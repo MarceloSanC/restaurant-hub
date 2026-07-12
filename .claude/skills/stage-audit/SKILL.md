@@ -110,6 +110,19 @@ evidência; "está tudo verde" não é.
 do `pyproject`, `import-linter`, `mypy --strict`, `bandit`, `safety`)
 está mesmo invocado por algum comando do alvo `check`. Configuração que
 nenhum comando dispara é decoração — conceito "Gate inerte ou míope".
+E **quando um gate falha, achar qual falhou primeiro na cadeia**: o de
+baixo pode nunca ter rodado, e a causa reportada não ser a causa real.
+
+**Toda saída colada pelo autor como estado do "antes" tem de ser
+reproduzida a partir da base** — nunca da working tree (conceito
+"Evidência de árvore suja"):
+
+```bash
+# arquivo alegado como pré-existente e quebrado é adição pura desta branch?
+git log --diff-filter=A -- <path>
+# reproduzir o "antes" a partir da base, sem untracked contaminando
+git archive origin/<base> | tar -x -C <tmp> && cd <tmp> && <comando do gate>
+```
 
 **Nota — pré-requisito de Stage anterior.** Stage atual pode declarar
 a anterior como pré-requisito. Pré-requisito real é "mergeada em
@@ -471,6 +484,26 @@ prova um lado, a auditoria assume o outro.
 algumas estruturais (LAYOUT §3) mas **não** as específicas da Stage.
 Para coverage alto, abrir 2-3 arquivos de teste e ler asserts
 (Fase D-bis #6).
+
+### Evidência de árvore suja
+
+Saída colada como prova do estado de **outra** árvore (a base, o "antes"),
+mas produzida na working tree local — que já tem o fix aplicado e arquivos
+*untracked*. Não é "Rastro perdido": aqui **há** registro, plausível e
+específico — e **falso**, verificável em um comando.
+
+- "Rodei o gate em `develop`: 3 arquivos falham" — mas um dos 3 é **adição
+  pura desta branch** e nunca existiu na base.
+- A conclusão pode até estar certa (o gate *estava* quebrado) e a **causa
+  declarada, errada** — a base falhava por outro motivo, a montante.
+
+**Pergunta:** "esta saída foi reproduzida **a partir da base**, ou de uma
+árvore que já contém o trabalho?"
+
+**Tratamento:** para todo arquivo alegado como *pré-existente e quebrado*,
+`git log --diff-filter=A -- <path>` (ou `git cat-file -e origin/<base>:<path>`):
+adição pura ⇒ evidência falsa. Reproduzir o "antes" a partir da base limpa:
+`git archive origin/<base> | tar -x -C <tmp>`.
 
 ### Gate inerte ou míope
 

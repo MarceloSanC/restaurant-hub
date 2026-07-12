@@ -147,7 +147,20 @@ uv run pytest <testes da issue> \
 **Antes de declarar `make check` verde, ler o target no `Makefile`** —
 confirmar que cada gate declarado em config (`fail_under`, `import-linter`,
 `mypy --strict`, `bandit`) é mesmo invocado. Config que nenhum comando
-dispara é decoração (conceito "Gate inerte ou míope").
+dispara é decoração (conceito "Gate inerte ou míope"). E **quando um gate
+falha, achar o gate que falhou primeiro** na cadeia: o de baixo pode nunca
+ter rodado (variante *míope*).
+
+**Toda saída que o autor colou como estado do "antes" tem de ser
+reproduzida a partir da base** — não da working tree (conceito "Evidência
+de árvore suja"):
+
+```bash
+# arquivo alegado como pré-existente e quebrado é adição pura desta branch?
+git log --diff-filter=A -- <path>
+# reproduzir o "antes" a partir da base, sem untracked contaminando
+git archive origin/<base> | tar -x -C <tmp> && cd <tmp> && <comando do gate>
+```
 
 ### Fase C — Cruzar implementação ↔ corpo da issue
 
@@ -398,6 +411,21 @@ Confundir presença com ausência, ou execução com asserção; ou cobrir
 - **Tratamento:** para "global/qualquer/todos", exigir teste pela app
   real (`create_app()`/boot). Para invariante negativa, `Grep` ativo
   com **0 matches**. Para coverage alto, ler 2-3 asserts (D-bis #5).
+
+### Evidência de árvore suja
+Saída colada como prova do estado de **outra** árvore (a base, o "antes"),
+mas produzida na working tree local — que tem arquivos *untracked* e o fix
+já aplicado. Diferente de "Rastro perdido": aqui **há** registro, plausível
+e específico — e **falso**, verificável em um comando.
+- Ex.: "rodei o gate em `develop`, 3 arquivos falham" — mas um dos 3 é
+  **adição pura desta branch** e nunca existiu na base; a falha real da base
+  era outra, a montante.
+- **Pergunta:** "esta saída foi reproduzida **a partir da base**, ou de uma
+  árvore que já contém o trabalho?"
+- **Tratamento:** para todo arquivo alegado como *pré-existente e quebrado*,
+  `git log --diff-filter=A -- <path>` (ou `git cat-file -e <base>:<path>`) —
+  se é adição pura, a evidência é falsa. Reproduzir a partir da base de
+  verdade: `git archive <base> | tar -x -C <tmp>`.
 
 ### Definido mas não plugado (dead-config)
 Módulo/handler/validator existe, tem coverage, mas **nenhum call-site
