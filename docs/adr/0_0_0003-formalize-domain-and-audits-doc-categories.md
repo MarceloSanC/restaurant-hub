@@ -303,7 +303,7 @@ narrative docs — [CONVENTIONS.md §1](../CONVENTIONS.md)).
   `PROMPT-step-single-session.md` §1 — not part of this ADR's PR.
 - **First `audits/` candidate:** none today (see Alternative C).
 - ADR id `0.0.0002` is **not used**: ids are identity, not position, and are never
-  recycled nor renumbered ([CONVENTIONS.md §2](../CONVENTIONS.md)).
+  recycled nor renumbered ([CONVENTIONS.md §1 → Numeração](../CONVENTIONS.md)).
 
 ## References
 
