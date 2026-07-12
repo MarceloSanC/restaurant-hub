@@ -45,7 +45,9 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         from restaurant_hub.features.<feature>.application.use_cases.<use_case> import <UseCase>
         from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
         from restaurant_hub.shared.infrastructure.database.connection import build_engine
-        from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import Uuid4Generator
+        from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import (
+            Uuid4Generator,
+        )
 
         cfg = settings or get_settings()
         engine = build_engine()
