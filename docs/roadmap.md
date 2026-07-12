@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-10
-last_reviewed_at: 2026-07-10
+updated_at: 2026-07-12
+last_reviewed_at: 2026-07-12
 ---
 
 # Roadmap — restaurant-hub
@@ -138,6 +138,19 @@ graph LR
 | `8.2-hub-http` | API dos painéis + Unidade Geral | adapters/in/http | draft | `8.1-hub-read-models` |
 
 **Legenda de status (Stage):** `draft`, `in_progress`, `review`, `done`, `archived`.
+
+## Tabela de Issues
+
+Issues **avulsas** — trabalho cujo concept+technical cabem no corpo da issue (fix, docs,
+chore), sem pasta de Stage. O litmus está em [`PIPELINE.md`](./PIPELINE.md) §4.5: se o corpo
+vira um mini-concept, **promova a Stage**. Issue de Stage não entra aqui — vive na Tabela de
+Stages, e seu número fica no `issue_id` do `technical.md`.
+
+| Issue | Título | BC | Camada-alvo | Status | Depende de |
+|---|---|---|---|---|---|
+| [#2](https://github.com/MarceloSanC/restaurant-hub/issues/2) | Adaptar fluxo de Step (prompt, ADR e gates) ao restaurant-hub | shared | docs + scripts | closed | — |
+
+**Legenda de status (issue):** `open`, `closed`.
 
 ---
 
@@ -1017,6 +1030,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | Data | Mudança | Motivo |
 |---|---|---|
 | 2026-07-10 | Criação inicial (Steps 1–8 decompostos, 9–13 backlog) | Fase 2 do RUNBOOK-INIT-PROJECT |
+| 2026-07-12 | Criação da Tabela de Issues (avulsas) | Referenciada por `PROMPT-issue-single-session.md` e pelo PR template, mas inexistente — issue #2 |
 
 ## Próxima revisão de roadmap
 
