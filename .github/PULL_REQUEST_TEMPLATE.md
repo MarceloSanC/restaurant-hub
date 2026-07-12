@@ -1,8 +1,10 @@
 <!--
-Título: siga o mesmo padrão da issue.
-  PR de Stage:  feat: stage N.M — <título humano>
-  PR de fix:    fix(<scope>): <descrição>
-Ver docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
+Título: Conventional Commits em português, com escopo OBRIGATÓRIO (o escopo é
+o BC/módulo — NUNCA a Stage). Ver docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
+  PR de Stage:   <tipo>(<escopo>): stage N.M — <descrição>
+                 ex.: feat(scheduling): stage 4.1 — domínio da escala
+  PR avulso:     <tipo>(<escopo>): issue #<num> — <descrição>
+                 ex.: fix(staff): issue #47 — corrigir sobreposição de indisponibilidades
 -->
 
 Closes #<num-issue>
@@ -19,22 +21,18 @@ Closes #<num-issue>
 
 <!-- 1–2 frases sobre o que mudou e por quê. -->
 
-## Tipo
-
-- [ ] Stage do pipeline (N.M)
-- [ ] Fix (bug)
-- [ ] Refactor
-- [ ] Docs
-- [ ] Chore
-
 ## Checklist (Stage)
 
-<!-- Marque os itens aplicáveis. Para não-Stage, ignore os irrelevantes. -->
+<!--
+O checklist é um HANDOFF: marque APENAS o que você validou com certeza
+nesta sessão; deixe o resto desmarcado — a auditoria completa depois.
+Para não-Stage, ignore os itens irrelevantes.
+-->
 
 - [ ] Todas as Tasks do `technical.md` implementadas (1 Task = 1 commit)
-- [ ] `make check` verde localmente (lint + typecheck + layout-check + test)
+- [ ] `make check` verde localmente (lint + typecheck + layout-check + docs-check + test)
 - [ ] Coverage ≥ 90% no código novo (via `pyproject.toml [tool.coverage.report]`)
-- [ ] `roadmap.md` sincronizado **neste PR**: Stage marcada `done` (`todo→done`) — ou, em PR de issue avulsa, o item `open→closed` — + `updated_at`/`last_reviewed_at` no frontmatter (para o roadmap não defasar do GitHub ao mergear)
+- [ ] `roadmap.md` sincronizado **neste PR**: Stage marcada `done` (`draft→done`) — ou, em PR de issue avulsa, o item `open→closed` na Tabela de Issues — + `updated_at`/`last_reviewed_at` no frontmatter (para o roadmap não defasar do GitHub ao mergear)
 - [ ] ADRs novos (se houve) em `status: accepted`
 - [ ] Runbooks operacionais criados se aplicável
 - [ ] `concept.md` não precisa de retoque retrospectivo
@@ -45,4 +43,4 @@ Closes #<num-issue>
 make check
 ```
 
-<!-- Se houver passos extras (migrations, fixtures), liste aqui. -->
+<!-- Se houver passos extras (migrations, fixtures, seeds), liste aqui. -->
