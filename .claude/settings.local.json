@@ -3,5 +3,8 @@
     "allow": [
       "Bash(git mv *)"
     ]
+  },
+  "env": {
+    "UV_SYSTEM_CERTS": "1"
   }
 }

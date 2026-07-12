@@ -39,8 +39,12 @@ ADR_GLOB = "docs/adr/*.md"
 # "transversal (spans payments + billing)" -> "transversal").
 _BC_LINE = re.compile(r"^bounded_context:\s*([a-z_]+)", re.MULTILINE)
 
+# Sentinel of a global ADR (`0_0_*` / `1_1_*`): it belongs to no single BC,
+# so it is never declared in the roadmap and must be admitted explicitly.
+GLOBAL_BC = "transversal"
 
-def valid_bounded_contexts() -> set[str]:
+
+def roadmap_bounded_contexts() -> set[str]:
     """The set of BC keywords the roadmap declares (single source)."""
     # utf-8-sig: some docs carry a UTF-8 BOM; strip it transparently.
     text = ROADMAP.read_text(encoding="utf-8-sig")
@@ -67,11 +71,16 @@ def check_adr(path: Path, valid: set[str]) -> str | None:
     declared = [line for line in fm if line.startswith("bounded_context:")]
     if not declared:
         return f"{rel}: falta `bounded_context` no frontmatter"
-    value = declared[0].split(":", 1)[1].strip()
+    # Same normalization as the roadmap side: compare the leading token, so a
+    # qualifier ("transversal (abrange staff + scheduling)") still matches.
+    match = _BC_LINE.match(declared[0])
+    if match is None:
+        return f"{rel}: `bounded_context` sem valor reconhecivel"
+    value = match.group(1)
     if value not in valid:
         return (
-            f"{rel}: bounded_context='{value}' nao esta no conjunto do "
-            f"roadmap ({', '.join(sorted(valid))})"
+            f"{rel}: bounded_context='{value}' nao esta no conjunto valido "
+            f"({', '.join(sorted(valid))})"
         )
     return None
 
@@ -85,14 +94,15 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
-    valid = valid_bounded_contexts()
-    if not valid:
+    from_roadmap = roadmap_bounded_contexts()
+    if not from_roadmap:
         print(
             "check_adr_bounded_context: nenhum `bounded_context` no roadmap "
             "— nao ha conjunto valido para validar (fail closed)",
             file=sys.stderr,
         )
         return 2
+    valid = from_roadmap | {GLOBAL_BC}
 
     violations = [
         msg

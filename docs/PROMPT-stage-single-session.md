@@ -432,7 +432,7 @@ Todos OBRIGATÓRIOS antes do commit final `stage <N.M>: complete`:
       # arquivos de src/ tocados pela Stage
       git diff --name-only (git merge-base origin/develop HEAD) HEAD -- src/
       # cobertura por arquivo
-      uv run pytest tests/ --cov=src/erp_intel --cov-report=term-missing
+      uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
       ```
       Cada arquivo tocado deve aparecer com ≥ 90% na tabela do
       `term-missing`. Arquivo abaixo disso → cobrir ou justificar por
