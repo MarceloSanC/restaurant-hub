@@ -148,9 +148,12 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 
 | Issue | Título | BC | Camada-alvo | Status | Depende de |
 |---|---|---|---|---|---|
-| [#2](https://github.com/MarceloSanC/restaurant-hub/issues/2) | Adaptar fluxo de Step (prompt, ADR e gates) ao restaurant-hub | shared | docs + scripts | closed | — |
+| [#2](https://github.com/MarceloSanC/restaurant-hub/issues/2) | Adaptar fluxo de Step (prompt, ADR e gates) ao restaurant-hub | shared | docs + scripts | done | — |
 
-**Legenda de status (issue):** `open`, `closed`.
+**Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
+consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
+`placeholder` = marcador de backlog sem DoD (não implementar direto); `blocked` = dependência
+externa não resolvida; `done` é o estado final que o prompt grava ao fechar (§DoD).
 
 ---
 
