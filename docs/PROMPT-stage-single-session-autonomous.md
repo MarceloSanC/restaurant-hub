@@ -111,8 +111,10 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
    ```
 5. **Nunca** force-push em `develop`/`main`; **nunca** reescrever história já mergeada.
 
-> A auditoria imparcial (passo 1), o gate mecânico `audit-gate` e os gates objetivos são o
-> que torna o auto-merge seguro. Pular qualquer um quebra a justificativa do ADR 0.0.0004.
+> O que torna o auto-merge seguro é a **auditoria imparcial** (passo 1) somada aos **gates
+> objetivos** — que falham de verdade, com exit ≠ 0. O `audit-gate` **não** é a terceira perna:
+> ele apenas **sinaliza** (não trava — ver acima). Pular qualquer um dos dois quebra a
+> justificativa do ADR 0.0.0004, e **ninguém além de você** vai perceber.
 
 ### 4. Pré-condição de dependência endurecida
 

@@ -35,7 +35,7 @@ Two written rules conflict with unattended self-merge:
 - `docs/PROMPT-stage-single-session.md` §"REGRA DE PR": the implementing session opens the PR but **never merges** — the merge belongs to the user.
 - `docs/GIT-WORKFLOW.md` §"Comportamento bloqueante" lists "merge without ≥ 1 approval" as an absolute stop.
 
-This repo also has a **mechanical audit gate** the flow must compose with: the `audit-gate` CI workflow blocks merge while the PR's audit label (CONVENTIONS §3.6) is not `complete`, and only the audit session (running `stage-audit`/`issue-audit`) may write `complete`.
+This repo also has an **audit signal** the flow must compose with: the `audit-gate` CI workflow goes red while the PR's audit label (CONVENTIONS §3.6) is not `complete`, and only the audit session (running `stage-audit`/`issue-audit`) may write `complete`. It **signals** the audit state; it **cannot block** the merge on this plan — see the Forces below.
 
 Forces:
 
