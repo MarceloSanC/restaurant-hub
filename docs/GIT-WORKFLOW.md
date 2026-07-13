@@ -672,7 +672,9 @@ Exemplo de feedback construtivo:
 
 - Tentativa de push direto em `main` ou `develop`
 - Tentativa de merge **sem** CI verde
-- Tentativa de merge **sem** ≥ 1 aprovação
+- Tentativa de merge **sem** ≥ 1 aprovação — **exceto** em corrida autônoma
+  autorizada pelo ADR 0.0.0004, onde a aprovação é substituída por auditoria
+  de contexto limpo (ver §Gates de PR, o ponto único)
 - Coverage < 90% em código novo
 - Branch errada para a operação (ex: `feat/x` em vez de branch de feature)
 - Squash ou rebase no merge (deve ser merge commit)

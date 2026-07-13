@@ -33,10 +33,17 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
 > com o veredito (status global + gates numéricos + fixes aplicados com
 > hash) e (2) o label de auditoria do corpo (linha `> **Auditoria:** ...`,
 > CONVENTIONS §3.6) gravado como **`complete`** — o comentário do veredito é
-> quem cita a data e o veredito. Essa troca é **mecânica, não cosmética**: o
-> workflow `audit-gate` (CI) falha enquanto o status não for `complete` —
-> gravar `complete` é o que **destrava o merge**. Auditoria sem marca no PR
-> **não existe** para quem decide o merge.
+> quem cita a data e o veredito. O workflow `audit-gate` (CI) falha enquanto o
+> status não for `complete`. Auditoria sem marca no PR **não existe** para quem
+> decide o merge.
+>
+> ⚠️ **Você é o freio, não o penúltimo freio.** O `audit-gate` **sinaliza**, mas
+> **não trava** o merge: repo privado em GitHub Free não permite branch
+> protection, então nenhum check é *Required* — PR com check vermelho fica
+> `UNSTABLE`, não `BLOCKED`, e `gh pr merge` passa assim mesmo (GIT-WORKFLOW
+> §Gates de PR). Não grave `complete` contando que "se algo escapar, o CI pega".
+> Não pega.
+>
 > **Nunca faz merge** — é do usuário, salvo pedido explícito. Branch alheia:
 > `git show` para ler; checkout + push para aplicar.
 
