@@ -41,7 +41,15 @@ Forces:
 
 - Per-stage merge is load-bearing for the chain to advance overnight.
 - An unattended run that papers over a real contradiction is worse than one that stops.
-- If branch protection with required approvals is actually enabled on `develop`, self-merge is technically blocked; whether it is enabled must be **verified as part of authorizing a run** (`gh api repos/:owner/:repo/branches/develop/protection`), and the human decides how to reconcile before the run starts.
+- **There is no mechanical backstop today, and this is decisive.** Branch protection is
+  unavailable on this repo (**private** repo on GitHub **Free**):
+  `gh api repos/:owner/:repo/branches/develop/protection` → **403 "Upgrade to GitHub Pro or make
+  this repository public"** (verified 2026-07-12). Therefore **no check can be a Required Status
+  Check** — including `audit-gate`, which the workflow itself declares observational
+  (`.github/workflows/audit-gate.yml:15-17`). A PR whose check is **red** shows
+  `mergeStateStatus: UNSTABLE`, **not** `BLOCKED`, and `gh pr merge` succeeds anyway. Whatever
+  replaces the human gate is therefore enforced by the agent's discipline, not by the platform.
+  Re-verify this when authorizing a run — the answer changes if the repo goes public or to Pro.
 
 ## Decision
 
@@ -79,12 +87,19 @@ For explicitly authorized overnight runs only:
 
 ### Positive
 - Authorized stretches of the chain can run unattended; the human reviews afterward and stays in the loop for judgment-heavy stages.
-- The audit is not just documented but **CI-enforced**: `audit-gate` mechanically blocks merge until a real audit writes `complete`.
-- `stage-audit` and future sessions read this ADR and will **not** flag self-merge as a blocking violation for an authorized run.
+- The audit is **written down and impartial by construction** (fresh context, separate label, never written by the implementer), and the objective gates (`make check`, coverage, real mutation) *do* fail hard on their own — those are the teeth.
+- `stage-audit` and future sessions read this ADR and will **not** flag self-merge as a blocking violation for an authorized run. The exception is registered in the **owning** doc — `GIT-WORKFLOW.md` §Gates de PR (CONVENTIONS §0: "o dono vence") — so the ADR is actually in force, not letra morta.
 
 ### Negative
 - A silent bug merged in an early stage propagates down the chain until an audit or gate catches it. Mitigated by per-stage clean-context audit + objective gates, not eliminated.
 - Deviates from two written rules; the deviation is scoped and recorded here, but it is still a deviation.
+- **The audit gate is honor-system, not machine-enforced — say it plainly.** `audit-gate` is
+  observational on this plan (see Context): it goes red and the PR stays mergeable. So the
+  substitute for human approval is: objective gates that *do* fail hard, plus the agent's
+  discipline in actually running the impartial audit and not writing its own `complete`. **A human
+  authorizing a run is accepting that**, not accepting a mechanical guarantee. If that trade is
+  unacceptable for a given stretch, do not authorize it — or move the repo to a plan where branch
+  protection makes `audit-gate` a Required Status Check, and revisit this ADR.
 
 ### Neutral / trade-offs accepted
 - The run may HALT partway (contradiction, gate, ambiguity, blocked merge) and wait for a human, rather than force progress.
