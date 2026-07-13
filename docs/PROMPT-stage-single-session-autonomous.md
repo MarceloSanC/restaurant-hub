@@ -83,8 +83,20 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
    que recebe só os caminhos dos artefatos, nunca o seu histórico nem o seu raciocínio.
    Se a auditoria apontar **blocker**, corrija e re-audite; só prossiga com auditoria sem
    blocker. É a **sessão de auditoria** (não você) quem completa o checklist do PR e grava
-   o label `> **Auditoria:** complete` + comentário de veredito (CONVENTIONS §3.6) — isso
-   é o que destrava o gate `audit-gate` do CI. **Nunca** grave `complete` você mesmo.
+   o label `> **Auditoria:** complete` + comentário de veredito (CONVENTIONS §3.6). **Nunca**
+   grave `complete` você mesmo.
+
+   **Cap de 2 re-auditorias.** Blocker que sobrevive à **3ª** rodada → **HALT**, não 4ª
+   tentativa. Sem cap, esta é a única etapa do fluxo com re-rolagem infinita — e é justamente
+   a que substitui o humano, então re-rolar até passar é *audit-shopping*: você acaba
+   selecionando o auditor que não viu o problema. (Os Checkpoints A/B/C já têm cap de 3 no
+   canônico, preservado na §"O que NÃO muda".)
+
+   > **O `audit-gate` do CI NÃO bloqueia o merge** — repo privado em GitHub Free não permite
+   > branch protection, então nenhum check é *Required*: um PR com check vermelho fica
+   > `UNSTABLE`, não `BLOCKED`, e `gh pr merge` passa assim mesmo (ADR 0.0.0004 §Context;
+   > GIT-WORKFLOW §Gates de PR). O label `complete` **sinaliza**, não trava. Quem impede o
+   > merge de uma Stage não auditada é **você** — não conte com a plataforma para isso.
 2. Esperar CI verde (`gh pr checks <num> --watch`). Check vermelho → corrigir e re-passar
    pelo passo 1 se a correção tocar código/docs auditados.
 3. Mergear com **merge commit** (NUNCA squash/rebase — GIT-WORKFLOW §Gates):
