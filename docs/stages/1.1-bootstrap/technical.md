@@ -501,4 +501,27 @@ mesmo. Abaixo do threshold de pergunta por ser escolha local
 trivialmente reversível; registrado após achado do Checkpoint C (bloco
 01–03).
 
+### 2026-07-14 — [finding] Drift de versão entre hooks pre-commit e deps do projeto — Claude
+**Contexto:** o hook `ruff` do pre-commit está pinado em `v0.6.9`
+enquanto o projeto resolve `ruff>=0.6` para a versão mais recente. Na
+execução, o hook aprovou commits que o `make lint` rejeitou (regras
+`PLC0415`/`ANN101` divergem entre versões) — dois commits precisaram de
+fix (`a6dcd35`). O mesmo risco existe para o hook `mirrors-mypy`.
+**Direção sugerida:** alinhar o rev do hook à versão real da dep (ou
+trocar por hook local `uv run ruff`, como o `lint-imports`).
+**Stage/issue candidata:** issue avulsa de tooling pós-Stage (criação da
+issue via `gh` ficou pendente de aprovação do usuário nesta sessão —
+corpo proposto no relatório final da Stage).
+
+### 2026-07-14 — [finding] Falta .gitattributes (normalização de EOL) — Claude
+**Contexto:** todo commit emite "LF will be replaced by CRLF"
+(`core.autocrlf=true`, sem `.gitattributes`); combinado com o `git.exe`
+do MSYS2 no PATH, já produziu churn fantasma de ~2900 linhas em teste
+anterior (ADR 1.1.0001). Fora do escopo da 1.1 por decisão do concept
+(§1 Fora do escopo).
+**Direção sugerida:** `.gitattributes` com política explícita de EOL +
+renormalização em PR dedicado.
+**Stage/issue candidata:** issue avulsa de repo pós-Stage (criação
+pendente de aprovação do usuário — corpo proposto no relatório final).
+
 <!-- END: post-execution -->
