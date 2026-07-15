@@ -2,10 +2,10 @@
 title: Runbook — Validate the CI gate per error class
 description: Step-by-step procedure to prove that each error class is rejected by the local `make check` gate (which is exactly what the CI workflow runs)
 when-use: After hardening the CI gate (a new tool joins the chain); when auditing that the existing CI gate still rejects each error class; after an incident where a regression slipped past the gate
-keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, docs-check, test]
+keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage]
 status: accepted
 created_at: 2026-06-23
-updated_at: 2026-06-23
+updated_at: 2026-07-14
 runbook_id: validate-ci-gate
 triggers:
   - Hardening of the CI gate (new tool joining the chain — e.g., bandit, import-linter)
@@ -26,18 +26,22 @@ Prove, **class by class**, that each error class enforced by the local `make che
 
 The argument is transitive: if every class fails `make check` locally, every class fails `make check` on the runner. This runbook documents the local demonstration that closes that transitivity argument.
 
-In this template, `make check` expands to the following target chain (see [`Makefile`](../../Makefile)):
+In this project, `make check` expands to the following target chain (see [`Makefile`](../../Makefile)):
 
 ```
-check: lint typecheck layout-check docs-check test
+check: lint typecheck layout-check import-check lock-check docs-check test-gate
 ```
 
-and `make docs-check` itself expands to:
+where `import-check` runs `lint-imports` (import-linter contracts in
+[`.importlinter`](../../.importlinter)), `lock-check` runs `uv lock --check`
+(lockfile drift), `test-gate` runs pytest with `--cov` (the `fail_under = 90`
+coverage gate fires inside `make check`), and `make docs-check` expands to:
 
 ```
 docs-check:
 	uv run python scripts/check_technical_postexec.py
 	uv run python scripts/check_stage_issue.py
+	uv run python scripts/check_adr_bounded_context.py
 ```
 
 ## Triggers
@@ -52,7 +56,10 @@ When to execute this runbook:
 - [ ] Working tree clean (`git status` empty).
 - [ ] `make check` green on the current branch **before** starting (baseline).
 - [ ] `.venv` installed and current (`make setup`).
-- [ ] On a POSIX shell (Linux native, macOS) or inside the Docker container on Windows (`make docker-shell`) — `make` is POSIX-only by project decision.
+- [ ] Any environment with GNU Make 4+ — native Windows (PowerShell) included.
+      Makefile recipes are shell-agnostic by project decision
+      ([ADR 1.1.0001](../adr/1_1_0001-windows-native-dev-environment.md));
+      the devcontainer remains a supported option, not a requirement.
 
 ## Procedure
 
@@ -171,14 +178,15 @@ rm src/restaurant_hub/shared/domain/_temp_violation.py
 
 ---
 
-### Class 5 — `docs-check` (`scripts/check_technical_postexec.py` + `scripts/check_stage_issue.py`)
+### Class 5 — `docs-check` (`check_technical_postexec.py` + `check_stage_issue.py` + `check_adr_bounded_context.py`)
 
-`make docs-check` runs two scripts in sequence; the first to exit non-zero fails the gate.
+`make docs-check` runs three scripts in sequence; the first to exit non-zero fails the gate.
 
 1. **`check_technical_postexec.py`** enforces, on every `technical.md`:
    - **Structural (always):** exactly one `<!-- BEGIN: post-execution -->` marker and exactly one `<!-- END: post-execution -->` marker, with END after BEGIN.
    - **Diff vs baseline (only when `status: done` and the Stage has a reserved `stage N.M: technical approved` commit):** content outside the markers must match that approved baseline. If no approval commit exists in history (Stage still in 3A/3B, or no Stage yet), check 2 is skipped by design.
 2. **`check_stage_issue.py`** requires every Stage `technical.md` to carry a valid `issue_id` that resolves via `gh issue view`. It is **best-effort**: if `gh` is not installed or not authenticated it prints WARN and returns 0, so it is not a reliable local trigger without `gh`.
+3. **`check_adr_bounded_context.py`** requires every ADR to carry a `bounded_context` whose value belongs to the set declared in the roadmap (`transversal` for global `0_0_*`/`1_1_*` ADRs).
 
 The **structural check** of `check_technical_postexec.py` is the most direct, environment-independent trigger — break a marker and the script flags it regardless of file status and regardless of whether `gh` is available.
 
@@ -231,38 +239,92 @@ git restore tests/test_smoke.py
 
 ---
 
-### Class 7 — `coverage` (pytest --cov-fail-under)
+### Class 7 — `coverage` (`make test-gate`, fail_under inside `make check`)
 
-The coverage gate is configured in [`pyproject.toml`](../../pyproject.toml) `[tool.coverage.report] fail_under = 90`. A coverage drop below 90 % causes a non-zero exit, which fails the gate.
+The coverage gate is configured in [`pyproject.toml`](../../pyproject.toml) `[tool.coverage.report] fail_under = 90` and fires inside `make check` via the `test-gate` target (pytest with `--cov`). A coverage drop below 90 % causes a non-zero exit, which fails the gate.
 
-**Patch** (drop a tested branch — remove the smoke test temporarily so coverage falls):
-```bash
-git mv tests/test_smoke.py tests/test_smoke.py.bak
+**Patch** (drop a tested block — move the shared-kernel unit tests out of the collection root temporarily so coverage falls):
+```powershell
+Move-Item tests/unit/shared $env:TEMP/_shared_tests_bak
 ```
 
 **Command:**
 ```bash
-uv run pytest tests/ --cov=src/restaurant_hub --cov-fail-under=90
+make test-gate
 ```
 
 **Expected output (fingerprint):**
 ```
-FAIL Required test coverage of 90% not reached. Total coverage: N%
+FAIL Required test coverage of 90.0% not reached. Total coverage: N%
 ```
-Exit code: **2** (pytest coverage failure).
+Exit code: non-zero (pytest coverage failure; observed 54.37% when exercised in Stage 1.1).
+
+**Revert:**
+```powershell
+Move-Item $env:TEMP/_shared_tests_bak tests/unit/shared
+```
+
+> The `90` threshold must match `fail_under` in `pyproject.toml`. If the project raises or lowers the coverage gate, update the fingerprint in this class. Note: removing a single small test file may not drop coverage below 90 % — the patch must remove a block large enough to cross the threshold.
+
+---
+
+### Class 8 — `import-check` (import-linter contracts)
+
+[`.importlinter`](../../.importlinter) mirrors the import rules of [`LAYOUT.md`](../LAYOUT.md) §3 (layers of `shared`, domain/application purity, shared not importing features). `make import-check` runs `lint-imports`; the same check runs as a pre-commit hook.
+
+**Patch** (create a new file):
+```powershell
+Set-Content -Path src/restaurant_hub/shared/domain/_temp_violation.py -Value 'from restaurant_hub.shared.infrastructure.config.settings import Settings  # noqa: F401'
+```
+
+**Command:**
+```bash
+uv run lint-imports
+```
+
+**Expected output (fingerprint):**
+```
+restaurant_hub.shared.domain is not allowed to import restaurant_hub.shared.infrastructure:
+-   restaurant_hub.shared.domain._temp_violation -> restaurant_hub.shared.infrastructure.config.settings (l.1)
+Contracts: N kept, 1 broken.
+```
+Exit code: **1**.
+
+**Revert:**
+```powershell
+Remove-Item src/restaurant_hub/shared/domain/_temp_violation.py
+```
+
+---
+
+### Class 9 — `lock-check` (uv.lock drift)
+
+`make lock-check` runs `uv lock --check`, which fails when `uv.lock` no longer matches `pyproject.toml` (a dependency was added/changed without regenerating the lock in the same commit — CONVENTIONS §5).
+
+**Patch:** add a throwaway dependency to `pyproject.toml` `[project] dependencies` (e.g. `"six>=1.0"`) **without** running `uv lock`/`uv sync`.
+
+**Command:**
+```bash
+make lock-check
+```
+
+**Expected output (fingerprint):**
+```
+Resolved N packages in Xms
+error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+```
+Exit code: **1**.
 
 **Revert:**
 ```bash
-git mv tests/test_smoke.py.bak tests/test_smoke.py
+git restore pyproject.toml
 ```
-
-> The `90` threshold here must match `fail_under` in `pyproject.toml`. If the project raises or lowers the coverage gate, update both the command and the fingerprint in this class.
 
 ---
 
 ## Verification (cumulative)
 
-After exercising all seven classes individually, run the full gate **without any patch** to confirm baseline is green:
+After exercising all nine classes individually, run the full gate **without any patch** to confirm baseline is green:
 
 ```bash
 git status              # must be clean
@@ -305,8 +367,8 @@ If a patch was committed by accident:
 
 When a future Stage **hardens** the CI gate, this runbook MUST be extended in the same Stage. Examples:
 
-- **New tool joins `make check`** (e.g., `bandit`, `safety`, `pip-audit`): add a new §Class N section in §Procedure, in the order in which `make check` runs it, with the four-part shape (patch / command / expected output / revert).
-- **`scripts/check_layout.py` replaced by `import-linter`**: rewrite §Class 4 with the new tool's fingerprint; keep the same domain-violation patch.
+- **New tool joins `make check`** (e.g., `bandit`, `safety`, `pip-audit`): add a new §Class N section in §Procedure, in the order in which `make check` runs it, with the four-part shape (patch / command / expected output / revert). (Done in Stage 1.1 for `import-check` — §Class 8 — and `lock-check` — §Class 9.)
+- **`scripts/check_layout.py` and `import-linter` coexist** by decision of Stage 1.1 (concept §6 — defense in depth): §Class 4 exercises the script, §Class 8 the contracts. If one ever replaces the other, merge the two classes.
 - **`fmt-check` promoted to a blocking target** (adding `ruff format --check` to `check`): upgrade the note in §Class 2 and add the target to the chain documented in §Purpose.
 - **Coverage gate** (`fail_under` in `pyproject.toml`): if the threshold or coverage tool changes, update §Class 7's command and fingerprint accordingly.
 
