@@ -3,6 +3,7 @@
 import pytest
 from fastapi import FastAPI
 
+from restaurant_hub import main
 from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 
@@ -20,6 +21,4 @@ def test_wire_dependencies_aceita_settings_explicito() -> None:
 
 
 def test_main_expoe_app_asgi() -> None:
-    from restaurant_hub import main
-
     assert isinstance(main.app, FastAPI)
