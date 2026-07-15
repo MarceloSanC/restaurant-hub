@@ -200,8 +200,9 @@ skills_hint: [hex-arch-python, import-linter-rules]
 ```
 
 > Nota (2026-07-14): bloco corrigido durante a execução da Stage (issue #1) —
-> a feature-exemplo `features/orders/` citada originalmente não existia no
-> bootstrap (letra morta) e o escopo real reavaliou a complexidade de S para M.
+> a feature-exemplo de pedidos do boilerplate, citada originalmente em
+> `arquivos_a_modificar`, não existia no bootstrap (letra morta) e o escopo
+> real reavaliou a complexidade de S para M.
 
 #### Stage 1.2 — `1.2-ci`
 
