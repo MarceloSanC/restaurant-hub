@@ -10,7 +10,7 @@
 # condicional vive em scripts Python (ex.: scripts/clean.py).
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check lint fmt typecheck layout-check lock-check docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check lint fmt typecheck layout-check lock-check docs-check test test-fast test-cov test-gate clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -26,7 +26,8 @@ help:
 	@echo   make install          Reinstala dependencias apos mudar pyproject.toml
 	@echo   make run              Sobe o servidor de desenvolvimento com hot-reload
 	@echo   make migrate          Aplica migrations pendentes - alembic upgrade head
-	@echo   make check            Gate completo - lint + types + layout + lock + docs + testes
+	@echo   make check            Gate completo - lint + types + layout + lock + docs + testes com cobertura
+	@echo   make test-gate        Suite com gate de cobertura 90 - usado pelo check
 	@echo   make lint             Roda ruff check - apenas reporta
 	@echo   make fmt              Formata o codigo com ruff format + ruff check --fix
 	@echo   make typecheck        Roda mypy strict
@@ -73,9 +74,10 @@ migrate:
 	uv run alembic upgrade head
 
 # ---------------------------------------------------------------------------
-# check — gate completo, bloqueante no CI (lint + types + layout + lock + docs + testes)
+# check — gate completo, bloqueante no CI (lint + types + layout + lock + docs
+# + testes com gate de cobertura >= 90, via fail_under do pyproject.toml)
 # ---------------------------------------------------------------------------
-check: lint typecheck layout-check lock-check docs-check test
+check: lint typecheck layout-check lock-check docs-check test-gate
 
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
@@ -120,10 +122,16 @@ docs-check:
 	uv run python scripts/check_adr_bounded_context.py
 
 # ---------------------------------------------------------------------------
-# test — roda toda a suite de testes
+# test — roda toda a suite de testes (sem cobertura — loop rápido local)
 # ---------------------------------------------------------------------------
 test:
 	uv run pytest tests/ -v
+
+# ---------------------------------------------------------------------------
+# test-gate — suite com cobertura; falha se < 90% (fail_under do pyproject)
+# ---------------------------------------------------------------------------
+test-gate:
+	uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
 
 # ---------------------------------------------------------------------------
 # test-fast — pula testes marcados como slow (CI rápido / loop local)
