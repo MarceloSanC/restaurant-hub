@@ -286,9 +286,12 @@ uv run lint-imports
 ```
 restaurant_hub.shared.domain is not allowed to import restaurant_hub.shared.infrastructure:
 -   restaurant_hub.shared.domain._temp_violation -> restaurant_hub.shared.infrastructure.config.settings (l.1)
-Contracts: N kept, 1 broken.
+Contracts: 2 kept, 2 broken.
 ```
-Exit code: **1**.
+Exit code: **1**. Note: this single patch breaks **two** contracts at once —
+`shared-layers` (layers) and `domain-purity` (forbidden, which also reports
+the transitive chain to `pydantic_settings`) — so the summary line says
+`2 broken`, not `1 broken`.
 
 **Revert:**
 ```powershell

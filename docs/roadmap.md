@@ -187,6 +187,7 @@ arquivos_a_modificar:
   - .pre-commit-config.yaml (hook lint-imports)
   - .gitignore (settings.local.json)
   - README.md, docs/runbooks/validate-ci-gate.md, docs/LAYOUT.md (ambiente real)
+  - docs/roadmap.md (este bloco) + docs/stages/1.1-bootstrap/ (artefatos do próprio ciclo)
 contratos_introduzidos: []
 contratos_consumidos: []
 definition_of_done:

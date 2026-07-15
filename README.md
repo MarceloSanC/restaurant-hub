@@ -157,10 +157,12 @@ src/restaurant_hub/
 
 ## CI
 
-O CI (`.github/workflows/ci.yml`) instala com `uv sync --extra dev` e roda
-**exatamente** `make check` — o mesmo gate local: lint, typecheck,
-layout-check, import-check, lock-check, docs-check e testes com cobertura
-≥ 90% (`fail_under` no `pyproject.toml`).
+O CI (`.github/workflows/ci.yml`) tem dois jobs: `lint-and-test` instala com
+`uv sync --extra dev` e roda **exatamente** `make check` — o mesmo gate
+local: lint, typecheck, layout-check, import-check, lock-check, docs-check e
+testes com cobertura ≥ 90% (`fail_under` no `pyproject.toml`) — e
+`guard-main-source` bloqueia PRs para `main` que não venham de
+`develop`/`hotfix/*` (ver [ADR 1.1.0002](docs/adr/1_1_0002-observational-pr-gates.md)).
 
 Para rodar localmente o mesmo check do CI:
 
