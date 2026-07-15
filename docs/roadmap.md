@@ -167,30 +167,41 @@ externa não resolvida; `done` é o estado final que o prompt grava ao fechar (�
 
 #### Stage 1.1 — `1.1-bootstrap`
 
-**Descrição humana:** validar e completar o scaffolding copiado do template: `make setup`/`check`/`test` verdes, pre-commit ativo, import-linter refletindo LAYOUT.md, tree.txt gerado. Sem regra de negócio.
+**Descrição humana:** validar e completar o scaffolding copiado do template no **Windows nativo**: `make setup`/`check`/`test` verdes e reprodutíveis (Makefile shell-agnostic, `uv.lock` versionado com lock-check), pre-commit ativo, import-linter refletindo LAYOUT.md, gate de cobertura ≥ 90% ativo (com suite de testes do kernel `shared/`), tree.txt gerado e docs corrigidos. Sem regra de negócio. Ver `docs/stages/1.1-bootstrap/`.
 
 ```yaml
 stage_id: 1.1-bootstrap
 bounded_context: shared
 camada_alvo: bootstrap
 arquivos_a_criar:
-  - uv.lock (gerado por make setup)
-  - tree.txt (gerado por scripts/regen_tree.py)
+  - uv.lock (gerado por make setup; versionado)
+  - tree.txt (gerado por scripts/regen_tree.py; gitignorado)
+  - .importlinter (contratos espelhando LAYOUT §3)
+  - .claude/settings.json (env compartilhado; settings.local.json sai do git)
+  - scripts/clean.py (lógica do make clean, shell-agnostic)
+  - tests/unit/shared/ + tests/unit/test_bootstrap.py + tests/e2e/test_app_smoke.py
+  - docs/adr/1_1_0001 (ambiente Windows-nativo) e 1_1_0002 (gates de PR observacionais)
 arquivos_a_modificar:
-  - pyproject.toml (ajustes finos se necessário)
-  - README.md (instruções específicas do projeto)
-  - features/orders/ (feature-exemplo do boilerplate — decidir manter como referência ou remover; registrar em ADR se remover)
+  - Makefile (receitas shell-agnostic; uv sync; test-gate com cobertura; import/lock-check)
+  - pyproject.toml (dep import-linter)
+  - .pre-commit-config.yaml (hook lint-imports)
+  - .gitignore (settings.local.json)
+  - README.md, docs/runbooks/validate-ci-gate.md, docs/LAYOUT.md (ambiente real)
 contratos_introduzidos: []
 contratos_consumidos: []
 definition_of_done:
-  - "`make setup && make check && make test` verdes na máquina local"
+  - "`make setup && make check && make test` verdes na máquina local (Windows nativo)"
 non_goals:
   - features de negócio
   - CI no GitHub (Stage 1.2)
-complexidade_estimada: S
+complexidade_estimada: M
 gate_mode: strict
 skills_hint: [hex-arch-python, import-linter-rules]
 ```
+
+> Nota (2026-07-14): bloco corrigido durante a execução da Stage (issue #1) —
+> a feature-exemplo `features/orders/` citada originalmente não existia no
+> bootstrap (letra morta) e o escopo real reavaliou a complexidade de S para M.
 
 #### Stage 1.2 — `1.2-ci`
 
