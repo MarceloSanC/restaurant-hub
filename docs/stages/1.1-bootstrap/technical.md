@@ -476,4 +476,29 @@ Task 01 ─► Task 02 ─► Task 03 ─► Task 04 ─► Task 05 ─► Task 
 > `scripts/check_technical_postexec.py`. O frontmatter `updated_at`
 > **não muda** com edições aqui — cada entrada carrega data + autor.
 
+### 2026-07-14 — [decision] Fase 4 (modo de gate) — Marcelo + Claude
+**Contexto:** o roadmap declara `gate_mode: strict` (revisão humana de
+diff antes de cada commit) para a 1.1.
+**Pergunta:** conduzir a execução com pausa por Task, autônoma com
+Checkpoint C, ou pausa só nas Tasks de risco?
+**Opções:**
+- A — Strict literal (8 pausas)
+- B — Autônomo + Checkpoint C a cada 2–3 Tasks + auditoria de testes ✅ recomendada
+- C — Pausa só nas Tasks de risco (01, 05, 06)
+**Decisão:** B (respondida via `AskUserQuestion`, 2026-07-14).
+**Razão:** decisões materiais já validadas pelo usuário nas perguntas da
+Fase 3A; escopo é tooling; a revisão humana acontece no PR, e o olhar
+externo por bloco fica com o Checkpoint C.
+
+### 2026-07-14 — [deviation] Task 01 (scripts/clean.py) — Claude
+**Contexto:** a receita antiga do `clean` (`find .`) varria o repositório
+inteiro, incluindo `.venv/` e `.git/`; o novo `scripts/clean.py` pula
+esses dois diretórios (`SKIP_DIRS`).
+**Razão:** remover `__pycache__` de dentro do `.venv` é inócuo (o venv é
+recriável e os caches são regenerados) e a varredura completa é lenta; o
+comportamento visível de `make clean` para artefatos do projeto é o
+mesmo. Abaixo do threshold de pergunta por ser escolha local
+trivialmente reversível; registrado após achado do Checkpoint C (bloco
+01–03).
+
 <!-- END: post-execution -->

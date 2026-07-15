@@ -23,9 +23,16 @@ UUID4_VERSION = 4
 SAMPLE_SIZE = 100
 
 
+def _public_members(protocol: type) -> list[str]:
+    return [name for name in dir(protocol) if not name.startswith("_")]
+
+
 def test_system_clock_satisfaz_o_port_clock() -> None:
-    clock: Clock = SystemClock()  # atribuição tipada = contrato estrutural
-    assert callable(clock.now)
+    # Introspecção real: todo membro público do Protocol precisa existir e ser
+    # chamável no adapter (mypy não checa tests/, então a verificação é aqui).
+    clock = SystemClock()
+    for member in _public_members(Clock):
+        assert callable(getattr(clock, member))
 
 
 def test_now_retorna_datetime_com_timezone_utc() -> None:
@@ -42,8 +49,9 @@ def test_now_acompanha_o_relogio_do_sistema() -> None:
 
 
 def test_uuid4_generator_satisfaz_o_port_id_generator() -> None:
-    generator: IdGenerator = Uuid4Generator()
-    assert callable(generator.next_id)
+    generator = Uuid4Generator()
+    for member in _public_members(IdGenerator):
+        assert callable(getattr(generator, member))
 
 
 def test_next_id_retorna_uuid_versao_4() -> None:
