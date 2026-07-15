@@ -38,6 +38,9 @@ layers =
 containers =
     restaurant_hub.shared
 
+# As listas de frameworks abaixo enumeram TODAS as libs de runtime/dev do
+# pyproject que representam I/O ou boundary (LAYOUT §3 Domain: "apenas
+# stdlib"). Dependência nova no pyproject => adicionar aqui no mesmo commit.
 [importlinter:contract:domain-purity]
 name = shared.domain nao importa camadas externas nem frameworks (LAYOUT §3 Domain)
 type = forbidden
@@ -48,9 +51,13 @@ forbidden_modules =
     restaurant_hub.shared.infrastructure
     restaurant_hub.features
     fastapi
+    starlette
+    uvicorn
     sqlalchemy
+    alembic
     pydantic
     pydantic_settings
+    httpx
 
 [importlinter:contract:application-purity]
 name = shared.application nao importa infrastructure nem frameworks (LAYOUT §3 Application)
@@ -61,9 +68,13 @@ forbidden_modules =
     restaurant_hub.shared.infrastructure
     restaurant_hub.features
     fastapi
+    starlette
+    uvicorn
     sqlalchemy
+    alembic
     pydantic
     pydantic_settings
+    httpx
 
 [importlinter:contract:shared-independence]
 name = shared nao importa de features (LAYOUT §7 regra de ouro)

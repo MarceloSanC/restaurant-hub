@@ -9,7 +9,15 @@ pytestmark = pytest.mark.unit
 DEFAULT_PORT = 8000
 
 
-def test_defaults_permitem_iniciar_sem_env() -> None:
+def _isolate_ambient_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # pydantic-settings é case-insensitive: PORT/HOST/DEBUG etc. da máquina
+    # ou do CI vazariam para dentro do teste de defaults.
+    for field in ("APP_NAME", "DEBUG", "DATABASE_URL", "HOST", "PORT", "LOG_LEVEL"):
+        monkeypatch.delenv(field, raising=False)
+
+
+def test_defaults_permitem_iniciar_sem_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_ambient_env(monkeypatch)
     settings = Settings(_env_file=None)
     assert settings.app_name == "restaurant_hub"
     assert settings.debug is False

@@ -7,6 +7,7 @@ fábrica — URL resolvida e parâmetros de pool — sem abrir conexão.
 """
 
 import logging
+from collections.abc import Iterator
 
 import pytest
 
@@ -54,26 +55,52 @@ def test_build_engine_cai_para_url_das_settings(monkeypatch: pytest.MonkeyPatch)
         get_settings.cache_clear()
 
 
-def _reset_root_logger() -> None:
+@pytest.fixture
+def restore_logging_state() -> Iterator[None]:
+    """Salva e restaura o estado global de logging mutado por configure_logging.
+
+    A limpeza de handlers acontece DENTRO do corpo de cada teste (helper
+    abaixo): o plugin de logging do pytest re-injeta um handler no root entre
+    o setup da fixture e a fase de call, o que tornaria basicConfig no-op.
+    """
+    root = logging.getLogger()
+    saved_handlers = root.handlers[:]
+    saved_level = root.level
+    saved_sqlalchemy = logging.getLogger("sqlalchemy.engine").level
+    saved_uvicorn = logging.getLogger("uvicorn.access").level
+    yield
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+    for handler in saved_handlers:
+        root.addHandler(handler)
+    root.setLevel(saved_level)
+    logging.getLogger("sqlalchemy.engine").setLevel(saved_sqlalchemy)
+    logging.getLogger("uvicorn.access").setLevel(saved_uvicorn)
+
+
+def _clear_root_handlers() -> None:
     root = logging.getLogger()
     for handler in root.handlers[:]:
         root.removeHandler(handler)
 
 
+@pytest.mark.usefixtures("restore_logging_state")
 def test_configure_logging_aplica_nivel_valido() -> None:
-    _reset_root_logger()
+    _clear_root_handlers()
     configure_logging("DEBUG")
     assert logging.getLogger().level == logging.DEBUG
 
 
+@pytest.mark.usefixtures("restore_logging_state")
 def test_configure_logging_nivel_invalido_cai_para_info() -> None:
-    _reset_root_logger()
+    _clear_root_handlers()
     configure_logging("NIVEL_INEXISTENTE")
     assert logging.getLogger().level == logging.INFO
 
 
+@pytest.mark.usefixtures("restore_logging_state")
 def test_configure_logging_reduz_verbosidade_de_libs() -> None:
-    _reset_root_logger()
+    _clear_root_handlers()
     configure_logging("INFO")
     assert logging.getLogger("sqlalchemy.engine").level == logging.WARNING
     assert logging.getLogger("uvicorn.access").level == logging.INFO
