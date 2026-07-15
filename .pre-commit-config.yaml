@@ -5,8 +5,10 @@
 #     uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
 
 repos:
+  # rev alinhado à versão que o uv resolve para a dep `ruff` do projeto —
+  # drift entre os dois faz hook e `make lint` divergirem (finding da 1.1).
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.21
     hooks:
       - id: ruff-format
       - id: ruff

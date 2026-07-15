@@ -509,6 +509,12 @@ execução, o hook aprovou commits que o `make lint` rejeitou (regras
 fix (`a6dcd35`). O mesmo risco existe para o hook `mirrors-mypy`.
 **Direção sugerida:** alinhar o rev do hook à versão real da dep (ou
 trocar por hook local `uv run ruff`, como o `lint-imports`).
+**Atualização (2026-07-14, gate de saída):** o gate `pre-commit run
+--all-files` falhou por causa deste drift (ANN101 do ruff antigo em
+`src/`); o rev do ruff foi alinhado a `v0.15.21` ainda na Stage (commit
+`[1.1/--]`), com reformatação mecânica de 8 arquivos. **Resta para a
+issue:** mecanismo anti-drift permanente e alinhamento do hook
+`mirrors-mypy`.
 **Stage/issue candidata:** issue avulsa de tooling pós-Stage (criação da
 issue via `gh` ficou pendente de aprovação do usuário nesta sessão —
 corpo proposto no relatório final da Stage).
