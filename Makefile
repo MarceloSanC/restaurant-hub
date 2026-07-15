@@ -10,7 +10,7 @@
 # condicional vive em scripts Python (ex.: scripts/clean.py).
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check lint fmt typecheck layout-check lock-check docs-check test test-fast test-cov test-gate clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check lint fmt typecheck layout-check import-check lock-check docs-check test test-fast test-cov test-gate clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -32,6 +32,7 @@ help:
 	@echo   make fmt              Formata o codigo com ruff format + ruff check --fix
 	@echo   make typecheck        Roda mypy strict
 	@echo   make layout-check     Valida regras de dependencia - scripts/check_layout.py
+	@echo   make import-check     Valida contratos de import - import-linter
 	@echo   make lock-check       Confere que uv.lock esta sincronizado com pyproject.toml
 	@echo   make docs-check       Valida docs de stage, issues e ADRs
 	@echo   make test             Roda todos os testes
@@ -77,7 +78,7 @@ migrate:
 # check — gate completo, bloqueante no CI (lint + types + layout + lock + docs
 # + testes com gate de cobertura >= 90, via fail_under do pyproject.toml)
 # ---------------------------------------------------------------------------
-check: lint typecheck layout-check lock-check docs-check test-gate
+check: lint typecheck layout-check import-check lock-check docs-check test-gate
 
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
@@ -103,6 +104,12 @@ typecheck:
 # ---------------------------------------------------------------------------
 layout-check:
 	uv run python scripts/check_layout.py
+
+# ---------------------------------------------------------------------------
+# import-check — valida contratos de import (.importlinter espelha LAYOUT §3)
+# ---------------------------------------------------------------------------
+import-check:
+	uv run lint-imports
 
 # ---------------------------------------------------------------------------
 # lock-check — falha se o uv.lock divergiu do pyproject.toml (CONVENTIONS §5)

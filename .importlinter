@@ -1,0 +1,74 @@
+# =============================================================================
+# import-linter — contratos de import espelhando docs/LAYOUT.md §3
+# =============================================================================
+# Enforcement estrutural das regras de dependência (PIPELINE §3.4; skill
+# import-linter-rules). Cobre TODA regra de LAYOUT §3 expressável como
+# contrato de import no grafo atual (concept 1.1 §4). Roda em `make check`
+# (alvo import-check), no pre-commit e no CI (via make check).
+#
+# Regras de LAYOUT NÃO expressáveis como contrato de import (ficam com
+# scripts/check_layout.py + revisão manual):
+#   - "wiring apenas no composition_root" (LAYOUT §6) — regra de
+#     instanciação, não de import;
+#   - "adapters não importam outros adapters exceto via port" — a exceção
+#     "via port" não é modelável em contrato estático.
+#
+# Contratos FUTUROS (ativar quando a estrutura existir):
+#   - independence entre bounded contexts (`type = independence` com
+#     restaurant_hub.features.*) — quando o 2º BC existir;
+#   - layers por feature (containers = restaurant_hub.features.*) — quando
+#     a 1ª feature existir;
+#   - exceção declarada LAYOUT §6: a cadeia shared/infrastructure/http/app
+#     → composition_root → features.adapters exigirá `ignore_imports` no
+#     contrato shared-nao-importa-features (documentada lá) — hoje o
+#     composition_root não importa features, então não há supressão.
+
+[importlinter]
+root_packages =
+    restaurant_hub
+include_external_packages = True
+
+[importlinter:contract:shared-layers]
+name = shared segue camadas hexagonais (infrastructure -> application -> domain)
+type = layers
+layers =
+    infrastructure
+    application
+    domain
+containers =
+    restaurant_hub.shared
+
+[importlinter:contract:domain-purity]
+name = shared.domain nao importa camadas externas nem frameworks (LAYOUT §3 Domain)
+type = forbidden
+source_modules =
+    restaurant_hub.shared.domain
+forbidden_modules =
+    restaurant_hub.shared.application
+    restaurant_hub.shared.infrastructure
+    restaurant_hub.features
+    fastapi
+    sqlalchemy
+    pydantic
+    pydantic_settings
+
+[importlinter:contract:application-purity]
+name = shared.application nao importa infrastructure nem frameworks (LAYOUT §3 Application)
+type = forbidden
+source_modules =
+    restaurant_hub.shared.application
+forbidden_modules =
+    restaurant_hub.shared.infrastructure
+    restaurant_hub.features
+    fastapi
+    sqlalchemy
+    pydantic
+    pydantic_settings
+
+[importlinter:contract:shared-independence]
+name = shared nao importa de features (LAYOUT §7 regra de ouro)
+type = forbidden
+source_modules =
+    restaurant_hub.shared
+forbidden_modules =
+    restaurant_hub.features
