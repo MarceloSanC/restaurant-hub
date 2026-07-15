@@ -67,3 +67,12 @@ async def test_domain_error_vira_422(probe_client: AsyncClient) -> None:
     body = response.json()
     assert body["type"] == "domain_error"
     assert "sonda" in body["detail"]
+
+
+async def test_middleware_cors_responde_a_origin(probe_client: AsyncClient) -> None:
+    # Sem o CORSMiddleware registrado, a resposta não carrega o header —
+    # este teste mata a mutação "remover add_middleware" em middlewares.py.
+    response = await probe_client.get("/docs", headers={"Origin": "http://example.com"})
+    assert response.status_code == HTTPStatus.OK
+    # allow_origins=["*"] + allow_credentials=True => starlette espelha a origin
+    assert response.headers.get("access-control-allow-origin") == "http://example.com"
