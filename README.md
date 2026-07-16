@@ -19,23 +19,61 @@
 
 ## Setup local
 
-Três caminhos suportados: **devcontainer (recomendado)** via VS Code, **Docker Compose direto** (sem IDE), ou **host nativo** (Python local sem Docker).
+Caminho padrão deste projeto: **host nativo no Windows** (PowerShell, sem
+Docker) — decisão registrada no [ADR 1.1.0001](docs/adr/1_1_0001-windows-native-dev-environment.md).
+Devcontainer e Docker Compose seguem suportados como opções.
 
-### Pré-requisitos
+### Caminho A — Host nativo (padrão; Windows, Linux ou macOS)
 
-- [Docker](https://docs.docker.com/get-docker/) + [Docker Compose v2.24+](https://docs.docker.com/compose/install/) — necessário para o devcontainer e para `make docker-*`
-- (se for rodar direto no host) Python 3.12+ + [uv](https://docs.astral.sh/uv/) + `make` (GNU Make) + ambiente POSIX (Linux, macOS, ou WSL no Windows)
+Pré-requisitos: Python 3.12+, [uv](https://docs.astral.sh/uv/) e GNU Make 4+.
 
-### Caminho A — Devcontainer (VS Code dentro do container)
+**Setup de máquina no Windows (uma vez):**
 
-Pré-requisito extra: extensão **Dev Containers** do VS Code.
+1. **`make` no PATH do usuário.** Qualquer GNU Make 4+ serve (ezwinports via
+   `winget install ezwinports.make`, ou o do MSYS2). Se usar o do MSYS2,
+   adicione `C:\msys64\usr\bin` ao PATH do usuário **no final (append,
+   nunca prepend)** — esse diretório carrega um `git.exe` próprio que NÃO
+   pode ganhar do Git for Windows (causa churn fantasma de CRLF no
+   `git diff`). Depois confira:
+   ```powershell
+   make --version      # GNU Make 4.x
+   Get-Command git     # deve resolver para C:\Program Files\Git\cmd\git.exe
+   ```
+2. **`UV_SYSTEM_CERTS=1` no ambiente do usuário** (sem isso o `uv` falha
+   TLS ao alcançar o PyPI nesta configuração de máquina):
+   ```powershell
+   [Environment]::SetEnvironmentVariable("UV_SYSTEM_CERTS", "1", "User")
+   ```
+   Sessões do Claude Code já herdam a variável de `.claude/settings.json`
+   (versionado).
+
+**Setup do projeto:**
+
+```powershell
+git clone <repo-url>
+cd restaurant-hub
+
+make setup                            # uv sync (gera/usa uv.lock) + hooks pre-commit e commit-msg
+Copy-Item .env.example .env           # ajuste credenciais locais
+uv run python scripts/regen_tree.py   # gera tree.txt (contexto para agentes; gitignorado)
+make check                            # gate completo — deve fechar verde
+```
+
+As receitas do Makefile são shell-agnostic (funcionam sob `sh` ou
+`cmd.exe`) — não há dependência de ambiente POSIX.
+
+### Caminho B — Devcontainer (VS Code dentro do container)
+
+Pré-requisitos: [Docker](https://docs.docker.com/get-docker/) +
+[Docker Compose v2.24+](https://docs.docker.com/compose/install/) +
+extensão **Dev Containers** do VS Code.
 
 1. Abra a pasta do projeto no VS Code.
 2. `Ctrl+Shift+P` → `Dev Containers: Reopen in Container`.
 3. VS Code sobe o `docker-compose.yml`, abre o IDE dentro da stage `builder` do Dockerfile (com `uv`, `ruff`, `mypy`, `pytest` já instalados) e roda `make setup` automaticamente via `postCreateCommand`.
 4. Use o terminal integrado para os comandos abaixo (`make check`, `make run`, etc.).
 
-### Caminho B — Docker Compose direto (sem devcontainer)
+### Caminho C — Docker Compose direto (sem devcontainer)
 
 ```bash
 make docker-build            # builda a stage `builder` com toolchain de dev
@@ -44,35 +82,28 @@ make docker-shell            # bash dentro do container, para rodar `make check`
 make docker-down             # derruba a stack
 ```
 
-### Caminho C — Host nativo (sem Docker)
-
-```bash
-git clone <repo-url>
-cd Restaurant Hub
-
-make setup                    # cria .venv via uv e instala deps
-cp .env.example .env          # ajuste credenciais locais
-make migrate                  # alembic upgrade head
-make check                    # lint + typecheck + testes
-```
-
 ---
 
 ## Comandos principais
 
 | Comando | O que faz |
 |---------|-----------|
-| `make setup` | Cria `.venv` e instala dependências com `uv` |
+| `make setup` | `uv sync --extra dev` (gera/usa `uv.lock`) + instala hooks `pre-commit` e `commit-msg` |
 | `make install` | Reinstala dependências (após mudança no `pyproject.toml`) |
 | `make run` | Sobe o servidor de desenvolvimento com hot-reload |
 | `make migrate` | Aplica migrations pendentes (`alembic upgrade head`) |
-| `make check` | Roda lint + typecheck (falha o CI se houver erros) |
+| `make check` | Gate completo: lint + typecheck + layout + import-linter + lock + docs + testes com cobertura ≥ 90% |
 | `make lint` | Roda `ruff check` — apenas reporta |
 | `make fmt` | Roda `ruff format` + `ruff check --fix` |
 | `make typecheck` | Roda `mypy` |
-| `make test` | Roda todos os testes |
+| `make layout-check` | Valida regras de dependência (`scripts/check_layout.py`) |
+| `make import-check` | Valida contratos de import (`.importlinter` espelha `docs/LAYOUT.md` §3) |
+| `make lock-check` | Falha se `uv.lock` divergiu do `pyproject.toml` |
+| `make docs-check` | Valida docs de Stage, issues e ADRs |
+| `make test` | Roda todos os testes (sem cobertura — loop rápido) |
+| `make test-gate` | Suite com gate de cobertura ≥ 90% (usado pelo `check`) |
 | `make test-cov` | Testes com relatório de cobertura em HTML |
-| `make clean` | Remove artefatos de build, cache e `.venv` |
+| `make clean` | Remove artefatos de build, cache e arquivos gerados (`scripts/clean.py`) |
 | `make docker-build` | Builda a stage `builder` (devcontainer/CI) — tag `:dev` |
 | `make docker-build-prod` | Builda a stage `runtime` (deploy) — tag `:prod` |
 | `make docker-up` | Sobe a stack do `docker-compose.yml` em background |
@@ -126,15 +157,18 @@ src/restaurant_hub/
 
 ## CI
 
-O pipeline de CI roda, nesta ordem:
-
-1. `make lint` — falha em qualquer violação de estilo
-2. `make typecheck` — falha em qualquer erro de tipo
-3. `make test` com `-m "not slow"` — roda unit + integration, pula lentos
-4. Upload do relatório de cobertura
+O CI (`.github/workflows/ci.yml`) tem dois jobs: `lint-and-test` instala com
+`uv sync --extra dev` e roda **exatamente** `make check` — o mesmo gate
+local: lint, typecheck, layout-check, import-check, lock-check, docs-check e
+testes com cobertura ≥ 90% (`fail_under` no `pyproject.toml`) — e
+`guard-main-source` bloqueia PRs para `main` que não venham de
+`develop`/`hotfix/*` (ver [ADR 1.1.0002](docs/adr/1_1_0002-observational-pr-gates.md)).
 
 Para rodar localmente o mesmo check do CI:
 
 ```bash
-make check && make test
+make check
 ```
+
+Para provar classe a classe que cada erro é rejeitado pelo gate, ver
+[docs/runbooks/validate-ci-gate.md](docs/runbooks/validate-ci-gate.md).

@@ -108,8 +108,7 @@ def _check_markers(content: str, path: Path) -> tuple[int, int]:
     end = end_indices[0]
     if end <= begin:
         msg = (
-            f"{path}: marcador END (linha {end + 1}) deve vir depois do "
-            f"BEGIN (linha {begin + 1})."
+            f"{path}: marcador END (linha {end + 1}) deve vir depois do BEGIN (linha {begin + 1})."
         )
         raise CheckError(msg)
 
@@ -263,10 +262,7 @@ def _check_postexec_diff(path: Path, content: str, window: tuple[int, int]) -> l
 
     baseline_content = _git_show(sha, path)
     if baseline_content is None:
-        return [
-            f"{path}: não foi possível recuperar a versão de baseline "
-            f"do commit {sha[:8]}."
-        ]
+        return [f"{path}: não foi possível recuperar a versão de baseline do commit {sha[:8]}."]
 
     try:
         b_begin, b_end = _check_markers(baseline_content, path)

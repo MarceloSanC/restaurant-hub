@@ -64,15 +64,18 @@ src/restaurant_hub/
 
 tests/
 ├── unit/                           # Testes sem I/O — rápidos, sem fixtures de banco
-│   └── features/<feature>/
-│       ├── domain/                 # Testam entidades, value objects, serviços
-│       └── application/            # Testam use cases com fakes
+│   ├── features/<feature>/
+│   │   ├── domain/                 # Testam entidades, value objects, serviços
+│   │   └── application/            # Testam use cases com fakes
+│   ├── shared/                     # tests/unit/shared/ — kernel compartilhado (espelha src/restaurant_hub/shared/)
+│   └── test_bootstrap.py           # Testa composition_root + entrypoint main (sem feature)
 ├── integration/                    # Testam adapters reais contra banco/serviços
 │   └── features/<feature>/adapters/out/postgres/
 ├── contract/                       # Validam que fake e implementação real respeitam o contrato
 │   └── features/<feature>/
 ├── e2e/                            # Sobem a app completa via HTTP
-│   └── features/<feature>/
+│   ├── features/<feature>/
+│   └── test_app_smoke.py           # Smoke da app factory (middlewares + error handlers, sem feature)
 └── fakes/                          # Implementações fake dos ports para uso em testes
     └── features/<feature>/
         └── in_memory_<entity>_repository.py

@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-12
-last_reviewed_at: 2026-07-12
+updated_at: 2026-07-14
+last_reviewed_at: 2026-07-14
 ---
 
 # Roadmap — restaurant-hub
@@ -86,7 +86,7 @@ graph LR
 
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
-| 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | not_started | 1.1 → 1.2 |
+| 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | in_progress | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | not_started | 2.1 → 2.5 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | not_started | 3.1 → 3.5 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | not_started | 4.1 → 4.7 |
@@ -106,7 +106,7 @@ graph LR
 
 | Stage | Título | Camada-alvo | Status | Depende de |
 |---|---|---|---|---|
-| `1.1-bootstrap` | Bootstrap do projeto | bootstrap | draft | — |
+| `1.1-bootstrap` | Bootstrap do projeto | bootstrap | done | — |
 | `1.2-ci` | CI no GitHub Actions | bootstrap | draft | `1.1-bootstrap` |
 | `2.1-identity-domain` | Domínio de tenancy e acesso | domain | draft | `1.2-ci` |
 | `2.2-identity-application` | Use cases de tenancy e acesso | application | draft | `2.1-identity-domain` |
@@ -149,6 +149,9 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | Issue | Título | BC | Camada-alvo | Status | Depende de |
 |---|---|---|---|---|---|
 | [#2](https://github.com/MarceloSanC/restaurant-hub/issues/2) | Adaptar fluxo de Step (prompt, ADR e gates) ao restaurant-hub | shared | docs + scripts | done | — |
+| [#6](https://github.com/MarceloSanC/restaurant-hub/issues/6) | Plugar `configure_logging` no boot da aplicação | shared | shared/infrastructure + bootstrap | open | — |
+| [#7](https://github.com/MarceloSanC/restaurant-hub/issues/7) | Alinhar hook mirrors-mypy e prevenir drift de versão dos hooks pre-commit | shared | tooling | open | — |
+| [#8](https://github.com/MarceloSanC/restaurant-hub/issues/8) | Definir política de fim de linha com `.gitattributes` e renormalizar | shared | repo | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -167,30 +170,43 @@ externa não resolvida; `done` é o estado final que o prompt grava ao fechar (�
 
 #### Stage 1.1 — `1.1-bootstrap`
 
-**Descrição humana:** validar e completar o scaffolding copiado do template: `make setup`/`check`/`test` verdes, pre-commit ativo, import-linter refletindo LAYOUT.md, tree.txt gerado. Sem regra de negócio.
+**Descrição humana:** validar e completar o scaffolding copiado do template no **Windows nativo**: `make setup`/`check`/`test` verdes e reprodutíveis (Makefile shell-agnostic, `uv.lock` versionado com lock-check), pre-commit ativo, import-linter refletindo LAYOUT.md, gate de cobertura ≥ 90% ativo (com suite de testes do kernel `shared/`), tree.txt gerado e docs corrigidos. Sem regra de negócio. Ver `docs/stages/1.1-bootstrap/`.
 
 ```yaml
 stage_id: 1.1-bootstrap
 bounded_context: shared
 camada_alvo: bootstrap
 arquivos_a_criar:
-  - uv.lock (gerado por make setup)
-  - tree.txt (gerado por scripts/regen_tree.py)
+  - uv.lock (gerado por make setup; versionado)
+  - tree.txt (gerado por scripts/regen_tree.py; gitignorado)
+  - .importlinter (contratos espelhando LAYOUT §3)
+  - .claude/settings.json (env compartilhado; settings.local.json sai do git)
+  - scripts/clean.py (lógica do make clean, shell-agnostic)
+  - tests/unit/shared/ + tests/unit/test_bootstrap.py + tests/e2e/test_app_smoke.py
+  - docs/adr/1_1_0001 (ambiente Windows-nativo) e 1_1_0002 (gates de PR observacionais)
 arquivos_a_modificar:
-  - pyproject.toml (ajustes finos se necessário)
-  - README.md (instruções específicas do projeto)
-  - features/orders/ (feature-exemplo do boilerplate — decidir manter como referência ou remover; registrar em ADR se remover)
+  - Makefile (receitas shell-agnostic; uv sync; test-gate com cobertura; import/lock-check)
+  - pyproject.toml (dep import-linter)
+  - .pre-commit-config.yaml (hook lint-imports)
+  - .gitignore (settings.local.json)
+  - README.md, docs/runbooks/validate-ci-gate.md, docs/LAYOUT.md (ambiente real)
+  - docs/roadmap.md (este bloco) + docs/stages/1.1-bootstrap/ (artefatos do próprio ciclo)
 contratos_introduzidos: []
 contratos_consumidos: []
 definition_of_done:
-  - "`make setup && make check && make test` verdes na máquina local"
+  - "`make setup && make check && make test` verdes na máquina local (Windows nativo)"
 non_goals:
   - features de negócio
   - CI no GitHub (Stage 1.2)
-complexidade_estimada: S
+complexidade_estimada: M
 gate_mode: strict
 skills_hint: [hex-arch-python, import-linter-rules]
 ```
+
+> Nota (2026-07-14): bloco corrigido durante a execução da Stage (issue #1) —
+> a feature-exemplo de pedidos do boilerplate, citada originalmente em
+> `arquivos_a_modificar`, não existia no bootstrap (letra morta) e o escopo
+> real reavaliou a complexidade de S para M.
 
 #### Stage 1.2 — `1.2-ci`
 
@@ -1034,6 +1050,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 |---|---|---|
 | 2026-07-10 | Criação inicial (Steps 1–8 decompostos, 9–13 backlog) | Fase 2 do RUNBOOK-INIT-PROJECT |
 | 2026-07-12 | Criação da Tabela de Issues (avulsas) | Referenciada por `PROMPT-issue-single-session.md` e pelo PR template, mas inexistente — issue #2 |
+| 2026-07-14 | Stage 1.1-bootstrap concluída (`done`); bloco corrigido para o escopo real; Step 1 → `in_progress` | Execução da Stage 1.1 — issue #1 |
 
 ## Próxima revisão de roadmap
 

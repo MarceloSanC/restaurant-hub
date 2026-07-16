@@ -5,8 +5,10 @@
 #     uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
 
 repos:
+  # rev alinhado à versão que o uv resolve para a dep `ruff` do projeto —
+  # drift entre os dois faz hook e `make lint` divergirem (finding da 1.1).
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.21
     hooks:
       - id: ruff-format
       - id: ruff
@@ -35,3 +37,12 @@ repos:
         stages: [commit-msg]
         # Validates the subject of the commit message file passed by git.
         # Rules: docs/CONVENTIONS.md §4(a)/§4(b), docs/GIT-WORKFLOW.md §Commits.
+
+      - id: lint-imports
+        name: lint-imports (import-linter contracts — LAYOUT §3)
+        # `language: system` executa no PATH do shell (sem venv ativado),
+        # então o entry precisa do `uv run` para resolver o console script.
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        files: \.(py|importlinter)$

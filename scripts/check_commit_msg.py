@@ -29,8 +29,16 @@ import sys
 from pathlib import Path
 
 ALLOWED_TYPES = (
-    "feat", "fix", "refactor", "test", "docs",
-    "chore", "perf", "style", "build", "ci",
+    "feat",
+    "fix",
+    "refactor",
+    "test",
+    "docs",
+    "chore",
+    "perf",
+    "style",
+    "build",
+    "ci",
 )
 
 # Reserved subjects — fixed text, NOT Conventional Commits.

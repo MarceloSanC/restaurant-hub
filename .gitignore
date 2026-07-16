@@ -62,6 +62,10 @@ coverage.xml
 *.swo
 *~
 
+# Claude Code — override de máquina (config compartilhada vive em
+# .claude/settings.json, versionado)
+.claude/settings.local.json
+
 # ---------------------------------------------------------------------------
 # Sistema operacional
 # ---------------------------------------------------------------------------
