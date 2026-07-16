@@ -504,6 +504,16 @@ implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
 GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, salvo
 pedido explícito. Não execute `gh pr merge`.
 
+> **Exceção — corrida autônoma autorizada.** Numa corrida coberta pelo
+> [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md) (`status:
+> accepted` **e** a Stage dentro do recorte em "Authorized runs"), quem
+> mergeia é a própria sessão implementadora, após auditoria de contexto
+> limpo sem blocker — ver
+> [`./PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
+> §3. A regra de aprovação vive em [`./GIT-WORKFLOW.md`](./GIT-WORKFLOW.md)
+> §Gates de PR (CONVENTIONS §0 — o dono vence); esta página só aponta.
+> **Fora de corrida autorizada, o parágrafo acima vale literalmente.**
+
 **O checklist do PR é um handoff.** Marque **apenas** as caixinhas que você
 **validou com certeza**; deixe as demais **desmarcadas**. O corpo do PR
 (vindo do template) traz o label de auditoria em `review` (linha
@@ -623,7 +633,7 @@ fonte mais alta na hierarquia.**
 8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) +
    relatório final (com disposições dos checkpoints).
 
-**PARE no merge.** Você faz push e abre o PR; o **merge é do usuário** (salvo pedido explícito). Não execute `gh pr merge`.
+**PARE no merge.** Você faz push e abre o PR; o **merge é do usuário** (salvo pedido explícito, ou corrida autônoma autorizada pelo ADR 0.0.0004 — ver §REGRA DE PR). Não execute `gh pr merge`.
 ````
 
 ---

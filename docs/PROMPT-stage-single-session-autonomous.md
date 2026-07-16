@@ -128,13 +128,18 @@ exige **mergeado em `develop`** (a cadeia avança por merge, não por status):
 
 ```powershell
 git fetch origin
-# para cada dependência, o commit "stage <dep>: complete" deve estar em origin/develop
-git log origin/develop --oneline | Select-String "stage <dep>: complete"
+# para cada dependência, o commit "stage <N.M>: complete" deve estar em origin/develop
+git log origin/develop --oneline | Select-String "stage <N.M>: complete"
 ```
 
-O padrão inclui `: complete` de propósito: `Select-String "stage <dep>"` casaria também
-`conceptual approved`/`technical approved` (ou qualquer commit parcial da Stage que tenha
-chegado a `develop` por PR parcial), dando verde para dependência que **não fechou**.
+**`<N.M>` é o NÚMERO da Stage, não o `stage_id`.** O `depends_on` do roadmap carrega o id
+com slug (`1.1-bootstrap`), mas o commit reservado de fechamento usa só o número
+(`stage 1.1: complete` — CONVENTIONS §4(b)). Substituir `<N.M>` pelo `stage_id` não casa
+nada e produz **HALT falso** na primeira dependência checada.
+
+O padrão inclui `: complete` de propósito: `Select-String "stage <N.M>"` casaria também
+`conceptual draft`/`conceptual approved`/`technical approved` (ou qualquer commit parcial da
+Stage que tenha chegado a `develop`), dando verde para dependência que **não fechou**.
 
 `done` no roadmap sem merge = pré-condição falhou → HALT (a Stage anterior não fechou de
 verdade).

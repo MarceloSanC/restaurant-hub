@@ -5,7 +5,7 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-14
+updated_at: 2026-07-16
 last_reviewed_at: 2026-07-14
 ---
 

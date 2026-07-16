@@ -57,7 +57,7 @@ Three written surfaces conflict with unattended self-merge:
 - `docs/GIT-WORKFLOW.md` §"Comportamento bloqueante" lists "merge without ≥ 1 approval" as an absolute stop.
 - `docs/PIPELINE.md` §11.1 echoes "o merge é do usuário" when describing the standard two-session flow.
 
-Per CONVENTIONS §0 ("o dono vence"), the exception is registered in the **owning** doc — `GIT-WORKFLOW.md` §Gates de PR, which owns the approval rule; the other two carry pointers to it. Outside an authorized run, all three read literally and the merge stays the user's.
+Per CONVENTIONS §0 ("o dono vence"), the exception is registered once in the **owning** doc — `GIT-WORKFLOW.md` §Gates de PR, which owns the approval rule. The other two surfaces are echoes and carry only pointers to it: `PROMPT-stage-single-session.md` §REGRA DE PR (plus its closing recap) and `PIPELINE.md` §11.1. Outside an authorized run, all three read literally and the merge stays the user's.
 
 This repo also has an **audit signal** the flow must compose with: the `audit-gate` CI workflow goes red while the PR's audit label (CONVENTIONS §3.6) is not `complete`, and only the audit session (running `stage-audit`/`issue-audit`) may write `complete`. It **signals** the audit state; it **cannot block** the merge on this plan — see the Forces below.
 
