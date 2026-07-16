@@ -3,9 +3,9 @@ title: Prompt — Execução de Stage em Sessão Única (variante AUTÔNOMA over
 description: Override do PROMPT-stage-single-session para corrida autônoma overnight, onde o agente fecha e mergeia a Stage sem gate humano, com auditoria de contexto-limpo (stage-audit + label audit-gate) no lugar da aprovação
 when-use: Apenas em corrida autônoma overnight autorizada pelo ADR 0.0.0004 (status accepted + recorte de stages registrado no ADR). Fora de corrida autorizada, usar o prompt canônico.
 keywords: [prompt, stage, autonomous, overnight, auto-merge, adr-0004, audit-gate]
-status: draft
+status: done
 created_at: 2026-07-12
-updated_at: 2026-07-12
+updated_at: 2026-07-16
 ---
 
 # Prompt — Execução de Stage em Sessão Única (variante AUTÔNOMA)
@@ -18,8 +18,13 @@ Autorizada e governada pelo [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-m
 > recorte registrado na seção "Authorized runs" do ADR. Se qualquer uma falhar, **PARE** —
 > esta variante não se aplica; volte ao prompt canônico.
 
-> `status: draft` deste doc acompanha o ADR: vira `done` quando o ADR 0.0.0004 for aceito
-> na autorização da primeira corrida.
+> `status: done` desde a autorização da primeira corrida (2026-07-16, recorte `1.2`→`3.5`).
+
+> **Pausa por Step, quando a autorização a impuser.** A entrada em "Authorized runs" pode
+> condicionar a corrida a **parar na fronteira de cada Step** (é o caso do recorte
+> `1.2`→`3.5`: pausa após a `2.5` e após a `3.5`). Onde houver pausa, a Stage seguinte
+> **não começa** — feche a corrida com o resumo do Step e aguarde o humano. Dentro do Step,
+> as Stages encadeiam sem pausa, como esta variante descreve.
 
 ---
 
@@ -123,9 +128,18 @@ exige **mergeado em `develop`** (a cadeia avança por merge, não por status):
 
 ```powershell
 git fetch origin
-# para cada dependência, o commit "stage <dep>: complete" deve estar em origin/develop
-git log origin/develop --oneline | Select-String "stage <dep>"
+# para cada dependência, o commit "stage <N.M>: complete" deve estar em origin/develop
+git log origin/develop --oneline | Select-String "stage <N.M>: complete"
 ```
+
+**`<N.M>` é o NÚMERO da Stage, não o `stage_id`.** O `depends_on` do roadmap carrega o id
+com slug (`1.1-bootstrap`), mas o commit reservado de fechamento usa só o número
+(`stage 1.1: complete` — CONVENTIONS §4(b)). Substituir `<N.M>` pelo `stage_id` não casa
+nada e produz **HALT falso** na primeira dependência checada.
+
+O padrão inclui `: complete` de propósito: `Select-String "stage <N.M>"` casaria também
+`conceptual draft`/`conceptual approved`/`technical approved` (ou qualquer commit parcial da
+Stage que tenha chegado a `develop`), dando verde para dependência que **não fechou**.
 
 `done` no roadmap sem merge = pré-condição falhou → HALT (a Stage anterior não fechou de
 verdade).
