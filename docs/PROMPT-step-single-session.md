@@ -286,8 +286,9 @@ Depois do tratamento, o subagente refaz a análise: **está tudo validado para f
 - **Não** → repete **§3.2** (tratar o que sobrou) e re-audita.
 - **Sim** → **fecha a auditoria no PR como a skill manda**: comentário com o veredito (status global
   + gates numéricos + fixes aplicados com hash) e o **label de auditoria gravado como `complete`**
-  (linha `> **Auditoria:** ...`, CONVENTIONS §3.6) — é o que **destrava o merge** (o workflow
-  `audit-gate` do CI falha enquanto não for `complete`).
+  (linha `> **Auditoria:** ...`, CONVENTIONS §3.6) — o workflow `audit-gate` do CI falha enquanto
+  não for `complete`. Ele **sinaliza**, mas **não trava** o merge (sem branch protection, nenhum
+  check é *Required* — CONVENTIONS §3.6): quem não mergeia Stage não auditada é **você**.
 
 ### 3.4 Relatório ao humano (formato da stage-audit)
 

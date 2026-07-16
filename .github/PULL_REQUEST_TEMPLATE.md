@@ -11,11 +11,12 @@ Closes #<num-issue>
 
 > **Auditoria:** `review`
 >
-> Label de status do gate `audit-gate` (CI) — CONVENTIONS §3.6. `review` =
-> aguardando auditoria (**merge bloqueado**); `complete` = auditada
-> (**liberado**). A sessão de auditoria (`stage-audit` para Stage,
-> `issue-audit` para issue avulsa) grava `complete` ao validar — **não edite
-> à mão**.
+> Label de status do gate `audit-gate` (CI) — enum e semântica em CONVENTIONS
+> §3.6 (fonte única; este template **aponta**, não redefine). `review` =
+> aguardando auditoria (check **vermelho**); `complete` = auditada (check
+> **verde**). O check **sinaliza** e **não trava** o merge — não mergeie em
+> `review`. A sessão de auditoria (`stage-audit` para Stage, `issue-audit` para
+> issue avulsa) grava `complete` ao validar — **não edite à mão**.
 
 ## Resumo
 

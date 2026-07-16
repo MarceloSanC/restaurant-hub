@@ -75,6 +75,14 @@ referenciam esta seção em vez de duplicar a lista:
   `[tool.coverage.report] fail_under = 90`; o pytest falha sozinho se a
   cobertura cair abaixo.
 - **+1 aprovação:** code review obrigatório (`Require approvals: 1`).
+  **Exceção — corrida autônoma:** numa corrida overnight autorizada pelo
+  [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md) (`status:
+  accepted` **e** a Stage dentro do recorte em "Authorized runs"), a
+  aprovação humana é substituída por **auditoria de contexto limpo**
+  (`stage-audit` por sessão fresca, que grava o label `complete` —
+  CONVENTIONS §3.6). Fora de corrida autorizada, a aprovação continua
+  obrigatória. Esta é a exceção **registrada no dono**, como manda
+  CONVENTIONS §0 — sem ela o ADR seria letra morta.
 - **Branch atualizada:** PR precisa estar à frente da base (`Require
   branches to be up to date`).
 - **Conversas resolvidas:** todos os comentários do code review devem
@@ -86,6 +94,18 @@ referenciam esta seção em vez de duplicar a lista:
 Mudar qualquer um desses números (ex: coverage de 90 → 80, aprovações de
 1 → 2) exige edição desta seção como ponto único — os ponteiros não
 precisam mudar.
+
+> **Estes gates são hoje OBSERVACIONAIS, não mecânicos.** Branch
+> protection não está disponível (repo **privado** em GitHub **Free**):
+> `gh api repos/:owner/:repo/branches/develop/protection` → **403
+> "Upgrade to GitHub Pro or make this repository public"**. Consequência
+> concreta: um PR com check **vermelho** fica `mergeStateStatus:
+> UNSTABLE`, **não** `BLOCKED` — e `gh pr merge` passa assim mesmo. Isso
+> vale inclusive para o `audit-gate` (o próprio
+> [`audit-gate.yml`](../.github/workflows/audit-gate.yml) admite: "ou
+> aceite como gate observacional"). **O que segura o merge é disciplina,
+> não o GitHub.** Ao migrar para repo público ou GitHub Pro, ativar os
+> gates como Required Status Checks e atualizar esta nota.
 
 Para confirmar, classe a classe, que cada check rodado por `make check`
 realmente falha com exit ≠ 0 (e portanto o CI rejeita o estado quebrado
@@ -652,7 +672,9 @@ Exemplo de feedback construtivo:
 
 - Tentativa de push direto em `main` ou `develop`
 - Tentativa de merge **sem** CI verde
-- Tentativa de merge **sem** ≥ 1 aprovação
+- Tentativa de merge **sem** ≥ 1 aprovação — **exceto** em corrida autônoma
+  autorizada pelo ADR 0.0.0004, onde a aprovação é substituída por auditoria
+  de contexto limpo (ver §Gates de PR, o ponto único)
 - Coverage < 90% em código novo
 - Branch errada para a operação (ex: `feat/x` em vez de branch de feature)
 - Squash ou rebase no merge (deve ser merge commit)

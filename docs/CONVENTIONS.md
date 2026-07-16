@@ -307,9 +307,9 @@ draft ──────► in_progress ──────► review ───�
 
 O corpo de todo PR carrega **uma linha canônica** que declara o estado da
 auditoria do fluxo single-session — a máquina de estados que o workflow
-`audit-gate` (CI) lê para **travar o merge até a auditoria acontecer**
-(fecha o handoff antes lembrado por humano). É uma máquina **distinta** da
-de status de doc (§3.1/§3.5), embora reuse os rótulos `review`/`complete`:
+`audit-gate` (CI) lê para **sinalizar se a auditoria aconteceu** (fecha o
+handoff antes lembrado por humano). É uma máquina **distinta** da de status
+de doc (§3.1/§3.5), embora reuse os rótulos `review`/`complete`:
 
 ```
 > **Auditoria:** `review`
@@ -318,11 +318,19 @@ de status de doc (§3.1/§3.5), embora reuse os rótulos `review`/`complete`:
 Enum (fonte única — todo outro doc/prompt/skill **aponta** para cá, não
 redefine):
 
-| Valor | Significado | Merge |
+| Valor | Significado | Check `audit-status` |
 |---|---|---|
-| `draft` | implementação em andamento (WIP) | **bloqueado** |
-| `review` | pronto, aguardando auditoria | **bloqueado** |
-| `complete` | auditoria realizada (`stage-audit`/`issue-audit`) | **liberado** |
+| `draft` | implementação em andamento (WIP) | **vermelho** |
+| `review` | pronto, aguardando auditoria | **vermelho** |
+| `complete` | auditoria realizada (`stage-audit`/`issue-audit`) | **verde** |
+
+> ⚠️ **Vermelho ≠ merge bloqueado.** Branch protection não está disponível
+> (repo **privado** em GitHub **Free** — ver [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md)
+> §Gates de PR), então **nenhum check é *Required***: um PR com `audit-status`
+> vermelho fica `mergeStateStatus: UNSTABLE`, **não** `BLOCKED`, e `gh pr merge`
+> passa assim mesmo. O label **sinaliza**; quem segura o merge de uma entrega não
+> auditada é **disciplina humana/do agente**, não o GitHub. Ao migrar para repo
+> público ou Pro, tornar `audit-status` *Required* e atualizar esta nota.
 
 - **Default do template** ([`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md)):
   `review`. Os prompts single-session **preservam** o label; **não** o
@@ -332,7 +340,7 @@ redefine):
   Gravar `complete` à mão sem auditoria burla o gate.
 - **Gate `audit-gate`** ([`.github/workflows/audit-gate.yml`](../.github/workflows/audit-gate.yml)):
   extrai o valor da linha canônica e passa **iff** `complete` — *fail
-  closed* (ausente/inválido → bloqueia). Lê **só** essa linha, então as
+  closed* (ausente/inválido → falha). Lê **só** essa linha, então as
   palavras `draft`/`review`/`complete` podem aparecer livremente na prosa
   do corpo sem falsear o gate.
 

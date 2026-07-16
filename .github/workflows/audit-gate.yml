@@ -1,11 +1,13 @@
 name: audit-gate
 
-# Gate mecânico da auditoria de Stage/issue: o corpo do PR carrega o label
+# Sinal mecânico da auditoria de Stage/issue: o corpo do PR carrega o label
 # canônico "> **Auditoria:** `<status>`" (CONVENTIONS §3.6), posto pelo
 # PULL_REQUEST_TEMPLATE com default `review`. Este check FALHA enquanto o
-# status não for `complete` — o merge fica bloqueado até a sessão de auditoria
-# (stage-audit / issue-audit) gravar `complete`. Substitui o handoff lembrado
-# por humano por um gate.
+# status não for `complete` — mas ATENÇÃO: falhar não é bloquear. Sem branch
+# protection (ver abaixo) ele NÃO é Required, e o PR com este check vermelho
+# fica `UNSTABLE`, não `BLOCKED`: `gh pr merge` passa assim mesmo. O check
+# torna a ausência de auditoria VISÍVEL; quem não mergeia sem ela é o humano
+# (ou o agente). Não confie neste workflow como freio.
 #
 # Dispara em `edited` além dos eventos default de PR: quando a auditoria edita
 # o corpo do PR (troca a nota), o check re-roda e fica verde. Fica num workflow
@@ -37,7 +39,9 @@ jobs:
             | sed -nE 's/^> \*\*Auditoria:\*\* `(draft|review|complete)`.*/\1/p' \
             | head -1)
           if [ "$status" != "complete" ]; then
-            echo "::error::Auditoria em status '${status:-ausente/inválido}' — merge bloqueado até 'complete'." >&2
+            echo "::error::Auditoria em status '${status:-ausente/inválido}' — NÃO mergeie até 'complete'." >&2
+            echo "Este check é OBSERVACIONAL: ele nao impede o merge (sem branch" >&2
+            echo "protection, nao e Required). Voce e o freio, nao ele." >&2
             echo "A sessão de auditoria (stage-audit/issue-audit) grava" >&2
             echo "'> **Auditoria:** \`complete\`' no corpo do PR ao validar." >&2
             exit 1
