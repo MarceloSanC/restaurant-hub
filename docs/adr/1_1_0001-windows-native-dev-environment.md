@@ -5,7 +5,7 @@ when-use: Reference whenever revisiting how the local dev environment works on W
 keywords: [adr, windows, make, msys2, uv, makefile, posix, dev-environment]
 status: accepted
 created_at: 2026-07-14
-updated_at: 2026-07-14
+updated_at: 2026-07-15
 adr_id: 1.1.0001
 decision: Support Windows-native development as the first-class environment — GNU Make (MSYS2) reachable via the user's global PATH, uv with UV_SYSTEM_CERTS in versioned Claude settings, and shell-agnostic Makefile recipes — revoking the template's POSIX-only assumption
 context_stage: 1.1-bootstrap
@@ -133,6 +133,13 @@ Windows-native development is the supported first-class environment:
   `Get-Command git` check is the guard.
 
 ### Neutral / trade-offs accepted
+- The GNU Make **provider** is not pinned to MSYS2 (audit note,
+  2026-07-15): on the sponsor's machine the WinGet `ezwinports.make`
+  (also GNU Make 4.4.1) shadows MSYS2's make on the user PATH, and
+  `make check` stays green. The load-bearing invariants are "*some*
+  GNU Make 4.4+ reachable on the PATH" and "`git` resolving to Git for
+  Windows" — not which provider answers `make`. README §Setup already
+  documents both providers as valid.
 - The devcontainer path may drift (it is no longer exercised daily);
   accepted — CI on `ubuntu-latest` remains the portable-environment
   check.
