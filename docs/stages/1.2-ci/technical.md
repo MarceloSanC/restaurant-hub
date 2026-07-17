@@ -17,7 +17,7 @@ branch: feat/9-1-2-ci
 tasks_count: 5
 ---
 
-# Technical — Stage 1.2 — CI no GitHub Actions (ERRO INTENCIONAL FORA DA JANELA DA SECAO 7)
+# Technical — Stage 1.2 — CI no GitHub Actions
 
 > **Como usar este documento (para code assistant):**
 > 1. Ler primeiro [§1 Contexto e estratégia](#1-contexto-e-estratégia-de-execução).
