@@ -218,9 +218,13 @@ skills_hint: [hex-arch-python, import-linter-rules]
 stage_id: 1.2-ci
 bounded_context: shared
 camada_alvo: bootstrap
-arquivos_a_criar: []
+arquivos_a_criar:
+  - docs/adr/1_2_0001-deterministic-pr-path-gates.md
+  - docs/stages/1.2-ci/ (artefatos do próprio ciclo)
 arquivos_a_modificar:
   - .github/workflows/ci.yml (ajustes para o repo real)
+  - docs/runbooks/validate-ci-gate.md (dever da §Maintenance do próprio runbook)
+  - docs/roadmap.md (este bloco)
 definition_of_done:
   - "PR de teste com erro intencional falha no CI; revertido, CI verde em <5min"
 contratos_introduzidos: []
@@ -232,6 +236,20 @@ complexidade_estimada: S
 gate_mode: strict
 skills_hint: [git-versioning-pointer]
 ```
+
+> Nota (2026-07-16): bloco corrigido durante a execução da Stage (issue #9) —
+> `arquivos_a_criar`/`arquivos_a_modificar` citavam só o `ci.yml` e omitiam os
+> caminhos que a própria Stage necessariamente toca: a §Maintenance do
+> `docs/runbooks/validate-ci-gate.md` obriga toda Stage que endurece o gate de CI
+> a estender o runbook na mesma Stage, a Fase 3A produziu um ADR, e os artefatos
+> da Stage + este bloco também são tocados (mesmo padrão declarado no bloco da
+> 1.1). `contratos_introduzidos: []` e `complexidade_estimada: S` seguem válidos:
+> 5 Tasks, nenhuma mudança de código-fonte (`src/`/`scripts/`). As fronteiras que
+> a Fase 3A avaliou e recusou (higiene de runner-minutes; levar o gate
+> issue-first ao caminho de PR) ficam registradas no `concept.md` §1 "Fora do
+> escopo" e no ADR 1.2.0001 — **não** foram acrescentadas aos `non_goals` daqui,
+> para não fazer o Roadmap citar como norma uma decisão do Concept que ele
+> governa.
 
 ---
 
