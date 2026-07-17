@@ -53,5 +53,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run gate completo (lint + typecheck + layout-check + tests)
+      # O nome espelha a cadeia real do target `check` (Makefile). Se a cadeia
+      # mudar lá, atualize aqui — e em docs/runbooks/validate-ci-gate.md, que
+      # cita este nome verbatim.
+      - name: Run gate completo (lint + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)
         run: make check
