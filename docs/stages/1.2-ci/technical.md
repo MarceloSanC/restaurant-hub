@@ -435,6 +435,32 @@ descartável não tem o label de auditoria). Constante nos três, logo não inte
 no isolamento; **não** foi contornado (CONVENTIONS §3.6 proíbe gravar `complete`
 à mão).
 
+### 2026-07-17 — [decision] Task 06 (extra) — travar os invariantes silenciosos do `ci.yml` — Claude
+
+**Contexto:** a Auditoria de Testes (subagente independente, contexto zerado)
+**reprovou** com um achado que não estava no plano: o `fetch-depth: 0` da Task 01
+— o entregável central da Stage — estava protegido **só por prosa**. A mutação
+real provou: reverter `fetch-depth: 0` → `1` deixava o `make check` inteiro verde
+(EXIT=0), ressuscitando o bug silencioso sem nenhum sinal. E o runbook que escrevi
+na Task 03 **admitia a lacuna em voz alta** ("If that line is ever removed,
+Class 5b goes green on the runner without anyone noticing"). É a própria classe de
+defeito que a Stage cataloga (gate protegido só por prosa), um nível acima.
+**Decisão:** não deixar como `[finding]` — cobertura faltante de gap legítimo vira
+Task extra (protocolo da Auditoria de Testes). Criado
+`tests/unit/test_ci_workflow.py` com dois invariantes cuja quebra é **silenciosa**
+(`fetch-depth: 0` no job de gate; `run: make check` literal — I3), e `pyyaml`
+declarada como dep dev real (vinha de carona do `pre-commit`; teste-gate não pode
+depender de carona). Commit `fa8551f`.
+**Mutação real (executada, não mental):**
+```
+# (a) fetch-depth: 0 -> 1   → AssertionError "precisa de fetch-depth: 0" (antes: make check EXIT=0, nada pegava)
+# (b) run: make check + arg  → AssertionError "precisa rodar exatamente make check (I3)"
+```
+Ambas revertidas; `make check` verde com o teste dentro (40 testes, era 38).
+**Razão de estar no escopo:** o teste guarda o invariante que **esta** Stage
+introduz; sem ele, o gate de saída da Stage certifica algo que deixa de valer no
+dia seguinte. Não é overengineering — é fechar a lacuna que a auditoria comprovou.
+
 ### 2026-07-16 — [decision] Task 05 — `guard-main-source` exercitado pela 1ª vez (CA5) — Claude
 
 **Contexto:** o `guard-main-source` nunca executou na história do repo — todo PR
