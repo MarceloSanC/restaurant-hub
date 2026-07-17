@@ -237,19 +237,21 @@ docs/stages/N.M-<slug>/technical.md: status=done mas há mudanças fora dos marc
 ```
 Exit code: **1**.
 
-**Proof that the environment — not the patch — is the variable** (run in Stage 1.2; the same patch, both sides):
+**Local proof that the environment — not the patch — is the variable** (Stage 1.2; same patch on both sides, synthetic Stage `done` and not merged):
 
 | Clone | `git log` sees baseline? | Result |
 |---|---|---|
-| full history (`fetch-depth: 0`) | yes | **exit 1** — freeze fires |
-| `--depth 1` (`fetch-depth: 1`) | no | **exit 0** — passes silently |
+| full history (simulates `fetch-depth: 0`) | yes | **exit 1** — freeze fires |
+| `git clone --depth 1` (simulates `fetch-depth: 1`) | no | **exit 0** — passes silently |
+
+The table says *simulates* on purpose: `fetch-depth` is an `actions/checkout` input, and this demonstration never ran the action. It closes the mechanism, not the environment.
 
 **Revert:**
 ```bash
 git restore docs/stages/N.M-<slug>/technical.md
 ```
 
-> **Local exit codes do not close this class by themselves.** Unlike Classes 1–9, the local demonstration proves only the *mechanism*; the runner's `pull_request` event checks out `refs/pull/N/merge`, not a local clone. Stage 1.2 closed the environment half with an A/B pair of **real runs** on a throwaway PR (same patch: green under `fetch-depth: 1`, red under `fetch-depth: 0`). Re-do that pair if `ci.yml`'s checkout, or the baseline-lookup logic, ever changes.
+> **Local exit codes do not close this class.** Unlike Classes 1–9, the local demonstration proves only the *mechanism*; the runner's `pull_request` event checks out `refs/pull/N/merge`, not a local clone. The environment half is closed only by an **A/B pair of real runs** on a throwaway PR — the same patch, green under `fetch-depth: 1` and red under `fetch-depth: 0`. The recorded evidence (run links) lives in §7 of [`docs/stages/1.2-ci/technical.md`](../stages/1.2-ci/technical.md). Re-do that pair if `ci.yml`'s checkout, or the baseline-lookup logic, ever changes.
 
 ---
 
@@ -416,7 +418,7 @@ If a patch was committed by accident:
 When a future Stage **hardens** the CI gate, this runbook MUST be extended in the same Stage. Examples:
 
 - **New tool joins `make check`** (e.g., `bandit`, `safety`, `pip-audit`): add a new §Class N section in §Procedure, in the order in which `make check` runs it, with the four-part shape (patch / command / expected output / revert). (Done in Stage 1.1 for `import-check` — §Class 8 — and `lock-check` — §Class 9.)
-- **A check's inputs differ between laptop and runner** (git history, network, filesystem layout): the class needs its **environment precondition** written next to the patch, and its local exit code does **not** close the transitivity argument on its own — say so explicitly. (Done in Stage 1.2 for the §7 freeze — §Class 5b — whose input is git history and which needed `fetch-depth: 0` in `ci.yml` plus an A/B pair of real runs to close.) The generalisation worth remembering: **a class this runbook cannot trigger locally is not automatically a class the CI enforces** — verify, do not assume.
+- **A check's inputs differ between laptop and runner** (git history, network, filesystem layout): the class needs its **environment precondition** written next to the patch, and its local exit code does **not** close the transitivity argument on its own — say so explicitly, and close the environment half with real runs whose links are recorded in the Stage's §7. (Added in Stage 1.2 for the §7 freeze — §Class 5b — whose input is git history and which required `fetch-depth: 0` in `ci.yml`.) The generalisation worth remembering: **a class this runbook cannot trigger locally is not automatically a class the CI enforces** — verify, do not assume.
 - **`scripts/check_layout.py` and `import-linter` coexist** by decision of Stage 1.1 (concept §6 — defense in depth): §Class 4 exercises the script, §Class 8 the contracts. If one ever replaces the other, merge the two classes.
 - **`fmt-check` promoted to a blocking target** (adding `ruff format --check` to `check`): upgrade the note in §Class 2 and add the target to the chain documented in §Purpose.
 - **Coverage gate** (`fail_under` in `pyproject.toml`): if the threshold or coverage tool changes, update §Class 7's command and fingerprint accordingly.
