@@ -378,4 +378,69 @@ Task 05 (guard-main-source) — independente das demais
 > `scripts/check_technical_postexec.py`. O frontmatter `updated_at`
 > **não muda** com edições aqui — cada entrada carrega data + autor.
 
+### 2026-07-16 — [decision] Task 04 — prova A/B do gate no runner (CA2 + CA3) — Claude
+
+**Contexto:** o entregável da Stage é a evidência de que `fetch-depth: 0` faz o
+freeze da §7 disparar **no runner** — o experimento local do concept §3 prova só
+o mecanismo. Executada no PR descartável **draft**
+[#13](https://github.com/MarceloSanC/restaurant-hub/pull/13) (branch
+`test/9-ci-gate-probe`, base `develop`), fechado sem merge (`state: CLOSED`,
+`mergedAt: null`, `isDraft: true`) e branch apagada.
+
+**Resultado — o mesmo patch (edição fora dos marcadores da §7: a linha de título
+do technical), nos três runs:**
+
+| Run | checkout | patch | run | duração | resultado |
+|---|---|---|---|---|---|
+| **A** | `fetch-depth: 1` | erro presente | [29546150438](https://github.com/MarceloSanC/restaurant-hub/actions/runs/29546150438) | 25s | **success** |
+| **B** | `fetch-depth: 0` | erro presente (idêntico) | [29546221053](https://github.com/MarceloSanC/restaurant-hub/actions/runs/29546221053) | 21s | **failure** |
+| **C** | `fetch-depth: 0` | erro revertido | [29546311519](https://github.com/MarceloSanC/restaurant-hub/actions/runs/29546311519) | **28s** | **success** |
+
+Run A (o buraco) — o gate **rodou e aprovou** a violação:
+```
+OK — 2 arquivo(s) validado(s).
+check_stage_issue: WARN — `gh` não disponível ou não autenticado; verificação programática pulada (best-effort).
+```
+
+Run B (o conserto) — mesmo patch, só o checkout mudou:
+```
+/home/runner/work/restaurant-hub/restaurant-hub/docs/stages/1.2-ci/technical.md: status=done mas há mudanças fora dos marcadores post-execution (baseline: 6af53211 `stage technical approved`):
+  replace: baseline[19:20] (lines 20-20) vs current[19:20] (lines 20-20)
+2 erro(s) em 2 arquivo(s).
+make: *** [Makefile:127: docs-check] Error 1
+##[error]Process completed with exit code 2.
+```
+
+**As duas premissas do §1 ficam MEDIDAS, não assumidas:** o Run B encontrou a
+baseline `6af53211` (logo `fetch-depth: 0` dá histórico completo no merge ref de
+um evento `pull_request`) **e** enforçou em vez de cair em fail-open (logo
+`_stage_is_merged()` resolveu `origin/develop` e concluiu "não mergeada").
+
+**Isolamento da variável:** `origin/develop` ficou em `6c36c51b` durante A e B —
+o merge ref não mudou entre os dois runs.
+
+**Ressalva de honestidade sobre "só uma linha muda":** o diff A→B tem **3**
+linhas, não 1 — o `sed` que trocou o `fetch-depth` acertou também duas linhas de
+**comentário** que citavam o valor. Só uma é funcional (`fetch-depth:`); as
+outras duas são texto de comentário, sem efeito no runner. A afirmação do concept
+§9 CA2 ("diferindo só na linha do checkout") vale para o **comportamento**, não
+para a contagem literal de linhas do diff.
+
+**Nota sobre o `audit-gate`:** ficou vermelho nos três runs, por design (o PR
+descartável não tem o label de auditoria). Constante nos três, logo não interfere
+no isolamento; **não** foi contornado (CONVENTIONS §3.6 proíbe gravar `complete`
+à mão).
+
+### 2026-07-16 — [deviation] Task 03 — o runbook afirmava prova que ainda não existia — Claude
+
+**Contexto:** achado do Checkpoint C (bloco 01–03). A §Class 5b e a §Maintenance
+do `validate-ci-gate.md` foram escritas afirmando, **no passado**, que a Stage
+"closed the environment half with an A/B pair of real runs" — mas a Task 04 ainda
+não tinha rodado.
+**Razão:** era a própria classe de defeito que a Stage conserta (declarar fechado
+sem ter olhado), transposta de gate para doc — e nenhum gate mecânico pega
+asserção de doc contra realidade. Corrigido em `f284fe0`: a classe voltou ao modo
+roteiro e aponta a evidência para esta §7, onde ela de fato entrou. Ajuste
+in-scope da própria Task 03, abaixo do threshold de decisão.
+
 <!-- END: post-execution -->
