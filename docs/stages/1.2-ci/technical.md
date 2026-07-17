@@ -416,8 +416,12 @@ baseline `6af53211` (logo `fetch-depth: 0` dá histórico completo no merge ref 
 um evento `pull_request`) **e** enforçou em vez de cair em fail-open (logo
 `_stage_is_merged()` resolveu `origin/develop` e concluiu "não mergeada").
 
-**Isolamento da variável:** `origin/develop` ficou em `6c36c51b` durante A e B —
-o merge ref não mudou entre os dois runs.
+**Isolamento da variável:** a **base** do merge ref — `origin/develop` — ficou em
+`6c36c51b` durante A e B (`base.sha` idêntico nos dois runs). O
+`refs/pull/13/merge` em si é **recomputado a cada push** — muda entre A e B,
+necessariamente, porque o head mudou; o que sustenta o isolamento é a base
+constante, não o merge ref. Precisão corrigida sobre a redação original (achado
+do Checkpoint C bloco 04–05).
 
 **Ressalva de honestidade sobre "só uma linha muda":** o diff A→B tem **3**
 linhas, não 1 — o `sed` que trocou o `fetch-depth` acertou também duas linhas de
@@ -560,9 +564,10 @@ qual dos dois é a intenção).
 ### 2026-07-16 — [finding] `audit-gate` não tem carve-out para PR descartável/draft — Claude
 
 **Contexto:** achado do Checkpoint B. O `audit-gate.yml` dispara em todo
-`pull_request` sem filtro de base nem de draft, então ficou vermelho nos 5 runs
-dos dois PRs descartáveis desta Stage (#13, #14) — corretamente, do ponto de
-vista dele, mas ruidosamente. O risco real não é o ruído: é que a saída óbvia
+`pull_request` sem filtro de base nem de draft, então ficou vermelho nos **4**
+runs dos dois PRs descartáveis desta Stage (3 no #13 + 1 no #14 — um por head
+SHA; contagem verificada) — corretamente, do ponto de vista dele, mas
+ruidosamente. O risco real não é o ruído: é que a saída óbvia
 para "deixar verde" é gravar `> **Auditoria:** complete` à mão, que CONVENTIONS
 §3.6 proíbe. O plano da Task 04 fixou por escrito que "verde" se refere ao run do
 `ci.yml`, não ao agregado de checks do PR — mas isso é disciplina, não mecanismo.
