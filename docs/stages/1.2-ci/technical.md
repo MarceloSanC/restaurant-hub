@@ -431,6 +431,36 @@ descartável não tem o label de auditoria). Constante nos três, logo não inte
 no isolamento; **não** foi contornado (CONVENTIONS §3.6 proíbe gravar `complete`
 à mão).
 
+### 2026-07-16 — [decision] Task 05 — `guard-main-source` exercitado pela 1ª vez (CA5) — Claude
+
+**Contexto:** o `guard-main-source` nunca executou na história do repo — todo PR
+até hoje teve base `develop`, onde ele fica SKIPPED (`if: base.ref == 'main'`).
+Um gate que nunca rodou é um gate que o projeto *acredita* ter.
+
+**Execução:** PR descartável **draft** [#14](https://github.com/MarceloSanC/restaurant-hub/pull/14)
+(branch `test/9-guard-main-probe`, commit vazio, base **`main`**), fechado **na
+mesma Task que o abriu** (`state: CLOSED`, `mergedAt: null`, `isDraft: true`) e
+branch apagada.
+
+**Resultado** — [run 29546481401](https://github.com/MarceloSanC/restaurant-hub/actions/runs/29546481401):
+
+| job | conclusão |
+|---|---|
+| `guard-main-source` | **failure** ✅ (esperado) |
+| `lint-and-test` | success |
+
+```
+PRs para main só são aceitos de 'develop' ou 'hotfix/*'. Origem: test/9-guard-main-probe
+##[error]Process completed with exit code 1.
+```
+
+**Controle de segurança:** draft, porque é mecânico — o GitHub recusa merge de PR
+em draft. Sem branch protection (ADR 1.1.0002), "não aprovar" não seguraria nada,
+e PR para `main` é o único caminho que alcança produção (GIT-WORKFLOW §Princípios
+#5). Excede o DoD do roadmap conscientemente: o DoD pede um PR de teste, e o
+objetivo declarado da Stage ("validar o pipeline") pede que o único job nunca
+observado seja observado.
+
 ### 2026-07-16 — [deviation] Task 03 — o runbook afirmava prova que ainda não existia — Claude
 
 **Contexto:** achado do Checkpoint C (bloco 01–03). A §Class 5b e a §Maintenance
@@ -442,5 +472,116 @@ sem ter olhado), transposta de gate para doc — e nenhum gate mecânico pega
 asserção de doc contra realidade. Corrigido em `f284fe0`: a classe voltou ao modo
 roteiro e aponta a evidência para esta §7, onde ela de fato entrou. Ajuste
 in-scope da própria Task 03, abaixo do threshold de decisão.
+
+### 2026-07-16 — [finding] `check_stage_issue.py` é repo-global: qualquer Stage em 3A deixa o `make check` local vermelho para todo mundo — Claude
+
+**Contexto:** `discover_technicals()` (`check_stage_issue.py:114-123`) varre
+`docs/stages/*/technical.md` — todas as Stages, independente do que se está
+mexendo. Enquanto o `technical.md` desta Stage foi o template (`issue_id: 0`,
+commit `316b88e`), o `make check` **local** ficou vermelho para qualquer dev com
+`gh` autenticado, inclusive quem não tocou na 1.2. Some ao preencher o
+`issue_id` real, mas repete a cada 3A.
+**Direção sugerida:** escopar a varredura ao delta do PR/branch, **ou** tratar
+`issue_id: 0`/`status: draft` como "Stage ainda em 3A" e pular. É também o
+argumento nº 1 da Decisão 1 do concept (por que não levar o gate ao caminho de
+PR): plugar `GH_TOKEN` exportaria esse vermelho para todo PR do repo.
+**Stage/issue candidata:** issue avulsa de tooling.
+
+### 2026-07-16 — [finding] `check_stage_issue.py` aprova issue **fechada** — Claude
+
+**Contexto:** o script pede `--json number,state` (`:70`) mas só compara `number`
+(`:79`) — `state` é campo morto. Um `issue_id` apontando para issue `CLOSED`
+(ou para a issue errada, que por acaso exista) satisfaz o gate issue-first.
+Verificado: `docs/stages/1.1-bootstrap/technical.md` → issue #1 está `CLOSED` e o
+gate diz `OK`.
+**Direção sugerida:** decidir explicitamente se `CLOSED` reprova (provavelmente
+sim durante a execução da Stage; não após o merge) e usar o `state` que já é
+buscado. Afeta a metade agendada (`stage-issue-audit.yml`), que é quem enforça.
+**Stage/issue candidata:** mesma issue de tooling do finding acima.
+
+### 2026-07-16 — [finding] Higiene de runner-minutes do `ci.yml`: sem `concurrency` e sem `timeout-minutes` — Claude
+
+**Contexto:** avaliado e **recusado** na Fase 3A por ser a mesma classe do
+non-goal "cache de dependências" (concept §1). Sem `concurrency`, pushes
+sucessivos deixam runs redundantes vivos; sem `timeout-minutes`, um job travado
+herda o default de **360 min**.
+**Direção sugerida:** `concurrency` agrupado por workflow+ref com
+`cancel-in-progress` **só para PR** (cancelar run de push em `develop` perderia
+o registro por merge), e `timeout-minutes` ~10.
+**Stage/issue candidata:** issue avulsa de CI, pós-Stage.
+
+### 2026-07-16 — [finding] Os dois gates locais discordam: `pre-commit` roda `ruff-format`, `make check` não — Claude
+
+**Contexto:** `.pre-commit-config.yaml` tem o hook `ruff-format`, mas
+`make check` (`Makefile:81`) não tem target de formatação — o `fmt` *aplica*,
+não *checa*. Código commitado com `--no-verify`, ou por quem não instalou os
+hooks, passa no CI desformatado. O `validate-ci-gate.md` §Class 2 já antecipa a
+promoção (`ruff format --check`) como hardening futuro.
+**Direção sugerida:** adicionar `fmt-check` à cadeia do `check` e promover a
+§Class 2 do runbook. É mudança do **gate local** (território da 1.1), não da
+ativação do CI — por isso fora do escopo desta Stage.
+**Stage/issue candidata:** issue avulsa de tooling (parente da #7, drift de hooks).
+
+### 2026-07-16 — [finding] `mypy` não cobre `scripts/` — Claude
+
+**Contexto:** `make typecheck` roda `mypy src/` (`Makefile:100`); `ruff` cobre
+`scripts/` mas o type-checker não. Os scripts de `scripts/` **são os gates** do
+projeto (`check_layout`, `check_technical_postexec`, `check_stage_issue`,
+`check_commit_msg`) e não têm nem tipos checados nem cobertura medida
+(`--cov=src/restaurant_hub` no `Makefile:141`; a entrada `*/scripts/*` do `omit`
+em `pyproject.toml:91` é redundante com `source = ["src"]`).
+**Direção sugerida:** estender `mypy` a `scripts/`; avaliar testes para os
+validadores.
+**Stage/issue candidata:** issue avulsa de tooling.
+
+### 2026-07-16 — [finding] O cabeçalho do `stage-issue-audit.yml` descreve um docs-check delta-scoped que não existe — Claude
+
+**Contexto:** o cabeçalho diz "o docs-check de PR/local valida **só o delta da
+branch**". Isso descreve bem o `check_technical_postexec.py` (que só *enforce* na
+janela de execução da Stage), mas **não** o `check_stage_issue.py`, que varre
+todas as Stages por glob. A imprecisão fez a primeira passada da Fase 3A desta
+Stage ler o split como inequivocamente deliberado — o Checkpoint A refutou, e o
+concept §6 Decisão 1 foi reancorado em argumentos estruturais.
+**Direção sugerida:** corrigir o cabeçalho para dizer qual checagem é
+delta-scoped e qual é repo-global.
+**Stage/issue candidata:** junto da issue de tooling do `check_stage_issue`.
+
+### 2026-07-16 — [finding] `CONVENTIONS.md` §3.4 afirma que o `check_technical_postexec.py` roda no pre-commit — não roda — Claude
+
+**Contexto:** achado do Checkpoint B. O `.pre-commit-config.yaml` tem só
+`ruff-format`, `ruff`, `mypy`, `check-commit-msg` e `lint-imports`. O
+`check_technical_postexec.py` roda **só** via `make docs-check` (e, portanto, no
+CI). Drift de doc pré-existente, da mesma classe que esta Stage cataloga:
+documento afirmando garantia que o mecanismo não dá.
+**Direção sugerida:** corrigir o texto de §3.4 **ou** adicionar o hook (decidir
+qual dos dois é a intenção).
+**Stage/issue candidata:** issue avulsa de docs/tooling.
+
+### 2026-07-16 — [finding] `audit-gate` não tem carve-out para PR descartável/draft — Claude
+
+**Contexto:** achado do Checkpoint B. O `audit-gate.yml` dispara em todo
+`pull_request` sem filtro de base nem de draft, então ficou vermelho nos 5 runs
+dos dois PRs descartáveis desta Stage (#13, #14) — corretamente, do ponto de
+vista dele, mas ruidosamente. O risco real não é o ruído: é que a saída óbvia
+para "deixar verde" é gravar `> **Auditoria:** complete` à mão, que CONVENTIONS
+§3.6 proíbe. O plano da Task 04 fixou por escrito que "verde" se refere ao run do
+`ci.yml`, não ao agregado de checks do PR — mas isso é disciplina, não mecanismo.
+**Direção sugerida:** avaliar `if: github.event.pull_request.draft == false` no
+`audit-gate` (PR em draft é, por definição, trabalho não pronto para auditoria).
+**Stage/issue candidata:** issue avulsa de CI, junto do finding de higiene.
+
+### 2026-07-16 — [finding] Precedente de escopo de commit violando CONVENTIONS §4(a) — Claude
+
+**Contexto:** achado do Checkpoint B. CONVENTIONS §4(a) manda escopo = bounded
+context e marca com ❌ o padrão "Stage como escopo"
+(`❌ feat(stage-2.3): ...`). O commit `5d0e069 docs(stage-1-1): registrar
+findings...` (Stage 1.1, mergeado) usa exatamente o padrão proibido, e o hook
+`check_commit_msg.py` não o pega (o regex aceita qualquer `[a-z0-9._-]+`). Esta
+Stage corrigiu o próprio plano (usa `docs(shared)`), mas o precedente segue no
+histórico.
+**Direção sugerida:** decidir se §4(a) vale (então o hook deveria recusar escopo
+que casa `stage[-_.]?\d`) ou se precisa de errata. Regra sem gate mecânico
+regride — foi o que aconteceu.
+**Stage/issue candidata:** issue avulsa de tooling (hook `check_commit_msg`).
 
 <!-- END: post-execution -->
