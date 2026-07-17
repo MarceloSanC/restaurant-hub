@@ -2,10 +2,10 @@
 title: Runbook — Validate the CI gate per error class
 description: Step-by-step procedure to prove that each error class is rejected by the local `make check` gate (which is exactly what the CI workflow runs)
 when-use: After hardening the CI gate (a new tool joins the chain); when auditing that the existing CI gate still rejects each error class; after an incident where a regression slipped past the gate
-keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage]
+keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage, fetch-depth, freeze-secao-7]
 status: accepted
 created_at: 2026-06-23
-updated_at: 2026-07-14
+updated_at: 2026-07-16
 runbook_id: validate-ci-gate
 triggers:
   - Hardening of the CI gate (new tool joining the chain — e.g., bandit, import-linter)
@@ -22,9 +22,11 @@ estimated_duration: ~20min
 
 ## Purpose
 
-Prove, **class by class**, that each error class enforced by the local `make check` gate produces a non-zero exit code, so the CI step `Run gate completo (lint + typecheck + layout-check + tests)` in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (which runs literally `make check`) rejects the broken state before merge.
+Prove, **class by class**, that each error class enforced by the local `make check` gate produces a non-zero exit code, so the CI step `Run gate completo (lint + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)` in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (which runs literally `make check`) rejects the broken state before merge.
 
 The argument is transitive: if every class fails `make check` locally, every class fails `make check` on the runner. This runbook documents the local demonstration that closes that transitivity argument.
+
+> **The transitivity argument has one precondition, and it is not free** (added in Stage 1.2 — [ADR 1.2.0001](../adr/1_2_0001-deterministic-pr-path-gates.md)). It holds only for checks whose inputs exist identically in both environments. A check that reads **git history** does *not* qualify under the runner's default shallow clone: `actions/checkout` defaults to `fetch-depth: 1`, which hides the baseline commit and makes such a check skip itself and **exit 0 — green because it did not look**. Stage 1.2 found exactly that in check 2 of `check_technical_postexec.py` and fixed it with `fetch-depth: 0` in `ci.yml`. When adding a class below, ask what its inputs look like on the runner before assuming transitivity carries it. See §Class 5b.
 
 In this project, `make check` expands to the following target chain (see [`Makefile`](../../Makefile)):
 
@@ -212,6 +214,45 @@ git restore docs/stages/N.M-<slug>/technical.md
 
 ---
 
+### Class 5b — `docs-check` / §7 freeze (`check_technical_postexec.py` **check 2**)
+
+> Added in **Stage 1.2** ([ADR 1.2.0001](../adr/1_2_0001-deterministic-pr-path-gates.md)). Class 5 above exercises the **structural** check, which is environment-independent. Check 2 — the diff-vs-baseline that actually enforces the §7 freeze (CONVENTIONS §3.4) — is a different animal: **its input is git history**, and it was silently skipped on every CI run until Stage 1.2. It needs its own class.
+
+**This class has two preconditions.** Neither is optional; if either is missing, the check exits 0 and the class proves nothing:
+
+1. **Full git history.** Check 2 locates the baseline via `git log --format=%H%x09%s -- <path>` looking for the subject `stage N.M: technical approved`, and calls `git merge-base --is-ancestor <baseline> origin/develop` to decide whether the Stage already merged. Under a shallow clone both fail open (`_approved_commit_for()` → `None`; no integration ref resolves). On the runner this means **`fetch-depth: 0` in [`ci.yml`](../../.github/workflows/ci.yml)** — the default `fetch-depth: 1` disables this class entirely.
+2. **An eligible target.** The freeze only bites for a Stage that is `status: done` **and not yet merged** (CONVENTIONS §3.4 — the execution window). A Stage in 3A/3B has no baseline (legitimately skipped), and a **merged** Stage is skipped by `_stage_is_merged()`. So you cannot exercise this class against `1.1-bootstrap` or any other merged Stage: it is skipped in *both* worlds and the A/B proves nothing.
+
+**Patch** (apply to a `technical.md` that is `done` and not merged — the Stage currently in flight): edit any line **outside** the `BEGIN/END: post-execution` markers, e.g. change the `# Technical — …` title line.
+
+**Command:**
+```bash
+uv run python scripts/check_technical_postexec.py docs/stages/N.M-<slug>/technical.md
+```
+
+**Expected output (fingerprint):**
+```
+docs/stages/N.M-<slug>/technical.md: status=done mas há mudanças fora dos marcadores post-execution (baseline: 9761ea38 `stage technical approved`):
+  replace: baseline[4:5] (lines 5-5) vs current[4:5] (lines 5-5)
+```
+Exit code: **1**.
+
+**Proof that the environment — not the patch — is the variable** (run in Stage 1.2; the same patch, both sides):
+
+| Clone | `git log` sees baseline? | Result |
+|---|---|---|
+| full history (`fetch-depth: 0`) | yes | **exit 1** — freeze fires |
+| `--depth 1` (`fetch-depth: 1`) | no | **exit 0** — passes silently |
+
+**Revert:**
+```bash
+git restore docs/stages/N.M-<slug>/technical.md
+```
+
+> **Local exit codes do not close this class by themselves.** Unlike Classes 1–9, the local demonstration proves only the *mechanism*; the runner's `pull_request` event checks out `refs/pull/N/merge`, not a local clone. Stage 1.2 closed the environment half with an A/B pair of **real runs** on a throwaway PR (same patch: green under `fetch-depth: 1`, red under `fetch-depth: 0`). Re-do that pair if `ci.yml`'s checkout, or the baseline-lookup logic, ever changes.
+
+---
+
 ### Class 6 — `test` (pytest)
 
 **Patch:** edit [`tests/test_smoke.py`](../../tests/test_smoke.py), changing the bootstrap smoke test so it fails. The shipped test only asserts that `import restaurant_hub` succeeds; force a failure by adding a failing assertion to its body, e.g.:
@@ -334,7 +375,9 @@ git status              # must be clean
 make check              # must exit 0
 ```
 
-If `make check` is green and each class individually produced a non-zero exit code, the transitivity argument is closed: the CI step `Run gate completo (lint + typecheck + layout-check + tests)` runs exactly `make check`, so every class fails on the runner as well.
+If `make check` is green and each class individually produced a non-zero exit code, the transitivity argument is closed **for every class whose inputs are identical on the runner**: the CI step `Run gate completo (lint + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)` runs exactly `make check`, so every such class fails on the runner as well.
+
+**Class 5b is the exception that proves the rule** — its input is git history, which the runner does *not* reproduce by default. Its local demonstration does **not** transfer on its own; it transfers only because `ci.yml` pins `fetch-depth: 0`. If that line is ever removed, Class 5b goes green on the runner without anyone noticing, and this §Verification silently overstates what it proved.
 
 ## Rollback
 
@@ -362,6 +405,8 @@ If a patch was committed by accident:
 | The patch triggers an error in a *different* class than expected (e.g., the type-error patch is also flagged by lint). | Patch is too broad; multiple linters react. | Use the minimal patch listed in this runbook; do not improvise broader patches. |
 | `make check` fails on baseline (before any patch). | Working tree drift, or a previous patch was not reverted. | `git status` first; `git restore .` to discard any leftover changes; re-run `make check`. |
 | `check_technical_postexec.py` does not flag an edit **outside** the markers in a `status: done` file. | Expected when the Stage has no reserved `stage N.M: technical approved` commit in history: check 2 is scoped to the execution window, so without that baseline only the structural check runs. | Exercise Class 5 via the **structural** check (break a marker — see §Procedure Class 5 above), which fires regardless of status. |
+| Check 2 does not flag an out-of-markers edit **on the runner**, though it flags it locally. | The clone is shallow: `actions/checkout` defaults to `fetch-depth: 1`, so the baseline commit and `origin/develop` are invisible and check 2 fails open (exit 0). Fixed in Stage 1.2. | Confirm `ci.yml` still pins `fetch-depth: 0` on the `lint-and-test` checkout (ADR 1.2.0001). If it was dropped, the class is disabled repo-wide and silently — see §Class 5b. |
+| Check 2 is skipped even with full history. | The target Stage is already **merged** (`_stage_is_merged()` → skip: the freeze only covers the execution window) or is still in 3A/3B (no baseline yet). | Expected. Use a Stage that is `done` and not merged — see §Class 5b precondition 2. |
 | `check_stage_issue.py` prints `WARN — gh não disponível` and returns 0. | `gh` is not installed or not authenticated. | Expected locally without `gh`. To exercise this sub-check, install `gh` and run `gh auth login`; otherwise rely on the `check_technical_postexec.py` structural break as the Class 5 trigger. |
 | Class 6 patch flagged by `ruff` (lint) before reaching `pytest`. | If `make check` runs `lint` first and exits on it, you won't see `pytest` fail. | Run `uv run pytest tests/test_smoke.py -v` directly (as listed in this runbook) instead of the full `make check`. |
 | Fingerprint differs from the runbook (different line number, slightly different wording). | Tool was upgraded; line numbers shift as files evolve. | Match on **rule code** (`F401`, `[no-untyped-def]`, etc.) and **exit code**, not on the exact line number. Update the runbook if a fingerprint drifts materially. |
@@ -371,6 +416,7 @@ If a patch was committed by accident:
 When a future Stage **hardens** the CI gate, this runbook MUST be extended in the same Stage. Examples:
 
 - **New tool joins `make check`** (e.g., `bandit`, `safety`, `pip-audit`): add a new §Class N section in §Procedure, in the order in which `make check` runs it, with the four-part shape (patch / command / expected output / revert). (Done in Stage 1.1 for `import-check` — §Class 8 — and `lock-check` — §Class 9.)
+- **A check's inputs differ between laptop and runner** (git history, network, filesystem layout): the class needs its **environment precondition** written next to the patch, and its local exit code does **not** close the transitivity argument on its own — say so explicitly. (Done in Stage 1.2 for the §7 freeze — §Class 5b — whose input is git history and which needed `fetch-depth: 0` in `ci.yml` plus an A/B pair of real runs to close.) The generalisation worth remembering: **a class this runbook cannot trigger locally is not automatically a class the CI enforces** — verify, do not assume.
 - **`scripts/check_layout.py` and `import-linter` coexist** by decision of Stage 1.1 (concept §6 — defense in depth): §Class 4 exercises the script, §Class 8 the contracts. If one ever replaces the other, merge the two classes.
 - **`fmt-check` promoted to a blocking target** (adding `ruff format --check` to `check`): upgrade the note in §Class 2 and add the target to the chain documented in §Purpose.
 - **Coverage gate** (`fail_under` in `pyproject.toml`): if the threshold or coverage tool changes, update §Class 7's command and fingerprint accordingly.
