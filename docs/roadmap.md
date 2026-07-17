@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-16
-last_reviewed_at: 2026-07-14
+updated_at: 2026-07-17
+last_reviewed_at: 2026-07-17
 ---
 
 # Roadmap — restaurant-hub
@@ -86,7 +86,7 @@ graph LR
 
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
-| 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | in_progress | 1.1 → 1.2 |
+| 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | not_started | 2.1 → 2.5 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | not_started | 3.1 → 3.5 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | not_started | 4.1 → 4.7 |
@@ -107,7 +107,7 @@ graph LR
 | Stage | Título | Camada-alvo | Status | Depende de |
 |---|---|---|---|---|
 | `1.1-bootstrap` | Bootstrap do projeto | bootstrap | done | — |
-| `1.2-ci` | CI no GitHub Actions | bootstrap | draft | `1.1-bootstrap` |
+| `1.2-ci` | CI no GitHub Actions | bootstrap | done | `1.1-bootstrap` |
 | `2.1-identity-domain` | Domínio de tenancy e acesso | domain | draft | `1.2-ci` |
 | `2.2-identity-application` | Use cases de tenancy e acesso | application | draft | `2.1-identity-domain` |
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | draft | `2.2-identity-application` |
@@ -1071,6 +1071,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-10 | Criação inicial (Steps 1–8 decompostos, 9–13 backlog) | Fase 2 do RUNBOOK-INIT-PROJECT |
 | 2026-07-12 | Criação da Tabela de Issues (avulsas) | Referenciada por `PROMPT-issue-single-session.md` e pelo PR template, mas inexistente — issue #2 |
 | 2026-07-14 | Stage 1.1-bootstrap concluída (`done`); bloco corrigido para o escopo real; Step 1 → `in_progress` | Execução da Stage 1.1 — issue #1 |
+| 2026-07-17 | Stage 1.2-ci concluída (`done`); bloco corrigido (nota datada — arquivos reais + ADR); Step 1 → `done` (fundação fechada) | Execução da Stage 1.2 — issue #9 |
 
 ## Próxima revisão de roadmap
 
