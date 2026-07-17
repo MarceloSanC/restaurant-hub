@@ -33,6 +33,12 @@ dev = [
     "mypy>=1.10",
     "pre-commit>=3.7",
     "import-linter>=2.0",
+    # Parsing de workflow do GitHub Actions no teste de invariante de CI
+    # (tests/unit/test_ci_workflow.py). Vinha só como dep transitiva do
+    # pre-commit; declarada aqui porque teste-gate não pode depender de carona:
+    # se a carona sair, o gate morre em silêncio — que é o defeito que a
+    # Stage 1.2 existe para consertar.
+    "pyyaml>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -29,7 +29,18 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 é REQUISITO do gate, não otimização.
+      # `make check` → `docs-check` → `check_technical_postexec.py` checagem 2
+      # (freeze da §7, CONVENTIONS §3.4) localiza o commit-baseline
+      # `stage N.M: technical approved` via `git log`, e resolve `origin/develop`
+      # para saber se a Stage já mergeou. Com o clone raso default
+      # (fetch-depth: 1) nada disso existe no runner: a checagem devolve None e
+      # se PULA EM SILÊNCIO — verde por não ter olhado, exatamente na janela que
+      # ela protege (Stage `done` e ainda não mergeada = todo PR de Stage).
+      # Ver ADR 1.2.0001 (docs/adr/1_2_0001-deterministic-pr-path-gates.md).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,5 +53,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run gate completo (lint + typecheck + layout-check + tests)
+      # O nome espelha a cadeia real do target `check` (Makefile). Se a cadeia
+      # mudar lá, atualize aqui — e em docs/runbooks/validate-ci-gate.md, que
+      # cita este nome verbatim.
+      - name: Run gate completo (lint + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)
         run: make check
