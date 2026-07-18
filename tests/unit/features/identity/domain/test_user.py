@@ -9,6 +9,7 @@ import pytest
 
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidIdentifierError,
     MissingTenantError,
     PlatformAdminTenantError,
 )
@@ -49,6 +50,36 @@ def test_usuario_de_restaurante_sem_tenant_e_rejeitado(role: Role) -> None:
     # Invariante 1: papel de restaurante exige tenant_id.
     with pytest.raises(MissingTenantError, match=role.value):
         _user(role, tenant_id=None)
+
+
+@pytest.mark.parametrize("role", _RESTAURANT_ROLES)
+@pytest.mark.parametrize("branco", ["", "   "])
+def test_tenant_em_branco_conta_como_ausente(role: Role, branco: str) -> None:
+    # `""` não é "ter tenant": aceitá-lo criaria um balde de falso isolamento
+    # onde todos os usuários "sem tenant" se enxergariam.
+    with pytest.raises(MissingTenantError, match=role.value):
+        _user(role, tenant_id=RestaurantId(branco))
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_id_vazio_e_rejeitado(invalido: str) -> None:
+    with pytest.raises(InvalidIdentifierError, match="identificador de usuário"):
+        _user(Role.OWNER, user_id=invalido)
+
+
+class _SempreIgual:
+    """Objeto que se declara igual a qualquer coisa, para testar a reflexão."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return 0
+
+
+def test_eq_delega_ao_outro_operando_quando_o_tipo_e_estranho() -> None:
+    assert _user(Role.OWNER) == _SempreIgual()
+    assert _SempreIgual() == _user(Role.OWNER)
 
 
 def test_platform_admin_sem_tenant_e_valido() -> None:

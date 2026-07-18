@@ -5,7 +5,10 @@ import dataclasses
 import pytest
 
 from restaurant_hub.features.identity.domain.entities.unit import Unit
-from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
+from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidIdentifierError,
+    InvalidNameError,
+)
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UnitId,
@@ -60,3 +63,32 @@ def test_entidade_e_imutavel() -> None:
     unidade = Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
     with pytest.raises(dataclasses.FrozenInstanceError):
         unidade.restaurant_id = RestaurantId("r2")  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_id_vazio_e_rejeitado(invalido: str) -> None:
+    with pytest.raises(InvalidIdentifierError, match="identificador de unidade"):
+        Unit(id=UnitId(invalido), restaurant_id=RestaurantId("r1"), name="Matriz")
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_restaurante_vazio_e_rejeitado(invalido: str) -> None:
+    # tenant_id vazio criaria um balde de falso isolamento.
+    with pytest.raises(InvalidIdentifierError, match="restaurante da unidade"):
+        Unit(id=UnitId("u1"), restaurant_id=RestaurantId(invalido), name="Matriz")
+
+
+class _SempreIgual:
+    """Objeto que se declara igual a qualquer coisa, para testar a reflexão."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return 0
+
+
+def test_eq_delega_ao_outro_operando_quando_o_tipo_e_estranho() -> None:
+    unidade = Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
+    assert unidade == _SempreIgual()
+    assert _SempreIgual() == unidade

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.exceptions.errors import (
     CrossTenantError,
+    InvalidIdentifierError,
     MissingTenantError,
     PlatformAdminMembershipError,
     PlatformAdminTenantError,
@@ -61,9 +62,13 @@ class User:
     tenant_id: RestaurantId | None
 
     def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise InvalidIdentifierError("usuário")
         if self.role is Role.PLATFORM_ADMIN and self.tenant_id is not None:
             raise PlatformAdminTenantError()
-        if self.role is not Role.PLATFORM_ADMIN and self.tenant_id is None:
+        # Tenant em branco é *ausência* de tenant: aceitá-lo criaria um balde de
+        # falso isolamento onde todos os "sem tenant" se enxergariam.
+        if self.role is not Role.PLATFORM_ADMIN and not (self.tenant_id or "").strip():
             raise MissingTenantError(self.role.value)
 
     def has_permission(self, permission: Permission) -> bool:

@@ -7,6 +7,7 @@ from restaurant_hub.features.identity.domain.exceptions.errors import (
     CrossTenantError,
     IdentityError,
     InvalidEmailError,
+    InvalidIdentifierError,
     InvalidNameError,
     InvalidRoleError,
     MissingTenantError,
@@ -28,6 +29,7 @@ def test_identity_error_e_um_domain_error() -> None:
     "exc_type",
     [
         InvalidEmailError,
+        InvalidIdentifierError,
         InvalidNameError,
         InvalidRoleError,
         MissingTenantError,

@@ -5,7 +5,10 @@ import dataclasses
 import pytest
 
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
-from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
+from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidIdentifierError,
+    InvalidNameError,
+)
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
 )
@@ -60,3 +63,28 @@ def test_entidade_e_imutavel() -> None:
     restaurante = Restaurant(id=RestaurantId("r1"), name="Cantina")
     with pytest.raises(dataclasses.FrozenInstanceError):
         restaurante.name = "Outro"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_id_vazio_e_rejeitado(invalido: str) -> None:
+    # Entidade sem identidade é entidade inválida.
+    with pytest.raises(InvalidIdentifierError, match="identificador de restaurante"):
+        Restaurant(id=RestaurantId(invalido), name="Cantina")
+
+
+class _SempreIgual:
+    """Objeto que se declara igual a qualquer coisa, para testar a reflexão."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return 0
+
+
+def test_eq_delega_ao_outro_operando_quando_o_tipo_e_estranho() -> None:
+    # Devolver NotImplemented (e não False) deixa o Python consultar o __eq__
+    # refletido — é o que faz `mock.ANY` funcionar nos testes das Stages 2.2/2.3.
+    restaurante = Restaurant(id=RestaurantId("r1"), name="Cantina")
+    assert restaurante == _SempreIgual()
+    assert _SempreIgual() == restaurante

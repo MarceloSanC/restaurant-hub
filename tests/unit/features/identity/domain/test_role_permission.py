@@ -4,7 +4,10 @@ import pytest
 
 from restaurant_hub.features.identity.domain.exceptions.errors import InvalidRoleError
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
-from restaurant_hub.features.identity.domain.value_objects.role import Role
+from restaurant_hub.features.identity.domain.value_objects.role import (
+    _ROLE_PERMISSIONS,
+    Role,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -55,10 +58,10 @@ def test_role_compara_por_valor() -> None:
 
 
 def test_mapa_de_permissoes_e_total_sobre_todos_os_papeis() -> None:
-    # Guarda contra papel novo adicionado sem entrada no mapa: sem entrada,
-    # `role.permissions` levanta KeyError e este teste quebra.
-    for role in Role:
-        assert isinstance(role.permissions, frozenset)
+    # Asserção sobre as CHAVES, não sobre o tipo do retorno: se o acesso ao mapa
+    # virasse `.get(role, frozenset())`, um papel sem entrada passaria a negar
+    # tudo em silêncio e um assert de tipo não perceberia.
+    assert set(_ROLE_PERMISSIONS) == set(Role)
 
 
 @pytest.mark.parametrize(

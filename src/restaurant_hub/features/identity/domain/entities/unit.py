@@ -9,7 +9,10 @@ Igualdade por **identidade**.
 
 from dataclasses import dataclass
 
-from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
+from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidIdentifierError,
+    InvalidNameError,
+)
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UnitId,
@@ -31,6 +34,10 @@ class Unit:
     name: str
 
     def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise InvalidIdentifierError("unidade")
+        if not self.restaurant_id.strip():
+            raise InvalidIdentifierError("restaurante da unidade")
         if not self.name.strip():
             raise InvalidNameError("unidade")
 

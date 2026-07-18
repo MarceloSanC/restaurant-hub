@@ -10,7 +10,10 @@ entidade, ainda que os demais campos difiram.
 
 from dataclasses import dataclass
 
-from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
+from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidIdentifierError,
+    InvalidNameError,
+)
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
 )
@@ -29,6 +32,8 @@ class Restaurant:
     name: str
 
     def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise InvalidIdentifierError("restaurante")
         if not self.name.strip():
             raise InvalidNameError("restaurante")
 

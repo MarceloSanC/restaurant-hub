@@ -61,6 +61,18 @@ def test_rejeita_email_malformado(invalido: str) -> None:
     assert repr(invalido) in mensagem
 
 
+def test_terminador_de_linha_e_removido_e_nao_sobrevive_no_valor() -> None:
+    # O `.strip()` corre antes da validação, então nenhum terminador chega ao
+    # valor guardado — não há vetor de injeção por quebra de linha.
+    assert Email("dono@cantina.com\n").value == "dono@cantina.com"
+    assert Email("dono@cantina.com\r\n").value == "dono@cantina.com"
+
+
+def test_quebra_de_linha_no_meio_e_rejeitada() -> None:
+    with pytest.raises(InvalidEmailError):
+        Email("dono@cantina.com\nEVIL")
+
+
 def test_mensagem_de_erro_preserva_o_valor_nao_normalizado() -> None:
     # O relato tem que mostrar o que o usuário digitou (com espaços e maiúsculas),
     # não a versão normalizada — senão o diagnóstico engana.

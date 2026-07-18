@@ -20,6 +20,18 @@ class InvalidEmailError(IdentityError):
         super().__init__(f"e-mail inválido: {value!r}")
 
 
+class InvalidIdentifierError(IdentityError):
+    """Identificador de entidade vazio.
+
+    Entidade sem identidade é entidade inválida. Importa em especial para o
+    `tenant_id`: um identificador vazio criaria um balde de falso isolamento, no
+    qual usuários e unidades "sem tenant" se enxergariam.
+    """
+
+    def __init__(self, entity: str) -> None:
+        super().__init__(f"identificador de {entity} não pode ser vazio")
+
+
 class InvalidNameError(IdentityError):
     """Nome obrigatório vazio numa entidade do BC.
 
