@@ -59,3 +59,11 @@ def test_rejeita_email_malformado(invalido: str) -> None:
     assert "e-mail inválido" in mensagem
     # A mensagem precisa carregar o valor ofensivo original — não só o prefixo.
     assert repr(invalido) in mensagem
+
+
+def test_mensagem_de_erro_preserva_o_valor_nao_normalizado() -> None:
+    # O relato tem que mostrar o que o usuário digitou (com espaços e maiúsculas),
+    # não a versão normalizada — senão o diagnóstico engana.
+    with pytest.raises(InvalidEmailError) as excinfo:
+        Email("  A@B  ")
+    assert "'  A@B  '" in str(excinfo.value)

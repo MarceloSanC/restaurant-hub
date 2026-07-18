@@ -60,6 +60,14 @@ def test_link_to_unit_entre_tenants_diferentes_e_bloqueado(role: Role) -> None:
         usuario.link_to_unit(UNIT_B1)
 
 
+def test_cross_tenant_error_cita_o_tenant_do_usuario_antes_do_da_unidade() -> None:
+    # Sem fixar a ordem, inverter os argumentos no raise passa despercebido e a
+    # mensagem acusa o tenant errado.
+    usuario = _user(Role.EMPLOYEE, TENANT_A)
+    with pytest.raises(CrossTenantError, match=r"usuário do tenant 'rA'.*unidade do tenant 'rB'"):
+        usuario.link_to_unit(UNIT_B1)
+
+
 def test_platform_admin_nao_recebe_vinculo_de_unidade() -> None:
     admin = _user(Role.PLATFORM_ADMIN, None)
     with pytest.raises(PlatformAdminMembershipError, match="unidade"):
