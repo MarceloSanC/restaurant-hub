@@ -53,5 +53,9 @@ def test_aceita_emails_bem_formados(valido: str) -> None:
     ],
 )
 def test_rejeita_email_malformado(invalido: str) -> None:
-    with pytest.raises(InvalidEmailError, match="e-mail inválido"):
+    with pytest.raises(InvalidEmailError) as excinfo:
         Email(invalido)
+    mensagem = str(excinfo.value)
+    assert "e-mail inválido" in mensagem
+    # A mensagem precisa carregar o valor ofensivo original — não só o prefixo.
+    assert repr(invalido) in mensagem

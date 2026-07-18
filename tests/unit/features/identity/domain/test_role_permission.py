@@ -40,6 +40,14 @@ def test_from_string_rejeita_papel_desconhecido(desconhecido: str) -> None:
         Role.from_string(desconhecido)
 
 
+def test_from_string_preserva_a_causa_original() -> None:
+    # `raise ... from exc` mantém o ValueError do enum como causa, preservando
+    # o rastro para depuração nas camadas de fora.
+    with pytest.raises(InvalidRoleError) as excinfo:
+        Role.from_string("chef")
+    assert isinstance(excinfo.value.__cause__, ValueError)
+
+
 def test_role_compara_por_valor() -> None:
     # VO: igualdade estrutural; StrEnum também compara com a própria string.
     assert Role.from_string("owner") == Role.OWNER
