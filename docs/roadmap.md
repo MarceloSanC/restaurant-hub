@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-17
-last_reviewed_at: 2026-07-17
+updated_at: 2026-07-18
+last_reviewed_at: 2026-07-18
 ---
 
 # Roadmap — restaurant-hub
@@ -87,7 +87,7 @@ graph LR
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
-| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | not_started | 2.1 → 2.5 |
+| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.5 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | not_started | 3.1 → 3.5 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | not_started | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
@@ -108,7 +108,7 @@ graph LR
 |---|---|---|---|---|
 | `1.1-bootstrap` | Bootstrap do projeto | bootstrap | done | — |
 | `1.2-ci` | CI no GitHub Actions | bootstrap | done | `1.1-bootstrap` |
-| `2.1-identity-domain` | Domínio de tenancy e acesso | domain | draft | `1.2-ci` |
+| `2.1-identity-domain` | Domínio de tenancy e acesso | domain | done | `1.2-ci` |
 | `2.2-identity-application` | Use cases de tenancy e acesso | application | draft | `2.1-identity-domain` |
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | draft | `2.2-identity-application` |
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | draft | `2.3-identity-persistence` |
@@ -287,6 +287,24 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python]
 ```
+
+> Nota (2026-07-18): bloco corrigido durante a execução da Stage (issue #17) —
+> o recorte real tocou mais do que o bloco previa, em dois eixos. **File-scope:**
+> por ser a 1ª feature-slice do repo, `scripts/check_layout.py`
+> (`REQUIRED_FEATURE_DIRS`) exige os três diretórios da feature, então entraram
+> `features/identity/{application,adapters}/__init__.py` como pacotes-placeholder
+> vazios; e o `.importlinter` foi **modificado** (contrato aditivo
+> `identity-domain-purity`, espelhando LAYOUT §3 como o `domain-purity` já fazia
+> para `shared.domain`) — logo `arquivos_a_modificar: []` não se sustentou.
+> **Contratos:** além de `Restaurant/Unit/User` e `Email/Role/Permission`, a Stage
+> introduziu os identificadores tipados (`RestaurantId/UnitId/UserId`), o VO
+> `UnitMembership` (esqueleto do vínculo user↔unit — kickoff #1, já citado na
+> descrição humana) e a hierarquia de exceções do BC (`IdentityError` + 7
+> subclasses); e **consome** `DomainError` de `shared/domain` (1.1), contra
+> `contratos_consumidos: []`. `complexidade_estimada: M` e `gate_mode: strict`
+> seguem válidos (7 Tasks + 4 commits de correção de revisão). As decisões de
+> modelagem estão nos ADRs 2.1.0001 (agregados e membership) e 2.1.0002
+> (`platform_admin` sem tenant); os desvios de execução, na §7 do `technical.md`.
 
 #### Stage 2.2 — `2.2-identity-application`
 
@@ -1073,6 +1091,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-12 | Criação da Tabela de Issues (avulsas) | Referenciada por `PROMPT-issue-single-session.md` e pelo PR template, mas inexistente — issue #2 |
 | 2026-07-14 | Stage 1.1-bootstrap concluída (`done`); bloco corrigido para o escopo real; Step 1 → `in_progress` | Execução da Stage 1.1 — issue #1 |
 | 2026-07-17 | Stage 1.2-ci concluída (`done`); bloco corrigido (nota datada — arquivos reais + ADR); Step 1 → `done` (fundação fechada) | Execução da Stage 1.2 — issue #9 |
+| 2026-07-18 | Stage 2.1-identity-domain concluída (`done`); bloco corrigido (nota datada — file-scope e contratos reais); Step 2 → `in_progress` (primeiro código de domínio do projeto) | Execução da Stage 2.1 — issue #17 |
 
 ## Próxima revisão de roadmap
 
