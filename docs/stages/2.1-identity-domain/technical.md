@@ -355,4 +355,88 @@ Task 03,04,05,06 ─► Task 07 (User)   [usa Email,Role,Permission,Unit,UnitMem
 > `status: done` (enquanto a Stage não mergeou). Modo autônomo (ADR 0.0.0004):
 > decisões reversíveis-baratas são registradas aqui como `[decision]` sem pergunta.
 
+### 2026-07-18 — [decision] Task 01 — contrato import-linter e pacotes-placeholder — Claude (autônomo)
+**Contexto:** identity é a 1ª feature-slice do repo. `scripts/check_layout.py`
+(`REQUIRED_FEATURE_DIRS`) exige `domain/`, `application/` e `adapters/` em toda
+feature, e o `.importlinter` marcava contratos de feature como "ativar quando a 1ª
+feature existir". O bloco do roadmap 2.1 declara `arquivos_a_modificar: []`.
+**Pergunta:** instalar agora o contrato de pureza de `identity.domain` (e os
+pacotes-placeholder), ou adiar para a 2.2 quando a camada application existir?
+**Opções:**
+- A — adiar tudo para a 2.2, mantendo o file-scope do roadmap literal
+- B — instalar o contrato `forbidden` de `identity.domain` + placeholders agora ✅ recomendada
+**Decisão:** B.
+**Razão:** `check_layout.py` **obriga** os placeholders (sem eles o gate falha), então
+o file-scope já se expande de qualquer modo; e a Stage de domínio é o lugar natural
+para instalar a pureza do domínio. O import-linter é mais estrito que o
+`check_layout.py` (pega `starlette`/`httpx`/`alembic`, que o AST-checker não lista).
+Reversível barato. O contrato é **puramente aditivo** — nenhum contrato existente foi
+afrouxado (verificado no diff; `lint-imports` reporta 5 contratos KEPT). Independence
+entre BCs e layers-por-feature seguem adiados (2º BC / camada application). O bloco do
+roadmap foi reconciliado com nota datada no fechamento, no padrão das notas 1.1/1.2.
+
+### 2026-07-18 — [deviation] Tasks 05/07 — entidades imutáveis (`frozen=True`) — Claude (autônomo)
+**Contexto:** o technical especificava `@dataclass(eq=False)` para `Restaurant`,
+`Unit` e `User`. A revisão independente do bloco final demonstrou empiricamente que,
+com campos públicos mutáveis, a invariante de tenancy era furável **após** a
+construção: `emp.role = Role.PLATFORM_ADMIN` transformava um employee com tenant em
+admin de plataforma e passava a enxergar unidade de outro tenant.
+**Razão:** a skill `ddd-tactical-patterns` exige invariante imposta no construtor
+**e** nos métodos que mutam estado, e "entidade nunca exposta em estado inválido".
+Como esta Stage não tem operação de mutação, `frozen=True` é a forma mínima que fecha
+o buraco; mudança de estado legítima passa a ser `dataclasses.replace`, que reexecuta
+`__post_init__` e revalida. Fecha também o caminho silencioso de reidratação por
+atribuição no mapper da Stage 2.3. Abaixo do limiar de regressão do technical: não
+muda contrato, fronteira nem critério de aceite — endurece a implementação deles.
+
+### 2026-07-18 — [deviation] Task 05 — `InvalidNameError`/`InvalidIdentifierError` no lugar de `ValueError` — Claude (autônomo)
+**Contexto:** o technical (Task 05) mandava levantar `ValueError` para nome vazio,
+tratando-o como "dado estrutural, não regra de negócio". A auditoria de testes
+verificou o handler já registrado em `shared/infrastructure/http/error_handlers.py`:
+ele captura `NotFoundError` (404) e `DomainError` (422); um `ValueError` escapa dos
+dois e vira **500**. A auditoria seguinte encontrou ainda que identificador vazio
+(`id`/`tenant_id` = `""`) era aceito, criando um balde de falso isolamento no qual
+todos os "sem tenant" se enxergariam.
+**Razão:** o concept §6 fecha com "todas subclasses de `IdentityError` → `DomainError`";
+manter `ValueError` contradiz isso e planta um 500 na 2.4. Foram criadas
+`InvalidNameError` e `InvalidIdentifierError`, ambas `IdentityError`. **Nota de
+precisão para a auditoria:** o concept §6 **não enumera** estes dois cenários (a
+validação de `name` nasceu no technical, não no concept) — optei por registrar o
+desvio aqui em vez de regredir o concept, por proporcionalidade; a divergência fica
+visível para a auditoria de contexto limpo decidir se merece retoque do concept.
+
+### 2026-07-18 — [deviation] Tasks 05/07 — `__eq__` devolve `NotImplemented` — Claude (autônomo)
+**Contexto:** a implementação original devolvia `False` para tipo alheio, o que
+impede o Python de consultar o `__eq__` refletido do outro operando.
+**Razão:** quebra a comparação simétrica e faz `mock.ANY` falhar de forma não-óbvia —
+padrão comum nos testes de use case (2.2) e de mapper (2.3). Correção de protocolo,
+sem efeito sobre `set`/`dict` (o `__hash__` por id foi mantido).
+
+### 2026-07-18 — [finding] `name` não é normalizado nas entidades — Claude (autônomo)
+**Contexto:** `Email` normaliza (trim + lowercase) e guarda o valor normalizado; já
+`Restaurant.name`/`Unit.name` **validam** com `.strip()` mas **armazenam o valor cru**
+(`Restaurant(name="  Cantina  ").name == "  Cantina  "`). Nada no concept exige
+normalizar `name`, então ficou fora do escopo desta Stage.
+**Direção sugerida:** decidir na persistência se `name` é normalizado na escrita
+(afeta unicidade e ordenação por nome).
+**Stage candidata:** `2.3-identity-persistence`.
+
+### 2026-07-18 — [finding] precedência entre validações do `__post_init__` não é especificada — Claude (autônomo)
+**Contexto:** quando `id` vazio e `tenant_id` ausente coincidem, a exceção levantada
+depende da ordem das checagens no `__post_init__` (hoje: `InvalidIdentifierError`).
+O concept §6 mapeia cenário→exceção mas não fixa precedência quando dois cenários
+coincidem. Mutação que reordena as checagens sobrevive à suíte — é comportamento
+**não especificado**, não falso verde (ambas são `IdentityError` → mesmo 4xx na 2.4).
+**Direção sugerida:** se a API precisar de mensagem determinística por campo, fixar a
+precedência no concept e cobrir por teste.
+**Stage candidata:** `2.4-identity-http`.
+
+### 2026-07-18 — [deviation] datas dos artefatos — Claude (autônomo)
+**Contexto:** `concept.md`, `technical.md` e os dois ADRs carregam
+`created_at/updated_at: 2026-07-17` (data informada no kickoff da corrida); a execução
+atravessou a virada do dia e a Stage fechou em **2026-07-18**, data usada no
+`roadmap.md` e nesta §7. O `technical.md` §1–§6 está congelado enquanto a Stage não
+mergeia (`check_technical_postexec.py`), então a data não foi reescrita
+retroativamente — o registro honesto fica aqui.
+
 <!-- END: post-execution -->
