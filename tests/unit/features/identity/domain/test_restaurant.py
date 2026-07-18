@@ -1,8 +1,11 @@
 """Testes da entidade Restaurant (domain/entities/restaurant.py)."""
 
+import dataclasses
+
 import pytest
 
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
+from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
 )
@@ -47,5 +50,13 @@ def test_comparacao_com_outro_tipo_nao_e_igual() -> None:
 
 @pytest.mark.parametrize("invalido", ["", "   "])
 def test_nome_vazio_e_rejeitado(invalido: str) -> None:
-    with pytest.raises(ValueError, match="nome do restaurante não pode ser vazio"):
+    # Erro de negócio (IdentityError -> DomainError), não ValueError: só assim o
+    # error handler HTTP da 2.4 devolve 4xx em vez de 500.
+    with pytest.raises(InvalidNameError, match="nome de restaurante"):
         Restaurant(id=RestaurantId("r1"), name=invalido)
+
+
+def test_entidade_e_imutavel() -> None:
+    restaurante = Restaurant(id=RestaurantId("r1"), name="Cantina")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        restaurante.name = "Outro"  # type: ignore[misc]

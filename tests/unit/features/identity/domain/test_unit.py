@@ -1,8 +1,11 @@
 """Testes da entidade Unit (domain/entities/unit.py)."""
 
+import dataclasses
+
 import pytest
 
 from restaurant_hub.features.identity.domain.entities.unit import Unit
+from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UnitId,
@@ -49,5 +52,11 @@ def test_comparacao_com_outro_tipo_nao_e_igual() -> None:
 
 @pytest.mark.parametrize("invalido", ["", "   "])
 def test_nome_vazio_e_rejeitado(invalido: str) -> None:
-    with pytest.raises(ValueError, match="nome da unidade não pode ser vazio"):
+    with pytest.raises(InvalidNameError, match="nome de unidade"):
         Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name=invalido)
+
+
+def test_entidade_e_imutavel() -> None:
+    unidade = Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        unidade.restaurant_id = RestaurantId("r2")  # type: ignore[misc]

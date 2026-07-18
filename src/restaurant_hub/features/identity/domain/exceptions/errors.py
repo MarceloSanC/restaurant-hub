@@ -20,6 +20,17 @@ class InvalidEmailError(IdentityError):
         super().__init__(f"e-mail inválido: {value!r}")
 
 
+class InvalidNameError(IdentityError):
+    """Nome obrigatório vazio numa entidade do BC.
+
+    É erro de negócio, não `ValueError`: só assim o error handler HTTP (2.4),
+    que captura `DomainError`, o converte em 4xx em vez de deixar virar 500.
+    """
+
+    def __init__(self, entity: str) -> None:
+        super().__init__(f"nome de {entity} não pode ser vazio")
+
+
 class InvalidRoleError(IdentityError):
     """Papel desconhecido — fora do conjunto fechado de `Role`."""
 

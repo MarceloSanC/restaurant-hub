@@ -7,6 +7,7 @@ from restaurant_hub.features.identity.domain.exceptions.errors import (
     CrossTenantError,
     IdentityError,
     InvalidEmailError,
+    InvalidNameError,
     InvalidRoleError,
     MissingTenantError,
     PlatformAdminMembershipError,
@@ -27,6 +28,7 @@ def test_identity_error_e_um_domain_error() -> None:
     "exc_type",
     [
         InvalidEmailError,
+        InvalidNameError,
         InvalidRoleError,
         MissingTenantError,
         PlatformAdminTenantError,
@@ -39,12 +41,13 @@ def test_toda_excecao_do_bc_herda_de_identity_error(exc_type: type[IdentityError
 
 
 def test_nenhuma_excecao_do_modulo_escapa_de_identity_error() -> None:
-    # Guarda *derivada* (não lista fixa): uma exceção nova que herde direto de
-    # DomainError, em vez de IdentityError, escaparia da parametrização acima.
+    # Guarda *derivada* (não lista fixa): pega exceção nova que herde de
+    # DomainError — ou de Exception puro, o engano mais provável — em vez de
+    # IdentityError, e que portanto escaparia da parametrização acima.
     definidas = [
         obj
         for obj in vars(identity_errors).values()
-        if isinstance(obj, type) and issubclass(obj, DomainError) and obj is not DomainError
+        if isinstance(obj, type) and issubclass(obj, Exception) and obj is not DomainError
     ]
     assert definidas, "o módulo de erros deve definir ao menos uma exceção"
     for exc_type in definidas:

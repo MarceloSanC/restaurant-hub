@@ -10,12 +10,13 @@ entidade, ainda que os demais campos difiram.
 
 from dataclasses import dataclass
 
+from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
 )
 
 
-@dataclass(eq=False)
+@dataclass(frozen=True, eq=False)
 class Restaurant:
     """Restaurante cliente da plataforma — a raiz da tenancy.
 
@@ -29,7 +30,7 @@ class Restaurant:
 
     def __post_init__(self) -> None:
         if not self.name.strip():
-            raise ValueError("nome do restaurante não pode ser vazio")
+            raise InvalidNameError("restaurante")
 
     @property
     def tenant_id(self) -> RestaurantId:
@@ -37,7 +38,9 @@ class Restaurant:
         return self.id
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Restaurant) and self.id == other.id
+        if not isinstance(other, Restaurant):
+            return NotImplemented
+        return self.id == other.id
 
     def __hash__(self) -> int:
         return hash(self.id)

@@ -3,6 +3,8 @@
 As invariantes de vínculo e visibilidade ficam em `test_visibility.py`.
 """
 
+import dataclasses
+
 import pytest
 
 from restaurant_hub.features.identity.domain.entities.user import User
@@ -118,3 +120,21 @@ def test_ids_diferentes_nao_sao_iguais() -> None:
 
 def test_comparacao_com_outro_tipo_nao_e_igual() -> None:
     assert _user(Role.OWNER) != "us1"
+
+
+def test_usuario_nao_pode_ser_mutado_para_estado_invalido() -> None:
+    # A invariante de tenancy vale para a entidade, não só para o instante da
+    # construção: sem imutabilidade, `user.role = PLATFORM_ADMIN` deixaria um
+    # employee com tenant virar admin de plataforma e furar o isolamento.
+    usuario = _user(Role.EMPLOYEE)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        usuario.role = Role.PLATFORM_ADMIN  # type: ignore[misc]
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        usuario.tenant_id = None  # type: ignore[misc]
+
+
+def test_replace_revalida_a_invariante_de_tenancy() -> None:
+    # O caminho legítimo de "mudança de estado" reexecuta __post_init__.
+    usuario = _user(Role.EMPLOYEE)
+    with pytest.raises(PlatformAdminTenantError):
+        dataclasses.replace(usuario, role=Role.PLATFORM_ADMIN)

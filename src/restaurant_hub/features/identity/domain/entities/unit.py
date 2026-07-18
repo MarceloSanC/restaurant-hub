@@ -9,13 +9,14 @@ Igualdade por **identidade**.
 
 from dataclasses import dataclass
 
+from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UnitId,
 )
 
 
-@dataclass(eq=False)
+@dataclass(frozen=True, eq=False)
 class Unit:
     """Unidade de um restaurante.
 
@@ -31,7 +32,7 @@ class Unit:
 
     def __post_init__(self) -> None:
         if not self.name.strip():
-            raise ValueError("nome da unidade não pode ser vazio")
+            raise InvalidNameError("unidade")
 
     @property
     def tenant_id(self) -> RestaurantId:
@@ -39,7 +40,9 @@ class Unit:
         return self.restaurant_id
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Unit) and self.id == other.id
+        if not isinstance(other, Unit):
+            return NotImplemented
+        return self.id == other.id
 
     def __hash__(self) -> int:
         return hash(self.id)

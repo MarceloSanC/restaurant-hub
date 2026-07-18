@@ -10,6 +10,12 @@ Amarra os **dois eixos de acesso** (concept §3, §5), que são ortogonais:
 Invariante de tenancy (ADR 2.1.0002): `tenant_id` é `None` **se e somente se** o
 papel for `platform_admin` — acesso de plataforma vive fora de qualquer tenant.
 
+A entidade é **imutável** (`frozen`): a invariante vale para o `User`, não só para
+o instante da construção. Sem isso, `user.role = PLATFORM_ADMIN` levaria a entidade
+a um estado inválido e furaria o isolamento — e a reidratação por mapper (Stage 2.3)
+seria exatamente esse caminho. Mudança de estado se faz por `dataclasses.replace`,
+que reexecuta `__post_init__` e revalida.
+
 Igualdade por **identidade**.
 """
 
@@ -38,7 +44,7 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
 _UNIT_SCOPE_BYPASS_ROLES = frozenset({Role.OWNER, Role.PLATFORM_ADMIN})
 
 
-@dataclass(eq=False)
+@dataclass(frozen=True, eq=False)
 class User:
     """Conta de acesso de uma pessoa.
 
@@ -101,7 +107,9 @@ class User:
         )
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, User) and self.id == other.id
+        if not isinstance(other, User):
+            return NotImplemented
+        return self.id == other.id
 
     def __hash__(self) -> int:
         return hash(self.id)
