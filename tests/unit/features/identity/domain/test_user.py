@@ -87,9 +87,13 @@ def test_platform_admin_sem_tenant_e_valido() -> None:
     assert _user(Role.PLATFORM_ADMIN, tenant_id=None).tenant_id is None
 
 
-def test_platform_admin_com_tenant_e_rejeitado() -> None:
+@pytest.mark.parametrize("tenant", ["r1", "", "   "])
+def test_platform_admin_com_tenant_e_rejeitado(tenant: str) -> None:
+    # O iff do §5.2 vale nos dois sentidos: platform_admin exige tenant_id None,
+    # e `""` NÃO é None. "Harmonizar" esta checagem com a linha de baixo (que é
+    # blank-aware de propósito) gravaria '' em vez de NULL no mapper da 2.3.
     with pytest.raises(PlatformAdminTenantError, match="platform_admin"):
-        _user(Role.PLATFORM_ADMIN, tenant_id=TENANT)
+        _user(Role.PLATFORM_ADMIN, tenant_id=RestaurantId(tenant))
 
 
 @pytest.mark.parametrize(
