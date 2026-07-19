@@ -5,28 +5,37 @@ para recursos caros como engines de banco de dados. Fixtures de escopo padrão
 (function) são recriadas a cada teste — ideal para estado que deve ser isolado
 entre testes (ex: client HTTP). Use pytest.mark para filtrar suites no CI.
 
-Este arquivo nasce com fixtures genéricas no template. Cada feature deve
-adicionar fixtures próprias (CREATE TABLE da entity, factories de DTO, etc.)
-em `tests/<categoria>/features/<feature>/conftest.py`.
+**Fixtures de banco (Stage 2.3).** `database_url` e `engine` vivem aqui, e não em
+`tests/integration/conftest.py`, porque as suítes de **integração** e de
+**contrato** precisam do mesmo `Engine` — o contrato roda o mesmo corpo de teste
+contra o fake e contra o Postgres. Duplicá-las criaria duas conexões e duas
+verdades sobre o que é "o banco de teste". São lazy: um teste unitário que não as
+pede nunca abre conexão.
+
+A fixture `test_engine` (SQLite in-memory), herdada do template, foi removida na
+Stage 2.3 — sem substituto. Ela nunca chegou a ser usada por teste nenhum, e
+mantê-la seria pior que não tê-la: o schema desta Stage carrega as invariantes
+**no banco** (FKs compostas, a `CHECK` do iff de tenancy, `TIMESTAMPTZ`,
+constraints nomeadas que o adapter lê para traduzir erro), e o SQLite diverge do
+Postgres em todos esses pontos. Uma suíte verde contra SQLite valeria menos que
+suíte nenhuma, porque inspiraria confiança no que não foi verificado.
 """
 
-import pytest
-from httpx import ASGITransport, AsyncClient
+from collections.abc import Iterator
+from pathlib import Path
 
+import pytest
+from alembic import command
+from alembic.config import Config
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.exc import OperationalError
+
+from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
 
-# A fixture `test_engine` (SQLite in-memory), herdada do template, foi removida na
-# Stage 2.3 — sem substituto aqui.
-#
-# Ela nunca chegou a ser usada por teste nenhum, e mantê-la seria pior que não
-# tê-la: o schema desta Stage carrega as invariantes **no banco** — FKs compostas,
-# a `CHECK` do iff de tenancy, `TIMESTAMPTZ`, constraints nomeadas que o adapter lê
-# para traduzir erro —, e o SQLite diverge do Postgres em todos esses pontos. Uma
-# suíte verde contra SQLite valeria menos que suíte nenhuma, porque inspiraria
-# confiança no que não foi verificado.
-#
-# As fixtures de banco vivem agora em `tests/integration/conftest.py`, contra
-# PostgreSQL real e sem caminho de skip (ADR 2.3.0001).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_ALEMBIC_INI = _REPO_ROOT / "migrations" / "alembic.ini"
 
 
 @pytest.fixture
@@ -42,3 +51,88 @@ async def client() -> AsyncClient:
         base_url="http://testserver",
     ) as c:
         yield c
+
+
+# ---------------------------------------------------------------------------
+# Banco real — sem caminho de skip (ADR 2.3.0001)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    """URL do banco de teste, do ambiente ou do `.env` da worktree.
+
+    Não há default embutido de propósito: um fallback silencioso para
+    `localhost:5432` faria a suíte de uma worktree paralela rodar contra o banco
+    de **outra** — e a falha apareceria como dado estranho, não como erro.
+    """
+    return Settings().database_url
+
+
+@pytest.fixture(scope="session")
+def engine(database_url: str) -> Iterator[Engine]:
+    """Engine de teste contra o Postgres real, com o schema já migrado.
+
+    **Quando o banco não responde, esta fixture FALHA.** Nunca `pytest.skip`, e
+    não existe variável de ambiente que desligue a exigência — esta é a decisão de
+    gate mais consequente da Stage (ADR 2.3.0001), e ela vive aqui.
+
+    O motivo é o defeito que a Stage 1.2 catalogou: um teste que se pula quando
+    falta infraestrutura reporta verde **por não ter olhado** ("a false negative
+    wearing a checkmark"). Como o gate deste projeto é o mesmo comando local e no
+    runner (`make check`), qualquer válvula de escape aqui acabaria aberta no CI, e
+    o gate de persistência inteiro viraria decorativo.
+
+    O custo é real e aceito: `make check` passa a exigir Docker. A alternativa
+    ("pular local, exigir no CI") foi medida e rejeitada — com os adapters sem
+    cobertura, o `fail_under = 90` reprovaria de todo jeito, então o skip não
+    entregaria nem o gate verde que prometia.
+
+    **O schema vem da migration**, não de `metadata.create_all`: assim cada
+    execução exercita a migration de verdade, e o schema de teste não diverge do de
+    produção.
+
+    Escopo `session`: aplicar migration por teste seria lento sem ganho — o
+    isolamento fica com o `TRUNCATE` das fixtures que dependem desta.
+    """
+    engine = create_engine(
+        database_url,
+        connect_args={
+            # O psycopg devolve `timestamptz` no fuso da SESSÃO, não em UTC. Sem
+            # fixar, um round-trip volta em horário local e o mesmo teste passa no
+            # runner (UTC) e falha numa máquina em America/Sao_Paulo. O mapper
+            # ainda normaliza — cinto e suspensório, porque este Engine é o dos
+            # testes e não passa pelo composition root.
+            "options": "-c timezone=UTC",
+            # Falhar rápido faz parte de falhar alto: sem timeout, a tentativa de
+            # conexão fica pendurada por dezenas de segundos e o dev lê "a suíte
+            # travou" em vez de "falta subir o Postgres".
+            "connect_timeout": 5,
+        },
+    )
+
+    try:
+        with engine.connect() as conexao:
+            conexao.execute(text("SELECT 1"))
+    except OperationalError as exc:
+        engine.dispose()
+        pytest.fail(
+            f"Postgres não está acessível em {database_url!r}.\n"
+            f"Suba o banco com `make docker-up`. Os testes de integração desta "
+            f"Stage não se pulam (ADR 2.3.0001): um gate que se pula sozinho "
+            f"reporta verde por não ter olhado.\n"
+            f"Erro original: {exc}",
+            pytrace=False,
+        )
+
+    _aplicar_migrations(database_url)
+    yield engine
+    engine.dispose()
+
+
+def _aplicar_migrations(database_url: str) -> None:
+    """Leva o banco de teste até `head` aplicando a migration de verdade."""
+    config = Config(str(_ALEMBIC_INI))
+    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", database_url)
+    command.upgrade(config, "head")
