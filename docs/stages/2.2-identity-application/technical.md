@@ -719,4 +719,147 @@ Task 01 (erros)
 > `status: done` (enquanto a Stage não mergeou). Modo autônomo (ADR 0.0.0004):
 > decisões reversíveis-baratas são registradas aqui como `[decision]` sem pergunta.
 
+### 2026-07-19 — [decision] Task 04 — `make typecheck` passa a cobrir `tests/fakes/` — Claude (autônomo)
+**Contexto:** o Checkpoint B provou por execução que a conformidade fake↔`Protocol`
+**não tinha gate nenhum**: `pyproject.toml` fixa `files = ["src"]` e o Makefile
+rodava `mypy src/`, então uma anotação como `repo: UserRepository =
+InMemoryUserRepository()` dentro de um teste some em runtime e nunca é checada.
+Um fake com método faltando passava em todos os gates.
+**Pergunta:** deixar a conformidade como convenção, ou estender o alvo `typecheck`?
+**Opções:**
+- A — manter `mypy src/`, confiando na revisão
+- B — `mypy src/ tests/fakes/` + `_conforms: <Port> = <Fake>()` em cada fake ✅ recomendada
+**Decisão:** B.
+**Razão:** os fakes são a especificação que a 2.3 vai reimplementar (concept §10
+mitiga o risco "fake e adapter divergirem" com "os fakes já são escritos contra o
+`Protocol`" — afirmação que sem gate não se sustentava). Verificado por mutação:
+renomear `find_by_id` num fake produz `missing following protocol member`.
+`mypy src/ tests/fakes/` está limpo hoje (80 arquivos), então a mudança não
+importa dívida pré-existente — `mypy src/ tests/` traria 8 erros e foi evitado.
+
+### 2026-07-19 — [decision] Task 05 — `tests/fakes/shared/` acrescentado ao LAYOUT §2 — Claude (autônomo)
+**Contexto:** LAYOUT §2 previa `tests/fakes/` contendo apenas `features/<feature>/`.
+Os fakes de `Clock` e `IdGenerator` são de ports **compartilhados** e não cabem
+sob nenhuma feature.
+**Decisão:** acrescentar `shared/` à árvore do LAYOUT §2, no mesmo commit que criou
+os arquivos.
+**Razão:** CLAUDE.md nota 1 proíbe criar arquivo fora do LAYOUT sem justificativa;
+a alternativa (duplicar os fakes dentro de cada feature) contraria a regra de
+fonte única da skill `pytest-with-fakes`. Mudança puramente aditiva no doc.
+
+### 2026-07-19 — [decision] Task 09 — `# noqa: PLR0913` no construtor do `AuthenticateUserUseCase` — Claude (autônomo)
+**Contexto:** o construtor recebe 8 parâmetros (4 ports + `IdGenerator` + `Clock` +
+2 TTLs) e o ruff reprova acima de 5.
+**Opções:**
+- A — agrupar dependências num objeto-parâmetro
+- B — `noqa` local com justificativa ✅ recomendada
+**Decisão:** B.
+**Razão:** PLR0913 existe para pegar função que faz coisas demais; aqui o
+construtor é a **costura de injeção de dependência**, montada uma vez pelo
+composition root. Agrupar esconderia o grafo de dependências que o hexagonal quer
+explícito, e os TTLs injetados são exigência do concept §7.6 (a camada
+`application` não pode ler `Settings`). O Checkpoint C confirmou que o `noqa` é
+load-bearing e não mascara defeito.
+
+### 2026-07-19 — [decision] pós-auditoria — `branch = true` na cobertura — Claude (autônomo)
+**Contexto:** a auditoria de testes apontou que a métrica era de **linha**, então
+uma condição composta contava como coberta assim que a linha executasse uma vez.
+`authorize_action` tem 20 branches, e é exatamente num guard de autorização que o
+ramo não exercitado é o buraco.
+**Decisão:** ativar `branch = true` em `[tool.coverage.run]`.
+**Razão:** verificado antes de fixar — com branch coverage a camada `application`
+permanece **100%** (76 branches), então o gate não foi afrouxado para caber; o
+projeto ganha a métrica mais estrita de graça. Aplica-se a todo o repo, o que é
+desejável.
+
+### 2026-07-19 — [deviation] concept §4/§6 listam erros inalcançáveis a partir do use case — Claude (autônomo)
+**Contexto:** o concept §4 lista `InvalidIdentifierError` entre os erros de
+`CreateUnitUseCase`, e §6 lista `InvalidEmailError`/`InvalidRoleError`. A
+auditoria observou que nenhum dos três é alcançável **de dentro** de um use case:
+`Email` e `Role` são construídos pelo chamador ao montar o command, e o
+identificador vem do `IdGenerator`. Eles continuam corretos como erros do **BC**
+(a 2.4 vai encontrá-los ao converter a requisição), mas não como erros levantados
+por estes use cases.
+**Razão:** é imprecisão de tabela, não de contrato nem de comportamento — nenhum
+critério de aceite muda. Registro aqui em vez de regredir o concept, por
+proporcionalidade e seguindo o precedente da 2.1 (`[deviation]` sobre `ValueError`).
+A divergência fica visível para a auditoria de contexto limpo decidir se merece
+retoque.
+
+### 2026-07-19 — [deviation] datas dos artefatos — Claude (autônomo)
+**Contexto:** `concept.md`, `technical.md` e os quatro ADRs carregam
+`created_at/updated_at: 2026-07-18` (data em que foram escritos); a execução
+atravessou a virada do dia e a Stage fechou em **2026-07-19**, data usada no
+`roadmap.md` e nestas entradas.
+**Razão:** o `technical.md` §1–§6 fica congelado enquanto a Stage não mergeia
+(`check_technical_postexec.py`), então a data não foi reescrita retroativamente —
+o registro honesto fica aqui. Mesma situação que a 2.1 registrou.
+
+### 2026-07-19 — [finding] use case de refresh/rotação de sessão não existe — Claude (autônomo)
+**Contexto:** o `SessionRepository` nasce com `find_by_fingerprint`, `revoke` e
+`revoke_all_for_user`, mas esta Stage não entrega o use case que os orquestra —
+o recorte da Stage cobre cinco use cases, e refresh não é um deles. Os três
+métodos estão cobertos por teste contra o fake (CA16), então a semântica está
+especificada; falta o consumidor de produção.
+**Direção sugerida:** criar `application/use_cases/refresh_session.py` junto do
+endpoint `POST /auth/refresh`. Fluxo: `find_by_fingerprint` → `is_active(now)` →
+`revoke` a antiga → `add` a nova. O bloco 2.4 do `roadmap.md` **não** lista esse
+arquivo em `arquivos_a_criar` e precisa ser reconciliado.
+**Stage candidata:** `2.4-identity-http`.
+
+### 2026-07-19 — [finding] bootstrap de tenant não é autorizável pelo mapa RBAC atual — Claude (autônomo)
+**Contexto:** o mapa da 2.1 dá ao `platform_admin` apenas `MANAGE_PLATFORM`, e
+`MANAGE_USERS` só existe em papéis internos ao tenant. Logo, **ninguém consegue
+criar o primeiro `owner`** de um restaurante recém-criado, e o DoD da 2.4
+("admin cria tenant→unidade→usuário") fica inalcançável sem uma saída explícita.
+**Direção sugerida:** a tabela permissão↔ação do concept §4 já propõe rotas de
+bootstrap gated por `MANAGE_PLATFORM`, sem tocar no domínio. A alternativa —
+conceder `MANAGE_TENANT`/`MANAGE_USERS` ao `platform_admin` — é mudança de
+domínio e exigiria ADR próprio, além de contrariar o princípio "acesso de
+plataforma não é acesso de restaurante" (concept 2.1 §5).
+**Stage candidata:** `2.4-identity-http`.
+
+### 2026-07-19 — [finding] `UnitMembershipRepository` dedicado quando houver consulta inversa — Claude (autônomo)
+**Contexto:** `list_memberships(user_id)` vive no `UserRepository` (concept §7.4),
+porque toda consulta desta Stage é "os vínculos deste usuário".
+**Direção sugerida:** quando o Step 3 precisar de "quais usuários desta unidade",
+o port dedicado passa a ser o desenho certo. Mover o método é refatoração
+mecânica (um port, um fake, um adapter).
+**Stage candidata:** `3.2-staff-application`.
+
+### 2026-07-19 — [finding] `employee` não tem permissão alguma, logo nunca é autorizado — Claude (autônomo)
+**Contexto:** `Role.EMPLOYEE → frozenset()` no mapa da 2.1, então todo command de
+funcionário para no eixo RBAC. É consequência correta do modelo, não defeito —
+mas significa que endpoints voltados ao funcionário responderão 403 sempre.
+**Direção sugerida:** a Stage que introduzir auto-serviço de funcionário (ver a
+própria escala, marcar preferência) precisará de uma permissão para isso.
+**Stage candidata:** `3.5-employee-login-link` ou a Stage de auto-serviço do Step 4.
+
+### 2026-07-19 — [finding] `hr` não tem ação tenant-wide — Claude (autônomo)
+**Contexto:** `_UNIT_SCOPE_BYPASS_ROLES` = `{OWNER, PLATFORM_ADMIN}`, então `hr`
+é escopado por unidade como o `manager` e, pelo passo 4 de §5.6, precisa nomear
+uma unidade em toda ação. O comentário de `role.py` diz que "`manager` e `hr`
+coincidem em identity e divergem no eixo de visibilidade" — divergência que hoje
+não existe no código.
+**Direção sugerida:** se `hr` ganhar atribuição tenant-wide (folha por
+restaurante, por exemplo), ou ele entra em `_UNIT_SCOPE_BYPASS_ROLES` ou o
+comentário deve ser corrigido.
+**Stage candidata:** a primeira Stage que der atribuição própria ao `hr`.
+
+### 2026-07-19 — [finding] cenário "tenant removido" não é modelável — Claude (autônomo)
+**Contexto:** não existe exclusão de restaurante, unidade ou usuário em lugar
+nenhum do sistema, então "usuário cujo restaurante sumiu" não tem como acontecer
+hoje. `authenticate_user` não consulta o `RestaurantRepository`.
+**Direção sugerida:** quando houver exclusão (ou desativação), decidir se o login
+verifica a existência/estado do tenant e se as sessões do tenant são revogadas em
+lote — o port já suporta via `revoke_all_for_user`.
+**Stage candidata:** a Stage que introduzir desativação de tenant/usuário.
+
+### 2026-07-19 — [finding] limpeza de sessões expiradas — Claude (autônomo)
+**Contexto:** cada login grava uma linha de sessão; nada as remove. Em produção a
+tabela cresce indefinidamente.
+**Direção sugerida:** política de expurgo (job periódico ou índice com TTL) na
+Stage que cria a tabela.
+**Stage candidata:** `2.3-identity-persistence`.
+
 <!-- END: post-execution -->

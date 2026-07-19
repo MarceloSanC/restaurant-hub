@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-18
-last_reviewed_at: 2026-07-18
+updated_at: 2026-07-19
+last_reviewed_at: 2026-07-19
 ---
 
 # Roadmap — restaurant-hub
@@ -109,7 +109,7 @@ graph LR
 | `1.1-bootstrap` | Bootstrap do projeto | bootstrap | done | — |
 | `1.2-ci` | CI no GitHub Actions | bootstrap | done | `1.1-bootstrap` |
 | `2.1-identity-domain` | Domínio de tenancy e acesso | domain | done | `1.2-ci` |
-| `2.2-identity-application` | Use cases de tenancy e acesso | application | draft | `2.1-identity-domain` |
+| `2.2-identity-application` | Use cases de tenancy e acesso | application | done | `2.1-identity-domain` |
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | draft | `2.2-identity-application` |
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | draft | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | draft | `2.4-identity-http` |
@@ -334,6 +334,27 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [pytest-with-fakes, task-ordering-hex, hex-arch-python]
 ```
+
+> Nota (2026-07-19): bloco corrigido durante a execução da Stage (issue #20) —
+> o recorte real extrapolou o bloco em três eixos, todos **aditivos**.
+> **Contratos:** entrou um sexto port-out, `SessionRepository`, exigido pela
+> decisão de kickoff #1 (refresh persistido e rotacionado, para que logout e
+> demissão cortem acesso de verdade); a issue #20 autoriza explicitamente
+> modelá-lo e registrá-lo em ADR (2.2.0001). Junto dele vieram os DTOs
+> `Session`/`IssuedRefreshToken`/`AccessTokenClaims`/`UserCredentials`, e
+> `PasswordHasher` ganhou `dummy_hash()` (defesa contra enumeração de contas por
+> tempo de resposta — ADR 2.2.0003 e concept §5.14). **File-scope:**
+> `arquivos_a_modificar: []` não se sustentou — o `.importlinter` recebeu o
+> contrato aditivo `identity-application-purity` (espelhando LAYOUT §3 como a 2.1
+> fez para o domínio), o `Makefile` passou a rodar `mypy` também sobre
+> `tests/fakes/` (sem isso a conformidade fake↔`Protocol` não tinha gate algum),
+> `docs/LAYOUT.md` §2 passou a prever `tests/fakes/shared/`, e `pyproject.toml`
+> ativou `branch = true` na cobertura. **Consequências para as Stages seguintes,
+> ainda não refletidas nos blocos 2.3 e 2.4:** a 2.3 precisa implementar
+> `session_repository.py` + a tabela de sessões (e uma política de expurgo das
+> expiradas); a 2.4 precisa de `application/use_cases/refresh_session.py` — o
+> endpoint de refresh já está alocado lá, mas o arquivo do use case não. Ambos
+> registrados como `[finding]` na §7 do `technical.md` da 2.2.
 
 #### Stage 2.3 — `2.3-identity-persistence`
 
@@ -1092,6 +1113,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-14 | Stage 1.1-bootstrap concluída (`done`); bloco corrigido para o escopo real; Step 1 → `in_progress` | Execução da Stage 1.1 — issue #1 |
 | 2026-07-17 | Stage 1.2-ci concluída (`done`); bloco corrigido (nota datada — arquivos reais + ADR); Step 1 → `done` (fundação fechada) | Execução da Stage 1.2 — issue #9 |
 | 2026-07-18 | Stage 2.1-identity-domain concluída (`done`); bloco corrigido (nota datada — file-scope e contratos reais); Step 2 → `in_progress` (primeiro código de domínio do projeto) | Execução da Stage 2.1 — issue #17 |
+| 2026-07-19 | Stage 2.2-identity-application concluída (`done`); bloco corrigido (nota datada — 6º port `SessionRepository`, file-scope real e consequências para 2.3/2.4) | Execução da Stage 2.2 — issue #20 |
 
 ## Próxima revisão de roadmap
 
