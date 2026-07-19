@@ -95,9 +95,16 @@ fmt:
 
 # ---------------------------------------------------------------------------
 # typecheck — checagem estática de tipos
+#
+# Inclui tests/fakes/ (desde a Stage 2.2): os fakes implementam os ports por
+# tipagem estrutural, e cada módulo declara `_conforms: <Port> = <Fake>()`. Sem
+# checar essa pasta, a conformidade fake↔Protocol não teria gate nenhum — o
+# pyproject fixa `files = ["src"]`, então uma anotação dentro de um teste some
+# em runtime e nunca é verificada. Como os fakes são a especificação que os
+# adapters reais (2.3/2.4) reimplementam, a divergência seria herdada em silêncio.
 # ---------------------------------------------------------------------------
 typecheck:
-	uv run mypy src/
+	uv run mypy src/ tests/fakes/
 
 # ---------------------------------------------------------------------------
 # layout-check — valida regras de dependência (docs/LAYOUT.md §3)

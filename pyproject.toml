@@ -95,6 +95,12 @@ markers = [
 [tool.coverage.run]
 source = ["src"]
 omit = ["*/migrations/*", "*/scripts/*"]
+# Cobertura de branch, não só de linha (Stage 2.2). Sem isso, uma condição
+# composta conta como coberta assim que a linha executa uma vez — e é justamente
+# em guarda de autorização (`authorize_action` tem 20 branches) que o ramo não
+# exercitado é o buraco de segurança. Verificado ao ativar: a camada application
+# permanece 100%, então nada foi afrouxado para o gate caber.
+branch = true
 
 [tool.coverage.report]
 # Gate de cobertura — falha o pytest se < 90%. Vale para qualquer invocação

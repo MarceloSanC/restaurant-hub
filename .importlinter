@@ -84,6 +84,31 @@ source_modules =
 forbidden_modules =
     restaurant_hub.features
 
+# Ativado na Stage 2.2 (1ª camada application do repo). Espelha para
+# features.identity.application o contrato que application-purity aplica a
+# shared.application (LAYOUT §3 Application: nunca importa adapters nem
+# infrastructure). NÃO proíbe restaurant_hub.shared.domain nem
+# restaurant_hub.shared.application (dependências legítimas: os erros herdam de
+# DomainError/NotFoundError, e os use cases consomem os ports Clock/IdGenerator),
+# nem restaurant_hub.features (auto-proibiria o import do próprio domínio de
+# identity, que é a dependência central desta camada).
+[importlinter:contract:identity-application-purity]
+name = features.identity.application nao importa adapters nem frameworks (LAYOUT §3 Application)
+type = forbidden
+source_modules =
+    restaurant_hub.features.identity.application
+forbidden_modules =
+    restaurant_hub.features.identity.adapters
+    restaurant_hub.shared.infrastructure
+    fastapi
+    starlette
+    uvicorn
+    sqlalchemy
+    alembic
+    pydantic
+    pydantic_settings
+    httpx
+
 # Ativado na Stage 2.1 (1ª feature — identity). Espelha para features.identity.domain
 # o mesmo contrato de pureza que domain-purity aplica a shared.domain (LAYOUT §3).
 # NÃO proíbe restaurant_hub.features (auto-proibiria imports internos de identity)

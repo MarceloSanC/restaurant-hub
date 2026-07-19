@@ -77,6 +77,7 @@ tests/
 │   ├── features/<feature>/
 │   └── test_app_smoke.py           # Smoke da app factory (middlewares + error handlers, sem feature)
 └── fakes/                          # Implementações fake dos ports para uso em testes
+    ├── shared/                     # Fakes dos ports compartilhados (Clock, IdGenerator)
     └── features/<feature>/
         └── in_memory_<entity>_repository.py
 
