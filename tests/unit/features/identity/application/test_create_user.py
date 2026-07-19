@@ -134,6 +134,66 @@ def test_unicidade_de_email_e_cobrada_antes_da_regra_de_platform_admin() -> None
         )
 
 
+def test_unicidade_de_email_e_cobrada_antes_da_existencia_do_restaurante() -> None:
+    """Precedência (1) → (3) do §5.7.
+
+    Com a ordem trocada, quem tenta reusar um e-mail existente recebe
+    "restaurante não encontrado" — resposta que descreve o problema errado.
+    Verificado por mutação: inverter as duas checagens derruba só este teste.
+    """
+    fixture = _Fixture()
+    fixture.use_case.execute(_command(email=Email("colisao@x.com")))
+
+    with pytest.raises(EmailAlreadyRegisteredError):
+        fixture.use_case.execute(
+            _command(
+                email=Email("colisao@x.com"),
+                tenant_id=RestaurantId("nao-existe"),
+                unit_ids=(),
+            )
+        )
+
+
+def test_restaurante_inexistente_e_cobrado_antes_de_resolver_unidades() -> None:
+    """Precedência (3) → (5) do §5.7 — mesma classe de vazamento do CA4.
+
+    Resolver as unidades primeiro contaria ao chamador quais ids de unidade
+    existem sob um tenant que ele nem pode alcançar. A asserção sobre
+    `find_calls` trava a **ordem**, não apenas o tipo do erro: só verificar a
+    exceção deixaria passar uma implementação que consulta e depois descarta.
+    """
+    fixture = _Fixture()
+
+    with pytest.raises(RestaurantNotFoundError):
+        fixture.use_case.execute(
+            _command(
+                tenant_id=RestaurantId("nao-existe"),
+                unit_ids=(UnitId("fantasma"),),
+            )
+        )
+
+    assert fixture.units.find_calls == 0
+
+
+def test_vinculo_de_platform_admin_e_cobrado_antes_das_invariantes_do_dominio() -> None:
+    """Precedência (2) → (4) do §5.7.
+
+    O comando viola duas regras ao mesmo tempo: `platform_admin` com unidade e
+    `platform_admin` com tenant. A resposta precisa ser a da checagem mais alta,
+    senão a mensagem aponta para a violação errada.
+    """
+    fixture = _Fixture()
+
+    with pytest.raises(PlatformAdminMembershipError):
+        fixture.use_case.execute(
+            _command(
+                role=Role.PLATFORM_ADMIN,
+                tenant_id=_TENANT_A,
+                unit_ids=(_UNIT_A1,),
+            )
+        )
+
+
 def test_email_duplicado_ignora_diferenca_de_caixa() -> None:
     """CA3 — `Email` normaliza no domínio, então a unicidade herda isso."""
     fixture = _Fixture()

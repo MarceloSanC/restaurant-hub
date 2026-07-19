@@ -163,6 +163,24 @@ def test_quem_falha_nos_dois_eixos_recebe_o_erro_do_rbac() -> None:
         fixture.use_case.execute(_command("e", unit=_UNIT_A2))
 
 
+def test_rbac_e_cobrado_antes_do_escopo_de_tenant() -> None:
+    """Precedência entre os passos 2 e 3 — a que mais importa das seis.
+
+    Não é preciosismo de ordem: os dois erros viram status HTTP diferentes na
+    2.4, e com a ordem trocada o guard responde `TenantScopeRequiredError` a
+    quem não tem permissão nenhuma — ou seja, informa a um chamador não
+    autorizado qual escopo de tenant ele deveria ter declarado.
+
+    Verificado por mutação: trocar os passos 2 e 3 derruba apenas este teste.
+    """
+    fixture = _Fixture()
+    fixture.add_user("e", Role.EMPLOYEE, _TENANT_A, (_UNIT_A1,))
+
+    # Falha nas DUAS checagens: papel sem permissão E tenant não declarado.
+    with pytest.raises(PermissionDeniedError):
+        fixture.use_case.execute(_command("e", tenant=None))
+
+
 def test_ator_inexistente_e_rejeitado_antes_de_qualquer_checagem() -> None:
     fixture = _Fixture()
 
