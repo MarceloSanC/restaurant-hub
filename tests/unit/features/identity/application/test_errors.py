@@ -15,6 +15,8 @@ from restaurant_hub.features.identity.application import errors
 from restaurant_hub.features.identity.domain.exceptions.errors import IdentityError
 from restaurant_hub.shared.domain.exceptions.base import DomainError, NotFoundError
 
+pytestmark = pytest.mark.unit
+
 # Erros que representam "recurso inexistente" e, por isso, devem alcançar o
 # handler 404 antes do 422.
 _NOT_FOUND_ERRORS = (
@@ -24,12 +26,19 @@ _NOT_FOUND_ERRORS = (
 )
 
 
-def _application_error_classes() -> list[type[Exception]]:
-    """Todas as classes de exceção declaradas em `application/errors.py`."""
+def _application_error_classes() -> list[type]:
+    """Todas as classes declaradas em `application/errors.py`.
+
+    O filtro é **só** por módulo de origem, deliberadamente. Filtrar também por
+    `issubclass(obj, BaseException)` pareceria mais preciso e seria um falso
+    verde: uma classe que esquecesse a base de exceção simplesmente não entraria
+    na lista, e a suíte passaria — enquanto `raise` dela explodiria em runtime
+    com `TypeError` e viraria 500. A checagem de base é **asserção**, não filtro.
+    """
     return [
         obj
         for _, obj in inspect.getmembers(errors, inspect.isclass)
-        if issubclass(obj, BaseException) and obj.__module__ == errors.__name__
+        if obj.__module__ == errors.__name__
     ]
 
 
@@ -52,9 +61,15 @@ def test_modulo_declara_as_dez_excecoes_esperadas() -> None:
 
 @pytest.mark.parametrize("error_class", _application_error_classes())
 def test_todo_erro_de_aplicacao_e_identity_error_e_domain_error(
-    error_class: type[Exception],
+    error_class: type,
 ) -> None:
-    """Nenhum erro de negócio desta camada pode escapar para 500 na 2.4."""
+    """Nenhum erro de negócio desta camada pode escapar para 500 na 2.4.
+
+    `BaseException` primeiro: uma classe sem base de exceção não é levantável, e
+    `raise` dela dá `TypeError` — 500 garantido, que é exatamente o que o
+    ADR 2.2.0003 existe para impedir.
+    """
+    assert issubclass(error_class, BaseException)
     assert issubclass(error_class, IdentityError)
     assert issubclass(error_class, DomainError)
 

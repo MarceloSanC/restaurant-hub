@@ -9,8 +9,10 @@ Além da construção, o teste guarda duas propriedades que são contrato:
 """
 
 import dataclasses
+from collections.abc import Iterator
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
+from typing import get_args, get_type_hints
 
 import pytest
 
@@ -42,6 +44,8 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
+pytestmark = pytest.mark.unit
+
 _RESULT_CLASSES = (
     RestaurantResult,
     UnitResult,
@@ -49,6 +53,9 @@ _RESULT_CLASSES = (
     AuthenticationResult,
     AuthorizedActor,
 )
+
+# Prefixo dos módulos de entidade — o que um result nunca pode carregar.
+_ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -159,14 +166,51 @@ def test_dtos_sao_imutaveis() -> None:
         result.name = "Outra"  # type: ignore[misc]
 
 
-def test_nenhum_result_expoe_senha_ou_hash() -> None:
-    """CA14 — por introspecção, para que um campo novo com segredo quebre a suíte."""
-    proibidos = {"password", "senha", "plain_password", "password_hash", "hash"}
+def _tipos_folha(annotation: object) -> Iterator[object]:
+    """Desmonta `X | None`, `tuple[X, ...]` etc. até os tipos folha."""
+    args = get_args(annotation)
+    if not args:
+        yield annotation
+        return
+    for arg in args:
+        yield from _tipos_folha(arg)
+
+
+def _assert_sem_segredo_nem_entidade(cls: type, caminho: str) -> None:
+    """Falha se `cls` expuser senha/hash ou entidade de domínio, em qualquer nível.
+
+    A checagem é **recursiva** de propósito: um campo `credentials:
+    UserCredentials` esconderia um `PasswordHash` um nível abaixo, e uma
+    verificação só do tipo de topo passaria batido.
+    """
+    for nome, annotation in get_type_hints(cls).items():
+        assert not any(
+            pista in nome.lower() for pista in ("password", "senha", "hash", "secret")
+        ), f"{caminho}.{nome} tem nome de segredo"
+
+        for folha in _tipos_folha(annotation):
+            assert folha is not PasswordHash, f"{caminho}.{nome} carrega PasswordHash"
+
+            modulo = getattr(folha, "__module__", "") or ""
+            assert not modulo.startswith(_ENTITIES_MODULE), (
+                f"{caminho}.{nome} carrega a entidade de domínio {folha!r} "
+                "— use case devolve DTO, nunca entidade (LAYOUT §7)"
+            )
+
+            if dataclasses.is_dataclass(folha) and isinstance(folha, type):
+                _assert_sem_segredo_nem_entidade(folha, f"{caminho}.{nome}")
+
+
+def test_nenhum_result_expoe_senha_hash_ou_entidade() -> None:
+    """CA14 — por introspecção recursiva.
+
+    Duas classes de vazamento precisam quebrar a suíte, não só a óbvia:
+    um `PasswordHash` aninhado dentro de outro DTO, e uma **entidade de domínio**
+    devolvida por use case (LAYOUT §7 / CLAUDE.md §6). Uma checagem rasa, por
+    nome exato e só do tipo de topo, deixa as duas passarem.
+    """
     for result_class in _RESULT_CLASSES:
-        nomes = {campo.name for campo in dataclasses.fields(result_class)}
-        assert not (nomes & proibidos), f"{result_class.__name__} expõe segredo"
-        for campo in dataclasses.fields(result_class):
-            assert "PasswordHash" not in str(campo.type)
+        _assert_sem_segredo_nem_entidade(result_class, result_class.__name__)
 
 
 def test_modulo_de_results_declara_os_cinco_esperados() -> None:

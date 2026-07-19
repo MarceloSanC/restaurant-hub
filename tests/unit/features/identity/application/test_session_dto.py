@@ -28,6 +28,8 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
+pytestmark = pytest.mark.unit
+
 _NOW = datetime(2026, 7, 18, 12, 0, tzinfo=UTC)
 _TTL = timedelta(days=7)
 
