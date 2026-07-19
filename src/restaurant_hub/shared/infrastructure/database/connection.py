@@ -32,4 +32,13 @@ def build_engine(database_url: str | None = None) -> Engine:
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
+        # Sessão em UTC (Stage 2.3). O psycopg devolve `timestamptz` no fuso da
+        # SESSÃO, não em UTC: sem fixar, o mesmo instante volta como -03:00 numa
+        # máquina em America/Sao_Paulo e +00:00 no runner, e o `is_active` de uma
+        # sessão passa a depender do fuso de quem consulta.
+        #
+        # O mapper também normaliza com `.astimezone(UTC)` — cinto e suspensório
+        # deliberados: esta fixação cobre o caminho de produção, e a do mapper cobre
+        # qualquer `Engine` construído fora daqui (um script, um teste, a 2.4).
+        connect_args={"options": "-c timezone=UTC"},
     )
