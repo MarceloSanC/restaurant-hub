@@ -14,7 +14,11 @@ class UnitRepository(Protocol):
     """Contrato de persistência da raiz de agregado `Unit`."""
 
     def add(self, unit: Unit) -> None:
-        """Persiste uma unidade nova."""
+        """Persiste uma unidade nova.
+
+        **É inserção, não upsert** (ADR 2.3.0003): id já gravado levanta
+        `UnitAlreadyExistsError`, imposto pela PK da tabela na 2.3.
+        """
         ...
 
     def find_by_id(self, unit_id: UnitId) -> Unit | None:

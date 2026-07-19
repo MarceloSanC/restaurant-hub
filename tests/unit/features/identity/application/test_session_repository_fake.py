@@ -219,7 +219,7 @@ def test_purge_expired_preserva_sessoes_ainda_validas() -> None:
     assert repo.find_by_fingerprint("fp::morta") is None
 
 
-def test_purge_expired_nao_poupa_sessao_revogada_mas_ainda_nao_expirada() -> None:
+def test_purge_expired_poupa_sessao_revogada_mas_ainda_nao_expirada() -> None:
     """Revogada e válida continua sendo o registro de uma credencial ativa-até-revogar.
 
     O expurgo é por expiração, não por revogação — preservar o `revoked_at` de uma

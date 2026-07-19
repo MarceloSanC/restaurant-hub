@@ -152,9 +152,22 @@ class SessionFingerprintAlreadyExistsError(IdentityError):
     """
 
     def __init__(self, fingerprint: str) -> None:
-        # A mensagem não carrega o fingerprint inteiro: ele é material derivado de
-        # segredo, e mensagem de erro é lugar por onde segredo vaza para log.
-        super().__init__(f"fingerprint de refresh token já registrado: {fingerprint[:8]!r}…")
+        # A mensagem nunca carrega o fingerprint inteiro: é material derivado de
+        # segredo, e mensagem de erro acaba em log.
+        #
+        # O prefixo só é seguro quando sobra fingerprint suficiente para que ele
+        # NÃO seja o valor todo. Um `fingerprint[:8]` puro parecia resolver e não
+        # resolvia: para qualquer valor de até 8 caracteres a "redação" devolvia o
+        # segredo inteiro — e os fingerprints curtos dos próprios testes
+        # (`fp::a`, `fp::abc`) caíam exatamente nesse caso.
+        prefixo_seguro = 8
+        if len(fingerprint) > prefixo_seguro:
+            visivel = f"{fingerprint[:prefixo_seguro]!r}…"
+        else:
+            visivel = "<redigido>"
+        super().__init__(
+            f"fingerprint de refresh token já registrado: {visivel} ({len(fingerprint)} chars)"
+        )
 
 
 class RestaurantNotFoundError(IdentityError, NotFoundError):

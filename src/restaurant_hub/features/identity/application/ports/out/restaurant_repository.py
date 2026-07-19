@@ -17,7 +17,12 @@ class RestaurantRepository(Protocol):
     """Contrato de persistência da raiz de agregado `Restaurant`."""
 
     def add(self, restaurant: Restaurant) -> None:
-        """Persiste um restaurante novo."""
+        """Persiste um restaurante novo.
+
+        **É inserção, não upsert** (ADR 2.3.0003): id já gravado levanta
+        `RestaurantAlreadyExistsError`. Na 2.3 quem impõe a regra é a PK da
+        tabela, e o adapter traduz o `IntegrityError` para essa exceção.
+        """
         ...
 
     def find_by_id(self, restaurant_id: RestaurantId) -> Restaurant | None:

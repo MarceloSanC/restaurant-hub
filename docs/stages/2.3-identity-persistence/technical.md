@@ -678,4 +678,31 @@ Pontos que costumam ser lidos errado:
 > `status: done` (enquanto a Stage não mergeou). Modo autônomo (ADR 0.0.0004):
 > decisões reversíveis-baratas são registradas aqui como `[decision]` sem pergunta.
 
+### 2026-07-19 — [deviation] Task 03 — sexto erro (`UnitMembershipAlreadyExistsError`) — Claude (autônomo)
+**Contexto:** o concept §4 e o ADR 2.3.0003 enumeram **cinco** erros novos de chave
+duplicada. Ao corrigir o fake de `UserRepository`, ficou claro que falta um sexto
+caso: `add` recebe `Sequence[UnitMembership]` e o fake fazia `self.memberships.extend(...)`,
+acumulando vínculos repetidos — enquanto a tabela real tem PK composta
+`(user_id, unit_id)` e rejeita. Sem um erro próprio, ou o fake continuaria mais
+permissivo que o banco (a divergência que esta Stage existe para fechar), ou o caso
+seria reportado como um erro de outra entidade.
+**Razão:** acréscimo puramente aditivo, na mesma classe de decisão já aprovada no ADR
+2.3.0003 ("um erro por violação, não por tabela"), e abaixo do limiar de regressão —
+não muda contrato de port, fronteira da Stage nem critério de aceite; CA6 ("`add` com
+chave já gravada levanta o `*AlreadyExistsError` correspondente") já o cobre por
+construção. A Task 03 tocou `application/errors.py` e `test_errors.py`, que estavam
+listados na Task 02 — desvio de file-scope registrado aqui em vez de inflar a Task.
+
+### 2026-07-19 — [decision] Task 03 — testes da 2.2 efetivamente alterados — Claude (autônomo)
+**Contexto:** o ADR 2.3.0003 registrou que inverteria um teste mergeado da 2.2 e
+mudaria o comportamento de três fakes, mas deixou explícito que **quais** testes
+quebrariam era fato de execução, não algo que o ADR pudesse afirmar de antemão.
+**Decisão:** a lista real ficou menor que o temido — **um** teste invertido,
+`test_regravar_o_mesmo_usuario_nao_e_conflito_de_email` →
+`test_regravar_o_mesmo_usuario_e_rejeitado_como_id_duplicado`. Nenhum outro teste da
+2.2 precisou mudar: os 365 testes seguem verdes.
+**Razão:** os demais testes da 2.2 usam `add` sempre com chaves novas, então a
+mudança de semântica não os alcança. Isso confirma que o comportamento de upsert
+não era usado como regra em lugar nenhum — era, de fato, só uma frouxidão do fake.
+
 <!-- END: post-execution -->

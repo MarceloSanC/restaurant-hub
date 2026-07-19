@@ -25,7 +25,7 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
 )
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.value_objects.email import Email
-from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
+from restaurant_hub.features.identity.domain.value_objects.identifiers import UnitId, UserId
 from restaurant_hub.features.identity.domain.value_objects.unit_membership import (
     UnitMembership,
 )
@@ -70,8 +70,15 @@ class InMemoryUserRepository:
         # rejeitado, não acumulado. O use case da 2.2 já deduplica `unit_ids`
         # (invariante #15), então nenhum caminho de produção regride.
         novos = list(memberships)
-        if len({(m.user_id, m.unit_id) for m in novos}) != len(novos):
-            raise UnitMembershipAlreadyExistsError(user.id)
+        vistos: set[tuple[UserId, UnitId]] = set()
+        for membership in novos:
+            chave = (membership.user_id, membership.unit_id)
+            if chave in vistos:
+                # Reporta o dono do vínculo repetido, não o do `add`: os dois
+                # podem diferir, e apontar para a linha errada custa caro no
+                # diagnóstico.
+                raise UnitMembershipAlreadyExistsError(membership.user_id)
+            vistos.add(chave)
         self.users[user.id] = user
         self.password_hashes[user.id] = password_hash
         self.emails[user.email.value] = user.id
