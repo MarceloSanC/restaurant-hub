@@ -210,6 +210,38 @@ def test_restaurante_inexistente_e_rejeitado() -> None:
         fixture.use_case.execute(_command(tenant_id=RestaurantId("nao-existe"), unit_ids=()))
 
 
+def test_tenant_em_branco_e_tratado_como_inexistente_e_nao_como_ausente() -> None:
+    """Precedência (3) → (4) do §5.7, observável só com tenant em branco.
+
+    `RestaurantId` é `NewType` sobre `str`, e o command não valida — então a 2.4
+    consegue mandar `"   "`. Esse valor passa pelo `is not None` da checagem de
+    restaurante e é rejeitado pelo `.strip()` do domínio, o que torna as duas
+    ordens distinguíveis: construir o `User` antes responderia
+    `MissingTenantError` ("faltou tenant") para um tenant que foi informado e
+    apenas não existe.
+    """
+    fixture = _Fixture()
+
+    with pytest.raises(RestaurantNotFoundError):
+        fixture.use_case.execute(_command(tenant_id=RestaurantId("   "), unit_ids=()))
+
+
+def test_invariante_de_tenancy_e_cobrada_antes_de_resolver_unidades() -> None:
+    """Precedência (4) → (5) do §5.7 — e a mesma classe de vazamento do CA4.
+
+    Com a ordem trocada, um papel de restaurante sem tenant recebe
+    `UnitNotFoundError` para unidade inexistente e `MissingTenantError` para
+    unidade existente: a diferença enumera ids de unidade a partir de um
+    comando que nem chega a formar um usuário válido.
+    """
+    fixture = _Fixture()
+
+    with pytest.raises(MissingTenantError):
+        fixture.use_case.execute(_command(tenant_id=None, unit_ids=(UnitId("fantasma"),)))
+
+    assert fixture.units.find_calls == 0
+
+
 def test_papel_de_restaurante_sem_tenant_viola_invariante_do_dominio() -> None:
     """A invariante é da 2.1 e sobe sem reembrulho."""
     fixture = _Fixture()

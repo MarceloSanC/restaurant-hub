@@ -16,7 +16,13 @@ from typing import get_args, get_type_hints
 
 import pytest
 
-from restaurant_hub.features.identity.application.dtos import results
+from restaurant_hub.features.identity.application.dtos import (
+    commands,
+    credentials,
+    results,
+    tokens,
+)
+from restaurant_hub.features.identity.application.dtos import session as session_dto
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthenticateUserCommand,
     AuthorizeActionCommand,
@@ -56,6 +62,10 @@ _RESULT_CLASSES = (
 
 # Prefixo dos módulos de entidade — o que um result nunca pode carregar.
 _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
+
+# 5 commands + 5 results + Session + IssuedRefreshToken + AccessTokenClaims +
+# UserCredentials. Guarda contra o teste de imutabilidade virar vácuo.
+_TOTAL_DE_DTOS = 14
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -164,6 +174,34 @@ def test_dtos_sao_imutaveis() -> None:
     result = RestaurantResult(id=RestaurantId("rest-1"), name="Cantina")
     with pytest.raises(FrozenInstanceError):
         result.name = "Outra"  # type: ignore[misc]
+
+
+def test_todo_dto_da_camada_e_frozen() -> None:
+    """A imutabilidade vale para **todos** os DTOs, não só os dois testados acima.
+
+    Verificado por introspecção porque a checagem por instância cobre só o que
+    alguém lembrou de instanciar: mutação real mostrou que tirar `frozen=True`
+    de `AuthorizedActor`, `AuthenticationResult`, `UserResult`,
+    `CreateUserCommand` e `AuthorizeActionCommand` mantinha a suíte verde. Os
+    dois primeiros são justamente a decisão de autorização e o portador do
+    refresh token, que a 2.4 recebe e não pode poder alterar.
+    """
+    modulos = (commands, results, session_dto, tokens, credentials)
+    encontrados = 0
+
+    for modulo in modulos:
+        for nome, obj in vars(modulo).items():
+            if (
+                dataclasses.is_dataclass(obj)
+                and isinstance(obj, type)
+                and not nome.startswith("_")
+                and obj.__module__ == modulo.__name__
+            ):
+                encontrados += 1
+                assert obj.__dataclass_params__.frozen, f"{nome} não é frozen"
+
+    # Guarda contra o teste virar vácuo se os módulos forem reorganizados.
+    assert encontrados == _TOTAL_DE_DTOS
 
 
 def _tipos_folha(annotation: object) -> Iterator[object]:
