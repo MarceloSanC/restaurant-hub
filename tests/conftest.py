@@ -12,29 +12,21 @@ em `tests/<categoria>/features/<feature>/conftest.py`.
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
 
 from restaurant_hub.shared.infrastructure.http.app import create_app
 
-
-@pytest.fixture(scope="session")
-def test_engine() -> Engine:
-    """Engine SQLAlchemy em SQLite in-memory para testes de integração.
-
-    Escopo session: o banco é criado uma vez e compartilhado por todos os
-    testes de integração. Cada feature deve criar suas próprias tabelas em
-    `tests/integration/features/<feature>/conftest.py` (via SQL ou aplicando
-    migrations Alembic) — este conftest não conhece o schema de nenhuma feature.
-    """
-    engine = create_engine(
-        "sqlite:///:memory:",
-        # SQLite não suporta pool_size/max_overflow
-        connect_args={"check_same_thread": False},
-    )
-
-    yield engine
-    engine.dispose()
+# A fixture `test_engine` (SQLite in-memory), herdada do template, foi removida na
+# Stage 2.3 — sem substituto aqui.
+#
+# Ela nunca chegou a ser usada por teste nenhum, e mantê-la seria pior que não
+# tê-la: o schema desta Stage carrega as invariantes **no banco** — FKs compostas,
+# a `CHECK` do iff de tenancy, `TIMESTAMPTZ`, constraints nomeadas que o adapter lê
+# para traduzir erro —, e o SQLite diverge do Postgres em todos esses pontos. Uma
+# suíte verde contra SQLite valeria menos que suíte nenhuma, porque inspiraria
+# confiança no que não foi verificado.
+#
+# As fixtures de banco vivem agora em `tests/integration/conftest.py`, contra
+# PostgreSQL real e sem caminho de skip (ADR 2.3.0001).
 
 
 @pytest.fixture
