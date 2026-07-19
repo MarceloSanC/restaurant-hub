@@ -66,7 +66,8 @@ tests/
 ├── unit/                           # Testes sem I/O — rápidos, sem fixtures de banco
 │   ├── features/<feature>/
 │   │   ├── domain/                 # Testam entidades, value objects, serviços
-│   │   └── application/            # Testam use cases com fakes
+│   │   ├── application/            # Testam use cases com fakes
+│   │   └── adapters/               # Parte do adapter testável SEM I/O (schema declarado, mappers puros, wiring)
 │   ├── shared/                     # tests/unit/shared/ — kernel compartilhado (espelha src/restaurant_hub/shared/)
 │   └── test_bootstrap.py           # Testa composition_root + entrypoint main (sem feature)
 ├── integration/                    # Testam adapters reais contra banco/serviços
