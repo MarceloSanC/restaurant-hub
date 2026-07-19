@@ -55,6 +55,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx
@@ -72,6 +73,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx
@@ -105,6 +107,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx
@@ -130,6 +133,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx

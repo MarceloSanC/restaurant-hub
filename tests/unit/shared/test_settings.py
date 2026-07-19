@@ -23,7 +23,10 @@ def test_defaults_permitem_iniciar_sem_env(monkeypatch: pytest.MonkeyPatch) -> N
     assert settings.debug is False
     assert settings.port == DEFAULT_PORT
     assert settings.log_level == "INFO"
-    assert settings.database_url.startswith("postgresql://")
+    # O esquema carrega o driver (Stage 2.3). `postgresql://` sozinho resolveria
+    # para o psycopg2, que o projeto não declara — a asserção fixa o driver
+    # nomeado para que voltar ao esquema genérico quebre aqui, e não em runtime.
+    assert settings.database_url.startswith("postgresql+psycopg://")
 
 
 def test_variavel_de_ambiente_sobrescreve_default(monkeypatch: pytest.MonkeyPatch) -> None:
