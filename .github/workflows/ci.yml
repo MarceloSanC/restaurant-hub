@@ -28,6 +28,45 @@ jobs:
 
   lint-and-test:
     runs-on: ubuntu-latest
+
+    # Postgres real no gate (Stage 2.3, ADR 2.3.0001).
+    #
+    # A partir da Stage 2.3 o `make check` roda testes de integração que exigem
+    # banco, e eles NÃO se pulam quando o banco falta — falham alto. Sem este
+    # service as alternativas seriam CI permanentemente vermelho ou testes que se
+    # auto-pulam, e a segunda é o falso-verde que a Stage 1.2 catalogou: "verde
+    # por não ter olhado". Aqui não existe caminho de skip, então não há o que
+    # degradar em silêncio.
+    #
+    # `tests/unit/test_ci_workflow.py` assere a presença deste bloco e da
+    # DATABASE_URL abaixo: removê-los reprova `make check` localmente, em vez de
+    # só aparecer num run vermelho depois do push.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: restaurant_hub
+        ports:
+          - 5432:5432
+        # O runner espera o health check antes dos steps — sem isto o job corre
+        # contra um banco ainda subindo, e a falha é intermitente (a pior espécie
+        # num gate).
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Política de CI viaja por `env:`, NUNCA por argumento na linha de comando —
+    # invariante I3 da Stage 1.2. O step abaixo roda literalmente `make check`, e
+    # é isso que sustenta o argumento de transitividade do
+    # docs/runbooks/validate-ci-gate.md ("o que reprova localmente reprova no
+    # runner"). Um argumento extra aqui quebraria esse argumento em silêncio.
+    env:
+      DATABASE_URL: postgresql+psycopg://user:pass@localhost:5432/restaurant_hub
+
     steps:
       # fetch-depth: 0 é REQUISITO do gate, não otimização.
       # `make check` → `docs-check` → `check_technical_postexec.py` checagem 2

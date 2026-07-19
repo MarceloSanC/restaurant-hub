@@ -5,7 +5,7 @@ when-use: After hardening the CI gate (a new tool joins the chain); when auditin
 keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage, fetch-depth, freeze-secao-7]
 status: accepted
 created_at: 2026-06-23
-updated_at: 2026-07-16
+updated_at: 2026-07-19
 runbook_id: validate-ci-gate
 triggers:
   - Hardening of the CI gate (new tool joining the chain — e.g., bandit, import-linter)
@@ -58,6 +58,8 @@ When to execute this runbook:
 - [ ] Working tree clean (`git status` empty).
 - [ ] `make check` green on the current branch **before** starting (baseline).
 - [ ] `.venv` installed and current (`make setup`).
+- [ ] **PostgreSQL running** (`make docker-up`) — since Stage 2.3 the test gate
+      requires a real database and does not skip without one (Class 10).
 - [ ] Any environment with GNU Make 4+ — native Windows (PowerShell) included.
       Makefile recipes are shell-agnostic by project decision
       ([ADR 1.1.0001](../adr/1_1_0001-windows-native-dev-environment.md));
@@ -368,9 +370,61 @@ git restore pyproject.toml
 
 ---
 
+### Class 10 — `integration` (real PostgreSQL required by the test gate)
+
+Added in **Stage 2.3** ([ADR 2.3.0001](../adr/2_3_0001-integration-tests-require-real-postgres.md)). From that Stage on, `make check` → `test-gate` runs integration tests that exercise the Postgres adapters against a **real database**. They do **not** skip when the database is unreachable — they fail loudly, and there is deliberately no environment variable that turns the requirement off.
+
+> **Environment precondition — read before trusting this class.** Unlike Classes 1–4 and 6–9, whose inputs are identical on a laptop and on the runner, this class needs a **service that must exist in both environments**. Locally it comes from `docker-compose.yml` (`make docker-up`); on the runner it comes from the `services: postgres` block in [`ci.yml`](../../.github/workflows/ci.yml). The local exit code below therefore does **not**, on its own, close the transitivity argument for this class — the runner half is closed by `tests/unit/test_ci_workflow.py`, which asserts that the gate job declares both the service and `DATABASE_URL`, so deleting either turns `make check` red *locally*. This is the same lesson as Class 5b, generalised: **a class whose inputs differ between environments needs its environment half verified separately, not assumed.**
+
+**Patch A — database absent** (proves the suite fails instead of skipping):
+```bash
+docker compose stop postgres
+```
+
+**Command:**
+```bash
+uv run pytest tests/integration -q
+```
+
+**Expected output (fingerprint):** a hard failure naming the unreachable database and telling the operator how to fix it — never `s` (skipped) and never a green summary:
+```
+… Postgres não está acessível em postgresql+psycopg://…
+… Suba o banco com `make docker-up`. Os testes de integração desta Stage não se pulam (ADR 2.3.0001).
+```
+Exit code: **non-zero**.
+
+**Revert:**
+```bash
+docker compose start postgres
+```
+
+**Patch B — service removed from CI** (proves the runner half is guarded):
+```bash
+# delete the `services:` block (or the `DATABASE_URL` under `env:`) from
+# .github/workflows/ci.yml
+```
+
+**Command:**
+```bash
+uv run pytest tests/unit/test_ci_workflow.py -q
+```
+
+**Expected output (fingerprint):**
+```
+o job de gate precisa de um service `postgres`: … Ver ADR 2.3.0001.
+```
+Exit code: **1**.
+
+**Revert:**
+```bash
+git restore .github/workflows/ci.yml
+```
+
+---
+
 ## Verification (cumulative)
 
-After exercising all nine classes individually, run the full gate **without any patch** to confirm baseline is green:
+After exercising all ten classes individually, run the full gate **without any patch** to confirm baseline is green (with Postgres up — see Class 10):
 
 ```bash
 git status              # must be clean
@@ -422,6 +476,12 @@ When a future Stage **hardens** the CI gate, this runbook MUST be extended in th
 - **`scripts/check_layout.py` and `import-linter` coexist** by decision of Stage 1.1 (concept §6 — defense in depth): §Class 4 exercises the script, §Class 8 the contracts. If one ever replaces the other, merge the two classes.
 - **`fmt-check` promoted to a blocking target** (adding `ruff format --check` to `check`): upgrade the note in §Class 2 and add the target to the chain documented in §Purpose.
 - **Coverage gate** (`fail_under` in `pyproject.toml`): if the threshold or coverage tool changes, update §Class 7's command and fingerprint accordingly.
+
+- **A gate requires an external service** (database, cache, broker): the class needs
+  its **environment precondition** stated next to the patch *and* a mechanical guard
+  that the service is declared in `ci.yml` — the local exit code alone cannot close
+  the transitivity argument. (Done in Stage 2.3 for PostgreSQL — §Class 10 — guarded
+  by `tests/unit/test_ci_workflow.py`.)
 
 Update `updated_at` in the frontmatter and reference the hardening Stage in the body of the new subsection.
 
