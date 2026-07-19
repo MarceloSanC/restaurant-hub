@@ -37,6 +37,26 @@ from restaurant_hub.shared.infrastructure.http.app import create_app
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _ALEMBIC_INI = _REPO_ROOT / "migrations" / "alembic.ini"
 
+# Ordem de truncamento: filhas antes das mães. `CASCADE` resolveria sozinho, mas a
+# ordem explícita documenta o grafo de dependências.
+#
+# Fonte ÚNICA: as suítes de integração e de contrato truncam as mesmas tabelas, e
+# duas listas separadas divergiriam no dia em que uma tabela nova entrasse só numa
+# delas — o sintoma seria um erro de FK confuso numa suíte e não na outra.
+TABELAS_EM_ORDEM_DE_LIMPEZA = (
+    "sessions",
+    "unit_memberships",
+    "users",
+    "units",
+    "restaurants",
+)
+
+
+def truncar_tudo(engine: Engine) -> None:
+    """Esvazia todas as tabelas do BC identity."""
+    with engine.begin() as conexao:
+        conexao.execute(text(f"TRUNCATE {', '.join(TABELAS_EM_ORDEM_DE_LIMPEZA)} CASCADE"))
+
 
 @pytest.fixture
 async def client() -> AsyncClient:

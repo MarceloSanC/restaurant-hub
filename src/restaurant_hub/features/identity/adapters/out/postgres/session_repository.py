@@ -25,6 +25,7 @@ from datetime import datetime
 
 from sqlalchemy import Connection, Engine, delete, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import ColumnElement
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
@@ -81,11 +82,13 @@ class PostgresSessionRepository:
 
     # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) ----
 
-    def _revoke(self, conexao: Connection, criterio: object, revoked_at: datetime) -> None:
+    def _revoke(
+        self, conexao: Connection, criterio: ColumnElement[bool], revoked_at: datetime
+    ) -> None:
         conexao.execute(
             update(sessions)
             # `revoked_at IS NULL` é o que torna a idempotência forte: sessão já
             # revogada não é tocada, e o instante da PRIMEIRA revogação sobrevive.
-            .where(criterio, sessions.c.revoked_at.is_(None))  # type: ignore[arg-type]
+            .where(criterio, sessions.c.revoked_at.is_(None))
             .values(revoked_at=revoked_at)
         )

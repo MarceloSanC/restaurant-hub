@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
+from restaurant_hub.features.identity.adapters.out.postgres import mappers
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
 )
@@ -258,10 +259,23 @@ def test_add_e_atomico_quando_um_vinculo_falha(cenario: Engine) -> None:
     que é exatamente o cenário que o port existe para impedir.
     """
     repo = PostgresUserRepository(cenario)
+    PostgresUnitRepository(cenario).add(
+        Unit(id=UnitId("unit-a2"), restaurant_id=RestaurantId("rest-a"), name="Praia")
+    )
     user = _user()
 
+    # O TERCEIRO elemento é o inválido (concept §11 CA4). Com um só vínculo, o
+    # `executemany` teria uma linha e o teste provaria apenas "a linha do usuário
+    # reverteu" — não o caso que importa: dois vínculos já inseridos precisam
+    # sumir junto com o terceiro rejeitado.
+    vinculos = [
+        UnitMembership(user_id=user.id, unit_id=UnitId("unit-a1")),
+        UnitMembership(user_id=user.id, unit_id=UnitId("unit-a2")),
+        UnitMembership(user_id=user.id, unit_id=UnitId("fantasma")),
+    ]
+
     with pytest.raises(IntegrityError):
-        repo.add(user, _HASH, [UnitMembership(user_id=user.id, unit_id=UnitId("fantasma"))])
+        repo.add(user, _HASH, vinculos)
 
     assert repo.find_by_id(user.id) is None
     assert repo.find_credentials_by_email(Email("dono@x.com")) is None
@@ -362,26 +376,40 @@ def test_linha_corrompida_levanta_ao_ser_lida(cenario: Engine) -> None:
     de outra Stage), a leitura levanta em vez de devolver um `User` inválido que o
     resto do sistema trataria como legítimo.
     """
-    with cenario.begin() as conexao:
-        conexao.execute(
-            text("ALTER TABLE users DROP CONSTRAINT ck_users_tenant_iff_platform_admin")
-        )
+    # A corrupção vive dentro de UMA transação que termina em rollback. A versão
+    # anterior deste teste dropava a constraint, commitava e a recriava num
+    # `finally` — e o `engine` é de escopo de sessão sobre um banco persistente,
+    # então um Ctrl-C dentro dessa janela deixava a constraint permanentemente
+    # ausente no banco de dev. Aqui, qualquer interrupção reverte sozinha.
+    with cenario.connect() as conexao:
+        transacao = conexao.begin()
+        try:
+            conexao.execute(
+                text("ALTER TABLE users DROP CONSTRAINT ck_users_tenant_iff_platform_admin")
+            )
+            conexao.execute(
+                text(
+                    "INSERT INTO users (id, email, role, tenant_id, password_hash) "
+                    "VALUES ('corrompido', 'x@x.com', 'platform_admin', 'rest-a', 'h')"
+                )
+            )
+
+            # A leitura acontece na MESMA transação, única onde a linha inválida
+            # existe — o repositório recebe essa conexão via um Engine efêmero.
+            linha = conexao.execute(
+                text("SELECT id, email, role, tenant_id FROM users WHERE id = 'corrompido'")
+            ).one()
+
+            with pytest.raises(PlatformAdminTenantError):
+                mappers.linha_para_usuario(linha)
+        finally:
+            transacao.rollback()
+
+    # E o banco voltou intacto: a constraint continua lá e a linha inválida não.
+    with pytest.raises(IntegrityError), cenario.begin() as conexao:
         conexao.execute(
             text(
                 "INSERT INTO users (id, email, role, tenant_id, password_hash) "
-                "VALUES ('corrompido', 'x@x.com', 'platform_admin', 'rest-a', 'h')"
+                "VALUES ('outro', 'y@x.com', 'platform_admin', 'rest-a', 'h')"
             )
         )
-
-    try:
-        with pytest.raises(PlatformAdminTenantError):
-            PostgresUserRepository(cenario).find_by_id(UserId("corrompido"))
-    finally:
-        with cenario.begin() as conexao:
-            conexao.execute(text("DELETE FROM users WHERE id = 'corrompido'"))
-            conexao.execute(
-                text(
-                    "ALTER TABLE users ADD CONSTRAINT ck_users_tenant_iff_platform_admin "
-                    "CHECK ((role = 'platform_admin') = (tenant_id IS NULL))"
-                )
-            )

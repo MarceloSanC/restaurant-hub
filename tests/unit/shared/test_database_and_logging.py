@@ -104,3 +104,25 @@ def test_configure_logging_reduz_verbosidade_de_libs() -> None:
     configure_logging("INFO")
     assert logging.getLogger("sqlalchemy.engine").level == logging.WARNING
     assert logging.getLogger("uvicorn.access").level == logging.INFO
+
+
+def test_build_engine_fixa_a_sessao_em_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O `timezone=UTC` da conexão de produção precisa de gate próprio.
+
+    O psycopg devolve `timestamptz` no fuso da SESSÃO. O mapper normaliza, e o
+    `Engine` dos testes fixa o fuso por conta própria — de modo que apagar esta
+    linha do `build_engine` não quebrava teste nenhum, apesar de mudar o
+    comportamento de produção. Só a prosa protegia.
+    """
+    capturado: dict[str, object] = {}
+
+    def _fake_create_engine(url: str, **kwargs: object) -> object:
+        capturado.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(connection, "create_engine", _fake_create_engine)
+    connection.build_engine("postgresql+psycopg://x/y")
+
+    connect_args = capturado.get("connect_args")
+    assert isinstance(connect_args, dict)
+    assert "-c timezone=UTC" in str(connect_args.get("options"))

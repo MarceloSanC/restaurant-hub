@@ -21,10 +21,9 @@ inventando requisito.
 """
 
 from dataclasses import dataclass
-from typing import Protocol
 
 import pytest
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
@@ -50,6 +49,7 @@ from restaurant_hub.features.identity.application.ports.out.unit_repository impo
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
+from tests.conftest import truncar_tudo
 from tests.fakes.features.identity.in_memory_restaurant_repository import (
     InMemoryRestaurantRepository,
 )
@@ -58,18 +58,6 @@ from tests.fakes.features.identity.in_memory_session_repository import (
 )
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
-
-_TABELAS_EM_ORDEM_DE_LIMPEZA = (
-    "sessions",
-    "unit_memberships",
-    "users",
-    "units",
-    "restaurants",
-)
-
-
-class _TemPorteDeRepositorios(Protocol):
-    """Só para documentar a forma do pacote — não é um port do domínio."""
 
 
 @dataclass(frozen=True)
@@ -86,11 +74,6 @@ class Repositorios:
     unidades: UnitRepository
     usuarios: UserRepository
     sessoes: SessionRepository
-
-
-def _limpar(engine: Engine) -> None:
-    with engine.begin() as conexao:
-        conexao.execute(text(f"TRUNCATE {', '.join(_TABELAS_EM_ORDEM_DE_LIMPEZA)} CASCADE"))
 
 
 @pytest.fixture(params=["fake", "postgres"])
@@ -112,7 +95,7 @@ def repos(request: pytest.FixtureRequest) -> Repositorios:
     # `engine` vem do conftest de integração, que exige Postgres real e falha alto
     # quando ele não está no ar (ADR 2.3.0001) — o contrato herda essa exigência.
     engine: Engine = request.getfixturevalue("engine")
-    _limpar(engine)
+    truncar_tudo(engine)
     return Repositorios(
         restaurantes=PostgresRestaurantRepository(engine),
         unidades=PostgresUnitRepository(engine),

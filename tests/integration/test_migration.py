@@ -11,7 +11,11 @@ três da manhã.
 """
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import Engine, text
+
+from tests.conftest import _ALEMBIC_INI, _REPO_ROOT
 
 pytestmark = [pytest.mark.integration]
 
@@ -107,3 +111,30 @@ def test_indices_de_sessions_existem(engine: Engine) -> None:
             )
         }
     assert indices >= {"ix_sessions_user_id", "ix_sessions_expires_at"}
+
+
+@pytest.mark.slow
+def test_downgrade_remove_o_que_o_upgrade_criou(engine: Engine, database_url: str) -> None:
+    """CA1, metade do `downgrade` — o caminho de rollback de um deploy que deu errado.
+
+    Este teste existe porque a metade `downgrade` do CA1 estava sendo **afirmada** no
+    docstring deste módulo e não verificada por nada: `migrations/` está no `omit` da
+    cobertura, então nem o gate de cobertura a alcançava. Um `downgrade` com ordem de
+    drop errada passaria despercebido até a madrugada em que alguém precisasse dele.
+
+    O teste devolve o banco ao estado anterior no `finally`, inclusive se a asserção
+    falhar — o `engine` é de escopo de sessão e compartilhado com o resto da suíte.
+    """
+    config = Config(str(_ALEMBIC_INI))
+    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", database_url)
+
+    try:
+        command.downgrade(config, "base")
+        restantes = _tabelas(engine) & _TABELAS_ESPERADAS
+        assert restantes == set(), f"downgrade deixou tabelas para trás: {sorted(restantes)}"
+    finally:
+        command.upgrade(config, "head")
+
+    # E o upgrade de volta reconstrói tudo — o par é reversível, não só destrutivo.
+    assert _tabelas(engine) >= _TABELAS_ESPERADAS

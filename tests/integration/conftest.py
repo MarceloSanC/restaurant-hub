@@ -10,15 +10,9 @@ junto da fixture `engine`, na raiz.
 """
 
 import pytest
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 
-_TABELAS_EM_ORDEM_DE_LIMPEZA = (
-    "sessions",
-    "unit_memberships",
-    "users",
-    "units",
-    "restaurants",
-)
+from tests.conftest import truncar_tudo
 
 
 @pytest.fixture
@@ -33,9 +27,8 @@ def banco_limpo(engine: Engine) -> Engine:
     estado que ele deixou continua no banco para diagnóstico, e ainda assim o
     teste seguinte começa limpo.
 
-    Ordem de truncamento: filhas antes das mães. O `CASCADE` resolveria sozinho,
-    mas a ordem explícita documenta o grafo de dependências.
+    A ordem de truncamento vive em `tests/conftest.py`, como fonte única
+    compartilhada com a suíte de contrato.
     """
-    with engine.begin() as conexao:
-        conexao.execute(text(f"TRUNCATE {', '.join(_TABELAS_EM_ORDEM_DE_LIMPEZA)} CASCADE"))
+    truncar_tudo(engine)
     return engine
