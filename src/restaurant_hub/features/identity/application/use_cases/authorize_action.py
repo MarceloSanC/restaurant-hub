@@ -42,6 +42,7 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
     UserRepository,
 )
 from restaurant_hub.features.identity.domain.entities.user import User
+from restaurant_hub.features.identity.domain.value_objects.identifiers import UnitId
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 
@@ -83,7 +84,7 @@ class AuthorizeActionUseCase:
 
         # 5. Eixo visibilidade
         if command.unit_id is not None:
-            self._assert_unit_visibility(user, command)
+            self._assert_unit_visibility(user, command, command.unit_id)
 
         return AuthorizedActor(
             user_id=user.id,
@@ -107,12 +108,18 @@ class AuthorizeActionUseCase:
         if command.tenant_id != user.tenant_id:
             raise TenantNotVisibleError(user.tenant_id, command.tenant_id)
 
-    def _assert_unit_visibility(self, user: User, command: AuthorizeActionCommand) -> None:
-        """Passo 5 — resolve a unidade e delega a visibilidade ao domínio."""
-        unit_id = command.unit_id
-        if unit_id is None:  # pragma: no cover - garantido pelo chamador
-            return
+    def _assert_unit_visibility(
+        self,
+        user: User,
+        command: AuthorizeActionCommand,
+        unit_id: UnitId,
+    ) -> None:
+        """Passo 5 — resolve a unidade e delega a visibilidade ao domínio.
 
+        `unit_id` vem como parâmetro já estreitado pelo chamador: aceitar
+        `UnitId | None` aqui exigiria um `return` inalcançável só para o
+        type-checker, e código morto num guard de segurança é ruído que esconde.
+        """
         unit = self._units.find_by_id(unit_id)
         if unit is None:
             raise UnitNotFoundError(unit_id)
@@ -120,7 +127,7 @@ class AuthorizeActionUseCase:
         # Coerência do par alvo: vale inclusive para platform_admin, que pulou o
         # passo 3 — declarar o tenant B e mirar unidade do tenant C é incoerente.
         if command.tenant_id is not None and unit.tenant_id != command.tenant_id:
-            raise TenantNotVisibleError(command.tenant_id, unit.tenant_id)
+            raise TenantNotVisibleError(user.tenant_id, unit.tenant_id)
 
         # Sem filtrar o resultado: o domínio casa user_id E unit_id, então um
         # repositório permissivo não concede visibilidade indevida.

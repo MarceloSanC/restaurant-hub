@@ -37,7 +37,20 @@ class UserRepository(Protocol):
         password_hash: PasswordHash,
         memberships: Sequence[UnitMembership] = (),
     ) -> None:
-        """Persiste usuário, credencial e vínculos como uma única unidade."""
+        """Persiste usuário, credencial e vínculos como uma única unidade.
+
+        **É inserção, não upsert.** E-mail já registrado levanta
+        `EmailAlreadyRegisteredError` — o mesmo erro que `exists_by_email`
+        antecipa. A checagem prévia do use case resolve o caso comum com uma
+        mensagem melhor; esta regra é a garantia dura, que continua valendo sob
+        concorrência, quando duas requisições passam pela checagem antes de
+        qualquer uma gravar. Na 2.3 ela é o índice único global sobre o e-mail,
+        cujo `IntegrityError` o adapter traduz para esta exceção.
+
+        Sem essa regra no contrato, o fake sobrescreveria em silêncio e o
+        Postgres levantaria — divergência que só apareceria no teste de contrato
+        da 2.3.
+        """
         ...
 
     def find_by_id(self, user_id: UserId) -> User | None:

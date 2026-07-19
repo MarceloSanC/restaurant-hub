@@ -10,6 +10,9 @@ global de e-mail, que é onde o SQL tende a divergir (um índice único por
 import pytest
 
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
+from restaurant_hub.features.identity.application.errors import (
+    EmailAlreadyRegisteredError,
+)
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.entities.user import User
@@ -126,6 +129,35 @@ def test_unicidade_de_email_ignora_caixa() -> None:
     repo.add(_user(email="dono@x.com"), _HASH)
 
     assert repo.exists_by_email(Email("DONO@X.COM")) is True
+
+
+def test_add_e_insercao_e_nao_upsert_de_email() -> None:
+    """O fake precisa rejeitar o que o índice único do Postgres rejeitará.
+
+    Sobrescrever em silêncio seria pior que aceitar: trocaria qual credencial
+    aquele e-mail autentica, sem erro nenhum. É a garantia que continua valendo
+    sob concorrência, quando duas requisições passam pelo `exists_by_email`
+    antes de qualquer uma gravar.
+    """
+    repo = InMemoryUserRepository()
+    repo.add(_user(user_id="user-1", email="dono@x.com"), _HASH)
+
+    with pytest.raises(EmailAlreadyRegisteredError):
+        repo.add(_user(user_id="user-2", email="dono@x.com", tenant="rest-2"), _HASH)
+
+    assert repo.find_credentials_by_email(Email("dono@x.com")) is not None
+    assert repo.emails["dono@x.com"] == "user-1"
+
+
+def test_regravar_o_mesmo_usuario_nao_e_conflito_de_email() -> None:
+    """O conflito é entre usuários distintos — o mesmo id pode ser regravado."""
+    repo = InMemoryUserRepository()
+    user = _user(user_id="user-1", email="dono@x.com")
+
+    repo.add(user, _HASH)
+    repo.add(user, _HASH)
+
+    assert repo.find_by_id(UserId("user-1")) == user
 
 
 def test_email_nao_registrado_nao_existe_e_nao_tem_credencial() -> None:

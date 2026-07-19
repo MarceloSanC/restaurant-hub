@@ -15,6 +15,9 @@ from collections.abc import Sequence
 
 from restaurant_hub.features.identity.application.dtos.credentials import UserCredentials
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
+from restaurant_hub.features.identity.application.errors import (
+    EmailAlreadyRegisteredError,
+)
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
@@ -46,6 +49,12 @@ class InMemoryUserRepository:
         password_hash: PasswordHash,
         memberships: Sequence[UnitMembership] = (),
     ) -> None:
+        # Inserção, não upsert (contrato do port). Sobrescrever em silêncio faria
+        # o fake aceitar o que o índice único do Postgres rejeita — e trocaria,
+        # sem aviso, qual credencial aquele e-mail autentica.
+        existing = self.emails.get(user.email.value)
+        if existing is not None and existing != user.id:
+            raise EmailAlreadyRegisteredError(user.email.value)
         self.users[user.id] = user
         self.password_hashes[user.id] = password_hash
         self.emails[user.email.value] = user.id

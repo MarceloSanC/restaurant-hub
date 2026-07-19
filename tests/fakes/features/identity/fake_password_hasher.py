@@ -28,12 +28,19 @@ class FakePasswordHasher:
 
     def __init__(self) -> None:
         self.verify_calls = 0
+        # Guarda os argumentos, não só a contagem: o CA7 precisa provar **contra
+        # qual hash** o caminho de e-mail inexistente verificou. Contar chamadas
+        # não distingue `dummy_hash()` de um hash qualquer — e um hash qualquer
+        # devolveria `False` de imediato no argon2 real, sem rodar o KDF,
+        # reabrindo o oráculo de tempo que a defesa existe para fechar.
+        self.verify_args: list[tuple[str, PasswordHash]] = []
 
     def hash(self, plain_password: str) -> PasswordHash:
         return PasswordHash(f"{_PREFIX}{plain_password}")
 
     def verify(self, plain_password: str, password_hash: PasswordHash) -> bool:
         self.verify_calls += 1
+        self.verify_args.append((plain_password, password_hash))
         # Nunca levanta, mesmo com hash malformado — lei 1 do port.
         return password_hash == f"{_PREFIX}{plain_password}"
 

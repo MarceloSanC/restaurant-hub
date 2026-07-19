@@ -210,6 +210,21 @@ def test_manager_sem_declarar_unidade_e_negado() -> None:
         fixture.use_case.execute(_command("m", unit=None))
 
 
+def test_escopo_de_tenant_e_cobrado_antes_do_escopo_de_unidade() -> None:
+    """A precedência entre os passos 3 e 4, que nenhum outro teste distingue.
+
+    Os testes de CA10.2 e CA10.3 isolam uma checagem cada, então ambos passam
+    mesmo com os dois passos trocados. Só um command que falha nas **duas** —
+    sem tenant e sem unidade — revela qual roda primeiro. Verificado por mutação:
+    trocar os passos derruba apenas este teste.
+    """
+    fixture = _Fixture()
+    fixture.add_user("m", Role.MANAGER, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(TenantScopeRequiredError):
+        fixture.use_case.execute(_command("m", tenant=None, unit=None))
+
+
 def test_hr_tambem_precisa_declarar_a_unidade() -> None:
     """`hr` não faz bypass de escopo — mesma regra do `manager`."""
     fixture = _Fixture()
@@ -307,6 +322,23 @@ def test_platform_admin_com_par_tenant_unidade_incoerente_e_negado() -> None:
         fixture.use_case.execute(
             _command("admin", Permission.MANAGE_PLATFORM, tenant=_TENANT_B, unit=_UNIT_A1)
         )
+
+
+def test_mensagem_de_tenant_invisivel_descreve_o_tenant_do_ator() -> None:
+    """A mensagem compara o tenant do **ator** com o do alvo, não o alvo consigo.
+
+    Sem esta asserção, inverter os argumentos produz uma mensagem plausível e
+    errada — para o `platform_admin` ela chegou a afirmar que o ator pertencia a
+    um tenant, quando ele não pertence a nenhum.
+    """
+    fixture = _Fixture()
+    fixture.add_user("m", Role.MANAGER, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(TenantNotVisibleError) as erro:
+        fixture.use_case.execute(_command("m", tenant=_TENANT_A, unit=_UNIT_B1))
+
+    assert _TENANT_A in str(erro.value)
+    assert _TENANT_B in str(erro.value)
 
 
 # --------------------------------------------------------------------------

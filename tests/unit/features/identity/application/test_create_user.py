@@ -112,6 +112,28 @@ def test_email_duplicado_em_outro_tenant_e_rejeitado() -> None:
         fixture.use_case.execute(_command(tenant_id=_TENANT_B, unit_ids=(_UNIT_B1,)))
 
 
+def test_unicidade_de_email_e_cobrada_antes_da_regra_de_platform_admin() -> None:
+    """A precedência (1) → (2) do §5.7, que nenhum outro teste distingue.
+
+    Cada um dos outros testes aciona uma só das duas checagens, então ambos
+    passam mesmo com a ordem trocada. Só um command que viola as **duas** —
+    e-mail já registrado E `platform_admin` com unidade — revela qual vem antes.
+    Verificado por mutação: trocar as checagens derruba apenas este teste.
+    """
+    fixture = _Fixture()
+    fixture.use_case.execute(_command(email=Email("colisao@x.com")))
+
+    with pytest.raises(EmailAlreadyRegisteredError):
+        fixture.use_case.execute(
+            _command(
+                email=Email("colisao@x.com"),
+                role=Role.PLATFORM_ADMIN,
+                tenant_id=None,
+                unit_ids=(_UNIT_A1,),
+            )
+        )
+
+
 def test_email_duplicado_ignora_diferenca_de_caixa() -> None:
     """CA3 — `Email` normaliza no domínio, então a unicidade herda isso."""
     fixture = _Fixture()

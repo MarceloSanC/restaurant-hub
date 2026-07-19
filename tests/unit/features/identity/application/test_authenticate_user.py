@@ -188,18 +188,19 @@ def test_email_inexistente_ainda_paga_o_custo_da_verificacao() -> None:
 
 
 def test_verificacao_do_email_inexistente_usa_o_hash_dummy_do_port() -> None:
-    """O hash constante vem do adapter, não da camada de aplicação.
+    """CA7 — o use case verifica contra `dummy_hash()`, não contra um hash qualquer.
 
-    A aplicação não tem como fabricar um hash argon2 legítimo nem deve conhecer
-    os parâmetros de custo dele — por isso `dummy_hash()` faz parte do contrato.
+    Contar chamadas não basta: qualquer string faria o contador subir. E um hash
+    arbitrário é pior do que inútil aqui — o argon2 real rejeita hash malformado
+    de imediato, **sem rodar o KDF**, o que reabre exatamente o oráculo de tempo
+    que esta defesa fecha. Por isso a asserção é sobre o argumento recebido.
     """
     fixture = _Fixture(com_usuario=False)
-    dummy = fixture.hasher.dummy_hash()
 
     with pytest.raises(InvalidCredentialsError):
         fixture.use_case.execute(_command())
 
-    assert fixture.hasher.verify(_SENHA, dummy) is False
+    assert fixture.hasher.verify_args == [(_SENHA, fixture.hasher.dummy_hash())]
 
 
 def test_hash_guardado_e_o_usado_na_verificacao() -> None:
