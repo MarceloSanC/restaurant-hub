@@ -42,7 +42,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_quinze_excecoes_esperadas() -> None:
+def test_modulo_declara_as_dezesseis_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -61,6 +61,7 @@ def test_modulo_declara_as_quinze_excecoes_esperadas() -> None:
         "RestaurantAlreadyExistsError",
         "UnitAlreadyExistsError",
         "UserAlreadyExistsError",
+        "UnitMembershipAlreadyExistsError",
         "SessionAlreadyExistsError",
         "SessionFingerprintAlreadyExistsError",
     }
@@ -77,6 +78,7 @@ def test_erros_de_chave_duplicada_nao_sao_not_found() -> None:
         errors.RestaurantAlreadyExistsError,
         errors.UnitAlreadyExistsError,
         errors.UserAlreadyExistsError,
+        errors.UnitMembershipAlreadyExistsError,
         errors.SessionAlreadyExistsError,
         errors.SessionFingerprintAlreadyExistsError,
     )

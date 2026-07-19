@@ -17,6 +17,8 @@ from restaurant_hub.features.identity.application.dtos.credentials import UserCr
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
+    UnitMembershipAlreadyExistsError,
+    UserAlreadyExistsError,
 )
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
@@ -52,13 +54,28 @@ class InMemoryUserRepository:
         # Inserção, não upsert (contrato do port). Sobrescrever em silêncio faria
         # o fake aceitar o que o índice único do Postgres rejeita — e trocaria,
         # sem aviso, qual credencial aquele e-mail autentica.
+        #
+        # A ORDEM das checagens é parte da especificação: id duplicado é checado
+        # ANTES do e-mail. Re-gravar o mesmo usuário não é conflito de e-mail (o
+        # e-mail é dele), e reportá-lo como tal faria a 2.4 responder "e-mail já
+        # registrado" a uma requisição cujo e-mail está livre. Até a Stage 2.3 o
+        # fake aceitava esse caso em silêncio, contrariando o próprio docstring do
+        # port — ADR 2.3.0003.
+        if user.id in self.users:
+            raise UserAlreadyExistsError(user.id)
         existing = self.emails.get(user.email.value)
-        if existing is not None and existing != user.id:
+        if existing is not None:
             raise EmailAlreadyRegisteredError(user.email.value)
+        # PK composta (user_id, unit_id) na tabela real: vínculo repetido é
+        # rejeitado, não acumulado. O use case da 2.2 já deduplica `unit_ids`
+        # (invariante #15), então nenhum caminho de produção regride.
+        novos = list(memberships)
+        if len({(m.user_id, m.unit_id) for m in novos}) != len(novos):
+            raise UnitMembershipAlreadyExistsError(user.id)
         self.users[user.id] = user
         self.password_hashes[user.id] = password_hash
         self.emails[user.email.value] = user.id
-        self.memberships.extend(memberships)
+        self.memberships.extend(novos)
 
     def find_by_id(self, user_id: UserId) -> User | None:
         return self.users.get(user_id)

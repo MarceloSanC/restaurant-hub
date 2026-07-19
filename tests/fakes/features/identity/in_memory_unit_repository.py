@@ -6,6 +6,7 @@ repositório de unidades — do contrário o erro vazaria a existência de unida
 quem não deveria enxergá-las.
 """
 
+from restaurant_hub.features.identity.application.errors import UnitAlreadyExistsError
 from restaurant_hub.features.identity.application.ports.out.unit_repository import (
     UnitRepository,
 )
@@ -21,6 +22,9 @@ class InMemoryUnitRepository:
         self.find_calls = 0
 
     def add(self, unit: Unit) -> None:
+        # Inserção, não upsert — ver ADR 2.3.0003.
+        if unit.id in self.units:
+            raise UnitAlreadyExistsError(unit.id)
         self.units[unit.id] = unit
 
     def find_by_id(self, unit_id: UnitId) -> Unit | None:

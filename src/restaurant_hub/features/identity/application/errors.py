@@ -120,6 +120,20 @@ class UserAlreadyExistsError(IdentityError):
         super().__init__(f"usuário já existe: {user_id!r}")
 
 
+class UnitMembershipAlreadyExistsError(IdentityError):
+    """Vínculo usuário↔unidade repetido na mesma escrita.
+
+    A tabela real tem PK composta `(user_id, unit_id)` — vínculo é **relação, não
+    multiconjunto** (invariante #15 da 2.2). O use case já deduplica `unit_ids`,
+    então este erro sinaliza chamador que passou a lista crua; acumular em
+    silêncio, como o fake fazia, esconderia esse defeito até a primeira escrita
+    real (ADR 2.3.0003).
+    """
+
+    def __init__(self, user_id: str) -> None:
+        super().__init__(f"vínculo de unidade repetido para o usuário {user_id!r}")
+
+
 class SessionAlreadyExistsError(IdentityError):
     """Sessão com o mesmo id já gravada (ADR 2.3.0003)."""
 
