@@ -70,9 +70,13 @@ run:
 
 # ---------------------------------------------------------------------------
 # migrate — aplica todas as migrations pendentes
+#
+# O `-c` é obrigatório: o alembic.ini deste projeto vive em migrations/, e o
+# alembic só procura por `alembic.ini` no diretório corrente. Sem a flag o alvo
+# falha com "No 'script_location' key found in configuration" (Stage 2.3).
 # ---------------------------------------------------------------------------
 migrate:
-	uv run alembic upgrade head
+	uv run alembic -c migrations/alembic.ini upgrade head
 
 # ---------------------------------------------------------------------------
 # check — gate completo, bloqueante no CI (lint + types + layout + lock + docs
