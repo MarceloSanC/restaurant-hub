@@ -77,6 +77,25 @@ class UserRepository(Protocol):
         """Devolve usuário + hash numa ida só, ou `None` se o e-mail não existir."""
         ...
 
+    def set_password_hash(self, user_id: UserId, password_hash: PasswordHash) -> None:
+        """Substitui o hash de senha do usuário (Stage 2.5).
+
+        **É `UPDATE`, não upsert** — usuário inexistente levanta
+        `UserNotFoundError` e **nada** é gravado. Criar a linha aqui seria pior
+        que inútil: este método é alcançado por uma rota **pública**, a partir de
+        um token de e-mail, e um upsert transformaria um token com `user_id`
+        órfão numa conta nova, sem e-mail, sem papel e sem tenant.
+
+        Toca **apenas** o hash. E-mail, papel e tenant não mudam por este
+        caminho; quem redefine a própria senha não redefine quem é.
+
+        Não revoga sessão nem invalida token: isso é decisão de quem orquestra
+        (`SetPasswordWithTokenUseCase`, ADR 2.5.0003), e enterrá-la aqui faria
+        toda futura troca de senha herdar um efeito colateral que o port não
+        anuncia.
+        """
+        ...
+
     def list_memberships(self, user_id: UserId) -> tuple[UnitMembership, ...]:
         """Vínculos de unidade associados ao usuário."""
         ...

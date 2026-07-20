@@ -19,6 +19,7 @@ from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     UnitMembershipAlreadyExistsError,
     UserAlreadyExistsError,
+    UserNotFoundError,
 )
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
@@ -98,6 +99,15 @@ class InMemoryUserRepository:
             user=self.users[user_id],
             password_hash=self.password_hashes[user_id],
         )
+
+    def set_password_hash(self, user_id: UserId, password_hash: PasswordHash) -> None:
+        # `UPDATE`, não upsert: usuário inexistente levanta e nada é gravado.
+        # Um `self.password_hashes[user_id] = ...` direto criaria uma credencial
+        # órfã que o Postgres recusa — e faria o teste de "token de usuário
+        # apagado" passar verde sobre um caminho que, no banco, falha.
+        if user_id not in self.users:
+            raise UserNotFoundError(user_id)
+        self.password_hashes[user_id] = password_hash
 
     def list_memberships(self, user_id: UserId) -> tuple[UnitMembership, ...]:
         if self.leak_foreign_memberships:

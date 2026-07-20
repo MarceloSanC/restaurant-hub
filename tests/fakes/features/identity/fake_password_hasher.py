@@ -34,6 +34,7 @@ class FakePasswordHasher:
         # devolveria `False` de imediato no argon2 real, sem rodar o KDF,
         # reabrindo o oráculo de tempo que a defesa existe para fechar.
         self.verify_args: list[tuple[str, PasswordHash]] = []
+        self._unusable_counter = 0
 
     def hash(self, plain_password: str) -> PasswordHash:
         return PasswordHash(f"{_PREFIX}{plain_password}")
@@ -46,6 +47,20 @@ class FakePasswordHasher:
 
     def dummy_hash(self) -> PasswordHash:
         return _DUMMY
+
+    def unusable_hash(self) -> PasswordHash:
+        """Hash inatingível e **diferente a cada chamada** (ADR 2.5.0004).
+
+        Não começa com `_PREFIX`, então nenhuma senha o produz e `verify` sempre
+        devolve `False` — inclusive para a sentinela do adapter argon2, que é a
+        senha que o teste de contrato assere nominalmente.
+
+        O contador existe para honrar a lei 2 do método: um fake que devolvesse
+        uma constante deixaria passar um adapter que faz o mesmo, e todo
+        convidado compartilharia a mesma string em `users.password_hash`.
+        """
+        self._unusable_counter += 1
+        return PasswordHash(f"unusable::{self._unusable_counter}")
 
 
 _conforms: PasswordHasher = FakePasswordHasher()

@@ -95,6 +95,12 @@ def test_o_mapa_nao_tem_entrada_orfa() -> None:
         (application_errors.InvalidRefreshTokenError(), 401),
         (application_errors.RefreshTokenReuseError(), 401),
         (application_errors.SessionFingerprintAlreadyExistsError("fp-longo-o-bastante"), 401),
+        # Stage 2.5. Sem esta linha, trocar o status para 404 no mapa mantinha a
+        # suíte verde: as duas guardas estruturais só perguntam "existe entrada?"
+        # e "existe classe?", nunca leem o valor. E a rota que este erro atende é
+        # PÚBLICA — um 404 falante ali confirmaria ao atacante que a string
+        # apresentada era um token de verdade (concept §5 regra 16).
+        (application_errors.InvalidSetupTokenError(), 401),
         (application_errors.PermissionDeniedError("manager", "manage_tenant"), 403),
         (application_errors.TenantScopeRequiredError("owner"), 403),
         (application_errors.TenantNotVisibleError("a", "b"), 403),

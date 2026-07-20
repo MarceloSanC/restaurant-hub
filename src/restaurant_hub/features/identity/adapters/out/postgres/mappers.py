@@ -30,8 +30,13 @@ from typing import Any
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SessionId,
+    SetupTokenId,
 )
 from restaurant_hub.features.identity.application.dtos.session import Session
+from restaurant_hub.features.identity.application.dtos.setup_tokens import (
+    PasswordSetupToken,
+    SetupTokenPurpose,
+)
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.entities.user import User
@@ -190,4 +195,46 @@ def linha_para_sessao(row: Row) -> Session:
         issued_at=_para_utc(row.issued_at),
         expires_at=_para_utc(row.expires_at),
         revoked_at=_para_utc(row.revoked_at) if row.revoked_at is not None else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PasswordSetupToken (Stage 2.5)
+# ---------------------------------------------------------------------------
+
+
+def token_de_setup_para_linha(token: PasswordSetupToken) -> dict[str, Any]:
+    """Persiste o **fingerprint**, nunca o valor do token (ADR 2.5.0002).
+
+    Mesma disciplina de `sessao_para_linha`: não existe coluna capaz de guardar o
+    valor, então não existe nem a possibilidade de gravá-lo por engano.
+    """
+    return {
+        "id": token.id,
+        "user_id": token.user_id,
+        "purpose": token.purpose.value,
+        "token_fingerprint": token.token_fingerprint,
+        "issued_at": token.issued_at,
+        "expires_at": token.expires_at,
+        "consumed_at": token.consumed_at,
+    }
+
+
+def linha_para_token_de_setup(row: Row) -> PasswordSetupToken:
+    """Reidrata o registro, convertendo o propósito de volta para o enum.
+
+    `SetupTokenPurpose(row.purpose)` levanta `ValueError` para um valor que o
+    enum não conhece — e é o desejado: a CHECK do banco só aceita os valores
+    correntes, então uma linha fora do conjunto significa schema divergente do
+    código, que precisa estourar alto em vez de virar um token de propósito
+    silenciosamente errado.
+    """
+    return PasswordSetupToken(
+        id=SetupTokenId(row.id),
+        user_id=UserId(row.user_id),
+        purpose=SetupTokenPurpose(row.purpose),
+        token_fingerprint=row.token_fingerprint,
+        issued_at=_para_utc(row.issued_at),
+        expires_at=_para_utc(row.expires_at),
+        consumed_at=_para_utc(row.consumed_at) if row.consumed_at is not None else None,
     )

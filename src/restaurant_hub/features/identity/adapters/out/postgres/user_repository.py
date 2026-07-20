@@ -39,6 +39,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.tables import (
 )
 from restaurant_hub.features.identity.application.dtos.credentials import UserCredentials
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
+from restaurant_hub.features.identity.application.errors import UserNotFoundError
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
@@ -133,6 +134,22 @@ class PostgresUserRepository:
             unit_memberships.insert(),
             [mappers.vinculo_para_linha(v, user.tenant_id) for v in vinculos],  # type: ignore[arg-type]
         )
+
+    def set_password_hash(self, user_id: UserId, password_hash: PasswordHash) -> None:
+        """`UPDATE` do hash. `rowcount == 0` significa usuário inexistente.
+
+        Usar o `rowcount` — e não um `SELECT` prévio — é o que torna a checagem e
+        a escrita a mesma operação. Com o `SELECT` antes, o usuário poderia ser
+        removido entre as duas, e o `UPDATE` afetaria zero linhas devolvendo
+        sucesso: uma redefinição de senha que reporta "pronto" sem ter gravado
+        nada.
+        """
+        with self._engine.begin() as conexao:
+            resultado = conexao.execute(
+                users.update().where(users.c.id == user_id).values(password_hash=password_hash)
+            )
+            if resultado.rowcount == 0:
+                raise UserNotFoundError(user_id)
 
     def _find_by_id(self, conexao: Connection, user_id: UserId) -> User | None:
         # Colunas explícitas, sem `password_hash`: material de credencial que não é

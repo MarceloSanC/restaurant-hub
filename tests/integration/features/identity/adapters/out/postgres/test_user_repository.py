@@ -26,6 +26,7 @@ from restaurant_hub.features.identity.application.dtos.identifiers import Passwo
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     UserAlreadyExistsError,
+    UserNotFoundError,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
@@ -577,3 +578,73 @@ def test_rollback_devolve_as_constraints_dropadas(
             ),
             {"role": role},
         )
+
+
+# ---------------------------------------------------------------------------
+# set_password_hash — Stage 2.5
+# ---------------------------------------------------------------------------
+
+
+def test_set_password_hash_grava_o_hash_novo(cenario: Engine) -> None:
+    repo = PostgresUserRepository(cenario)
+    repo.add(_user(), _HASH)
+    novo = PasswordHash("hashed::nova-senha")
+
+    repo.set_password_hash(UserId("user-1"), novo)
+
+    credenciais = repo.find_credentials_by_email(Email("dono@x.com"))
+    assert credenciais is not None
+    assert credenciais.password_hash == novo
+
+
+def test_set_password_hash_nao_altera_identidade(cenario: Engine) -> None:
+    """Redefinir a senha não redefine quem a pessoa é.
+
+    E-mail, papel e tenant são os três campos por onde uma escalada passaria se o
+    `UPDATE` fosse escrito com `values(**linha)` em vez de só o hash.
+    """
+    repo = PostgresUserRepository(cenario)
+    repo.add(_user(), _HASH)
+
+    repo.set_password_hash(UserId("user-1"), PasswordHash("hashed::outra"))
+
+    lido = repo.find_by_id(UserId("user-1"))
+    assert lido is not None
+    assert lido.email == Email("dono@x.com")
+    assert lido.role is Role.OWNER
+    assert lido.tenant_id == "rest-a"
+
+
+def test_set_password_hash_de_usuario_inexistente_levanta(cenario: Engine) -> None:
+    repo = PostgresUserRepository(cenario)
+
+    with pytest.raises(UserNotFoundError):
+        repo.set_password_hash(UserId("nao-existe"), PasswordHash("hashed::x"))
+
+
+def test_set_password_hash_de_usuario_inexistente_nao_cria_linha(cenario: Engine) -> None:
+    """É `UPDATE`, não upsert.
+
+    Este método é alcançado por uma rota **pública**, a partir de um token de
+    e-mail. Um upsert transformaria um token com `user_id` órfão numa conta nova,
+    sem e-mail, sem papel e sem tenant — que as CHECKs de tenancy nem aceitariam,
+    mas que não deve sequer ser tentado.
+    """
+    repo = PostgresUserRepository(cenario)
+
+    with pytest.raises(UserNotFoundError):
+        repo.set_password_hash(UserId("fantasma"), PasswordHash("hashed::x"))
+
+    assert repo.find_by_id(UserId("fantasma")) is None
+
+
+def test_set_password_hash_nao_afeta_outro_usuario(cenario: Engine) -> None:
+    repo = PostgresUserRepository(cenario)
+    repo.add(_user("user-1", "a@x.com"), _HASH)
+    repo.add(_user("user-2", "b@x.com"), _HASH)
+
+    repo.set_password_hash(UserId("user-1"), PasswordHash("hashed::so-do-um"))
+
+    outro = repo.find_credentials_by_email(Email("b@x.com"))
+    assert outro is not None
+    assert outro.password_hash == _HASH

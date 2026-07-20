@@ -24,6 +24,7 @@ from restaurant_hub.composition_root import (
     build_http_wiring,
     wire_dependencies,
 )
+from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
 from restaurant_hub.shared.infrastructure.http.error_handlers import register_error_handlers
 from restaurant_hub.shared.infrastructure.http.middlewares import register_middlewares
@@ -31,7 +32,11 @@ from restaurant_hub.shared.infrastructure.http.middlewares import register_middl
 API_PREFIX = "/api/v1"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    email_sender: EmailSender | None = None,
+) -> FastAPI:
     """Cria, configura e retorna a instância FastAPI pronta para uso.
 
     Ordem de inicialização:
@@ -43,7 +48,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     `settings` é injetável para que um teste possa montar a app com outro banco ou
     outros TTLs sem mexer em variável de ambiente global — é o que torna o TTL
-    observável como configuração.
+    observável como configuração. `email_sender` é repassado ao composition root
+    pela mesma razão, e por uma específica: o ADR 0.0.0004 §Decision 7 exige que
+    nada saia da máquina durante a corrida, então o e2e precisa de uma forma
+    honesta de capturar o envio — sem construir um segundo grafo de dependências
+    nem alcançar atributo privado de use case já montado.
 
     **Os handlers genéricos são registrados antes dos de feature de propósito.**
     Starlette resolve o handler pelo `__mro__` da exceção, não pela ordem de
@@ -63,7 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_middlewares(app)
     register_error_handlers(app)
 
-    deps = wire_dependencies(cfg)
+    deps = wire_dependencies(cfg, email_sender=email_sender)
     _register_feature_routers(app, deps)
 
     return app

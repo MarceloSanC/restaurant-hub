@@ -26,8 +26,11 @@ from restaurant_hub.features.identity.application.dtos.commands import (
     CreateRestaurantCommand,
     CreateUnitCommand,
     CreateUserCommand,
+    InviteUserCommand,
     RefreshSessionCommand,
+    RequestPasswordResetCommand,
     RevokeSessionCommand,
+    SetPasswordWithTokenCommand,
 )
 from restaurant_hub.features.identity.application.dtos.results import (
     AuthenticationResult,
@@ -47,11 +50,20 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.invite_user import (
+    InviteUserUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.request_password_reset import (
+    RequestPasswordResetUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.revoke_session import (
     RevokeSessionUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
+    SetPasswordWithTokenUseCase,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
@@ -67,10 +79,13 @@ from .schemas import (
     CreateRestaurantRequest,
     CreateUnitRequest,
     CreateUserRequest,
+    InviteUserRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
+    RequestPasswordResetRequest,
     RestaurantResponse,
+    SetPasswordRequest,
     TokenResponse,
     UnitResponse,
     UserResponse,
@@ -108,6 +123,18 @@ def _get_create_unit() -> CreateUnitUseCase:
 
 def _get_create_user() -> CreateUserUseCase:
     _nao_conectado("create_user")
+
+
+def _get_invite_user() -> InviteUserUseCase:
+    _nao_conectado("invite_user")
+
+
+def _get_request_password_reset() -> RequestPasswordResetUseCase:
+    _nao_conectado("request_password_reset")
+
+
+def _get_set_password_with_token() -> SetPasswordWithTokenUseCase:
+    _nao_conectado("set_password_with_token")
 
 
 def _get_guard() -> IdentityGuard:
@@ -369,3 +396,105 @@ def create_user(
         )
     )
     return _user_response(resultado)
+
+
+# ---------------------------------------------------------------------------
+# Convite e definição de senha (Stage 2.5)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/users/invitations",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def invite_user(
+    payload: InviteUserRequest,
+    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
+    guard: Annotated[IdentityGuard, Depends(_get_guard)],
+    use_case: Annotated[InviteUserUseCase, Depends(_get_invite_user)],
+) -> UserResponse:
+    """Convida uma pessoa para o tenant do **ator**.
+
+    **A autorização é literalmente a mesma de `POST /users`**, e a repetição é
+    deliberada: convidar concede exatamente o mesmo acesso que criar, então
+    afrouxar aqui seria criar uma porta lateral para a escalada que aquela rota
+    fecha. As três defesas continuam valendo — "não se concede o que não se
+    detém" via `required_permissions_for_role`, autorização por unidade
+    requisitada, e tenant vindo do ator e nunca do corpo.
+
+    A resposta é o `UserResponse` de sempre: **nenhum campo de token**. O link
+    existe apenas dentro do e-mail (concept §5 regra 1).
+    """
+    papel_alvo = Role.from_string(payload.role)
+    unit_ids = tuple(UnitId(unit_id) for unit_id in payload.unit_ids)
+
+    autorizado = guard.authorize_all(
+        ator,
+        required_permissions_for_role(papel_alvo),
+        tenant_id=ator.claims.tenant_id,
+        unit_ids=unit_ids,
+    )
+
+    resultado = use_case.execute(
+        InviteUserCommand(
+            email=Email(payload.email),
+            role=papel_alvo,
+            tenant_id=autorizado.actor_tenant_id,
+            unit_ids=unit_ids,
+        )
+    )
+    return _user_response(resultado)
+
+
+@router.post(
+    "/auth/password-reset-requests",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def request_password_reset(
+    payload: RequestPasswordResetRequest,
+    use_case: Annotated[RequestPasswordResetUseCase, Depends(_get_request_password_reset)],
+) -> Response:
+    """Pede a redefinição de senha. **Sempre 202, sempre com o mesmo corpo.**
+
+    Pública por definição, e é justamente por isso que a resposta não pode
+    depender de o e-mail existir. **202 e não 200**: o servidor aceitou o pedido
+    e não afirma nada sobre o que fez com ele — que é literalmente a semântica
+    desejada e a única honesta.
+
+    O corpo é vazio, então não há campo, mensagem nem contagem que difira entre
+    os dois casos. O use case tampouco levanta: qualquer falha do envio ou da
+    escrita é absorvida lá dentro, porque 500 num caminho e 202 no outro seria
+    enumeração de contas pelo status (concept §5 regra 8).
+
+    E-mail malformado ainda é 422, e isso **não** fura a regra: o formato é
+    conhecimento que o cliente já tem antes de perguntar, e não revela nada
+    sobre a base.
+    """
+    use_case.execute(RequestPasswordResetCommand(email=Email(payload.email)))
+    return Response(status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.post("/auth/password", status_code=status.HTTP_204_NO_CONTENT)
+def set_password(
+    payload: SetPasswordRequest,
+    use_case: Annotated[SetPasswordWithTokenUseCase, Depends(_get_set_password_with_token)],
+) -> Response:
+    """Define a senha apresentando o token recebido por e-mail.
+
+    **204 sem corpo — não autentica** (concept §5 regra 14). Devolver um par de
+    tokens aqui transformaria o link de e-mail numa credencial de sessão: quem
+    interceptasse o e-mail ganharia acesso sem nunca provar que sabe a senha.
+    O cliente faz login pelo caminho normal, logo em seguida.
+
+    O usuário alvo **não** vem do corpo: sai do registro que o servidor gravou ao
+    emitir o token. Token desconhecido, expirado, já usado ou de usuário apagado
+    produzem o mesmo 401 de corpo constante.
+    """
+    use_case.execute(
+        SetPasswordWithTokenCommand(
+            token=payload.token.get_secret_value(),
+            plain_password=payload.password.get_secret_value(),
+        )
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

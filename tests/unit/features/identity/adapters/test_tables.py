@@ -17,10 +17,14 @@ from sqlalchemy import CheckConstraint, UniqueConstraint
 
 from restaurant_hub.features.identity.adapters.out.postgres.tables import (
     identity_metadata,
+    password_setup_tokens,
     sessions,
     unit_memberships,
     units,
     users,
+)
+from restaurant_hub.features.identity.application.dtos.setup_tokens import (
+    SetupTokenPurpose,
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
@@ -31,7 +35,7 @@ def _constraint_names(table: object) -> set[str]:
     return {c.name for c in table.constraints if c.name is not None}  # type: ignore[attr-defined]
 
 
-def test_metadata_declara_exatamente_as_cinco_tabelas() -> None:
+def test_metadata_declara_exatamente_as_seis_tabelas() -> None:
     """Tabela nova ou removida força revisão consciente — e da migration junto."""
     assert set(identity_metadata.tables) == {
         "restaurants",
@@ -39,7 +43,41 @@ def test_metadata_declara_exatamente_as_cinco_tabelas() -> None:
         "users",
         "unit_memberships",
         "sessions",
+        # Stage 2.5 — o registro que torna o uso único do token de definição de
+        # senha uma garantia do banco (ADR 2.5.0002).
+        "password_setup_tokens",
     }
+
+
+def test_setup_tokens_nao_tem_coluna_capaz_de_guardar_o_valor_do_token() -> None:
+    """Mesma disciplina de `sessions`: só o fingerprint é persistido.
+
+    Igualdade de conjunto, e não ausência de um nome específico: uma coluna nova
+    chamada qualquer coisa (`token`, `secret`, `raw_value`) quebra o teste, que é
+    o ponto. Um dump deste banco não pode devolver link de convite utilizável.
+    """
+    assert {c.name for c in password_setup_tokens.columns} == {
+        "id",
+        "user_id",
+        "purpose",
+        "token_fingerprint",
+        "issued_at",
+        "expires_at",
+        "consumed_at",
+    }
+
+
+def test_check_de_proposito_deriva_do_enum() -> None:
+    """Repetir a lista à mão criaria duas fontes de verdade que divergem.
+
+    Um propósito novo em `SetupTokenPurpose` sem entrada na CHECK só apareceria
+    como `IntegrityError` em produção.
+    """
+    checks = [c for c in password_setup_tokens.constraints if isinstance(c, CheckConstraint)]
+    texto = " ".join(str(c.sqltext) for c in checks)
+
+    for purpose in SetupTokenPurpose:
+        assert f"'{purpose.value}'" in texto
 
 
 def test_sessions_nao_tem_coluna_capaz_de_guardar_o_valor_do_refresh_token() -> None:

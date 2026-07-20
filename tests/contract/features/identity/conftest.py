@@ -25,6 +25,9 @@ from dataclasses import dataclass
 import pytest
 from sqlalchemy import Engine
 
+from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
+    PostgresPasswordSetupTokenRepository,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
 )
@@ -36,6 +39,9 @@ from restaurant_hub.features.identity.adapters.out.postgres.unit_repository impo
 )
 from restaurant_hub.features.identity.adapters.out.postgres.user_repository import (
     PostgresUserRepository,
+)
+from restaurant_hub.features.identity.application.ports.out.password_setup_token_repository import (
+    PasswordSetupTokenRepository,
 )
 from restaurant_hub.features.identity.application.ports.out.restaurant_repository import (
     RestaurantRepository,
@@ -50,6 +56,9 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
     UserRepository,
 )
 from tests.conftest import truncar_tudo
+from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
+    InMemoryPasswordSetupTokenRepository,
+)
 from tests.fakes.features.identity.in_memory_restaurant_repository import (
     InMemoryRestaurantRepository,
 )
@@ -74,6 +83,10 @@ class Repositorios:
     unidades: UnitRepository
     usuarios: UserRepository
     sessoes: SessionRepository
+    # Stage 2.5. Entra no mesmo pacote pelo motivo do docstring: a tabela de
+    # tokens tem FK para `users`, então um teste que semeasse o pré-requisito de
+    # um jeito para o fake e de outro para o Postgres deixaria de ser contrato.
+    tokens_de_setup: PasswordSetupTokenRepository
 
 
 @pytest.fixture(params=["fake", "postgres"])
@@ -90,6 +103,7 @@ def repos(request: pytest.FixtureRequest) -> Repositorios:
             unidades=InMemoryUnitRepository(),
             usuarios=InMemoryUserRepository(),
             sessoes=InMemorySessionRepository(),
+            tokens_de_setup=InMemoryPasswordSetupTokenRepository(),
         )
 
     # `engine` vem do conftest de integração, que exige Postgres real e falha alto
@@ -101,4 +115,5 @@ def repos(request: pytest.FixtureRequest) -> Repositorios:
         unidades=PostgresUnitRepository(engine),
         usuarios=PostgresUserRepository(engine),
         sessoes=PostgresSessionRepository(engine),
+        tokens_de_setup=PostgresPasswordSetupTokenRepository(engine),
     )

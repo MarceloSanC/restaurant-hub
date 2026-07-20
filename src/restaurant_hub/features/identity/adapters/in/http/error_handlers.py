@@ -28,6 +28,7 @@ from restaurant_hub.features.identity.application.errors import (
     InvalidAccessTokenError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
+    InvalidSetupTokenError,
     PermissionDeniedError,
     RefreshTokenReuseError,
     RestaurantAlreadyExistsError,
@@ -84,6 +85,14 @@ IDENTITY_ERROR_STATUS: Final[dict[type[IdentityError], int]] = {
     InvalidAccessTokenError: HTTP_UNAUTHORIZED,
     InvalidRefreshTokenError: HTTP_UNAUTHORIZED,
     RefreshTokenReuseError: HTTP_UNAUTHORIZED,
+    # 401 numa rota **pública** que não usa Bearer, e a escolha é deliberada:
+    # `InvalidRefreshTokenError` já viaja no corpo e também é 401 (ADR 2.4.0001),
+    # e a faixa 401 é a única com **corpo constante** — que é justamente a
+    # propriedade de que este erro precisa, de graça. O `WWW-Authenticate: Bearer`
+    # que a faixa anexa fica semanticamente impreciso; exceptuá-lo criaria uma
+    # SEGUNDA forma de 401 no BC, e a diferença entre as duas seria observável.
+    # Um cabeçalho impreciso não é um oráculo; duas faixas 401 distinguíveis são.
+    InvalidSetupTokenError: HTTP_UNAUTHORIZED,
     # 401, e não 409, apesar do nome "AlreadyExists": a própria classe declara
     # que fingerprint repetido é o **sinal de reuso de refresh token**.
     # Classificá-lo como conflito de escrita registraria o oposto do que ele

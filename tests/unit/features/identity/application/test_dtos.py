@@ -20,6 +20,7 @@ from restaurant_hub.features.identity.application.dtos import (
     commands,
     credentials,
     results,
+    setup_tokens,
     tokens,
 )
 from restaurant_hub.features.identity.application.dtos import session as session_dto
@@ -66,7 +67,15 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # 7 commands (os 5 da 2.2 + RefreshSessionCommand e RevokeSessionCommand da 2.4)
 # + 5 results + Session + IssuedRefreshToken + AccessTokenClaims +
 # UserCredentials. Guarda contra o teste de imutabilidade virar vácuo.
-_TOTAL_DE_DTOS = 16
+# 16 até a 2.4; a Stage 2.5 acrescenta `IssuedSetupToken`, `PasswordSetupToken` e
+# os três commands do fluxo de convite/redefinição.
+#
+# O número só fecha porque `setup_tokens` entrou na tupla de módulos varridos —
+# 19 "fechava" antes por acidente, contando os três commands e ignorando os dois
+# DTOs novos. Um DTO fora da varredura é pior que um número errado: `frozen` some
+# sem ninguém notar, e `PasswordSetupToken` é justamente o registro que carrega
+# `consumed_at`, isto é, a prova de uso único.
+_TOTAL_DE_DTOS = 21
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -187,7 +196,7 @@ def test_todo_dto_da_camada_e_frozen() -> None:
     dois primeiros são justamente a decisão de autorização e o portador do
     refresh token, que a 2.4 recebe e não pode poder alterar.
     """
-    modulos = (commands, results, session_dto, tokens, credentials)
+    modulos = (commands, results, session_dto, tokens, credentials, setup_tokens)
     encontrados = 0
 
     for modulo in modulos:

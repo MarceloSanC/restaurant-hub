@@ -30,8 +30,13 @@ import pytest
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SessionId,
+    SetupTokenId,
 )
 from restaurant_hub.features.identity.application.dtos.session import Session
+from restaurant_hub.features.identity.application.dtos.setup_tokens import (
+    PasswordSetupToken,
+    SetupTokenPurpose,
+)
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     RestaurantAlreadyExistsError,
@@ -39,6 +44,7 @@ from restaurant_hub.features.identity.application.errors import (
     SessionFingerprintAlreadyExistsError,
     UnitAlreadyExistsError,
     UserAlreadyExistsError,
+    UserNotFoundError,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
@@ -412,3 +418,207 @@ def test_purge_expired_poupa_revogada_ainda_nao_expirada(repos: Repositorios) ->
 
 def test_purge_expired_em_repositorio_vazio_devolve_zero(repos: Repositorios) -> None:
     assert repos.sessoes.purge_expired(_NOW) == 0
+
+
+# ---------------------------------------------------------------------------
+# PasswordSetupTokenRepository e set_password_hash — Stage 2.5
+#
+# Estas duas baterias existiam separadas (uma só para o fake, outra só para o
+# Postgres), escritas à mão com corpos diferentes. A auditoria de testes apontou
+# o buraco: duas baterias independentes provam que cada implementação faz o que o
+# seu próprio teste diz, e **não** que fazem a mesma coisa — que é exatamente o
+# risco que o concept §10 registrou para o `consume` condicional.
+# ---------------------------------------------------------------------------
+
+
+# `noqa: PLR0913` — fábrica de fixture: cada parâmetro é uma coluna do registro.
+def _setup_token(  # noqa: PLR0913
+    token_id: str = "tok-1",
+    *,
+    user_id: str = "user-1",
+    purpose: SetupTokenPurpose = SetupTokenPurpose.INVITATION,
+    fingerprint: str = "sfp::abc",
+    expires_at: datetime | None = None,
+    consumed_at: datetime | None = None,
+) -> PasswordSetupToken:
+    return PasswordSetupToken(
+        id=SetupTokenId(token_id),
+        user_id=UserId(user_id),
+        purpose=purpose,
+        token_fingerprint=fingerprint,
+        issued_at=_NOW,
+        expires_at=expires_at if expires_at is not None else _NOW + _TTL,
+        consumed_at=consumed_at,
+    )
+
+
+def _com_usuario(repos: Repositorios) -> None:
+    _semear_tenant(repos)
+    repos.usuarios.add(_user(), _HASH)
+
+
+def test_setup_token_faz_round_trip(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token())
+
+    lido = repos.tokens_de_setup.find_by_fingerprint("sfp::abc")
+
+    assert lido is not None
+    assert lido.id == "tok-1"
+    assert lido.user_id == "user-1"
+    assert lido.purpose is SetupTokenPurpose.INVITATION
+    assert lido.consumed_at is None
+
+
+def test_find_by_fingerprint_de_setup_nao_filtra_consumido(repos: Repositorios) -> None:
+    """Filtrar tornaria um replay indistinguível de um token forjado."""
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token(consumed_at=_NOW))
+
+    assert repos.tokens_de_setup.find_by_fingerprint("sfp::abc") is not None
+
+
+def test_find_by_fingerprint_de_setup_nao_filtra_expirado(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token(expires_at=_NOW - timedelta(days=1)))
+
+    assert repos.tokens_de_setup.find_by_fingerprint("sfp::abc") is not None
+
+
+def test_find_by_fingerprint_de_setup_desconhecido_e_none(repos: Repositorios) -> None:
+    assert repos.tokens_de_setup.find_by_fingerprint("sfp::nao-existe") is None
+
+
+def test_consume_de_setup_devolve_true_e_depois_false(repos: Repositorios) -> None:
+    """O booleano **é** o contrato de uso único — a mesma semântica nas duas."""
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token())
+
+    primeiro = repos.tokens_de_setup.consume(SetupTokenId("tok-1"), _NOW)
+    segundo = repos.tokens_de_setup.consume(SetupTokenId("tok-1"), _NOW + _TTL)
+
+    assert primeiro is True
+    assert segundo is False
+
+
+def test_consume_de_setup_preserva_o_instante_do_primeiro_uso(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token())
+    repos.tokens_de_setup.consume(SetupTokenId("tok-1"), _NOW)
+    repos.tokens_de_setup.consume(SetupTokenId("tok-1"), _NOW + _TTL)
+
+    lido = repos.tokens_de_setup.find_by_fingerprint("sfp::abc")
+    assert lido is not None
+    assert lido.consumed_at == _NOW
+
+
+def test_consume_de_setup_inexistente_devolve_false(repos: Repositorios) -> None:
+    """`False`, não exceção: quem consome já trata `False` como token inválido."""
+    assert repos.tokens_de_setup.consume(SetupTokenId("nao-existe"), _NOW) is False
+
+
+def test_invalidate_com_proposito_preserva_o_outro(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(
+        _setup_token("convite", purpose=SetupTokenPurpose.INVITATION, fingerprint="sfp::c")
+    )
+    repos.tokens_de_setup.add(
+        _setup_token("reset", purpose=SetupTokenPurpose.PASSWORD_RESET, fingerprint="sfp::r")
+    )
+
+    invalidados = repos.tokens_de_setup.invalidate_all_for_user(
+        UserId("user-1"), _NOW, purpose=SetupTokenPurpose.PASSWORD_RESET
+    )
+
+    assert invalidados == 1
+    convite = repos.tokens_de_setup.find_by_fingerprint("sfp::c")
+    assert convite is not None
+    assert convite.consumed_at is None
+
+
+def test_invalidate_sem_proposito_atinge_todos(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(
+        _setup_token("convite", purpose=SetupTokenPurpose.INVITATION, fingerprint="sfp::c")
+    )
+    repos.tokens_de_setup.add(
+        _setup_token("reset", purpose=SetupTokenPurpose.PASSWORD_RESET, fingerprint="sfp::r")
+    )
+
+    esperado = 2
+    assert repos.tokens_de_setup.invalidate_all_for_user(UserId("user-1"), _NOW) == esperado
+
+
+def test_invalidate_alcanca_expirado_nao_consumido(repos: Repositorios) -> None:
+    """Regra 4 do port: o predicado é `consumed_at IS NULL`, sem termo de expiração.
+
+    É o caso exato em que fake e adapter divergiriam em silêncio, e a contagem é
+    observável — a CA13 assere sobre ela.
+    """
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token(expires_at=_NOW - timedelta(days=1)))
+
+    assert repos.tokens_de_setup.invalidate_all_for_user(UserId("user-1"), _NOW) == 1
+
+
+def test_invalidate_nao_reescreve_consumo_gravado(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token(consumed_at=_NOW))
+
+    assert repos.tokens_de_setup.invalidate_all_for_user(UserId("user-1"), _NOW + _TTL) == 0
+
+    lido = repos.tokens_de_setup.find_by_fingerprint("sfp::abc")
+    assert lido is not None
+    assert lido.consumed_at == _NOW
+
+
+def test_purge_de_setup_token_e_inclusivo_na_fronteira(repos: Repositorios) -> None:
+    """`is_usable` é half-open, então em `expires_at == before` já expirou."""
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token(expires_at=_NOW))
+
+    assert repos.tokens_de_setup.purge_expired(_NOW) == 1
+    assert repos.tokens_de_setup.find_by_fingerprint("sfp::abc") is None
+
+
+def test_purge_de_setup_token_preserva_valido(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    repos.tokens_de_setup.add(_setup_token(expires_at=_NOW + timedelta(seconds=1)))
+
+    assert repos.tokens_de_setup.purge_expired(_NOW) == 0
+
+
+def test_set_password_hash_troca_o_hash(repos: Repositorios) -> None:
+    _com_usuario(repos)
+    novo = PasswordHash("hashed::nova")
+
+    repos.usuarios.set_password_hash(UserId("user-1"), novo)
+
+    credenciais = repos.usuarios.find_credentials_by_email(Email("dono@x.com"))
+    assert credenciais is not None
+    assert credenciais.password_hash == novo
+
+
+def test_set_password_hash_nao_altera_identidade(repos: Repositorios) -> None:
+    """Redefinir a senha não redefine quem a pessoa é."""
+    _com_usuario(repos)
+
+    repos.usuarios.set_password_hash(UserId("user-1"), PasswordHash("hashed::outra"))
+
+    lido = repos.usuarios.find_by_id(UserId("user-1"))
+    assert lido is not None
+    assert lido.email == Email("dono@x.com")
+    assert lido.role is Role.OWNER
+
+
+def test_set_password_hash_de_usuario_inexistente_levanta(repos: Repositorios) -> None:
+    """`UPDATE`, não upsert — e a mesma exceção nas duas implementações."""
+    with pytest.raises(UserNotFoundError):
+        repos.usuarios.set_password_hash(UserId("fantasma"), PasswordHash("hashed::x"))
+
+
+def test_set_password_hash_de_usuario_inexistente_nao_cria_linha(repos: Repositorios) -> None:
+    with pytest.raises(UserNotFoundError):
+        repos.usuarios.set_password_hash(UserId("fantasma"), PasswordHash("hashed::x"))
+
+    assert repos.usuarios.find_by_id(UserId("fantasma")) is None

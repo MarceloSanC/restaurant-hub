@@ -7,6 +7,7 @@ parte deste arquivo testa **falha**, não sucesso.
 
 import pytest
 
+from restaurant_hub.features.identity.adapters.out.security import argon2_hasher
 from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
     Argon2PasswordHasher,
 )
@@ -18,6 +19,12 @@ from restaurant_hub.features.identity.application.ports.out.password_hasher impo
 pytestmark = pytest.mark.unit
 
 _SENHA = "s3nha-muito-secreta"
+
+# Piso de entropia da pré-imagem de `unusable_hash()`, em bytes (ADR 2.5.0004).
+_ENTROPIA_MINIMA_BYTES = 32
+# Quantas vezes `unusable_hash()` é chamado no teste da origem da entropia — e,
+# portanto, quantos sorteios independentes de `secrets` são exigidos.
+_CHAMADAS_OBSERVADAS = 2
 
 
 def test_adapter_satisfaz_o_protocolo() -> None:
@@ -111,6 +118,41 @@ def test_dummy_hash_e_inatingivel_por_qualquer_senha(tentativa: str) -> None:
     hasher = Argon2PasswordHasher()
 
     assert hasher.verify(tentativa, hasher.dummy_hash()) is False
+
+
+def test_unusable_hash_deriva_de_secrets_a_cada_chamada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A **origem** da pré-imagem de `unusable_hash()`, não um representante dela.
+
+    Os testes de contrato do port só conseguem observar o resultado — e o
+    resultado não distingue nada, porque o salt por hash do argon2 já faz duas
+    chamadas com a MESMA pré-imagem devolverem strings diferentes. Um
+    `unusable_hash()` que hasheasse `"seed-literal-do-repo"` passa em todos eles,
+    e é exatamente o bypass que a ADR 2.5.0004 fecha: pré-imagem literal no
+    repositório vira senha funcional de toda conta convidada.
+
+    Por isso a asserção é sobre a chamada, não sobre a saída, e é uma
+    propriedade em vez de uma lista de literais proibidos: a pré-imagem vem de
+    `secrets`, com pelo menos 32 bytes de entropia, e é pedida **de novo** a cada
+    chamada. Qualquer literal — os quatro já parametrizados ou o próximo que
+    alguém inventar — falha aqui por não passar por `secrets`.
+    """
+    entropia_pedida: list[int] = []
+
+    def _gravador(nbytes: int) -> str:
+        entropia_pedida.append(nbytes)
+        return f"pre-imagem-{len(entropia_pedida)}"
+
+    monkeypatch.setattr(argon2_hasher.secrets, "token_urlsafe", _gravador)
+    hasher = Argon2PasswordHasher()
+
+    hasher.unusable_hash()
+    hasher.unusable_hash()
+
+    # Duas chamadas, dois sorteios: nada é memoizado no construtor como o dummy.
+    assert len(entropia_pedida) == _CHAMADAS_OBSERVADAS
+    assert all(nbytes >= _ENTROPIA_MINIMA_BYTES for nbytes in entropia_pedida)
 
 
 def test_dummy_hash_e_estavel_na_mesma_instancia() -> None:

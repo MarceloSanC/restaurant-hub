@@ -13,3 +13,9 @@ from typing import NewType
 
 PasswordHash = NewType("PasswordHash", str)
 SessionId = NewType("SessionId", str)
+
+# Id do registro de token de definição de senha. Fica nesta camada, e não no
+# domínio, pelo mesmo motivo de `SessionId`: o token de setup é um conceito de
+# aplicação — mecanismo de acesso —, não uma entidade do domínio de identidade
+# (ADR 2.5.0002).
+SetupTokenId = NewType("SetupTokenId", str)
