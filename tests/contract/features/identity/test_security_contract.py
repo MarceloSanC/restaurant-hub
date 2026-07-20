@@ -29,6 +29,9 @@ from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import
 from restaurant_hub.features.identity.adapters.out.security.jwt_issuer import (
     JwtTokenIssuer,
 )
+from restaurant_hub.features.identity.adapters.out.security.setup_token_issuer import (
+    Sha256SetupTokenIssuer,
+)
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SessionId,
@@ -38,6 +41,9 @@ from restaurant_hub.features.identity.application.errors import InvalidAccessTok
 from restaurant_hub.features.identity.application.ports.out.password_hasher import (
     PasswordHasher,
 )
+from restaurant_hub.features.identity.application.ports.out.setup_token_issuer import (
+    SetupTokenIssuer,
+)
 from restaurant_hub.features.identity.application.ports.out.token_issuer import TokenIssuer
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
@@ -45,6 +51,7 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
+from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
 
 pytestmark = pytest.mark.contract
@@ -270,3 +277,45 @@ def test_lei_da_decodificacao_recusa_token_expirado(issuer: TokenIssuer) -> None
 
     with pytest.raises(InvalidAccessTokenError):
         issuer.decode_access_token(token)
+
+
+# ---------------------------------------------------------------------------
+# SetupTokenIssuer — a mesma lei do fingerprint, num port deliberadamente separado
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=["fake", "sha256"])
+def setup_issuer(request: pytest.FixtureRequest) -> SetupTokenIssuer:
+    """Fake e adapter real respondem à mesma bateria.
+
+    O port é separado do `TokenIssuer` de propósito (ADR 2.5.0002), mas a lei do
+    fingerprint é a mesma — e é a lei que, se quebrada, faz **toda** redenção de
+    token falhar com as duas metades parecendo corretas isoladamente.
+    """
+    if request.param == "fake":
+        return FakeSetupTokenIssuer()
+    return Sha256SetupTokenIssuer()
+
+
+def test_lei_do_fingerprint_do_setup_token(setup_issuer: SetupTokenIssuer) -> None:
+    """`issuer.fingerprint(t.value) == t.fingerprint`, via o método."""
+    emitido = setup_issuer.issue()
+
+    assert setup_issuer.fingerprint(emitido.value) == emitido.fingerprint
+
+
+def test_setup_token_muda_a_cada_emissao(setup_issuer: SetupTokenIssuer) -> None:
+    """Dois convites não podem compartilhar o mesmo link."""
+    assert setup_issuer.issue().value != setup_issuer.issue().value
+
+
+def test_fingerprint_do_setup_token_e_deterministico(setup_issuer: SetupTokenIssuer) -> None:
+    """Sem determinismo, a redenção não acha o registro que a emissão gravou."""
+    assert setup_issuer.fingerprint("valor-x") == setup_issuer.fingerprint("valor-x")
+
+
+def test_fingerprint_do_setup_token_nao_devolve_o_proprio_valor(
+    setup_issuer: SetupTokenIssuer,
+) -> None:
+    """Um "fingerprint" igual ao valor faria o banco guardar o token utilizável."""
+    assert setup_issuer.fingerprint("valor-x") != "valor-x"
