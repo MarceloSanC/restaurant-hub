@@ -87,7 +87,7 @@ graph LR
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
-| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.5 |
+| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | done | 2.1 → 2.5 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | not_started | 3.1 → 3.5 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | not_started | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
@@ -112,7 +112,7 @@ graph LR
 | `2.2-identity-application` | Use cases de tenancy e acesso | application | done | `2.1-identity-domain` |
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | done | `2.2-identity-application` |
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | done | `2.3-identity-persistence` |
-| `2.5-email-invite` | Convite por e-mail | vertical (identity) | draft | `2.4-identity-http` |
+| `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
 | `3.1-staff-domain` | Domínio de equipe | domain | draft | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | draft | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | draft | `3.2-staff-application` |
@@ -477,7 +477,7 @@ skills_hint: [fastapi-thin-adapter, composition-root]
 
 #### Stage 2.5 — `2.5-email-invite`
 
-**Descrição humana:** fatia vertical do convite: port compartilhado `EmailSender` + adapter free-tier (ROADMAP-5) + use case de convite/definição de senha por token + endpoints; cobre também reset de senha (mesmo mecanismo de token).
+**Descrição humana:** fatia vertical do convite: port compartilhado `EmailSender` + `ConsoleSender` (o adapter free-tier da ROADMAP-5 **não** entrou — ver nota) + use cases de convite, definição de senha por token e pedido de reset + endpoints; cobre também reset de senha (mesmo mecanismo de token). Inclui persistência do token (uso único).
 
 ```yaml
 stage_id: 2.5-email-invite
@@ -503,6 +503,41 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [task-ordering-hex, fastapi-thin-adapter, composition-root]
 ```
+
+> **Nota (2026-07-20): bloco corrigido durante a execução da Stage (issue #27)** —
+> as cinco divergências abaixo estão declaradas no concept §1 e reconciliadas aqui.
+>
+> - **Persistência entrou no escopo.** O bloco não lista tabela, migration nem
+>   `adapters/out`. O DoD ("token define a senha") somado à exigência de **uso único**
+>   é inalcançável sem estado no servidor — a alternativa stateless foi examinada e
+>   rejeitada no ADR 2.5.0002. Entraram `password_setup_tokens`, a migration `0002` e
+>   o adapter Postgres.
+> - **Três use cases, não dois.** Além de `invite_user` e `set_password_with_token`,
+>   entrou `request_password_reset`: o pedido de reset é **público** e o convite é
+>   autenticado, então precisam de caminhos de entrada distintos.
+> - **`smtp_or_api_sender` não foi entregue — a descrição humana acima foi corrigida.**
+>   A issue #27 autorizou explicitamente fechar o DoD com `ConsoleSender`. O adapter
+>   real (Resend, kickoff #7 / ASSUM-3) é `[finding]` para a **6.2**.
+> - **`TokenIssuer` não é consumido**, contra o que `contratos_consumidos` diz. O token
+>   de convite/reset tem ciclo de vida próprio (uso único, prazo curto, canal fora de
+>   banda) e ganhou mecanismo separado — ADR 2.5.0002. Reusar token de sessão como
+>   token de convite seria vulnerabilidade, não economia.
+> - **O port ficou em `shared/application/ports/out/`**, não em
+>   `shared/application/ports/`: `out/` é a convenção vigente (`clock.py`,
+>   `id_generator.py`) e LAYOUT §5 separa ports primários de secundários.
+> - **`EmailSender` nasceu em `shared/`** (ADR 2.5.0001), decidindo a tensão que a issue
+>   #27 levantou entre o roadmap e o LAYOUT §4: a regra do LAYOUT existe contra
+>   abstração **prematura**, e prematuro é o que não tem segundo consumidor
+>   identificado — a 4.6 já o nomeia em `contratos_consumidos`.
+> - **4 ADRs novos:** 2.5.0001 (`EmailSender` em shared), 2.5.0002 (token de setup
+>   dedicado e de uso único), 2.5.0003 (definir senha revoga todas as sessões),
+>   2.5.0004 (`unusable_hash` para conta pendente).
+> - **Achado de segurança fechado antes de virar código:** o plano original gravava
+>   `dummy_hash()` na conta convidada — que é o hash de um literal do repositório, ou
+>   seja, **bypass de autenticação** para qualquer convidado não ativado. Pego por dois
+>   revisores no Checkpoint A; corrigido com `unusable_hash()` (ADR 2.5.0004).
+> - `complexidade_estimada: M` e `gate_mode: strict` seguem válidos (13 Tasks + commits
+>   de correção de revisão e de auditoria).
 
 ---
 
@@ -1183,6 +1218,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-19 | Stage 2.2-identity-application concluída (`done`); bloco corrigido (nota datada — 6º port `SessionRepository`, file-scope real e consequências para 2.3/2.4) | Execução da Stage 2.2 — issue #20 |
 | 2026-07-19 | Stage 2.3-identity-persistence concluída (`done`); bloco corrigido (nota datada — tabela `sessions` e `session_repository` reconciliados do ADR 2.2.0001, `integrity_errors.py`, CI exigindo Postgres real, 5 ADRs) | Execução da Stage 2.3 — issue #22 |
 | 2026-07-20 | Stage 2.4-identity-http concluída (`done`); bloco corrigido (nota datada — `decode_access_token` estendendo `TokenIssuer`, use cases de rotação/logout, contract test de segurança, argon2 sem bcrypt, 4 ADRs); primeira superfície de runtime do projeto | Execução da Stage 2.4 — issue #24 |
+| 2026-07-20 | Stage 2.5-email-invite concluída (`done`); bloco corrigido (nota datada — 5 divergências: persistência no escopo, 3 use cases, sem adapter real, sem `TokenIssuer`, port em `ports/out/`; 4 ADRs); **Step 2 → `done`** — BC `identity` fechado do domínio ao convite | Execução da Stage 2.5 — issue #27 |
 
 ## Próxima revisão de roadmap
 
