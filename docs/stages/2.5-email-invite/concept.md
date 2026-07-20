@@ -638,9 +638,10 @@ seria inatingível pelo port e impossível para o fake. O índice
 - [ ] **CA12b** — **falha do `EmailSender` no reset não é observável**: com um
       sender que sempre levanta, a resposta continua idêntica à do cenário de
       e-mail não cadastrado (regra 8).
-- [ ] **CA13** — emitir um segundo token do **mesmo propósito** invalida o
-      primeiro; emitir um token de **outro** propósito **não** invalida o
-      pendente (um pedido de reset não mata um convite em andamento).
+- [ ] **CA13** — **dois pedidos de reset** para o mesmo usuário deixam vivo
+      apenas o segundo token; e um pedido de reset **não** invalida um convite
+      pendente. (O caminho de convite não tem contraparte: convidar o mesmo
+      e-mail duas vezes responde 409 e não emite token nenhum — regra 6.)
 - [ ] **CA14** — teste **enumerativo**, no molde do teste de totalidade do mapa de
       erros: varre todas as subclasses de `BaseModel` cujo nome termina em
       `Response` e falha se alguma declarar campo de token de setup; e varre as
