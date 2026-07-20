@@ -273,24 +273,75 @@ async def test_corpos_de_403_sao_constantes_entre_causas_diferentes(
 async def test_corpos_de_401_sao_constantes_entre_causas_diferentes(
     client: AsyncClient, admin_semeado: User
 ) -> None:
-    """CA26 — credencial ausente, malformada e inválida respondem igual."""
+    """CA26 — três EXCEÇÕES diferentes da faixa 401, um só corpo.
+
+    **A escolha dos cenários é o teste.** Uma versão anterior usava "sem header",
+    "esquema Basic" e "token adulterado" — os três levantam a mesma
+    `InvalidAccessTokenError`, com a mesma mensagem, então a igualdade byte a
+    byte era garantida pela construção da exceção e não pela regra de corpo
+    constante. O teste passava mesmo com a regra revertida para `str(exc)`: era
+    teatro.
+
+    Estes três atingem exceções distintas, com mensagens distintas:
+    `InvalidCredentialsError` ("credenciais inválidas"),
+    `InvalidAccessTokenError` ("token de acesso inválido") e
+    `InvalidRefreshTokenError` ("token de renovação inválido"). Reverter o corpo
+    constante agora reprova aqui.
+    """
     tokens = await fazer_login(client, ADMIN_EMAIL)
 
-    sem_header = await client.post(f"{API}/restaurants", json={"name": "X"})
-    esquema_errado = await client.post(
-        f"{API}/restaurants",
-        json={"name": "X"},
-        headers={"Authorization": "Basic abc"},
+    credencial_errada = await client.post(
+        f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": "errada"}
     )
     token_forjado = await client.post(
         f"{API}/restaurants",
         json={"name": "X"},
         headers={"Authorization": f"Bearer {tokens['access_token']}adulterado"},
     )
+    refresh_desconhecido = await client.post(
+        f"{API}/auth/refresh", json={"refresh_token": "nunca-foi-emitido"}
+    )
 
-    respostas = (sem_header, esquema_errado, token_forjado)
+    respostas = (credencial_errada, token_forjado, refresh_desconhecido)
     assert {r.status_code for r in respostas} == {HTTPStatus.UNAUTHORIZED}
-    assert len({r.content for r in respostas}) == 1
+    assert len({r.content for r in respostas}) == 1, (
+        f"corpos divergentes na faixa 401: {[r.text for r in respostas]}"
+    )
+
+
+async def test_tenant_id_no_corpo_e_descartado(client: AsyncClient, admin_semeado: User) -> None:
+    """CA13 contra o grafo real — a defesa nº 3 do `POST /users`.
+
+    O corpo tenta injetar o tenant de OUTRO restaurante. A resposta é 201 (o
+    campo é descartado, não rejeitado) e o usuário nasce no tenant do **ator**.
+
+    Exercitar isto contra o Postgres real, e não só contra fake, importa: é aqui
+    que se vê que a linha gravada tem o tenant certo. Um teste que só olhasse o
+    corpo da resposta poderia passar com o servidor devolvendo uma coisa e
+    gravando outra.
+    """
+    admin = await fazer_login(client, ADMIN_EMAIL)
+    tenant_a = await _montar_tenant(client, admin, "Alfa")
+    tenant_b = await _montar_tenant(client, admin, "Beta")
+
+    resposta = await client.post(
+        f"{API}/users",
+        json={
+            "email": "novo@alfa.com",
+            "password": SENHA_PADRAO,
+            "role": "employee",
+            "unit_ids": [tenant_a["unidade"]],
+            "tenant_id": tenant_b["restaurante"],
+        },
+        headers=auth(tenant_a["owner"]),
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED, resposta.text
+    assert resposta.json()["tenant_id"] == tenant_a["restaurante"]
+    assert resposta.json()["tenant_id"] != tenant_b["restaurante"]
+    # E o usuário criado enxerga o tenant de A quando faz login de verdade.
+    novo = await fazer_login(client, "novo@alfa.com")
+    assert novo["access_token"]
 
 
 # ---------------------------------------------------------------------------

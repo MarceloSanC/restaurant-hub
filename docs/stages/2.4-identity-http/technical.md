@@ -683,4 +683,137 @@ vai do mais simples ao mais acoplado. 09 depende de 02 (erros) e do
 > Preenchida durante/após a **Fase 4**. Apenas esta seção é editável após
 > `status: done`.
 
+### 2026-07-19 — [deviation] Task 01/04 — segredo JWT default abaixo do mínimo da RFC 7518 — Claude (autônomo)
+**Contexto:** o `jwt_secret_key` default nasceu como `dev-insecure-change-me`
+(21 bytes). Ao escrever os testes do adapter JWT, o PyJWT emitiu
+`InsecureKeyLengthWarning`: HS256 usa a chave como chave HMAC-SHA256, e a
+RFC 7518 §3.2 exige ao menos o tamanho do digest (32 bytes).
+**Desvio:** o default foi alongado para 39 caracteres, seguindo obviamente
+inseguro — que é a propriedade desejada —, e o teste passou a fixar o piso de
+tamanho. Os segredos de teste também subiram para ≥ 32 bytes.
+**Razão para não ter perguntado:** ajuste in-scope revelado por um aviso da
+própria biblioteca, sem mudança de contrato. Um default curto ensinaria o formato
+errado a quem copiasse o `.env.example` e trocasse só as palavras.
+
+### 2026-07-19 — [deviation] Task 03/04 — mypy do pre-commit é mais estrito que o do `make check` — Claude (autônomo)
+**Contexto:** `make typecheck` roda `mypy src/ tests/fakes/` e passava, mas o
+hook de pre-commit — que roda sobre o **conjunto estreito de arquivos alterados**
+— reprovou `argon2_hasher.py` e `jwt_issuer.py` com `no-any-return`. Com poucos
+arquivos no comando, o mypy não resolve os stubs de `argon2`/`jwt` e as funções
+das libs voltam como `Any`.
+**Desvio:** os dois adapters passaram a construir o retorno explicitamente
+(`verify` monta o `bool`; `issue_access_token` usa local anotado) em vez de
+repassar o valor da lib.
+**Razão:** repassar faria o type-checker **acreditar** em vez de verificar. O
+ajuste satisfaz os dois gates e é mais honesto que o código original.
+
+### 2026-07-19 — [decision] Task 06 — `revoke` antes de `add` na rotação — Claude (autônomo)
+**Contexto:** não há port de unidade de trabalho, então revogar a sessão antiga e
+gravar a nova são transações separadas. A ordem entre elas é escolha.
+**Opções:**
+- A — `add` novo, depois `revoke` antigo: se o `revoke` falhar, dois refresh
+  válidos coexistem.
+- B — `revoke` antigo, depois `add` novo ✅ escolhida: se o `add` falhar, o
+  cliente fica com um token morto e o retry dispara detecção de reuso.
+**Decisão:** B.
+**Razão:** num sistema com detecção de reuso, dois refresh válidos ao mesmo tempo
+é o pior dos dois estados — é exatamente o cenário que a detecção existe para
+tratar como incidente. B erra para o lado seguro. Declarado no concept §6.
+
+### 2026-07-20 — [deviation] Task 11 — o guard virou dependência FastAPI, como o concept já mandava — Claude (autônomo)
+**Contexto:** o Checkpoint C do segundo bloco mostrou que uma requisição **sem
+credencial** com corpo malformado recebia 422 (validação do Pydantic) enquanto
+com corpo válido recebia 401 — deixando um cliente sem credencial nenhuma sondar
+o schema dos endpoints protegidos.
+**Desvio:** a autenticação, que estava sendo chamada no **corpo** de cada rota,
+passou a ser um `Depends`. O FastAPI resolve dependências antes de validar o
+corpo, então os dois casos passaram a devolver 401 indistinguível.
+**Razão:** não é só correção de vazamento — o concept §7.5 já declarava "guard
+como `Depends`, não middleware", e a implementação original o contrariava sem
+dizer. O desvio foi **em relação ao código**, não ao plano.
+
+### 2026-07-20 — [deviation] Task 12 — a lista de aceite da Task 12 sobredeclara CA6 — Claude (autônomo)
+**Contexto:** o Checkpoint C do terceiro bloco apontou que o "Critério de aceite"
+da Task 12 lista **CA6** (precedência revogado-antes-de-expirado) entre os CAs
+verdes "contra Postgres real". Nenhum teste e2e faz um refresh expirar: a app
+real não tem relógio injetável, e forjar expiração exigiria manipular a linha do
+banco — o que testaria o SQL, não a precedência.
+**Desvio:** CA6 fica coberto **apenas** pela Task 06
+(`test_precedencia_revogado_vence_expirado`, com `FakeClock`), que é onde a
+matriz de rastreabilidade da §3 corretamente o aloca. A lista da Task 12 é que
+estava inflada.
+**Razão para registrar em vez de corrigir o texto:** §1–§6 do technical são
+imutáveis após `status: done` (`check_technical_postexec.py`), e a matriz da §3
+— que é a fonte usada no gate — já estava certa. Registrar aqui é o mecanismo
+previsto para exatamente este caso.
+
+### 2026-07-20 — [deviation] Task 12 — cenário de 422 nas faixas usa papel inválido, não e-mail malformado — Claude (autônomo)
+**Contexto:** a Task 12 especifica "Cenário de 422: `role` inválido"; a primeira
+implementação usou e-mail malformado em `POST /auth/login`.
+**Desvio:** corrigido para papel inválido em rota **autenticada**, como
+especificado.
+**Razão:** com o cenário público, a faixa 422 era exercitada apenas por
+`Email(...)`, e `Role.from_string` — a outra conversão texto→VO do router — não
+tinha exercício e2e nenhum. O desvio deixava um caminho de conversão sem
+cobertura de ponta a ponta.
+
+### 2026-07-20 — [finding] Rota de desativação/demissão de usuário — Claude (autônomo)
+**Stage candidata: `3.5-employee-login-link`** (a primeira que mexe no ciclo de
+vida de uma pessoa), ou uma Stage dedicada de gestão de usuários.
+**Contexto:** a decisão do sponsor descreve "demissão/logout cortam o refresh na
+hora e o access em até 15 minutos". O logout foi entregue; a **demissão não tem
+rota**. `SessionRepository.revoke_all_for_user` só tem chamador na detecção de
+reuso, `User` não tem `is_active`, e os ports-out não têm update nem delete.
+**Direção sugerida:** `is_active` em `User` + rota de desativação que chama
+`revoke_all_for_user`. Enquanto não existir, a janela de corte por demissão não é
+de 15 minutos — é indefinida. Declarado no concept §1 e §13.
+
+### 2026-07-20 — [finding] Teto absoluto de vida de sessão e causa da revogação — Claude (autônomo)
+**Stage candidata: uma Stage de endurecimento de sessão no Step 6**, junto do job
+de `purge_expired`. Os dois itens mexem em `Session` e valem uma migration só.
+**Contexto:** (a) a rotação renova `expires_at` a cada uso, sem teto — um cliente
+que rotacione dentro do TTL mantém sessão indefinidamente (a RFC 6819 §5.2.2.3
+trata rotação como complemento de um tempo de vida absoluto, não substituto);
+(b) há um único `revoked_at` para logout, rotação e incidente, então reapresentar
+um token que saiu por logout conta como reuso e derruba as demais sessões do
+usuário — comportamento aceito, declarado e fixado por teste (CA23), mas que uma
+coluna de causa resolveria.
+
+### 2026-07-20 — [finding] Fail-fast de segredo default em produção — Claude (autônomo)
+**Stage candidata: `6.2-deploy-pipeline`.**
+**Contexto:** `jwt_secret_key` tem default de desenvolvimento e nada impede subir
+em produção com ele. A checagem não foi feita aqui porque a suíte roda com
+`debug=false` (default de `Settings`) e a checagem quebraria os testes em vez da
+produção. Um gate de configuração de boot é o lugar certo.
+
+### 2026-07-20 — [finding] Guard de escalada vive no boundary, e um segundo adapter de entrada não o herdaria — Claude (autônomo)
+**Stage candidata: a primeira que introduza um segundo adapter de entrada**
+(CLI, worker, console administrativo).
+**Contexto:** "não se concede o que não se detém" é composto no adapter HTTP
+(ADR 2.4.0003). Um futuro adapter que chame `CreateUserUseCase` direto **não**
+herda a proteção. Aceito hoje porque HTTP é o único adapter de entrada; registrado
+para não depender de memória quando isso mudar. Está nas Consequences do
+ADR 2.4.0003 e repetido aqui para rastreabilidade.
+
+### 2026-07-20 — [finding] Atomicidade da rotação e do provisionamento — Claude (autônomo)
+**Stage candidata: `4.4-scheduling-persistence`** (a primeira com escrita
+multi-agregado provável).
+**Contexto:** não há port de unidade de trabalho. `revoke` + `add` da rotação são
+transações separadas (concept §6), e o provisionamento restaurante+owner só não é
+composto porque foi deliberadamente partido em duas rotas (ADR 2.4.0003,
+Alternative B). Um port de UoW resolveria os dois.
+
+### 2026-07-20 — [decision] Divergências declaradas em relação ao bloco do roadmap — Claude (autônomo)
+**Contexto:** o bloco `2.4-identity-http` do `roadmap.md` traz
+`contratos_introduzidos: []` e `camada_alvo: adapters/in/http`, e nenhum dos dois
+se sustentou.
+**Decisão:** declarar as divergências no concept §1 ("Vínculo com o roadmap") e
+registrá-las aqui, deixando a **nota datada no `roadmap.md`** para o commit de
+fechamento da Stage — que é o padrão que a 2.2 e a 2.3 estabeleceram.
+**Razão:** a Stage introduziu a extensão aditiva `TokenIssuer.decode_access_token`,
+dois commands, dois use cases, três erros de aplicação e dois adapters de
+segurança; e criou arquivos em `application/use_cases/` e `adapters/out/security/`,
+além da camada declarada. Silenciar seria repetir o defeito que as duas Stages
+anteriores corrigiram com nota.
+
 <!-- END: post-execution -->

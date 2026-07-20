@@ -74,9 +74,28 @@ async def _cenario_409(client: AsyncClient, admin: dict) -> Response:
     )
 
 
-async def _cenario_422(client: AsyncClient, _admin: dict) -> Response:
-    """E-mail malformado — invariante de domínio violada pelo conteúdo enviado."""
-    return await client.post(f"{API}/auth/login", json={"email": "nao-e-um-email", "password": "x"})
+async def _cenario_422(client: AsyncClient, admin: dict) -> Response:
+    """Papel desconhecido — invariante de domínio violada pelo conteúdo enviado.
+
+    Usa rota **autenticada** de propósito. Um 422 vindo só de rota pública
+    deixaria `Role.from_string` sem exercício e2e algum, e é justamente a
+    conversão texto→VO do router que faz este caso ser erro de domínio (422 pelo
+    mapa) em vez de `RequestValidationError` do FastAPI.
+    """
+    restaurante = (
+        await client.post(f"{API}/restaurants", json={"name": "Cantina"}, headers=auth(admin))
+    ).json()["id"]
+    await client.post(
+        f"{API}/restaurants/{restaurante}/owners",
+        json={"email": "dono-422@x.com", "password": SENHA_PADRAO},
+        headers=auth(admin),
+    )
+    owner = await fazer_login(client, "dono-422@x.com")
+    return await client.post(
+        f"{API}/users",
+        json={"email": "x@y.com", "password": SENHA_PADRAO, "role": "imperador"},
+        headers=auth(owner),
+    )
 
 
 CENARIOS: dict[HTTPStatus, Callable[[AsyncClient, dict], Awaitable[Response]]] = {
