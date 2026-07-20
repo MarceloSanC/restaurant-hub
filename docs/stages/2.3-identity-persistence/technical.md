@@ -770,4 +770,43 @@ adiar CA19 é o de o gate estar quebrado **hoje** no runner sem ninguém notar �
 risco se extingue no primeiro push, porque a suíte inteira exige banco (ADR 2.3.0001):
 um CI sem Postgres funcionante não produz verde, produz 100+ falhas de fixture.
 
+### `[decision]` — CA19 satisfeita por evidência equivalente (auditoria do PR #23)
+
+A auditoria de Stage (contexto zerado, PR #23) mediu diretamente a propriedade que o
+CA19 existe para demonstrar, por outra via: com a `DATABASE_URL` apontada para porta
+morta, a suíte deu **451 passed, 90 errors, 0 skips** — não existe caminho em que ela
+fique verde sem banco. Combinado com o job `lint-and-test` **verde** num workflow que
+declara o service Postgres, isso estabelece I12 de forma mais direta do que o run
+vermelho deliberado que o CA19 descreve.
+
+**Decisão:** CA19 é dada por satisfeita por evidência equivalente, e **não** por
+dispensa. Não vale sujar o histórico da branch com um commit deliberadamente quebrado
+para produzir uma captura de tela do que já foi medido. O checkbox de §3 permanece
+desmarcado por impedimento mecânico (região congelada pelo `check_technical_postexec.py`
+enquanto `status: done`), não por omissão — quem fecha lê esta entrada.
+
+### `[deviation]` — desvios de file-scope entre o planejado e o entregue
+
+Cinco divergências entre os "arquivos a criar/modificar" das Tasks e o que foi de fato
+entregue. Nenhuma altera contrato ou comportamento; registradas porque o padrão
+repetido é rastro perdido, e a §7 é o lugar onde ele não some:
+
+1. **Task 11** planejava três arquivos de teste de contrato + dois `__init__.py`;
+   entregou um `test_repository_contract.py` + `conftest.py`. A parametrização
+   `params=["fake", "postgres"]` num conftest único tornou a divisão por repositório
+   desnecessária — e é ela que garante o mesmo corpo de teste nas duas implementações.
+2. **Tasks 09/10** planejavam `test_restaurant_repository.py` e
+   `test_unit_repository.py` separados; entregaram
+   `test_restaurant_and_unit_repository.py`. Os dois repositórios compartilham o
+   cenário de seeding de tenant; separar duplicaria a fixture.
+3. **`tests/unit/test_bootstrap.py`** constava como modificado na Task 12 e não foi
+   tocado — a cobertura do wiring ficou em `test_composition_root_identity.py`, que é
+   onde ela pertence.
+4. **`Makefile`, `migrations/alembic.ini`, `migrations/script.py.mako`** foram
+   alterados sem constar de Task alguma (infra do Alembic, consequência da Task 05).
+5. **`application/dtos/credentials.py`** ganhou `field(repr=False)` no `password_hash`
+   — DTO da 2.2, fora de qualquer Task desta Stage. É mudança de comportamento
+   (impede o hash de aparecer em `repr`/traceback/log), justificada no próprio
+   arquivo e alinhada ao tratamento de material de credencial do ADR 2.2.0001.
+
 <!-- END: post-execution -->

@@ -122,6 +122,13 @@ class PostgresUserRepository:
         # `UnitMembership` (que só carrega dois ids). As FKs compostas rejeitam a
         # linha se ele não bater com o tenant da unidade — é assim que vínculo
         # cross-tenant fica irrepresentável.
+        #
+        # Por que o `type: ignore[arg-type]` abaixo é seguro: `user.tenant_id` é
+        # `RestaurantId | None` e `vinculo_para_linha` exige `RestaurantId`. O único
+        # papel com tenant nulo é `platform_admin`, que não chega aqui —
+        # `User.link_to_unit` levanta `PlatformAdminMembershipError` antes (domínio,
+        # 2.1); e se chegasse, a coluna é `NOT NULL` sob FK composta. Estreitar o tipo
+        # exigiria um `assert` reafirmando invariante que o domínio já garante.
         conexao.execute(
             unit_memberships.insert(),
             [mappers.vinculo_para_linha(v, user.tenant_id) for v in vinculos],  # type: ignore[arg-type]
