@@ -19,18 +19,33 @@ FastAPI, que seguiria outro caminho e outro formato de corpo.
 
 from typing import Annotated, Never
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthenticateUserCommand,
+    CreateRestaurantCommand,
+    CreateUnitCommand,
+    CreateUserCommand,
     RefreshSessionCommand,
     RevokeSessionCommand,
 )
 from restaurant_hub.features.identity.application.dtos.results import (
     AuthenticationResult,
+    RestaurantResult,
+    UnitResult,
+    UserResult,
 )
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.create_restaurant import (
+    CreateRestaurantUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.create_unit import (
+    CreateUnitUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.create_user import (
+    CreateUserUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
@@ -39,13 +54,26 @@ from restaurant_hub.features.identity.application.use_cases.revoke_session impor
     RevokeSessionUseCase,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    RestaurantId,
+    UnitId,
+)
+from restaurant_hub.features.identity.domain.value_objects.permission import Permission
+from restaurant_hub.features.identity.domain.value_objects.role import Role
 
-from .dependencies import IdentityGuard
+from .dependencies import IdentityGuard, required_permissions_for_role
 from .schemas import (
+    CreateOwnerRequest,
+    CreateRestaurantRequest,
+    CreateUnitRequest,
+    CreateUserRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
+    RestaurantResponse,
     TokenResponse,
+    UnitResponse,
+    UserResponse,
 )
 
 router = APIRouter(tags=["identity"])
@@ -70,8 +98,38 @@ def _get_revoke_session() -> RevokeSessionUseCase:
     _nao_conectado("revoke_session")
 
 
+def _get_create_restaurant() -> CreateRestaurantUseCase:
+    _nao_conectado("create_restaurant")
+
+
+def _get_create_unit() -> CreateUnitUseCase:
+    _nao_conectado("create_unit")
+
+
+def _get_create_user() -> CreateUserUseCase:
+    _nao_conectado("create_user")
+
+
 def _get_guard() -> IdentityGuard:
     _nao_conectado("identity_guard")
+
+
+def _restaurant_response(resultado: RestaurantResult) -> RestaurantResponse:
+    return RestaurantResponse(id=resultado.id, name=resultado.name)
+
+
+def _unit_response(resultado: UnitResult) -> UnitResponse:
+    return UnitResponse(id=resultado.id, restaurant_id=resultado.restaurant_id, name=resultado.name)
+
+
+def _user_response(resultado: UserResult) -> UserResponse:
+    return UserResponse(
+        id=resultado.id,
+        email=resultado.email.value,
+        role=resultado.role.value,
+        tenant_id=resultado.tenant_id,
+        unit_ids=list(resultado.unit_ids),
+    )
 
 
 def _token_response(resultado: AuthenticationResult) -> TokenResponse:
@@ -138,3 +196,159 @@ def logout(
     """
     use_case.execute(RevokeSessionCommand(refresh_token=payload.refresh_token.get_secret_value()))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Tenancy — as quatro rotas de criação, todas autenticadas
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/restaurants",
+    response_model=RestaurantResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_restaurant(
+    payload: CreateRestaurantRequest,
+    request: Request,
+    guard: Annotated[IdentityGuard, Depends(_get_guard)],
+    use_case: Annotated[CreateRestaurantUseCase, Depends(_get_create_restaurant)],
+) -> RestaurantResponse:
+    """Cria um restaurante — que é, ele próprio, o tenant.
+
+    Exige `manage_platform`, isto é: **só `platform_admin`** (decisão do sponsor
+    de 2026-07-19). `tenant_id=None` no comando de autorização porque esta é uma
+    ação de plataforma, não de tenant — e um ator com tenant falha antes disso,
+    na checagem de permissão.
+    """
+    ator = guard.authenticate(request)
+    guard.authorize(ator, Permission.MANAGE_PLATFORM)
+
+    resultado = use_case.execute(CreateRestaurantCommand(name=payload.name))
+    return _restaurant_response(resultado)
+
+
+@router.post(
+    "/restaurants/{restaurant_id}/owners",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_restaurant_owner(
+    restaurant_id: str,
+    payload: CreateOwnerRequest,
+    request: Request,
+    guard: Annotated[IdentityGuard, Depends(_get_guard)],
+    use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
+) -> UserResponse:
+    """Provisiona o primeiro `owner` de um restaurante — ação de **plataforma**.
+
+    Esta rota existe porque, sem ela, a cadeia do DoD é impossível: só
+    `platform_admin` cria restaurante, e ele detém **apenas** `manage_platform`
+    (mapa da 2.1), logo não poderia criar usuário nenhum — o restaurante nasceria
+    sem ninguém capaz de operá-lo (ADR 2.4.0003 §5).
+
+    **É exceção declarada à regra "não se concede o que não se detém"**: o ator
+    emite um `owner` sem deter `manage_tenant` nem `manage_users`. É o que
+    bootstrap significa. O que contém a exceção não é a regra, é o conjunto de
+    rotas: existe uma só, exige `manage_platform`, e o papel é o literal
+    `Role.OWNER` abaixo — nunca vindo do request. É isso que garante que
+    **nenhuma rota emite `platform_admin`**.
+
+    **O tenant vem do PATH, não do ator** (concept §5 regra 3, segunda origem):
+    o ator é `platform_admin` e o seu `actor_tenant_id` é necessariamente `None`,
+    então tirá-lo do ator produziria `MissingTenantError` e a rota seria
+    natimorta. Um path param nomeia o recurso e é resolvido contra o banco
+    (`RestaurantNotFoundError` → 404), ao contrário de um campo de corpo, que
+    seria afirmação não verificada do cliente.
+    """
+    ator = guard.authenticate(request)
+    guard.authorize(ator, Permission.MANAGE_PLATFORM)
+
+    resultado = use_case.execute(
+        CreateUserCommand(
+            email=Email(payload.email),
+            plain_password=payload.password.get_secret_value(),
+            role=Role.OWNER,
+            tenant_id=RestaurantId(restaurant_id),
+        )
+    )
+    return _user_response(resultado)
+
+
+@router.post(
+    "/restaurants/{restaurant_id}/units",
+    response_model=UnitResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_unit(
+    restaurant_id: str,
+    payload: CreateUnitRequest,
+    request: Request,
+    guard: Annotated[IdentityGuard, Depends(_get_guard)],
+    use_case: Annotated[CreateUnitUseCase, Depends(_get_create_unit)],
+) -> UnitResponse:
+    """Cria uma unidade sob um restaurante — ação do `owner`.
+
+    Exige `manage_tenant`, que só o `owner` detém: `manager`/`hr` não têm, e
+    `platform_admin` também não ("acesso de plataforma não é acesso de
+    restaurante"). É a decisão do sponsor: o `owner` cria e gerencia unidades.
+
+    O `restaurant_id` do path é passado como **alvo** da autorização, de modo que
+    um `owner` de outro tenant falha em `_assert_tenant_scope` antes de qualquer
+    escrita.
+    """
+    ator = guard.authenticate(request)
+    tenant_id = RestaurantId(restaurant_id)
+    guard.authorize(ator, Permission.MANAGE_TENANT, tenant_id=tenant_id)
+
+    resultado = use_case.execute(CreateUnitCommand(restaurant_id=tenant_id, name=payload.name))
+    return _unit_response(resultado)
+
+
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_user(
+    payload: CreateUserRequest,
+    request: Request,
+    guard: Annotated[IdentityGuard, Depends(_get_guard)],
+    use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
+) -> UserResponse:
+    """Cria um usuário dentro do tenant do **ator**.
+
+    Três defesas compõem esta rota, e nenhuma delas é opcional:
+
+    1. **"Não se concede o que não se detém"** — o conjunto de permissões
+       exigidas inclui todas as do papel alvo, derivadas do mapa da 2.1. Um
+       `manager` (que tem `manage_users`) não cria um `owner` (que tem
+       `manage_tenant`), e ninguém cria um `platform_admin`.
+    2. **Autorização por unidade requisitada** — cada `unit_id` do corpo é
+       checado. Além de impedir que um `manager` vincule alguém a uma unidade que
+       não enxerga, é o que mantém seguras as faixas 404/422: sem isso o use case
+       seria alcançado com unidade não-visível e responderia `UnitNotFoundError`
+       (404) ou `CrossTenantError` (422), reabrindo o oráculo de enumeração.
+    3. **O tenant vem do ator**, nunca do corpo — o schema sequer tem o campo.
+    """
+    ator = guard.authenticate(request)
+    papel_alvo = Role.from_string(payload.role)
+    unit_ids = tuple(UnitId(unit_id) for unit_id in payload.unit_ids)
+
+    autorizado = guard.authorize_all(
+        ator,
+        required_permissions_for_role(papel_alvo),
+        tenant_id=ator.claims.tenant_id,
+        unit_ids=unit_ids,
+    )
+
+    resultado = use_case.execute(
+        CreateUserCommand(
+            email=Email(payload.email),
+            plain_password=payload.password.get_secret_value(),
+            role=papel_alvo,
+            tenant_id=autorizado.actor_tenant_id,
+            unit_ids=unit_ids,
+        )
+    )
+    return _user_response(resultado)
