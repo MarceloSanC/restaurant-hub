@@ -816,4 +816,27 @@ segurança; e criou arquivos em `application/use_cases/` e `adapters/out/securit
 além da camada declarada. Silenciar seria repetir o defeito que as duas Stages
 anteriores corrigiram com nota.
 
+### 2026-07-20 — [decision] Auditoria de testes aprovada condicionada a dois gates — Claude (autônomo)
+**Contexto:** a auditoria de testes da Stage rodou 24 mutações no código de
+produção e encontrou **duas** lacunas. Nos dois casos o código está correto; o que
+faltava era o teste que o segurasse. Aprovação condicionada a fechá-las.
+**Decisão:** adicionar dois testes, sem tocar em código de produção.
+1. `test_revoke_da_antiga_precede_o_add_da_nova`
+   (`tests/unit/.../test_refresh_session.py`) — trava a **ordem das escritas** do
+   passo 6. Inverter `revoke`/`add` era a única das 24 mutações que sobrevivia
+   (783 passed, zero falhas), porque o estado final de uma rotação bem-sucedida é
+   idêntico nas duas ordens. O teste arma uma falha no `add` — o cenário "rotação
+   não-atômica" que o concept §6 declara aceito — e exige que a sessão antiga já
+   esteja revogada quando ela ocorre.
+2. CA22 (`tests/e2e/.../test_authorization.py`) — passa a sondar também com
+   **`owner`**. O teste só usava `manager`, que é unit-scoped e por isso é barrado
+   antes por `UnitScopeRequiredError`: os três casos viravam 403 por um motivo que
+   **não** é a defesa que o teste nomeia. Com a regra 4b desativada ele continuava
+   verde, enquanto um `owner` colhia o oráculo completo — 404 para unidade
+   inexistente e 422 vazando o UUID do tenant dono, exatamente o que o concept §5
+   regra 10 chama de pior que revelar existência.
+**Razão:** os dois defeitos são da mesma família — teste que afirma um contrato
+sem alcançá-lo. O primeiro não observava a ordem; o segundo observava o ator
+errado. Ambos foram verificados por mutação: vermelho com a mutação, verde sem.
+
 <!-- END: post-execution -->

@@ -57,12 +57,40 @@ _REFRESH_TTL = timedelta(days=14)
 _USER_ID = UserId("user-1")
 
 
+class _FalhaDeEscrita(Exception):
+    """A falha transitória de banco do cenário "rotação não-atômica" (concept §6)."""
+
+
+class _SessionRepositoryInstrumentado(InMemorySessionRepository):
+    """Registra a ordem das escritas e permite armar uma falha no `add`.
+
+    Existe para tornar observável um contrato que nenhuma outra asserção alcança:
+    o use case chama `revoke` e `add`, e uma suíte que só olhe o estado final ao
+    fim de uma rotação bem-sucedida passa idêntica nas duas ordens.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.chamadas: list[str] = []
+        self.add_deve_falhar = False
+
+    def add(self, session: Session) -> None:
+        self.chamadas.append("add")
+        if self.add_deve_falhar:
+            raise _FalhaDeEscrita()
+        super().add(session)
+
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> None:
+        self.chamadas.append("revoke")
+        super().revoke(session_id, revoked_at)
+
+
 class _Fixture:
     """Grafo montado com fakes — o mesmo que o composition root monta com reais."""
 
-    def __init__(self) -> None:
+    def __init__(self, sessions: InMemorySessionRepository | None = None) -> None:
         self.users = InMemoryUserRepository()
-        self.sessions = InMemorySessionRepository()
+        self.sessions = sessions if sessions is not None else InMemorySessionRepository()
         self.issuer = FakeTokenIssuer()
         self.clock = FakeClock(_NOW)
         self.use_case = RefreshSessionUseCase(
@@ -208,6 +236,40 @@ def test_precedencia_revogado_vence_expirado() -> None:
         _rotacionar(fixture)
 
     assert fixture.sessions.sessions[outra.id].revoked_at == _NOW
+
+
+# ---------------------------------------------------------------------------
+# A ordem das ESCRITAS — o outro contrato invisível em diff
+# ---------------------------------------------------------------------------
+
+
+def test_revoke_da_antiga_precede_o_add_da_nova() -> None:
+    """A ordem das escritas do passo 6 é contrato, e este teste é o que a segura.
+
+    Irmão de `test_precedencia_revogado_vence_expirado`: lá a precedência é das
+    **checagens** (passos 3 e 4), aqui é das **escritas**. As duas são invisíveis
+    numa revisão de diff e nenhuma outra asserção da suíte as alcança — ao fim de
+    uma rotação bem-sucedida o estado final é idêntico nas duas ordens.
+
+    O cenário é literalmente o que o concept §6 declara aceito sob o nome
+    "rotação não-atômica": `revoke` confirma, `add` falha. Com a ordem correta, o
+    token antigo já está morto e o cliente cai em detecção de reuso no retry —
+    erra para o lado seguro. Invertida, a falha deixaria a sessão antiga **viva**,
+    abrindo a janela em que dois refresh valem ao mesmo tempo — o pior trade num
+    sistema cuja principal defesa é detectar reuso.
+    """
+    sessions = _SessionRepositoryInstrumentado()
+    fixture = _Fixture(sessions=sessions).com_usuario()
+    antiga = fixture.com_sessao()
+    sessions.chamadas.clear()  # descarta o `add` da própria montagem
+    sessions.add_deve_falhar = True
+
+    with pytest.raises(_FalhaDeEscrita):
+        _rotacionar(fixture)
+
+    assert sessions.chamadas == ["revoke", "add"]
+    # E a consequência que dá sentido à ordem: a antiga não sobrevive à falha.
+    assert fixture.sessions.sessions[antiga.id].revoked_at == _NOW
 
 
 # ---------------------------------------------------------------------------

@@ -67,6 +67,11 @@ async def test_unidade_inexistente_e_de_outro_tenant_sao_indistinguiveis(
     A comparação é **byte a byte** de propósito: igualar só o status deixaria
     passar a versão que vaza a causa no corpo, e igualar só o corpo deixaria
     passar a que vaza no status.
+
+    **O ator importa tanto quanto o oráculo.** O teste sonda com dois: o
+    `manager` (unit-scoped) e o `owner` (tenant-scoped). Só o segundo chega à
+    defesa que o teste nomeia — o primeiro é barrado antes, por escopo. Ver o
+    comentário no corpo.
     """
     admin = await fazer_login(client, ADMIN_EMAIL)
     tenant_a = await _montar_tenant(client, admin, "Alfa")
@@ -109,12 +114,40 @@ async def test_unidade_inexistente_e_de_outro_tenant_sao_indistinguiveis(
         f"{API}/users", json=_tentativa(outra_unidade_de_a), headers=auth(manager)
     )
 
-    respostas = (inexistente, de_outro_tenant, nao_vinculada)
-    assert {r.status_code for r in respostas} == {HTTPStatus.FORBIDDEN}
+    # O MESMO sondar, agora pelo `owner` — o ator que realmente exercita a defesa.
+    # O `manager` acima é unit-scoped e por isso é barrado antes, por
+    # `UnitScopeRequiredError`: os três casos dele viram 403 por um motivo que não
+    # é a tradução `UnitNotFoundError` → `UnitNotVisibleError` que o teste nomeia.
+    # O `owner` é tenant-scoped, passa daquela checagem e chega à regra 4b — sem
+    # ela, colhe o oráculo completo: 404 "unidade não encontrada" para a
+    # inexistente e 422 "isolamento de tenant violado: ... unidade do tenant 'B'"
+    # para a de outro tenant, que ainda vaza o UUID do tenant dono (§5 regra 10).
+    owner_inexistente = await client.post(
+        f"{API}/users",
+        json=_tentativa("outra-unidade-que-nao-existe"),
+        headers=auth(tenant_a["owner"]),
+    )
+    owner_de_outro_tenant = await client.post(
+        f"{API}/users", json=_tentativa(tenant_b["unidade"]), headers=auth(tenant_a["owner"])
+    )
+
+    respostas = (
+        inexistente,
+        de_outro_tenant,
+        nao_vinculada,
+        owner_inexistente,
+        owner_de_outro_tenant,
+    )
+    assert {r.status_code for r in respostas} == {HTTPStatus.FORBIDDEN}, (
+        f"status divergentes: {[(r.status_code, r.text) for r in respostas]}"
+    )
     assert len({r.content for r in respostas}) == 1, (
-        "os três casos devem ser indistinguíveis byte a byte — "
+        "os cinco casos devem ser indistinguíveis byte a byte — "
         f"corpos: {[r.text for r in respostas]}"
     )
+    # E nenhum deles nomeia o tenant dono da unidade sondada.
+    for resposta in respostas:
+        assert tenant_b["restaurante"] not in resposta.text
 
 
 async def test_owner_de_outro_tenant_nao_enxerga_o_restaurante(
