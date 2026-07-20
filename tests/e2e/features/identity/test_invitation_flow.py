@@ -19,7 +19,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import Engine
 
-from restaurant_hub.composition_root import build_http_wiring, wire_dependencies
 from restaurant_hub.features.identity.adapters.out.postgres.user_repository import (
     PostgresUserRepository,
 )
@@ -60,20 +59,17 @@ def app_com_captura(
 ) -> object:
     """App de produção com **apenas** o `EmailSender` substituído.
 
-    A substituição acontece reconstruindo os três use cases que enviam e-mail
-    com o sender de captura — e não mexendo em `wire_dependencies`, que continua
-    sendo o wiring real de tudo o mais (Postgres, argon2, SHA-256, JWT).
+    A troca passa pela costura do composition root (`create_app(...,
+    email_sender=...)`), que é o lugar certo: escolher a implementação de um port
+    é literalmente o trabalho dele. A alternativa — montar a app, montar um
+    **segundo** grafo e sobrescrever um atributo privado do use case — funcionava
+    por acidente (dependia de os dois grafos terem exatamente as mesmas chaves de
+    override) e deixava um `Engine` inteiro pendurado a cada teste.
+
+    Tudo o mais continua sendo o wiring real: Postgres, argon2, SHA-256, JWT.
     """
     truncar_tudo(engine)
-    app = create_app(settings_e2e)
-
-    deps = wire_dependencies(settings_e2e)
-    deps.identity_invite_user._email_sender = caixa_de_entrada
-    deps.identity_request_password_reset._email_sender = caixa_de_entrada
-
-    wiring = build_http_wiring(deps)
-    app.dependency_overrides.update(wiring.dependency_overrides)
-    return app
+    return create_app(settings_e2e, email_sender=caixa_de_entrada)
 
 
 @pytest.fixture

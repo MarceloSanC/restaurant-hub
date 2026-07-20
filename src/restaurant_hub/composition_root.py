@@ -91,6 +91,7 @@ from restaurant_hub.features.identity.application.use_cases.revoke_session impor
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
 )
+from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
 from restaurant_hub.shared.infrastructure.database.connection import build_engine
@@ -143,7 +144,11 @@ class HttpWiring:
     dependency_overrides: dict[Callable[..., Any], Callable[..., Any]]
 
 
-def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
+def wire_dependencies(
+    settings: Settings | None = None,
+    *,
+    email_sender: EmailSender | None = None,
+) -> ApplicationDependencies:
     """Monta o grafo de dependências completo e devolve o contêiner.
 
     Chamado uma única vez na inicialização da aplicação (dentro de `create_app()`).
@@ -157,6 +162,14 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     `create_engine` **não abre conexão** (o pool é preguiçoso), então montar o grafo
     não exige banco no ar e o boot da aplicação não falha por causa de um Postgres
     que ainda está subindo.
+
+    **`email_sender` é uma costura, não um atalho de teste.** Escolher a
+    implementação de um port é literalmente o trabalho deste módulo; expor o
+    parâmetro é o que permite ao teste e2e trocar **só** o envio de e-mail —
+    exigência do ADR 0.0.0004 §Decision 7, "nada sai da máquina" — sem alcançar
+    atributo privado de use case depois de montado, e sem construir um segundo
+    grafo (com um segundo `Engine`) só para descartar o primeiro. O default
+    continua sendo o adapter de produção desta Stage.
     """
     cfg = settings or get_settings()
     engine = build_engine(cfg.database_url)
@@ -174,7 +187,7 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     # (ADR 0.0.0004 §Decision 7). O provedor real (Resend, kickoff #7) entra na
     # 6.2 e é a troca de **uma linha** aqui — nenhum use case muda, porque todos
     # dependem do port `EmailSender`, não desta classe.
-    email_sender = ConsoleSender()
+    sender = email_sender if email_sender is not None else ConsoleSender()
     token_issuer = JwtTokenIssuer(secret_key=cfg.jwt_secret_key, algorithm=cfg.jwt_algorithm)
     clock = SystemClock()
     id_generator = Uuid4Generator()
@@ -239,7 +252,7 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
             hasher=hasher,
             tokens=setup_tokens,
             token_issuer=setup_token_issuer,
-            email_sender=email_sender,
+            email_sender=sender,
             id_generator=id_generator,
             clock=clock,
             invitation_ttl=invitation_ttl,
@@ -249,7 +262,7 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
             users=users,
             tokens=setup_tokens,
             token_issuer=setup_token_issuer,
-            email_sender=email_sender,
+            email_sender=sender,
             id_generator=id_generator,
             clock=clock,
             reset_ttl=reset_ttl,

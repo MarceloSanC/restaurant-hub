@@ -12,6 +12,7 @@ o caminho indireto; este teste fecha essa lacuna pelo lado do consumidor.
 """
 
 import ast
+import io
 import pathlib
 from datetime import timedelta
 
@@ -30,16 +31,29 @@ from restaurant_hub.features.identity.adapters.out.postgres.unit_repository impo
 from restaurant_hub.features.identity.adapters.out.postgres.user_repository import (
     PostgresUserRepository,
 )
+from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
+    Argon2PasswordHasher,
+)
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.invite_user import (
+    InviteUserUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.request_password_reset import (
+    RequestPasswordResetUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
+    SetPasswordWithTokenUseCase,
+)
 from restaurant_hub.shared.infrastructure.config.settings import Settings
+from restaurant_hub.shared.infrastructure.email.console_sender import ConsoleSender
 
 pytestmark = pytest.mark.unit
 
@@ -50,6 +64,14 @@ _SRC = pathlib.Path(__file__).resolve().parents[5] / "src" / "restaurant_hub"
 # teste continuaria verde sem NUNCA olhar para os módulos novos — "continua
 # passando" seria trivialmente verdade e completamente vazio.
 _MODULO_DE_ADAPTERS = "restaurant_hub.features.identity.adapters"
+# **Segundo prefixo, acrescentado na Stage 2.5.** A 2.5 introduziu o primeiro
+# adapter de saída que mora em `shared/` — `ConsoleSender`, implementação do port
+# compartilhado `EmailSender` (ADR 2.5.0001). Ele fica **fora** do prefixo acima,
+# de modo que a varredura, sozinha, não o veria: alguém poderia instanciá-lo
+# dentro de um router e o teste continuaria verde. `check_layout.py` também não
+# pega, porque `shared/infrastructure` é importável de qualquer lugar por regra.
+_MODULO_DE_ADAPTERS_COMPARTILHADOS = "restaurant_hub.shared.infrastructure.email"
+_PREFIXOS_DE_ADAPTERS = (_MODULO_DE_ADAPTERS, _MODULO_DE_ADAPTERS_COMPARTILHADOS)
 _COMPOSITION_ROOT = _SRC / "composition_root.py"
 
 
@@ -69,7 +91,40 @@ def test_wire_dependencies_monta_os_use_cases() -> None:
     assert isinstance(deps.identity_authenticate_user, AuthenticateUserUseCase)
     assert isinstance(deps.identity_refresh_session, RefreshSessionUseCase)
     assert isinstance(deps.identity_create_user, CreateUserUseCase)
+    assert isinstance(deps.identity_invite_user, InviteUserUseCase)
+    assert isinstance(deps.identity_request_password_reset, RequestPasswordResetUseCase)
+    assert isinstance(deps.identity_set_password_with_token, SetPasswordWithTokenUseCase)
     assert deps.identity_guard is not None
+
+
+def test_o_adapter_de_email_do_grafo_e_o_console_sender() -> None:
+    """CA17 — o sender concreto é escolhido no composition root, e é o desta Stage.
+
+    Sem esta asserção, trocar `ConsoleSender()` por um sender que engole tudo
+    passaria despercebido em toda a suíte que não exige Postgres: o teste acima
+    só veria "é um use case", e o e2e — que pegaria — é justamente o que um
+    `-m "not e2e"` pula.
+    """
+    deps = wire_dependencies(Settings(_env_file=None))
+
+    assert isinstance(deps.identity_invite_user._email_sender, ConsoleSender)
+    assert isinstance(deps.identity_request_password_reset._email_sender, ConsoleSender)
+
+
+def test_costura_de_email_sender_substitui_apenas_o_envio() -> None:
+    """A costura existe para o e2e capturar o e-mail sem sair da máquina.
+
+    O que ela **não** pode fazer é trocar mais nada: se substituir o sender
+    trocasse também repositório ou hasher, o e2e deixaria de exercitar o caminho
+    real e viraria um teste de fakes caro.
+    """
+    outro = ConsoleSender(stream=io.StringIO())
+
+    deps = wire_dependencies(Settings(_env_file=None), email_sender=outro)
+
+    assert deps.identity_invite_user._email_sender is outro
+    assert isinstance(deps.identity_authenticate_user._users, PostgresUserRepository)
+    assert isinstance(deps.identity_invite_user._hasher, Argon2PasswordHasher)
 
 
 def test_os_adapters_concretos_continuam_sendo_os_do_postgres() -> None:
@@ -102,6 +157,37 @@ def test_ttl_dos_tokens_vem_da_configuracao() -> None:
     assert deps.identity_authenticate_user._access_token_ttl == timedelta(minutes=7)
     assert deps.identity_authenticate_user._refresh_token_ttl == timedelta(days=3)
     assert deps.identity_refresh_session._access_token_ttl == timedelta(minutes=7)
+
+
+def test_ttls_do_token_de_setup_vem_da_configuracao() -> None:
+    """Os dois prazos são alavancas de segurança, e são **diferentes**.
+
+    O teste passa valores distintos e assere cada um no seu use case, de propósito:
+    com o mesmo valor nos dois, trocar `invitation_ttl` por `reset_ttl` no
+    composition root continuaria verde — e a troca embarcaria uma janela de
+    redefinição de senha de 72 horas, que é exatamente o oposto da defesa que o
+    prazo curto existe para dar.
+    """
+    cfg = Settings(
+        _env_file=None,
+        invitation_token_ttl_hours=5,
+        password_reset_token_ttl_minutes=11,
+    )
+
+    deps = wire_dependencies(cfg)
+
+    assert deps.identity_invite_user._invitation_ttl == timedelta(hours=5)
+    assert deps.identity_request_password_reset._reset_ttl == timedelta(minutes=11)
+
+
+def test_base_url_do_link_vem_da_configuracao() -> None:
+    """O link do e-mail aponta para a aplicação web, e o endereço é ambiente."""
+    cfg = Settings(_env_file=None, app_base_url="https://app.exemplo.com")
+
+    deps = wire_dependencies(cfg)
+
+    assert deps.identity_invite_user._base_url == "https://app.exemplo.com"
+    assert deps.identity_request_password_reset._base_url == "https://app.exemplo.com"
 
 
 def test_duas_chamadas_devolvem_grafos_independentes() -> None:
@@ -138,7 +224,7 @@ def _modulos_que_importam_adapters() -> set[str]:
                 alvo = no.module
             elif isinstance(no, ast.Import):
                 alvo = " ".join(alias.name for alias in no.names)
-            if _MODULO_DE_ADAPTERS in alvo:
+            if any(prefixo in alvo for prefixo in _PREFIXOS_DE_ADAPTERS):
                 culpados.add(str(arquivo.relative_to(_SRC)))
     return culpados
 
@@ -172,11 +258,18 @@ def test_a_varredura_alcanca_os_adapters_novos_da_stage() -> None:
         "restaurant_hub.features.identity.adapters.out.security.argon2_hasher",
         "restaurant_hub.features.identity.adapters.out.security.jwt_issuer",
         "restaurant_hub.features.identity.adapters.in.http.router",
+        # Stage 2.5 — os dois adapters novos de identity...
+        "restaurant_hub.features.identity.adapters.out.security.setup_token_issuer",
+        "restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository",
+        # ...e o primeiro que mora em `shared/`, que só é alcançado pelo
+        # segundo prefixo. Sem ele, um `ConsoleSender()` dentro de um router
+        # passaria pela varredura sem ser notado.
+        "restaurant_hub.shared.infrastructure.email.console_sender",
     )
 
     for modulo in modulos_novos:
-        assert _MODULO_DE_ADAPTERS in modulo, (
-            f"{modulo} ficaria fora da varredura — o prefixo não o cobre"
+        assert any(prefixo in modulo for prefixo in _PREFIXOS_DE_ADAPTERS), (
+            f"{modulo} ficaria fora da varredura — nenhum prefixo o cobre"
         )
 
 

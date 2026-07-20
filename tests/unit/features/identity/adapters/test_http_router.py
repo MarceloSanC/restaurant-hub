@@ -35,6 +35,9 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.invite_user import (
+    InviteUserUseCase,
+)
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.entities.user import User
@@ -46,7 +49,11 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
+from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
+from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
+    InMemoryPasswordSetupTokenRepository,
+)
 from tests.fakes.features.identity.in_memory_restaurant_repository import (
     InMemoryRestaurantRepository,
 )
@@ -54,6 +61,7 @@ from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnit
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.unit
 
@@ -81,6 +89,8 @@ class _Ambiente:
         self.clock = FakeClock(_NOW)
         self.issuer = FakeTokenIssuer(clock=self.clock)
         self.hasher = FakePasswordHasher()
+        self.setup_tokens = InMemoryPasswordSetupTokenRepository()
+        self.sender = RecordingEmailSender()
 
         autorizar = AuthorizeActionUseCase(users=self.users, units=self.units)
         guard = dependencies_module.IdentityGuard(
@@ -106,6 +116,19 @@ class _Ambiente:
                     units=self.units,
                     hasher=self.hasher,
                     id_generator=FakeIdGenerator(),
+                ),
+                router_module._get_invite_user: lambda: InviteUserUseCase(
+                    users=self.users,
+                    restaurants=self.restaurants,
+                    units=self.units,
+                    hasher=self.hasher,
+                    tokens=self.setup_tokens,
+                    token_issuer=FakeSetupTokenIssuer(),
+                    email_sender=self.sender,
+                    id_generator=FakeIdGenerator(),
+                    clock=self.clock,
+                    invitation_ttl=timedelta(hours=72),
+                    base_url="https://app.exemplo.com",
                 ),
             }
         )
@@ -522,6 +545,9 @@ async def test_papel_desconhecido_e_422(ambiente: _Ambiente, client: AsyncClient
         "_get_create_restaurant",
         "_get_create_unit",
         "_get_create_user",
+        "_get_invite_user",
+        "_get_request_password_reset",
+        "_get_set_password_with_token",
         "_get_guard",
     ],
 )
@@ -535,3 +561,114 @@ def test_provedor_nao_conectado_falha_alto(provedor: str) -> None:
     """
     with pytest.raises(RuntimeError, match="composition root"):
         getattr(router_module, provedor)()
+
+
+# ---------------------------------------------------------------------------
+# Rota de convite — as MESMAS defesas de `POST /users` (Stage 2.5, CA7)
+# ---------------------------------------------------------------------------
+
+
+async def test_manager_nao_convida_usuario_em_unidade_que_nao_enxerga(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """A defesa 2 da rota de convite, que o Checkpoint C achou descoberta.
+
+    O e2e não cobria: todos os convites de lá passam `unit_ids: []`, e com a
+    lista vazia o parâmetro de unidades não muda nada.
+
+    **Este teste sozinho não basta, e o par com o positivo abaixo é o que fecha.**
+    Verificado por mutação real: removendo `unit_ids=unit_ids` da chamada a
+    `guard.authorize_all`, este teste continua verde — `authorize_all` passa a ser
+    chamado com `unit_ids=()`, o `manager` cai em `UnitScopeRequiredError` e o
+    403 sai pelo motivo errado. Quem derruba a mutação é
+    `test_manager_convida_em_unidade_que_enxerga`, que passa a receber 403 onde
+    esperava 201. Um teste negativo isolado, aqui, seria falso verde.
+    """
+    ambiente.com_restaurante()
+    visivel = ambiente.com_unidade("unit-visivel-conv")
+    invisivel = ambiente.com_unidade("unit-invisivel-conv")
+    manager = ambiente.com_usuario(
+        user_id="manager-conv", role=Role.MANAGER, tenant_id=_TENANT, unidades=(visivel,)
+    )
+
+    resposta = await client.post(
+        "/api/v1/users/invitations",
+        json={"email": "convidado@x.com", "role": "employee", "unit_ids": [invisivel]},
+        headers=ambiente.auth(manager),
+    )
+
+    assert resposta.status_code == HTTPStatus.FORBIDDEN
+
+
+async def test_manager_convida_em_unidade_que_enxerga(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """Contraparte positiva — e é ela quem mata a mutação (ver o teste acima).
+
+    Sem este caso, qualquer implementação que respondesse 403 sempre passaria no
+    teste negativo, inclusive uma que tivesse perdido a autorização por unidade.
+    """
+    ambiente.com_restaurante()
+    visivel = ambiente.com_unidade("unit-ok-conv")
+    manager = ambiente.com_usuario(
+        user_id="manager-ok-conv", role=Role.MANAGER, tenant_id=_TENANT, unidades=(visivel,)
+    )
+
+    resposta = await client.post(
+        "/api/v1/users/invitations",
+        json={"email": "convidado-ok@x.com", "role": "employee", "unit_ids": [visivel]},
+        headers=ambiente.auth(manager),
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    assert resposta.json()["unit_ids"] == [visivel]
+
+
+async def test_manager_nao_convida_owner(ambiente: _Ambiente, client: AsyncClient) -> None:
+    """ "Não se concede o que não se detém", também pela rota de convite."""
+    ambiente.com_restaurante()
+    manager = ambiente.com_usuario(user_id="manager-escalada", role=Role.MANAGER, tenant_id=_TENANT)
+
+    resposta = await client.post(
+        "/api/v1/users/invitations",
+        json={"email": "novo-dono@x.com", "role": "owner", "unit_ids": []},
+        headers=ambiente.auth(manager),
+    )
+
+    assert resposta.status_code == HTTPStatus.FORBIDDEN
+
+
+async def test_convite_nao_aceita_tenant_do_corpo(ambiente: _Ambiente, client: AsyncClient) -> None:
+    """O tenant vem do ator. Campo extra no corpo é ignorado, não obedecido."""
+    ambiente.com_restaurante()
+    ambiente.com_restaurante(_OUTRO_TENANT)
+    owner = ambiente.com_usuario(user_id="owner-conv", role=Role.OWNER, tenant_id=_TENANT)
+
+    resposta = await client.post(
+        "/api/v1/users/invitations",
+        json={
+            "email": "convidado-tenant@x.com",
+            "role": "manager",
+            "unit_ids": [],
+            "tenant_id": _OUTRO_TENANT,
+        },
+        headers=ambiente.auth(owner),
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    assert resposta.json()["tenant_id"] == _TENANT
+
+
+async def test_convite_de_papel_desconhecido_e_422(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    ambiente.com_restaurante()
+    owner = ambiente.com_usuario(user_id="owner-422", role=Role.OWNER, tenant_id=_TENANT)
+
+    resposta = await client.post(
+        "/api/v1/users/invitations",
+        json={"email": "x@x.com", "role": "faxineiro", "unit_ids": []},
+        headers=ambiente.auth(owner),
+    )
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY

@@ -93,10 +93,12 @@ class Settings(BaseSettings):
     # quem clica é uma pessoa, e o destino é a tela de definir senha.
     app_base_url: str = "http://localhost:8000"
 
-    # Remetente das mensagens. O `ConsoleSender` não usa (escreve tudo local),
-    # mas o adapter de produção (Stage 6.2) usa — e deixá-lo configurável agora
-    # evita que a troca de adapter arraste uma mudança de Settings junto.
-    email_from: str = "nao-responda@restaurant-hub.local"
+    # Não há `email_from` aqui, e a ausência é deliberada. O `ConsoleSender` não
+    # tem remetente (escreve local) e `EmailMessage` não tem campo para ele — a
+    # CA1 fixa os três campos do DTO justamente para o port não crescer por
+    # antecipação. Um campo de configuração sem leitor é pior que ausência: quem
+    # o define no `.env` recebe silêncio. Entra na 6.2, junto com o adapter que
+    # vai lê-lo (`[finding]`).
 
     # TTLs dos tokens de definição de senha, em unidades **diferentes** de
     # propósito, porque os dois prazos não são o mesmo tipo de coisa:
