@@ -703,23 +703,30 @@ async def test_convite_com_email_malformado_e_422(ambiente: _Ambiente, client: A
     assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
 
 
-async def test_falha_do_sender_no_convite_nao_vira_4xx(
-    ambiente: _Ambiente, client: AsyncClient
-) -> None:
+async def test_falha_do_sender_no_convite_devolve_500(ambiente: _Ambiente) -> None:
     """Regra 13 no nível HTTP: a falha de envio **sobe**, e sobe como 5xx.
 
     O risco que isto fecha é o oposto do da rota de redefinição: se um handler
     convertesse a falha do provedor num 4xx plausível, quem convidou leria
     "requisição inválida" e tentaria de novo — enquanto a conta já existe e o
     e-mail nunca saiu. Aqui o barulho é o comportamento certo.
+
+    O cliente é montado com `raise_app_exceptions=False` de propósito: com o
+    default, a exceção escapa pelo transporte e nunca vira resposta, de modo que
+    o teste observaria uma propriedade do cliente em vez do status da aplicação.
     """
     ambiente.com_restaurante()
     owner = ambiente.com_usuario(user_id="owner-500", role=Role.OWNER, tenant_id=_TENANT)
     ambiente.sender.quebrar()
 
-    with pytest.raises(EmailSenderFailure):
-        await client.post(
+    async with AsyncClient(
+        transport=ASGITransport(app=ambiente.app, raise_app_exceptions=False),
+        base_url="http://t",
+    ) as cliente:
+        resposta = await cliente.post(
             "/api/v1/users/invitations",
             json={"email": "convidado-500@x.com", "role": "manager", "unit_ids": []},
             headers=ambiente.auth(owner),
         )
+
+    assert resposta.status_code == HTTPStatus.INTERNAL_SERVER_ERROR

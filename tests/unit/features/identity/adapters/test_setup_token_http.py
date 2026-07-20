@@ -70,6 +70,7 @@ HTTP_NO_CONTENT = 204
 HTTP_ACCEPTED = 202
 HTTP_UNAUTHORIZED = 401
 HTTP_UNPROCESSABLE = 422
+HTTP_SERVER_ERROR = 500
 
 
 class _UsuariosQueFalhamAoGravar(InMemoryUserRepository):
@@ -89,13 +90,15 @@ class Montagem:
     sessions: InMemorySessionRepository
 
 
-def _montar(
+# `noqa: PLR0913` — cada parâmetro liga/desliga um cenário do grafo de fakes.
+def _montar(  # noqa: PLR0913
     *,
     com_token: bool = True,
     com_usuario: bool = True,
     expirado: bool = False,
     sender: RecordingEmailSender | None = None,
     users_quebrado: bool = False,
+    propagar_excecao: bool = True,
 ) -> Montagem:
     users = _UsuariosQueFalhamAoGravar() if users_quebrado else InMemoryUserRepository()
     sessions = InMemorySessionRepository()
