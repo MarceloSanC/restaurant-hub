@@ -377,17 +377,31 @@ class TestErroDeSetupTokenNoMapa:
         assert resposta.headers["WWW-Authenticate"] == "Bearer"
 
 
-@pytest.mark.parametrize("rota", ["/auth/password", "/auth/password-reset-requests"])
-def test_rotas_novas_sao_publicas(rota: str) -> None:
+def test_definir_senha_e_publica() -> None:
     """Sem `Authorization`, e é o desenho: quem esqueceu a senha não tem token.
 
     Se estas rotas exigissem autenticação, o fluxo de recuperação seria
     inalcançável exatamente por quem precisa dele.
+
+    A asserção é o **204 do caminho feliz**, e não "não deu 401": aqui o 401 é
+    ambíguo por natureza — é também a resposta legítima a um token inválido
+    (`InvalidSetupTokenError`), de modo que uma asserção negativa não conseguiria
+    separar "rota exige login" de "token não serve". Só a requisição que deveria
+    ter sucesso, sem cabeçalho nenhum, distingue os dois.
     """
     montagem = _montar()
 
     resposta = montagem.client.post(
-        rota, json={"email": _CADASTRADO, "token": _VALOR, "password": "x"}
+        "/auth/password", json={"token": _VALOR, "password": "senha-nova"}
     )
 
-    assert resposta.status_code != HTTP_UNAUTHORIZED or rota == "/auth/password"
+    assert resposta.status_code == HTTP_NO_CONTENT
+
+
+def test_pedir_redefinicao_e_publica() -> None:
+    """Idem para o pedido de redefinição — ver `test_definir_senha_e_publica`."""
+    montagem = _montar()
+
+    resposta = montagem.client.post("/auth/password-reset-requests", json={"email": _CADASTRADO})
+
+    assert resposta.status_code == HTTP_ACCEPTED

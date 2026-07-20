@@ -770,4 +770,27 @@ Hoje é implícito: o hash é inutilizável. Uma coluna própria permitiria list
 convites pendentes — e criaria o sinal de enumeração que hoje não existe. **Stage
 candidata:** a que precisar da listagem.
 
+### 2026-07-20 — [decision] Auditoria independente aprovou condicionada a duas adições de teste — Claude (autônomo)
+A auditoria confirmou o código de produção correto e apontou duas lacunas **de
+gate**, não de comportamento. Ambas fechadas sem tocar em produção.
+
+1. **Origem da entropia de `unusable_hash()`** — `test_unusable_hash_deriva_de_secrets_a_cada_chamada`
+   (`tests/unit/.../test_argon2_hasher.py`). Os testes de contrato só observavam o
+   *resultado*, e o resultado não distingue nada: o salt por hash do argon2 já faz
+   duas chamadas com a mesma pré-imagem devolverem strings diferentes, então a lei
+   "muda a cada chamada" passava com qualquer implementação. A prova do auditor:
+   trocar `secrets.token_urlsafe(32)` por um literal deixava a suíte inteira verde
+   (reproduzido: 892 passed com o novo teste deselecionado) — e é o mesmo bypass da
+   ADR 2.5.0004. O novo teste assere a **propriedade** via `monkeypatch` no
+   `secrets` do módulo: pré-imagem pedida a `secrets`, com ≥32 bytes, **duas vezes**
+   em duas chamadas. Trava a origem, não uma lista de literais proibidos — o teste
+   antigo parametrizava quatro strings e qualquer quinta escapava.
+2. **Asserção vácua em metade da parametrização** — `test_rotas_novas_sao_publicas`
+   virou `test_definir_senha_e_publica` + `test_pedir_redefinicao_e_publica`. O
+   `!= 401 or rota == "/auth/password"` era trivialmente verdadeiro para um dos dois
+   params. A correção assere o **204/202 do caminho feliz sem `Authorization`**: o
+   401 é ambíguo por natureza (é também a resposta legítima a token inválido), então
+   só a requisição que deveria ter sucesso separa "rota exige login" de "token não
+   serve".
+
 <!-- END: post-execution -->
