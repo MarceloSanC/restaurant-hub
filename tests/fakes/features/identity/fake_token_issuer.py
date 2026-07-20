@@ -12,7 +12,17 @@ registro. Assim o round-trip `decode(issue(c)) == c` vale por construção, e
 qualquer token que este fake não tenha emitido — inclusive um forjado com o
 formato certo — levanta `InvalidAccessTokenError`, como o adapter real faz para
 assinatura inválida.
+
+**E o fake expira.** A lei do port diz que verificar é assinatura *e* expiração;
+uma primeira versão deste fake só checava o reconhecimento do valor, e portanto
+aceitava indefinidamente um token vencido. Isso é exatamente a mentira que o
+teste de contrato existe para impedir: o guard HTTP delega a expiração ao issuer,
+então qualquer teste de guard escrito com um fake que não expira passa verde
+sobre um sistema que não expira nada. O relógio é injetável para que o teste possa
+controlá-lo; sem injeção, usa o relógio real, de modo que o default é honesto.
 """
+
+from datetime import UTC, datetime
 
 from restaurant_hub.features.identity.application.dtos.tokens import (
     AccessTokenClaims,
@@ -20,12 +30,16 @@ from restaurant_hub.features.identity.application.dtos.tokens import (
 )
 from restaurant_hub.features.identity.application.errors import InvalidAccessTokenError
 from restaurant_hub.features.identity.application.ports.out.token_issuer import TokenIssuer
+from restaurant_hub.shared.application.ports.out.clock import Clock
 
 
 class FakeTokenIssuer:
     """Implementação determinística do port, com histórico de claims emitidas."""
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Clock | None = None) -> None:
+        # Sem relógio injetado, usa o real: o default precisa ser o honesto, ou
+        # o fake volta a mentir para quem não pensou no assunto.
+        self._clock = clock
         self._counter = 0
         self.issued_claims: list[AccessTokenClaims] = []
         # Token emitido -> claims. É o que torna a decodificação uma inversão
@@ -53,16 +67,14 @@ class FakeTokenIssuer:
             # assinatura inválida; o fake, por não reconhecer o valor. A exceção
             # é a mesma, que é o que o contrato exige.
             raise InvalidAccessTokenError()
+        # Expiração: metade da lei do port, e a metade que um fake esquece.
+        # `>=` porque o intervalo é half-open, como em `Session.is_active`.
+        if self._now() >= claims.expires_at:
+            raise InvalidAccessTokenError()
         return claims
 
-    def invalidar(self, token: str) -> None:
-        """Faz um token já emitido passar a ser recusado (auxílio de teste).
-
-        Existe porque o fake não tem relógio: sem isto, o caminho "token
-        expirado" seria inalcançável no teste que usa o fake, e a cobertura do
-        guard dependeria do adapter real.
-        """
-        self._emitidos.pop(token, None)
+    def _now(self) -> datetime:
+        return self._clock.now() if self._clock is not None else datetime.now(UTC)
 
 
 _conforms: TokenIssuer = FakeTokenIssuer()

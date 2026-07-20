@@ -133,13 +133,16 @@ def test_decode_inverte_a_emissao() -> None:
     vez de reconstruir claims a partir do texto do token — reconstruir seria uma
     segunda implementação, capaz de divergir da primeira em silêncio.
     """
-    issuer = FakeTokenIssuer()
+    # Relógio injetado: `_NOW` é uma data fixa do passado, e o fake agora expira
+    # de verdade. Sem controlar o relógio, este teste passaria a medir o
+    # calendário em vez do round-trip.
+    issuer = FakeTokenIssuer(clock=FakeClock(_NOW))
     claims = AccessTokenClaims(
         subject=UserId("user-1"),
         role=Role.MANAGER,
         tenant_id=RestaurantId("rest-1"),
         session_id=SessionId("sess-1"),
-        expires_at=_NOW,
+        expires_at=_NOW + timedelta(minutes=15),
     )
 
     assert issuer.decode_access_token(issuer.issue_access_token(claims)) == claims
@@ -151,13 +154,13 @@ def test_decode_preserva_tenant_nulo_de_platform_admin() -> None:
     Um decode que colapsasse `None` numa string vazia quebraria a invariante de
     `User` no outro lado do round-trip.
     """
-    issuer = FakeTokenIssuer()
+    issuer = FakeTokenIssuer(clock=FakeClock(_NOW))
     claims = AccessTokenClaims(
         subject=UserId("admin-1"),
         role=Role.PLATFORM_ADMIN,
         tenant_id=None,
         session_id=SessionId("sess-9"),
-        expires_at=_NOW,
+        expires_at=_NOW + timedelta(minutes=15),
     )
 
     assert issuer.decode_access_token(issuer.issue_access_token(claims)).tenant_id is None
@@ -175,19 +178,27 @@ def test_decode_recusa_token_nao_emitido_por_este_emissor() -> None:
         issuer.decode_access_token("access::user-1::sess-1")
 
 
-def test_decode_recusa_token_invalidado() -> None:
-    """Auxílio de teste: simula expiração num fake que não tem relógio."""
-    issuer = FakeTokenIssuer()
+def test_decode_recusa_token_expirado() -> None:
+    """O fake expira de verdade, com relógio injetado.
+
+    Antes ele só checava se reconhecia o valor, e aceitava token vencido para
+    sempre — divergindo do adapter real justamente na metade da lei que o guard
+    HTTP delega inteiramente ao issuer.
+    """
+    clock = FakeClock(_NOW)
+    issuer = FakeTokenIssuer(clock=clock)
     token = issuer.issue_access_token(
         AccessTokenClaims(
             subject=UserId("user-1"),
             role=Role.EMPLOYEE,
             tenant_id=RestaurantId("rest-1"),
             session_id=SessionId("sess-1"),
-            expires_at=_NOW,
+            expires_at=_NOW + timedelta(minutes=15),
         )
     )
-    issuer.invalidar(token)
+    assert issuer.decode_access_token(token).subject == UserId("user-1")
+
+    clock.advance(timedelta(minutes=15))
 
     with pytest.raises(InvalidAccessTokenError):
         issuer.decode_access_token(token)

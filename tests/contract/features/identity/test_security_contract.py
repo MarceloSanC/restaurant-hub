@@ -12,7 +12,7 @@ apareceria em produção, no primeiro login real. Rodar as **leis** contra as du
 implementações é o que impede isso.
 
 Fora do contrato, por decisão explícita: os ganchos que só existem no fake e não
-pertencem ao port — `invalidar()` e `issued_claims` do `FakeTokenIssuer`,
+pertencem ao port — `issued_claims` do `FakeTokenIssuer`,
 `verify_calls`/`verify_args` do `FakePasswordHasher`. São instrumentação de teste;
 exigi-los do adapter real seria inventar requisito.
 """
@@ -84,7 +84,15 @@ def test_verify_rejeita_senha_errada(hasher: PasswordHasher) -> None:
 
 @pytest.mark.parametrize(
     "degenerado",
-    ["", "nao-e-um-hash", "$argon2id$truncado", "$2b$12$bcrypt-de-outro-algoritmo"],
+    [
+        "",
+        "nao-e-um-hash",
+        "$argon2id$truncado",
+        "$2b$12$bcrypt-de-outro-algoritmo",
+        # Nao-ASCII: o argon2 real faz hash.encode("ascii") antes de qualquer
+        # coisa, levantando UnicodeEncodeError fora da sua propria hierarquia.
+        "$argon2id$café",
+    ],
 )
 def test_lei_1_verify_nunca_levanta(hasher: PasswordHasher, degenerado: str) -> None:
     """Lei 1 — hash inválido devolve `False`, jamais exceção.
@@ -185,3 +193,26 @@ def test_lei_da_decodificacao_recusa_token_nao_emitido(issuer: TokenIssuer) -> N
     """
     with pytest.raises(InvalidAccessTokenError):
         issuer.decode_access_token("token-que-ninguem-emitiu")
+
+
+def test_lei_da_decodificacao_recusa_token_expirado(issuer: TokenIssuer) -> None:
+    """Verificar é assinatura **e** expiração — a metade que um fake esquece.
+
+    Esta lei entrou no contrato depois de o fake ser pego aceitando
+    indefinidamente um token vencido, enquanto o adapter real o recusava. A
+    divergência importa porque o guard HTTP delega a expiração inteiramente ao
+    issuer: um teste de guard escrito com o fake permissivo passaria verde sobre
+    um sistema que não expira nada, e o TTL de 15 minutos — que é a janela de
+    revogação inteira do produto — seria decorativo.
+    """
+    claims = AccessTokenClaims(
+        subject=UserId("user-1"),
+        role=Role.OWNER,
+        tenant_id=RestaurantId("rest-1"),
+        session_id=SessionId("sess-1"),
+        expires_at=(datetime.now(UTC) - timedelta(seconds=1)).replace(microsecond=0),
+    )
+    token = issuer.issue_access_token(claims)
+
+    with pytest.raises(InvalidAccessTokenError):
+        issuer.decode_access_token(token)

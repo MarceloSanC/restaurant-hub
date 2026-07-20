@@ -12,6 +12,7 @@ import pytest
 
 from restaurant_hub.features.identity.application.dtos.commands import (
     RefreshSessionCommand,
+    RevokeSessionCommand,
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
@@ -27,6 +28,9 @@ from restaurant_hub.features.identity.application.errors import (
 )
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.revoke_session import (
+    RevokeSessionUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.value_objects.email import Email
@@ -69,6 +73,11 @@ class _Fixture:
             clock=self.clock,
             access_token_ttl=_ACCESS_TTL,
             refresh_token_ttl=_REFRESH_TTL,
+        )
+        self.logout_use_case = RevokeSessionUseCase(
+            sessions=self.sessions,
+            token_issuer=self.issuer,
+            clock=self.clock,
         )
         self.user = User(
             id=_USER_ID,
@@ -252,3 +261,30 @@ def test_mensagens_de_recusa_nao_distinguem_a_causa() -> None:
     que chega perto do cliente, é a mesma.
     """
     assert str(InvalidRefreshTokenError()) == str(RefreshTokenReuseError())
+
+
+def test_refresh_apos_logout_e_tratado_como_reuso() -> None:
+    """CA23 — o efeito colateral do logout, promovido a comportamento contratado.
+
+    O passo 3 da rotação não sabe **por que** a sessão foi revogada: um único
+    campo `revoked_at` serve a logout, rotação e incidente. A consequência é que
+    reapresentar em `/auth/refresh` um token que saiu por logout conta como reuso
+    e derruba as demais sessões do usuário — inclusive as de outros dispositivos.
+
+    Um cliente correto não faz isso (recebeu 204 e descartou o token), mas um
+    retry automático ou uma requisição em voo fazem. O comportamento erra para o
+    lado seguro e está declarado no concept §5 regra 6; este teste é o que impede
+    que ele mude sem que ninguém perceba — em particular, impede que uma Stage
+    futura "conserte" o passo 3 para ignorar revogação por logout e, com isso,
+    abra um caminho em que um token roubado sobrevive a um logout.
+    """
+    fixture = _Fixture().com_usuario()
+    fixture.com_sessao(refresh_value="refresh-do-celular", session_id="sess-celular")
+    desktop = fixture.com_sessao(refresh_value="refresh-do-desktop", session_id="sess-desktop")
+
+    fixture.logout_use_case.execute(RevokeSessionCommand(refresh_token="refresh-do-celular"))
+
+    with pytest.raises(RefreshTokenReuseError):
+        _rotacionar(fixture, "refresh-do-celular")
+
+    assert fixture.sessions.sessions[desktop.id].revoked_at == _NOW

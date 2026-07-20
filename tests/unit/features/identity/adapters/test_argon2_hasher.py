@@ -66,6 +66,12 @@ def test_hash_da_mesma_senha_difere_a_cada_chamada() -> None:
         # de uma migração de algoritmo pela metade.
         "$2b$12$KIXQJ0k7X8Zq1YQZ8Q1Q1eR0k7X8Zq1YQZ8Q1Q1eR0k7X8Zq1YQZ8",
         "$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHQ$hash-invalido",
+        # Nao-ASCII: a lib faz hash.encode("ascii") antes de tudo, entao isto
+        # levanta UnicodeEncodeError — que NAO e Argon2Error nem InvalidHashError.
+        # Era o furo real da lei 1: um registro corrompido com acento derrubava o
+        # login com 500 em vez de recusa-lo com 401.
+        "$argon2id$café",
+        "çççççççççç",
     ],
 )
 def test_verify_nunca_levanta_com_hash_malformado(malformado: str) -> None:

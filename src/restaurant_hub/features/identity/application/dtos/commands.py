@@ -11,7 +11,7 @@ vira 4xx, em vez de estourar dentro do use case.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
@@ -76,7 +76,14 @@ class RefreshSessionCommand:
     para fora do port.
     """
 
-    refresh_token: str
+    # `repr=False` pelo mesmo motivo que `UserCredentials.password_hash` (2.3):
+    # o repr default de uma dataclass imprime o campo inteiro em qualquer
+    # traceback com `--showlocals`, captura de locals do Sentry ou log de debug.
+    # Aqui pesa mais que lá — um refresh token é credencial bearer VIVA, não um
+    # hash. O `SecretStr` do schema morre no boundary; este command atravessa o
+    # use case e está nos locals do frame que levanta `RefreshTokenReuseError`,
+    # que é justamente o frame que alguém vai querer inspecionar.
+    refresh_token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -86,7 +93,7 @@ class RevokeSessionCommand:
     A autoridade da operação é a **posse** do token — não exige access token.
     """
 
-    refresh_token: str
+    refresh_token: str = field(repr=False)
 
 
 @dataclass(frozen=True)

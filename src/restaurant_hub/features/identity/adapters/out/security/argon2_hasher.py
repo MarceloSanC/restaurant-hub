@@ -13,7 +13,7 @@ concreto** — ver os docstrings de `verify` e `dummy_hash`.
 """
 
 from argon2 import PasswordHasher as Argon2Backend
-from argon2.exceptions import Argon2Error, InvalidHashError
+from argon2.exceptions import Argon2Error
 
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 
@@ -51,9 +51,16 @@ class Argon2PasswordHasher:
         transforma um dado corrompido numa página de erro em vez de um login
         recusado.
 
-        `Argon2Error` é a raiz da hierarquia da lib e cobre também
-        `VerificationError` e falhas de backend; `InvalidHashError` é capturada
-        explicitamente porque **não** herda de `Argon2Error`.
+        `Argon2Error` é a raiz da hierarquia da lib e cobre `VerificationError`,
+        `VerifyMismatchError` e falhas de backend. **`ValueError` cobre o resto, e
+        o "resto" não é hipotético:** `InvalidHashError` herda de `ValueError` (não
+        de `Argon2Error`), e — o caso que passou despercebido — a primeiríssima
+        linha de `PasswordHasher.verify` faz `hash.encode("ascii")`, de modo que um
+        hash com qualquer byte não-ASCII levanta `UnicodeEncodeError` **antes** de
+        o argon2 sequer olhar o valor. `UnicodeEncodeError` é `ValueError`, mas não
+        é `Argon2Error` nem `InvalidHashError`: com um `except` mais estreito ele
+        escapava, e um único registro corrompido com acento derrubava o login com
+        500 em vez de recusá-lo com 401.
 
         `argon2-cffi` **nunca devolve `False`**: ou devolve `True`, ou levanta.
         Por isso o retorno é construído aqui em vez de repassado — repassar
@@ -62,7 +69,7 @@ class Argon2PasswordHasher:
         """
         try:
             self._backend.verify(password_hash, plain_password)
-        except (Argon2Error, InvalidHashError):
+        except (Argon2Error, ValueError):
             return False
         return True
 
