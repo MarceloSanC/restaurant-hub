@@ -74,10 +74,12 @@ def extract_bearer_token(request: Request) -> str:
     if len(partes) != esperado or partes[0].lower() != _ESQUEMA_BEARER:
         raise InvalidAccessTokenError()
 
-    token = partes[1].strip()
-    if not token:
-        raise InvalidAccessTokenError()
-    return token
+    # Sem checagem extra de "token vazio": `split(maxsplit=1)` descarta o espaço
+    # em branco à direita, então `"Bearer   "` produz UMA parte e já cai no `if`
+    # acima. Um `if not partes[1].strip()` aqui seria inalcançável — e código
+    # morto dentro de um guard de segurança é ruído que esconde o que importa.
+    # Verificado empiricamente, inclusive com tab,  e espaços unicode.
+    return partes[1].strip()
 
 
 def required_permissions_for_role(target_role: Role) -> frozenset[Permission]:

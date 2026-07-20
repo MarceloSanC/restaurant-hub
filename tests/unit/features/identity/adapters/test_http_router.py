@@ -511,3 +511,27 @@ async def test_papel_desconhecido_e_422(ambiente: _Ambiente, client: AsyncClient
     )
 
     assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.parametrize(
+    "provedor",
+    [
+        "_get_authenticate_user",
+        "_get_refresh_session",
+        "_get_revoke_session",
+        "_get_create_restaurant",
+        "_get_create_unit",
+        "_get_create_user",
+        "_get_guard",
+    ],
+)
+def test_provedor_nao_conectado_falha_alto(provedor: str) -> None:
+    """Os `_get_*` são chaves de `dependency_overrides`, não fábricas.
+
+    Se algum for chamado de verdade, o wiring do composition root não aconteceu —
+    e a resposta certa é explodir na hora, com o nome da dependência na mensagem.
+    Devolver `None` "para não quebrar" empurraria a falha três camadas adiante,
+    onde ela apareceria como `AttributeError: 'NoneType'` sem pista da causa.
+    """
+    with pytest.raises(RuntimeError, match="composition root"):
+        getattr(router_module, provedor)()
