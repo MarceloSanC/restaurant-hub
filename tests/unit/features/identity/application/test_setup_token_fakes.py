@@ -170,6 +170,25 @@ class TestInvalidateAllForUser:
         assert invalidados == 0
         assert repo.tokens[SetupTokenId("tok-1")].consumed_at == _AGORA
 
+    def test_invalida_token_expirado_e_nao_consumido(self) -> None:
+        """Regra 4 do port — o predicado é `consumed_at IS NULL`, sem expiração.
+
+        Este é o caso que fake e adapter Postgres discordariam em silêncio: sob a
+        leitura "só os que ainda valem", o retorno seria 1 em vez de 2. Como o
+        retorno é observável e a CA13 assere sobre ele, a fronteira precisa de
+        teste próprio — senão o adapter da Task 08 pode escolher a outra leitura
+        com o contrato inteiro verde.
+        """
+        repo = InMemoryPasswordSetupTokenRepository()
+        repo.add(_token("expirado", expires_at=_AGORA - timedelta(hours=1)))
+        repo.add(_token("vivo", fingerprint="fp::vivo"))
+
+        invalidados = repo.invalidate_all_for_user(UserId("user-1"), _AGORA)
+
+        esperado = 2
+        assert invalidados == esperado
+        assert repo.tokens[SetupTokenId("expirado")].consumed_at == _AGORA
+
     def test_usuario_sem_token_devolve_zero(self) -> None:
         repo = InMemoryPasswordSetupTokenRepository()
 

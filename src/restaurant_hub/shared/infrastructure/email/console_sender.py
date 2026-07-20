@@ -22,10 +22,7 @@ sendo `sys.stdout`, que é o que faz sentido para quem roda `make run`.
 import sys
 from typing import TextIO
 
-from restaurant_hub.shared.application.ports.out.email_sender import (
-    EmailMessage,
-    EmailSender,
-)
+from restaurant_hub.shared.application.ports.out.email_sender import EmailMessage
 
 _SEPARADOR = "-" * 72
 
@@ -54,6 +51,3 @@ class ConsoleSender:
             f"{_SEPARADOR}\n"
         )
         self._stream.flush()
-
-
-_conforms: EmailSender = ConsoleSender()

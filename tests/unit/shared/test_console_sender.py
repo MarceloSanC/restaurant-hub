@@ -5,7 +5,10 @@ import sys
 
 import pytest
 
-from restaurant_hub.shared.application.ports.out.email_sender import EmailMessage
+from restaurant_hub.shared.application.ports.out.email_sender import (
+    EmailMessage,
+    EmailSender,
+)
 from restaurant_hub.shared.infrastructure.email.console_sender import ConsoleSender
 
 
@@ -15,6 +18,21 @@ def _mensagem() -> EmailMessage:
         subject="Voce foi convidado",
         body_text="Defina a sua senha: https://exemplo.com/senha?token=abc123",
     )
+
+
+def test_console_sender_conforma_ao_port() -> None:
+    """A anotação vive aqui, e não como `_conforms` no módulo de produção.
+
+    Uma instância em nível de módulo instanciaria um adapter **fora do
+    composition root** (LAYOUT §6) — a mesma razão pela qual o adapter argon2
+    tem a sua conformidade asserida no teste. Pior neste caso específico: o
+    construtor resolve `sys.stdout` como default, então a instância global
+    capturaria, no momento do import, a saída padrão que existisse ali, e a
+    seguraria pela vida do processo.
+    """
+    sender: EmailSender = ConsoleSender(stream=io.StringIO())
+
+    assert sender is not None
 
 
 class TestConsoleSender:

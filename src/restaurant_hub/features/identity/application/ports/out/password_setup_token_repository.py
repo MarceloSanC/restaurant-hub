@@ -28,7 +28,18 @@ cada regra existe por um motivo concreto:
    rota pública. Na **redenção** o escopo é `None` de propósito: definir uma senha
    mata **tudo** do usuário, para que um convite antigo de TTL longo não sobreviva
    à troca de senha (ADR 2.5.0003).
-4. **Nada reescreve um `consumed_at` já gravado.** `consume` e
+4. **"Invalidar" é definido por `consumed_at IS NULL`, e NÃO por `is_usable`.**
+   A distinção parece pedante e não é: um usuário com um convite **expirado e não
+   consumido** mais um reset vivo faz `invalidate_all_for_user` devolver `2` sob
+   esta definição e `1` sob a leitura "só os que ainda valem". O número é
+   observável (é o retorno do método, e a CA13 assere sobre ele), então as duas
+   leituras produzem fake e adapter que discordam — e discordam **em silêncio**,
+   porque o caso ambíguo é justamente o que ninguém escreve teste para.
+   Fixamos a definição barata: o predicado é `consumed_at IS NULL`, o mesmo de
+   `consume`, sem termo de expiração. Um token expirado já é inútil por
+   `is_usable`; marcá-lo como consumido é redundante, não incorreto, e poupa a
+   query de precisar do relógio.
+5. **Nada reescreve um `consumed_at` já gravado.** `consume` e
    `invalidate_all_for_user` só tocam linhas com `consumed_at IS NULL` — o
    instante do primeiro consumo é o dado que a forense de um token vazado precisa.
 """
@@ -53,6 +64,14 @@ class PasswordSetupTokenRepository(Protocol):
         **É inserção, não upsert** (ADR 2.3.0003). Guarda apenas o fingerprint —
         não existe coluna capaz de guardar o valor, então um dump deste banco não
         devolve nenhum token utilizável.
+
+        **O fingerprint é único**, e a unicidade faz parte deste contrato, não é
+        detalhe do adapter: `find_by_fingerprint` devolve **um** token, e sem o
+        índice único o adapter teria de escolher entre linhas empatadas — escolha
+        que o fake in-memory resolveria por ordem de inserção. Id repetido e
+        fingerprint repetido levantam; nenhum caminho de produção chega aqui,
+        porque o valor vem de um gerador aleatório, mas o fake e o schema
+        precisam concordar sobre o que é recusado.
         """
         ...
 
@@ -77,11 +96,15 @@ class PasswordSetupTokenRepository(Protocol):
         consumed_at: datetime,
         purpose: SetupTokenPurpose | None = None,
     ) -> int:
-        """Invalida os tokens ainda vivos do usuário. Devolve quantos invalidou.
+        """Invalida os tokens **não consumidos** do usuário. Devolve quantos foram.
+
+        O predicado é `consumed_at IS NULL` e **não** inclui expiração — regra 4
+        do módulo, que explica por que a diferença é observável e por que a
+        definição barata é a escolhida.
 
         Com `purpose`, restringe ao propósito dado (uso da **emissão**); sem ele,
-        atinge todos (uso da **redenção**) — regra 3 do módulo. Usuário sem token
-        vivo devolve `0`; não levanta.
+        atinge todos (uso da **redenção**) — regra 3. Usuário sem token não
+        consumido devolve `0`; não levanta.
         """
         ...
 
