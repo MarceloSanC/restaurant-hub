@@ -6,8 +6,10 @@ código Python que normalmente escreve nele. Uma invariante que só o domínio i
 some no dia em que alguém rodar um script de migração de dados.
 """
 
+from typing import NamedTuple
+
 import pytest
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, event, text
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
@@ -29,6 +31,9 @@ from restaurant_hub.features.identity.domain.entities.restaurant import Restaura
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidIdentifierError,
+    InvalidRoleError,
+    MissingTenantError,
     PlatformAdminTenantError,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
@@ -119,6 +124,41 @@ def test_platform_admin_faz_round_trip_com_tenant_nulo(cenario: Engine) -> None:
     assert lido is not None
     assert lido.tenant_id is None
     assert lido.role is Role.PLATFORM_ADMIN
+
+
+def test_find_by_id_nao_seleciona_o_password_hash(cenario: Engine) -> None:
+    """O SQL emitido não pode mencionar `password_hash` — gate de regressão.
+
+    O docstring do repositório promete que o hash "não vaza em log, traceback nem
+    repr", e a promessa se sustenta em `find_by_id` listar as colunas
+    explicitamente. Mas trocar esse `select(...)` por um `select(users)` não
+    derrubava teste nenhum: `User` não tem campo de senha, então o hash a mais
+    seria silenciosamente descartado pelo mapper — e continuaria aparecendo no
+    log de SQL e no traceback de qualquer erro daquela query.
+
+    Asserir sobre a entidade devolvida não pega isso. Só asserir sobre o **texto
+    da query** pega, porque é exatamente aí que o dado vaza.
+    """
+    repo = PostgresUserRepository(cenario)
+    repo.add(_user(), _HASH)
+
+    queries: list[str] = []
+
+    def capturar(
+        conn: object, cursor: object, statement: str, *args: object, **kwargs: object
+    ) -> None:
+        queries.append(statement)
+
+    event.listen(cenario, "before_cursor_execute", capturar)
+    try:
+        assert repo.find_by_id(UserId("user-1")) is not None
+    finally:
+        event.remove(cenario, "before_cursor_execute", capturar)
+
+    assert queries, "nenhum SQL capturado — o listener não observou a query"
+    assert not any("password_hash" in q for q in queries), (
+        f"`find_by_id` mencionou password_hash no SQL: {queries}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -367,14 +407,72 @@ def test_exists_by_email_e_global(cenario: Engine) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_linha_corrompida_levanta_ao_ser_lida(cenario: Engine) -> None:
+class _Corrompida(NamedTuple):
+    """Um cenário de linha inválida de §6, e a exceção que a leitura deve levantar.
+
+    `constraints` são as CHECKs a dropar para que o `INSERT` caiba; `tenant_sql` vai
+    inline (e não como bind) porque `NULL` não é um valor de parâmetro aqui — é a
+    ausência dele que caracteriza o cenário.
+    """
+
+    constraints: tuple[str, ...]
+    user_id: str
+    role: str
+    tenant_sql: str
+    esperada: type[Exception]
+
+
+@pytest.mark.parametrize(
+    "caso",
+    [
+        pytest.param(
+            _Corrompida(
+                ("ck_users_role_known",), "corrompido", "wizard", "'rest-a'", InvalidRoleError
+            ),
+            id="papel-fora-do-conjunto-fechado",
+        ),
+        pytest.param(
+            _Corrompida((), "   ", "owner", "'rest-a'", InvalidIdentifierError),
+            id="id-vazio",
+        ),
+        pytest.param(
+            _Corrompida(
+                ("ck_users_tenant_iff_platform_admin",),
+                "corrompido",
+                "platform_admin",
+                "'rest-a'",
+                PlatformAdminTenantError,
+            ),
+            id="platform-admin-com-tenant",
+        ),
+        pytest.param(
+            _Corrompida(
+                ("ck_users_tenant_iff_platform_admin",),
+                "corrompido",
+                "owner",
+                "NULL",
+                MissingTenantError,
+            ),
+            id="papel-de-restaurante-sem-tenant",
+        ),
+    ],
+)
+def test_linha_corrompida_levanta_ao_ser_lida(cenario: Engine, caso: _Corrompida) -> None:
     """CA15 contra o banco real, driblando a CHECK para simular corrupção.
 
-    A CHECK impede criar a linha inconsistente pelo caminho normal, então o teste
-    a desabilita temporariamente para provar a **segunda** linha de defesa: mesmo
-    que uma linha inválida exista (migração manual, restore de backup antigo, bug
-    de outra Stage), a leitura levanta em vez de devolver um `User` inválido que o
-    resto do sistema trataria como legítimo.
+    As CHECKs impedem criar a linha inconsistente pelo caminho normal, então o
+    teste as desabilita temporariamente para provar a **segunda** linha de defesa:
+    mesmo que uma linha inválida exista (migração manual, restore de backup antigo,
+    bug de outra Stage), a leitura levanta em vez de devolver um `User` inválido que
+    o resto do sistema trataria como legítimo.
+
+    Os quatro cenários de §6 rodam aqui, e não só no unit do mapper, porque o CA15
+    é literal sobre isso: as exceções precisam ser exercitadas por `INSERT` direto.
+    O unit prova que o mapper valida; só o `INSERT` prova que a linha corrompida
+    **cabe** no banco — isto é, que a defesa do construtor não é redundante com a
+    do schema. O caso de `id` vazio não dropa constraint nenhuma justamente porque
+    o schema não tem CHECK de id não-vazio: ali o construtor é a ÚNICA defesa, e o
+    `INSERT` limpo é a evidência disso.
     """
     # A corrupção vive dentro de UMA transação que termina em rollback. A versão
     # anterior deste teste dropava a constraint, commitava e a recriava num
@@ -384,32 +482,50 @@ def test_linha_corrompida_levanta_ao_ser_lida(cenario: Engine) -> None:
     with cenario.connect() as conexao:
         transacao = conexao.begin()
         try:
-            conexao.execute(
-                text("ALTER TABLE users DROP CONSTRAINT ck_users_tenant_iff_platform_admin")
-            )
+            for constraint in caso.constraints:
+                conexao.execute(text(f"ALTER TABLE users DROP CONSTRAINT {constraint}"))
             conexao.execute(
                 text(
                     "INSERT INTO users (id, email, role, tenant_id, password_hash) "
-                    "VALUES ('corrompido', 'x@x.com', 'platform_admin', 'rest-a', 'h')"
-                )
+                    f"VALUES (:id, 'x@x.com', :role, {caso.tenant_sql}, 'h')"
+                ),
+                {"id": caso.user_id, "role": caso.role},
             )
 
             # A leitura acontece na MESMA transação, única onde a linha inválida
             # existe — o repositório recebe essa conexão via um Engine efêmero.
             linha = conexao.execute(
-                text("SELECT id, email, role, tenant_id FROM users WHERE id = 'corrompido'")
+                text("SELECT id, email, role, tenant_id FROM users WHERE id = :id"),
+                {"id": caso.user_id},
             ).one()
 
-            with pytest.raises(PlatformAdminTenantError):
+            with pytest.raises(caso.esperada):
                 mappers.linha_para_usuario(linha)
         finally:
             transacao.rollback()
 
-    # E o banco voltou intacto: a constraint continua lá e a linha inválida não.
+
+@pytest.mark.parametrize(
+    ("role", "tenant_sql"),
+    [
+        pytest.param("platform_admin", "'rest-a'", id="ck-tenant-iff-platform-admin"),
+        pytest.param("wizard", "'rest-a'", id="ck-role-known"),
+    ],
+)
+def test_rollback_devolve_as_constraints_dropadas(
+    cenario: Engine, role: str, tenant_sql: str
+) -> None:
+    """As CHECKs que o teste acima dropa voltam sozinhas — é o rollback que garante.
+
+    Sem esta asserção, um `DROP CONSTRAINT` que vazasse da transação deixaria o
+    banco de dev permanentemente frouxo e os testes seguintes passariam por engano,
+    testando um schema que não é o de produção.
+    """
     with pytest.raises(IntegrityError), cenario.begin() as conexao:
         conexao.execute(
             text(
                 "INSERT INTO users (id, email, role, tenant_id, password_hash) "
-                "VALUES ('outro', 'y@x.com', 'platform_admin', 'rest-a', 'h')"
-            )
+                f"VALUES ('outro', 'y@x.com', :role, {tenant_sql}, 'h')"
+            ),
+            {"role": role},
         )
