@@ -110,9 +110,11 @@ def engine(database_url: str) -> Iterator[Engine]:
 
     **O schema vem da migration**, não de `metadata.create_all`: assim cada
     execução exercita a migration de verdade, e o schema de teste não diverge do de
-    produção.
+    produção. E é **recriado do zero** a cada execução (`_recriar_schema`), porque
+    contra um banco persistente `upgrade head` é no-op e a migration editada nunca
+    chegaria a ser exercitada — ver o docstring de `_recriar_schema`.
 
-    Escopo `session`: aplicar migration por teste seria lento sem ganho — o
+    Escopo `session`: recriar o schema por teste seria lento sem ganho — o
     isolamento fica com o `TRUNCATE` das fixtures que dependem desta.
     """
     engine = create_engine(
@@ -145,14 +147,38 @@ def engine(database_url: str) -> Iterator[Engine]:
             pytrace=False,
         )
 
-    _aplicar_migrations(database_url)
+    _recriar_schema(database_url)
     yield engine
     engine.dispose()
 
 
-def _aplicar_migrations(database_url: str) -> None:
-    """Leva o banco de teste até `head` aplicando a migration de verdade."""
+def _recriar_schema(database_url: str) -> None:
+    """Recria o schema do zero: `downgrade base` e então `upgrade head`.
+
+    **Por que não basta `upgrade head`.** O banco de teste local é persistente, e
+    `upgrade head` é no-op quando o banco já está em `head`. Editar o arquivo de
+    migration não reaplica nada: a suíte segue rodando contra o schema **antigo**,
+    que continua correto, e o local reporta verde para uma migration quebrada. A
+    quebra só apareceria em quem clonasse o repo — ou no CI, cujo Postgres é
+    efêmero e sempre parte do zero. Recriar aqui faz o local espelhar o CI.
+
+    Pior que o falso verde: `test_downgrade_remove_o_que_o_upgrade_criou` reaplica a
+    migration no fim, então uma migration errada **contamina** o banco de dev e só
+    se manifesta na rodada seguinte, longe da edição que a causou.
+
+    **Por que não `compare_metadata()`.** O diff de autogenerate não fecha este
+    caso: com a migration editada e não reaplicada, o banco guarda o schema antigo
+    (correto) e `tables.py` está intocado — não há diferença a detectar. Some-se a
+    isso que o suporte dele a `CHECK` é fraco, e `CHECK` é exatamente a classe de
+    invariante em jogo (`ck_users_email_normalized`, `ck_users_role_known`,
+    `ck_users_tenant_iff_platform_admin`).
+
+    **Custo.** Roda uma vez por sessão de pytest, não por teste — a fixture que a
+    chama tem escopo `session`, e o isolamento entre testes continua sendo o
+    `TRUNCATE`. Dropar e recriar cinco tabelas vazias é ruído perto do resto.
+    """
     config = Config(str(_ALEMBIC_INI))
     config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
     config.set_main_option("sqlalchemy.url", database_url)
+    command.downgrade(config, "base")
     command.upgrade(config, "head")
