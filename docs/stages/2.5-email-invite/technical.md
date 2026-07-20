@@ -634,4 +634,140 @@ T03 ─► T04 ─────┼─► T09 ─┐
 > `status: done`** — alterações fora dos marcadores são rejeitadas por
 > `scripts/check_technical_postexec.py`.
 
+### 2026-07-20 — [decision] Fase 3B — 13 Tasks em vez de 12 — Claude (autônomo)
+**Contexto:** o plano fechou com 13 Tasks, uma acima da faixa saudável de 3–12
+(CONVENTIONS §6) e abaixo do limiar de alarme (≥ 14).
+**Pergunta:** juntar Tasks para caber na faixa, ou declarar o excedente?
+**Opções:**
+- A — juntar, produzindo commits de 8–10 arquivos
+- B — declarar as 13 e explicar a causa ✅ recomendada
+**Decisão:** B
+**Razão:** `make check` roda `mypy src/ tests/fakes/` e o projeto mantém asserções
+de conformidade nos fakes, de modo que acrescentar um método a um `Protocol` já
+implementado deixa o build vermelho até o adapter real **e** o fake implementarem.
+Isso obriga a fatiar por *unidade que compila*, não por camada, e transforma três
+mudanças de port em três Tasks completas. Juntar produziria exatamente a
+patologia (commit gigante) que a faixa existe para evitar.
+
+### 2026-07-20 — [decision] Task 03 — erro e mapeamento HTTP na mesma Task — Claude (autônomo)
+**Contexto:** `InvalidSetupTokenError` nasceu na Task 03; o mapeamento para 401
+estava planejado para a Task 12.
+**Razão:** `test_o_mapa_e_total_sobre_identity_error` falha para qualquer subclasse
+de `IdentityError` sem entrada própria no mapa. Criar o erro sem mapeá-lo deixaria
+a suíte vermelha da Task 03 até a 12 — nove commits. São uma mudança só, e viajaram
+juntas (7 arquivos, acima do usual, declarado na Task).
+
+### 2026-07-20 — [decision] Task 05 — `unusable_hash()` em vez de `dummy_hash()` — Claude (autônomo)
+**Contexto:** o concept original mandava gravar `hasher.dummy_hash()` como
+credencial da conta convidada. O **Checkpoint A** (dois revisores independentes,
+achado *blocker* em ambos) mostrou que `dummy_hash()` é o hash de
+`_SENTINELA_DUMMY = "dummy-password-that-never-authenticates"`, um literal do
+repositório: `verify(sentinela, dummy_hash())` devolve `True`.
+**Decisão:** introduzir `PasswordHasher.unusable_hash()`, aleatório por chamada,
+derivado de `secrets` dentro do adapter. Registrado no **ADR 2.5.0004**.
+**Razão:** persistido, o dummy seria uma senha válida para **toda** conta
+convidada ainda não ativada, publicada no código-fonte — tomada de conta completa
+antes de a vítima abrir o e-mail. O concept foi corrigido antes do commit
+`conceptual approved`; nenhuma linha chegou a ser escrita com o defeito.
+
+### 2026-07-20 — [decision] Task 11 — a absorção envolve o caminho inteiro — Claude (autônomo)
+**Contexto:** a primeira implementação de `request_password_reset` protegia com
+`try/except` **apenas** a chamada ao `EmailSender`. O **Checkpoint C do segundo
+bloco** apontou que a emissão e a gravação do token ficavam de fora.
+**Decisão:** o `try/except Exception` envolve emissão **e** envio.
+**Razão:** a regra 8 do concept é sobre o **efeito colateral assimétrico**, não
+sobre a classe `EmailSender`. Gravar o token também só acontece para e-mail
+cadastrado, então bastava o banco recusar escrita — réplica somente-leitura, disco
+cheio, deadlock, timeout — para o cadastrado dar 500 e o desconhecido dar 202:
+enumeração completa de contas pelo status, sem medir tempo. Coberto por
+`TestFalhaDeEscritaTambemEAbsorvida`.
+
+### 2026-07-20 — [decision] Task 13-fix — `EmailSender` vira costura do composition root — Claude (autônomo)
+**Contexto:** o e2e trocava o sender montando um **segundo** grafo de dependências
+e sobrescrevendo `_email_sender`, atributo privado do use case.
+**Decisão:** `wire_dependencies(..., email_sender=None)` e
+`create_app(..., email_sender=None)`.
+**Razão:** escolher a implementação de um port é literalmente o trabalho do
+composition root, então o parâmetro é uma costura legítima e não um atalho de
+teste. A versão anterior funcionava por acidente (dependia de os dois grafos terem
+exatamente as mesmas chaves de override) e deixava um `Engine` pendurado por teste.
+
+### 2026-07-20 — [deviation] Task 13-fix — `email_from` removido de `Settings` — Claude (autônomo)
+Foi acrescentado na Task 13 e removido no mesmo bloco: `ConsoleSender` não tem
+remetente e `EmailMessage` não tem campo para ele (a CA1 fixa os três campos do DTO
+justamente para o port não crescer por antecipação). Um campo de configuração sem
+leitor é pior que ausência — quem o define no `.env` recebe silêncio. Entra na 6.2
+junto com o adapter que vai lê-lo.
+
+### 2026-07-20 — [deviation] Tasks 03/08 — guardas enumerativas existentes atualizadas — Claude (autônomo)
+Quatro testes-guarda de Stages anteriores precisaram ser estendidos, e nenhum
+estava na lista de arquivos das Tasks: `test_dtos.py` (varredura de `frozen` —
+`setup_tokens` **não estava** na tupla de módulos, então o número fechava por
+acidente), `test_errors.py` (lista de exceções), `test_tables.py` (conjunto de
+tabelas) e `test_composition_root_identity.py` (prefixo da varredura de adapters).
+São exatamente as guardas que existem para forçar revisão consciente; atualizá-las
+é o comportamento desejado, não desvio de escopo.
+
+### 2026-07-20 — [deviation] CA7 verificada em dois níveis — Claude (autônomo)
+O technical atribuía a CA7 (autorização do convite) à Task 12. O Checkpoint C do
+terceiro bloco mostrou que a cobertura ficara só no e2e, e que todos os convites de
+lá passam `unit_ids: []` — de modo que a autorização **por unidade** não era
+exercitada. Os testes foram para `test_http_router.py`, no par negativo + positivo.
+Mutação real confirmou que o negativo sozinho é falso verde: removendo
+`unit_ids=unit_ids`, quem falha é o teste positivo.
+
+### 2026-07-20 — [finding] Adapter Resend real + credencial — Claude (autônomo)
+O provedor está decidido (kickoff #7), mas o ADR 0.0.0004 §Decision 7 proíbe
+chamada externa nesta corrida e a API key é do sponsor. Entregue `ConsoleSender`,
+que satisfaz o DoD. **Stage candidata: `6.2-deploy-pipeline`.** Direção sugerida:
+adapter HTTP sobre a API da Resend, com `email_from` voltando a `Settings` junto —
+e sem imprimir o corpo em log, ao contrário do `ConsoleSender`.
+
+### 2026-07-20 — [finding] Oráculo de tempo no pedido de redefinição — Claude (autônomo)
+Status, corpo e cabeçalhos são idênticos (CA12, provado no e2e), mas o caminho
+"e-mail cadastrado" grava e envia, enquanto o "não cadastrado" retorna na hora. A
+diferença é medível. Fechá-la exige envio assíncrono (fila), que é decisão de
+infraestrutura. **Stage candidata: Step 6** (hardening/deploy).
+
+### 2026-07-20 — [finding] Rate limiting das rotas públicas — Claude (autônomo)
+`/auth/password-reset-requests` e `/auth/password` não têm limite. A primeira é
+vetor de mail-bomb contra um endereço cadastrado; a segunda admite força bruta
+sobre o espaço de tokens — mitigada pelos 256 bits de entropia e pelo TTL curto,
+não eliminada. **Stage candidata: Step 6.**
+
+### 2026-07-20 — [finding] Oráculo de existência global de conta no 409 do convite — Claude (autônomo)
+`EmailAlreadyRegisteredError` (409) revela, a qualquer `manager`, que um e-mail
+existe **em algum tenant** — a unicidade é global por decisão de kickoff #2. É
+herdado da 2.4 (`POST /users` faz o mesmo, e `error_handlers.py` declara a
+aceitação por escrito); a rota de convite herda em vez de divergir, porque duas
+semânticas de conflito seriam piores. **Agravante novo:** uma sondagem
+bem-sucedida agora também dispara e-mail ao endereço sondado. **Stage candidata:
+Step 6** (hardening).
+
+### 2026-07-20 — [finding] Rota autenticada de reenvio de convite — Claude (autônomo)
+Não existe: reconvidar responde 409, então só o próprio convidado consegue um link
+novo, pela rota pública de redefinição. Um administrador não consegue reenviar.
+**Stage candidata:** a que tratar de gestão de usuários (Step 6 ou a Stage de
+administração).
+
+### 2026-07-20 — [finding] Docstring de `dummy_hash()` continua afirmando o que é falso — Claude (autônomo)
+O port diz "`verify` sempre falha", e isso não vale para `_SENTINELA_DUMMY`. Esta
+Stage deixou de depender da afirmação (ADR 2.5.0004) e a corrigiu **no ponto de
+uso**, mas o texto do port segue convidando o próximo leitor ao mesmo erro. Direção
+sugerida: reescrever a lei 2 como "nenhuma senha **que não seja a semente**
+verifica" e acrescentar o parâmetro nominal ao teste de contrato do dummy, como já
+foi feito para `unusable_hash`. **Stage candidata: Step 6.**
+
+### 2026-07-20 — [finding] Atomicidade dos quatro passos da redefinição — Claude (autônomo)
+`set_password_with_token` faz quatro escritas sem transação abrangente. A ordenação
+fail-closed (regra 5) garante que toda falha parcial deixa a conta *mais fechada*,
+e é o que torna a ausência de unidade de trabalho aceitável — não o que a resolve.
+Reforça o `[finding]` de atomicidade já escalado pela 2.4. **Stage candidata:
+`4.4`** (unit of work), como a 2.4 indicou.
+
+### 2026-07-20 — [finding] Estado explícito de "conta não ativada" — Claude (autônomo)
+Hoje é implícito: o hash é inutilizável. Uma coluna própria permitiria listar
+convites pendentes — e criaria o sinal de enumeração que hoje não existe. **Stage
+candidata:** a que precisar da listagem.
+
 <!-- END: post-execution -->
