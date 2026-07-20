@@ -122,4 +122,3 @@ change that trade; it inherits it.
 - `docs/stages/2.4-identity-http/technical.md` §7 — `[finding]` absolute session cap
 - GitHub issue #27, "Cuidados de segurança"
 - `docs/stages/2.5-email-invite/concept.md` §5 regra 4, §7 D3
-</content>

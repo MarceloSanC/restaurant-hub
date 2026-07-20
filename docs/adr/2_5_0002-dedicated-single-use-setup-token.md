@@ -146,4 +146,3 @@ shape: a token that cannot be marked as spent is not single use.
 - `docs/adr/2_4_0002-decode-extends-token-issuer.md` (anticipated crypto changes)
 - GitHub issue #27, "Decisões herdadas" and "Cuidados específicos"
 - `docs/stages/2.5-email-invite/concept.md` §4, §5, §7 D2
-</content>

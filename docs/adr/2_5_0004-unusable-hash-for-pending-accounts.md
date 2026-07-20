@@ -139,4 +139,3 @@ pending invitation on the platform, simultaneously.
 - `docs/adr/2_4_0004-security-adapter-parameters.md`
 - `docs/stages/2.5-email-invite/concept.md` §3 (premises), §5 regra 9, §7 D4, CA6b/CA6c
 - Checkpoint A of stage 2.5 — two independent reviewers, blocker, 2026-07-20
-</content>

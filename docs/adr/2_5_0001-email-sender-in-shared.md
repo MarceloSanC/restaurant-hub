@@ -126,4 +126,3 @@ Three facts carry the decision:
 - `docs/roadmap.md` §Stage 2.5, §Stage 4.6
 - GitHub issue #27, "Decisão a tomar nesta Stage"
 - `docs/stages/2.5-email-invite/concept.md` §7 D1
-</content>

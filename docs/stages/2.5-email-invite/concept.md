@@ -724,4 +724,3 @@ seria inatingível pelo port e impossível para o fake. O índice
 - [`../../adr/2_2_0001-revocable-refresh-session-port.md`](../../adr/2_2_0001-revocable-refresh-session-port.md)
 - [`../../adr/2_4_0001-http-error-status-mapping.md`](../../adr/2_4_0001-http-error-status-mapping.md)
 - ADRs desta Stage: `2_5_0001`, `2_5_0002`, `2_5_0003`, `2_5_0004`
-</content>
