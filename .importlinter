@@ -59,6 +59,8 @@ forbidden_modules =
     pydantic
     pydantic_settings
     httpx
+    argon2
+    jwt
 
 [importlinter:contract:application-purity]
 name = shared.application nao importa infrastructure nem frameworks (LAYOUT §3 Application)
@@ -77,6 +79,8 @@ forbidden_modules =
     pydantic
     pydantic_settings
     httpx
+    argon2
+    jwt
 
 [importlinter:contract:shared-independence]
 name = shared nao importa de features (LAYOUT §7 regra de ouro)
@@ -127,6 +131,8 @@ forbidden_modules =
     pydantic
     pydantic_settings
     httpx
+    argon2
+    jwt
 
 # Ativado na Stage 2.1 (1ª feature — identity). Espelha para features.identity.domain
 # o mesmo contrato de pureza que domain-purity aplica a shared.domain (LAYOUT §3).
@@ -153,3 +159,5 @@ forbidden_modules =
     pydantic
     pydantic_settings
     httpx
+    argon2
+    jwt
