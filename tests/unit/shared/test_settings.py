@@ -12,6 +12,9 @@ REFRESH_TOKEN_TTL_PADRAO = 14
 # Valores arbitrários, só para provar que o ambiente sobrescreve o default.
 ACCESS_TOKEN_TTL_DO_AMBIENTE = 5
 REFRESH_TOKEN_TTL_DO_AMBIENTE = 30
+# RFC 7518 §3.2: a chave HMAC deve ter ao menos o tamanho do digest — 32 bytes
+# para SHA-256. O PyJWT avisa abaixo disso.
+TAMANHO_MINIMO_DE_CHAVE_HS256 = 32
 
 
 def _isolate_ambient_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,7 +80,10 @@ def test_defaults_de_token_existem_para_a_app_subir_sem_env(
     # O default é inseguro DE PROPÓSITO e precisa continuar óbvio: um segredo que
     # parecesse plausível passaria despercebido numa revisão e iria para
     # produção. O fail-fast de boot está escalado para a Stage 6.2.
-    assert settings.jwt_secret_key == "dev-insecure-change-me"
+    assert settings.jwt_secret_key.startswith("dev-insecure-change-me")
+    # >= 32 bytes: HS256 usa a chave como chave HMAC-SHA256 (RFC 7518 §3.2).
+    # Um default curto ensinaria o formato errado a quem copiasse o .env.example.
+    assert len(settings.jwt_secret_key) >= TAMANHO_MINIMO_DE_CHAVE_HS256
 
 
 def test_configuracao_de_token_vem_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:

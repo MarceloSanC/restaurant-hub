@@ -60,7 +60,13 @@ class Settings(BaseSettings):
     # `Settings`), então a checagem quebraria os testes em vez da produção.
     # Escalado como `[finding]` para `6.2-deploy-pipeline`, onde um gate de
     # configuração de boot é o lugar certo — concept §10 e §13.
-    jwt_secret_key: str = "dev-insecure-change-me"
+    #
+    # O preenchimento até 32+ bytes não é enfeite: HS256 usa a chave como chave
+    # HMAC-SHA256, e a RFC 7518 §3.2 exige chave de pelo menos o tamanho do
+    # digest (32 bytes). O PyJWT emite `InsecureKeyLengthWarning` abaixo disso —
+    # foi assim que se notou. Um default curto ensinaria o formato errado a quem
+    # copiasse o `.env.example` e trocasse só as palavras.
+    jwt_secret_key: str = "dev-insecure-change-me-0000000000000000"
 
     # Algoritmo de assinatura. Simétrico porque um único serviço assina e
     # verifica; a troca para RS256 é mudança de configuração + adapter, sem
