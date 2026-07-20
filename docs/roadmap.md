@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-19
-last_reviewed_at: 2026-07-19
+updated_at: 2026-07-20
+last_reviewed_at: 2026-07-20
 ---
 
 # Roadmap — restaurant-hub
@@ -111,7 +111,7 @@ graph LR
 | `2.1-identity-domain` | Domínio de tenancy e acesso | domain | done | `1.2-ci` |
 | `2.2-identity-application` | Use cases de tenancy e acesso | application | done | `2.1-identity-domain` |
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | done | `2.2-identity-application` |
-| `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | draft | `2.3-identity-persistence` |
+| `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | draft | `2.4-identity-http` |
 | `3.1-staff-domain` | Domínio de equipe | domain | draft | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | draft | `3.1-staff-domain` |
@@ -414,7 +414,7 @@ skills_hint: [repository-pattern, composition-root, pytest-with-fakes]
 
 #### Stage 2.4 — `2.4-identity-http`
 
-**Descrição humana:** endpoints FastAPI de auth (login/refresh) e CRUD de tenants/unidades/usuários com enforcement de RBAC via dependência; adapters de PasswordHasher (argon2/bcrypt) e TokenIssuer (JWT); e2e feliz + acesso negado.
+**Descrição humana:** endpoints FastAPI de auth (login/refresh) e CRUD de tenants/unidades/usuários com enforcement de RBAC via dependência (`Depends`, não middleware — ver nota); adapters de PasswordHasher (**argon2**, ADR 2.4.0004) e TokenIssuer (JWT); e2e feliz + acesso negado.
 
 ```yaml
 stage_id: 2.4-identity-http
@@ -437,6 +437,43 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [fastapi-thin-adapter, composition-root]
 ```
+
+> **Nota (2026-07-20): bloco corrigido durante a execução da Stage (issue #24)** —
+> file-scope e contratos reais.
+>
+> - **`contratos_introduzidos: []` ficou desatualizado:** a Stage **estendeu** o port
+>   `TokenIssuer` com `decode_access_token` (ADR 2.4.0002) — extensão aditiva, decidida
+>   aqui porque decodificar é a operação inversa de emitir e pertence ao mesmo port.
+> - **Dois use cases novos na camada application, não previstos no bloco:**
+>   `refresh_session.py` (rotação) e `revoke_session.py` (logout). O ADR 2.2.0001 já
+>   alocava a rotação a esta Stage; o bloco não refletia.
+> - **Arquivos não previstos:** `adapters/in/http/error_handlers.py` (mapa exceção →
+>   status, ADR 2.4.0001), campos de token em `shared/infrastructure/config/settings.py`,
+>   `.importlinter` (contrato da nova camada), `.env.example` e `pyproject.toml`
+>   (`argon2-cffi`, `pyjwt`).
+> - **Testes além do previsto:** o bloco citava só `tests/e2e/features/identity/`; a Stage
+>   entregou também `tests/contract/features/identity/test_security_contract.py`, provando
+>   fake ≡ real para `PasswordHasher` e `TokenIssuer` — o mesmo padrão que a 2.3 usou para
+>   os repositórios.
+> - **`bcrypt` não entrou — a descrição humana acima foi corrigida.** O bloco dizia
+>   "argon2/bcrypt"; a escolha foi **argon2** (ADR 2.4.0004), sem alternativa
+>   implementada — trocar é um adapter.
+> - **Não há middleware de auth — a descrição humana acima foi corrigida.** O bloco previa
+>   "registrar router e middleware de auth"; o enforcement é uma **dependência**
+>   (`Depends`), não middleware. `Depends` roda por rota com o contrato explícito na
+>   assinatura, enquanto middleware roda para tudo e precisaria de lista de exceções para
+>   as rotas públicas de auth — lista que silenciosamente deixa rota nova desprotegida.
+>   ADR 2.4.0003.
+> - **4 ADRs novos:** 2.4.0001 (mapa de status HTTP), 2.4.0002 (`decode` estende
+>   `TokenIssuer`), 2.4.0003 (composição de autorização no boundary), 2.4.0004 (parâmetros
+>   do adapter de segurança).
+> - **Decisões do sponsor de 2026-07-19 aplicadas aqui:** só `platform_admin` cria
+>   restaurante (o `owner` cria unidades; auto-cadastro segue no Step 13) e a janela de
+>   revogação fecha por **TTL curto de access token, configurável** — sem introspecção por
+>   request, com `session_id` já nos claims para permiti-la depois.
+> - `complexidade_estimada: M` e `gate_mode: strict` seguem válidos (12 Tasks + commits de
+>   correção de revisão e de auditoria). Os desvios de execução estão na §7 do
+>   `technical.md`.
 
 #### Stage 2.5 — `2.5-email-invite`
 
@@ -1145,6 +1182,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-18 | Stage 2.1-identity-domain concluída (`done`); bloco corrigido (nota datada — file-scope e contratos reais); Step 2 → `in_progress` (primeiro código de domínio do projeto) | Execução da Stage 2.1 — issue #17 |
 | 2026-07-19 | Stage 2.2-identity-application concluída (`done`); bloco corrigido (nota datada — 6º port `SessionRepository`, file-scope real e consequências para 2.3/2.4) | Execução da Stage 2.2 — issue #20 |
 | 2026-07-19 | Stage 2.3-identity-persistence concluída (`done`); bloco corrigido (nota datada — tabela `sessions` e `session_repository` reconciliados do ADR 2.2.0001, `integrity_errors.py`, CI exigindo Postgres real, 5 ADRs) | Execução da Stage 2.3 — issue #22 |
+| 2026-07-20 | Stage 2.4-identity-http concluída (`done`); bloco corrigido (nota datada — `decode_access_token` estendendo `TokenIssuer`, use cases de rotação/logout, contract test de segurança, argon2 sem bcrypt, 4 ADRs); primeira superfície de runtime do projeto | Execução da Stage 2.4 — issue #24 |
 
 ## Próxima revisão de roadmap
 
