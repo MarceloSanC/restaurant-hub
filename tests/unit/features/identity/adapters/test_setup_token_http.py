@@ -15,7 +15,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
+from restaurant_hub.features.identity.application.dtos.identifiers import (
+    PasswordHash,
+    SetupTokenId,
+)
 from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     PasswordSetupToken,
     SetupTokenPurpose,
@@ -69,6 +72,13 @@ HTTP_UNAUTHORIZED = 401
 HTTP_UNPROCESSABLE = 422
 
 
+class _UsuariosQueFalhamAoGravar(InMemoryUserRepository):
+    """Falha só em `set_password_hash`, para observar a resposta HTTP."""
+
+    def set_password_hash(self, user_id: UserId, password_hash: PasswordHash) -> None:
+        raise RuntimeError("banco indisponível")
+
+
 @dataclasses.dataclass
 class Montagem:
     """A app real com os use cases reais e repositórios in-memory."""
@@ -79,8 +89,15 @@ class Montagem:
     sessions: InMemorySessionRepository
 
 
-def _montar(*, com_token: bool = True, com_usuario: bool = True) -> Montagem:
-    users = InMemoryUserRepository()
+def _montar(
+    *,
+    com_token: bool = True,
+    com_usuario: bool = True,
+    expirado: bool = False,
+    sender: RecordingEmailSender | None = None,
+    users_quebrado: bool = False,
+) -> Montagem:
+    users = _UsuariosQueFalhamAoGravar() if users_quebrado else InMemoryUserRepository()
     sessions = InMemorySessionRepository()
     tokens = InMemoryPasswordSetupTokenRepository()
     issuer = FakeSetupTokenIssuer()
@@ -104,7 +121,9 @@ def _montar(*, com_token: bool = True, com_usuario: bool = True) -> Montagem:
                 purpose=SetupTokenPurpose.INVITATION,
                 token_fingerprint=issuer.fingerprint(_VALOR),
                 issued_at=_AGORA,
-                expires_at=_AGORA + timedelta(hours=72),
+                expires_at=(
+                    _AGORA - timedelta(seconds=1) if expirado else _AGORA + timedelta(hours=72)
+                ),
             )
         )
 
@@ -125,7 +144,7 @@ def _montar(*, com_token: bool = True, com_usuario: bool = True) -> Montagem:
         users=users,
         tokens=tokens,
         token_issuer=issuer,
-        email_sender=RecordingEmailSender(),
+        email_sender=sender if sender is not None else RecordingEmailSender(),
         id_generator=FakeIdGenerator(),
         clock=FakeClock(_AGORA),
         reset_ttl=timedelta(minutes=30),
@@ -191,6 +210,15 @@ class TestDefinirSenha:
             montagem.client.post("/auth/password", json={"token": _VALOR, "password": "x"})
         )
 
+        # A quarta causa, que a primeira versão deste teste omitia. As quatro
+        # passam pelo mesmo `raise`, então o risco prático era baixo — mas a CA10
+        # nomeia "token expirado" explicitamente, e um teste que não exercita o
+        # que a CA nomeia é um teste que documenta a intenção sem verificá-la.
+        montagem = _montar(expirado=True)
+        respostas.append(
+            montagem.client.post("/auth/password", json={"token": _VALOR, "password": "x"})
+        )
+
         comparaveis = {_resposta_comparavel(r) for r in respostas}
         assert len(comparaveis) == 1
         assert respostas[0].status_code == HTTP_UNAUTHORIZED
@@ -218,6 +246,19 @@ class TestDefinirSenha:
 
         assert resposta.status_code == HTTP_UNPROCESSABLE
         assert "token-vivo-secreto" not in resposta.text
+
+    def test_falha_ao_gravar_a_senha_nao_vira_4xx(self) -> None:
+        """§6 — consume OK e `set_password_hash` falhando propaga como 5xx.
+
+        A conta fica **mais fechada** (token queimado, sessões revogadas, senha
+        inalterada — regra 5), e o cliente precisa ver que algo deu errado. Um
+        4xx aqui diria "seu token é inválido" a quem tem um token perfeitamente
+        válido, e a pessoa pediria outro para sempre.
+        """
+        montagem = _montar(users_quebrado=True)
+
+        with pytest.raises(RuntimeError):
+            montagem.client.post("/auth/password", json={"token": _VALOR, "password": "x"})
 
     def test_replay_nao_regrava_a_senha(self) -> None:
         montagem = _montar()
@@ -258,6 +299,25 @@ class TestPedirRedefinicao:
 
         assert cadastrado.content == b""
         assert desconhecido.content == b""
+
+    def test_falha_do_sender_nao_muda_a_resposta(self) -> None:
+        """CA12b no nível HTTP — a versão anterior comparava `None == None`.
+
+        É o cenário do atacante: sondar endereços durante uma queda do provedor
+        de e-mail. Se a exceção subisse, o cadastrado daria 500 e o desconhecido
+        202 — enumeração completa pelo status, sem medir tempo.
+        """
+        montagem = _montar(sender=RecordingEmailSender(fail_with=RuntimeError("fora")))
+
+        cadastrado = montagem.client.post(
+            "/auth/password-reset-requests", json={"email": _CADASTRADO}
+        )
+        desconhecido = montagem.client.post(
+            "/auth/password-reset-requests", json={"email": "nunca-vi@x.com"}
+        )
+
+        assert cadastrado.status_code == HTTP_ACCEPTED
+        assert _resposta_comparavel(cadastrado) == _resposta_comparavel(desconhecido)
 
     def test_email_malformado_e_422(self) -> None:
         """Não fura a regra 7: o formato não revela nada sobre a base."""

@@ -45,6 +45,21 @@ _CADASTRADO = "cadastrado@x.com"
 _DESCONHECIDO = "nunca-vi@x.com"
 
 
+class FalhaDeProvedor(Exception):
+    """Falha **fora** da hierarquia `RuntimeError`.
+
+    Existe porque a auditoria de testes encontrou um falso verde: todas as
+    injeções de falha da suíte eram `RuntimeError` (o `EmailSenderFailure` herda
+    dele), então estreitar o `except Exception` do use case para `except
+    RuntimeError` **não derrubava teste nenhum** — com a linha marcada como 100%
+    coberta. Executar a linha não prova a largura do `except`.
+
+    E a largura importa: as falhas que a regra 8 existe para absorver não são
+    `RuntimeError`. `sqlalchemy.exc.SQLAlchemyError`, `psycopg.OperationalError`
+    e o `httpx.HTTPError` do futuro adapter Resend herdam direto de `Exception`.
+    """
+
+
 class RepositorioDeTokensQueFalha(InMemoryPasswordSetupTokenRepository):
     """Falha em toda escrita — simula banco somente-leitura, disco cheio, deadlock."""
 
@@ -58,6 +73,13 @@ class RepositorioDeTokensQueFalha(InMemoryPasswordSetupTokenRepository):
         purpose: SetupTokenPurpose | None = None,
     ) -> int:
         raise RuntimeError("banco indisponível para escrita")
+
+
+class RepositorioDeTokensQueFalhaComExcecaoBase(InMemoryPasswordSetupTokenRepository):
+    """Falha de escrita que não é `RuntimeError` — ver `FalhaDeProvedor`."""
+
+    def add(self, token: PasswordSetupToken) -> None:
+        raise FalhaDeProvedor("banco indisponível para escrita")
 
 
 class Cenario:
@@ -223,6 +245,25 @@ class TestFalhaDeEscritaTambemEAbsorvida:
         desconhecido = cenario.use_case.execute(_comando(_DESCONHECIDO))
 
         assert com_falha == desconhecido
+
+    def test_absorve_excecao_fora_da_hierarquia_de_runtime_error(self) -> None:
+        """A largura do `except` é o contrato, não a sua existência.
+
+        Este é o teste que mata a mutação `except Exception` → `except
+        RuntimeError`. Sem ele, um refactor que estreitasse a captura — ou
+        simplesmente o adapter real da 6.2 levantando `httpx.ConnectError` —
+        reabriria a enumeração de contas (500 = cadastrado, 202 = não cadastrado)
+        com a suíte inteira verde.
+        """
+        cenario = Cenario(sender=RecordingEmailSender(fail_with=FalhaDeProvedor("provedor")))
+
+        assert cenario.use_case.execute(_comando(_CADASTRADO)) is None
+
+    def test_absorve_excecao_de_escrita_fora_de_runtime_error(self) -> None:
+        """Mesma largura, do lado do repositório."""
+        cenario = Cenario(tokens=RepositorioDeTokensQueFalhaComExcecaoBase())
+
+        assert cenario.use_case.execute(_comando(_CADASTRADO)) is None
 
     def test_falha_de_escrita_nao_envia_mensagem(self) -> None:
         cenario = Cenario(tokens=RepositorioDeTokensQueFalha())

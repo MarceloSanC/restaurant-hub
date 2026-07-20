@@ -61,7 +61,10 @@ from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnit
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
-from tests.fakes.shared.recording_email_sender import RecordingEmailSender
+from tests.fakes.shared.recording_email_sender import (
+    EmailSenderFailure,
+    RecordingEmailSender,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -79,6 +82,18 @@ _OUTRO_TENANT = RestaurantId("rest-2")
 _SENHA = "s3nha-valida"
 
 
+class _SenderQuebravel(RecordingEmailSender):
+    """Sender que pode ser quebrado **depois** de montado.
+
+    O `RecordingEmailSender` decide falhar no construtor, e o grafo do `_Ambiente`
+    é montado antes de o teste escolher o cenário. Este subtipo move a decisão
+    para o corpo do teste.
+    """
+
+    def quebrar(self) -> None:
+        self._fail_with = EmailSenderFailure("provedor fora do ar")
+
+
 class _Ambiente:
     """App real montada com fakes — o mesmo caminho que o composition root monta."""
 
@@ -90,7 +105,7 @@ class _Ambiente:
         self.issuer = FakeTokenIssuer(clock=self.clock)
         self.hasher = FakePasswordHasher()
         self.setup_tokens = InMemoryPasswordSetupTokenRepository()
-        self.sender = RecordingEmailSender()
+        self.sender = _SenderQuebravel()
 
         autorizar = AuthorizeActionUseCase(users=self.users, units=self.units)
         guard = dependencies_module.IdentityGuard(
@@ -672,3 +687,39 @@ async def test_convite_de_papel_desconhecido_e_422(
     )
 
     assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+async def test_convite_com_email_malformado_e_422(ambiente: _Ambiente, client: AsyncClient) -> None:
+    """A conversão texto→VO no router é o que faz isto ser erro de domínio."""
+    ambiente.com_restaurante()
+    owner = ambiente.com_usuario(user_id="owner-mail", role=Role.OWNER, tenant_id=_TENANT)
+
+    resposta = await client.post(
+        "/api/v1/users/invitations",
+        json={"email": "isto-nao-e-email", "role": "manager", "unit_ids": []},
+        headers=ambiente.auth(owner),
+    )
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+async def test_falha_do_sender_no_convite_nao_vira_4xx(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """Regra 13 no nível HTTP: a falha de envio **sobe**, e sobe como 5xx.
+
+    O risco que isto fecha é o oposto do da rota de redefinição: se um handler
+    convertesse a falha do provedor num 4xx plausível, quem convidou leria
+    "requisição inválida" e tentaria de novo — enquanto a conta já existe e o
+    e-mail nunca saiu. Aqui o barulho é o comportamento certo.
+    """
+    ambiente.com_restaurante()
+    owner = ambiente.com_usuario(user_id="owner-500", role=Role.OWNER, tenant_id=_TENANT)
+    ambiente.sender.quebrar()
+
+    with pytest.raises(EmailSenderFailure):
+        await client.post(
+            "/api/v1/users/invitations",
+            json={"email": "convidado-500@x.com", "role": "manager", "unit_ids": []},
+            headers=ambiente.auth(owner),
+        )
