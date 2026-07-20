@@ -358,7 +358,7 @@ skills_hint: [pytest-with-fakes, task-ordering-hex, hex-arch-python]
 
 #### Stage 2.3 — `2.3-identity-persistence`
 
-**Descrição humana:** repositórios PostgreSQL de identity (com `tenant_id` em todas as tabelas — ROADMAP-3), mappers, migrations iniciais e testes de integração + contrato (fake ≡ real).
+**Descrição humana:** repositórios PostgreSQL de identity (com `tenant_id` nas tabelas em que ele é dado — ROADMAP-3; `sessions` é a exceção deliberada e alcança o tenant por `user_id`, ADR 2.3.0002), mappers, migrations iniciais e testes de integração + contrato (fake ≡ real).
 
 ```yaml
 stage_id: 2.3-identity-persistence
@@ -385,6 +385,12 @@ skills_hint: [repository-pattern, composition-root, pytest-with-fakes]
 > **Nota (2026-07-19): bloco corrigido durante a execução da Stage (issue #22)** —
 > file-scope e contratos reais.
 >
+> - **`tenant_id` NÃO fica em todas as tabelas — a descrição humana acima foi corrigida.**
+>   `sessions` não recebe a coluna: o DTO `Session` não carrega tenant, então ela seria
+>   inatingível pelo port e impossível para o fake; e, como o tenant de um `platform_admin`
+>   é nulo, a FK composta sobre ela seria MATCH SIMPLE — desligada justamente no caso que
+>   deveria proteger. O isolamento de sessão chega por `user_id`. Decisão validada
+>   empiricamente contra Postgres 16 (com controle negativo) — ADR 2.3.0002.
 > - **Sessão persistida (reconciliação pendente do ADR 2.2.0001).** O bloco não citava
 >   `session_repository.py` nem a tabela `sessions`; ambos existem, como consequência
 >   direta do 6º port introduzido na 2.2. O ADR 2.2.0001 §Consequences já previa esta
