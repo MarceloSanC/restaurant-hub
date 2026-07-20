@@ -9,17 +9,25 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
+from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash, SetupTokenId
 from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     PasswordSetupToken,
     SetupTokenPurpose,
 )
-from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
+from restaurant_hub.features.identity.application.errors import UserNotFoundError
+from restaurant_hub.features.identity.domain.entities.user import User
+from restaurant_hub.features.identity.domain.value_objects.email import Email
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    RestaurantId,
+    UserId,
+)
+from restaurant_hub.features.identity.domain.value_objects.role import Role
 from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
     InMemoryPasswordSetupTokenRepository,
     SetupTokenAlreadyExistsError,
 )
+from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 
 _AGORA = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
 _DEPOIS = _AGORA + timedelta(minutes=5)
@@ -224,3 +232,35 @@ class TestAddEPurge:
         repo.add(_token(expires_at=_AGORA + timedelta(seconds=1)))
 
         assert repo.purge_expired(_AGORA) == 0
+
+
+class TestSetPasswordHashNoFake:
+    """O fake do `UserRepository` precisa recusar o que o Postgres recusa.
+
+    Se o fake criasse a credencial órfã em silêncio, o teste de "token cujo
+    usuário foi apagado" passaria verde sobre um caminho que, no banco, levanta.
+    """
+
+    def test_troca_o_hash_de_usuario_existente(self) -> None:
+        repo = InMemoryUserRepository()
+        usuario = User(
+            id=UserId("user-1"),
+            email=Email("a@x.com"),
+            role=Role.OWNER,
+            tenant_id=RestaurantId("rest-a"),
+        )
+        repo.add(usuario, PasswordHash("hashed::antiga"))
+
+        repo.set_password_hash(UserId("user-1"), PasswordHash("hashed::nova"))
+
+        credenciais = repo.find_credentials_by_email(Email("a@x.com"))
+        assert credenciais is not None
+        assert credenciais.password_hash == "hashed::nova"
+
+    def test_usuario_inexistente_levanta_e_nao_grava(self) -> None:
+        repo = InMemoryUserRepository()
+
+        with pytest.raises(UserNotFoundError):
+            repo.set_password_hash(UserId("fantasma"), PasswordHash("hashed::x"))
+
+        assert UserId("fantasma") not in repo.password_hashes
