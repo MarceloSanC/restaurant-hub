@@ -61,7 +61,7 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
-from .dependencies import IdentityGuard, required_permissions_for_role
+from .dependencies import AuthenticatedActor, IdentityGuard, required_permissions_for_role
 from .schemas import (
     CreateOwnerRequest,
     CreateRestaurantRequest,
@@ -112,6 +112,27 @@ def _get_create_user() -> CreateUserUseCase:
 
 def _get_guard() -> IdentityGuard:
     _nao_conectado("identity_guard")
+
+
+def _authenticated_actor(
+    request: Request,
+    guard: Annotated[IdentityGuard, Depends(_get_guard)],
+) -> AuthenticatedActor:
+    """Autenticação como **dependência**, e não como chamada no corpo da rota.
+
+    A diferença é observável: o FastAPI resolve as dependências **antes** de
+    validar o corpo da requisição. Autenticando aqui, uma requisição sem
+    credencial recebe 401 mesmo que o corpo esteja malformado; autenticando
+    dentro da rota, o 422 da validação do corpo chegaria primeiro — e um cliente
+    sem credencial nenhuma passaria a distinguir "meu corpo tem forma válida" de
+    "não tem", sondando o schema de endpoints protegidos.
+
+    É também o que o concept §7.5 declara: `Depends`, não middleware. Com
+    `Depends`, uma rota **sem** o guard é visível na assinatura da função; com
+    middleware global seria preciso manter uma allowlist de rotas públicas, que
+    erra por omissão e **abre** rota sem querer.
+    """
+    return guard.authenticate(request)
 
 
 def _restaurant_response(resultado: RestaurantResult) -> RestaurantResponse:
@@ -210,7 +231,7 @@ def logout(
 )
 def create_restaurant(
     payload: CreateRestaurantRequest,
-    request: Request,
+    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateRestaurantUseCase, Depends(_get_create_restaurant)],
 ) -> RestaurantResponse:
@@ -221,7 +242,6 @@ def create_restaurant(
     ação de plataforma, não de tenant — e um ator com tenant falha antes disso,
     na checagem de permissão.
     """
-    ator = guard.authenticate(request)
     guard.authorize(ator, Permission.MANAGE_PLATFORM)
 
     resultado = use_case.execute(CreateRestaurantCommand(name=payload.name))
@@ -236,7 +256,7 @@ def create_restaurant(
 def create_restaurant_owner(
     restaurant_id: str,
     payload: CreateOwnerRequest,
-    request: Request,
+    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
 ) -> UserResponse:
@@ -261,7 +281,6 @@ def create_restaurant_owner(
     (`RestaurantNotFoundError` → 404), ao contrário de um campo de corpo, que
     seria afirmação não verificada do cliente.
     """
-    ator = guard.authenticate(request)
     guard.authorize(ator, Permission.MANAGE_PLATFORM)
 
     resultado = use_case.execute(
@@ -283,7 +302,7 @@ def create_restaurant_owner(
 def create_unit(
     restaurant_id: str,
     payload: CreateUnitRequest,
-    request: Request,
+    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateUnitUseCase, Depends(_get_create_unit)],
 ) -> UnitResponse:
@@ -297,7 +316,6 @@ def create_unit(
     um `owner` de outro tenant falha em `_assert_tenant_scope` antes de qualquer
     escrita.
     """
-    ator = guard.authenticate(request)
     tenant_id = RestaurantId(restaurant_id)
     guard.authorize(ator, Permission.MANAGE_TENANT, tenant_id=tenant_id)
 
@@ -312,7 +330,7 @@ def create_unit(
 )
 def create_user(
     payload: CreateUserRequest,
-    request: Request,
+    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
 ) -> UserResponse:
@@ -331,7 +349,6 @@ def create_user(
        (404) ou `CrossTenantError` (422), reabrindo o oráculo de enumeração.
     3. **O tenant vem do ator**, nunca do corpo — o schema sequer tem o campo.
     """
-    ator = guard.authenticate(request)
     papel_alvo = Role.from_string(payload.role)
     unit_ids = tuple(UnitId(unit_id) for unit_id in payload.unit_ids)
 

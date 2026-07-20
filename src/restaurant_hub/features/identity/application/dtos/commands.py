@@ -53,7 +53,13 @@ class CreateUserCommand:
     """
 
     email: Email
-    plain_password: str
+    # `repr=False` pelo mesmo motivo dos commands de sessão e de
+    # `UserCredentials.password_hash`: o `SecretStr` do schema morre no boundary,
+    # em `get_secret_value()`. Deste ponto em diante é a senha em claro que
+    # atravessa o use case, e ela fica nos locals do frame que levanta
+    # `EmailAlreadyRegisteredError` — justamente o frame que alguém inspeciona.
+    # Senha é pior que refresh token: o humano a reusa em outros sistemas.
+    plain_password: str = field(repr=False)
     role: Role
     tenant_id: RestaurantId | None
     unit_ids: Sequence[UnitId] = ()
@@ -64,7 +70,9 @@ class AuthenticateUserCommand:
     """Tentativa de login por e-mail e senha."""
 
     email: Email
-    plain_password: str
+    # `repr=False` — ver `CreateUserCommand`. Aqui o frame em risco é o que
+    # levanta `InvalidCredentialsError`, que é o mais inspecionado do sistema.
+    plain_password: str = field(repr=False)
 
 
 @dataclass(frozen=True)

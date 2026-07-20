@@ -197,6 +197,30 @@ async def test_sem_token_e_401_com_www_authenticate(client: AsyncClient) -> None
     assert resposta.headers["WWW-Authenticate"] == "Bearer"
 
 
+@pytest.mark.parametrize(
+    ("corpo", "cenario"),
+    [
+        ({"name": "X"}, "corpo-valido"),
+        ({"campo": "errado"}, "corpo-malformado"),
+        ({}, "corpo-vazio"),
+    ],
+)
+async def test_sem_credencial_o_401_vem_antes_da_validacao_do_corpo(
+    client: AsyncClient, corpo: dict[str, str], cenario: str
+) -> None:
+    """A autenticação é `Depends`, então roda ANTES da validação do corpo.
+
+    Se ela vivesse no corpo da rota, o 422 da validação chegaria primeiro para o
+    corpo malformado — e um cliente **sem credencial nenhuma** passaria a
+    distinguir "meu corpo tem forma válida" de "não tem", sondando o schema de
+    endpoints protegidos. Com o guard como dependência, os três cenários são
+    indistinguíveis.
+    """
+    resposta = await client.post("/api/v1/restaurants", json=corpo)
+
+    assert resposta.status_code == HTTPStatus.UNAUTHORIZED
+
+
 # ---------------------------------------------------------------------------
 # CA24 — POST /restaurants/{id}/owners
 # ---------------------------------------------------------------------------
