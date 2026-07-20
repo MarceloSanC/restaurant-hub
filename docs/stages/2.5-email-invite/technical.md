@@ -793,4 +793,29 @@ gate**, não de comportamento. Ambas fechadas sem tocar em produção.
    só a requisição que deveria ter sucesso separa "rota exige login" de "token não
    serve".
 
+### `[decision]` — primeira rodada de auditoria de testes (registro que faltava)
+
+Achado F2 da auditoria de Stage (PR #28): a §7 documentava só a auditoria
+independente, deixando sem rastro a **primeira** rodada, cujos seis achados foram
+fechados em `6f08227`, `71ce25a` e `61d86a2`. Registro aqui porque a §7 é o registro
+permanente — o corpo do PR não é.
+
+O achado principal daquela rodada é o mais instrutivo da Stage: mutar
+`except Exception` para `except RuntimeError` em `request_password_reset` matava
+**zero** testes, com a linha marcada a **100% de cobertura**. Todas as injeções de
+falha dos testes eram `RuntimeError`, então a linha executava sempre e a **largura**
+do `except` nunca era exercitada. Fechado com `FalhaDeProvedor(Exception)` cobrindo
+os dois lados (sender e repositório); a auditoria independente reaplicou a mutação e
+confirmou que agora morre em dois testes.
+
+Os outros cinco achados da rodada: a corrida perdida do `consume` não era asserida no
+use case, e as duas rotas não tinham teste provando o 500 real. Todos com commit
+dedicado.
+
+**Lição, e ela vale além desta Stage:** cobertura de linha mede **execução**, não
+**verificação**. Um `except`, um `if` ou uma parametrização podem estar a 100% com
+apenas um representante estreito da categoria sendo exercitado. A mesma classe
+reapareceu duas vezes nesta Stage — no `except`, e depois em `unusable_hash()`, onde
+o teste travava a lista de senhas conhecidas em vez da origem da entropia.
+
 <!-- END: post-execution -->
