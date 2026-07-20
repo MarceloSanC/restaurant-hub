@@ -705,4 +705,23 @@ quebrariam era fato de execução, não algo que o ADR pudesse afirmar de antem�
 mudança de semântica não os alcança. Isso confirma que o comportamento de upsert
 não era usado como regra em lugar nenhum — era, de fato, só uma frouxidão do fake.
 
+### 2026-07-19 — [deviation] Task 12 — precedência de validação do mapper contradizia o concept §6 — Claude (autônomo)
+**Contexto:** o concept §6 fixa a ordem de validação de `linha_para_usuario` como
+`Role.from_string(role)` → `Email(email)` → `User(...)`, e o docstring da função
+afirmava exatamente isso. O código fazia o contrário: `email=Email(row.email)` estava
+escrito **antes** de `role=Role.from_string(row.role)` na chamada do construtor, e
+Python avalia argumentos na ordem da fonte. Uma linha corrompida nos dois eixos
+levantava `InvalidEmailError` onde a spec manda `InvalidRoleError`. Nenhum teste pegava
+porque todos os testes de reidratação corrompiam **um** eixo por vez — com um eixo só,
+qualquer ordem passa.
+**Desvio:** o **código** cedeu ao concept (hierarquia Concept > Código), e as duas
+conversões foram extraídas para variáveis locais antes da chamada, na ordem da spec.
+Resolver só reordenando os kwargs deixaria a precedência como propriedade implícita da
+assinatura de `User` — um reorder futuro (formatter, ou alinhamento cosmético com a
+assinatura) a quebraria de novo em silêncio. Fechado por
+`test_precedencia_papel_invalido_vence_email_malformado`, que corrompe os dois eixos
+simultaneamente e falhava com `InvalidEmailError` antes da correção.
+**Razão:** ajuste in-scope revelado pela auditoria — não muda contrato de port,
+fronteira da Stage nem critério de aceite; alinha o código a uma decisão já aprovada.
+
 <!-- END: post-execution -->

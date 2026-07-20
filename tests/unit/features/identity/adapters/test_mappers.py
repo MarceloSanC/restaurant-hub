@@ -224,6 +224,28 @@ def test_precedencia_papel_invalido_vence_tenant_inconsistente() -> None:
         )
 
 
+def test_precedencia_papel_invalido_vence_email_malformado() -> None:
+    """`Role.from_string` roda ANTES de `Email` — §6 fixa essa ordem.
+
+    Este é o par que a ordem dos argumentos do construtor não protege: se o mapper
+    montar `User(...)` com `email=` escrito antes de `role=`, Python avalia os
+    argumentos na ordem da FONTE e o chamador vê `InvalidEmailError` onde a spec
+    manda `InvalidRoleError`. Manter os dois eixos corrompidos na mesma linha é o
+    único jeito de a precedência ficar observável — com um eixo só, qualquer ordem
+    passa.
+    """
+    with pytest.raises(InvalidRoleError):
+        mappers.linha_para_usuario(
+            _linha(
+                id="user-1",
+                email="nao-e-email",
+                role="wizard",
+                tenant_id="rest-1",
+                password_hash=_HASH,
+            )
+        )
+
+
 # ---------------------------------------------------------------------------
 # Fuso — I10
 # ---------------------------------------------------------------------------

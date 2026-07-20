@@ -118,11 +118,20 @@ def linha_para_usuario(row: Row) -> User:
     (papel desconhecido levanta antes de qualquer outra coisa), depois `Email`,
     e por fim `User`, cujo `__post_init__` checa id vazio → iff de `platform_admin`
     → tenant ausente, nessa ordem.
+
+    As duas conversões saem para variáveis locais **de propósito**. Avaliá-las
+    inline nos argumentos do construtor faria a precedência depender da ordem em que
+    os kwargs estão escritos — Python avalia argumentos na ordem da fonte — e um
+    reorder futuro (de um formatter, ou de quem só quis alinhar com a assinatura de
+    `User`) inverteria a exceção observada em silêncio, sem quebrar nada visível. Com
+    as locais, a ordem especificada é o próprio fluxo do código.
     """
+    role = Role.from_string(row.role)
+    email = Email(row.email)
     return User(
         id=UserId(row.id),
-        email=Email(row.email),
-        role=Role.from_string(row.role),
+        email=email,
+        role=role,
         tenant_id=RestaurantId(row.tenant_id) if row.tenant_id is not None else None,
     )
 
