@@ -16,6 +16,12 @@ dependencies = [
     # ORM e banco de dados
     "sqlalchemy>=2.0",
     "alembic>=1.13",
+    # Driver PostgreSQL (DBAPI). Sem ele o SQLAlchemy não abre conexão nenhuma —
+    # o projeto declarava o ORM e driver algum até a Stage 2.3. psycopg 3 (e não
+    # psycopg2, em manutenção) pela linha atual e pelo caminho para async, caso a
+    # 2.4+ precise. A URL usa o esquema explícito `postgresql+psycopg://` para
+    # não depender do driver default do SQLAlchemy, que é justamente o psycopg2.
+    "psycopg[binary]>=3.2",
     # Validação e configuração
     "pydantic>=2.7",
     "pydantic-settings>=2.3",

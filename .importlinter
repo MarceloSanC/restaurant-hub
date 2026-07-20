@@ -55,6 +55,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx
@@ -72,6 +73,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx
@@ -83,6 +85,22 @@ source_modules =
     restaurant_hub.shared
 forbidden_modules =
     restaurant_hub.features
+# Exceção declarada em LAYOUT §6, prevista no cabeçalho deste arquivo desde a
+# Stage 1.1 e efetivada na 2.3, quando o composition_root passou a montar os
+# repositórios Postgres de identity.
+#
+# A cadeia real é INDIRETA: shared/infrastructure/http/app.py importa o
+# composition_root, que importa features.identity.adapters. Nenhum módulo de
+# `shared` importa uma feature diretamente — a regra de ouro segue valendo no
+# sentido em que foi escrita.
+#
+# A supressão é a mais estreita possível: só este par, só nesta direção. Ela NÃO
+# libera `shared -> features` em geral; um import direto de feature dentro de
+# shared continua reprovando. O que ela deixa de cobrir — que nada além do
+# composition_root instancie adapter — é coberto por teste mecânico em
+# tests/unit/features/identity/adapters/test_composition_root_identity.py.
+ignore_imports =
+    restaurant_hub.shared.infrastructure.http.app -> restaurant_hub.composition_root
 
 # Ativado na Stage 2.2 (1ª camada application do repo). Espelha para
 # features.identity.application o contrato que application-purity aplica a
@@ -105,6 +123,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx
@@ -130,6 +149,7 @@ forbidden_modules =
     uvicorn
     sqlalchemy
     alembic
+    psycopg
     pydantic
     pydantic_settings
     httpx

@@ -87,6 +87,89 @@ class UnitNotVisibleError(IdentityError):
         super().__init__(f"usuário {user_id!r} não enxerga a unidade {unit_id!r}")
 
 
+class RestaurantAlreadyExistsError(IdentityError):
+    """Restaurante com o mesmo id já gravado.
+
+    Contraparte de `RestaurantNotFoundError`, e o que a PK da tabela impõe: `add`
+    é **inserção, não upsert** (ADR 2.3.0003). Existe para que o fake in-memory e
+    o adapter Postgres devolvam a mesma coisa no mesmo cenário — antes desta
+    Stage o fake sobrescrevia em silêncio o que o banco rejeita.
+    """
+
+    def __init__(self, restaurant_id: str) -> None:
+        super().__init__(f"restaurante já existe: {restaurant_id!r}")
+
+
+class UnitAlreadyExistsError(IdentityError):
+    """Unidade com o mesmo id já gravada (ADR 2.3.0003)."""
+
+    def __init__(self, unit_id: str) -> None:
+        super().__init__(f"unidade já existe: {unit_id!r}")
+
+
+class UserAlreadyExistsError(IdentityError):
+    """Usuário com o mesmo id já gravado.
+
+    Distinto de `EmailAlreadyRegisteredError` de propósito: são violações
+    diferentes (id duplicado vs. e-mail tomado por outra conta), e a Stage 2.4
+    precisa mapeá-las para respostas diferentes. Colapsar as duas faria a API
+    responder "e-mail já registrado" a uma requisição cujo e-mail está livre.
+    """
+
+    def __init__(self, user_id: str) -> None:
+        super().__init__(f"usuário já existe: {user_id!r}")
+
+
+class UnitMembershipAlreadyExistsError(IdentityError):
+    """Vínculo usuário↔unidade repetido na mesma escrita.
+
+    A tabela real tem PK composta `(user_id, unit_id)` — vínculo é **relação, não
+    multiconjunto** (invariante #15 da 2.2). O use case já deduplica `unit_ids`,
+    então este erro sinaliza chamador que passou a lista crua; acumular em
+    silêncio, como o fake fazia, esconderia esse defeito até a primeira escrita
+    real (ADR 2.3.0003).
+    """
+
+    def __init__(self, user_id: str) -> None:
+        super().__init__(f"vínculo de unidade repetido para o usuário {user_id!r}")
+
+
+class SessionAlreadyExistsError(IdentityError):
+    """Sessão com o mesmo id já gravada (ADR 2.3.0003)."""
+
+    def __init__(self, session_id: str) -> None:
+        super().__init__(f"sessão já existe: {session_id!r}")
+
+
+class SessionFingerprintAlreadyExistsError(IdentityError):
+    """Fingerprint de refresh token já associado a outra sessão.
+
+    Separado de `SessionAlreadyExistsError` porque os dois cenários não têm o
+    mesmo peso: id repetido é colisão, enquanto **fingerprint repetido é o sinal
+    de reuso de refresh token** que o ADR 2.2.0001 desenhou a sessão para tornar
+    detectável. Um erro só para os dois entregaria à 2.4 a mesma exceção para uma
+    colisão inócua e para um token possivelmente roubado.
+    """
+
+    def __init__(self, fingerprint: str) -> None:
+        # A mensagem nunca carrega o fingerprint inteiro: é material derivado de
+        # segredo, e mensagem de erro acaba em log.
+        #
+        # O prefixo só é seguro quando sobra fingerprint suficiente para que ele
+        # NÃO seja o valor todo. Um `fingerprint[:8]` puro parecia resolver e não
+        # resolvia: para qualquer valor de até 8 caracteres a "redação" devolvia o
+        # segredo inteiro — e os fingerprints curtos dos próprios testes
+        # (`fp::a`, `fp::abc`) caíam exatamente nesse caso.
+        prefixo_seguro = 8
+        if len(fingerprint) > prefixo_seguro:
+            visivel = f"{fingerprint[:prefixo_seguro]!r}…"
+        else:
+            visivel = "<redigido>"
+        super().__init__(
+            f"fingerprint de refresh token já registrado: {visivel} ({len(fingerprint)} chars)"
+        )
+
+
 class RestaurantNotFoundError(IdentityError, NotFoundError):
     """Restaurante inexistente."""
 

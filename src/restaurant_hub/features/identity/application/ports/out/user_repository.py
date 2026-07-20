@@ -39,8 +39,20 @@ class UserRepository(Protocol):
     ) -> None:
         """Persiste usuário, credencial e vínculos como uma única unidade.
 
-        **É inserção, não upsert.** E-mail já registrado levanta
-        `EmailAlreadyRegisteredError` — o mesmo erro que `exists_by_email`
+        **É inserção, não upsert.** Três violações distintas, três erros distintos
+        (ADR 2.3.0003) — e a **ordem** das checagens faz parte do contrato:
+
+        1. `user_id` já gravado levanta `UserAlreadyExistsError`, checado
+           **antes** do e-mail. Re-gravar o mesmo usuário não é conflito de
+           e-mail (o e-mail é dele), e reportá-lo como tal faria a 2.4 responder
+           "e-mail já registrado" a uma requisição cujo e-mail está livre.
+        2. E-mail já registrado por **outro** usuário levanta
+           `EmailAlreadyRegisteredError`.
+        3. Vínculo repetido na mesma escrita levanta
+           `UnitMembershipAlreadyExistsError` — a tabela tem PK composta
+           `(user_id, unit_id)`, então vínculo é relação, não multiconjunto.
+
+        `EmailAlreadyRegisteredError` é o mesmo erro que `exists_by_email`
         antecipa. A checagem prévia do use case resolve o caso comum com uma
         mensagem melhor; esta regra é a garantia dura, que continua valendo sob
         concorrência, quando duas requisições passam pela checagem antes de

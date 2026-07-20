@@ -16,6 +16,10 @@ from datetime import datetime
 
 from restaurant_hub.features.identity.application.dtos.identifiers import SessionId
 from restaurant_hub.features.identity.application.dtos.session import Session
+from restaurant_hub.features.identity.application.errors import (
+    SessionAlreadyExistsError,
+    SessionFingerprintAlreadyExistsError,
+)
 from restaurant_hub.features.identity.application.ports.out.session_repository import (
     SessionRepository,
 )
@@ -29,6 +33,15 @@ class InMemorySessionRepository:
         self.sessions: dict[SessionId, Session] = {}
 
     def add(self, session: Session) -> None:
+        # Inserção, não upsert (ADR 2.3.0003). `self.sessions[id] = session`
+        # sobrescreveria em silêncio o que a PK do Postgres rejeita — e, pior,
+        # trocaria o estado de revogação de uma sessão existente sem erro nenhum.
+        if session.id in self.sessions:
+            raise SessionAlreadyExistsError(session.id)
+        # Fingerprint tem índice único no banco. O erro é próprio, não o mesmo do
+        # id: fingerprint repetido é o sinal de reuso de refresh token.
+        if self.find_by_fingerprint(session.refresh_token_fingerprint) is not None:
+            raise SessionFingerprintAlreadyExistsError(session.refresh_token_fingerprint)
         self.sessions[session.id] = session
 
     def find_by_fingerprint(self, fingerprint: str) -> Session | None:
@@ -49,6 +62,18 @@ class InMemorySessionRepository:
         for session in list(self.sessions.values()):
             if session.user_id == user_id:
                 self._revoke_one(session, revoked_at)
+
+    def purge_expired(self, before: datetime) -> int:
+        # `<=` e não `<`: `is_active` é half-open, então em `expires_at == before`
+        # a sessão já está expirada e tem de ser expurgável. Ver docstring do port.
+        expiradas = [
+            session_id
+            for session_id, session in self.sessions.items()
+            if session.expires_at <= before
+        ]
+        for session_id in expiradas:
+            del self.sessions[session_id]
+        return len(expiradas)
 
     def _revoke_one(self, session: Session, revoked_at: datetime) -> None:
         if session.revoked_at is not None:

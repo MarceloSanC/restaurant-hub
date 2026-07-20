@@ -42,7 +42,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_dez_excecoes_esperadas() -> None:
+def test_modulo_declara_as_dezesseis_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -56,7 +56,73 @@ def test_modulo_declara_as_dez_excecoes_esperadas() -> None:
         "RestaurantNotFoundError",
         "UnitNotFoundError",
         "UserNotFoundError",
+        # Stage 2.3 — "chave já gravada" precisa ser o mesmo resultado no fake e
+        # no Postgres, porque `add` é inserção, não upsert (ADR 2.3.0003).
+        "RestaurantAlreadyExistsError",
+        "UnitAlreadyExistsError",
+        "UserAlreadyExistsError",
+        "UnitMembershipAlreadyExistsError",
+        "SessionAlreadyExistsError",
+        "SessionFingerprintAlreadyExistsError",
     }
+
+
+def test_erros_de_chave_duplicada_nao_sao_not_found() -> None:
+    """`*AlreadyExists` é conflito, não ausência — não pode cair no handler 404.
+
+    Os dois grupos são simétricos no nome e opostos no significado; herdar
+    `NotFoundError` por simetria descuidada faria a 2.4 responder 404 a um
+    conflito de chave.
+    """
+    duplicados = (
+        errors.RestaurantAlreadyExistsError,
+        errors.UnitAlreadyExistsError,
+        errors.UserAlreadyExistsError,
+        errors.UnitMembershipAlreadyExistsError,
+        errors.SessionAlreadyExistsError,
+        errors.SessionFingerprintAlreadyExistsError,
+    )
+    for cls in duplicados:
+        assert issubclass(cls, IdentityError)
+        assert issubclass(cls, DomainError)
+        assert not issubclass(cls, NotFoundError)
+
+
+@pytest.mark.parametrize(
+    "fingerprint",
+    [
+        "0123456789abcdef0123456789abcdef",  # tamanho realista
+        "fp::a",  # curto — o usado nos próprios testes de sessão
+        "12345678",  # exatamente no limite do prefixo
+        "",  # degenerado
+    ],
+)
+def test_erro_de_fingerprint_nunca_expoe_o_fingerprint_inteiro(fingerprint: str) -> None:
+    """Fingerprint é material derivado de segredo, e mensagem de erro vira log.
+
+    Parametrizado de propósito: a primeira versão truncava com `fingerprint[:8]`
+    e passava neste teste com um valor de 32 caracteres, enquanto vazava o
+    segredo inteiro para qualquer valor de até 8 — inclusive os fingerprints
+    curtos que a suíte de sessão usa. Um caso só teria dado falso verde.
+    """
+    mensagem = str(errors.SessionFingerprintAlreadyExistsError(fingerprint))
+    if fingerprint:
+        assert fingerprint not in mensagem
+
+
+def test_erro_de_fingerprint_mostra_prefixo_quando_ha_o_que_esconder() -> None:
+    """Redigir tudo sempre seria seguro e inútil para investigar reuso de token."""
+    mensagem = str(errors.SessionFingerprintAlreadyExistsError("0123456789abcdef"))
+    assert "01234567" in mensagem
+    assert "16 chars" in mensagem
+
+
+def test_erros_de_chave_duplicada_citam_a_chave() -> None:
+    """Mensagem sem a chave violada é inútil para diagnóstico."""
+    assert "rest-1" in str(errors.RestaurantAlreadyExistsError("rest-1"))
+    assert "unit-1" in str(errors.UnitAlreadyExistsError("unit-1"))
+    assert "user-1" in str(errors.UserAlreadyExistsError("user-1"))
+    assert "sess-1" in str(errors.SessionAlreadyExistsError("sess-1"))
 
 
 @pytest.mark.parametrize("error_class", _application_error_classes())

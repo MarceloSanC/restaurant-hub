@@ -12,6 +12,10 @@ import pytest
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
+    RestaurantAlreadyExistsError,
+    UnitAlreadyExistsError,
+    UnitMembershipAlreadyExistsError,
+    UserAlreadyExistsError,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
@@ -149,15 +153,58 @@ def test_add_e_insercao_e_nao_upsert_de_email() -> None:
     assert repo.emails["dono@x.com"] == "user-1"
 
 
-def test_regravar_o_mesmo_usuario_nao_e_conflito_de_email() -> None:
-    """O conflito é entre usuários distintos — o mesmo id pode ser regravado."""
+def test_regravar_o_mesmo_usuario_e_rejeitado_como_id_duplicado() -> None:
+    """Expectativa **invertida** na Stage 2.3 — ver ADR 2.3.0003.
+
+    Este teste afirmava o contrário ("o mesmo id pode ser regravado") e estava em
+    conflito direto com o docstring do port que ele deveria verificar: "**É
+    inserção, não upsert**". Contra o Postgres, `users.id` é PK e a segunda
+    gravação levanta — logo o fake era mais permissivo que a produção, que é
+    exatamente a divergência que o teste de contrato desta Stage existe para pegar.
+
+    O erro é `UserAlreadyExistsError`, e não `EmailAlreadyRegisteredError`: o
+    e-mail é do próprio usuário, e reportá-lo como conflito de e-mail faria a 2.4
+    responder "e-mail já registrado" a uma requisição cujo e-mail está livre.
+    """
     repo = InMemoryUserRepository()
     user = _user(user_id="user-1", email="dono@x.com")
-
-    repo.add(user, _HASH)
     repo.add(user, _HASH)
 
-    assert repo.find_by_id(UserId("user-1")) == user
+    with pytest.raises(UserAlreadyExistsError):
+        repo.add(user, _HASH)
+
+
+def test_add_de_restaurante_rejeita_id_ja_gravado() -> None:
+    """PK de `restaurants` — o fake não pode ser mais gentil que o banco."""
+    repo = InMemoryRestaurantRepository()
+    repo.add(Restaurant(id=RestaurantId("rest-1"), name="Cantina"))
+
+    with pytest.raises(RestaurantAlreadyExistsError):
+        repo.add(Restaurant(id=RestaurantId("rest-1"), name="Outro nome"))
+
+
+def test_add_de_unidade_rejeita_id_ja_gravado() -> None:
+    """PK de `units` — idem."""
+    repo = InMemoryUnitRepository()
+    repo.add(Unit(id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro"))
+
+    with pytest.raises(UnitAlreadyExistsError):
+        repo.add(Unit(id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Praia"))
+
+
+def test_add_rejeita_vinculo_repetido_na_mesma_escrita() -> None:
+    """PK composta `(user_id, unit_id)`: vínculo é relação, não multiconjunto.
+
+    O fake acumulava com `extend`, então o mesmo vínculo entrava duas vezes —
+    enquanto a tabela real rejeita. O use case da 2.2 já deduplica `unit_ids`, de
+    modo que este erro sinaliza chamador passando a lista crua.
+    """
+    repo = InMemoryUserRepository()
+    user = _user(user_id="user-1")
+    vinculo = UnitMembership(user_id=user.id, unit_id=UnitId("unit-1"))
+
+    with pytest.raises(UnitMembershipAlreadyExistsError):
+        repo.add(user, _HASH, [vinculo, vinculo])
 
 
 def test_email_nao_registrado_nao_existe_e_nao_tem_credencial() -> None:

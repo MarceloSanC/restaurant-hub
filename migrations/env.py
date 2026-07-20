@@ -12,6 +12,9 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 # Importa as Settings do projeto para ler DATABASE_URL do .env
+from restaurant_hub.features.identity.adapters.out.postgres.tables import (
+    identity_metadata,
+)
 from restaurant_hub.shared.infrastructure.config.settings import get_settings
 
 # Objeto de configuração do Alembic — acessa valores do alembic.ini
@@ -26,10 +29,16 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# MetaData para autogenerate — adicione os modelos SQLAlchemy aqui quando usar ORM
-# from restaurant_hub.shared.infrastructure.database.models import Base
-# target_metadata = Base.metadata
-target_metadata = None
+# MetaData para autogenerate.
+#
+# O projeto usa SQLAlchemy **Core** (sem ORM declarativo), então não existe um
+# `Base`: cada bounded context descreve o seu schema num `MetaData` próprio, e é
+# ele que entra aqui. Um `MetaData` global compartilhado faria o Alembic de um BC
+# enxergar as tabelas de outro e propor drops indevidos no autogenerate.
+#
+# Quando o 2º BC chegar, combine os metadatas em vez de trocar este por aquele —
+# `target_metadata` aceita uma lista.
+target_metadata = identity_metadata
 
 
 def run_migrations_offline() -> None:

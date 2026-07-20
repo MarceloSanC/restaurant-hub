@@ -11,6 +11,10 @@ import pytest
 
 from restaurant_hub.features.identity.application.dtos.identifiers import SessionId
 from restaurant_hub.features.identity.application.dtos.session import Session
+from restaurant_hub.features.identity.application.errors import (
+    SessionAlreadyExistsError,
+    SessionFingerprintAlreadyExistsError,
+)
 from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
@@ -153,3 +157,87 @@ def test_revogar_todas_preserva_o_instante_de_quem_ja_estava_revogado() -> None:
     assert recem_revogada is not None
     assert ja_revogada.revoked_at == primeira
     assert recem_revogada.revoked_at == _NOW + timedelta(hours=9)
+
+
+# ---------------------------------------------------------------------------
+# Stage 2.3 — `add` é inserção, não upsert, e expurgo de sessões expiradas.
+#
+# O fake gravava com `self.sessions[id] = session`, sobrescrevendo em silêncio o
+# que a PK do Postgres rejeita. Os testes abaixo fixam a semântica que o adapter
+# real precisa espelhar (ADR 2.3.0003 / 2.3.0004).
+# ---------------------------------------------------------------------------
+
+
+def test_add_rejeita_id_ja_gravado() -> None:
+    """Sobrescrever seria pior que falhar: trocaria o estado de revogação sem erro."""
+    repo = InMemorySessionRepository()
+    repo.add(_session("sess-1", fingerprint="fp::a"))
+
+    with pytest.raises(SessionAlreadyExistsError):
+        repo.add(_session("sess-1", fingerprint="fp::b"))
+
+
+def test_add_rejeita_fingerprint_ja_gravado_com_erro_proprio() -> None:
+    """Fingerprint repetido é sinal de reuso de token, não colisão de id.
+
+    O erro é distinto de `SessionAlreadyExistsError` de propósito: a Stage 2.4
+    precisa distinguir uma colisão inócua de um refresh token possivelmente
+    roubado (ADR 2.2.0001).
+    """
+    repo = InMemorySessionRepository()
+    repo.add(_session("sess-1", fingerprint="fp::a"))
+
+    with pytest.raises(SessionFingerprintAlreadyExistsError):
+        repo.add(_session("sess-2", fingerprint="fp::a"))
+
+
+def test_purge_expired_usa_fronteira_inclusiva() -> None:
+    """`expires_at == before` já está expirada — `is_active` é half-open.
+
+    Um `<` no expurgo deixaria para trás exatamente a sessão que `is_active`
+    considera expirada, fazendo "expirada" e "expurgável" discordarem na
+    fronteira.
+    """
+    repo = InMemorySessionRepository()
+    na_fronteira = _session("sess-borda", fingerprint="fp::borda", expires_at=_NOW)
+    repo.add(na_fronteira)
+
+    assert na_fronteira.is_active(_NOW) is False
+    assert repo.purge_expired(_NOW) == 1
+    assert repo.find_by_fingerprint("fp::borda") is None
+
+
+def test_purge_expired_preserva_sessoes_ainda_validas() -> None:
+    repo = InMemorySessionRepository()
+    repo.add(_session("sess-viva", fingerprint="fp::viva", expires_at=_NOW + _TTL))
+    repo.add(_session("sess-morta", fingerprint="fp::morta", expires_at=_NOW - _TTL))
+
+    removidas = repo.purge_expired(_NOW)
+
+    assert removidas == 1
+    assert repo.find_by_fingerprint("fp::viva") is not None
+    assert repo.find_by_fingerprint("fp::morta") is None
+
+
+def test_purge_expired_poupa_sessao_revogada_mas_ainda_nao_expirada() -> None:
+    """Revogada e válida continua sendo o registro de uma credencial ativa-até-revogar.
+
+    O expurgo é por expiração, não por revogação — preservar o `revoked_at` de uma
+    sessão ainda não expirada é o que sustenta a forense do ADR 2.2.0001.
+    """
+    repo = InMemorySessionRepository()
+    repo.add(
+        _session(
+            "sess-revogada",
+            fingerprint="fp::revogada",
+            expires_at=_NOW + _TTL,
+            revoked_at=_NOW,
+        )
+    )
+
+    assert repo.purge_expired(_NOW) == 0
+    assert repo.find_by_fingerprint("fp::revogada") is not None
+
+
+def test_purge_expired_em_repositorio_vazio_devolve_zero() -> None:
+    assert InMemorySessionRepository().purge_expired(_NOW) == 0

@@ -5,6 +5,9 @@ Fake, não mock: guarda estado observável em `dict`, então os testes verificam
 (`assert_called_with`), que acoplam o teste à implementação do use case.
 """
 
+from restaurant_hub.features.identity.application.errors import (
+    RestaurantAlreadyExistsError,
+)
 from restaurant_hub.features.identity.application.ports.out.restaurant_repository import (
     RestaurantRepository,
 )
@@ -22,6 +25,12 @@ class InMemoryRestaurantRepository:
         self.find_calls = 0
 
     def add(self, restaurant: Restaurant) -> None:
+        # Inserção, não upsert (ADR 2.3.0003): a atribuição direta sobrescrevia em
+        # silêncio o que a PK de `restaurants` rejeita — o fake sendo mais gentil
+        # que a produção, que é o jeito exato de um teste passar e o sistema
+        # falhar ao vivo.
+        if restaurant.id in self.restaurants:
+            raise RestaurantAlreadyExistsError(restaurant.id)
         self.restaurants[restaurant.id] = restaurant
 
     def find_by_id(self, restaurant_id: RestaurantId) -> Restaurant | None:

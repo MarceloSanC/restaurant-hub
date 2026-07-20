@@ -110,7 +110,7 @@ graph LR
 | `1.2-ci` | CI no GitHub Actions | bootstrap | done | `1.1-bootstrap` |
 | `2.1-identity-domain` | Domínio de tenancy e acesso | domain | done | `1.2-ci` |
 | `2.2-identity-application` | Use cases de tenancy e acesso | application | done | `2.1-identity-domain` |
-| `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | draft | `2.2-identity-application` |
+| `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | done | `2.2-identity-application` |
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | draft | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | draft | `2.4-identity-http` |
 | `3.1-staff-domain` | Domínio de equipe | domain | draft | `2.5-email-invite` |
@@ -358,7 +358,7 @@ skills_hint: [pytest-with-fakes, task-ordering-hex, hex-arch-python]
 
 #### Stage 2.3 — `2.3-identity-persistence`
 
-**Descrição humana:** repositórios PostgreSQL de identity (com `tenant_id` em todas as tabelas — ROADMAP-3), mappers, migrations iniciais e testes de integração + contrato (fake ≡ real).
+**Descrição humana:** repositórios PostgreSQL de identity (com `tenant_id` nas tabelas em que ele é dado — ROADMAP-3; `sessions` é a exceção deliberada e alcança o tenant por `user_id`, ADR 2.3.0002), mappers, migrations iniciais e testes de integração + contrato (fake ≡ real).
 
 ```yaml
 stage_id: 2.3-identity-persistence
@@ -381,6 +381,36 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [repository-pattern, composition-root, pytest-with-fakes]
 ```
+
+> **Nota (2026-07-19): bloco corrigido durante a execução da Stage (issue #22)** —
+> file-scope e contratos reais.
+>
+> - **`tenant_id` NÃO fica em todas as tabelas — a descrição humana acima foi corrigida.**
+>   `sessions` não recebe a coluna: o DTO `Session` não carrega tenant, então ela seria
+>   inatingível pelo port e impossível para o fake; e, como o tenant de um `platform_admin`
+>   é nulo, a FK composta sobre ela seria MATCH SIMPLE — desligada justamente no caso que
+>   deveria proteger. O isolamento de sessão chega por `user_id`. Decisão validada
+>   empiricamente contra Postgres 16 (com controle negativo) — ADR 2.3.0002.
+> - **Sessão persistida (reconciliação pendente do ADR 2.2.0001).** O bloco não citava
+>   `session_repository.py` nem a tabela `sessions`; ambos existem, como consequência
+>   direta do 6º port introduzido na 2.2. O ADR 2.2.0001 §Consequences já previa esta
+>   reconciliação.
+> - **Arquivos não previstos:** `integrity_errors.py` (tradução de violação de constraint
+>   por `diag.constraint_name`, sem parsing de mensagem), a infra do Alembic
+>   (`migrations/env.py`, `alembic.ini`, `script.py.mako`), e ajustes em
+>   `shared/infrastructure/{config/settings,database/connection}.py` + `pyproject.toml`
+>   (driver `psycopg`).
+> - **`contratos_introduzidos: []` ficou desatualizado:** a Stage estendeu os ports-out de
+>   2.2 com os erros de chave duplicada (`restaurant/unit/user/session_repository`,
+>   `errors.py`, `credentials.py`) — extensão aditiva, não contraditória.
+> - **`.github/workflows/ci.yml` alterado:** o job de gate passou a exigir Postgres real
+>   (ADR 2.3.0001) — sem isso os testes de integração passariam por ausência.
+> - **5 ADRs novos:** 2.3.0001 (integração exige Postgres real), 2.3.0002 (schema, tenant e
+>   constraints), 2.3.0003 (`add` é inserção, não upsert), 2.3.0004 (retenção e purge de
+>   sessão), 2.3.0005 (nomes persistidos verbatim).
+> - `complexidade_estimada: M` e `gate_mode: strict` seguem válidos (12 Tasks + commits de
+>   correção de revisão e de auditoria). Os desvios de execução estão na §7 do
+>   `technical.md`.
 
 #### Stage 2.4 — `2.4-identity-http`
 
@@ -1114,6 +1144,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-17 | Stage 1.2-ci concluída (`done`); bloco corrigido (nota datada — arquivos reais + ADR); Step 1 → `done` (fundação fechada) | Execução da Stage 1.2 — issue #9 |
 | 2026-07-18 | Stage 2.1-identity-domain concluída (`done`); bloco corrigido (nota datada — file-scope e contratos reais); Step 2 → `in_progress` (primeiro código de domínio do projeto) | Execução da Stage 2.1 — issue #17 |
 | 2026-07-19 | Stage 2.2-identity-application concluída (`done`); bloco corrigido (nota datada — 6º port `SessionRepository`, file-scope real e consequências para 2.3/2.4) | Execução da Stage 2.2 — issue #20 |
+| 2026-07-19 | Stage 2.3-identity-persistence concluída (`done`); bloco corrigido (nota datada — tabela `sessions` e `session_repository` reconciliados do ADR 2.2.0001, `integrity_errors.py`, CI exigindo Postgres real, 5 ADRs) | Execução da Stage 2.3 — issue #22 |
 
 ## Próxima revisão de roadmap
 

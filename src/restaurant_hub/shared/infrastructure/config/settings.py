@@ -34,9 +34,12 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     # Database
     # ---------------------------------------------------------------------------
-    # Formato: postgresql://usuario:senha@host:porta/banco
-    # Em testes: pode ser sobrescrito para sqlite:///./test.db
-    database_url: str = "postgresql://user:pass@localhost:5432/restaurant_hub"
+    # Formato: postgresql+psycopg://usuario:senha@host:porta/banco
+    #
+    # O esquema nomeia o driver de propósito (Stage 2.3): `postgresql://` sozinho
+    # faz o SQLAlchemy procurar o psycopg2, que este projeto não declara. Nomear
+    # o driver impede que a escolha dependa de um default silencioso.
+    database_url: str = "postgresql+psycopg://user:pass@localhost:5432/restaurant_hub"
 
     # ---------------------------------------------------------------------------
     # Server

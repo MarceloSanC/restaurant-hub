@@ -31,7 +31,14 @@ class SessionRepository(Protocol):
     """Contrato de persistência de sessões de refresh."""
 
     def add(self, session: Session) -> None:
-        """Persiste uma sessão recém-criada."""
+        """Persiste uma sessão recém-criada.
+
+        **É inserção, não upsert** (ADR 2.3.0003). Id já gravado levanta
+        `SessionAlreadyExistsError`; fingerprint já gravado levanta
+        `SessionFingerprintAlreadyExistsError`. Os dois erros são distintos de
+        propósito: id repetido é colisão, fingerprint repetido é o sinal de reuso
+        de refresh token que esta tabela existe para tornar detectável.
+        """
         ...
 
     def find_by_fingerprint(self, fingerprint: str) -> Session | None:
@@ -44,4 +51,23 @@ class SessionRepository(Protocol):
 
     def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
         """Revoga todas as sessões do usuário (demissão). Mesmas regras."""
+        ...
+
+    def purge_expired(self, before: datetime) -> int:
+        """Remove as sessões já expiradas em `before`. Devolve quantas removeu.
+
+        O predicado é `expires_at <= before`, **inclusive** — a mesma fronteira de
+        `Session.is_active`, que é half-open (em `now == expires_at` a sessão já
+        expirou). Um `<` aqui deixaria para trás exatamente a sessão que
+        `is_active` considera expirada, e "expirada" e "expurgável" passariam a
+        discordar na fronteira.
+
+        **A política de retenção é do chamador, não deste port** (ADR 2.3.0004):
+        quem quiser preservar 90 dias de histórico forense passa `now - 90d`.
+        Enterrar a janela aqui destruiria, num prazo que ninguém escolheu, o
+        `revoked_at` que o ADR 2.2.0001 preserva justamente para investigar reuso
+        de token.
+
+        Sessão ainda válida nunca é removida, revogada ou não.
+        """
         ...
