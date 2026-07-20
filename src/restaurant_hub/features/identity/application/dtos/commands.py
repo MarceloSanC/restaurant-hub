@@ -68,6 +68,28 @@ class AuthenticateUserCommand:
 
 
 @dataclass(frozen=True)
+class RefreshSessionCommand:
+    """Pedido de rotação: troca um refresh token por um par novo.
+
+    Carrega o **valor** do token, não o fingerprint: derivá-lo é papel do
+    `TokenIssuer`, e exigir que o chamador o derivasse espalharia criptografia
+    para fora do port.
+    """
+
+    refresh_token: str
+
+
+@dataclass(frozen=True)
+class RevokeSessionCommand:
+    """Logout: revoga a sessão do refresh token apresentado.
+
+    A autoridade da operação é a **posse** do token — não exige access token.
+    """
+
+    refresh_token: str
+
+
+@dataclass(frozen=True)
 class AuthorizeActionCommand:
     """Pedido de autorização de uma ação.
 
