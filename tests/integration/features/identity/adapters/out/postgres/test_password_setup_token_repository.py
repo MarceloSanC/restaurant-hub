@@ -134,13 +134,46 @@ def test_tabela_nao_tem_coluna_para_o_valor_do_token(cenario: Engine) -> None:
 
 
 def test_schema_da_migration_bate_com_o_metadata(cenario: Engine) -> None:
-    """CA16 — a migration `0002` e `tables.py` descrevem a mesma tabela."""
-    inspetor = inspect(cenario)
-    esperadas = {c.name for c in identity_metadata.tables["password_setup_tokens"].columns}
+    """CA16 — a migration `0002` e `tables.py` descrevem a mesma tabela.
 
-    reais = {c["name"] for c in inspetor.get_columns("password_setup_tokens")}
+    Compara nome **e nulabilidade**, não só o conjunto de nomes. A migration
+    duplica o schema à mão de propósito (é registro histórico congelado), então
+    é justamente o artefato que mais tende a divergir — e um `nullable=False`
+    perdido em `expires_at` deixaria passar um token sem prazo, isto é, um token
+    que a checagem de expiração nunca recusa.
+    """
+    inspetor = inspect(cenario)
+    esperadas = {
+        c.name: c.nullable for c in identity_metadata.tables["password_setup_tokens"].columns
+    }
+
+    reais = {c["name"]: c["nullable"] for c in inspetor.get_columns("password_setup_tokens")}
 
     assert reais == esperadas
+
+
+def test_indices_da_migration_existem_no_banco(cenario: Engine) -> None:
+    """Os dois índices servem `invalidate_all_for_user` e `purge_expired`.
+
+    Sem eles as duas operações viram varredura sequencial — não quebra nada, e é
+    exatamente por isso que a ausência passaria despercebida até a tabela crescer.
+    """
+    nomes = {i["name"] for i in inspect(cenario).get_indexes("password_setup_tokens")}
+
+    assert {"ix_setup_tokens_user_id", "ix_setup_tokens_expires_at"} <= nomes
+
+
+def test_token_de_usuario_inexistente_e_recusado_pela_fk(cenario: Engine) -> None:
+    """A FK é o que obriga o use case a criar o usuário **antes** do token.
+
+    Sem este teste, inverter as duas escritas em `invite_user` mantinha a suíte
+    inteira verde — o fake in-memory não tem integridade referencial — e todo
+    convite quebrava em produção com `IntegrityError` em `fk_setup_tokens_user`.
+    """
+    repo = PostgresPasswordSetupTokenRepository(cenario)
+
+    with pytest.raises(IntegrityError):
+        repo.add(_token("orfao", user_id="usuario-que-nao-existe"))
 
 
 def test_fingerprint_repetido_e_recusado_pelo_banco(cenario: Engine) -> None:

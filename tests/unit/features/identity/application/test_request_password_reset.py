@@ -45,12 +45,32 @@ _CADASTRADO = "cadastrado@x.com"
 _DESCONHECIDO = "nunca-vi@x.com"
 
 
+class RepositorioDeTokensQueFalha(InMemoryPasswordSetupTokenRepository):
+    """Falha em toda escrita — simula banco somente-leitura, disco cheio, deadlock."""
+
+    def add(self, token: PasswordSetupToken) -> None:
+        raise RuntimeError("banco indisponível para escrita")
+
+    def invalidate_all_for_user(
+        self,
+        user_id: UserId,
+        consumed_at: datetime,
+        purpose: SetupTokenPurpose | None = None,
+    ) -> int:
+        raise RuntimeError("banco indisponível para escrita")
+
+
 class Cenario:
     """Um usuário cadastrado; o resto dos e-mails não existe."""
 
-    def __init__(self, *, sender: RecordingEmailSender | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        sender: RecordingEmailSender | None = None,
+        tokens: InMemoryPasswordSetupTokenRepository | None = None,
+    ) -> None:
         self.users = InMemoryUserRepository()
-        self.tokens = InMemoryPasswordSetupTokenRepository()
+        self.tokens = tokens if tokens is not None else InMemoryPasswordSetupTokenRepository()
         self.issuer = FakeSetupTokenIssuer()
         self.sender = sender if sender is not None else RecordingEmailSender()
         self.hasher = FakePasswordHasher()
@@ -180,6 +200,36 @@ class TestFalhaDoSenderEAbsorvida:
         cenario.use_case.execute(_comando(_CADASTRADO))
 
         assert len(cenario.tokens.tokens) == 1
+
+
+class TestFalhaDeEscritaTambemEAbsorvida:
+    """A regra 8 é sobre o **efeito colateral assimétrico**, não sobre o sender.
+
+    Emitir e gravar o token também só acontece para e-mail cadastrado. Com a
+    emissão fora do `try`, bastava o banco recusar escrita — failover para
+    réplica somente-leitura, disco cheio, deadlock — para o cadastrado dar 500 e
+    o desconhecido dar 202: enumeração completa pelo status, sem medir tempo.
+    """
+
+    def test_falha_ao_gravar_o_token_nao_levanta(self) -> None:
+        cenario = Cenario(tokens=RepositorioDeTokensQueFalha())
+
+        assert cenario.use_case.execute(_comando(_CADASTRADO)) is None
+
+    def test_retorno_continua_identico_ao_do_email_desconhecido(self) -> None:
+        cenario = Cenario(tokens=RepositorioDeTokensQueFalha())
+
+        com_falha = cenario.use_case.execute(_comando(_CADASTRADO))
+        desconhecido = cenario.use_case.execute(_comando(_DESCONHECIDO))
+
+        assert com_falha == desconhecido
+
+    def test_falha_de_escrita_nao_envia_mensagem(self) -> None:
+        cenario = Cenario(tokens=RepositorioDeTokensQueFalha())
+
+        cenario.use_case.execute(_comando(_CADASTRADO))
+
+        assert cenario.sender.sent == ()
 
 
 class TestInvalidacaoEscopadaPorProposito:

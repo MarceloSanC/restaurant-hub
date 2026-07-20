@@ -91,8 +91,20 @@ class RequestPasswordResetUseCase:
             # chamador não tem como saber que foi por aqui que passou.
             return
 
-        valor_do_token = self._emitir_token(credenciais.user.id)
-        self._enviar(command.email.value, valor_do_token)
+        # **Todo** o caminho "existe" fica dentro do `try`, e não apenas o envio.
+        #
+        # A regra 8 é sobre o **efeito colateral assimétrico**, não sobre a classe
+        # `EmailSender`: emitir e gravar o token também só acontece para e-mail
+        # cadastrado. Com a emissão fora daqui, bastava o banco recusar escrita —
+        # failover para réplica somente-leitura, disco cheio, deadlock no UPDATE
+        # de invalidação, timeout de statement — para o e-mail cadastrado dar 500
+        # e o desconhecido dar 202. Enumeração completa pelo status, sem medir
+        # tempo nenhum, exatamente o ataque que esta regra existe para fechar.
+        try:
+            valor_do_token = self._emitir_token(credenciais.user.id)
+            self._enviar(command.email.value, valor_do_token)
+        except Exception:
+            return
 
     def _emitir_token(self, user_id: UserId) -> str:
         """Invalida as redefinições anteriores e emite uma nova."""
@@ -119,12 +131,12 @@ class RequestPasswordResetUseCase:
         return emitido.value
 
     def _enviar(self, destinatario: str, valor_do_token: str) -> None:
-        """Envia a mensagem, **absorvendo** qualquer falha do provedor.
+        """Compõe e envia a mensagem.
 
-        O `except Exception` largo é deliberado e não é preguiça: o que importa
-        não é qual erro o adapter levantou, e sim que **nenhum** deles atravesse
-        para o cliente. Um `except` estreito deixaria passar o erro que ninguém
-        previu — que é justamente o que um atacante procuraria.
+        **A absorção da falha não acontece aqui**: ela envolve o caminho inteiro,
+        em `execute`. Um `try` só em volta do envio deixaria a emissão de fora, e
+        um erro de escrita no repositório reabriria o oráculo pelo status —
+        cadastrado dá 500, desconhecido dá 202.
 
         A falha não é silenciada por desprezo ao problema: ela deveria ir para o
         log do servidor. `configure_logging` ainda não está plugado no boot
@@ -133,17 +145,14 @@ class RequestPasswordResetUseCase:
         para não repetir.
         """
         link = f"{self._base_url.rstrip('/')}/definir-senha?token={valor_do_token}"
-        try:
-            self._email_sender.send(
-                EmailMessage(
-                    to=destinatario,
-                    subject=_ASSUNTO,
-                    body_text=(
-                        "Recebemos um pedido para redefinir a sua senha.\n\n"
-                        f"Defina uma senha nova por este link:\n{link}\n\n"
-                        "Se não foi você, ignore esta mensagem."
-                    ),
-                )
+        self._email_sender.send(
+            EmailMessage(
+                to=destinatario,
+                subject=_ASSUNTO,
+                body_text=(
+                    "Recebemos um pedido para redefinir a sua senha.\n\n"
+                    f"Defina uma senha nova por este link:\n{link}\n\n"
+                    "Se não foi você, ignore esta mensagem."
+                ),
             )
-        except Exception:
-            return
+        )

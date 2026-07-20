@@ -56,6 +56,13 @@ class RepositorioQueFalhaAoGravar(InMemoryUserRepository):
         raise RuntimeError("banco indisponível")
 
 
+class SessoesQueFalhamAoRevogar(InMemorySessionRepository):
+    """Falha só em `revoke_all_for_user` — para observar o passo intermediário."""
+
+    def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
+        raise RuntimeError("banco indisponível")
+
+
 class Cenario:
     """Um usuário com um token de convite vivo e uma sessão aberta."""
 
@@ -63,12 +70,13 @@ class Cenario:
         self,
         *,
         users: InMemoryUserRepository | None = None,
+        sessions: InMemorySessionRepository | None = None,
         expires_at: datetime | None = None,
         consumed_at: datetime | None = None,
         com_usuario: bool = True,
     ) -> None:
         self.users = users if users is not None else InMemoryUserRepository()
-        self.sessions = InMemorySessionRepository()
+        self.sessions = sessions if sessions is not None else InMemorySessionRepository()
         self.tokens = InMemoryPasswordSetupTokenRepository()
         self.issuer = FakeSetupTokenIssuer()
         self.hasher = FakePasswordHasher()
@@ -262,20 +270,50 @@ class TestFalhasIndistinguiveis:
         with pytest.raises(InvalidSetupTokenError):
             cenario.use_case.execute(_comando())
 
-    def test_as_quatro_causas_tem_a_mesma_mensagem(self) -> None:
+    def test_todas_as_causas_tem_a_mesma_mensagem(self) -> None:
+        """Cada causa precisa alcançar o seu **próprio** `raise`.
+
+        A primeira versão deste teste passava `token="nunca-emitido"` sempre que
+        o usuário existia — isto é, em três dos quatro cenários —, de modo que
+        três deles caíam no mesmo `raise` de "fingerprint não encontrado" e os
+        argumentos `expires_at`/`consumed_at` eram construídos e ignorados. O
+        `raise` do replay não era comparado por teste nenhum: bastava alguém
+        introduzir uma subclasse com mensagem própria ali para abrir um oráculo
+        de "token real versus chute" com a suíte inteira verde.
+        """
         mensagens = set()
-        for cenario in (
-            Cenario(),
-            Cenario(expires_at=_AGORA - timedelta(seconds=1)),
-            Cenario(consumed_at=_AGORA),
-            Cenario(com_usuario=False),
-        ):
-            token = "nunca-emitido" if cenario.users.users else _VALOR
+
+        # Cada tupla é (cenário, token a apresentar), escolhida para atingir um
+        # `raise` distinto do use case.
+        casos = [
+            (Cenario(), "nunca-emitido"),  # fingerprint desconhecido
+            (Cenario(expires_at=_AGORA - timedelta(seconds=1)), _VALOR),  # expirado
+            (Cenario(consumed_at=_AGORA), _VALOR),  # já consumido
+            (Cenario(com_usuario=False), _VALOR),  # usuário apagado
+        ]
+        for cenario, token in casos:
             with pytest.raises(InvalidSetupTokenError) as capturado:
                 cenario.use_case.execute(_comando(token=token))
             mensagens.add(str(capturado.value))
 
+        # E o replay, que só é alcançável redimindo duas vezes de verdade — é o
+        # `raise` do `consume` que perde a corrida.
+        cenario_replay = Cenario()
+        cenario_replay.use_case.execute(_comando())
+        with pytest.raises(InvalidSetupTokenError) as capturado:
+            cenario_replay.use_case.execute(_comando())
+        mensagens.add(str(capturado.value))
+
         assert len(mensagens) == 1
+
+    def test_falha_ao_revogar_sessoes_ja_consumiu_o_token(self) -> None:
+        """Falha no passo intermediário também deixa a conta mais fechada."""
+        cenario = Cenario(sessions=SessoesQueFalhamAoRevogar())
+
+        with pytest.raises(RuntimeError):
+            cenario.use_case.execute(_comando())
+
+        assert cenario.tokens.tokens[SetupTokenId("tok-1")].consumed_at == _AGORA
 
 
 class TestOrdemFailClosed:
