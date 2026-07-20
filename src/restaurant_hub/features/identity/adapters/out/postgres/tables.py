@@ -45,6 +45,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 
+from restaurant_hub.features.identity.application.dtos.setup_tokens import (
+    SetupTokenPurpose,
+)
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 # `MetaData` próprio do BC (não global do projeto): cada bounded context descreve
@@ -58,6 +61,11 @@ identity_metadata = MetaData()
 # `IntegrityError` em produção.
 _ROLE_VALUES = tuple(role.value for role in Role)
 _ROLE_IN_LIST = ", ".join(f"'{value}'" for value in _ROLE_VALUES)
+
+# Mesma disciplina para o propósito do token: derivado do enum, não repetido à
+# mão. Um propósito novo em `SetupTokenPurpose` sem entrada aqui viraria
+# `IntegrityError` em produção, e só lá.
+_PURPOSE_IN_LIST = ", ".join(f"'{purpose.value}'" for purpose in SetupTokenPurpose)
 
 # Timestamps com fuso e precisão de microssegundo (a mesma do `datetime` do
 # Python). Precisão reduzida truncaria silenciosamente e faria o round-trip
@@ -181,4 +189,39 @@ sessions = Table(
     Index("ix_sessions_user_id", "user_id"),
     # `purge_expired` varre por expiração — sem o índice, o expurgo é sequencial.
     Index("ix_sessions_expires_at", "expires_at"),
+)
+
+
+password_setup_tokens = Table(
+    "password_setup_tokens",
+    identity_metadata,
+    Column("id", Text, nullable=False),
+    Column(
+        "user_id",
+        Text,
+        ForeignKey("users.id", name="fk_setup_tokens_user"),
+        nullable=False,
+    ),
+    Column("purpose", Text, nullable=False),
+    # Apenas o **fingerprint**, nunca o valor do token — mesma disciplina de
+    # `sessions` (ADR 2.2.0001). Não existe coluna capaz de guardar o valor,
+    # então um dump deste banco não devolve nenhum link de convite utilizável, e
+    # a garantia é estrutural em vez de depender de disciplina de escrita.
+    Column("token_fingerprint", Text, nullable=False),
+    Column("issued_at", _TIMESTAMPTZ, nullable=False),
+    Column("expires_at", _TIMESTAMPTZ, nullable=False),
+    # Nulo enquanto o token nunca foi usado. É esta coluna que torna o uso único
+    # verificável: `consume` faz `UPDATE ... WHERE consumed_at IS NULL`, e o
+    # `rowcount` decide quem venceu a corrida entre duas redenções simultâneas.
+    Column("consumed_at", _TIMESTAMPTZ, nullable=True),
+    PrimaryKeyConstraint("id", name="pk_password_setup_tokens"),
+    # Único: `find_by_fingerprint` devolve **um** token, e sem a unicidade o
+    # adapter teria de escolher entre linhas empatadas — escolha que o fake
+    # in-memory resolveria por ordem de inserção, criando divergência silenciosa.
+    UniqueConstraint("token_fingerprint", name="uq_setup_tokens_fingerprint"),
+    CheckConstraint(f"purpose IN ({_PURPOSE_IN_LIST})", name="ck_setup_tokens_purpose_known"),
+    # `invalidate_all_for_user` varre por usuário.
+    Index("ix_setup_tokens_user_id", "user_id"),
+    # `purge_expired` varre por expiração — sem o índice, o expurgo é sequencial.
+    Index("ix_setup_tokens_expires_at", "expires_at"),
 )

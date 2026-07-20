@@ -44,6 +44,8 @@ _ALEMBIC_INI = _REPO_ROOT / "migrations" / "alembic.ini"
 # duas listas separadas divergiriam no dia em que uma tabela nova entrasse só numa
 # delas — o sintoma seria um erro de FK confuso numa suíte e não na outra.
 TABELAS_EM_ORDEM_DE_LIMPEZA = (
+    # Stage 2.5 — antes de `users`, que é o alvo da sua FK.
+    "password_setup_tokens",
     "sessions",
     "unit_memberships",
     "users",
