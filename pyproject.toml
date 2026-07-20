@@ -25,6 +25,18 @@ dependencies = [
     # Validação e configuração
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    # Segurança (Stage 2.4 — ADR 2.4.0004)
+    #
+    # argon2-cffi: binding de referência para a implementação C do argon2, com
+    # argon2id como default. É a primeira recomendação do OWASP Password Storage
+    # Cheat Sheet. Preterido `passlib` (sem release desde 2020) — o port
+    # `PasswordHasher` já é a camada de abstração, e uma segunda seria um
+    # invólucro não mantido em volta do que se quer usar direto.
+    "argon2-cffi>=23.1",
+    # PyJWT: codec JWT padrão de facto e ativamente mantido. Preteridos
+    # `python-jose` (CVEs acumuladas, manutenção esparsa) e `authlib`
+    # (framework OAuth inteiro onde só se precisa de um codec).
+    "pyjwt>=2.9",
 ]
 
 [project.optional-dependencies]

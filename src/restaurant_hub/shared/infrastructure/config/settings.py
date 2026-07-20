@@ -48,6 +48,45 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # ---------------------------------------------------------------------------
+    # Segurança / tokens (Stage 2.4 — ADR 2.4.0004)
+    # ---------------------------------------------------------------------------
+    # Segredo de assinatura do access token (HS256).
+    #
+    # O default é deliberadamente inseguro E deliberadamente óbvio: um valor que
+    # parecesse plausível seria pior, porque passaria despercebido em revisão.
+    #
+    # NÃO há fail-fast de boot quando `debug=false` e o segredo é o default, e a
+    # razão é concreta: a suíte de testes sobe com `debug=false` (é o default de
+    # `Settings`), então a checagem quebraria os testes em vez da produção.
+    # Escalado como `[finding]` para `6.2-deploy-pipeline`, onde um gate de
+    # configuração de boot é o lugar certo — concept §10 e §13.
+    #
+    # O preenchimento até 32+ bytes não é enfeite: HS256 usa a chave como chave
+    # HMAC-SHA256, e a RFC 7518 §3.2 exige chave de pelo menos o tamanho do
+    # digest (32 bytes). O PyJWT emite `InsecureKeyLengthWarning` abaixo disso —
+    # foi assim que se notou. Um default curto ensinaria o formato errado a quem
+    # copiasse o `.env.example` e trocasse só as palavras.
+    jwt_secret_key: str = "dev-insecure-change-me-0000000000000000"
+
+    # Algoritmo de assinatura. Simétrico porque um único serviço assina e
+    # verifica; a troca para RS256 é mudança de configuração + adapter, sem
+    # tocar no port (ADR 2.4.0002).
+    jwt_algorithm: str = "HS256"
+
+    # TTL do access token, em minutos.
+    #
+    # **É configuração, não constante** — decisão do sponsor de 2026-07-19. A
+    # janela de revogação do sistema é justamente este número: revogar a sessão
+    # corta o refresh na hora, e o access sobrevive no máximo este tempo. Fixá-lo
+    # em código tornaria a principal alavanca de segurança do sistema
+    # inalcançável sem deploy.
+    access_token_ttl_minutes: int = 15
+
+    # TTL do refresh token, em dias. Renovado a cada rotação — não há teto
+    # absoluto de vida de sessão nesta Stage (`[finding]`, concept §13).
+    refresh_token_ttl_days: int = 14
+
+    # ---------------------------------------------------------------------------
     # Logging
     # ---------------------------------------------------------------------------
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL

@@ -1,45 +1,61 @@
 """Fábrica da aplicação FastAPI.
 
 `create_app()` é o único lugar que monta a aplicação: registra middlewares,
-error handlers e routers. Também aciona o composition_root para fazer o wiring
-das dependências e registrá-las via dependency_overrides. Usar uma factory
-(em vez de um app global) facilita testes: cada teste pode chamar create_app()
-com configurações diferentes.
+error handlers e routers. Aciona o composition_root para fazer o wiring das
+dependências. Usar uma factory (em vez de um app global) facilita testes: cada
+teste pode chamar `create_app()` com configurações diferentes.
 
-Este arquivo nasce sem routers de feature no template — registre o router de
-cada feature em `_register_feature_routers()` conforme as features forem
-sendo criadas.
+**Este módulo não conhece feature nenhuma, e isso é uma restrição de arquitetura,
+não estilo.** `shared` não importa de `features` (LAYOUT §7); a única exceção
+declarada é a cadeia indireta `app → composition_root → features.adapters`, e ela
+é suprimida no `.importlinter` **apenas para esse par**. Por isso o composition
+root entrega aqui um `HttpWiring` já montado — router, registrador de handlers e
+mapa de `dependency_overrides` — em vez de este arquivo ir buscar cada peça.
 
-NOTA sobre o diretório `adapters/in/` em features:
-O nome `in` é uma keyword do Python, então não pode ser importado diretamente.
-Use `importlib.import_module()` para carregar o módulo do router, ou injete o
-use case via `FastAPI Depends` a partir do composition_root. Ver
-`docs/LAYOUT.md` §5/§8 para o padrão recomendado.
+O mapa de overrides é a peça que fecha o desenho: as chaves são os provedores
+`_get_*` definidos **dentro** do módulo do router. Alcançá-los daqui exigiria
+importar a feature, e a supressão estreita deixaria de bastar.
 """
 
 from fastapi import FastAPI
 
-from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
-from restaurant_hub.shared.infrastructure.config.settings import get_settings
+from restaurant_hub.composition_root import (
+    ApplicationDependencies,
+    build_http_wiring,
+    wire_dependencies,
+)
+from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
 from restaurant_hub.shared.infrastructure.http.error_handlers import register_error_handlers
 from restaurant_hub.shared.infrastructure.http.middlewares import register_middlewares
 
+API_PREFIX = "/api/v1"
 
-def create_app() -> FastAPI:
+
+def create_app(settings: Settings | None = None) -> FastAPI:
     """Cria, configura e retorna a instância FastAPI pronta para uso.
 
     Ordem de inicialização:
     1. Cria o app FastAPI com metadados das settings
     2. Registra middlewares (CORS, etc.)
-    3. Registra error handlers (DomainError → 422, NotFoundError → 404)
+    3. Registra os error handlers genéricos (NotFoundError → 404, DomainError → 422)
     4. Faz o wiring das dependências via composition_root
-    5. Registra os routers de cada feature
+    5. Registra router, handlers de feature e dependency_overrides
+
+    `settings` é injetável para que um teste possa montar a app com outro banco ou
+    outros TTLs sem mexer em variável de ambiente global — é o que torna o TTL
+    observável como configuração.
+
+    **Os handlers genéricos são registrados antes dos de feature de propósito.**
+    Starlette resolve o handler pelo `__mro__` da exceção, não pela ordem de
+    registro, e como `IdentityError` precede `DomainError`/`NotFoundError` em todas
+    as MROs do BC, o handler específico vence de qualquer forma. Registrar o
+    genérico primeiro deixa claro que ele é a rede de segurança, não o principal.
     """
-    settings = get_settings()
+    cfg = settings or get_settings()
 
     app = FastAPI(
-        title=settings.app_name,
-        debug=settings.debug,
+        title=cfg.app_name,
+        debug=cfg.debug,
         docs_url="/docs",
         redoc_url="/redoc",
     )
@@ -47,30 +63,16 @@ def create_app() -> FastAPI:
     register_middlewares(app)
     register_error_handlers(app)
 
-    deps = wire_dependencies(settings)
+    deps = wire_dependencies(cfg)
     _register_feature_routers(app, deps)
 
     return app
 
 
 def _register_feature_routers(app: FastAPI, deps: ApplicationDependencies) -> None:
-    """Registra os routers HTTP de cada feature.
+    """Registra o que o composition root montou, sem conhecer a feature."""
+    wiring = build_http_wiring(deps)
 
-    Para cada feature, importe seu router e dê `app.include_router(...)`. Use
-    `importlib.import_module()` quando o caminho do módulo contiver o segmento
-    `in` (keyword do Python). Template:
-
-        import importlib
-
-        <feature>_router_module = importlib.import_module(
-            "restaurant_hub.features.<feature>.adapters.in.http.router"
-        )
-        app.dependency_overrides[
-            <feature>_router_module._get_<use_case>
-        ] = lambda: deps.<use_case>
-        app.include_router(<feature>_router_module.router, prefix="/api/v1")
-    """
-    # `deps` é mantido na assinatura para deixar explícito que o registro de
-    # routers consome os use cases do composition root. Quando a primeira
-    # feature chegar, este parâmetro deixa de estar "não utilizado".
-    _ = deps
+    wiring.register_error_handlers(app)
+    app.dependency_overrides.update(wiring.dependency_overrides)
+    app.include_router(wiring.router, prefix=API_PREFIX)

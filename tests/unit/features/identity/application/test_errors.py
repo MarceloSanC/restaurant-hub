@@ -42,7 +42,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_dezesseis_excecoes_esperadas() -> None:
+def test_modulo_declara_as_dezenove_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -64,6 +64,14 @@ def test_modulo_declara_as_dezesseis_excecoes_esperadas() -> None:
         "UnitMembershipAlreadyExistsError",
         "SessionAlreadyExistsError",
         "SessionFingerprintAlreadyExistsError",
+        # Stage 2.4 — falhas de credencial. As três caem em 401 com corpo
+        # genérico: distinguir a causa para o cliente seria oráculo.
+        # `RefreshTokenReuseError` é classe separada de `InvalidRefreshTokenError`
+        # apesar da mensagem idêntica, porque o teste e a auditoria precisam
+        # distinguir "token desconhecido" de "reuso detectado" — o cliente, não.
+        "InvalidAccessTokenError",
+        "InvalidRefreshTokenError",
+        "RefreshTokenReuseError",
     }
 
 

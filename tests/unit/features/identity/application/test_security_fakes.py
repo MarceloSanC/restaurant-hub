@@ -16,6 +16,7 @@ from restaurant_hub.features.identity.application.dtos.identifiers import (
     SessionId,
 )
 from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
+from restaurant_hub.features.identity.application.errors import InvalidAccessTokenError
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UserId,
@@ -123,6 +124,84 @@ def test_access_token_registra_as_claims_emitidas() -> None:
 
     assert "user-1" in token
     assert issuer.issued_claims == [claims]
+
+
+def test_decode_inverte_a_emissao() -> None:
+    """Round-trip do port estendido (Stage 2.4, ADR 2.4.0002).
+
+    A lei é `decode(issue(c)) == c`. O fake a honra guardando o que emitiu, em
+    vez de reconstruir claims a partir do texto do token — reconstruir seria uma
+    segunda implementação, capaz de divergir da primeira em silêncio.
+    """
+    # Relógio injetado: `_NOW` é uma data fixa do passado, e o fake agora expira
+    # de verdade. Sem controlar o relógio, este teste passaria a medir o
+    # calendário em vez do round-trip.
+    issuer = FakeTokenIssuer(clock=FakeClock(_NOW))
+    claims = AccessTokenClaims(
+        subject=UserId("user-1"),
+        role=Role.MANAGER,
+        tenant_id=RestaurantId("rest-1"),
+        session_id=SessionId("sess-1"),
+        expires_at=_NOW + timedelta(minutes=15),
+    )
+
+    assert issuer.decode_access_token(issuer.issue_access_token(claims)) == claims
+
+
+def test_decode_preserva_tenant_nulo_de_platform_admin() -> None:
+    """`tenant_id=None` é estado legítimo, não ausência de dado (ADR 2.1.0002).
+
+    Um decode que colapsasse `None` numa string vazia quebraria a invariante de
+    `User` no outro lado do round-trip.
+    """
+    issuer = FakeTokenIssuer(clock=FakeClock(_NOW))
+    claims = AccessTokenClaims(
+        subject=UserId("admin-1"),
+        role=Role.PLATFORM_ADMIN,
+        tenant_id=None,
+        session_id=SessionId("sess-9"),
+        expires_at=_NOW + timedelta(minutes=15),
+    )
+
+    assert issuer.decode_access_token(issuer.issue_access_token(claims)).tenant_id is None
+
+
+def test_decode_recusa_token_nao_emitido_por_este_emissor() -> None:
+    """Token forjado com o formato certo não passa.
+
+    No adapter real quem barra é a assinatura; no fake, o não-reconhecimento. A
+    exceção precisa ser a mesma, senão o contrato fake≡real não vale.
+    """
+    issuer = FakeTokenIssuer()
+
+    with pytest.raises(InvalidAccessTokenError):
+        issuer.decode_access_token("access::user-1::sess-1")
+
+
+def test_decode_recusa_token_expirado() -> None:
+    """O fake expira de verdade, com relógio injetado.
+
+    Antes ele só checava se reconhecia o valor, e aceitava token vencido para
+    sempre — divergindo do adapter real justamente na metade da lei que o guard
+    HTTP delega inteiramente ao issuer.
+    """
+    clock = FakeClock(_NOW)
+    issuer = FakeTokenIssuer(clock=clock)
+    token = issuer.issue_access_token(
+        AccessTokenClaims(
+            subject=UserId("user-1"),
+            role=Role.EMPLOYEE,
+            tenant_id=RestaurantId("rest-1"),
+            session_id=SessionId("sess-1"),
+            expires_at=_NOW + timedelta(minutes=15),
+        )
+    )
+    assert issuer.decode_access_token(token).subject == UserId("user-1")
+
+    clock.advance(timedelta(minutes=15))
+
+    with pytest.raises(InvalidAccessTokenError):
+        issuer.decode_access_token(token)
 
 
 def test_fake_clock_fica_parado_e_avanca_sob_demanda() -> None:

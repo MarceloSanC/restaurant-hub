@@ -41,6 +41,55 @@ class InvalidCredentialsError(IdentityError):
         super().__init__("credenciais inválidas")
 
 
+class InvalidAccessTokenError(IdentityError):
+    """Access token ausente, malformado, mal assinado ou expirado (Stage 2.4).
+
+    **Uma exceção só para todas as causas, de propósito.** Distinguir "expirado"
+    de "assinatura inválida" de "sujeito inexistente" na resposta entregaria ao
+    atacante um mapa do que ele acertou. Vale aqui a mesma regra que fez
+    `InvalidCredentialsError` ter mensagem única.
+
+    É também o destino da conversão que o guard HTTP faz do `UserNotFoundError`
+    do **ator**: um token cujo sujeito não existe mais é credencial inválida
+    (401), não recurso ausente (404) — concept §6.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("token de acesso inválido")
+
+
+class InvalidRefreshTokenError(IdentityError):
+    """Refresh token desconhecido, expirado ou sem usuário correspondente.
+
+    Mensagem genérica pelo mesmo motivo de `InvalidAccessTokenError`. Note que
+    **não** cobre o refresh já revogado: aquele é reuso, tem exceção própria, e
+    dispara resposta ativa.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("token de renovação inválido")
+
+
+class RefreshTokenReuseError(IdentityError):
+    """Refresh token já revogado foi reapresentado — sinal de reuso.
+
+    É o evento que o ADR 2.2.0001 desenhou a sessão para tornar **detectável**:
+    `find_by_fingerprint` não filtra justamente para que um token já rotacionado
+    volte como sessão revogada, em vez de voltar `None` e ficar indistinguível de
+    um token forjado. Quem levanta esta exceção já revogou todas as sessões do
+    usuário.
+
+    **A mensagem é idêntica à de `InvalidRefreshTokenError`, e a classe é
+    separada mesmo assim.** Para o cliente as duas respostas são o mesmo 401
+    genérico — contar ao portador de um token roubado que a detecção disparou só
+    o ajuda. Para o teste e para a auditoria, porém, os dois cenários precisam ser
+    distinguíveis, e é a classe que os distingue.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("token de renovação inválido")
+
+
 class PermissionDeniedError(IdentityError):
     """Eixo RBAC: o papel do ator não concede a permissão exigida."""
 

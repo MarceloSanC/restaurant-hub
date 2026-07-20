@@ -39,3 +39,28 @@ class TokenIssuer(Protocol):
     def fingerprint(self, refresh_token_value: str) -> str:
         """Deriva o fingerprint de um refresh token, para consulta na sessão."""
         ...
+
+    def decode_access_token(self, token: str) -> AccessTokenClaims:
+        """Verifica um access token e devolve as suas claims (Stage 2.4).
+
+        **Lei:** `decode_access_token(issue_access_token(c))` devolve `c`, e
+        **nada mais** atravessa este método. Verificar significa assinatura *e*
+        expiração; qualquer falha — assinatura inválida, formato quebrado, token
+        expirado, algoritmo inesperado, claim ausente — levanta
+        `InvalidAccessTokenError`. **Nunca** devolve claims de um token que não
+        passou na verificação.
+
+        **Não existe variante "decodificar sem verificar", e a ausência é
+        deliberada.** Um método desses é o footgun clássico: alguém o alcança
+        "só para ler o subject" num log ou numa métrica, e a verificação some do
+        caminho sem que nenhum teste perceba — o token passa a ser confiável por
+        omissão.
+
+        Mora neste port, e não num `AccessTokenVerifier` separado, porque
+        emissão e verificação compartilham segredo e algoritmo: separá-las
+        criaria dois pontos de configuração capazes de divergir em silêncio, e a
+        divergência se manifestaria como "todo token é inválido" — que parece bug
+        de autenticação, não de configuração, com as duas metades corretas
+        isoladamente. ADR 2.4.0002.
+        """
+        ...

@@ -63,9 +63,10 @@ _RESULT_CLASSES = (
 # Prefixo dos módulos de entidade — o que um result nunca pode carregar.
 _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 
-# 5 commands + 5 results + Session + IssuedRefreshToken + AccessTokenClaims +
+# 7 commands (os 5 da 2.2 + RefreshSessionCommand e RevokeSessionCommand da 2.4)
+# + 5 results + Session + IssuedRefreshToken + AccessTokenClaims +
 # UserCredentials. Guarda contra o teste de imutabilidade virar vácuo.
-_TOTAL_DE_DTOS = 14
+_TOTAL_DE_DTOS = 16
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:

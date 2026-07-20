@@ -11,7 +11,7 @@ vira 4xx, em vez de estourar dentro do use case.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
@@ -53,7 +53,13 @@ class CreateUserCommand:
     """
 
     email: Email
-    plain_password: str
+    # `repr=False` pelo mesmo motivo dos commands de sessão e de
+    # `UserCredentials.password_hash`: o `SecretStr` do schema morre no boundary,
+    # em `get_secret_value()`. Deste ponto em diante é a senha em claro que
+    # atravessa o use case, e ela fica nos locals do frame que levanta
+    # `EmailAlreadyRegisteredError` — justamente o frame que alguém inspeciona.
+    # Senha é pior que refresh token: o humano a reusa em outros sistemas.
+    plain_password: str = field(repr=False)
     role: Role
     tenant_id: RestaurantId | None
     unit_ids: Sequence[UnitId] = ()
@@ -64,7 +70,38 @@ class AuthenticateUserCommand:
     """Tentativa de login por e-mail e senha."""
 
     email: Email
-    plain_password: str
+    # `repr=False` — ver `CreateUserCommand`. Aqui o frame em risco é o que
+    # levanta `InvalidCredentialsError`, que é o mais inspecionado do sistema.
+    plain_password: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class RefreshSessionCommand:
+    """Pedido de rotação: troca um refresh token por um par novo.
+
+    Carrega o **valor** do token, não o fingerprint: derivá-lo é papel do
+    `TokenIssuer`, e exigir que o chamador o derivasse espalharia criptografia
+    para fora do port.
+    """
+
+    # `repr=False` pelo mesmo motivo que `UserCredentials.password_hash` (2.3):
+    # o repr default de uma dataclass imprime o campo inteiro em qualquer
+    # traceback com `--showlocals`, captura de locals do Sentry ou log de debug.
+    # Aqui pesa mais que lá — um refresh token é credencial bearer VIVA, não um
+    # hash. O `SecretStr` do schema morre no boundary; este command atravessa o
+    # use case e está nos locals do frame que levanta `RefreshTokenReuseError`,
+    # que é justamente o frame que alguém vai querer inspecionar.
+    refresh_token: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class RevokeSessionCommand:
+    """Logout: revoga a sessão do refresh token apresentado.
+
+    A autoridade da operação é a **posse** do token — não exige access token.
+    """
+
+    refresh_token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
