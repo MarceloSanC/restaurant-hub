@@ -56,6 +56,21 @@ class RepositorioQueFalhaAoGravar(InMemoryUserRepository):
         raise RuntimeError("banco indisponível")
 
 
+class TokensQuePerdemACorrida(InMemoryPasswordSetupTokenRepository):
+    """`is_usable` diz sim, `consume` diz não — a corrida perdida, em laboratório.
+
+    É o **único** jeito de exercitar a linha que torna o replay impossível. No
+    caminho sequencial ela é inalcançável: quando o mesmo token volta, ele já está
+    consumido e `is_usable` barra antes. A linha só executa quando duas redenções
+    simultâneas passam juntas pela checagem barata e o `UPDATE` condicional
+    escolhe uma — que é exatamente o cenário de produção que o teste de
+    concorrência contra Postgres cobre do lado do adapter.
+    """
+
+    def consume(self, token_id: SetupTokenId, consumed_at: datetime) -> bool:
+        return False
+
+
 class SessoesQueFalhamAoRevogar(InMemorySessionRepository):
     """Falha só em `revoke_all_for_user` — para observar o passo intermediário."""
 
@@ -66,18 +81,24 @@ class SessoesQueFalhamAoRevogar(InMemorySessionRepository):
 class Cenario:
     """Um usuário com um token de convite vivo e uma sessão aberta."""
 
-    def __init__(
+    # `noqa: PLR0913` — cada parâmetro liga/desliga um cenário do grafo de fakes.
+    def __init__(  # noqa: PLR0913
         self,
         *,
         users: InMemoryUserRepository | None = None,
         sessions: InMemorySessionRepository | None = None,
+        tokens_perdem_corrida: bool = False,
         expires_at: datetime | None = None,
         consumed_at: datetime | None = None,
         com_usuario: bool = True,
     ) -> None:
         self.users = users if users is not None else InMemoryUserRepository()
         self.sessions = sessions if sessions is not None else InMemorySessionRepository()
-        self.tokens = InMemoryPasswordSetupTokenRepository()
+        self.tokens = (
+            TokensQuePerdemACorrida()
+            if tokens_perdem_corrida
+            else InMemoryPasswordSetupTokenRepository()
+        )
         self.issuer = FakeSetupTokenIssuer()
         self.hasher = FakePasswordHasher()
         self.clock = FakeClock(_AGORA)
@@ -228,6 +249,25 @@ class TestReplay:
         assert credenciais is not None
         assert cenario.hasher.verify(_SENHA_NOVA, credenciais.password_hash) is True
         assert cenario.hasher.verify("senha-do-atacante", credenciais.password_hash) is False
+
+    def test_perder_a_corrida_do_consume_falha(self) -> None:
+        """A linha que torna o replay impossível, exercitada.
+
+        Cenário: duas redenções simultâneas do mesmo token passam ambas por
+        `is_usable` (ainda não consumido) e o `UPDATE` condicional escolhe uma. A
+        perdedora recebe `False` do `consume` — e **tem** de recusar, sem gravar
+        senha nem revogar nada. Se este `raise` sumisse, a segunda requisição
+        escreveria a senha do atacante por cima da da vítima.
+        """
+        cenario = Cenario(tokens_perdem_corrida=True)
+
+        with pytest.raises(InvalidSetupTokenError):
+            cenario.use_case.execute(_comando())
+
+        assert cenario.sessions.sessions[SessionId("sess-1")].revoked_at is None
+        credenciais = cenario.users.find_credentials_by_email(Email("convidado@x.com"))
+        assert credenciais is not None
+        assert cenario.hasher.verify(_SENHA_NOVA, credenciais.password_hash) is False
 
     def test_token_ja_consumido_falha(self) -> None:
         cenario = Cenario(consumed_at=_AGORA - timedelta(minutes=1))
