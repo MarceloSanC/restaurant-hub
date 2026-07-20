@@ -221,6 +221,54 @@ def test_usuario_duplicado_levanta_erro_de_id_e_nao_de_email(cenario: Engine) ->
 
 
 # ---------------------------------------------------------------------------
+# Conteúdo do `detalhe` traduzido — I11 / CA20
+# ---------------------------------------------------------------------------
+#
+# A classe do erro já é asserida acima. O que estes dois testes travam é o VALOR
+# que entra na mensagem: o repositório escolhe entre `user.email.value` e
+# `user.id` conforme a constraint violada, e sem asserção o ternário colapsa para
+# um dos lados sem derrubar teste nenhum. A mensagem errada não quebra fluxo — ela
+# apenas manda quem está diagnosticando procurar pelo valor que não está em
+# conflito, que é o pior modo de falhar de uma mensagem de erro.
+
+
+def test_detalhe_do_email_duplicado_traz_o_email_e_nao_o_id(cenario: Engine) -> None:
+    """`uq_users_email` → o valor em conflito é o e-mail.
+
+    O id de quem tentou gravar está livre; citá-lo ("e-mail já registrado:
+    'user-2'") apontaria para o dado errado.
+    """
+    repo = PostgresUserRepository(cenario)
+    repo.add(_user("user-1", "dono@x.com", tenant="rest-a"), _HASH)
+
+    with pytest.raises(EmailAlreadyRegisteredError) as exc:
+        repo.add(_user("user-2", "dono@x.com", tenant="rest-b"), _HASH)
+
+    mensagem = str(exc.value)
+    assert "dono@x.com" in mensagem, f"mensagem sem o e-mail em conflito: {mensagem!r}"
+    assert "user-2" not in mensagem, f"mensagem citou o id, que não está em conflito: {mensagem!r}"
+
+
+def test_detalhe_do_id_duplicado_traz_o_id_e_nao_o_email(cenario: Engine) -> None:
+    """`pk_users` → o valor em conflito é o id.
+
+    O e-mail do segundo `add` é outro e está livre, então uma mensagem que o
+    citasse acusaria um dado que não tem problema nenhum.
+    """
+    repo = PostgresUserRepository(cenario)
+    repo.add(_user("user-1", "dono@x.com", tenant="rest-a"), _HASH)
+
+    with pytest.raises(UserAlreadyExistsError) as exc:
+        repo.add(_user("user-1", "outro@x.com", tenant="rest-a"), _HASH)
+
+    mensagem = str(exc.value)
+    assert "user-1" in mensagem, f"mensagem sem o id em conflito: {mensagem!r}"
+    assert "outro@x.com" not in mensagem, (
+        f"mensagem citou o e-mail, que não está em conflito: {mensagem!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Tenancy imposta pelo banco — I3 / CA7
 # ---------------------------------------------------------------------------
 

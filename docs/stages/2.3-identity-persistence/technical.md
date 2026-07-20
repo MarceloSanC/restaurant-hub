@@ -724,4 +724,50 @@ simultaneamente e falhava com `InvalidEmailError` antes da correção.
 **Razão:** ajuste in-scope revelado pela auditoria — não muda contrato de port,
 fronteira da Stage nem critério de aceite; alinha o código a uma decisão já aprovada.
 
+### 2026-07-19 — [finding] Ordem do `__post_init__` de `User` — especificada na 2.1, com gate só na 2.3 — Claude (autônomo)
+**Stage de origem: 2.1.** O concept §6 desta Stage fixa a ordem interna de
+`User.__post_init__` como `id` vazio → iff de `platform_admin` → tenant ausente, e o
+docstring de `linha_para_usuario` repete a afirmação. O código sempre cumpriu, mas
+nada a travava: os testes de reidratação da 2.1 e da 2.2 corrompem **um** eixo por
+vez, e com um eixo só qualquer ordem passa. Trocar as duas primeiras checagens de
+lugar deixava a suíte inteira verde — medido: 540 testes passam com a ordem invertida.
+**Ação:** fechado por `test_precedencia_id_vazio_vence_iff_de_platform_admin`
+(`tests/unit/features/identity/adapters/test_mappers.py`), com uma linha que viola os
+dois eixos ao mesmo tempo. **O código de domínio não foi tocado** — ele já estava
+correto, e `__post_init__` é da 2.1, fora da camada-alvo desta Stage. O gate entra na
+fronteira de leitura, que é território da 2.3.
+**Razão de fechar mesmo sendo herdado:** é a segunda instância do mesmo padrão do
+achado bloqueante já corrigido nesta Stage (precedência afirmada em doc, sem nada que
+a trave — a `[deviation]` da Task 12 acima). Deixar a segunda aberta depois de ter
+nomeado o padrão seria escolher redescobri-lo.
+
+### 2026-07-19 — [finding] Conteúdo do `detalhe` da tradução de erro não era asserido — Claude (autônomo)
+**Stage de origem: 2.3 (in-scope).** `user_repository.py` escolhe entre
+`user.email.value` e `user.id` conforme a constraint violada, com comentário
+justificando ("uma mensagem dizendo 'e-mail já registrado: user-42' seria pior que
+nenhuma"). CA20 assertava a **classe** do erro, nunca o valor: colapsar o ternário
+para qualquer um dos dois lados não derrubava teste.
+**Ação:** dois testes de integração fixam os dois lados — e-mail duplicado produz
+mensagem que contém o e-mail e **não** o id; id duplicado (com e-mail livre) produz o
+inverso. Provados por mutação nas duas direções.
+
+### 2026-07-19 — [decision] CA19 fica devido para a abertura do PR — Claude (autônomo)
+**Contexto:** CA19 pede a demonstração pontual de que um teste de integração
+deliberadamente quebrado derruba o CI, com link do run colado. O item estava `- [ ]`
+sem evidência e sem justificativa. A justificativa mora **aqui** e não ao lado do
+checkbox porque `check_technical_postexec.py` congela tudo fora dos marcadores
+`post-execution` depois de `status: done` — anotar a linha do §3 reprova o
+`make docs-check`. Quem for fechar a Stage lê esta entrada, não a caixinha.
+**Decisão:** **não é dispensado** — é registrado como pendência com prazo, a ser
+satisfeita no push que abre o PR. A evidência é, por definição, um run no runner do
+GitHub; não há como produzi-la de uma worktree local, e a sessão que fechou estas
+lacunas operou sob proibição explícita de push/PR.
+**Razão para não travar a Stage por isso:** CA19 é **evidência histórica** de que I12
+valia num momento, não proteção regressiva. Quem protege I12 daqui em diante é CA18
+(`tests/unit/test_ci_workflow.py`), já verde, que reprova se o service de Postgres, a
+`DATABASE_URL` ou o `make check` literal sumirem do `ci.yml`. O risco residual de
+adiar CA19 é o de o gate estar quebrado **hoje** no runner sem ninguém notar — e esse
+risco se extingue no primeiro push, porque a suíte inteira exige banco (ADR 2.3.0001):
+um CI sem Postgres funcionante não produz verde, produz 100+ falhas de fixture.
+
 <!-- END: post-execution -->

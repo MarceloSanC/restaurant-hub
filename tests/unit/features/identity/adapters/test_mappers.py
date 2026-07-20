@@ -246,6 +246,34 @@ def test_precedencia_papel_invalido_vence_email_malformado() -> None:
         )
 
 
+def test_precedencia_id_vazio_vence_iff_de_platform_admin() -> None:
+    """Dentro de `__post_init__`, id vazio roda ANTES do iff de tenancy.
+
+    O concept §6 fixa a ordem interna de `User.__post_init__` como id vazio → iff
+    de `platform_admin` → tenant ausente, e o docstring de `linha_para_usuario`
+    repete a afirmação. Até aqui nada a provava: os testes de reidratação corrompem
+    **um** eixo por vez, e com um eixo só qualquer ordem passa — trocar as duas
+    primeiras checagens de lugar não derrubava teste nenhum.
+
+    Esta linha viola os dois eixos ao mesmo tempo (id em branco **e**
+    `platform_admin` com tenant), então só a ordem decide qual exceção o chamador
+    vê; a spec manda `InvalidIdentifierError`.
+
+    `__post_init__` é código da 2.1, fora da camada-alvo desta Stage: o gate entra
+    aqui, na fronteira de leitura, sem tocar no domínio. Ver §7 do technical.
+    """
+    with pytest.raises(InvalidIdentifierError):
+        mappers.linha_para_usuario(
+            _linha(
+                id="   ",
+                email="adm@x.com",
+                role="platform_admin",
+                tenant_id="rest-1",
+                password_hash=_HASH,
+            )
+        )
+
+
 # ---------------------------------------------------------------------------
 # Fuso — I10
 # ---------------------------------------------------------------------------
