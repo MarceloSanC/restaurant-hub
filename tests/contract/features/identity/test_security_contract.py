@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
+    _SENTINELA_DUMMY,
     Argon2PasswordHasher,
 )
 from restaurant_hub.features.identity.adapters.out.security.jwt_issuer import (
@@ -117,8 +118,61 @@ def test_lei_2_dummy_hash_e_inatingivel(hasher: PasswordHasher, tentativa: str) 
 
 
 def test_lei_2_dummy_hash_e_estavel(hasher: PasswordHasher) -> None:
-    """O dummy não muda entre chamadas — as duas implementações concordam nisso."""
+    """O dummy não muda entre chamadas — as duas implementações concordam nisso.
+
+    Estabilidade é **obrigatória** aqui e **proibida** em `unusable_hash()`, e o
+    contraste não é acidente: recomputar o dummy faria o caminho "e-mail
+    inexistente" pagar dois KDFs contra um do caminho "senha errada", reabrindo
+    pelo relógio o oráculo que a lei 2 fecha.
+    """
     assert hasher.dummy_hash() == hasher.dummy_hash()
+
+
+# ---------------------------------------------------------------------------
+# unusable_hash — o hash de uma conta convidada que ainda não definiu senha
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "tentativa",
+    [
+        "",
+        _SENHA,
+        "admin",
+        # **A senha que importa.** `dummy_hash()` é o hash desta string literal,
+        # que está no código-fonte; se `unusable_hash()` fosse "simplificado"
+        # para devolver o dummy, qualquer pessoa faria login como qualquer
+        # convidado que ainda não ativou a conta. Este parâmetro é o que impede
+        # a regressão, e é por isso que ele é nomeado e não genérico
+        # (ADR 2.5.0004).
+        _SENTINELA_DUMMY,
+    ],
+)
+def test_lei_1_unusable_hash_nao_autentica_nenhuma_senha(
+    hasher: PasswordHasher, tentativa: str
+) -> None:
+    """Lei 1 de `unusable_hash` — nenhuma senha conhecida verifica contra ele."""
+    assert hasher.verify(tentativa, hasher.unusable_hash()) is False
+
+
+def test_lei_2_unusable_hash_muda_a_cada_chamada(hasher: PasswordHasher) -> None:
+    """Lei 2 — dois convidados não compartilham a mesma string no banco.
+
+    Um valor constante entregaria, a quem tem leitura em `users`, a lista exata
+    das contas que ainda não foram ativadas — o conjunto de alvos mais valioso
+    do sistema, e justamente aquele para o qual a lei 1 é a única defesa.
+    """
+    assert hasher.unusable_hash() != hasher.unusable_hash()
+
+
+def test_unusable_hash_nao_e_o_dummy_hash(hasher: PasswordHasher) -> None:
+    """A distinção entre os dois métodos é asserida, não confiada à leitura.
+
+    Se alguém apontar `unusable_hash` para `dummy_hash` — o "simplifiquei, era a
+    mesma coisa" que o ADR 2.5.0004 existe para impedir —, este teste falha
+    antes de o código chegar ao banco.
+    """
+    assert hasher.unusable_hash() != hasher.dummy_hash()
 
 
 # ---------------------------------------------------------------------------

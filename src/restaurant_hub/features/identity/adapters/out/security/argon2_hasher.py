@@ -12,6 +12,8 @@ codificada; este adapter não adiciona nenhum.
 concreto** — ver os docstrings de `verify` e `dummy_hash`.
 """
 
+import secrets
+
 from argon2 import PasswordHasher as Argon2Backend
 from argon2.exceptions import Argon2Error
 
@@ -87,3 +89,24 @@ class Argon2PasswordHasher:
         imediato, sem rodar o KDF, o que reabriria o oráculo que o método fecha.
         """
         return self._dummy_hash
+
+    def unusable_hash(self) -> PasswordHash:
+        """Hash argon2id de material aleatório descartado na hora (ADR 2.5.0004).
+
+        **Não é `dummy_hash()`, e a distinção é a diferença entre uma conta
+        pendente segura e um bypass de autenticação.** O dummy é o hash de
+        `_SENTINELA_DUMMY`, um literal deste arquivo; gravá-lo como
+        `users.password_hash` de um convidado faria `POST /auth/login` com essa
+        string devolver o par de tokens da vítima, com o papel e o tenant dela,
+        antes de a vítima abrir o e-mail.
+
+        Aqui a pré-imagem é gerada por `secrets.token_urlsafe` e **não é
+        guardada em lugar nenhum** — sai de escopo ao fim da chamada. Ninguém
+        pode autenticar contra o resultado, nem quem escreveu esta linha.
+
+        Aleatório **por chamada**, e não uma vez no construtor como o dummy: dois
+        convidados não podem compartilhar a mesma string em `users.password_hash`,
+        senão quem lê o banco enumera as contas ainda não ativadas.
+        """
+        # 32 bytes de entropia; o valor morre nesta linha.
+        return PasswordHash(self._backend.hash(secrets.token_urlsafe(32)))
