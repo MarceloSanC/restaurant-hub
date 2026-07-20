@@ -87,6 +87,33 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 14
 
     # ---------------------------------------------------------------------------
+    # Convite e definição de senha (Stage 2.5)
+    # ---------------------------------------------------------------------------
+    # Base do link que vai no e-mail. É a URL da aplicação **web**, não da API:
+    # quem clica é uma pessoa, e o destino é a tela de definir senha.
+    app_base_url: str = "http://localhost:8000"
+
+    # Remetente das mensagens. O `ConsoleSender` não usa (escreve tudo local),
+    # mas o adapter de produção (Stage 6.2) usa — e deixá-lo configurável agora
+    # evita que a troca de adapter arraste uma mudança de Settings junto.
+    email_from: str = "nao-responda@restaurant-hub.local"
+
+    # TTLs dos tokens de definição de senha, em unidades **diferentes** de
+    # propósito, porque os dois prazos não são o mesmo tipo de coisa:
+    #
+    # - um convite tolera o atraso humano de alguém que só abre o e-mail no dia
+    #   seguinte, então conta-se em dias;
+    # - uma redefinição de senha é uma emergência — normalmente a pessoa está com
+    #   o e-mail aberto agora —, e a janela curta é a própria defesa: reduz o
+    #   tempo em que um e-mail interceptado ainda vale.
+    #
+    # Configuráveis pela mesma razão do TTL do access token: são alavancas de
+    # segurança do produto, e fixá-las em código as tornaria inalcançáveis sem
+    # deploy.
+    invitation_token_ttl_hours: int = 72
+    password_reset_token_ttl_minutes: int = 30
+
+    # ---------------------------------------------------------------------------
     # Logging
     # ---------------------------------------------------------------------------
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL

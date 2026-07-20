@@ -37,6 +37,9 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI
 
+from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
+    PostgresPasswordSetupTokenRepository,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
 )
@@ -55,6 +58,9 @@ from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import
 from restaurant_hub.features.identity.adapters.out.security.jwt_issuer import (
     JwtTokenIssuer,
 )
+from restaurant_hub.features.identity.adapters.out.security.setup_token_issuer import (
+    Sha256SetupTokenIssuer,
+)
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
 )
@@ -70,15 +76,25 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.invite_user import (
+    InviteUserUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.request_password_reset import (
+    RequestPasswordResetUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.revoke_session import (
     RevokeSessionUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
+    SetPasswordWithTokenUseCase,
+)
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
 from restaurant_hub.shared.infrastructure.database.connection import build_engine
+from restaurant_hub.shared.infrastructure.email.console_sender import ConsoleSender
 from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import (
     Uuid4Generator,
 )
@@ -103,6 +119,9 @@ class ApplicationDependencies:
     identity_create_restaurant: CreateRestaurantUseCase
     identity_create_unit: CreateUnitUseCase
     identity_create_user: CreateUserUseCase
+    identity_invite_user: InviteUserUseCase
+    identity_request_password_reset: RequestPasswordResetUseCase
+    identity_set_password_with_token: SetPasswordWithTokenUseCase
     identity_authorize_action: AuthorizeActionUseCase
     # `Any` porque o tipo real (`IdentityGuard`) vive num pacote que só pode ser
     # carregado por `importlib` — anotá-lo exigiria o import estático que a
@@ -147,7 +166,15 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     users = PostgresUserRepository(engine)
     sessions = PostgresSessionRepository(engine)
 
+    setup_tokens = PostgresPasswordSetupTokenRepository(engine)
+
     hasher = Argon2PasswordHasher()
+    setup_token_issuer = Sha256SetupTokenIssuer()
+    # `ConsoleSender` é o adapter desta Stage: escreve local, nada sai da máquina
+    # (ADR 0.0.0004 §Decision 7). O provedor real (Resend, kickoff #7) entra na
+    # 6.2 e é a troca de **uma linha** aqui — nenhum use case muda, porque todos
+    # dependem do port `EmailSender`, não desta classe.
+    email_sender = ConsoleSender()
     token_issuer = JwtTokenIssuer(secret_key=cfg.jwt_secret_key, algorithm=cfg.jwt_algorithm)
     clock = SystemClock()
     id_generator = Uuid4Generator()
@@ -156,6 +183,10 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     # (concept §5 regra 12 — este número é a janela de revogação do produto).
     access_ttl = timedelta(minutes=cfg.access_token_ttl_minutes)
     refresh_ttl = timedelta(days=cfg.refresh_token_ttl_days)
+    # Unidades diferentes de propósito — ver `Settings`: convite tolera dias de
+    # atraso humano, redefinição de senha é emergência de minutos.
+    invitation_ttl = timedelta(hours=cfg.invitation_token_ttl_hours)
+    reset_ttl = timedelta(minutes=cfg.password_reset_token_ttl_minutes)
 
     authorize_action = AuthorizeActionUseCase(users=users, units=units)
 
@@ -201,6 +232,37 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
             hasher=hasher,
             id_generator=id_generator,
         ),
+        identity_invite_user=InviteUserUseCase(
+            users=users,
+            restaurants=restaurants,
+            units=units,
+            hasher=hasher,
+            tokens=setup_tokens,
+            token_issuer=setup_token_issuer,
+            email_sender=email_sender,
+            id_generator=id_generator,
+            clock=clock,
+            invitation_ttl=invitation_ttl,
+            base_url=cfg.app_base_url,
+        ),
+        identity_request_password_reset=RequestPasswordResetUseCase(
+            users=users,
+            tokens=setup_tokens,
+            token_issuer=setup_token_issuer,
+            email_sender=email_sender,
+            id_generator=id_generator,
+            clock=clock,
+            reset_ttl=reset_ttl,
+            base_url=cfg.app_base_url,
+        ),
+        identity_set_password_with_token=SetPasswordWithTokenUseCase(
+            users=users,
+            sessions=sessions,
+            tokens=setup_tokens,
+            token_issuer=setup_token_issuer,
+            hasher=hasher,
+            clock=clock,
+        ),
         identity_authorize_action=authorize_action,
         identity_guard=guard,
     )
@@ -218,6 +280,9 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
         router_module._get_create_restaurant: lambda: deps.identity_create_restaurant,
         router_module._get_create_unit: lambda: deps.identity_create_unit,
         router_module._get_create_user: lambda: deps.identity_create_user,
+        router_module._get_invite_user: lambda: deps.identity_invite_user,
+        router_module._get_request_password_reset: (lambda: deps.identity_request_password_reset),
+        router_module._get_set_password_with_token: (lambda: deps.identity_set_password_with_token),
         router_module._get_guard: lambda: deps.identity_guard,
     }
 
