@@ -136,3 +136,44 @@ class UserResponse(BaseModel):
     role: str
     tenant_id: str | None
     unit_ids: list[str]
+
+
+class InviteUserRequest(BaseModel):
+    """Convite de uma pessoa que ainda não tem conta.
+
+    **Sem campo de senha, e a ausência é o ponto da Stage inteira**: quem convida
+    não escolhe, não conhece e não transporta a credencial de quem é convidado.
+
+    Sem `tenant_id` pela mesma razão de `CreateUserRequest` (nota 3 do módulo): o
+    tenant vem do ator.
+    """
+
+    email: str
+    role: str
+    unit_ids: list[str] = Field(default_factory=list)
+
+
+class RequestPasswordResetRequest(BaseModel):
+    """Pedido público de redefinição de senha.
+
+    Só o e-mail. A resposta é a mesma para endereço cadastrado e não cadastrado —
+    não há campo, status ou corpo que os distinga (concept §5 regra 7).
+    """
+
+    email: str
+
+
+class SetPasswordRequest(BaseModel):
+    """Redenção do token: define a senha da conta.
+
+    **Sem campo de usuário, e a ausência é a defesa.** O usuário alvo sai do
+    registro que o servidor gravou ao emitir o token. Se houvesse um `user_id`
+    aqui, quem pedisse uma redefinição para a própria conta definiria a senha de
+    qualquer outra.
+
+    Os dois campos são `SecretStr`: um é credencial bearer viva, o outro é senha
+    em claro. Nenhum dos dois pode aparecer num traceback com `--showlocals`.
+    """
+
+    token: SecretStr
+    password: SecretStr
