@@ -6,21 +6,36 @@ precisar trocar uma implementação (ex: Postgres → DynamoDB), mude APENAS aqu
 Nenhuma regra de negócio deve ser alterada.
 
 Regra: nenhum outro módulo deve instanciar diretamente classes de `infrastructure/`
-ou de `adapters/out/`. Sempre receba dependências via construtor (injeção
-explícita). Há teste mecânico disso em
+ou de `adapters/`. Há teste mecânico disso em
 `tests/unit/features/identity/adapters/test_composition_root_identity.py` — a regra
 é fácil de violar sem querer e invisível numa revisão de diff.
 
 **Sobre o `ignore_imports` que este arquivo motiva** (Stage 2.3): a partir daqui o
-composition root importa `features.identity.adapters.out.postgres`, e
+composition root importa `features.identity.adapters`, e
 `shared/infrastructure/http/app.py` importa o composition root. A cadeia
 `shared → composition_root → features.adapters` viola literalmente o contrato
-`shared-independence` do import-linter, e é a **exceção declarada em LAYOUT §6** —
-prevista, inclusive, no cabeçalho do próprio `.importlinter` desde a Stage 1.1. A
-supressão lá é a mais estreita possível: só este par.
+`shared-independence` do import-linter, e é a **exceção declarada em LAYOUT §6**.
+A supressão lá é a mais estreita possível: só este par.
+
+**Sobre o `importlib` do adapter de entrada** (Stage 2.4): o pacote se chama `in`,
+que é palavra reservada do Python — `from ...adapters.in.http...` é **SyntaxError**,
+não ImportError. Não há como importá-lo estaticamente, e o `importlib` é a única
+forma suportada (LAYOUT §8), não um contorno do gate.
+
+**Por que o composition root entrega também o mapa de `dependency_overrides`:** as
+chaves desse dicionário são os provedores `_get_*` definidos dentro de `router.py`.
+Se `app.py` tivesse de alcançá-los, `shared` passaria a importar feature — e a
+supressão estreita acima deixaria de bastar. Entregando o mapa pronto, `app.py`
+continua sem conhecer feature nenhuma.
 """
 
+import importlib
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
+from typing import Any
+
+from fastapi import APIRouter, FastAPI
 
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
@@ -34,52 +49,91 @@ from restaurant_hub.features.identity.adapters.out.postgres.unit_repository impo
 from restaurant_hub.features.identity.adapters.out.postgres.user_repository import (
     PostgresUserRepository,
 )
-from restaurant_hub.features.identity.application.ports.out.restaurant_repository import (
-    RestaurantRepository,
+from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
+    Argon2PasswordHasher,
 )
-from restaurant_hub.features.identity.application.ports.out.session_repository import (
-    SessionRepository,
+from restaurant_hub.features.identity.adapters.out.security.jwt_issuer import (
+    JwtTokenIssuer,
 )
-from restaurant_hub.features.identity.application.ports.out.unit_repository import (
-    UnitRepository,
+from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
+    AuthenticateUserUseCase,
 )
-from restaurant_hub.features.identity.application.ports.out.user_repository import (
-    UserRepository,
+from restaurant_hub.features.identity.application.use_cases.authorize_action import (
+    AuthorizeActionUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.create_restaurant import (
+    CreateRestaurantUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.create_unit import (
+    CreateUnitUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.create_user import (
+    CreateUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.refresh_session import (
+    RefreshSessionUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.revoke_session import (
+    RevokeSessionUseCase,
+)
+from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
 from restaurant_hub.shared.infrastructure.database.connection import build_engine
+from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import (
+    Uuid4Generator,
+)
+
+_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
 
 
 @dataclass
 class ApplicationDependencies:
     """Contêiner com as dependências montadas e prontas para uso.
 
-    Os campos são anotados com os **ports** (`RestaurantRepository`, …), não com as
-    classes concretas. Não é decoração: é o que faz o type-checker recusar um
-    consumidor que passe a depender de detalhe do Postgres, e o que permite injetar
-    os fakes aqui sem mudar assinatura nenhuma.
-
-    Os repositórios ficam expostos porque a Stage 2.3 ainda não tem use cases
-    montados — eles chegam na 2.4, e então este contêiner passa a expor use cases,
-    com os repositórios recuando para dentro deles.
+    Expõe **use cases**, não repositórios: a partir da Stage 2.4 os repositórios
+    recuam para dentro deles, que é o que o docstring da versão anterior deste
+    arquivo já antecipava. Os tipos são as classes de use case, e não ports,
+    porque use case é código nosso — o que precisa ser abstrato é o que ele
+    **consome**, e isso já está garantido pelas anotações de port nos construtores.
     """
 
-    identity_restaurants: RestaurantRepository
-    identity_units: UnitRepository
-    identity_users: UserRepository
-    identity_sessions: SessionRepository
+    identity_authenticate_user: AuthenticateUserUseCase
+    identity_refresh_session: RefreshSessionUseCase
+    identity_revoke_session: RevokeSessionUseCase
+    identity_create_restaurant: CreateRestaurantUseCase
+    identity_create_unit: CreateUnitUseCase
+    identity_create_user: CreateUserUseCase
+    identity_authorize_action: AuthorizeActionUseCase
+    # `Any` porque o tipo real (`IdentityGuard`) vive num pacote que só pode ser
+    # carregado por `importlib` — anotá-lo exigiria o import estático que a
+    # keyword `in` torna sintaticamente impossível.
+    identity_guard: Any
+
+
+@dataclass
+class HttpWiring:
+    """O que `create_app()` registra, montado sem que ele conheça features.
+
+    São três peças, e as três são necessárias: o router; o registrador de handlers
+    de erro (que recebe o `app`, porque só o app registra exception handlers); e o
+    mapa de overrides, cujas chaves vivem dentro do módulo do router.
+    """
+
+    router: APIRouter
+    register_error_handlers: Callable[[FastAPI], None]
+    dependency_overrides: dict[Callable[..., Any], Callable[..., Any]]
 
 
 def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
     """Monta o grafo de dependências completo e devolve o contêiner.
 
     Chamado uma única vez na inicialização da aplicação (dentro de `create_app()`).
-    Em testes, pode receber um `Settings` apontando para outro banco.
+    Em testes, pode receber um `Settings` apontando para outro banco ou com outros
+    TTLs — é o que torna o TTL observável como configuração (CA25).
 
     **Sem singleton global.** O `Engine` é criado aqui e vive dentro dos
     repositórios que o receberam; não há variável de módulo guardando conexão. Duas
-    chamadas devolvem dois grafos independentes — é o que permite a um teste montar
-    o seu próprio grafo sem contaminar o de outro.
+    chamadas devolvem dois grafos independentes.
 
     `create_engine` **não abre conexão** (o pool é preguiçoso), então montar o grafo
     não exige banco no ar e o boot da aplicação não falha por causa de um Postgres
@@ -87,9 +141,85 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     """
     cfg = settings or get_settings()
     engine = build_engine(cfg.database_url)
+
+    restaurants = PostgresRestaurantRepository(engine)
+    units = PostgresUnitRepository(engine)
+    users = PostgresUserRepository(engine)
+    sessions = PostgresSessionRepository(engine)
+
+    hasher = Argon2PasswordHasher()
+    token_issuer = JwtTokenIssuer(secret_key=cfg.jwt_secret_key, algorithm=cfg.jwt_algorithm)
+    clock = SystemClock()
+    id_generator = Uuid4Generator()
+
+    # TTLs vêm da configuração, nunca de literal no corpo de use case
+    # (concept §5 regra 12 — este número é a janela de revogação do produto).
+    access_ttl = timedelta(minutes=cfg.access_token_ttl_minutes)
+    refresh_ttl = timedelta(days=cfg.refresh_token_ttl_days)
+
+    authorize_action = AuthorizeActionUseCase(users=users, units=units)
+
+    dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.dependencies")
+    guard = dependencies_module.IdentityGuard(
+        token_issuer=token_issuer,
+        authorize_action=authorize_action,
+    )
+
     return ApplicationDependencies(
-        identity_restaurants=PostgresRestaurantRepository(engine),
-        identity_units=PostgresUnitRepository(engine),
-        identity_users=PostgresUserRepository(engine),
-        identity_sessions=PostgresSessionRepository(engine),
+        identity_authenticate_user=AuthenticateUserUseCase(
+            users=users,
+            sessions=sessions,
+            hasher=hasher,
+            token_issuer=token_issuer,
+            id_generator=id_generator,
+            clock=clock,
+            access_token_ttl=access_ttl,
+            refresh_token_ttl=refresh_ttl,
+        ),
+        identity_refresh_session=RefreshSessionUseCase(
+            users=users,
+            sessions=sessions,
+            token_issuer=token_issuer,
+            id_generator=id_generator,
+            clock=clock,
+            access_token_ttl=access_ttl,
+            refresh_token_ttl=refresh_ttl,
+        ),
+        identity_revoke_session=RevokeSessionUseCase(
+            sessions=sessions, token_issuer=token_issuer, clock=clock
+        ),
+        identity_create_restaurant=CreateRestaurantUseCase(
+            restaurants=restaurants, id_generator=id_generator
+        ),
+        identity_create_unit=CreateUnitUseCase(
+            units=units, restaurants=restaurants, id_generator=id_generator
+        ),
+        identity_create_user=CreateUserUseCase(
+            users=users,
+            restaurants=restaurants,
+            units=units,
+            hasher=hasher,
+            id_generator=id_generator,
+        ),
+        identity_authorize_action=authorize_action,
+        identity_guard=guard,
+    )
+
+
+def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
+    """Carrega o adapter HTTP de identity e monta o que `create_app()` registra."""
+    router_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router")
+    error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.error_handlers")
+
+    overrides: dict[Callable[..., Any], Callable[..., Any]] = {
+        router_module._get_authenticate_user: lambda: deps.identity_authenticate_user,
+        router_module._get_refresh_session: lambda: deps.identity_refresh_session,
+        router_module._get_revoke_session: lambda: deps.identity_revoke_session,
+        router_module._get_guard: lambda: deps.identity_guard,
+    }
+
+    return HttpWiring(
+        router=router_module.router,
+        register_error_handlers=error_handlers_module.register_identity_error_handlers,
+        dependency_overrides=overrides,
     )
