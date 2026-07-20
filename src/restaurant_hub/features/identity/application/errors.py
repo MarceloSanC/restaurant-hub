@@ -238,3 +238,22 @@ class UserNotFoundError(IdentityError, NotFoundError):
 
     def __init__(self, user_id: str) -> None:
         super().__init__(f"usuário não encontrado: {user_id!r}")
+
+
+class InvalidSetupTokenError(IdentityError):
+    """Token de definição de senha ausente, desconhecido, expirado ou já usado.
+
+    **Uma exceção só para todas as causas, e a mensagem é constante.** Distinguir
+    "expirado" de "já consumido" de "nunca existiu" de "o usuário sumiu" entregaria
+    ao atacante um mapa do que ele acertou — e o pior dos quatro é o último: um
+    404 falante confirmaria que a string apresentada era um token de verdade, cujo
+    dono foi apagado. É a mesma regra que fez `InvalidAccessTokenError` ter causa
+    única, aplicada a uma rota que é **pública**.
+
+    A mensagem não interpola valor, fingerprint, id de usuário nem instante de
+    expiração. Mensagem de erro acaba em log, e o log de uma rota pública de
+    recuperação de conta é exatamente onde um token não pode estar.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("token de definição de senha inválido")

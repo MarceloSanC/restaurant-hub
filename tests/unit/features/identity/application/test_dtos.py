@@ -66,7 +66,9 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # 7 commands (os 5 da 2.2 + RefreshSessionCommand e RevokeSessionCommand da 2.4)
 # + 5 results + Session + IssuedRefreshToken + AccessTokenClaims +
 # UserCredentials. Guarda contra o teste de imutabilidade virar vácuo.
-_TOTAL_DE_DTOS = 16
+# 16 até a 2.4; a Stage 2.5 acrescenta `IssuedSetupToken`, `PasswordSetupToken` e
+# os três commands do fluxo de convite/redefinição.
+_TOTAL_DE_DTOS = 19
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:

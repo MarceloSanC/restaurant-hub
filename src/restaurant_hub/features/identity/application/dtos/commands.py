@@ -118,3 +118,56 @@ class AuthorizeActionCommand:
     permission: Permission
     tenant_id: RestaurantId | None = None
     unit_id: UnitId | None = None
+
+
+@dataclass(frozen=True)
+class InviteUserCommand:
+    """Convite de uma pessoa que ainda não tem conta.
+
+    É o irmão de `CreateUserCommand` sem o campo mais perigoso: **não há senha**.
+    Quem convida não escolhe, não conhece e não transporta a credencial de quem é
+    convidado — o convidado a define pelo link que recebe por e-mail.
+
+    Attributes:
+        email: e-mail de login e destino do convite; unicidade global.
+        role: papel fixo de acesso do convidado.
+        tenant_id: restaurante do convidado; vem do **ator**, nunca do corpo da
+            requisição (concept §5 regra 12).
+        unit_ids: unidades a que o convidado fica vinculado.
+    """
+
+    email: Email
+    role: Role
+    tenant_id: RestaurantId | None
+    unit_ids: Sequence[UnitId] = ()
+
+
+@dataclass(frozen=True)
+class SetPasswordWithTokenCommand:
+    """Redenção de um token de setup: define a senha da conta.
+
+    **Não carrega `user_id`, e a ausência é a defesa** (concept §5 regra 10). O
+    usuário alvo sai de `PasswordSetupToken.user_id`, isto é, do registro que o
+    servidor gravou ao emitir o token. Se o campo existisse, alguém acabaria por
+    lê-lo — e quem tivesse um token legítimo da própria conta definiria a senha de
+    qualquer outra. É a mesma disciplina do `CreateUserRequest` sem `tenant_id`.
+    """
+
+    # `repr=False` nos dois: um é credencial bearer viva, o outro é senha em
+    # claro. Ambos ficam nos locals do frame que levanta `InvalidSetupTokenError`,
+    # que é justamente o frame que alguém inspeciona.
+    token: str = field(repr=False)
+    plain_password: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class RequestPasswordResetCommand:
+    """Pedido público de redefinição de senha.
+
+    Carrega só o e-mail: a rota é pública e não autentica ninguém. O que o use
+    case faz com um e-mail inexistente é **nada** — e devolver o mesmo que
+    devolveria para um e-mail existente é o que impede a enumeração de contas
+    (concept §5 regra 7).
+    """
+
+    email: Email

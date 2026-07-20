@@ -42,7 +42,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_dezenove_excecoes_esperadas() -> None:
+def test_modulo_declara_as_vinte_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -72,6 +72,11 @@ def test_modulo_declara_as_dezenove_excecoes_esperadas() -> None:
         "InvalidAccessTokenError",
         "InvalidRefreshTokenError",
         "RefreshTokenReuseError",
+        # Stage 2.5 — token de definição de senha. Causa única e mensagem
+        # constante pelo mesmo motivo dos três acima, com um agravante: a rota
+        # que o levanta é **pública**, então a mensagem é a única superfície de
+        # informação que o atacante tem.
+        "InvalidSetupTokenError",
     }
 
 
