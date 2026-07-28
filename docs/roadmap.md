@@ -155,6 +155,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#10](https://github.com/MarceloSanC/restaurant-hub/issues/10) | Ativar modo autônomo para as stages 1.2→3.5 (ADR 0.0.0004 accepted) | shared | docs | open | — |
 | [#12](https://github.com/MarceloSanC/restaurant-hub/issues/12) | Padronizar placeholders de Stage que viram comando (stage_id × número) | shared | docs | open | — |
 | [#16](https://github.com/MarceloSanC/restaurant-hub/issues/16) | `check_stage_issue.py` aprova issue CLOSED (busca state mas não usa) | shared | tooling | open | — |
+| [#29](https://github.com/MarceloSanC/restaurant-hub/issues/29) | Doc de domínio do BC staff — gate do Step 3 | staff | docs | open | — |
+| [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
