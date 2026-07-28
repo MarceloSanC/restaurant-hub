@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, restaurantes, escala, saas, hub, multi-tenant]
 status: done
 created_at: 2026-07-10
-updated_at: 2026-07-10
+updated_at: 2026-07-23
 project_name: restaurant-hub
 stakeholders:
   - Sponsor / Desenvolvedor / Admin da plataforma: Marcelo (Whaka)
@@ -146,3 +146,7 @@ Termos escolhidos por pesquisa de mercado (jul/2026) priorizando o vocabulário 
 - Control iD (ponto na nuvem — Control iD Cloud / RHiD): https://www.controlid.com.br/
 - Getnet Eyemobile: PDV em operação no piloto (documentação de API a levantar — ASSUM-2).
 - Pesquisa de terminologia: [Factorial HR](https://factorialhr.com.br/blog/escala-restaurante/), [Shifton](https://shifton.com/features/shift-schedule/), [Goomer](https://goomer.com.br/blog/contratar-garcom-freelancer), [EPOC](https://epoc.com.br/blog/garcom-freelancer/), [GastronoMundo](https://www.gastronomundo.com/brigada-de-cozinha/), [Saipos](https://saipos.com/sistema/restaurante/brigada-de-cozinha), [tio.digital](https://blog.tio.digital/contrato-intermitente-para-bares-e-restaurantes/), [Fecomercio](https://www.fecomercio.com.br/noticia/atente-se-as-regras-de-remuneracao-e-convocacao-do-trabalhador-intermitente).
+- Legislação trabalhista (fonte primária — fronteira terminológica sob demanda × intermitente; consumida por `docs/domain/staff/workforce.md`; verificada no Planalto em 2026-07-23):
+  - BRASIL. **Decreto-Lei nº 5.452, de 1º de maio de 1943** (Consolidação das Leis do Trabalho), arts. 443, *caput* e § 3º, e 452-A, com redação dada pela **Lei nº 13.467, de 13 de julho de 2017** (Reforma Trabalhista). Texto consolidado. Brasília: Presidência da República. Disponível em: https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm. Acesso em: 23 jul. 2026.
+  - BRASIL. **Lei nº 13.467, de 13 de julho de 2017**. Altera a Consolidação das Leis do Trabalho (CLT). Disponível em: https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2017/lei/l13467.htm. Acesso em: 23 jul. 2026.
+  - (Nota: a MP nº 808/2017, que alterava temporariamente o art. 452-A e criava os arts. 452-B a 452-H, teve vigência encerrada em 23/04/2018 — Ato Declaratório CN nº 22/2018 — e não integra o direito vigente.)
