@@ -3,7 +3,7 @@ title: Technical — Domínio de equipe
 description: Plano de execução da Stage 3.1 — lista ordenada de Tasks (1 Task = 1 commit) para o domínio do BC staff
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, staff-domain, equipe, funcionario, funcao, jornada, indisponibilidade]
-status: draft
+status: done
 created_at: 2026-07-27
 updated_at: 2026-07-29
 stage_id: 3.1-staff-domain
