@@ -3,7 +3,7 @@ title: Concept — Domínio de equipe
 description: Modelagem do núcleo de domínio do BC staff — Funcionário, Função customizável, perfil de jornada (fixa × sob demanda), preferência de turno e Indisponibilidade, com as invariantes canônicas do subdomínio workforce
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff-domain, equipe, funcionario, funcao, jornada, sob-demanda, preferencia-turno, indisponibilidade, workforce]
-status: draft
+status: done
 created_at: 2026-07-27
 updated_at: 2026-07-28
 stage_id: 3.1-staff-domain
