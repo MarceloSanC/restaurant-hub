@@ -14,8 +14,6 @@
 #     "via port" não é modelável em contrato estático.
 #
 # Contratos FUTUROS (ativar quando a estrutura existir):
-#   - independence entre bounded contexts (`type = independence` com
-#     restaurant_hub.features.*) — quando o 2º BC existir;
 #   - layers por feature (containers = restaurant_hub.features.*) — quando
 #     a 1ª feature existir;
 #   - exceção declarada LAYOUT §6: a cadeia shared/infrastructure/http/app
@@ -138,8 +136,8 @@ forbidden_modules =
 # o mesmo contrato de pureza que domain-purity aplica a shared.domain (LAYOUT §3).
 # NÃO proíbe restaurant_hub.features (auto-proibiria imports internos de identity)
 # nem restaurant_hub.shared.domain (dependência legítima: IdentityError herda de
-# DomainError). Independence entre BCs e layers-por-feature seguem futuros (2º BC /
-# quando a camada application existir).
+# DomainError). Independence entre BCs foi ativado na Stage 3.1 (2º BC — staff);
+# layers-por-feature segue futuro.
 [importlinter:contract:identity-domain-purity]
 name = features.identity.domain nao importa camadas externas nem frameworks (LAYOUT §3 Domain)
 type = forbidden
@@ -161,3 +159,41 @@ forbidden_modules =
     httpx
     argon2
     jwt
+
+# Ativado na Stage 3.1 (1º código do BC staff). Espelha para features.staff.domain
+# o contrato de pureza de identity-domain-purity (LAYOUT §3 Domain). NÃO proíbe
+# restaurant_hub.features (auto-proibiria imports internos de staff) nem
+# restaurant_hub.shared.domain (dependência legítima: StaffError herda de
+# DomainError).
+[importlinter:contract:staff-domain-purity]
+name = features.staff.domain nao importa camadas externas nem frameworks (LAYOUT §3 Domain)
+type = forbidden
+source_modules =
+    restaurant_hub.features.staff.domain
+forbidden_modules =
+    restaurant_hub.features.staff.application
+    restaurant_hub.features.staff.adapters
+    restaurant_hub.shared.application
+    restaurant_hub.shared.infrastructure
+    fastapi
+    starlette
+    uvicorn
+    sqlalchemy
+    alembic
+    psycopg
+    pydantic
+    pydantic_settings
+    httpx
+    argon2
+    jwt
+
+# Ativado na Stage 3.1, quando o 2º BC (staff) passou a existir — contrato de
+# independência entre bounded contexts planejado no cabeçalho deste arquivo
+# desde a 1.1. BCs se comunicam por ports (identificadores atravessam a
+# fronteira como strings opacas), nunca por import direto entre features.
+[importlinter:contract:bc-independence]
+name = bounded contexts identity e staff sao independentes (LAYOUT §1)
+type = independence
+modules =
+    restaurant_hub.features.identity
+    restaurant_hub.features.staff
