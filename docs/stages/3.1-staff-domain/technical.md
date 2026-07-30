@@ -560,4 +560,15 @@ commit reservado `stage 3.1: technical approved`.
   `stage 3.1: technical approved`, forma do gate no precedente da Stage
   (commit `8929ef8` do concept: o commit reservado carrega exatamente o flip).
 
+### 2026-07-29 — [decision] Checkpoint C (bloco 1, Tasks 01–03) — disposição do finding minor — Sessão mestra + Claude (executor, Fase 4)
+**Contexto:** o revisor do Checkpoint C **aprovou** o bloco 1 (Tasks 01–03,
+commits `9c675ae`/`db297a6`/`dafc366`) com 1 finding minor.
+**Disposição:**
+- **F1** (o alias `WorkloadProfile` de `workload_profile.py` não era
+  referenciado por nenhum teste até a Task 07 — a mutação "remover o alias"
+  sobreviveria com check verde) — **corrigido**: teste
+  `test_workload_profile_e_a_uniao_dos_dois_perfis` (afirma
+  `WorkloadProfile == FixedSchedule | OnDemand`) adicionado em commit próprio
+  tagueado `[3.1/task-03]`, o mesmo commit desta entrada.
+
 <!-- END: post-execution -->

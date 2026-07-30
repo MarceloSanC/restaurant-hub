@@ -9,9 +9,16 @@ from restaurant_hub.features.staff.domain.exceptions.errors import InvalidWeekly
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
     FixedSchedule,
     OnDemand,
+    WorkloadProfile,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def test_workload_profile_e_a_uniao_dos_dois_perfis() -> None:
+    # Trava o alias no contrato: se WorkloadProfile sumisse ou mudasse de
+    # forma, este teste quebra (finding do Checkpoint C do bloco 1).
+    assert WorkloadProfile == FixedSchedule | OnDemand
 
 
 @pytest.mark.parametrize("valida", [Decimal("44"), Decimal("22.5"), Decimal("0.5")])
