@@ -571,4 +571,19 @@ commits `9c675ae`/`db297a6`/`dafc366`) com 1 finding minor.
   `WorkloadProfile == FixedSchedule | OnDemand`) adicionado em commit próprio
   tagueado `[3.1/task-03]`, o mesmo commit desta entrada.
 
+### 2026-07-29 — [decision] Checkpoint C (bloco 2, Tasks 04–05) — disposições dos 2 findings minor — Sessão mestra + Claude (executor, Fase 4)
+**Contexto:** o revisor do Checkpoint C **aprovou** o bloco 2 (fix `751edc8` +
+Tasks 04–05, commits `9c1581f`/`23f8124`) com 2 findings minor.
+**Disposições:**
+- **F1** (formato de commit de correção de Checkpoint C reusava o tag
+  `[3.1/task-NN]` da Task original, ambíguo com o commit canônico da Task) —
+  **aceito sem ação retroativa**; daqui em diante, correção de Checkpoint C
+  usa o sufixo `-fix` no tag: `<type>(staff): <desc> [3.1/task-NN-fix]`.
+- **F2** (teste do conjunto fechado de `DayPeriod` travava só os **valores**
+  dos membros — a mutação "renomear o membro mantendo o valor" sobreviveria,
+  e os identificadores EN são contrato do concept §4) — **corrigido**:
+  asserção `{m.name for m in DayPeriod} == {"MORNING", "AFTERNOON", "NIGHT",
+  "OVERNIGHT"}` adicionada ao teste, em commit próprio tagueado
+  `[3.1/task-04-fix]`, o mesmo commit desta entrada.
+
 <!-- END: post-execution -->

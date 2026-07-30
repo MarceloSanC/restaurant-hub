@@ -21,6 +21,14 @@ def test_day_period_e_um_conjunto_fechado_de_quatro_periodos() -> None:
         "night",
         "overnight",
     }
+    # Os nomes EN também são contrato (concept §4 — identificadores em inglês,
+    # CONVENTIONS §1): renomear um membro quebra aqui, não só o valor.
+    assert {membro.name for membro in DayPeriod} == {
+        "MORNING",
+        "AFTERNOON",
+        "NIGHT",
+        "OVERNIGHT",
+    }
 
 
 @pytest.mark.parametrize(
