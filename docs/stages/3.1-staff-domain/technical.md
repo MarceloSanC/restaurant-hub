@@ -368,7 +368,9 @@ tests/unit/features/staff/
   adjacentes aceita; `add_unavailability` rejeita sobreposição
   (parcial/total), aceita adjacente e devolve nova instância (original
   imutado); `remove_unavailability` remove por valor e inexistente →
-  `UnavailabilityNotFoundError`; `declare_shift_preference(None)` limpa;
+  `UnavailabilityNotFoundError`; `declare_shift_preference(pref)` **declara**
+  a preferência (não-None) e **substitui** uma preferência existente por
+  outra; `declare_shift_preference(None)` limpa;
   `change_workload_profile` troca fixa↔sob demanda; frozen
   (`FrozenInstanceError` em atribuição direta); igualdade por id.
 - **Comando de verificação:**
@@ -538,5 +540,24 @@ ativa) devolve instância equivalente ou levanta erro?
 exigiria contrato novo → regressão de concept); idempotência é o comportamento
 seguro para retry/reidratação e reversível barato — endurecer para erro depois
 é evolução aditiva na 3.2 se um use case precisar distinguir.
+
+### 2026-07-29 — [decision] Checkpoint B — disposição dos 3 findings minor — Sessão mestra + Claude (autor, Fase 3B)
+**Contexto:** o revisor de contexto zerado do Checkpoint B **aprovou** o
+technical com 3 findings minor, cuja disposição é registrada aqui antes do
+commit reservado `stage 3.1: technical approved`.
+**Disposições:**
+- **F1** (§7 pré-preenchida na Fase 3B: legenda estendida + 2 entradas
+  datadas de autoria) — **aceito**. Disposição do Checkpoint B: entradas de
+  autoria da Fase 3B aceitas explicitamente pela sessão mestra — conteúdo
+  transparente e auditável; legenda estendida mantida. Conteúdo não movido.
+- **F2** (critério de aceite da Task 07 não exercitava
+  `declare_shift_preference` com valor não-None — mutação "devolver sempre
+  None" sobreviveria) — **corrigido**: cenário "declara a preferência
+  (não-None) e substitui uma preferência existente por outra" adicionado ao
+  critério de aceite da Task 07.
+- **F3** (frontmatter ainda `status: draft`) — **corrigido**: flip para
+  `done` (com `updated_at: 2026-07-29`) aplicado no commit reservado
+  `stage 3.1: technical approved`, forma do gate no precedente da Stage
+  (commit `8929ef8` do concept: o commit reservado carrega exatamente o flip).
 
 <!-- END: post-execution -->
