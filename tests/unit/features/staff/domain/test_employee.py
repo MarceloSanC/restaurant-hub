@@ -177,6 +177,13 @@ def test_construcao_com_periodos_adjacentes_e_aceita() -> None:
     assert funcionario.unavailabilities == (_periodo(8, 12), _periodo(12, 14))
 
 
+def test_construcao_rejeita_sobreposicao_entre_par_nao_consecutivo() -> None:
+    # Par a par de verdade: 1º-2º e 2º-3º não conflitam; SÓ o par (1º, 3º)
+    # sobrepõe — um loop restrito a pares consecutivos deixaria passar.
+    with pytest.raises(OverlappingUnavailabilityError):
+        _funcionario(unavailabilities=(_periodo(8, 12), _periodo(14, 16), _periodo(10, 13)))
+
+
 def test_add_rejeita_sobreposicao_parcial() -> None:
     funcionario = _funcionario(unavailabilities=(_periodo(8, 12),))
     with pytest.raises(OverlappingUnavailabilityError):
@@ -187,6 +194,14 @@ def test_add_rejeita_continencia_total() -> None:
     funcionario = _funcionario(unavailabilities=(_periodo(8, 16),))
     with pytest.raises(OverlappingUnavailabilityError):
         funcionario.add_unavailability(_periodo(10, 12))
+
+
+def test_add_rejeita_conflito_com_o_primeiro_de_varios_existentes() -> None:
+    # O novo período conflita SÓ com o primeiro da coleção — valida que o add
+    # checa contra todos os existentes, não apenas o último.
+    funcionario = _funcionario(unavailabilities=(_periodo(8, 10), _periodo(12, 14)))
+    with pytest.raises(OverlappingUnavailabilityError):
+        funcionario.add_unavailability(_periodo(9, 11))
 
 
 def test_add_aceita_adjacente_devolvendo_nova_instancia() -> None:

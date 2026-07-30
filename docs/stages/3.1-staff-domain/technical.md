@@ -586,4 +586,18 @@ Tasks 04–05, commits `9c1581f`/`23f8124`) com 2 findings minor.
   "OVERNIGHT"}` adicionada ao teste, em commit próprio tagueado
   `[3.1/task-04-fix]`, o mesmo commit desta entrada.
 
+### 2026-07-29 — [decision] Checkpoint C (bloco 3, Tasks 06–07) — disposição do finding minor — Sessão mestra + Claude (executor, Fase 4)
+**Contexto:** o revisor do Checkpoint C **aprovou** o bloco 3 (fix `6ca928b` +
+Tasks 06–07, commits `4603f5c`/`d201baf`) com 1 finding minor.
+**Disposição:**
+- **F1** (a propriedade **par a par** da não-sobreposição só era exercitada
+  com pares consecutivos e coleções ≤ 2 — sobreviveriam as mutações "loop do
+  `__post_init__` restrito a pares consecutivos" e "`add_unavailability` sem
+  checar o primeiro de vários existentes") — **corrigido**: testes
+  `test_construcao_rejeita_sobreposicao_entre_par_nao_consecutivo` (3 períodos
+  onde só o par 1º–3º sobrepõe) e
+  `test_add_rejeita_conflito_com_o_primeiro_de_varios_existentes` (novo
+  período conflita só com o primeiro de 2 existentes) adicionados em commit
+  próprio tagueado `[3.1/task-07-fix]`, o mesmo commit desta entrada.
+
 <!-- END: post-execution -->
