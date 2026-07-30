@@ -467,40 +467,40 @@ erDiagram
 
 ## 11. Critérios de aceitação
 
-- [ ] `FixedSchedule` aceita carga positiva (incl. fracionária) e rejeita
+- [x] `FixedSchedule` aceita carga positiva (incl. fracionária) e rejeita
       `<= 0`, NaN e infinito com `InvalidWeeklyHoursError` (teste).
-- [ ] `OnDemand` não expõe carga nem qualquer campo monetário (teste);
+- [x] `OnDemand` não expõe carga nem qualquer campo monetário (teste);
       "exatamente um `WorkloadProfile`" é garantia **estática** da união de
       tipos — coberta pelo mypy strict no `make check`, não por teste de
       runtime.
-- [ ] `ShiftPreference` rejeita conjunto vazio (`EmptyShiftPreferenceError`)
+- [x] `ShiftPreference` rejeita conjunto vazio (`EmptyShiftPreferenceError`)
       e aceita qualquer subconjunto não-vazio dos 4 períodos; `Employee`
       aceita `shift_preference=None` e ambos os perfis podem declarar
       preferência (teste).
-- [ ] `UnavailabilityPeriod` rejeita `start >= end` e datetimes tz-aware
+- [x] `UnavailabilityPeriod` rejeita `start >= end` e datetimes tz-aware
       (`InvalidUnavailabilityPeriodError`); `overlaps` cobre a tabela-verdade
       semi-aberta — sobreposição parcial/total detectada, **adjacentes
       (fim == início) NÃO sobrepõem** (teste).
-- [ ] `Employee.add_unavailability` rejeita sobreposição com
+- [x] `Employee.add_unavailability` rejeita sobreposição com
       `OverlappingUnavailabilityError` e aceita períodos adjacentes; a
       **construção com coleção inicial sobreposta é igualmente rejeitada**
       (caminho de reidratação); `remove_unavailability` de período
       inexistente lança `UnavailabilityNotFoundError` (teste).
-- [ ] Construção de `Employee`/`JobFunction` com **cada** identificador
+- [x] Construção de `Employee`/`JobFunction` com **cada** identificador
       vazio ou só-whitespace lança `InvalidIdentifierError` (teste).
-- [ ] `JobFunction.deactivate()`/`reactivate()` alternam `active`; nomes de
+- [x] `JobFunction.deactivate()`/`reactivate()` alternam `active`; nomes de
       `Employee`/`JobFunction` vazios **ou só-whitespace** são rejeitados
       (`InvalidNameError`) e não-vazios preservados **verbatim** (ex.:
       `"  Cozinheiro "` inalterado) na construção e no `rename` (teste).
-- [ ] Entidades comparam por identidade (id), são **frozen** (atribuição
+- [x] Entidades comparam por identidade (id), são **frozen** (atribuição
       direta de atributo falha) e toda transição devolve nova instância
       revalidada; VOs comparam por valor (teste).
-- [ ] Todas as exceções do BC herdam de `StaffError` → `DomainError` (teste).
-- [ ] Domínio sem I/O e sem import de application/adapters/frameworks/outros
+- [x] Todas as exceções do BC herdam de `StaffError` → `DomainError` (teste).
+- [x] Domínio sem I/O e sem import de application/adapters/frameworks/outros
       BCs: `make check` verde, incluindo os contratos novos de
       `staff.domain` e de independência identity × staff no import-linter.
-- [ ] Cobertura ≥ 90% em cada arquivo `src/` tocado.
-- [ ] `Employee` com conjunto de funções vazio é rejeitado
+- [x] Cobertura ≥ 90% em cada arquivo `src/` tocado.
+- [x] `Employee` com conjunto de funções vazio é rejeitado
       (`EmptyJobFunctionsError`) na construção e em `assign_job_functions`;
       conjuntos com 1 e com N funções são aceitos (teste — ADR 3.1.0006).
 

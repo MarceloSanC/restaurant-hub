@@ -600,4 +600,20 @@ Tasks 06–07, commits `4603f5c`/`d201baf`) com 1 finding minor.
   período conflita só com o primeiro de 2 existentes) adicionados em commit
   próprio tagueado `[3.1/task-07-fix]`, o mesmo commit desta entrada.
 
+### 2026-07-29 — [decision] Fase de aplicação da auditoria da Stage (skill `stage-audit`) — Sessão mestra + Claude (subagente de aplicação)
+**Contexto:** a auditoria read-only da Stage 3.1 (PR #33) **aprovou sem
+bloqueantes** e validou TODOS os critérios do concept §11 e TODOS os itens
+do checklist §3 deste technical (gates: `make check` exit 0; 1152 passed;
+cobertura 99.89% global e 100% nos 14 arquivos da Stage; import-linter
+8 kept / 0 broken; 13/13 mutações mortas na auditoria de testes). Esta
+entrada é o registro da fase de aplicação (commit `[3.1/--]`).
+**Decisão sobre as caixinhas do §3:** o flip literal `[ ]`→`[x]` do §3
+fica **adiado para pós-merge** — o freeze do `status: done`
+(CONVENTIONS §3.4, `scripts/check_technical_postexec.py`) rejeita edição
+fora da janela §7 enquanto a Stage não mergeia (verificado empiricamente:
+o flip falha o `docs-check` contra a baseline `2caa944`). A validação de
+cada item vive nesta entrada e no comentário de veredito do PR #33; as
+caixinhas do concept §11 (sem freeze) foram marcadas no mesmo commit
+desta entrada.
+
 <!-- END: post-execution -->
