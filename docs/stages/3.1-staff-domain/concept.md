@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de
 keywords: [concept, staff-domain, equipe, funcionario, funcao, jornada, sob-demanda, preferencia-turno, indisponibilidade, workforce]
 status: draft
 created_at: 2026-07-27
-updated_at: 2026-07-27
+updated_at: 2026-07-28
 stage_id: 3.1-staff-domain
 stage_title: Domínio de equipe
 step_id: 3
@@ -24,12 +24,12 @@ depends_on: [2.5-email-invite]
 > (`accepted`) ao recorte da Stage — não re-deriva nem contradiz
 > (hierarquia: Overview > Roadmap > Domain > Concept).
 >
-> **⚠️ Pendência (fork F1):** a **cardinalidade da referência
-> Funcionário → Função** (exatamente uma × conjunto com ≥ 1 × conjunto
-> possivelmente vazio — enumeração canônica em §13) não é recuperável de
-> nenhuma fonte ratificada e foi **devolvida à sessão mestra** para decisão
-> do sponsor — ver §13. O placeholder está marcado em §4/§5/§9. O concept
-> **não** entra em `done` com este TODO aberto.
+> **Fork F1 resolvido (2026-07-28):** a cardinalidade da referência
+> Funcionário → Função foi decidida pelo **sponsor** via sessão mestra —
+> **conjunto de funções com no mínimo uma** (`frozenset` não-vazio de
+> `JobFunctionId`). Registro em
+> [ADR 3.1.0006](../../adr/3_1_0006-employee-function-set-cardinality.md);
+> histórico do fork em §13.
 
 ## 1. Escopo
 
@@ -208,14 +208,14 @@ servindo de contrato para as camadas seguintes do Step 3.
       name: str                                  # verbatim, não-vazio — ADR 3.1.0002
       workload_profile: WorkloadProfile          # exatamente um perfil
       shift_preference: ShiftPreference | None   # None = sem preferência — ADR 3.1.0004
-      # ⚠️ PENDENTE (fork F1, §13 — enumeração canônica com 3 opções):
-      #   (a) job_function_id: JobFunctionId                 # exatamente uma
-      #   (b) job_function_ids: frozenset[JobFunctionId]     # >= 1 (não-vazio)
-      #   (c) job_function_ids: frozenset[JobFunctionId]     # >= 0 (pode ser vazio)
+      job_function_ids: frozenset[JobFunctionId] # >= 1 (não-vazio) — ADR 3.1.0006;
+                                                 # vazio -> EmptyJobFunctionsError
       unavailabilities: tuple[UnavailabilityPeriod, ...] = ()
-      # __post_init__ valida ids/nome E a não-sobreposição da coleção inicial
+      # __post_init__ valida ids/nome, o conjunto de funções não-vazio
+      # E a não-sobreposição da coleção inicial
 
       def rename(self, name: str) -> "Employee"
+      def assign_job_functions(self, ids: frozenset[JobFunctionId]) -> "Employee"
       def change_workload_profile(self, profile: WorkloadProfile) -> "Employee"
       def declare_shift_preference(self, preference: ShiftPreference | None) -> "Employee"
       def add_unavailability(self, period: UnavailabilityPeriod) -> "Employee"
@@ -224,8 +224,9 @@ servindo de contrato para as camadas seguintes do Step 3.
 
 - **Exceções** (`StaffError(DomainError)` e subclasses):
   `InvalidIdentifierError`, `InvalidNameError`, `InvalidWeeklyHoursError`,
-  `EmptyShiftPreferenceError`, `InvalidUnavailabilityPeriodError`,
-  `OverlappingUnavailabilityError`, `UnavailabilityNotFoundError`.
+  `EmptyShiftPreferenceError`, `EmptyJobFunctionsError`,
+  `InvalidUnavailabilityPeriodError`, `OverlappingUnavailabilityError`,
+  `UnavailabilityNotFoundError`.
 
 ### Consumidos
 - **`DomainError`** — declarado em `shared/domain/exceptions/base.py`
@@ -271,9 +272,13 @@ Numeração alinhada à teoria (workforce §3.x):
     **novas** atribuições (enforcement na 3.2) e preserva referências
     existentes; remoção definitiva só sem funcionários referenciando
     (enforcement na 3.2/3.3) — ADR 3.1.0003.
-11. **Referência entre agregados só por id** — `Employee` nunca guarda o
-    objeto `JobFunction` (skill `ddd-tactical-patterns`; padrão 2.1).
-    *(Cardinalidade da referência: pendente — fork F1, §13.)*
+11. **Referência entre agregados só por id, conjunto não-vazio:**
+    `Employee.job_function_ids` é um `frozenset[JobFunctionId]` com **no
+    mínimo uma** função (vazio → `EmptyJobFunctionsError`, na construção e
+    em `assign_job_functions`); `Employee` nunca guarda o objeto
+    `JobFunction` (skill `ddd-tactical-patterns`; padrão 2.1;
+    ADR 3.1.0006 — decisão do sponsor, fork F1). Validade referencial e
+    bloqueio de função inativa: enforcement na 3.2/3.3 (invariante 10).
 12. **Igualdade e proteção de estado:** entidades comparam por identidade
     (id) e são **frozen** — atribuição direta de atributo falha
     (`FrozenInstanceError`); toda transição passa pelos métodos de negócio,
@@ -288,6 +293,7 @@ Numeração alinhada à teoria (workforce §3.x):
 | Nome vazio **ou só whitespace** (`Employee`/`JobFunction`, construção ou `rename`) | `InvalidNameError` |
 | `FixedSchedule` com `weekly_hours <= 0`, NaN ou infinito | `InvalidWeeklyHoursError` |
 | `ShiftPreference` com conjunto vazio | `EmptyShiftPreferenceError` |
+| `Employee` com conjunto de funções vazio (construção ou `assign_job_functions`) | `EmptyJobFunctionsError` |
 | `UnavailabilityPeriod` com `start >= end` ou datetime com tzinfo (ADR 3.1.0005) | `InvalidUnavailabilityPeriodError` |
 | Períodos sobrepostos (semântica semi-aberta) — em `add_unavailability` **ou na coleção inicial da construção/reidratação** | `OverlappingUnavailabilityError` |
 | `remove_unavailability` de período inexistente no registro | `UnavailabilityNotFoundError` |
@@ -341,6 +347,18 @@ hierarquia).
   overview §6; ADR 3.1.0001 (decisão i).
 - **ADR:** [`../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md`](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md)
 
+### Cardinalidade da referência funcionário → função: conjunto não-vazio (fork F1)
+- **O quê:** `Employee.job_function_ids: frozenset[JobFunctionId]` com no
+  mínimo uma função; vazio → `EmptyJobFunctionsError`; o registro casa com
+  vagas de **qualquer** das suas funções (Step 4/5).
+- **Por quê:** forma geral que contém o caso único; pessoa multifunção não
+  exige cadastro duplicado; migração coluna→junção depois seria cara.
+  Alternativas descartadas: exatamente uma; conjunto possivelmente vazio.
+- **Fonte:** **decisão do sponsor (2026-07-28, via sessão mestra)** — fork
+  F1 devolvido em formato rico por este concept; workforce §3.7; roadmap
+  4.1/Step 5; critério de escalabilidade progressiva.
+- **ADR:** [`../../adr/3_1_0006-employee-function-set-cardinality.md`](../../adr/3_1_0006-employee-function-set-cardinality.md)
+
 ### Entidades frozen com transições que devolvem nova instância
 - **O quê:** `Employee` e `JobFunction` são `@dataclass(frozen=True,
   eq=False)`; métodos de negócio devolvem **nova instância** (via
@@ -390,7 +408,8 @@ hierarquia).
 
 ### Não-sobreposição imposta dentro do agregado `Employee`
 - **O quê:** os períodos vivem no agregado; `add_unavailability` é o único
-  caminho de escrita e valida contra todos os existentes.
+  caminho de escrita incremental e valida contra todos os existentes; o
+  `__post_init__` valida a coleção inicial (construção/reidratação).
 - **Por quê:** invariante "por funcionário" = fronteira de consistência
   transacional do agregado (1 transação = 1 agregado); fora do agregado a
   invariante dependeria de query, virando check de application.
@@ -410,7 +429,7 @@ hierarquia).
 
 ```mermaid
 erDiagram
-  JOB_FUNCTION }o..o{ EMPLOYEE : "referencia por id (cardinalidade PENDENTE - fork F1)"
+  JOB_FUNCTION }|..o{ EMPLOYEE : "referencia por id (>= 1 funcao - ADR 3.1.0006)"
   EMPLOYEE ||--o{ UNAVAILABILITY_PERIOD : "agrega (nao sobrepostos)"
   JOB_FUNCTION {
     JobFunctionId id
@@ -425,6 +444,7 @@ erDiagram
     string name "verbatim, nao-unico"
     WorkloadProfile workload_profile "FixedSchedule ou OnDemand"
     ShiftPreference shift_preference "opcional; conjunto de DayPeriod"
+    frozenset job_function_ids "nao-vazio — ADR 3.1.0006"
   }
   UNAVAILABILITY_PERIOD {
     datetime start "naive; semi-aberto [start, end)"
@@ -433,13 +453,14 @@ erDiagram
 ```
 
 > Diagrama estrutural do **domínio** (não é schema de banco — persistência é
-> a 3.3). A aresta Funcionário↔Função está **pendente do fork F1** (§13).
+> a 3.3). A aresta Funcionário↔Função é conjunto **não-vazio** de ids
+> (ADR 3.1.0006 — decisão do sponsor, 2026-07-28).
 
 ## 10. Riscos e mitigações
 
 | Risco | Prob. | Impacto | Mitigação |
 |---|---|---|---|
-| Fork F1 pendente atrasar a 3B | M | M | Decisão isolada em 1 campo + 1 invariante; o restante do modelo é estável e a 3B pode ser planejada nas duas variantes |
+| Regras que dependem do conjunto de funções (validade referencial, função inativa) ficarem sem dono na 3.2 | M | A | Invariante 11 remete o enforcement explicitamente à 3.2/3.3; ADRs 3.1.0003/3.1.0006 §Implementation notes apontam os use cases e o RESTRICT |
 | Regras cross-agregado (invariantes 3 e 10) esquecidas na 3.2 | M | A | Declaradas com destaque em §5 e nos ADRs 3.1.0003; a matriz de rastreabilidade da 3.2 deve mapeá-las |
 | Semântica naive-datetime mal interpretada (comparação entre unidades/fusos) | B | M | Invariante 8 rejeita tz-aware na construção; docstring fixa "wall-clock do fuso da unidade"; conversão é de quem conhece o fuso |
 | Nomes EN dos períodos (`OVERNIGHT` = madrugada) gerarem ambiguidade | B | B | Glossário PT na docstring do enum; língua ubíqua PT vive no workforce §2 |
@@ -479,23 +500,23 @@ erDiagram
       BCs: `make check` verde, incluindo os contratos novos de
       `staff.domain` e de independência identity × staff no import-linter.
 - [ ] Cobertura ≥ 90% em cada arquivo `src/` tocado.
-- [ ] *(condicionado ao fork F1)* referência Funcionário→Função modelada
-      conforme a decisão do sponsor, com invariante e teste próprios.
+- [ ] `Employee` com conjunto de funções vazio é rejeitado
+      (`EmptyJobFunctionsError`) na construção e em `assign_job_functions`;
+      conjuntos com 1 e com N funções são aceitos (teste — ADR 3.1.0006).
 
 ## 12. Checklist de validação interna
 
 > Todas devem estar respondidas com "sim" para esta Stage sair do
 > Concept e entrar em Technical.
 
-- [ ] Todos os contratos introduzidos têm assinatura definida?
-      **NÃO — placeholder do fork F1 (referência Employee→JobFunction) em
-      §4; demais contratos definidos. Trava o `done` até a decisão.**
+- [x] Todos os contratos introduzidos têm assinatura definida? (§4 —
+      fork F1 resolvido pelo sponsor em 2026-07-28; ADR 3.1.0006)
 - [x] Toda decisão em §7 tem fonte rastreável? (workforce/overview/roadmap/
       ADRs/kickoff/skills)
 - [x] Toda integração externa tem contrato definido? (não há integração
       externa — domínio puro; §8 só internas)
 - [x] Decisões com alternativa real descartada têm ADR escrito?
-      (3.1.0002, 3.1.0003, 3.1.0004; 3.1.0001 herdado do gate)
+      (3.1.0002–3.1.0006; 3.1.0001 herdado do gate)
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)?
       (`2.5-email-invite` mergeada em `develop`)
 - [x] Stage cabe em ~3–12 Tasks? (estimativa: 6–8)
@@ -505,14 +526,14 @@ erDiagram
 
 ## 13. Questões em aberto
 
-- [ ] **F1 — Cardinalidade da referência Funcionário → Função** (exatamente
-  uma × conjunto com ≥ 1 × conjunto possivelmente vazio). Não recuperável de
-  fonte ratificada (workforce §3.7 confirma que a referência existe; nenhuma
-  fonte fixa a cardinalidade). Afeta contrato (§4), invariante (§5.11),
-  forma persistida (3.3) e o matching demanda×funcionário do Step 4.
-  **Devolvida à sessão mestra em formato rico (retorno deste subagente) para
-  decisão do sponsor; a decisão vira ADR `3_1_0006` e destrava o `done`.**
-  Esta enumeração de §13 é a **canônica** do fork (banner e §4 a espelham).
+Nenhuma questão em aberto.
+
+- [x] **F1 — Cardinalidade da referência Funcionário → Função** (exatamente
+  uma × conjunto com ≥ 1 × conjunto possivelmente vazio): não recuperável de
+  fonte ratificada, foi devolvida à sessão mestra em formato rico e
+  **decidida pelo sponsor em 2026-07-28** — **conjunto com no mínimo uma**
+  (opção b). Registro: [ADR 3.1.0006](../../adr/3_1_0006-employee-function-set-cardinality.md);
+  contrato em §4, invariante em §5.11, critério em §11.
 
 ## 14. Referências
 
@@ -523,7 +544,8 @@ erDiagram
 - [`../../roadmap.md`](../../roadmap.md) — Stage `3.1-staff-domain` e
   vizinhas (3.2–3.5, 4.1); ROADMAP-3.
 - ADRs desta Stage: [`../../adr/`](../../adr/) (prefixo `3_1_`) — 3.1.0001
-  (gate), 3.1.0002, 3.1.0003, 3.1.0004, 3.1.0005.
+  (gate), 3.1.0002, 3.1.0003, 3.1.0004, 3.1.0005, 3.1.0006 (fork F1,
+  decisão do sponsor).
 - ADRs herdados: 2.3.0005 (verbatim), 2.1.0001 (padrão de agregados).
 - Skills: `ddd-tactical-patterns`, `hex-arch-python`.
 - [`../../LAYOUT.md`](../../LAYOUT.md) §3–§4; `.importlinter` (contrato de
