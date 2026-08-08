@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-27
-last_reviewed_at: 2026-07-20
+updated_at: 2026-07-29
+last_reviewed_at: 2026-07-29
 ---
 
 # Roadmap — restaurant-hub
@@ -88,7 +88,7 @@ graph LR
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.5 |
-| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | not_started | 3.1 → 3.5 |
+| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.5 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | not_started | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
 | 6 | Implantação piloto | Sistema no ar para o restaurante piloto usar no dia a dia | not_started | 6.1 → 6.3 |
@@ -113,7 +113,7 @@ graph LR
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | done | `2.2-identity-application` |
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
-| `3.1-staff-domain` | Domínio de equipe | domain | draft | `2.5-email-invite` |
+| `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | draft | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | draft | `3.2-staff-application` |
 | `3.4-staff-http` | API de equipe | adapters/in/http | draft | `3.3-staff-persistence` |
@@ -157,6 +157,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#16](https://github.com/MarceloSanC/restaurant-hub/issues/16) | `check_stage_issue.py` aprova issue CLOSED (busca state mas não usa) | shared | tooling | open | — |
 | [#29](https://github.com/MarceloSanC/restaurant-hub/issues/29) | Doc de domínio do BC staff — gate do Step 3 | staff | docs | done | — |
 | [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | open | — |
+| [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34) | Promover o sufixo `[N.M/task-NN-fix]` de commits de correção de checkpoint a convenção | shared | docs | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -574,6 +575,26 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python]
 ```
+
+> **Nota (2026-07-29): bloco corrigido durante a execução da Stage (issue #32)** —
+> o recorte real expandiu o bloco em dois eixos, ambos declarados no concept §7
+> (mesmo padrão da 2.1). **File-scope:** `arquivos_a_modificar: []` não se
+> sustentou — o `.importlinter` foi **modificado** (contratos aditivos
+> `staff-domain-purity` e `bc-independence` identity × staff, este último
+> planejado no cabeçalho do arquivo desde a 1.1); e entraram
+> `features/staff/domain/value_objects/identifiers.py` (identificadores tipados
+> próprios do BC) e os placeholders `features/staff/{application,adapters}/__init__.py`
+> vazios (exigidos por `scripts/check_layout.py` — `REQUIRED_FEATURE_DIRS`).
+> **Contratos:** além de `Employee`/`JobFunction` e
+> `WorkloadProfile`/`ShiftPreference`/`UnavailabilityPeriod`, a Stage introduziu
+> `DayPeriod` (StrEnum fechado, co-locado em `shift_preference.py` — decisão na
+> §7 do technical), os identificadores `EmployeeId`/`JobFunctionId`/`TenantId`/`UnitId`
+> e a hierarquia de exceções do BC (`StaffError` + 8 subclasses, incl.
+> `UnavailabilityNotFoundError`); e **consome** `DomainError` de `shared/domain`,
+> contra `contratos_consumidos: []`. `complexidade_estimada: M` e
+> `gate_mode: strict` seguem válidos (7 Tasks + 3 commits de correção de
+> checkpoint). As decisões de modelagem estão nos ADRs 3.1.0001–3.1.0006; os
+> desvios de execução, na §7 do `technical.md`.
 
 #### Stage 3.2 — `3.2-staff-application`
 
@@ -1221,6 +1242,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-19 | Stage 2.3-identity-persistence concluída (`done`); bloco corrigido (nota datada — tabela `sessions` e `session_repository` reconciliados do ADR 2.2.0001, `integrity_errors.py`, CI exigindo Postgres real, 5 ADRs) | Execução da Stage 2.3 — issue #22 |
 | 2026-07-20 | Stage 2.4-identity-http concluída (`done`); bloco corrigido (nota datada — `decode_access_token` estendendo `TokenIssuer`, use cases de rotação/logout, contract test de segurança, argon2 sem bcrypt, 4 ADRs); primeira superfície de runtime do projeto | Execução da Stage 2.4 — issue #24 |
 | 2026-07-20 | Stage 2.5-email-invite concluída (`done`); bloco corrigido (nota datada — 5 divergências: persistência no escopo, 3 use cases, sem adapter real, sem `TokenIssuer`, port em `ports/out/`; 4 ADRs). **Todas as Stages de backend do Step 2 estão `done`; o Step permanece `in_progress`** — falta a contraparte de frontend (regra do §Escopo deste roadmap e §Lacunas conhecidas) | Execução da Stage 2.5 — issue #27 |
+| 2026-07-29 | Stage 3.1-staff-domain concluída (`done`); bloco corrigido (nota datada — `.importlinter` modificado com contratos de pureza `staff.domain` e independência identity × staff, `identifiers.py`, placeholders application/adapters, `DayPeriod` co-locado, hierarquia `StaffError` + 8 subclasses; ADRs 3.1.0001–0006); Step 3 → `in_progress` (primeiro código do BC staff) | Execução da Stage 3.1 — issue #32 |
 
 ## Próxima revisão de roadmap
 
