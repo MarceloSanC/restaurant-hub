@@ -45,6 +45,16 @@ class InMemoryJobFunctionRepository:
         """L-JF2 — `UPDATE`, não upsert; a guarda de nome ignora a própria função."""
         self._store.record("job_functions.update")
         # Lookup por (tenant_id, id) ANTES de qualquer outra guarda (§5.4).
+        #
+        # NOTA (não há teste que discrimine esta ordem AQUI, e é esperado):
+        # `_guard_name` já é tenant-scoped, então inverter as duas linhas seria
+        # **inobservável** — com tenant alheio a busca de homônima não acha
+        # nada e a execução cai no mesmo `JobFunctionNotFoundError`. A ordem
+        # fica explícita mesmo assim porque a 3.3 herda este método como
+        # especificação, e lá as duas checagens têm custo e efeito diferentes
+        # (índice único vs. lookup por PK). Onde a ordem É discriminável, ela
+        # está travada por teste: `delete` (NotFound vence InUse) e
+        # `EmployeeRepository.update` (NotFound vence Relocation).
         if self._find(job_function.tenant_id, job_function.id) is None:
             raise JobFunctionNotFoundError(job_function.id)
         self._guard_name(job_function)

@@ -9,13 +9,23 @@ implementada. Por isso o teste central deste módulo é o de que os dois fakes
 enxergam **o mesmo** store — sem ele, todo o resto passaria vacuamente.
 """
 
+import contextlib
+import inspect
+from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
 
 from restaurant_hub.features.staff.application.errors import JobFunctionInUseError
+from restaurant_hub.features.staff.application.ports.out.employee_repository import (
+    EmployeeRepository,
+)
+from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
+    JobFunctionRepository,
+)
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -81,6 +91,93 @@ def test_cada_chamada_ao_par_e_registrada_no_store() -> None:
     fakes.job_functions.find_by_name(_TENANT, "Cozinheiro")
     fakes.employees.list_by_unit(_TENANT, _UNIDADE)
     assert fakes.store.calls == ["job_functions.find_by_name", "employees.list_by_unit"]
+
+
+def _metodos_publicos(port: type) -> set[str]:
+    """Nomes dos métodos declarados no `Protocol` — a fonte da verdade do par."""
+    return {
+        nome for nome, _ in inspect.getmembers(port, inspect.isfunction) if not nome.startswith("_")
+    }
+
+
+def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
+    """Uma invocação por método do par, na ordem em que o estado as permite.
+
+    O valor devolvido e o erro levantado são irrelevantes aqui: o que se mede é
+    se a chamada **foi registrada**. Por isso as chamadas que levantam
+    (`update` de inexistente, `delete`) entram na lista sem cerimônia — o
+    `record()` acontece antes de qualquer guarda, e é justamente essa ordem que
+    faz `calls` valer como evidência de "o port foi tocado".
+    """
+    nova = _funcao(id_="f-nova", name="Nova")
+    return [
+        ("job_functions.add", lambda: fakes.job_functions.add(nova)),
+        ("job_functions.update", lambda: fakes.job_functions.update(nova)),
+        (
+            "job_functions.find_by_id",
+            lambda: fakes.job_functions.find_by_id(_TENANT, JobFunctionId("f-nova")),
+        ),
+        ("job_functions.find_by_name", lambda: fakes.job_functions.find_by_name(_TENANT, "Nova")),
+        (
+            "job_functions.find_all_by_ids",
+            lambda: fakes.job_functions.find_all_by_ids(
+                _TENANT, frozenset({JobFunctionId("f-nova")})
+            ),
+        ),
+        ("job_functions.list_by_tenant", lambda: fakes.job_functions.list_by_tenant(_TENANT)),
+        (
+            "job_functions.delete",
+            lambda: fakes.job_functions.delete(_TENANT, JobFunctionId("f-nova")),
+        ),
+        ("employees.add", lambda: fakes.employees.add(_funcionario(id_="e-novo"))),
+        ("employees.update", lambda: fakes.employees.update(_funcionario(id_="e-novo"))),
+        (
+            "employees.find_by_id",
+            lambda: fakes.employees.find_by_id(_TENANT, EmployeeId("e-novo")),
+        ),
+        ("employees.list_by_unit", lambda: fakes.employees.list_by_unit(_TENANT, _UNIDADE)),
+        (
+            "employees.exists_by_job_function",
+            lambda: fakes.employees.exists_by_job_function(_TENANT, JobFunctionId("f1")),
+        ),
+        ("employees.delete", lambda: fakes.employees.delete(_TENANT, EmployeeId("e-novo"))),
+    ]
+
+
+def test_todo_metodo_do_par_registra_exatamente_uma_chamada() -> None:
+    """Cada um dos 13 métodos do par tem o seu `record()` travado por teste.
+
+    **Por que isto não é zelo excessivo.** `store.calls` sustenta todos os
+    critérios "sem tocar o port" das Tasks 07/09/13 — e um critério desses é
+    uma asserção sobre uma lista **vazia**. Se um `record()` sumir, a asserção
+    vira **vacuamente verdadeira**: o teste continua verde enquanto o use case
+    consulta o port justamente onde não deveria. Evidência de ausência só vale
+    se a presença estiver garantida em todos os caminhos.
+    """
+    fakes = staff_repositories()
+    fakes.job_functions.add(_funcao())  # estado mínimo para as invocações
+
+    for esperado, invocar in _invocacoes(fakes):
+        antes = len(fakes.store.calls)
+        # O erro é irrelevante aqui — o registro da chamada não é.
+        with contextlib.suppress(StaffError):
+            invocar()
+        registradas = fakes.store.calls[antes:]
+        assert registradas == [esperado], f"{esperado} não registrou exatamente uma chamada"
+
+
+def test_as_invocacoes_cobrem_todo_metodo_declarado_nos_dois_protocolos() -> None:
+    """A lista acima **é** a superfície do par, não uma amostra dela.
+
+    Sem esta asserção, um 14º método de port entraria sem `record()` e sem
+    ninguém notar — e a Task seguinte herdaria um `calls` incompleto, que é o
+    mesmo defeito de fundo do achado anterior sobre listas literais.
+    """
+    esperados = {nome for nome, _ in _invocacoes(staff_repositories())}
+    declarados = {f"job_functions.{nome}" for nome in _metodos_publicos(JobFunctionRepository)} | {
+        f"employees.{nome}" for nome in _metodos_publicos(EmployeeRepository)
+    }
+    assert esperados == declarados
 
 
 def test_dois_helpers_nao_compartilham_estado() -> None:
