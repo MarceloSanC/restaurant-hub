@@ -17,16 +17,15 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 pytestmark = pytest.mark.unit
 
 
-def _funcao(name: str = "Cozinheiro", *, active: bool = True) -> JobFunction:
-    return JobFunction(id=JobFunctionId("f1"), tenant_id=TenantId("t1"), name=name, active=active)
+def _funcao(name: str = "Cozinheiro") -> JobFunction:
+    return JobFunction(id=JobFunctionId("f1"), tenant_id=TenantId("t1"), name=name)
 
 
-def test_cria_funcao_valida_com_active_default() -> None:
+def test_cria_funcao_valida() -> None:
     funcao = _funcao()
     assert funcao.id == "f1"
     assert funcao.tenant_id == "t1"
     assert funcao.name == "Cozinheiro"
-    assert funcao.active is True
 
 
 @pytest.mark.parametrize("invalido", ["", "   "])
@@ -64,29 +63,9 @@ def test_nome_e_preservado_verbatim_no_rename() -> None:
     assert renomeada.name == "  Chapeiro "
 
 
-def test_deactivate_devolve_nova_instancia_inativa() -> None:
-    original = _funcao()
-    inativa = original.deactivate()
-    assert inativa.active is False
-    assert original.active is True  # original imutada
-
-
-def test_reactivate_devolve_nova_instancia_ativa() -> None:
-    original = _funcao(active=False)
-    reativada = original.reactivate()
-    assert reativada.active is True
-    assert original.active is False  # original imutada
-
-
-def test_transicoes_repetidas_sao_idempotentes_no_valor() -> None:
-    # Decisão registrada na §7 do technical: repetir não é erro.
-    assert _funcao(active=False).deactivate().active is False
-    assert _funcao(active=True).reactivate().active is True
-
-
 def test_entidade_e_imutavel() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
-        _funcao().active = False  # type: ignore[misc]
+        _funcao().name = "Chapeiro"  # type: ignore[misc]
 
 
 def test_igualdade_por_identidade_ignora_demais_campos() -> None:
