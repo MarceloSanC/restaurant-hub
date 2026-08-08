@@ -3,7 +3,7 @@ title: Technical — Use cases de equipe
 description: Plano de execução da Stage 3.2 — 13 Tasks ordenadas (1 Task = 1 commit) para a camada application do BC staff, incluindo o ajuste de ciclo de vida das duas entidades da 3.1
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, staff-application, use-case, port-out, dto, fakes, leis-do-port, ciclo-de-vida]
-status: draft
+status: done
 created_at: 2026-08-08
 updated_at: 2026-08-08
 stage_id: 3.2-staff-application
