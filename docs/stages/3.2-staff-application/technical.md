@@ -1255,4 +1255,36 @@ Task 02 (Employee com estado) ────┴─► Task 03 (erros + importlinte
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
   diz o que mudou e por que ficou abaixo do threshold de perguntar.
 
+---
+
+### 2026-08-08 — [decision] tests/fakes/features/staff (Task 05) — executor
+
+**Contexto:** o plano da Task 05 fixa que o holder `StaffFakes` e o helper
+`staff_repositories()` vivem em `in_memory_staff_store.py`, "junto do store que
+constroem". O que o plano não previu é que isso fecha um **ciclo de import**: os
+dois fakes importam `InMemoryStaffStore` deste módulo (precisam dele no
+construtor e na linha `_conforms`), então um import de topo dos fakes dentro do
+módulo do store seria circular. O `PLC0415` do ruff (`import` should be at the
+top-level) reprova o import local que resolve o ciclo.
+
+**Pergunta:** onde ficam holder e helper, já que o plano os quer no módulo do
+store e o import de topo é impossível?
+
+**Opções:**
+- A — mover holder e helper para um quarto arquivo (`staff_fakes.py`), quebrando
+  o ciclo sem `noqa`, mas contrariando a alocação explícita do plano e criando
+  arquivo fora da lista da Task.
+- B — manter no módulo do store, com import **local** dentro de
+  `staff_repositories()` e `# noqa: PLC0415` justificado inline. ✅ recomendada
+
+**Decisão:** B
+
+**Razão:** a alocação é decisão declarada do plano ("não é arquivo novo"), e o
+ciclo é acidente de mecânica de import, não sinal de desenho errado — o holder
+em si **não** depende dos fakes: é anotado com os dois `Protocol`, que é
+justamente o que o torna reusável pela 3.3. O `noqa` local justificado é o
+precedente que o próprio technical §5 já previa para o caso análogo do
+`PLR0913`. Reversível barato: se a 3.3 preferir um módulo separado para o
+holder, mover é um `git mv` sem mudança de contrato.
+
 <!-- END: post-execution -->
