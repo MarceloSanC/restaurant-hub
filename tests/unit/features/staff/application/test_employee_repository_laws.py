@@ -1,0 +1,356 @@
+"""As sete leis de `EmployeeRepository`, travadas contra o fake (concept §11).
+
+Cada teste leva o nome da lei para que o teste de contrato da 3.3 possa
+pareá-los **lei a lei** — é o que evita a retroação de contrato que a 2.2→2.3
+pagou (ADR 2.3.0003).
+
+O teste mais importante do módulo é
+`test_l_e3_update_com_tenant_alheio_e_not_found_mesmo_com_unidade_divergente`:
+ele trava a **ordem de checagem** do port, que é a única regra daqui cujo
+descumprimento passaria despercebido — todos os outros testes continuariam
+verdes enquanto o port confirmasse a existência de registro alheio.
+"""
+
+import dataclasses
+from datetime import datetime
+from decimal import Decimal
+
+import pytest
+
+from restaurant_hub.features.staff.application.errors import (
+    EmployeeAlreadyExistsError,
+    EmployeeInUseError,
+    EmployeeNotFoundError,
+    EmployeeRelocationError,
+    JobFunctionNotFoundError,
+)
+from restaurant_hub.features.staff.application.ports.out.employee_repository import (
+    EmployeeRepository,
+)
+from restaurant_hub.features.staff.domain.entities.employee import Employee
+from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    EmployeeId,
+    JobFunctionId,
+    TenantId,
+    UnitId,
+)
+from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
+    UnavailabilityPeriod,
+)
+from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
+    FixedSchedule,
+    OnDemand,
+)
+from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+
+pytestmark = pytest.mark.unit
+
+_A = TenantId("tenant-a")
+_B = TenantId("tenant-b")
+_U1 = UnitId("u1")
+_U2 = UnitId("u2")
+_F1 = JobFunctionId("f1")
+_F2 = JobFunctionId("f2")
+_E1 = EmployeeId("e1")
+_PERIODO = UnavailabilityPeriod(
+    start=datetime(2026, 8, 3, 8, 0),
+    end=datetime(2026, 8, 3, 12, 0),
+)
+
+
+_BASE = Employee(
+    id=_E1,
+    tenant_id=_A,
+    unit_id=_U1,
+    name="Maria",
+    workload_profile=FixedSchedule(weekly_hours=Decimal("44")),
+    shift_preference=None,
+    job_function_ids=frozenset({_F1}),
+)
+
+
+def _funcionario(**overrides: object) -> Employee:
+    # Mesma forma do helper da suíte de domínio da 3.1: `dataclasses.replace`
+    # chama o construtor real, então cada override passa pelo `__post_init__`
+    # como uma construção direta passaria.
+    return dataclasses.replace(_BASE, **overrides)
+
+
+def _com_funcoes_gravadas() -> StaffFakes:
+    """Par com `f1` e `f2` no tenant A e `f1` também no tenant B (id `f-b`)."""
+    fakes = staff_repositories()
+    fakes.job_functions.add(JobFunction(id=_F1, tenant_id=_A, name="Cozinheiro"))
+    fakes.job_functions.add(JobFunction(id=_F2, tenant_id=_A, name="Chapeiro"))
+    fakes.job_functions.add(JobFunction(id=JobFunctionId("f-b"), tenant_id=_B, name="Cozinheiro"))
+    return fakes
+
+
+def _com_funcionario_gravado() -> StaffFakes:
+    fakes = _com_funcoes_gravadas()
+    fakes.employees.add(_funcionario())
+    return fakes
+
+
+# --- L-E1: `add` é inserção, não upsert --------------------------------------
+
+
+def test_l_e1_add_com_id_ja_gravado_e_erro_e_nao_altera_o_registro() -> None:
+    fakes = _com_funcionario_gravado()
+    with pytest.raises(EmployeeAlreadyExistsError):
+        fakes.employees.add(_funcionario(name="Joana"))
+    gravado = fakes.employees.find_by_id(_A, _E1)
+    assert gravado is not None
+    assert gravado.name == "Maria"
+
+
+def test_l_e1_add_com_id_gravado_em_outro_tenant_tambem_e_erro() -> None:
+    """Escopo **global** do id — mesma razão de `JobFunctionRepository.add`."""
+    fakes = _com_funcionario_gravado()
+    with pytest.raises(EmployeeAlreadyExistsError):
+        fakes.employees.add(
+            _funcionario(tenant_id=_B, job_function_ids=frozenset({JobFunctionId("f-b")}))
+        )
+
+
+# --- L-E2: `update` é UPDATE, não upsert -------------------------------------
+
+
+def test_l_e2_update_de_inexistente_no_tenant_nao_grava_nada() -> None:
+    fakes = _com_funcoes_gravadas()
+    with pytest.raises(EmployeeNotFoundError):
+        fakes.employees.update(_funcionario())
+    assert fakes.employees.find_by_id(_A, _E1) is None
+    assert fakes.employees.list_by_unit(_A, _U1) == ()
+
+
+def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz() -> None:
+    """Nome, perfil, preferência, conjunto, indisponibilidades **e estado**."""
+    fakes = _com_funcionario_gravado()
+    editado = _funcionario(name="Joana", job_function_ids=frozenset({_F2}), active=False)
+    editado = editado.change_workload_profile(OnDemand()).add_unavailability(_PERIODO)
+    fakes.employees.update(editado)
+    gravado = fakes.employees.find_by_id(_A, _E1)
+    assert gravado is not None
+    assert (
+        gravado.name,
+        gravado.workload_profile,
+        gravado.job_function_ids,
+        gravado.unavailabilities,
+        gravado.active,
+    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False)
+
+
+# --- L-E3: localização imutável ----------------------------------------------
+
+
+def test_l_e3_update_com_unidade_divergente_no_mesmo_tenant_e_relocation() -> None:
+    fakes = _com_funcionario_gravado()
+    with pytest.raises(EmployeeRelocationError):
+        fakes.employees.update(_funcionario(unit_id=_U2, name="Joana"))
+    gravado = fakes.employees.find_by_id(_A, _E1)
+    assert gravado is not None
+    # Na unidade original E com os campos antigos: nada foi gravado.
+    assert (gravado.unit_id, gravado.name) == (_U1, "Maria")
+
+
+def test_l_e3_update_com_tenant_alheio_e_not_found_mesmo_com_unidade_divergente() -> None:
+    """**Teste irmão obrigatório da ordem de checagem** (concept §4/L-E3, §5.4).
+
+    Este é o cenário perigoso: o registro existe, mas no tenant A; a tentativa
+    vem com `tenant_id` do B **e** unidade divergente. Uma implementação que
+    comparasse a unidade primeiro responderia `EmployeeRelocationError` — e esse
+    erro, sozinho, **confirma ao tenant B que o registro existe** e em que
+    unidade não está. A regra normativa de §5.4 é mais alta e vence a L-E3.
+
+    A asserção é sobre o **tipo exato**, não `pytest.raises(EmployeeNotFoundError)`
+    puro: a comparação exata é o que distingue "o port acertou" de "o port
+    levantou outra coisa que por acaso também não é `Relocation`".
+
+    De quebra, isto fixa L-E4 **depois** do lookup: o conjunto `{f1}` não existe
+    no tenant B, então uma ordem que resolvesse as funções primeiro devolveria
+    `JobFunctionNotFoundError` — e também vazaria, dizendo ao B algo sobre o
+    catálogo do A.
+    """
+    fakes = _com_funcionario_gravado()
+    with pytest.raises(StaffError) as excecao:
+        fakes.employees.update(_funcionario(tenant_id=_B, unit_id=_U2, name="Joana"))
+    assert type(excecao.value) is EmployeeNotFoundError
+
+    gravado = fakes.employees.find_by_id(_A, _E1)
+    assert gravado is not None
+    assert (gravado.tenant_id, gravado.unit_id, gravado.name) == (_A, _U1, "Maria")
+
+
+def test_l_e3_update_com_a_mesma_unidade_e_aceito() -> None:
+    """O contrapositivo: a lei bloqueia relocalização, não edição."""
+    fakes = _com_funcionario_gravado()
+    fakes.employees.update(_funcionario(name="Joana"))
+    gravado = fakes.employees.find_by_id(_A, _E1)
+    assert gravado is not None
+    assert gravado.name == "Joana"
+
+
+# --- L-E4: validade referencial do conjunto ----------------------------------
+
+
+def test_l_e4_add_com_funcao_inexistente_no_tenant_nao_grava_nada() -> None:
+    fakes = _com_funcoes_gravadas()
+    with pytest.raises(JobFunctionNotFoundError):
+        fakes.employees.add(_funcionario(job_function_ids=frozenset({JobFunctionId("f99")})))
+    assert fakes.employees.find_by_id(_A, _E1) is None
+
+
+def test_l_e4_add_com_funcao_existente_em_outro_tenant_nao_grava_nada() -> None:
+    """Id de função alheia conta como **ausente** — a resolução é escopada."""
+    fakes = _com_funcoes_gravadas()
+    with pytest.raises(JobFunctionNotFoundError):
+        fakes.employees.add(_funcionario(job_function_ids=frozenset({JobFunctionId("f-b")})))
+    assert fakes.employees.find_by_id(_A, _E1) is None
+
+
+def test_l_e4_add_rejeita_o_conjunto_quando_so_uma_das_funcoes_falta() -> None:
+    """A lei é sobre **toda** id do conjunto, não sobre "alguma existir"."""
+    fakes = _com_funcoes_gravadas()
+    with pytest.raises(JobFunctionNotFoundError):
+        fakes.employees.add(_funcionario(job_function_ids=frozenset({_F1, JobFunctionId("f99")})))
+    assert fakes.employees.find_by_id(_A, _E1) is None
+
+
+def test_l_e4_update_com_funcao_inexistente_nao_grava_nada() -> None:
+    fakes = _com_funcionario_gravado()
+    with pytest.raises(JobFunctionNotFoundError):
+        fakes.employees.update(
+            _funcionario(name="Joana", job_function_ids=frozenset({JobFunctionId("f99")}))
+        )
+    gravado = fakes.employees.find_by_id(_A, _E1)
+    assert gravado is not None
+    assert (gravado.name, gravado.job_function_ids) == ("Maria", frozenset({_F1}))
+
+
+# --- L-E5: `delete` é remoção definitiva guardada ----------------------------
+
+
+def test_l_e5_delete_de_inexistente_no_tenant_e_not_found() -> None:
+    fakes = _com_funcoes_gravadas()
+    with pytest.raises(EmployeeNotFoundError):
+        fakes.employees.delete(_A, _E1)
+
+
+def test_l_e5_delete_de_existente_remove_o_registro() -> None:
+    fakes = _com_funcionario_gravado()
+    fakes.employees.delete(_A, _E1)
+    assert fakes.employees.find_by_id(_A, _E1) is None
+
+
+def test_l_e5_nenhum_caminho_de_v1_produz_employee_in_use_error() -> None:
+    """A ausência de produtor em v1 é **declarada**, não esquecida.
+
+    Nada no escopo atual referencia o registro de funcionário: o que existe são
+    referências **saindo** dele (funções) e valores **dentro** dele
+    (indisponibilidades). Por isso o registro mais "conectado" que v1 consegue
+    montar — desligado, com duas funções, com indisponibilidade e com um colega
+    compartilhando as mesmas funções — ainda é removível.
+
+    Quem passa a produzir o erro é o Step 4 (alocação), pela FK da 3.3. A lei
+    está publicada agora para que a 3.4/Step 4 não retroajam o contrato do port.
+    """
+    fakes = _com_funcoes_gravadas()
+    conectado = _funcionario(job_function_ids=frozenset({_F1, _F2}), active=False)
+    fakes.employees.add(conectado.add_unavailability(_PERIODO))
+    fakes.employees.add(_funcionario(id=EmployeeId("e2"), job_function_ids=frozenset({_F1, _F2})))
+
+    fakes.employees.delete(_A, _E1)  # não levanta EmployeeInUseError
+    assert fakes.employees.find_by_id(_A, _E1) is None
+
+
+def test_l_e5_employee_in_use_error_existe_e_a_lei_esta_documentada_no_port() -> None:
+    """Classe instanciável, com mensagem, e lei legível por quem implementa a 3.3."""
+    assert "e-1" in str(EmployeeInUseError("e-1"))
+    documentacao = EmployeeRepository.delete.__doc__ or ""
+    assert "EmployeeInUseError" in documentacao
+    assert "Step 4" in documentacao
+
+
+# --- L-E6: listagem por unidade ----------------------------------------------
+
+
+def test_l_e6_list_by_unit_devolve_so_a_unidade_pedida() -> None:
+    fakes = _com_funcionario_gravado()
+    fakes.employees.add(_funcionario(id=EmployeeId("e2"), unit_id=_U2))
+    assert {registro.id for registro in fakes.employees.list_by_unit(_A, _U1)} == {_E1}
+    assert {registro.id for registro in fakes.employees.list_by_unit(_A, _U2)} == {EmployeeId("e2")}
+
+
+def test_l_e6_list_by_unit_esconde_desligados_por_default() -> None:
+    fakes = _com_funcionario_gravado()
+    fakes.employees.add(_funcionario(id=EmployeeId("e2"), active=False))
+    assert {registro.id for registro in fakes.employees.list_by_unit(_A, _U1)} == {_E1}
+
+
+def test_l_e6_list_by_unit_inclui_desligados_com_include_inactive() -> None:
+    """O desligado **sobrevive**: some da lista default, não do sistema."""
+    fakes = _com_funcionario_gravado()
+    fakes.employees.add(_funcionario(id=EmployeeId("e2"), active=False))
+    incluindo = fakes.employees.list_by_unit(_A, _U1, include_inactive=True)
+    assert {registro.id for registro in incluindo} == {_E1, EmployeeId("e2")}
+    # E continua endereçável por id, com ou sem flag.
+    assert fakes.employees.find_by_id(_A, EmployeeId("e2")) is not None
+
+
+# --- L-E7: consulta de referência a função -----------------------------------
+
+
+def test_l_e7_exists_by_job_function_e_false_sem_referencia() -> None:
+    fakes = _com_funcoes_gravadas()
+    assert fakes.employees.exists_by_job_function(_A, _F1) is False
+
+
+def test_l_e7_exists_by_job_function_e_true_em_qualquer_unidade_do_tenant() -> None:
+    """Tenant-wide porque a **função** é tenant-scoped: uma referência em
+    qualquer unidade impede a remoção."""
+    fakes = _com_funcoes_gravadas()
+    fakes.employees.add(_funcionario(unit_id=_U2))
+    assert fakes.employees.exists_by_job_function(_A, _F1) is True
+
+
+def test_l_e7_exists_by_job_function_e_true_para_referenciador_desligado() -> None:
+    fakes = _com_funcoes_gravadas()
+    fakes.employees.add(_funcionario(active=False))
+    assert fakes.employees.exists_by_job_function(_A, _F1) is True
+
+
+def test_l_e7_exists_by_job_function_e_false_para_referencia_de_outro_tenant() -> None:
+    """O booleano não pode contar registros do restaurante alheio."""
+    fakes = _com_funcoes_gravadas()
+    fakes.employees.add(
+        _funcionario(tenant_id=_B, job_function_ids=frozenset({JobFunctionId("f-b")}))
+    )
+    assert fakes.employees.exists_by_job_function(_A, JobFunctionId("f-b")) is False
+    assert fakes.employees.exists_by_job_function(_B, JobFunctionId("f-b")) is True
+
+
+# --- escopo de tenant (teste dedicado do port) -------------------------------
+
+
+def test_escopo_de_tenant_registro_do_a_e_invisivel_e_intocavel_com_tenant_b() -> None:
+    """Um registro do tenant A é **indistinguível de inexistente** para o B.
+
+    `add` fica **fora** deste critério pela mesma razão do port de função: a
+    colisão de id é global e declarada (quadro do concept §4).
+
+    A face de escrita desta regra — `update` com tenant alheio devolvendo
+    `NotFound` e não `Relocation` — é a mesma vista pelo lado da L-E3, e está
+    travada no teste irmão acima. Aqui se trava a face de leitura, listagem e
+    remoção.
+    """
+    fakes = _com_funcionario_gravado()
+
+    assert fakes.employees.find_by_id(_B, _E1) is None
+    assert fakes.employees.list_by_unit(_B, _U1) == ()
+    assert fakes.employees.list_by_unit(_B, _U1, include_inactive=True) == ()
+
+    with pytest.raises(EmployeeNotFoundError):
+        fakes.employees.delete(_B, _E1)
+    assert fakes.employees.find_by_id(_A, _E1) is not None
