@@ -8,12 +8,14 @@ serviriam: elas comparam só por id.
 """
 
 import dataclasses
+import inspect
 import typing
 from datetime import datetime
 from decimal import Decimal
 
 import pytest
 
+from restaurant_hub.features.staff.application.dtos import commands, queries, results
 from restaurant_hub.features.staff.application.dtos.commands import (
     AssignJobFunctionsCommand,
     ChangeWorkloadProfileCommand,
@@ -124,11 +126,59 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
 _DTOS_ESPERADOS = 14 + 2 + 2  # commands + queries + results (concept §4)
 
 
+def _dtos_declarados() -> set[type]:
+    """Todas as classes declaradas nos três módulos de DTO.
+
+    O filtro é **só** por módulo de origem, deliberadamente — mesma disciplina
+    do `_application_error_classes()` do `test_errors.py`. Filtrar também por
+    `dataclasses.is_dataclass` pareceria mais preciso e seria um falso verde: um
+    command declarado como classe comum simplesmente não entraria na lista, e a
+    suíte passaria — enquanto ele seria mutável na prática. Ser dataclass
+    `frozen` é **asserção**, não filtro.
+    """
+    declaradas: set[type] = set()
+    for modulo in (commands, queries, results):
+        declaradas |= {
+            obj
+            for _, obj in inspect.getmembers(modulo, inspect.isclass)
+            if obj.__module__ == modulo.__name__
+        }
+    return declaradas
+
+
+def test_a_lista_de_dtos_cobre_todos_os_declarados_nos_tres_modulos() -> None:
+    """A tupla `_TODOS_OS_DTOS` **é** o módulo, não uma amostra dele.
+
+    Sem esta asserção a tupla é literal e ninguém a confronta com a realidade:
+    um 19º command **sem `frozen`** acrescentado a `commands.py` escaparia das
+    três guardas de uma vez (contagem, imutabilidade e igualdade por valor),
+    porque nenhuma delas o enxergaria. É a mesma falha que o
+    `test_errors.py` fechou na partição "404 vs. não-404".
+    """
+    assert {type(dto) for dto in _TODOS_OS_DTOS} == _dtos_declarados()
+
+
 def test_a_stage_declara_catorze_commands_duas_queries_e_dois_results() -> None:
     """Guarda a contagem do concept §4: DTO novo ou removido força revisão."""
     assert len(_TODOS_OS_DTOS) == _DTOS_ESPERADOS
     # Nenhum DTO repetido na lista: 18 entradas de 18 tipos distintos.
     assert len({type(dto) for dto in _TODOS_OS_DTOS}) == _DTOS_ESPERADOS
+
+
+@pytest.mark.parametrize(
+    "dto_class",
+    sorted(_dtos_declarados(), key=lambda cls: cls.__name__),
+    ids=lambda cls: cls.__name__,
+)
+def test_todo_dto_declarado_e_dataclass_frozen(dto_class: type) -> None:
+    """A checagem que o filtro por módulo (e não por `is_dataclass`) torna possível.
+
+    Um DTO que nasça sem `@dataclass(frozen=True)` perde as duas propriedades de
+    que a camada depende — imutabilidade e igualdade por valor — e falha **aqui**,
+    em vez de ser silenciosamente ignorado pela suíte.
+    """
+    assert dataclasses.is_dataclass(dto_class), f"{dto_class.__name__} não é dataclass"
+    assert dto_class.__dataclass_params__.frozen, f"{dto_class.__name__} não é frozen"  # type: ignore[attr-defined]
 
 
 @pytest.mark.parametrize("dto", _TODOS_OS_DTOS, ids=lambda dto: type(dto).__name__)
@@ -243,7 +293,12 @@ def test_nenhum_result_carrega_vinculo_de_login() -> None:
 
 
 def _tipos_folha(anotacao: object) -> set[object]:
-    """Achata uma anotação em folhas (`frozenset[JobFunctionId]` → {frozenset, JobFunctionId}).
+    """Achata uma anotação nos seus tipos-**folha**, descartando os contêineres.
+
+    `frozenset[JobFunctionId]` devolve `{JobFunctionId}`, não
+    `{frozenset, JobFunctionId}`: quando há argumentos, a origem é substituída
+    por eles. É o que se quer — a guarda pergunta "que tipo **trafega** neste
+    campo", e `frozenset`/`tuple` são embalagem, não carga.
 
     A checagem precisa ser **estrutural**, não textual: `EmployeeId` contém a
     substring "Employee", então um `"Employee" not in str(anotacao)` reprovaria
@@ -258,16 +313,29 @@ def _tipos_folha(anotacao: object) -> set[object]:
     return folhas
 
 
-@pytest.mark.parametrize("result", [EmployeeResult, JobFunctionResult])
-def test_nenhum_campo_de_result_e_anotado_com_entidade(result: type) -> None:
+@pytest.mark.parametrize(
+    "dto_class",
+    sorted(_dtos_declarados(), key=lambda cls: cls.__name__),
+    ids=lambda cls: cls.__name__,
+)
+def test_nenhum_campo_de_dto_e_anotado_com_entidade(dto_class: type) -> None:
     """Use case devolve DTO, nunca entidade (CLAUDE.md nota 6; LAYOUT §7).
 
     VO de domínio pode trafegar (`WorkloadProfile`, `ShiftPreference`,
     `UnavailabilityPeriod`); entidade, não — ela tem identidade e ciclo de vida,
     e vazá-la daria ao adapter da 3.4 acesso às transições do agregado.
+
+    Roda sobre os **18** DTOs, não só sobre os dois results: a docstring de
+    `commands.py` afirma a garantia para os commands ("nem `Employee` nem
+    `JobFunction` aparecem em nenhum campo"), e afirmação de docstring sem teste
+    é justamente o que a memória do projeto chama de conformidade não verificada.
+    Um command que recebesse a entidade seria o caminho mais curto para o adapter
+    da 3.4 montar o agregado por fora do domínio.
     """
-    anotacoes = typing.get_type_hints(result)
+    anotacoes = typing.get_type_hints(dto_class)
     for nome, anotacao in anotacoes.items():
         folhas = _tipos_folha(anotacao)
-        assert Employee not in folhas, f"{result.__name__}.{nome} expõe a entidade Employee"
-        assert JobFunction not in folhas, f"{result.__name__}.{nome} expõe a entidade JobFunction"
+        assert Employee not in folhas, f"{dto_class.__name__}.{nome} expõe a entidade Employee"
+        assert JobFunction not in folhas, (
+            f"{dto_class.__name__}.{nome} expõe a entidade JobFunction"
+        )
