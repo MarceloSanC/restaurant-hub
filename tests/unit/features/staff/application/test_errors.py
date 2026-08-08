@@ -78,6 +78,25 @@ def test_modulo_declara_as_nove_excecoes_esperadas() -> None:
     }
 
 
+def test_a_particao_404_x_nao_404_cobre_todos_os_erros_do_modulo() -> None:
+    """As duas tuplas literais **particionam** o módulo — nenhum erro fica de fora.
+
+    Sem esta asserção as duas listas são só amostras: um décimo erro futuro
+    entraria na lista de nomes esperados (que o teste acima trava) e **escaparia**
+    da checagem `not issubclass(..., NotFoundError)`, porque ninguém o teria
+    acrescentado à tupla. Um `*AlreadyExistsError` acidentalmente 404 passaria
+    verde — que é exatamente o defeito que a partição existe para impedir.
+
+    (O espelho deste teste em identity tem o mesmo flanco aberto; o defeito não
+    foi replicado aqui de propósito.)
+    """
+    particao = set(_NOT_FOUND_ERRORS) | set(_NON_NOT_FOUND_ERRORS)
+    assert particao == set(_application_error_classes())
+    # E são disjuntas: um erro em ambas as tuplas satisfaria a união acima e
+    # tornaria as duas asserções contraditórias sobre a mesma classe.
+    assert not set(_NOT_FOUND_ERRORS) & set(_NON_NOT_FOUND_ERRORS)
+
+
 @pytest.mark.parametrize("error_class", _application_error_classes())
 def test_todo_erro_de_aplicacao_e_staff_error_e_domain_error(error_class: type) -> None:
     """Nenhum erro de negócio desta camada pode escapar para 500 na 3.4.
