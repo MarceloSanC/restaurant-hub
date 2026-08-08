@@ -3,7 +3,7 @@ title: Concept — Use cases de equipe
 description: Camada de aplicação do BC staff — use cases de função e funcionário (com ciclo de vida do funcionário), jornada/preferência, indisponibilidade e cópia entre unidades, sobre ports-out escopados por tenant e testados com fakes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff-application, use-cases, port-out, dto, funcionario, funcao, indisponibilidade, copia-unidade, fakes, ciclo-de-vida]
-status: draft
+status: done
 created_at: 2026-08-08
 updated_at: 2026-08-08
 stage_id: 3.2-staff-application
@@ -275,12 +275,22 @@ Três fatos do domínio 3.1 moldam os contratos desta Stage:
     **inteiro** (nome, perfil, preferência, conjunto de funções,
     indisponibilidades, estado).
   - **L-E3 (localização imutável) —** `add`/`update` **não relocalizam** o
-    registro: um `update` cujo par `(tenant_id, unit_id)` divirja do gravado ⇒
+    registro: um `update` cujo `unit_id` divirja do gravado ⇒
     **`EmployeeRelocationError`**. A lei tem exceção nomeada de propósito — sem
     nome, a única saída seria "gravar o que veio" (mover o registro em silêncio)
     ou "gravar o que estava" (descartar a escrita em silêncio), e as duas são
     corrupção silenciosa. O único caminho para existir em outra unidade é a
     cópia (§5.10).
+
+    > **A lei é sobre `unit_id`, dentro do mesmo tenant — não sobre
+    > `tenant_id`.** `tenant_id` divergente não é relocalização: é o registro
+    > **não existir** naquele escopo. A regra normativa de §5.4 é mais alta e
+    > vence — `EmployeeNotFoundError`, nunca um erro que confirme a existência
+    > do registro alheio. Consequência para o port (fake e adapter da 3.3): a
+    > **ordem de checagem é fixa** — primeiro o lookup por `(tenant_id, id)`
+    > (ausente ⇒ `EmployeeNotFoundError`), só depois a comparação de `unit_id`
+    > (divergente ⇒ `EmployeeRelocationError`). Invertê-la reintroduz o
+    > vazamento. Vale igual para `L-E2`, `L-E4` e `L-E5`.
   - **L-E4 (validade referencial) —** `add`/`update` exigem que **toda** id de
     `employee.job_function_ids` exista **no mesmo tenant**; alguma ausente ⇒
     `JobFunctionNotFoundError`. Sem esta lei, uma função removida entre a
@@ -480,7 +490,8 @@ Daí a asserção exata de §11 (índices na MRO, não `issubclass`).
    Consequência normativa: um id **de outro tenant** é **indistinguível de
    inexistente** — devolve `*NotFoundError`, nunca um erro que confirme a
    existência do registro alheio (nem `JobFunctionInUseError`, nem
-   `JobFunctionNameAlreadyExistsError`).
+   `JobFunctionNameAlreadyExistsError`, nem `EmployeeRelocationError` — ver o
+   quadro de ordem de checagem em L-E3).
 5. **Nome de função é único no tenant, verbatim.** Comparação **exata** — sem
    trim, sem case-folding: `"Cozinheiro"` e `"cozinheiro "` são nomes distintos.
    A **unicidade verbatim** é canônica em
@@ -609,7 +620,7 @@ na escrita. Ela morreu com o ADR 3.2.0005, junto com o estado.
 | Id de função/funcionário já gravado (`add` é inserção) | `JobFunctionAlreadyExistsError` / `EmployeeAlreadyExistsError` | port (L-JF1/L-E1) |
 | Alguma função do conjunto não existe no tenant | `JobFunctionNotFoundError` | application (3.2) + port (L-E4) |
 | Remoção de função referenciada por algum funcionário (ativo ou inativo) | `JobFunctionInUseError` | application (3.2) + port (L-JF3) |
-| `update` que mudaria `tenant_id`/`unit_id` do registro | `EmployeeRelocationError` | port (L-E3) |
+| `update` que mudaria a `unit_id` do registro (mesmo tenant) | `EmployeeRelocationError` | port (L-E3) |
 | Cópia cujo destino é a própria unidade de origem | `SameUnitCopyError` | application (3.2) |
 | Nome vazio/só-whitespace (funcionário ou função); identificador vazio | `InvalidNameError` / `InvalidIdentifierError` | domínio (3.1), na construção/transição **dentro** do use case |
 | Conjunto de funções vazio | `EmptyJobFunctionsError` | domínio (3.1), idem |
@@ -881,9 +892,12 @@ do BC identity (ADR 2.3.0003).
       `EmployeeAlreadyExistsError`; `update` de funcionário inexistente no
       tenant ⇒ `EmployeeNotFoundError` **e nada é gravado**.
 - [ ] **L-E3 (localização imutável):** `update` de um funcionário cujo `unit_id`
-      (ou `tenant_id`) diverge do gravado ⇒ `EmployeeRelocationError`, e a
+      diverge do gravado, **no mesmo tenant**, ⇒ `EmployeeRelocationError`, e a
       releitura devolve o registro **na unidade original, com os campos
-      antigos**.
+      antigos**. Com `tenant_id` divergente o erro é `EmployeeNotFoundError`
+      (§5.4 vence — o erro não pode confirmar a existência do registro alheio):
+      teste dedicado fixa a **ordem de checagem** do port, lookup por
+      `(tenant_id, id)` antes da comparação de `unit_id`.
 - [ ] **L-E4 (validade referencial):** `add`/`update` de funcionário cujo
       conjunto contém id de função **inexistente no tenant** (ou existente em
       **outro** tenant) ⇒ `JobFunctionNotFoundError` e nada é gravado.
