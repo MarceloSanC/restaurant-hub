@@ -133,6 +133,32 @@ def test_l_jf1_a_unicidade_de_nome_e_verbatim(variante: str) -> None:
 # --- L-JF2: `update` é UPDATE, não upsert ------------------------------------
 
 
+def test_find_by_name_encontra_o_nome_exato_e_recusa_o_normalizado() -> None:
+    """O `find_by_name` em si — não a guarda do `add` — comparado **verbatim**.
+
+    Este teste existe porque a suíte não tinha nenhum caminho positivo por
+    `find_by_name`: a unicidade verbatim era exercitada só pelo `_guard_name`
+    do `add`, e trocar a comparação do `find_by_name` por
+    `.strip().lower()` deixava tudo verde.
+
+    Não é preciosismo de fake: a 3.3 pareia o contrato **lei a lei** contra
+    esta suíte, e um adapter Postgres com `ILIKE` ou `lower(name)` passaria
+    igual — reintroduzindo a divergência fake↔adapter do ADR 2.3.0003 no
+    método mais fácil de errar, porque normalizar nome "parece certo".
+    """
+    fakes = _com_funcao_gravada()
+
+    encontrada = fakes.job_functions.find_by_name(_A, "Cozinheiro")
+    assert encontrada is not None
+    assert encontrada.id == _F1
+
+    # As variantes que uma normalização silenciosa colapsaria no mesmo nome.
+    assert fakes.job_functions.find_by_name(_A, "cozinheiro ") is None
+    assert fakes.job_functions.find_by_name(_A, "COZINHEIRO") is None
+    assert fakes.job_functions.find_by_name(_A, " Cozinheiro") is None
+    assert fakes.job_functions.find_by_name(_A, "Cozinheiro ") is None
+
+
 def test_l_jf2_update_de_funcao_inexistente_no_tenant_nao_grava_nada() -> None:
     fakes = staff_repositories()
     with pytest.raises(JobFunctionNotFoundError):
