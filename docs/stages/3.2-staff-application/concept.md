@@ -3,7 +3,7 @@ title: Concept — Use cases de equipe
 description: Camada de aplicação do BC staff — use cases de função e funcionário (com ciclo de vida do funcionário), jornada/preferência, indisponibilidade e cópia entre unidades, sobre ports-out escopados por tenant e testados com fakes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff-application, use-cases, port-out, dto, funcionario, funcao, indisponibilidade, copia-unidade, fakes, ciclo-de-vida]
-status: draft
+status: done
 created_at: 2026-08-08
 updated_at: 2026-08-08
 stage_id: 3.2-staff-application
@@ -552,14 +552,29 @@ Daí a asserção exata de §11 (índices na MRO, não `issubclass`).
 
     | Use case | Ordem | Par duplo construível |
     |---|---|---|
-    | `create_job_function` | (1) construir a entidade (nome não-vazio); (2) `find_by_name` → conflito; (3) `add` | **não** — um nome inválido nunca está gravado. O que se testa é que nome vazio **não consome id do gerador nem toca o port** |
+    | `create_job_function` | (1) construir a entidade (nome não-vazio); (2) `find_by_name` → conflito; (3) `add` | **não** — um nome inválido nunca está gravado. O que se testa é que nome vazio **não toca o port** (nem `find_by_name`, nem `add`). O id já saiu do gerador nesse ponto e é descartado — desperdiçar um uuid4 num payload inválido não tem custo, e a alternativa (duplicar a validação de nome na application) violaria §5.15 |
     | `rename_job_function` | (1) carregar → `JobFunctionNotFoundError`; (2) `find_by_name` (ignorando a própria) → conflito; (3) transição; (4) `update` | **sim** — renomear função **inexistente** para um nome **já usado**: vence `NotFound` |
     | `delete_job_function` | (1) existência da função; (2) referências; (3) `delete` | **sim** — função do tenant A, **referenciada**, apagada com `tenant_id` do B: vence `NotFound` (§5.4 — o erro não pode confirmar que ela existe *nem* que está em uso) |
     | `create_employee` | (1) resolver o conjunto de funções → ausência; (2) construir o `Employee` (nome, conjunto não-vazio, ids); (3) `add` | **sim** — nome vazio **e** função inexistente: vence `JobFunctionNotFoundError` |
+    | `rename_employee` | (1) carregar → `EmployeeNotFoundError`; (2) transição → `InvalidNameError`; (3) `update` | **sim** — funcionário inexistente **e** nome vazio: vence `EmployeeNotFoundError` |
     | `assign_job_functions` | (1) carregar o registro → `EmployeeNotFoundError`; (2) resolver as funções pedidas → ausência; (3) transição; (4) `update` | **sim** — funcionário inexistente **e** função inexistente: vence `EmployeeNotFoundError` |
     | `register_unavailability` | (1) carregar → `EmployeeNotFoundError`; (2) transição → `OverlappingUnavailabilityError`; (3) `update` | **sim** — funcionário inexistente **e** período sobreposto: vence `EmployeeNotFoundError` |
+    | `remove_unavailability` | (1) carregar → `EmployeeNotFoundError`; (2) transição → `UnavailabilityNotFoundError`; (3) `update` | **sim** — funcionário inexistente **e** período ausente do registro: vence `EmployeeNotFoundError` |
     | `delete_employee` | (1) carregar → `EmployeeNotFoundError`; (2) guarda de referências (L-E5, sem produtor em v1); (3) `delete` | **não** em v1 — não há produtor de `EmployeeInUseError` |
     | `copy_employee_to_unit` | (1) carregar a origem; (2) destino ≠ unidade da origem; (3) construir a cópia; (4) `add` | **sim** — origem **de outro tenant** e `target_unit_id` igual à unidade **real** da origem: vence `EmployeeNotFoundError`, e a resposta não revela que o registro existe em outro tenant |
+
+    > **Por que `create_job_function` constrói a entidade antes de tocar o port,
+    > e `create_employee` consulta o port antes de construir.** A assimetria é
+    > deliberada e tem uma regra só por trás: **a checagem mais barata que possa
+    > falhar sozinha vem primeiro**. Em `create_job_function` a validação do nome
+    > é local (não custa I/O) e é a única pré-condição, então validar antes evita
+    > uma consulta inútil e evita consumir um id do gerador por um payload
+    > inválido. Em `create_employee` a entidade **não pode ser construída** sem
+    > que o conjunto de funções esteja resolvido — construir primeiro só para
+    > descobrir depois que uma função não existe produziria erro de domínio
+    > (`InvalidNameError`) num pedido cuja falha real é referencial, escondendo a
+    > causa que o gerente precisa ler. Daí `JobFunctionNotFoundError` vencer o
+    > nome vazio, e não o contrário.
 
 17. **Escrita do agregado inteiro.** Toda edição é read-modify-write do
     `Employee` completo, sem controle de concorrência nesta Stage — duas edições
@@ -757,7 +772,9 @@ error handler HTTP da 2.4 já converte a hierarquia em 4xx, e a 3.4 o reusa.
   (o teste de contrato parametriza fake-par × adapters, não um repositório
   isolado). Precisa de: índice único `(tenant_id, name)` em função, FK
   `RESTRICT` de funcionário→função, coluna booleana `active` em funcionário, e
-  uma decisão de concorrência (§10).
+  **duas decisões próprias** que esta Stage escala como `[finding]` (§10):
+  controle de concorrência na escrita do agregado, e a estratégia de indexação
+  sob o padrão de acesso `(tenant_id, chave)` que o ADR 3.2.0002 impôs.
 - **Stage 3.4 (HTTP):** consome os use cases e **compõe** o escopo — o
   `tenant_id`/`unit_id` de cada command vem do `AuthorizedActor` devolvido por
   `authorize_action` (identity), nunca cru do request. Registra o handler de
@@ -822,6 +839,18 @@ são `frozen`, então a cópia não compartilha nenhum objeto mutável com a ori
   destino). **Stage candidata: `3.4-staff-http`.**
 - **`[finding]` para a 3.3 — controle de concorrência** na escrita do agregado
   (§5.17). **Stage candidata: `3.3-staff-persistence`.**
+- **`[finding]` para a 3.3 — estratégia de indexação sob o escopo de tenant.**
+  Consequência do ADR 3.2.0002: o padrão de acesso de **toda** consulta de staff
+  passou a ser `(tenant_id, chave)`, nunca a chave sozinha. Escolher entre índice
+  composto `(tenant_id, id)`, a PK simples com filtro, ou row-level security é
+  decisão da persistência — com trade-offs (amplificação de escrita, tamanho do
+  índice, estabilidade de plano) que só a Stage que os mede deve pesar. Esta
+  Stage **não** a decide; só declara a exigência de decidi-la conscientemente.
+  **Stage candidata: `3.3-staff-persistence`.**
+
+> Os `[finding]` acima são a **lista canônica** desta Stage. Um finding que
+> exista só no corpo de um ADR não é varrido pelo pipeline — se um ADR desta
+> Stage escalar algo, a linha correspondente entra aqui.
 
 ## 11. Critérios de aceitação
 
@@ -901,9 +930,9 @@ do BC identity (ADR 2.3.0003).
       aceito; nome que difere só por espaço/caixa (`"cozinheiro "` vs
       `"Cozinheiro"`) é aceito (unicidade verbatim — workforce §3.2). A
       releitura pelo port devolve o nome exatamente como enviado.
-- [ ] `create_job_function` com nome vazio/só-whitespace ⇒ `InvalidNameError`,
-      **sem consumir id do `IdGenerator`** (o fake do gerador não avança) e
-      **sem tocar o port** (nada gravado, nenhuma consulta de nome).
+- [ ] `create_job_function` com nome vazio/só-whitespace ⇒ `InvalidNameError`
+      **sem tocar o port** — nada gravado e **nenhuma consulta de nome**
+      (o fake registra as chamadas recebidas e o teste asserta a lista vazia).
 - [ ] `rename_job_function` para o **próprio nome atual** é aceito; para o nome
       de **outra** função do tenant ⇒ `JobFunctionNameAlreadyExistsError`; em
       ambos os casos **a releitura pelo port devolve o estado esperado** (o novo
@@ -922,8 +951,10 @@ do BC identity (ADR 2.3.0003).
 - [ ] `create_employee` grava o registro com o conjunto de funções pedido e
       `active=True`; função **inexistente no tenant** ⇒
       `JobFunctionNotFoundError`; conjunto **vazio** ⇒ `EmptyJobFunctionsError`
-      (domínio); **a releitura pelo port devolve o registro gravado**, e nos
-      casos de erro **nada** é gravado.
+      (domínio); **nome vazio/só-whitespace** ⇒ `InvalidNameError` (domínio) —
+      levantado na construção, **depois** da resolução das funções (§5.16);
+      **a releitura pelo port devolve o registro gravado**, e nos casos de erro
+      **nada** é gravado.
 - [ ] `rename_employee` troca o nome (verbatim), **a releitura pelo port devolve
       o nome novo**, e nenhum outro campo do registro muda — comparação
       **campo a campo** sobre o `EmployeeResult` (frozen, igualdade por valor),
@@ -984,7 +1015,7 @@ do BC identity (ADR 2.3.0003).
 - [ ] **Não-vazamento entre unidades:** `list_employees(tenant, unidade A)` não
       devolve registro da unidade B, e vice-versa.
 - [ ] **Precedência das checagens testada** em cada linha "par duplo = sim" da
-      tabela de §5.16 (seis cenários), com o erro esperado nomeado.
+      tabela de §5.16 (**oito** cenários), com o erro esperado nomeado.
 - [ ] **Fluxo ponta-a-ponta com fakes:** criar função → criar funcionário na
       unidade A → definir jornada e preferência → registrar indisponibilidade →
       copiar para a unidade B → desligar o da unidade A → listar A e B (A vazia
@@ -1026,8 +1057,18 @@ do BC identity (ADR 2.3.0003).
       rename/workload/preferência; (11) funcionário — assign + indisponibilidades;
       (12) funcionário — deactivate/reactivate/delete; (13) cópia + fluxo
       ponta-a-ponta + reconciliação do roadmap. A 3B **para** se passar de 13.
-- [x] Riscos críticos têm mitigação plausível? (§10, incluindo os três
-      `[finding]` escalados)
+- [x] Riscos críticos têm mitigação plausível? (§10, incluindo os **quatro**
+      `[finding]` escalados — a lista canônica; um finding que só viva em ADR
+      não é varrido pelo pipeline)
+- [x] Tamanho do documento dentro do saudável? — **NÃO, e conscientemente.**
+      O concept cruzou o sinal de alarme de CONVENTIONS §6 ("> 8 páginas: Stage
+      grande demais, dividir"). A densidade **não** vem de escopo inchado: vem
+      das **leis nomeadas** dos ports (L-JF1…L-E7) e de um critério de aceite
+      **por lei**, que foram exigência explícita do Checkpoint A — sem eles um
+      fake que virasse upsert em silêncio passaria verde (ADR 2.3.0003). O sinal
+      que de fato mede recorte é o de **Tasks**, e ele está em **13**, abaixo do
+      alarme (≥ 14). Registrado aqui para que a próxima leitura saiba que o
+      sinal foi visto e pesado, não ignorado.
 - [x] As regras cross-agregado da 3.1 têm dono explícito nesta Stage? — **sim,
       as três** (nome único, remoção guardada, validade referencial), com o
       grau de garantia de cada uma tabelado ao final da §5. A quarta ("função
