@@ -71,11 +71,18 @@ desta Stage:
    adicione arquivo de `src/` sem nada que o importe derruba a média e reprova
    o próprio commit. Por isso toda Task fecha um ciclo completo — código +
    teste que o exercita.
-3. **Port e fake no mesmo commit (Task 05).** É a prescrição literal da
-   `task-ordering-hex` ("port out (`Protocol`) + use case + in-memory fake …
-   same commit") e o precedente da 2.2 (Task 04). A regra dura que continua
-   valendo — *não misturar port com o **adapter real** do port* — é respeitada:
-   os adapters reais são da 3.3.
+3. **Port e fake no mesmo commit (Task 05).** A `task-ordering-hex` admite as
+   duas formas — "port out (`Protocol`) + use case + in-memory fake … **same
+   commit or consecutive Tasks**" — e aqui a escolha é o mesmo commit por uma
+   razão específica: a **conformidade fake↔`Protocol`** só tem gate quando os
+   dois existem juntos (`_conforms: <Port> = <Fake>(…)` checado pelo
+   `mypy src/ tests/fakes/`). Um commit só com os dois `Protocol` publicaria uma
+   fronteira sem nenhuma verificação de que ela é implementável — e é
+   exatamente essa fronteira que a 3.3 herda. **Não é argumento de cobertura:**
+   módulo de `Protocol` com corpo `...` mede 100% no import (os 10 ports de
+   identity somam 68 statements a 100%), e dois módulos a 0% não moveriam a
+   média global. A regra dura que continua valendo — *não misturar port com o
+   **adapter real** do port* — é respeitada: os adapters reais são da 3.3.
 
 Ordem e razão:
 
@@ -104,11 +111,11 @@ mantém **as mesmas 13 Tasks** e as mesmas fronteiras de escopo, com dois
 remanejamentos declarados aqui para não decidir em silêncio:
 
 - **Ports migraram para a Task dos fakes** (concept: Tasks 5 e 6 separadas;
-  aqui: Task 05 = ports + store + dois fakes). Razão: um commit só com os dois
-  `Protocol` não tem nada que os importe — os arquivos entram na medição de
-  cobertura a 0% — e a conformidade fake↔`Protocol` (checada por `mypy` sobre
-  `tests/fakes/`) não existe até o fake existir. É também a prescrição da
-  `task-ordering-hex`.
+  aqui: Task 05 = ports + store + dois fakes). Razão: a conformidade
+  fake↔`Protocol`, que é o **único gate** sobre a fronteira que a 3.3 vai
+  implementar, só existe quando os dois estão no mesmo commit (ver §Estratégia,
+  item 3). A `task-ordering-hex` admite as duas formas, e esta é a que deixa o
+  commit verificado.
 - **As doze leis viraram Task própria** (concept: dentro da Task dos fakes).
   Razão: é o entregável que a 3.3 herda como especificação executável; um
   commit dedicado torna a revisão da suíte de leis independente da revisão da
@@ -118,7 +125,24 @@ remanejamentos declarados aqui para não decidir em silêncio:
 
 A **folga** que o concept §10 reservava (fundir DTOs + ports numa Task) **não
 foi usada** e permanece disponível se alguma Task precisar ser quebrada durante
-a execução.
+a execução. **Corte já indicado, se a Task 13 estourar na execução:** 13a =
+`copy_employee_to_unit` + o seu teste; 13b = fluxo ponta-a-ponta + guardas
+mecânicas. O corte custa a **14ª** Task (alarme de CONVENTIONS §6), então só se
+paga se a Task 13 se mostrar de fato indivisível em revisão — não por
+antecipação.
+
+### Sinal de tamanho (CONVENTIONS §6) — visto e pesado
+
+Este documento cruza o sinal de alarme de `technical.md` (~15 páginas; faixa
+saudável 3–10). Registrado aqui pelo mesmo motivo que o concept registrou o
+dele: para que a próxima leitura saiba que o sinal **foi visto**, e não
+ignorado. A densidade não vem de escopo inchado — o sinal que mede recorte é o
+de **Tasks**, e ele está em **13**, abaixo do alarme (≥ 14). Ela vem de três
+fontes que o Checkpoint A e o B exigiram explicitamente: um critério de aceite
+**por lei nomeada** do port (doze), a **matriz de rastreabilidade** completa, e
+os **oito** cenários de precedência nomeados um a um. Encurtar qualquer um dos
+três devolveria o defeito que eles existem para impedir (fake que vira upsert
+em silêncio; critério órfão; reordenação silenciosa de checagem).
 
 ### Pré-condições
 
@@ -140,6 +164,23 @@ a execução.
   port mede 100% assim que é importado.
 - Fakes vivem em `tests/fakes/features/staff/` (LAYOUT §2 + skill
   `pytest-with-fakes`), nunca duplicados dentro de `tests/unit/`.
+- **O mapeamento `Employee` → `EmployeeResult` (e `JobFunction` →
+  `JobFunctionResult`) é montado *inline* em cada use case** — precedente
+  literal da 2.2 (`use_cases/create_unit.py`, onde o result é construído no
+  próprio `execute`). **Não existe `dtos/mappers.py` nesta camada** e nenhuma
+  Task o cria: os 11 use cases que devolvem `EmployeeResult` repetem a
+  construção de propósito. Extrair um mapper compartilhado é decisão da 3.3/3.4
+  (quando houver um segundo produtor do mesmo result, o adapter), não desta
+  Stage — antecipá-la criaria um módulo sem âncora no concept §4, que lista
+  DTOs e use cases e nenhum mapper. Se durante a execução a repetição doer,
+  **perguntar** antes de criar o módulo: é arquivo fora do plano (escopo
+  estrito).
+- **Não existe gate automático de cobertura *por arquivo*** neste repo:
+  `pyproject.toml` fixa apenas `fail_under = 90` **global**, aplicado pelo
+  `test-gate` dentro do `make check`. O limiar por arquivo desta Stage é
+  **verificação manual** da tabela do `--cov-report=term-missing` no gate de
+  saída (§3) — não é algo que o `make check` reprova sozinho, e por isso
+  precisa ser conferido a olho, com as linhas coladas no relatório.
 - **Nenhum wiring no `composition_root`**: não há implementação concreta dos
   ports nesta Stage (concept §1 — fora de escopo).
 - Código em **inglês**; docstrings, comentários e nomes de teste em PT-BR, como
@@ -148,6 +189,15 @@ a execução.
   `EmployeeId(str(id_generator.next_id()))` (concept §5.3). Nenhum use case
   chama `uuid4()`.
 - Nenhum use case recebe `Clock` (concept §7).
+- **Três erros do concept §6 são inalcançáveis a partir de qualquer use case
+  desta Stage** — `InvalidWeeklyHoursError`, `EmptyShiftPreferenceError` e
+  `InvalidUnavailabilityPeriodError`. Eles nascem no `__post_init__` do VO, e o
+  command já chega com o VO **construído**: quem os encontra é o chamador (hoje
+  o próprio teste ao montar o command; na 3.4, o adapter HTTP). É o terceiro
+  bloco da §6 do concept ("levantados **antes** do use case"). **Nenhuma Task
+  escreve teste de use case esperando-os** — um `pytest.raises` em volta de
+  `execute()` para qualquer um dos três nunca dispara, porque a exceção já
+  aconteceu na linha que montou o argumento. Mapeá-los para HTTP é da 3.4.
 
 ### Exceções declaradas aos critérios de Task Atômica (PIPELINE §4.3)
 
@@ -253,7 +303,7 @@ tests/
     métodos removidos.
   - A suíte de domínio da 3.1 continua verde; cobertura de
     `job_function.py` em 100%.
-  - `make check` verde (o gate de cobertura por arquivo não regride).
+  - `make check` verde (o gate global de cobertura não regride).
 - **Comando de verificação:**
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
@@ -333,8 +383,10 @@ tests/
     NotFoundError)` — `StaffError` **primeiro** (concept §4: o handler da raiz
     do BC precisa ganhar do genérico no lookup por MRO do Starlette).
   - Cada erro monta a mensagem no `__init__`, citando o recurso ou a regra
-    violada, como os do domínio 3.1. `EmployeeRelocationError` cita o par
-    `(tenant_id, unit_id)` divergente; `SameUnitCopyError` cita a unidade.
+    violada, como os do domínio 3.1. `EmployeeRelocationError` cita a `unit_id`
+    gravada e a enviada — é erro **intra-tenant** (concept §4/L-E3: com tenant
+    divergente o erro é `EmployeeNotFoundError`), então a mensagem **não** cita
+    `tenant_id`; `SameUnitCopyError` cita a unidade.
   - `EmployeeInUseError` nasce **sem produtor** em v1 (lei L-E5) — a docstring
     diz isso explicitamente e nomeia o Step 4 como quem passa a produzi-la.
   - Contrato `[importlinter:contract:staff-application-purity]`, tipo
@@ -360,7 +412,8 @@ tests/
   - `UnavailabilityNotFoundError` (domínio 3.1) **não** é `NotFoundError` —
     teste explícito de que os 422 são decisão e não esquecimento.
   - **Cada** erro é instanciado e a mensagem assertada (executa o `__init__`;
-    sem isso `errors.py` fica abaixo do limiar por arquivo).
+    sem isso `errors.py` fica abaixo do limiar por arquivo que a Stage se
+    impõe em §3 — conferência manual, não gate automático).
   - `lint-imports` reporta `staff-application-purity` como **KEPT** e nenhum
     contrato quebrado.
 - **Comando de verificação:**
@@ -464,9 +517,26 @@ tests/
   - Os dois fakes recebem o store no construtor
     (`InMemoryJobFunctionRepository(store)`); **um par construído sobre stores
     diferentes é erro de teste, não configuração válida**. Um helper
-    `staff_repositories() -> tuple[InMemoryJobFunctionRepository,
-    InMemoryEmployeeRepository]` constrói o par sobre um store novo e é a
-    única forma usada nos testes da Stage.
+    `staff_repositories()` constrói o par sobre um store novo e é a **única**
+    forma usada nos testes da Stage. Ele devolve **os três** objetos — os dois
+    fakes **e o store** — num holder `frozen`
+    (`StaffFakes(store, job_functions, employees)`), e não um par. Holder e
+    helper vivem em `in_memory_staff_store.py`, junto do store que constroem —
+    não é arquivo novo. Os critérios
+    "não tocou o port" (Task 07) asseriram `store.calls`, e sem o store no
+    retorno o teste só o alcançaria por atributo de um dos fakes — acoplando a
+    suíte à representação interna do fake, exatamente o que a
+    `pytest-with-fakes` manda evitar. O holder também é o formato que a 3.3
+    parametriza no teste de contrato.
+  - **Ordem de checagem, normativa (concept §4/L-E3 e §5.4):** todo método que
+    recebe `tenant_id` resolve **primeiro** o lookup por `(tenant_id, id)` —
+    ausente ⇒ `*NotFoundError` — e só **depois** avalia qualquer outra guarda
+    (divergência de `unit_id` em L-E3, referências em L-JF3/L-E5, conjunto de
+    funções em L-E4, nome em L-JF1/L-JF2). Invertê-la faz o port responder um
+    erro que **confirma a existência de registro de outro tenant**, violando a
+    regra normativa de §5.4. `EmployeeRelocationError` é, portanto, um erro
+    **intra-tenant**: só alcançável quando o registro foi encontrado no tenant
+    pedido e a unidade diverge.
   - As doze leis são implementadas **aqui**; os testes que as travam são a
     Task 06.
   - Cada módulo de fake declara, em escopo de módulo,
@@ -476,9 +546,10 @@ tests/
   - Round-trip de cada fake: `add` seguido de `find_by_id` (com o `tenant_id`
     certo) devolve o agregado gravado; `find_by_id` com id inexistente devolve
     `None`.
-  - O helper do par devolve dois fakes que enxergam **o mesmo** store: uma
+  - O helper devolve store + dois fakes que enxergam **o mesmo** store: uma
     função gravada pelo fake de função é visível para a guarda do fake de
-    funcionário (checagem básica de L-E4) e vice-versa (L-JF3).
+    funcionário (checagem básica de L-E4) e vice-versa (L-JF3); e
+    `fakes.store.calls` é alcançável **sem** tocar em atributo de fake.
   - `mypy src/ tests/fakes/` verde — e **validar empiricamente uma vez**:
     remover um método de um fake, confirmar que o mypy acusa
     `missing following protocol member`, restaurar.
@@ -508,7 +579,9 @@ tests/
 - **Detalhes técnicos:**
   - Nomear cada teste pela lei (`test_l_jf1_add_com_id_ja_gravado_...`), para
     que a 3.3 possa parear o teste de contrato lei a lei.
-  - Toda construção do par usa o helper `staff_repositories()` da Task 05.
+  - Toda construção usa o helper `staff_repositories()` da Task 05, que devolve
+    o holder `StaffFakes(store, job_functions, employees)` — nenhum teste da
+    Stage instancia fake diretamente nem alcança o store por atributo de fake.
 - **Critério de aceite** (um por linha de §11/"Leis dos ports"):
   - **L-JF1:** `add` com id já gravado ⇒ `JobFunctionAlreadyExistsError`,
     **inclusive quando o id gravado está em outro tenant**; `add` com nome já
@@ -529,9 +602,15 @@ tests/
   - **L-E1 / L-E2:** `add` com id já gravado ⇒ `EmployeeAlreadyExistsError`
     (inclusive id de outro tenant); `update` de inexistente no tenant ⇒
     `EmployeeNotFoundError` **e nada é gravado**.
-  - **L-E3:** `update` cujo `unit_id` (ou `tenant_id`) diverge do gravado ⇒
-    `EmployeeRelocationError`, e a releitura devolve o registro **na unidade
-    original, com os campos antigos**.
+  - **L-E3:** `update` cujo `unit_id` diverge do gravado, **no mesmo tenant**,
+    ⇒ `EmployeeRelocationError`, e a releitura devolve o registro **na unidade
+    original, com os campos antigos**. **Teste irmão obrigatório, da ordem de
+    checagem:** `update` com `tenant_id` **de outro tenant** ⇒
+    `EmployeeNotFoundError`, **não** `EmployeeRelocationError` — inclusive
+    quando a `unit_id` enviada também diverge da gravada, que é o cenário em
+    que uma implementação que checasse a unidade primeiro vazaria a existência
+    do registro alheio (concept §5.4 vence a L-E3; ver o quadro de L-E3 no
+    concept §4).
   - **L-E4:** `add`/`update` cujo conjunto contém id de função inexistente no
     tenant (**ou existente em outro tenant**) ⇒ `JobFunctionNotFoundError` e
     nada é gravado.
@@ -547,7 +626,9 @@ tests/
   - **Escopo de tenant (teste dedicado por port):** registro criado no tenant A
     não é encontrado, listado, atualizado nem removido usando `tenant_id` do
     tenant B — o erro é `*NotFoundError` e **nunca** uma exceção que confirme a
-    existência do registro alheio (nem `InUse`, nem `AlreadyExists`).
+    existência do registro alheio (nem `InUse`, nem `AlreadyExists`, nem
+    `EmployeeRelocationError`). Este critério e o de L-E3 acima são a **mesma**
+    regra vista dos dois lados; nenhuma entrada tem dois erros obrigatórios.
 - **Comando de verificação:**
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
@@ -591,7 +672,7 @@ tests/
     tenant** é aceito; `"cozinheiro "` e `"Cozinheiro"` são nomes **distintos**
     e ambos são aceitos (unicidade verbatim — workforce §3.2).
   - `create_job_function` com nome vazio/só-whitespace ⇒ `InvalidNameError`
-    **sem tocar o port**: `store.calls` fica **vazio** (nem `find_by_name`, nem
+    **sem tocar o port**: `fakes.store.calls` fica **vazio** (nem `find_by_name`, nem
     `add`).
   - `rename_job_function` para o **próprio nome atual** é aceito e a releitura
     devolve o nome; para o nome de **outra** função do tenant ⇒
@@ -802,9 +883,19 @@ tests/
   - `DeactivateEmployeeUseCase(employees)` / `ReactivateEmployeeUseCase(employees)`:
     carregar ⇒ `EmployeeNotFoundError`; transição (**idempotente no valor**);
     `update`.
-  - `DeleteEmployeeUseCase(employees)` ⇒ `None`. Ordem (§5.16): (1) carregar ⇒
-    `EmployeeNotFoundError`; (2) guarda de referências — **lei L-E5, sem
-    produtor em v1**; (3) `delete`.
+  - `DeleteEmployeeUseCase(employees)` ⇒ `None`. Ordem: (1) carregar ⇒
+    `EmployeeNotFoundError`; (2) `employees.delete`. **Só isso.**
+  - **A guarda de referências da L-E5 é do port, não do use case.** O concept
+    §5.16 lista "(2) guarda de referências" na precedência de `delete_employee`
+    porque descreve a **sequência observável** da operação — mas quem a impõe é
+    o `delete` do repositório (no fake, por construção; na 3.3, pela FK
+    `RESTRICT`), como acontece com L-JF3 do lado da função. **Não escrever no
+    use case um `if` que levante `EmployeeInUseError`**: em v1 nada referencia o
+    registro de funcionário, então esse ramo seria **morto** — e, com
+    `branch = true` na cobertura, o próximo a passar por aqui o "resolve" com um
+    `# pragma: no cover`, que é como um ramo inalcançável vira dívida
+    permanente. O use case chama `delete` e deixa o erro do port subir; quando o
+    Step 4 criar o produtor, o use case **não muda**.
   - O desligamento **não é datado** (o campo é booleano — ADR 3.2.0006);
     nenhum `Clock` é injetado.
 - **Critério de aceite:**
@@ -823,7 +914,9 @@ tests/
   - **Ausência de produtor de `EmployeeInUseError` em v1** fixada como critério:
     teste que percorre os cenários construíveis de `delete_employee` (ativo,
     inativo, com funções, com indisponibilidades) e afirma que **nenhum** a
-    levanta — a classe existe pelo contrato do Step 4, não por engano.
+    levanta — a classe existe pelo contrato do Step 4, não por engano. O use
+    case **não** tem ramo que a levante (ver Detalhes técnicos): o teste fixa
+    a ausência do produtor, não cobre um `if` morto.
 - **Comando de verificação:**
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
@@ -921,7 +1014,7 @@ concept §4 tem ao menos uma Task que o entrega; e nenhuma Task existe sem
 | L-JF5 — `list_by_tenant` devolve todas, sem flag de estado | Task 05 | **Task 06** |
 | L-E1 — `add` é inserção (id global) | Task 05 | **Task 06** |
 | L-E2 — `update` não é upsert; grava o agregado inteiro | Task 05 | **Task 06** |
-| L-E3 — localização imutável (`EmployeeRelocationError`) | Task 05 | **Task 06** |
+| L-E3 — localização imutável, **intra-tenant** (`EmployeeRelocationError`) + ordem de checagem `(tenant_id, id)` antes de `unit_id` | Task 05 | **Task 06** (lei + teste irmão de tenant alheio) |
 | L-E4 — validade referencial do conjunto no `add`/`update` | Task 05 | **Task 06** (+ Tasks 09/11/13 pelo uso) |
 | L-E5 — `delete` guardado; `EmployeeInUseError` sem produtor em v1 | Task 05 | **Task 06** (+ Task 12) |
 | L-E6 — `list_by_unit` exige unidade; só ativos por default | Task 05 | **Task 06** (+ Tasks 09/12) |
@@ -981,7 +1074,7 @@ concept §4 tem ao menos uma Task que o entrega; e nenhuma Task existe sem
 | **Escopo** — precedência testada nos **oito** pares duplos de §5.16 | 07 (rename função), 08 (delete função), 09 (create funcionário), 10 (rename funcionário), 11 (assign, register, remove — três), 13 (cópia) |
 | **Escopo** — fluxo ponta-a-ponta com fakes | 13 |
 | **Escopo** — nenhum use case devolve `Employee`/`JobFunction` | 13 |
-| **Gates** — `make check` verde incl. `staff-application-purity`; cobertura ≥ 90% por arquivo | 03 (contrato) + **todas** (gate por Task) + §3 |
+| **Gates** — `make check` verde incl. `staff-application-purity` (gate automático) e cobertura ≥ 90% por arquivo tocado (conferência manual do `term-missing`) | 03 (contrato) + **todas** (`make check` por Task) + §3 (conferência por arquivo) |
 | **Gates** — suíte da 3.1 verde após as duas mudanças; `grep` limpo | 01 + 02 |
 
 #### Findings escalados do concept §10 (nenhum é entregável desta Stage)
@@ -1014,8 +1107,12 @@ git diff --name-only (git merge-base origin/develop HEAD) HEAD -- src/
       acima, e isso deve ser **dito explicitamente** no relatório em vez de
       simular um e2e HTTP que não existe.
 - [ ] Cobertura ≥ 90% **em cada arquivo tocado** de `src/` — incluindo os dois
-      arquivos de `domain/entities/` modificados nas Tasks 01–02 —, medida por
-      `--cov-report=term-missing`.
+      arquivos de `domain/entities/` modificados nas Tasks 01–02 —, lida **a
+      olho** na tabela do `--cov-report=term-missing`. **Não é gate automático:**
+      o `test-gate` do `make check` só aplica `fail_under = 90` **global**, e a
+      média global esconde arquivo míope. As linhas relevantes do
+      `term-missing` vão **coladas** no relatório final; arquivo abaixo do
+      limiar ⇒ cobrir ou justificar por escrito.
 - [ ] `lint-imports` reporta `staff-application-purity` como **KEPT**.
 
 ### Checklist de fechamento da Stage
@@ -1065,8 +1162,12 @@ Task 02 (Employee com estado) ────┴─► Task 03 (erros + importlinte
 - **Tasks 01 e 02 vêm primeiro e são independentes entre si** — mas ambas
   precedem tudo, porque a forma final das entidades é insumo de DTOs, fakes e
   use cases. Fazê-las depois obrigaria a reescrever os testes da Stage.
-- **Task 05 depende de 03 e 04**: os fakes levantam os erros da Task 03 e o
-  `list_by_unit` devolve entidades que os results da Task 04 mapeiam.
+- **Task 05 depende de 03** por import real: os fakes **levantam** os erros de
+  `application/errors.py` (é o que torna L-JF1/L-E1/L-E3/L-E4 verificáveis).
+  **Não depende de 04 por import** — ports e fakes falam em **entidades** de
+  domínio, nunca em DTOs; quem monta result é o use case (Tasks 07–13). A
+  ordem 04 → 05 é de **coesão de leitura** (a fronteira de dados antes da
+  fronteira de I/O) e pode ser invertida sem retrabalho.
 - **Task 06 depende só de 05** (não toca use case) — pode ser lida como o
   "contrato executável" dos ports, isolada do resto.
 - **Task 08 depende de 07** apenas por coesão de pacote e pela fixture de
@@ -1085,7 +1186,7 @@ Task 02 (Employee com estado) ────┴─► Task 03 (erros + importlinte
 | Task 05 (9 arquivos) ficar grande demais para revisar | Usar a **folga declarada** do concept §10 ao contrário: extrair o `InMemoryStaffStore` + `__init__` para uma Task 05a e deixar ports + fakes na 05b (total 14 = alarme → só com autorização; preferir manter 13) |
 | Remover `JobFunction.active` quebrar algo fora dos testes de domínio | Verificado antes de planejar: `grep` por `JobFunction`/`.active` em `src/` não encontra referência fora de `features/staff/domain/` — a mudança é fechada nos dois arquivos da Task 01 |
 | Fake e futuro adapter divergirem nas guardas (o buraco que a 2.3 retroagiu) | Doze leis nomeadas na docstring do `Protocol` (Task 05) + suíte dedicada (Task 06); `mypy src/ tests/fakes/` dá gate estático à conformidade |
-| Par de fakes ser construído sobre stores diferentes num teste (L-JF3/L-E4 passariam vacuamente) | Helper único `staff_repositories()` como forma canônica de construção; nenhum teste da Stage instancia fake diretamente |
+| Par de fakes ser construído sobre stores diferentes num teste (L-JF3/L-E4 passariam vacuamente) | Helper único `staff_repositories()` devolvendo o holder `StaffFakes(store, job_functions, employees)` como forma canônica; nenhum teste da Stage instancia fake diretamente |
 | Precedência de checagens implementada fora de ordem sem que nenhum teste caia | Oito cenários de par duplo com o erro esperado nomeado (§5.16), distribuídos pelas Tasks 07–13, e mutação real na auditoria |
 | `frozenset`/`tuple` em dataclass gerar atrito de igualdade nos testes "campo a campo" | Results são `frozen` com igualdade por valor (Task 04 fixa isso por teste); a comparação é sobre o `EmployeeResult`, nunca sobre `Employee` (que compara só por id) |
 | `PLR0913` do ruff em construtor de use case com muitas dependências | Nenhum use case desta Stage passa de 3 dependências; se aparecer, seguir o precedente da 2.2 (`noqa` local justificado) e registrar `[decision]` em §7 |
