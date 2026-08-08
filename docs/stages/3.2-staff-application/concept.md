@@ -3,7 +3,7 @@ title: Concept — Use cases de equipe
 description: Camada de aplicação do BC staff — use cases de função e funcionário (com ciclo de vida do funcionário), jornada/preferência, indisponibilidade e cópia entre unidades, sobre ports-out escopados por tenant e testados com fakes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff-application, use-cases, port-out, dto, funcionario, funcao, indisponibilidade, copia-unidade, fakes, ciclo-de-vida]
-status: done
+status: draft
 created_at: 2026-08-08
 updated_at: 2026-08-08
 stage_id: 3.2-staff-application
