@@ -1287,4 +1287,35 @@ precedente que o próprio technical §5 já previa para o caso análogo do
 `PLR0913`. Reversível barato: se a 3.3 preferir um módulo separado para o
 holder, mover é um `git mv` sem mudança de contrato.
 
+---
+
+### 2026-08-08 — [finding] idioma de identificadores locais em `src/` — executor
+
+**Contexto:** o Checkpoint C do bloco 3 apontou identificadores locais em
+**português** dentro de `src/` — `homonima` e `renomeada`
+(`rename_job_function.py`), `encontradas` e `ausentes` (`create_employee.py`) —
+contra a regra de idioma de [`CONVENTIONS.md`](../../CONVENTIONS.md) §1 (*código
+em inglês; PT só em docstrings, comentários e nomes de teste*). O precedente do
+BC identity usa inglês nos locais.
+
+**Por que não foi corrigido nesta Stage:** não é defeito introduzido aqui. A
+Stage 3.1 **já mergeou** com o mesmo padrão (`indice`, `periodo`, `restantes`,
+`existente` em `employee.py`), então corrigir só os quatro nomes desta Stage
+deixaria o BC `staff` internamente incoerente — meio arquivo em cada idioma —
+sem fechar a regra. A correção honesta é uma varredura do BC inteiro, que é
+**escopo transversal** e não cabe no recorte desta Stage (nenhuma Task o
+prevê, e mexer em `employee.py` por isso violaria o escopo estrito).
+
+**Direção sugerida:** issue pós-Stage (branch `refactor/<issue>-...`, formato
+pós-Stage de GIT-WORKFLOW §Branches) que renomeie os locais em PT de **todo** o
+BC `staff` para inglês, num commit só, sem mudança de comportamento — o
+`make check` verde é o gate suficiente, já que nenhum dos nomes atravessa
+fronteira de módulo. Vale conferir no mesmo passo se `scripts/check_layout.py`
+ou o ruff conseguem impedir a reintrodução, para não depender de revisão humana.
+
+**Stage candidata:** nenhuma — é **pós-Stage** (chore/refactor transversal ao BC
+`staff`), a ser aberto como issue própria após o merge do PR desta Stage.
+Registrado aqui, e não só no relatório do checkpoint, porque finding que vive
+fora da §7 não é varrido pelo pipeline.
+
 <!-- END: post-execution -->

@@ -121,6 +121,11 @@ def test_cria_registro_sob_demanda() -> None:
     )
     resultado = _criar(fakes).execute(comando)
     assert resultado.workload_profile == OnDemand()
+    # Releitura pelo port, como o resto da suíte: o result é o que o use case
+    # diz ter feito; a releitura é o que ele gravou.
+    gravado = fakes.employees.find_by_id(_A, EmployeeId(resultado.id))
+    assert gravado is not None
+    assert gravado.workload_profile == OnDemand()
 
 
 def test_registro_novo_nasce_sem_indisponibilidades() -> None:
@@ -139,31 +144,42 @@ def test_nome_e_gravado_verbatim() -> None:
 # --- validade referencial ----------------------------------------------------
 
 
-def test_funcao_inexistente_no_tenant_e_not_found_e_nada_e_gravado() -> None:
+def test_funcao_inexistente_no_tenant_e_not_found_sem_tentar_gravar() -> None:
     fakes = _com_funcoes()
+    antes = len(fakes.store.calls)
     with pytest.raises(JobFunctionNotFoundError):
         _criar(fakes).execute(_comando(funcoes=frozenset({JobFunctionId("f99")})))
+    assert "employees.add" not in fakes.store.calls[antes:]
     assert fakes.employees.list_by_unit(_A, _U1, include_inactive=True) == ()
 
 
 def test_funcao_existente_em_outro_tenant_e_not_found() -> None:
     """A resolução é escopada: id de função alheia conta como **ausente**."""
     fakes = _com_funcoes()
+    antes = len(fakes.store.calls)
     with pytest.raises(JobFunctionNotFoundError):
         _criar(fakes).execute(_comando(funcoes=frozenset({JobFunctionId("f-b")})))
+    assert "employees.add" not in fakes.store.calls[antes:]
     assert fakes.employees.list_by_unit(_A, _U1, include_inactive=True) == ()
 
 
-def test_conjunto_parcialmente_valido_e_rejeitado_inteiro() -> None:
+def test_conjunto_parcialmente_valido_e_rejeitado_inteiro_sem_tentar_gravar() -> None:
     """A regra é sobre **toda** id do conjunto, não sobre "alguma existir".
 
-    Sem este caso, um use case que aceitasse o conjunto quando *pelo menos uma*
-    função existisse passaria — e gravaria um registro apontando para função
-    inexistente.
+    A asserção sobre `calls` é o que dá dente ao teste. Sem ela, um use case
+    que só reprovasse o conjunto quando **nenhuma** função fosse encontrada
+    (`if ausentes and not encontradas`) passaria: o `add` seria chamado e a lei
+    L-E4 do port levantaria o mesmo `JobFunctionNotFoundError`. O resultado
+    seria idêntico e a regra do use case, inexistente — que é precisamente a
+    diferença entre as duas camadas de enforcement da tabela do concept §5.
     """
     fakes = _com_funcoes()
+    antes = len(fakes.store.calls)
+
     with pytest.raises(JobFunctionNotFoundError):
         _criar(fakes).execute(_comando(funcoes=frozenset({_F1, JobFunctionId("f99")})))
+
+    assert "employees.add" not in fakes.store.calls[antes:]
     assert fakes.employees.list_by_unit(_A, _U1, include_inactive=True) == ()
 
 
