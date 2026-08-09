@@ -1441,4 +1441,119 @@ só cria `active=True`. Em todos, a cobertura era 100% e a mutação sobrevivia.
 antídoto que funcionou foi sempre o mesmo: **confrontar a lista com a fonte da
 verdade por introspecção**, e asserir a propriedade em vez do caso.
 
+---
+
+### 2026-08-09 — [decision] disposição dos achados da auditoria de testes independente — executor
+
+Companheira da tabela dos Checkpoints C acima, para a **outra** revisão
+independente: a auditoria de testes por subagente (exigida pelo checklist de
+§3), que aplicou **26 mutações** à camada e encontrou **11 sobreviventes**
+apesar de 100% de cobertura de linha **e de desvio**. Os quatro achados e sua
+disposição:
+
+| Achado | Sev. | O que era | Disposição |
+|---|---|---|---|
+| F-01 | **blocker** | nenhum teste jamais exercitou edição sobre registro **desligado** (todas as fixtures criavam `active=True`) — 9 mutações sobreviviam, duas delas ressuscitando o desligado em silêncio | gap de **concept**, não de teste → decisão do sponsor + **ADR 3.2.0007** + `[3.2/task-14-extra]` — `194f36a` (entrada acima) |
+| F-02 | major | o docstring do fake declara a ordem das três guardas do `update` (existência → unidade → conjunto) como contrato, mas inverter L-E3 ↔ L-E4 não derrubava nada: nenhum cenário fazia as duas falharem juntas | corrigido — `5ffc80b`; o docstring foi **mantido** (não relaxado) porque a 3.3 herda o método como especificação executável: lá um adapter que ordenasse ao contrário responderia erro sobre o **catálogo** a uma tentativa de relocalização do **registro** |
+| F-03 | major | `InvalidIdentifierError` declarado no concept §6 e em três blocos `Raises:` com **zero** ocorrências nos testes da camada | corrigido — `5ffc80b`; travado nos três caminhos, cada um pela sua **conduta**, que é o que os distingue (`create_job_function` falha sem tocar o port; `create_employee`, depois de resolver as funções; `copy_employee_to_unit`, depois de carregar a origem) |
+| F-04 | minor | a determinância de `sorted(ausentes)[0]` na mensagem de erro não estava travada — um `[-1]` passava, e como `frozenset` não tem ordem a mensagem mudaria entre execuções | corrigido — `5ffc80b`; travada nos **três** produtores (use case de criação, de atribuição e a guarda do fake) |
+
+**Mutação → resultado após os dois commits:** MU-01/02/03/04/21/24 (`active=True`
+fixo nos seis use cases de edição) morrem; MU-05b/05c (`.reactivate()` embutido)
+morrem; MU-05 (leitura oposta, `raise`) morre; MU-08 (inverter L-E3 ↔ L-E4 no
+fake) morre; MU-11 (`sorted(...)[0]` → `[-1]`) morre. **MU-09/MU-10 (ordem das
+listagens) sobrevivem de propósito** — ver o `[finding]` seguinte.
+
+---
+
+### 2026-08-09 — [finding] ordenação estável das listagens de staff — auditoria da Stage
+
+**Contexto:** `list_by_unit` (lei L-E6) e `list_by_tenant` (lei L-JF5) **não
+declaram ordem**, e nenhum teste da Stage a fixa. A omissão é **deliberada e
+correta nesta camada**: travar a ordem contra os fakes quebraria o reuso desta
+suíte como teste de contrato contra o Postgres na 3.3, onde um `SELECT` sem
+`ORDER BY` não garante ordem nenhuma. Por isso as mutações MU-09/MU-10 da
+auditoria de testes **sobrevivem de propósito**, e o commit `5ffc80b` registrou
+a nota no corpo.
+
+**Por que vira `[finding]` mesmo assim:** a decisão vivia só no corpo de um
+commit e no corpo do PR. Em Postgres, `SELECT` sem `ORDER BY` devolve ordem
+**instável entre planos** (mudança de estatística, index scan × seq scan,
+paralelismo), e a Stage **3.4 vai paginar** essa listagem — paginação sobre
+ordem instável **duplica e omite linhas** entre páginas, com a suíte verde e sem
+erro em lugar nenhum. Não é defeito desta camada; é uma decisão que **precisa
+existir** na camada que tem o `ORDER BY`.
+
+**Direção sugerida:** a 3.3 define uma **ordenação determinística** para as duas
+listagens (candidato natural: chave de negócio + `id` como desempate, para que a
+ordem seja **total** e não só estável em campo não-único), fixa-a como lei do
+port — passando a valer para o fake e para o adapter real — e cobre-a nos testes
+de contrato. Feito isso, MU-09/MU-10 passam a morrer legitimamente. **É
+pré-requisito da paginação da 3.4**, e é mais barato antes do `ORDER BY` existir
+do que depois de a borda ter paginado sobre ele.
+
+**Stage candidata:** `3.3-staff-persistence`.
+
+**Nota de forma:** o concept §10 declara sua lista de `[finding]` como "a lista
+canônica desta Stage", e este é o **quinto**. Ele entra aqui, e não lá, porque a
+Fase 4 já fechou: CONVENTIONS §3.2 encaminha explicitamente as revisões
+posteriores ao início da execução para a §3.4 — isto é, para esta seção — "sem
+mudar status", e a §7 é varrida pelo pipeline pelo mesmo critério que a §10
+(o que não é varrido é finding que vive só no corpo de um ADR ou de um commit,
+que era exatamente o caso deste antes desta entrada). Regredir o concept a
+`draft` para acrescentar uma linha de escalonamento pós-execução seria cerimônia
+sem ganho de rastreabilidade.
+
+---
+
+### 2026-08-09 — [decision] Fase de aplicação da auditoria da Stage (skill `stage-audit`) — Sessão mestra + Claude (subagente de aplicação)
+
+**Contexto:** a auditoria read-only da Stage 3.2 (PR #36) **aprovou sem
+bloqueantes**, com 4 findings, e validou **item a item, com evidência própria**,
+todos os critérios do concept §11 e todos os itens do checklist de §3 deste
+technical. Gates reproduzidos pela auditoria: `make check` **exit 0**;
+**1511 passed**; cobertura **99.91% global** e **100% nos 28 arquivos** de `src/`
+tocados pela Stage; `lint-imports` **9 kept / 0 broken** (incluindo o contrato
+novo `staff-application-purity`); `check_technical_postexec.py` OK;
+`make docs-check` **exit 0**. Esta entrada é o registro da fase de aplicação
+(commits `[3.2/--]`).
+
+**Disposição dos 4 findings:**
+
+| # | Finding | Disposição |
+|---|---|---|
+| F1 | `workforce.md` (doc de domínio `accepted`, **acima** dos concepts) ainda declarava aberta a lacuna do ciclo de vida da **função** (§3.2 e §6) — fechada duas vezes e em direções opostas — e **não mencionava** o ciclo de vida do **funcionário**, que virou regra canônica | corrigido — lacuna de §3.2 fechada com nota datada apontando o ADR 3.2.0005; ciclo de vida do funcionário acrescentado a §3.1 (ADRs 3.2.0006/3.2.0007); §1, §6, §7 e frontmatter (`updated_at`, `references`) alinhados |
+| F2 | ordenação das listagens não declarada, decisão viva só no corpo do PR/commit — pré-requisito da paginação da 3.4 | escalado — `[finding]` acima, Stage candidata `3.3-staff-persistence` |
+| F3 | o commit `5ffc80b` (`[3.2/task-15-extra]`) não tinha entrada na §7, enquanto o `[3.2/task-14-extra]` tinha | corrigido — `[decision]` "disposição dos achados da auditoria de testes independente" acima |
+| F4 | caixas do concept §11 e do checklist de §3 por marcar, apesar de validadas | tratado — ver abaixo |
+
+**Decisão sobre as caixinhas do §3:** o flip literal `[ ]`→`[x]` do §3 fica
+**adiado para pós-merge** — o freeze do `status: done` (CONVENTIONS §3.4,
+`scripts/check_technical_postexec.py`) rejeita edição fora da janela §7 enquanto
+a Stage não mergeia. Mesmo tratamento da Stage 3.1 (§7 do
+`3.1-staff-domain/technical.md`, entrada de 2026-07-29). A validação de cada
+item vive nesta entrada e no comentário de veredito do PR #36; as caixinhas do
+concept §11 (sem freeze programático) foram marcadas no mesmo lote de commits
+desta entrada.
+
+**Verificações funcionais e checklist de fechamento de §3 — validados pela
+auditoria:** fluxo ponta-a-ponta da Task 13 verde com os 16 use cases reais
+sobre a mesma bateria de fakes; ausência de superfície de runtime declarada
+explicitamente (a API é da 3.4, a persistência é da 3.3); cobertura ≥ 90% **em
+cada arquivo tocado** (todos em 100%, incluindo as duas entidades de
+`domain/entities/` modificadas nas Tasks 01–02); `staff-application-purity`
+**KEPT**; as 13 Tasks commitadas com seu check; commit `stage 3.2: complete`
+aplicado; `roadmap.md` com a Stage `done`, datas de hoje, linha no §Histórico e a
+nota de reconciliação em quatro eixos; ADRs 3.2.0001–3.2.0007 em
+`status: accepted` e 3.1.0003 em `superseded`. O único item do checklist que a
+auditoria **reabriu** foi o último ("`concept.md` não precisa de retoque
+retrospectivo"): o retoque necessário não era do concept, e sim do doc de
+domínio acima dele — F1.
+
+**Observação sem ação nesta Stage:** `scripts/check_commit_msg.py` aceita só
+`[N.M/task-NN]` e `[N.M/--]` (regex `task-\d{2}`), sem reconhecer os sufixos
+`-fix` e `-extra` que a prática usa desde a 2.5/3.1 e que esta Stage usou em oito
+commits. Já coberto pela issue [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34)
+(aberta pela auditoria da 3.1), estendida por comentário para incluir `-extra`.
+
 <!-- END: post-execution -->

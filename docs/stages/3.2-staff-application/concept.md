@@ -906,44 +906,44 @@ são `frozen`, então a cópia não compartilha nenhum objeto mutável com a ori
 Sem estes, um fake que vire upsert em silêncio passa verde — o defeito histórico
 do BC identity (ADR 2.3.0003).
 
-- [ ] **L-JF1 (`add` é inserção):** `add` de função com id já gravado ⇒
+- [x] **L-JF1 (`add` é inserção):** `add` de função com id já gravado ⇒
       `JobFunctionAlreadyExistsError`, **inclusive quando o id gravado está em
       outro tenant** (escopo global do id); `add` com nome já usado **no mesmo
       tenant** ⇒ `JobFunctionNameAlreadyExistsError`; em ambos os casos o
       registro anterior permanece **inalterado** (releitura por `find_by_id`
       devolve os campos antigos).
-- [ ] **L-JF2 (`update` não é upsert):** `update` de função **inexistente no
+- [x] **L-JF2 (`update` não é upsert):** `update` de função **inexistente no
       tenant** ⇒ `JobFunctionNotFoundError` **e nada é gravado** —
       `find_by_id` continua devolvendo `None` e `list_by_tenant` não cresce.
       `update` renomeando para o **próprio nome** é aceito; para o nome de
       **outra** ⇒ `JobFunctionNameAlreadyExistsError`.
-- [ ] **L-JF3 (`delete` guardado):** `delete` de função **referenciada** ⇒
+- [x] **L-JF3 (`delete` guardado):** `delete` de função **referenciada** ⇒
       `JobFunctionInUseError` e a função **continua legível** por `find_by_id`;
       vale também quando o único referenciador está **inativo**; `delete` de
       função inexistente no tenant ⇒ `JobFunctionNotFoundError`.
-- [ ] **L-JF4/L-JF5:** `find_all_by_ids` devolve só as encontradas e **não**
+- [x] **L-JF4/L-JF5:** `find_all_by_ids` devolve só as encontradas e **não**
       levanta erro para ids ausentes; `list_by_tenant` devolve **todas** as
       funções do tenant e nenhuma de outro.
-- [ ] **L-E1/L-E2:** `add` de funcionário com id já gravado ⇒
+- [x] **L-E1/L-E2:** `add` de funcionário com id já gravado ⇒
       `EmployeeAlreadyExistsError`; `update` de funcionário inexistente no
       tenant ⇒ `EmployeeNotFoundError` **e nada é gravado**.
-- [ ] **L-E3 (localização imutável):** `update` de um funcionário cujo `unit_id`
+- [x] **L-E3 (localização imutável):** `update` de um funcionário cujo `unit_id`
       diverge do gravado, **no mesmo tenant**, ⇒ `EmployeeRelocationError`, e a
       releitura devolve o registro **na unidade original, com os campos
       antigos**. Com `tenant_id` divergente o erro é `EmployeeNotFoundError`
       (§5.4 vence — o erro não pode confirmar a existência do registro alheio):
       teste dedicado fixa a **ordem de checagem** do port, lookup por
       `(tenant_id, id)` antes da comparação de `unit_id`.
-- [ ] **L-E4 (validade referencial):** `add`/`update` de funcionário cujo
+- [x] **L-E4 (validade referencial):** `add`/`update` de funcionário cujo
       conjunto contém id de função **inexistente no tenant** (ou existente em
       **outro** tenant) ⇒ `JobFunctionNotFoundError` e nada é gravado.
-- [ ] **L-E5 (`delete` guardado):** `delete` de funcionário inexistente no
+- [x] **L-E5 (`delete` guardado):** `delete` de funcionário inexistente no
       tenant ⇒ `EmployeeNotFoundError`; `delete` de funcionário existente
       **remove** o registro (`find_by_id` ⇒ `None`); **e um teste declara que
       nenhum caminho de v1 produz `EmployeeInUseError`** — a classe existe, é
       instanciável, tem mensagem, e a lei está documentada no `Protocol` para o
       Step 4 preencher.
-- [ ] **L-E6/L-E7:** `list_by_unit` devolve só a unidade pedida, só ativos por
+- [x] **L-E6/L-E7:** `list_by_unit` devolve só a unidade pedida, só ativos por
       default, e inclui os inativos com `include_inactive=True`;
       `exists_by_job_function` é `True` para referência em **qualquer** unidade
       do tenant e para referenciador **inativo**, e `False` para referência de
@@ -951,81 +951,81 @@ do BC identity (ADR 2.3.0003).
 
 ### Erros — espelho do `test_errors.py` de identity
 
-- [ ] Teste que percorre `application/errors.py` **por introspecção** (mesma
+- [x] Teste que percorre `application/errors.py` **por introspecção** (mesma
       forma de `tests/unit/features/identity/application/test_errors.py`):
       **toda** classe declarada no módulo é `BaseException`, `StaffError` e
       `DomainError`; e a lista de nomes é **fixada literalmente**, para que
       classe nova ou removida force revisão consciente.
-- [ ] **Nenhum** erro de duplicidade ou de "em uso" herda de `NotFoundError`:
+- [x] **Nenhum** erro de duplicidade ou de "em uso" herda de `NotFoundError`:
       `JobFunctionAlreadyExistsError`, `EmployeeAlreadyExistsError`,
       `JobFunctionNameAlreadyExistsError`, `JobFunctionInUseError`,
       `EmployeeInUseError`, `EmployeeRelocationError` e `SameUnitCopyError`
       ⇒ `not issubclass(cls, NotFoundError)`.
-- [ ] **Ordem na MRO** dos dois erros de "não encontrado", asserida por
+- [x] **Ordem na MRO** dos dois erros de "não encontrado", asserida por
       **índice** (e não por `issubclass`, que passa nas duas ordens):
       `X.__mro__.index(StaffError) < X.__mro__.index(NotFoundError)
       < X.__mro__.index(DomainError)`. Razão: o handler da **raiz do BC**
       (registrado pela 3.4) precisa ganhar do handler genérico, e entre os
       genéricos o 404 precisa ganhar do 422.
-- [ ] `UnavailabilityNotFoundError` **não** é `NotFoundError` (teste explícito):
+- [x] `UnavailabilityNotFoundError` **não** é `NotFoundError` (teste explícito):
       é 422 por decisão de §4, não esquecimento.
-- [ ] Cada erro instanciado produz mensagem que cita o recurso ou a regra
+- [x] Cada erro instanciado produz mensagem que cita o recurso ou a regra
       violada (executa o `__init__`).
 
 ### Função de trabalho
 
-- [ ] `create_job_function` grava a função com nome **verbatim**; segunda
+- [x] `create_job_function` grava a função com nome **verbatim**; segunda
       criação com o **mesmo nome no mesmo tenant** ⇒
       `JobFunctionNameAlreadyExistsError`; o mesmo nome **em outro tenant** é
       aceito; nome que difere só por espaço/caixa (`"cozinheiro "` vs
       `"Cozinheiro"`) é aceito (unicidade verbatim — workforce §3.2). A
       releitura pelo port devolve o nome exatamente como enviado.
-- [ ] `create_job_function` com nome vazio/só-whitespace ⇒ `InvalidNameError`
+- [x] `create_job_function` com nome vazio/só-whitespace ⇒ `InvalidNameError`
       **sem tocar o port** — nada gravado e **nenhuma consulta de nome**
       (o fake registra as chamadas recebidas e o teste asserta a lista vazia).
-- [ ] `rename_job_function` para o **próprio nome atual** é aceito; para o nome
+- [x] `rename_job_function` para o **próprio nome atual** é aceito; para o nome
       de **outra** função do tenant ⇒ `JobFunctionNameAlreadyExistsError`; em
       ambos os casos **a releitura pelo port devolve o estado esperado** (o novo
       nome no caso aceito; o nome antigo no caso recusado).
-- [ ] `delete_job_function` remove função **sem referências** (releitura ⇒
+- [x] `delete_job_function` remove função **sem referências** (releitura ⇒
       `None`); com **um** funcionário referenciando, em **qualquer** unidade do
       tenant e **ativo ou inativo** ⇒ `JobFunctionInUseError` e a função
       **continua legível pelo port**.
-- [ ] **Não existe** use case, command, campo de result nem parâmetro de query
+- [x] **Não existe** use case, command, campo de result nem parâmetro de query
       de ativação/desativação de função — teste que inspeciona o pacote
       `use_cases` e o `JobFunctionResult` (guarda mecânica contra a
       reintrodução do estado que o ADR 3.2.0005 removeu).
 
 ### Funcionário
 
-- [ ] `create_employee` grava o registro com o conjunto de funções pedido e
+- [x] `create_employee` grava o registro com o conjunto de funções pedido e
       `active=True`; função **inexistente no tenant** ⇒
       `JobFunctionNotFoundError`; conjunto **vazio** ⇒ `EmptyJobFunctionsError`
       (domínio); **nome vazio/só-whitespace** ⇒ `InvalidNameError` (domínio) —
       levantado na construção, **depois** da resolução das funções (§5.16);
       **a releitura pelo port devolve o registro gravado**, e nos casos de erro
       **nada** é gravado.
-- [ ] `rename_employee` troca o nome (verbatim), **a releitura pelo port devolve
+- [x] `rename_employee` troca o nome (verbatim), **a releitura pelo port devolve
       o nome novo**, e nenhum outro campo do registro muda — comparação
       **campo a campo** sobre o `EmployeeResult` (frozen, igualdade por valor),
       não `assert employee == employee` (que compara só por id).
-- [ ] `assign_job_functions` **substitui** o conjunto; id inexistente no tenant
+- [x] `assign_job_functions` **substitui** o conjunto; id inexistente no tenant
       ⇒ `JobFunctionNotFoundError` e nada é gravado; a releitura pelo port
       devolve o conjunto novo.
-- [ ] `change_workload_profile` troca `FixedSchedule` ↔ `OnDemand`;
+- [x] `change_workload_profile` troca `FixedSchedule` ↔ `OnDemand`;
       `declare_shift_preference` grava preferência não-`None` **e** limpa com
       `None`; ambos devolvem o estado novo no result **e a releitura pelo port
       devolve o estado novo**.
-- [ ] `register_unavailability` acrescenta o período; período **sobreposto** ⇒
+- [x] `register_unavailability` acrescenta o período; período **sobreposto** ⇒
       `OverlappingUnavailabilityError` e **nada é gravado** (a releitura devolve
       a coleção antiga); período **adjacente** (fim == início) é aceito.
       `remove_unavailability` remove por valor e a releitura confirma;
       inexistente ⇒ `UnavailabilityNotFoundError` e nada é gravado.
-- [ ] **Ciclo de vida:** `deactivate_employee` põe `active=False` e
+- [x] **Ciclo de vida:** `deactivate_employee` põe `active=False` e
       `reactivate_employee` põe `active=True`; ambos são **idempotentes no
       valor** (repetir não é erro); a releitura pelo port confirma o estado; e
       **nenhum outro campo muda** (comparação campo a campo do result).
-- [ ] **O desligado é editável, e editar não reativa** (§5.7-bis;
+- [x] **O desligado é editável, e editar não reativa** (§5.7-bis;
       ADR 3.2.0007): **cada uma** das seis operações de edição
       (`rename_employee`, `change_workload_profile`,
       `declare_shift_preference`, `assign_job_functions`,
@@ -1035,61 +1035,61 @@ do BC identity (ADR 2.3.0003).
       operação, não um representante: é a asserção (ii) que mata o
       `.reactivate()` embutido, e ela precisa existir em cada caminho porque é
       em **um** deles que alguém o embutiria.
-- [ ] **O desligado sobrevive e some da lista:** depois de `deactivate`,
+- [x] **O desligado sobrevive e some da lista:** depois de `deactivate`,
       `list_employees(tenant, unidade)` **não** o devolve;
       `list_employees(…, include_inactive=True)` **devolve**; `find_by_id`
       continua achando; e o registro **continua bloqueando** a remoção das suas
       funções (`JobFunctionInUseError`).
-- [ ] `delete_employee` remove o registro definitivamente (releitura ⇒ `None`,
+- [x] `delete_employee` remove o registro definitivamente (releitura ⇒ `None`,
       e ele some das duas listagens); registro inexistente **ou de outro
       tenant** ⇒ `EmployeeNotFoundError`.
 
 ### Cópia
 
-- [ ] **Cópia (DoD do roadmap):** `copy_employee_to_unit` cria registro com
+- [x] **Cópia (DoD do roadmap):** `copy_employee_to_unit` cria registro com
       **id novo**, `unit_id` = destino e mesmo `tenant_id`, replicando nome,
       perfil, preferência, conjunto de funções, indisponibilidades e `active`.
       A **origem permanece inalterada** — verificado **relendo a origem pelo
       port e comparando o `EmployeeResult` campo a campo com o snapshot tirado
       antes da cópia** (não `origem == origem`, que é vacuoso: `Employee.__eq__`
       compara só por id).
-- [ ] **Independência estrutural:** editar a cópia (renomear, acrescentar
+- [x] **Independência estrutural:** editar a cópia (renomear, acrescentar
       indisponibilidade, desligar) e reler a **origem** pelo port ⇒ campos da
       origem inalterados; e vice-versa. O teste **muta e relê**, nunca compara
       campos logo após a cópia.
-- [ ] O `EmployeeResult` da cópia **não contém nenhum campo de vínculo de
+- [x] O `EmployeeResult` da cópia **não contém nenhum campo de vínculo de
       login** (teste sobre os campos do dataclass — guarda para a 3.5).
-- [ ] `copy_employee_to_unit` com `target_unit_id` == unidade de origem ⇒
+- [x] `copy_employee_to_unit` com `target_unit_id` == unidade de origem ⇒
       `SameUnitCopyError` e **nada é gravado**.
-- [ ] **Limite declarado:** copiar **duas vezes** para o mesmo destino produz
+- [x] **Limite declarado:** copiar **duas vezes** para o mesmo destino produz
       **dois** registros na unidade destino, com ids distintos — teste que
       **fixa o comportamento como decisão** (§5.11), para que ninguém o "conserte"
       sem revisitar o `[finding]` da 3.4.
 
 ### Escopo, listagem e fluxo
 
-- [ ] **Escopo de tenant (por port, teste dedicado):** registro criado no tenant
+- [x] **Escopo de tenant (por port, teste dedicado):** registro criado no tenant
       A não é encontrado, listado, atualizado nem removido usando `tenant_id` do
       tenant B — o erro é `*NotFoundError`, e **nunca** uma exceção que confirme
       a existência do registro alheio (nem `InUse`, nem `AlreadyExists`).
-- [ ] **Não-vazamento entre unidades:** `list_employees(tenant, unidade A)` não
+- [x] **Não-vazamento entre unidades:** `list_employees(tenant, unidade A)` não
       devolve registro da unidade B, e vice-versa.
-- [ ] **Precedência das checagens testada** em cada linha "par duplo = sim" da
+- [x] **Precedência das checagens testada** em cada linha "par duplo = sim" da
       tabela de §5.16 (**oito** cenários), com o erro esperado nomeado.
-- [ ] **Fluxo ponta-a-ponta com fakes:** criar função → criar funcionário na
+- [x] **Fluxo ponta-a-ponta com fakes:** criar função → criar funcionário na
       unidade A → definir jornada e preferência → registrar indisponibilidade →
       copiar para a unidade B → desligar o da unidade A → listar A e B (A vazia
       por default, A com um registro em `include_inactive=True`, B com um
       registro) → tentar apagar a função ⇒ `JobFunctionInUseError`. Sem I/O,
       sem mocks.
-- [ ] Nenhum use case devolve `Employee` ou `JobFunction` (teste que inspeciona
+- [x] Nenhum use case devolve `Employee` ou `JobFunction` (teste que inspeciona
       os tipos de retorno dos results).
 
 ### Gates
 
-- [ ] `make check` verde, incluindo o contrato novo `staff-application-purity`
+- [x] `make check` verde, incluindo o contrato novo `staff-application-purity`
       no import-linter; cobertura ≥ 90% em cada arquivo `src/` tocado.
-- [ ] A suíte da 3.1 continua verde **depois** da remoção de
+- [x] A suíte da 3.1 continua verde **depois** da remoção de
       `JobFunction.active`/`deactivate`/`reactivate` e da adição de
       `Employee.active` — sem teste órfão referenciando os métodos removidos
       (`grep` limpo por `deactivate()`/`reactivate()` em `job_function`).
