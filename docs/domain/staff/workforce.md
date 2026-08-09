@@ -2,14 +2,17 @@
 title: Domínio staff/workforce — equipe da unidade (teoria canônica)
 description: Camada teórica do subdomínio workforce do BC staff — fundamentos, língua ubíqua, regras canônicas e invariantes de funcionário, função, jornada, preferência, indisponibilidade, cópia entre unidades e fronteira com identity
 when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (3.1–3.5) ou de qualquer Stage futura que toque o BC staff; é a base que os concepts consomem em vez de re-derivar
-keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua]
+keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao]
 status: accepted
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-08-09
 bounded_context: staff
 subdomain: workforce
 references:
   - ../../adr/3_1_0001-workforce-gate-modeling-decisions.md
+  - ../../adr/3_2_0005-job-function-has-no-lifecycle-state.md
+  - ../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md
+  - ../../adr/3_2_0007-terminated-employee-remains-editable.md
   - ../../adr/2_1_0001-identity-aggregates-and-membership.md
   - ../../adr/2_3_0005-names-persisted-verbatim.md
   - ../../adr/2_5_0002-dedicated-single-use-setup-token.md
@@ -30,7 +33,8 @@ references:
 
 O subdomínio **workforce** cobre a teoria da **equipe da unidade** de um restaurante (tenant):
 
-- o **registro de funcionário** por unidade e sua relação com a **pessoa** (login/User de identity);
+- o **registro de funcionário** por unidade, seu **ciclo de vida** (desligamento, recontratação e
+  remoção definitiva) e sua relação com a **pessoa** (login/User de identity);
 - a **função de trabalho** customizável por restaurante;
 - o **perfil de jornada** (fixa × sob demanda) e a **carga semanal contratada**;
 - a **preferência de turno** por períodos nomeados do dia;
@@ -103,6 +107,31 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 - Um registro de funcionário pertence a exatamente **uma unidade** de exatamente **um tenant**.
 - Nenhuma operação de staff atravessa unidades implicitamente — só a cópia explícita (§3.7).
 
+**Ciclo de vida do registro** (decidido pelo **sponsor** na Stage 3.2 —
+[ADR 3.2.0006](../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md) e
+[ADR 3.2.0007](../../adr/3_2_0007-terminated-employee-remains-editable.md); 2026-08-08/09):
+
+- O registro carrega um **estado ativo × inativo**, com duas transições explícitas —
+  **desligamento** (sai da equipe) e **recontratação** (volta). Ambas são **idempotentes no
+  valor**: repetir a transição já vigente não é erro.
+- **O desligado não é inerte:** desligar **retira o registro da listagem da unidade por
+  default** (a listagem só o devolve sob pedido explícito de incluir inativos). Sem esse estado,
+  quem saiu continuaria aparecendo no seletor de escala do Step 4 e seria escalável.
+- **O histórico sobrevive ao desligamento** — o registro continua legível por id, continua
+  referenciando suas funções e **continua bloqueando a remoção delas** (§3.2). É o que o hub de
+  análise lê (previsto × realizado por unidade).
+- **A remoção definitiva existe e é guardada**, para o cadastro criado por engano: só é aceita
+  na ausência de referências ao registro. Desligamento e remoção são atos **distintos** — um
+  preserva a história, o outro a apaga.
+- **O desligado permanece editável, e nenhuma edição o reativa** (ADR 3.2.0007): corrigir o
+  cadastro de quem saiu não é o mesmo ato que recontratá-lo, e o sistema não obriga um para
+  conseguir o outro. A reativação é **explícita** e só acontece pela transição de recontratação.
+
+**Invariantes:**
+- Todo registro está em exatamente um dos dois estados; nasce **ativo**.
+- Nenhuma operação de edição do registro altera o estado — só as duas transições o alteram.
+- Remoção definitiva é recusada enquanto houver referência ao registro.
+
 > **Lacuna para o concept da Stage 3.1:** os **atributos cadastrais mínimos** do registro
 > (nome, contato, o que identifica o registro dentro da unidade) não estão enumerados em nenhuma
 > fonte ratificada — o concept da 3.1 os fixa. Vale a regra transversal de dados livres persistidos
@@ -126,14 +155,28 @@ pré-determinado** — o gerente cria as funções que a operação dele usa. Ov
 - **Setor NÃO é atributo da função na v1** — termo ratificado no glossário sem feature que o
   exija (overview §9; ver §5).
 
+**Ciclo de vida:** a função **não tem estado** — nem ativo/inativo, nem transições de
+ativação/desativação. Função que ninguém usa é **inerte** e simplesmente permanece no catálogo;
+quem não a quer mais **a remove**. A **remoção é o único caminho de saída** e é **guardada**:
+recusada enquanto **qualquer** funcionário do tenant a referenciar — **inclusive um funcionário
+desligado** (§3.1), porque o registro dele sobrevive ao desligamento.
+
 **Invariantes:**
 - Nome de função é único dentro do tenant (comparação verbatim).
+- A função não carrega estado de ciclo de vida.
+- Remoção de função referenciada por qualquer funcionário do tenant (ativo ou desligado) é
+  recusada.
 
-> **Lacuna para o concept da Stage 3.1/3.2:** o **ciclo de vida da função** não está fixado em
-> fonte ratificada — as fontes dizem só "CRUD de função" (roadmap 3.2). Se existe estado
-> ativo/inativo ou remoção definitiva, e a **semântica da inativação/remoção** quando há
-> funcionários referenciando a função, são decisões do concept (com ADR, pois há alternativa
-> real: soft-state × hard-delete).
+> **Lacuna fechada (2026-08-09) —
+> [ADR 3.2.0005](../../adr/3_2_0005-job-function-has-no-lifecycle-state.md):** o **ciclo de vida
+> da função** era lacuna aberta deste doc ("há alternativa real: soft-state × hard-delete") e foi
+> fechado **duas vezes**, em direções opostas. A Stage 3.1 a fechou com estado soft
+> ativo/inativo ([ADR 3.1.0003](../../adr/3_1_0003-job-function-lifecycle-soft-state.md)); a
+> Stage 3.2 — a que pagaria a conta desse estado — devolveu a questão ao **sponsor**, que
+> decidiu em 2026-08-08 pela **ausência de ciclo de vida** (regra canônica acima). O ADR 3.2.0005
+> **supersede** o 3.1.0003, cujo corpo fica preservado como registro histórico
+> (`status: superseded`). A **remoção guardada** é a única parte do 3.1.0003 que sobreviveu, com
+> racional próprio restated no 3.2.0005.
 
 ### 3.3 Perfil de jornada: fixa × sob demanda
 
@@ -349,8 +392,10 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
   overview §6.
 - Função de trabalho com escopo de **tenant** — overview §3 ("customizável por restaurante").
 - Atributos mínimos da função: nome verbatim único — ADR 2.3.0005; overview §3
-  (parametrização é da demanda da escala). Ciclo de vida (ativo/inativo × remoção) é **lacuna**
-  para o concept da 3.1/3.2 (§3.2).
+  (parametrização é da demanda da escala). Ciclo de vida (ativo/inativo × remoção) era **lacuna**
+  para o concept da 3.1/3.2 (§3.2) — **fechada em 2026-08-09** pelo
+  [ADR 3.2.0005](../../adr/3_2_0005-job-function-has-no-lifecycle-state.md): a função **não tem
+  estado**, e a remoção guardada é o único caminho de saída.
 - Recorrência de indisponibilidade **fora da v1** — overview §3 (períodos absolutos: férias/atestados).
 - Interpretação temporal no **fuso da unidade** — overview §6.
 - CLT entra **só como fronteira terminológica**; teoria de validação trabalhista é do gate do Step 4 —
@@ -385,6 +430,14 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 - [ADR 3.1.0001](../../adr/3_1_0001-workforce-gate-modeling-decisions.md) — as três decisões de
   modelagem com alternativa real do gate de domínio do Step 3 (2026-07-23); as demais decisões do
   gate são derivações ancoradas — ver §6.
+- [ADR 3.2.0005](../../adr/3_2_0005-job-function-has-no-lifecycle-state.md) — função de trabalho
+  **sem** ciclo de vida; remoção guardada como único caminho de saída (§3.2). Supersede o
+  [ADR 3.1.0003](../../adr/3_1_0003-job-function-lifecycle-soft-state.md) (`superseded`).
+- [ADR 3.2.0006](../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md) — ciclo de vida do
+  **registro de funcionário**: estado ativo/inativo com desligamento e recontratação, mais remoção
+  definitiva guardada (§3.1).
+- [ADR 3.2.0007](../../adr/3_2_0007-terminated-employee-remains-editable.md) — o registro desligado
+  permanece editável e nenhuma edição o reativa (§3.1).
 
 ### Fontes primárias — legislação trabalhista (fronteira terminológica, §3.4)
 
