@@ -3,7 +3,7 @@ title: Concept — Use cases de equipe
 description: Camada de aplicação do BC staff — use cases de função e funcionário (com ciclo de vida do funcionário), jornada/preferência, indisponibilidade e cópia entre unidades, sobre ports-out escopados por tenant e testados com fakes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff-application, use-cases, port-out, dto, funcionario, funcao, indisponibilidade, copia-unidade, fakes, ciclo-de-vida]
-status: draft
+status: done
 created_at: 2026-08-08
 updated_at: 2026-08-09
 stage_id: 3.2-staff-application
@@ -511,6 +511,27 @@ Daí a asserção exata de §11 (índices na MRO, não `issubclass`).
    para a função). O registro desligado **sobrevive** com toda a história:
    some da listagem default (L-E6), continua contando como referência para a
    guarda de remoção de função (L-JF3) e continua endereçável por id.
+7-bis. **Editar não reativa, e o desligado é editável** (ADR 3.2.0007). As seis
+    operações de edição do funcionário — `rename_employee`,
+    `change_workload_profile`, `declare_shift_preference`,
+    `assign_job_functions`, `register_unavailability`,
+    `remove_unavailability` — funcionam sobre registro **desligado** exatamente
+    como sobre registro ativo, e **nenhuma delas escreve `active`**. Corrigir o
+    nome de quem saiu não exige trazê-lo de volta à equipe. A transição para
+    `active=True` acontece **só** por `reactivate_employee`, e para `False`
+    **só** por `deactivate_employee`: nenhuma outra operação do BC toca esse
+    campo.
+
+    > **A regra é ortogonalidade, e é por isso que ela é barata:** não há
+    > guarda de estado a escrever, erro novo nem ramo condicional em use case
+    > nenhum. O que a decisão compra é que a propriedade fica **travada por
+    > teste** — antes dela, o código preservava `active` por acidente, e a
+    > suíte passava verde tanto com a leitura oposta (recusar a edição) quanto
+    > com um `.reactivate()` embutido numa operação de edição, que
+    > **ressuscitaria o desligado em silêncio**. Alternativas descartadas
+    > (somente leitura; granular por tipo de campo) estão no ADR 3.2.0007 —
+    > migrar para a granular depois é **acréscimo** de guardas, não retrabalho.
+
 8. **Toda função referenciada existe e pertence ao tenant.** O conjunto do
    command é resolvido por `find_all_by_ids`; qualquer id não devolvido ⇒
    `JobFunctionNotFoundError` (consequência declarada do ADR 3.1.0006 — "use
@@ -676,6 +697,21 @@ error handler HTTP da 2.4 já converte a hierarquia em 4xx, e a 3.4 o reusa.
   história que o hub lê (overview §3). Decidir agora evita migration na 3.3.
 - **Fonte:** sponsor (2026-08-08, via sessão mestra), fork F1 opção (d).
 - **ADR:** [`../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md`](../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md)
+
+### O desligado é editável, e nenhuma edição o reativa (sponsor, 2026-08-09)
+- **O quê:** as seis operações de edição funcionam sobre registro desligado
+  como sobre ativo, e **nenhuma escreve `active`**; só `reactivate_employee`
+  reativa.
+- **Por quê:** corrigir o cadastro de quem saiu não é o mesmo ato que
+  recontratá-lo, e o sistema não deve obrigar um para conseguir o outro. A
+  regra é **ortogonalidade** — não custa guarda, erro nem ramo novo.
+- **Como apareceu:** gap de **especificação** encontrado pela auditoria de
+  testes independente (2026-08-09), que provou por mutação que a suíte não
+  distinguia esta leitura da oposta. É a armadilha registrada na memória do
+  projeto ("teste trava o caso, não a propriedade"): 100% de cobertura sobre
+  um representante estreito — todas as fixtures de edição criavam `active=True`.
+- **Fonte:** sponsor (2026-08-09, via sessão mestra).
+- **ADR:** [`../../adr/3_2_0007-terminated-employee-remains-editable.md`](../../adr/3_2_0007-terminated-employee-remains-editable.md)
 
 ### Guardas cross-agregado no use case **e** como lei do port
 - **O quê:** cada regra delegada é imposta pelo use case (com consulta explícita
@@ -989,6 +1025,16 @@ do BC identity (ADR 2.3.0003).
       `reactivate_employee` põe `active=True`; ambos são **idempotentes no
       valor** (repetir não é erro); a releitura pelo port confirma o estado; e
       **nenhum outro campo muda** (comparação campo a campo do result).
+- [ ] **O desligado é editável, e editar não reativa** (§5.7-bis;
+      ADR 3.2.0007): **cada uma** das seis operações de edição
+      (`rename_employee`, `change_workload_profile`,
+      `declare_shift_preference`, `assign_job_functions`,
+      `register_unavailability`, `remove_unavailability`), executada sobre um
+      registro criado **desligado**, (i) tem o efeito pretendido — confirmado
+      **relendo pelo port** — e (ii) deixa `active` em **`False`**. Um teste por
+      operação, não um representante: é a asserção (ii) que mata o
+      `.reactivate()` embutido, e ela precisa existir em cada caminho porque é
+      em **um** deles que alguém o embutiria.
 - [ ] **O desligado sobrevive e some da lista:** depois de `deactivate`,
       `list_employees(tenant, unidade)` **não** o devolve;
       `list_employees(…, include_inactive=True)` **devolve**; `find_by_id`
@@ -1133,7 +1179,8 @@ some em silêncio):
   inserção do port), 2.3.0005 (armazenamento verbatim).
   **Superseded:** 3.1.0003 (ciclo de vida da função) → 3.2.0005.
 - ADRs desta Stage: [`../../adr/`](../../adr/) (prefixo `3_2_`) — 3.2.0001,
-  3.2.0002, 3.2.0003, 3.2.0004, 3.2.0005, 3.2.0006.
+  3.2.0002, 3.2.0003, 3.2.0004, 3.2.0005, 3.2.0006, **3.2.0007** (este último
+  acrescentado na execução, após a auditoria de testes — ver §5.7-bis e §7).
 - [`../../roadmap.md`](../../roadmap.md) — Stage `3.2-staff-application` e
   vizinhas; ROADMAP-3. Issue [#35](https://github.com/MarceloSanC/restaurant-hub/issues/35).
 - [`../../LAYOUT.md`](../../LAYOUT.md) §3, §5, §7; `.importlinter`;
