@@ -4,6 +4,13 @@ Toda asserção de efeito é feita **relendo pelo port**, não só sobre o resul
 result é o que o use case diz ter feito; a releitura é o que ele de fato gravou.
 Um use case que montasse o result correto e não chamasse `add` passaria em
 qualquer suíte que olhasse só para o retorno.
+
+> **E os caminhos de rejeição aserem `store.calls`.** O par de fakes já impõe a
+> unicidade de nome por conta própria (L-JF1 no `add`, L-JF2 no `update`), então
+> `pytest.raises(JobFunctionNameAlreadyExistsError)` seria verde **mesmo sem a
+> checagem no use case** — o erro viria do port, do mesmo tipo. O que separa as
+> duas camadas de enforcement é a escrita **nem ser tentada**, e isso só existe
+> em `calls`.
 """
 
 import pytest
@@ -70,12 +77,21 @@ def test_cria_funcao_e_grava_o_nome_verbatim() -> None:
     assert gravada.name == "  Cozinheiro "  # releitura pelo port, verbatim
 
 
-def test_criar_com_nome_ja_usado_no_mesmo_tenant_e_conflito() -> None:
+def test_criar_com_nome_ja_usado_no_mesmo_tenant_e_conflito_sem_tentar_gravar() -> None:
+    """A checagem é do use case: o `add` **nem é chamado**.
+
+    Sem a asserção sobre `calls`, este teste passaria com o `find_by_name`
+    removido do use case — o fake levantaria o mesmo erro no `add`, pela L-JF1.
+    """
     fakes = staff_repositories()
     criar = _criar(fakes)
     criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+    antes = len(fakes.store.calls)
+
     with pytest.raises(JobFunctionNameAlreadyExistsError):
         criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+
+    assert "job_functions.add" not in fakes.store.calls[antes:]
     assert len(fakes.job_functions.list_by_tenant(_A)) == 1
 
 
@@ -162,11 +178,17 @@ def test_renomear_grava_o_nome_novo() -> None:
     assert gravada.name == "Chapeiro"
 
 
-def test_renomear_para_o_nome_de_outra_funcao_e_conflito_e_preserva_o_antigo() -> None:
+def test_renomear_para_o_nome_de_outra_funcao_e_conflito_sem_tentar_gravar() -> None:
+    """Mesma disciplina do `create`: o `update` **nem é chamado**.
+
+    Sem a asserção sobre `calls`, o teste passaria com a checagem de conflito
+    removida do use case — a L-JF2 do port levantaria o mesmo erro no `update`.
+    """
     fakes = staff_repositories()
     criar = _criar(fakes)
     criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
     outra = criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Chapeiro"))
+    antes = len(fakes.store.calls)
 
     with pytest.raises(JobFunctionNameAlreadyExistsError):
         _renomear(fakes).execute(
@@ -174,6 +196,8 @@ def test_renomear_para_o_nome_de_outra_funcao_e_conflito_e_preserva_o_antigo() -
                 tenant_id=_A, job_function_id=JobFunctionId(outra.id), name="Cozinheiro"
             )
         )
+
+    assert "job_functions.update" not in fakes.store.calls[antes:]
     gravada = fakes.job_functions.find_by_id(_A, JobFunctionId(outra.id))
     assert gravada is not None
     assert gravada.name == "Chapeiro"  # nome antigo
@@ -215,6 +239,7 @@ def test_precedencia_inexistente_vence_nome_ja_usado() -> None:
     """
     fakes = staff_repositories()
     _criar(fakes).execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+    antes = len(fakes.store.calls)
 
     with pytest.raises(StaffError) as excecao:
         _renomear(fakes).execute(
@@ -223,6 +248,10 @@ def test_precedencia_inexistente_vence_nome_ja_usado() -> None:
             )
         )
     assert type(excecao.value) is JobFunctionNotFoundError
+    # A ordem é observável aqui: a busca por nome nem chegou a acontecer.
+    conduta = fakes.store.calls[antes:]
+    assert "job_functions.find_by_name" not in conduta
+    assert "job_functions.update" not in conduta
 
 
 # --- listar ------------------------------------------------------------------
