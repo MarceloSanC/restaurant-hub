@@ -146,6 +146,22 @@ def test_conjunto_parcialmente_valido_e_rejeitado_inteiro() -> None:
     assert _conjunto_gravado(fakes) == frozenset({_F1})
 
 
+def test_id_de_funcao_ausente_reportada_e_deterministica() -> None:
+    """Mesma determinância do `create_employee` (achado F-04).
+
+    Vale nos dois porque os dois resolvem o mesmo conjunto — e um `sorted(...)`
+    corrigido só num dos lados daria mensagens diferentes para a mesma falha,
+    conforme o caminho.
+    """
+    fakes = _fakes()
+    faltantes = frozenset({JobFunctionId("f97"), JobFunctionId("f99")})
+    with pytest.raises(JobFunctionNotFoundError) as excecao:
+        _atribuir(fakes).execute(
+            AssignJobFunctionsCommand(tenant_id=_A, employee_id=_E1, job_function_ids=faltantes)
+        )
+    assert "f97" in str(excecao.value)
+
+
 def test_conjunto_vazio_e_erro_do_dominio_sem_gravar() -> None:
     fakes = _fakes()
     antes = len(fakes.store.calls)

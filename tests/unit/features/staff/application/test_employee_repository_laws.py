@@ -183,6 +183,29 @@ def test_l_e3_update_com_tenant_alheio_e_not_found_mesmo_com_unidade_divergente(
     assert (gravado.tenant_id, gravado.unit_id, gravado.name) == (_A, _U1, "Maria")
 
 
+def test_l_e3_vence_l_e4_quando_unidade_e_conjunto_falham_juntos() -> None:
+    """A ordem **interna** das guardas do `update`, depois do lookup de tenant.
+
+    O docstring do fake afirma que a ordem das três é o contrato — existência,
+    unidade, conjunto de funções. As duas primeiras estavam travadas; a terceira
+    não: inverter L-E3 ↔ L-E4 não derrubava nada, porque nenhum cenário fazia as
+    duas falharem juntas.
+
+    Fica travada aqui, e não removida do docstring, porque a 3.3 herda este
+    método como **especificação executável**: lá as duas checagens têm custo e
+    forma diferentes (comparação de coluna vs. FK `RESTRICT`), e um adapter que
+    as ordenasse ao contrário responderia `JobFunctionNotFoundError` a uma
+    tentativa de relocalização — trocando um erro sobre o **registro** por um
+    erro sobre o **catálogo**.
+    """
+    fakes = _com_funcionario_gravado()
+    with pytest.raises(StaffError) as excecao:
+        fakes.employees.update(
+            _funcionario(unit_id=_U2, job_function_ids=frozenset({JobFunctionId("f99")}))
+        )
+    assert type(excecao.value) is EmployeeRelocationError
+
+
 def test_l_e3_update_com_a_mesma_unidade_e_aceito() -> None:
     """O contrapositivo: a lei bloqueia relocalização, não edição."""
     fakes = _com_funcionario_gravado()
@@ -274,6 +297,29 @@ def test_l_e5_employee_in_use_error_existe_e_a_lei_esta_documentada_no_port() ->
 
 
 # --- L-E6: listagem por unidade ----------------------------------------------
+
+
+def test_l_e4_reporta_a_id_ausente_de_forma_deterministica() -> None:
+    """Faltando duas funções, a id reportada é sempre a mesma.
+
+    Mensagem de erro instável é ruído em log e teste intermitente em CI. A
+    ordenação do fake existe para isso, e sem este teste um `sorted(...)[-1]`
+    passaria despercebido — `frozenset` não tem ordem, então o "acaso" mudaria
+    entre execuções.
+    """
+    fakes = _com_funcoes_gravadas()
+    faltantes = frozenset({JobFunctionId("f97"), JobFunctionId("f99")})
+    with pytest.raises(JobFunctionNotFoundError) as excecao:
+        fakes.employees.add(_funcionario(job_function_ids=faltantes))
+    assert "f97" in str(excecao.value)
+
+
+# Nota deliberada: a **ordem** de `list_by_unit`, `list_by_tenant` e
+# `find_all_by_ids` NÃO é travada por teste, e isso não é esquecimento. O
+# concept não declara ordem nenhuma para essas leituras, e fixá-la aqui
+# quebraria o reuso desta suíte como teste de contrato contra o Postgres na
+# 3.3, onde um `SELECT` sem `ORDER BY` não garante ordem. As asserções usam
+# conjuntos de propósito.
 
 
 def test_l_e6_list_by_unit_devolve_so_a_unidade_pedida() -> None:

@@ -33,7 +33,11 @@ from restaurant_hub.features.staff.application.use_cases.list_job_functions impo
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
 )
-from restaurant_hub.features.staff.domain.exceptions.errors import InvalidNameError, StaffError
+from restaurant_hub.features.staff.domain.exceptions.errors import (
+    InvalidIdentifierError,
+    InvalidNameError,
+    StaffError,
+)
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
@@ -129,6 +133,24 @@ def test_criar_com_nome_vazio_nao_toca_o_port(invalido: str) -> None:
     fakes = staff_repositories()
     with pytest.raises(InvalidNameError):
         _criar(fakes).execute(CreateJobFunctionCommand(tenant_id=_A, name=invalido))
+    assert fakes.store.calls == []
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_criar_com_tenant_vazio_nao_toca_o_port(invalido: str) -> None:
+    """`InvalidIdentifierError` estava declarado em §6 e em três `Raises:` sem
+    **nenhum** teste na camada application (achado F-03 da auditoria).
+
+    Importa mais que um erro comum: `tenant_id` vazio é o que criaria um balde
+    de falso isolamento entre restaurantes — um registro que nenhuma consulta
+    escopada encontraria e que apareceria para quem passasse a mesma string
+    vazia.
+    """
+    fakes = staff_repositories()
+    with pytest.raises(InvalidIdentifierError):
+        _criar(fakes).execute(
+            CreateJobFunctionCommand(tenant_id=TenantId(invalido), name="Cozinheiro")
+        )
     assert fakes.store.calls == []
 
 

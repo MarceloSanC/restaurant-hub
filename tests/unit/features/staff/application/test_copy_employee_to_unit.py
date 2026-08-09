@@ -40,7 +40,10 @@ from restaurant_hub.features.staff.application.use_cases.rename_employee import 
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
-from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
+from restaurant_hub.features.staff.domain.exceptions.errors import (
+    InvalidIdentifierError,
+    StaffError,
+)
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -241,6 +244,31 @@ def test_destino_igual_a_origem_e_recusado_sem_gravar() -> None:
         )
 
     assert "employees.add" not in fakes.store.calls[antes:]
+    assert len(fakes.store.employees) == 1
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_unidade_destino_vazia_falha_depois_de_carregar_a_origem(invalido: str) -> None:
+    """`InvalidIdentifierError` (achado F-03), com a conduta do terceiro caminho.
+
+    Dos três lugares onde o erro é alcançável, este é o que carrega a origem
+    antes de falhar. Uma unidade destino vazia passaria pela comparação com a
+    unidade de origem (`"" != "u1"`) e só seria recusada na construção da
+    cópia — daí a asserção ser sobre `employees.add` **não** ter acontecido.
+    """
+    fakes = _fakes()
+    antes = len(fakes.store.calls)  # a fixture também escreve pelo port
+
+    with pytest.raises(InvalidIdentifierError):
+        _copiar(fakes).execute(
+            CopyEmployeeToUnitCommand(
+                tenant_id=_A, employee_id=_E1, target_unit_id=UnitId(invalido)
+            )
+        )
+
+    conduta = fakes.store.calls[antes:]
+    assert "employees.find_by_id" in conduta
+    assert "employees.add" not in conduta
     assert len(fakes.store.employees) == 1
 
 

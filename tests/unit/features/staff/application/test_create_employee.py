@@ -18,6 +18,7 @@ from restaurant_hub.features.staff.application.use_cases.create_employee import 
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmptyJobFunctionsError,
+    InvalidIdentifierError,
     InvalidNameError,
     StaffError,
 )
@@ -214,6 +215,47 @@ def test_precedencia_funcao_inexistente_vence_nome_vazio() -> None:
     with pytest.raises(StaffError) as excecao:
         _criar(fakes).execute(_comando(name="", funcoes=frozenset({JobFunctionId("f99")})))
     assert type(excecao.value) is JobFunctionNotFoundError
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_unidade_vazia_falha_depois_de_resolver_as_funcoes(invalido: str) -> None:
+    """`InvalidIdentifierError` (achado F-03), com a **conduta** que o distingue.
+
+    Aqui a resolução do conjunto **já aconteceu** quando o identificador é
+    rejeitado — o oposto de `create_job_function`, onde o erro vem sem tocar o
+    port. A diferença não é acidental: é a ordem de §5.16 vista de outro
+    ângulo, e travá-la impede que alguém "otimize" validando identificadores
+    antes e mude qual erro o chamador recebe num payload duplamente inválido.
+    """
+    fakes = _com_funcoes()
+    comando = CreateEmployeeCommand(
+        tenant_id=_A,
+        unit_id=UnitId(invalido),
+        name="Maria",
+        workload_profile=_FIXA,
+        job_function_ids=frozenset({_F1}),
+    )
+    antes = len(fakes.store.calls)  # a fixture também escreve pelo port
+
+    with pytest.raises(InvalidIdentifierError):
+        _criar(fakes).execute(comando)
+
+    conduta = fakes.store.calls[antes:]
+    assert "job_functions.find_all_by_ids" in conduta
+    assert "employees.add" not in conduta
+
+
+def test_id_de_funcao_ausente_reportada_e_deterministica() -> None:
+    """Faltando duas funções, a mensagem cita sempre a mesma (achado F-04).
+
+    `frozenset` não tem ordem: sem o `sorted`, qual id aparece na mensagem
+    mudaria entre execuções, e o teste que a asserisse seria intermitente.
+    """
+    fakes = _com_funcoes()
+    faltantes = frozenset({JobFunctionId("f97"), JobFunctionId("f99")})
+    with pytest.raises(JobFunctionNotFoundError) as excecao:
+        _criar(fakes).execute(_comando(funcoes=faltantes))
+    assert "f97" in str(excecao.value)
 
 
 def test_conjunto_vazio_nunca_produz_erro_referencial() -> None:
