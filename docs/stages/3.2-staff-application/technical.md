@@ -1318,4 +1318,127 @@ ou o ruff conseguem impedir a reintrodução, para não depender de revisão hum
 Registrado aqui, e não só no relatório do checkpoint, porque finding que vive
 fora da §7 não é varrido pelo pipeline.
 
+---
+
+### 2026-08-08 — [deviation] assinatura de `EmployeeRelocationError` — executor
+
+**O que mudou vs. o plano:** a Task 03 descreve a mensagem do erro citando "a
+`unit_id` gravada e a enviada" — dois parâmetros. A implementação recebe
+**três**: `(employee_id, stored_unit_id, requested_unit_id)`.
+
+**Por que ficou abaixo do limiar de perguntar:** o acréscimo é o `employee_id`,
+que os outros **oito** erros do módulo já citam — a mensagem sem ele seria a
+única do arquivo que não diz de qual registro fala, e um log de relocalização
+sem o id é inútil para diagnóstico. Não muda contrato (o erro não é capturado
+por assinatura em lugar nenhum), não muda tipo nem hierarquia, e a regra que o
+plano de fato fixava — **não citar `tenant_id`**, porque é erro intra-tenant —
+foi respeitada e está travada por teste
+(`test_erro_de_relocalizacao_cita_as_duas_unidades_e_nao_o_tenant`).
+
+---
+
+### 2026-08-09 — [decision] o desligado é editável, e editar não reativa — sponsor
+
+**Contexto:** a auditoria de testes independente aplicou 26 mutações à camada e
+**onze** sobreviveram, apesar de 100% de cobertura de linha **e de desvio**.
+Nove delas eram a mesma ausência: **nenhum teste da Stage jamais exercitou uma
+operação de edição sobre um registro desligado**, porque todas as fixtures de
+edição criavam `active=True`. Consequência: cada um dos seis use cases de edição
+podia trocar o `active` preservado por um `active=True` fixo sem falhar; dois
+podiam embutir `.reactivate()` e **ressuscitar o desligado em silêncio**; e a
+leitura **oposta** (recusar a edição com um `raise`) também passava verde.
+
+Este último ponto é o diagnóstico: a suíte não distinguia duas especificações
+**contraditórias**, o que significa que o comportamento nunca esteve
+especificado — apenas acontecia. Era gap de **concept**, não de teste: o
+concept descrevia as seis operações (ADR 3.2.0004) e as duas transições
+(ADR 3.2.0006) como features independentes e nunca dizia como interagem.
+
+**Pergunta:** o que acontece quando uma das seis operações de edição é chamada
+sobre um funcionário já desligado?
+
+**Opções:**
+- A — totalmente editável; nenhuma operação toca `active` ✅ recomendada
+- B — desligado é somente leitura (erro novo nas seis operações)
+- C — granular: identificação editável, dados de escala bloqueados
+
+**Decisão:** A (**sponsor, 2026-08-09**, via sessão mestra)
+
+**Razão:** corrigir o cadastro de quem saiu não é o mesmo ato que recontratá-lo,
+e o sistema não deve obrigar um para conseguir o outro. A regra é
+**ortogonalidade**, e é por isso que é barata: não custa guarda de estado, erro
+novo nem ramo condicional. (B) faria a correção de um acento custar duas
+transições que **mentem** sobre o que aconteceu; (C) é mais fiel à realidade,
+mas cada operação precisaria de regra e teste próprios — e migrar de (A) para
+(C) depois é **acréscimo**, não retrabalho, então (A) não fecha porta.
+
+**Consequências no artefato:** concept regredido a `draft` e re-aprovado
+(CONVENTIONS §3.2) com a regra em §5.7-bis e o critério de aceite em §11;
+**ADR 3.2.0007** criado; Task extra `[3.2/task-14-extra]` com o teste por
+operação. **Nenhuma mudança em `src/`** — a implementação já correspondia à
+decisão; o que faltava era a propriedade estar travada.
+
+---
+
+### 2026-08-09 — [finding] a suíte travava resultado, não conduta — executor
+
+**Contexto:** o Checkpoint C do bloco 3 provou que **quatro guardas
+cross-agregado** podiam ser removidas do código de produção sem derrubar
+nenhum dos 341 testes de então. O caso extremo: substituir o corpo inteiro do
+`DeleteJobFunctionUseCase.execute` por uma única chamada a `delete` deixava a
+suíte verde — a dependência `employees` era, para os testes, código morto, o
+que esvaziava a razão de existir da Task 08.
+
+**Causa comum:** o par de fakes impõe as leis dos ports por conta própria e
+levanta **o mesmo tipo de erro** que o use case levantaria. Uma asserção sobre
+o erro e o estado final é, portanto, satisfeita pelas **duas** arquiteturas —
+com e sem guarda no use case. A tabela ao final do concept §5 declara duas
+camadas de enforcement com limites honestos diferentes; sem observar a
+**conduta**, só uma delas tinha teste.
+
+**Direção aplicada nesta Stage:** os caminhos de rejeição passaram a asserir
+`store.calls` — que a escrita **nem foi tentada** —, e as ordens de checagem
+que o resultado não discrimina passaram a asserir que a guarda seguinte **nem
+foi consultada**. Cobertos nos commits `e12ae5b`, `08b1a30` e `eae34e3`, e
+aplicado preventivamente nas Tasks 10–13.
+
+**Direção sugerida para as próximas Stages:** onde um fake impõe a mesma regra
+que o use case, o teste do use case precisa de uma asserção de **conduta** — o
+resultado sozinho não distingue as camadas. Vale imediatamente para a 3.3
+(adapters reais impondo as mesmas leis) e para a 3.4 (o adapter HTTP não pode
+ser o único a ter teste de uma regra que o use case também impõe).
+**Stage candidata: `3.3-staff-persistence`.**
+
+---
+
+### 2026-08-09 — [decision] disposição dos achados dos Checkpoints C — executor
+
+Registro consolidado das três revisões por agente independente sobre o diff
+acumulado, para que a auditoria de PR não precise reconstruí-las do histórico.
+Todos os achados foram **corrigidos**; nenhum foi refutado ou descartado.
+
+| Bloco | Achado | Sev. | Disposição |
+|---|---|---|---|
+| 1 (Tasks 01–03) | partição 404 × não-404 dos erros era amostra, não partição — um 10º erro escaparia da checagem | minor | corrigido — `062b5cf` |
+| 1 | `EmployeeRelocationError` com três parâmetros vs. dois no plano | minor | `[deviation]` acima |
+| 1 | posição de `active` como último campo é provada por asserção vacuamente verdadeira | minor | sem ação (risco ≈ 0; todos os call-sites são keyword) |
+| 2 (Tasks 04–06) | `_TODOS_OS_DTOS` literal — um 19º command sem `frozen` escaparia de três guardas | major | corrigido — `5155479` |
+| 2 | `find_by_name` sem teste positivo: `.strip().lower()` passava verde | major | corrigido — `491a219` |
+| 2 | `store.calls` sustentava critérios "sem tocar o port" com só 2 de 13 métodos travados | major | corrigido — `02da785` |
+| 2 | docstring de `_tipos_folha` divergia da implementação | minor | corrigido — `5155479` |
+| 2 | guarda estrutural rodava só nos 2 results, mas a docstring de `commands.py` prometia mais | minor | corrigido — `5155479` |
+| 2 | ordem normativa inobservável em `JobFunctionRepository.update` | minor | corrigido — nota inline em `02da785` |
+| 3 (Tasks 07–09) | quatro guardas cross-agregado removíveis sem quebrar teste | major | `[finding]` acima; corrigido em `e12ae5b`, `08b1a30`, `eae34e3` |
+| 3 | docstring superdeclarava o alcance de um teste de tenant | minor | corrigido — `08b1a30` |
+| 3 | um teste de criação sem releitura pelo port | minor | corrigido — `eae34e3` |
+| 3 | identificadores locais em PT em `src/` | minor | `[finding]` acima — pós-Stage |
+
+**Nota de método, para a próxima Stage:** os três blocos convergem no mesmo
+defeito de raciocínio — **listas literais e representantes estreitos**. Uma
+tupla de DTOs que ninguém confronta com o módulo, uma partição de erros que
+ninguém prova completa, um `calls` que ninguém prova presente, uma fixture que
+só cria `active=True`. Em todos, a cobertura era 100% e a mutação sobrevivia. O
+antídoto que funcionou foi sempre o mesmo: **confrontar a lista com a fonte da
+verdade por introspecção**, e asserir a propriedade em vez do caso.
+
 <!-- END: post-execution -->

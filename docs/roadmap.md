@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-07-29
-last_reviewed_at: 2026-07-29
+updated_at: 2026-08-09
+last_reviewed_at: 2026-08-09
 ---
 
 # Roadmap — restaurant-hub
@@ -114,7 +114,7 @@ graph LR
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
-| `3.2-staff-application` | Use cases de equipe | application | draft | `3.1-staff-domain` |
+| `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | draft | `3.2-staff-application` |
 | `3.4-staff-http` | API de equipe | adapters/in/http | draft | `3.3-staff-persistence` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) | draft | `3.4-staff-http` |
@@ -621,6 +621,35 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [pytest-with-fakes, task-ordering-hex]
 ```
+
+> **Nota (2026-08-09): bloco corrigido durante a execução da Stage (issue #35)** —
+> o recorte real expandiu o bloco em **quatro** eixos, todos declarados no
+> concept §7 (mesmo padrão datado da 2.1 e da 3.1).
+> **Camada-alvo:** `camada_alvo: application` não se sustentou sozinho — a Stage
+> também **modificou o domínio já mergeado da 3.1**, por decisão do sponsor de
+> 2026-08-08: `JobFunction` **perdeu** `active`/`deactivate()`/`reactivate()`
+> (ADR 3.2.0005, que supersede o 3.1.0003) e `Employee` **ganhou**
+> `active: bool = True` com as duas transições (ADR 3.2.0006). É expansão de
+> camada-alvo, feita aqui de propósito para a 3.3 nascer com a coluna e sem
+> migration.
+> **File-scope:** `arquivos_a_modificar: []` não se sustentou — entraram o
+> `.importlinter` (contrato aditivo `staff-application-purity`), as duas
+> entidades da 3.1 e os seus dois arquivos de teste.
+> **Contratos introduzidos:** além dos dois ports-out, a Stage introduziu os
+> **DTOs** (14 commands, 2 queries, 2 results), os **nove erros de aplicação**
+> do BC (`application/errors.py`), os **16 use cases**, o campo `Employee.active`
+> com as suas transições e — como entregável de primeira classe, não andaime —
+> o **par acoplado de fakes** sobre `InMemoryStaffStore` com o holder
+> `StaffFakes`, que é a fixture que a 3.3 parametriza no teste de contrato.
+> **Contratos consumidos:** além de entities/VOs da 3.1, a Stage consome
+> `IdGenerator` (`shared/application`) e `DomainError`/`NotFoundError`
+> (`shared/domain`).
+> `complexidade_estimada: M` e `gate_mode: strict` seguem válidos (13 Tasks
+> planejadas + 2 Tasks extras de teste vindas da auditoria + 7 commits de
+> correção de checkpoint). As decisões estão nos ADRs 3.2.0001–3.2.0007 — o
+> **3.2.0007** foi acrescentado durante a execução, quando a auditoria de testes
+> independente revelou que a interação entre editar e desligar nunca fora
+> especificada; os desvios de execução, na §7 do `technical.md`.
 
 #### Stage 3.3 — `3.3-staff-persistence`
 
@@ -1243,6 +1272,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-20 | Stage 2.4-identity-http concluída (`done`); bloco corrigido (nota datada — `decode_access_token` estendendo `TokenIssuer`, use cases de rotação/logout, contract test de segurança, argon2 sem bcrypt, 4 ADRs); primeira superfície de runtime do projeto | Execução da Stage 2.4 — issue #24 |
 | 2026-07-20 | Stage 2.5-email-invite concluída (`done`); bloco corrigido (nota datada — 5 divergências: persistência no escopo, 3 use cases, sem adapter real, sem `TokenIssuer`, port em `ports/out/`; 4 ADRs). **Todas as Stages de backend do Step 2 estão `done`; o Step permanece `in_progress`** — falta a contraparte de frontend (regra do §Escopo deste roadmap e §Lacunas conhecidas) | Execução da Stage 2.5 — issue #27 |
 | 2026-07-29 | Stage 3.1-staff-domain concluída (`done`); bloco corrigido (nota datada — `.importlinter` modificado com contratos de pureza `staff.domain` e independência identity × staff, `identifiers.py`, placeholders application/adapters, `DayPeriod` co-locado, hierarquia `StaffError` + 8 subclasses; ADRs 3.1.0001–0006); Step 3 → `in_progress` (primeiro código do BC staff) | Execução da Stage 3.1 — issue #32 |
+| 2026-08-09 | Stage 3.2-staff-application concluída (`done`); bloco corrigido (nota datada — **quatro** eixos: camada-alvo expandida para o domínio da 3.1, file-scope real, DTOs/erros/use cases/fakes nos contratos introduzidos, `IdGenerator` e `DomainError`/`NotFoundError` nos consumidos). Decisões do sponsor mudaram o ciclo de vida das duas entidades da 3.1 (ADR 3.2.0005 supersede o 3.1.0003; ADR 3.2.0006), e o **ADR 3.2.0007** nasceu na execução, quando a auditoria de testes provou que a interação entre editar e desligar nunca fora especificada | Execução da Stage 3.2 — issue #35 |
 
 ## Próxima revisão de roadmap
 
