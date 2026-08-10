@@ -1,0 +1,115 @@
+"""Port de saída: persistência de funções de trabalho.
+
+**As docstrings deste módulo são especificação, não comentário.** Cada método
+cita a lei nomeada do concept §4 (L-JF1…L-JF5) que o governa e o erro que
+levanta, porque é este texto que a Stage 3.3 implementa em Postgres e que o
+teste de contrato de lá pareia lei a lei. Declarar o comportamento só no fake é
+o defeito que a 2.2→2.3 pagou retroagindo o contrato (ADR 2.3.0003).
+
+**Escopo de tenant na assinatura** (ADR 3.2.0002): não existe operação sem
+`tenant_id`. A alternativa — buscar por id e comparar `entity.tenant_id` no use
+case — só protege enquanto **cada** use case lembrar de comparar, e um use case
+novo que esqueça compila, passa nos testes e vaza.
+
+**Ordem de checagem, normativa** (concept §4/L-E3 e §5.4): todo método que
+recebe `tenant_id` resolve **primeiro** o lookup por `(tenant_id, id)` — ausente
+⇒ `*NotFoundError` — e só **depois** avalia qualquer outra guarda. Invertê-la
+faz o port responder um erro que **confirma a existência de registro de outro
+tenant**.
+"""
+
+from typing import Protocol
+
+from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    JobFunctionId,
+    TenantId,
+)
+
+
+class JobFunctionRepository(Protocol):
+    """Contrato de persistência da raiz de agregado `JobFunction`."""
+
+    def add(self, job_function: JobFunction) -> None:
+        """Persiste uma função nova.
+
+        **L-JF1 — é inserção, não upsert.** Id já gravado ⇒
+        `JobFunctionAlreadyExistsError`; nome já usado **no tenant**, comparado
+        **verbatim** (sem trim, sem case-folding) ⇒
+        `JobFunctionNameAlreadyExistsError`. Em ambos os casos **nada muda**: a
+        releitura devolve os campos antigos.
+
+        A colisão de **id** é checada **globalmente**, não por tenant — é a
+        única lei destes ports que não é escopada, e a exceção é deliberada: na
+        3.3 o id é a **chave primária**, e um fake que só olhasse dentro do
+        tenant aceitaria uma inserção que o Postgres rejeita. A colisão de
+        **nome** é por tenant (índice único `(tenant_id, name)` na 3.3).
+        """
+        ...
+
+    def update(self, job_function: JobFunction) -> None:
+        """Grava o estado de uma função existente.
+
+        **L-JF2 — é `UPDATE`, não upsert.** Função inexistente **no tenant** ⇒
+        `JobFunctionNotFoundError`, e **nada** é gravado. A guarda de nome de
+        L-JF1 vale igual, **ignorando a própria função**: renomear para o nome
+        atual não é conflito. `tenant_id` **não** é atualizável.
+        """
+        ...
+
+    def delete(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> None:
+        """Remove a função **definitivamente**.
+
+        **L-JF3 — remoção guardada.** Inexistente **no tenant** ⇒
+        `JobFunctionNotFoundError`; **referenciada por algum funcionário** ⇒
+        `JobFunctionInUseError` (na 3.3, a FK `RESTRICT` traduzida pelo
+        adapter), e a função continua legível.
+
+        A referência conta **independentemente do estado do funcionário**:
+        registro desligado ainda aponta para a função, e apagá-la deixaria o
+        cadastro apontando para função inexistente.
+
+        Ordem: o lookup por `(tenant_id, id)` vem **antes** da checagem de
+        referências — apagar função do tenant A com `tenant_id` do B devolve
+        `JobFunctionNotFoundError`, nunca `JobFunctionInUseError`, que
+        confirmaria a existência do registro alheio.
+        """
+        ...
+
+    def find_by_id(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> JobFunction | None:
+        """Devolve a função **do tenant**, ou `None` se não existir nele.
+
+        Função existente em **outro** tenant devolve `None`: id alheio é
+        indistinguível de inexistente (concept §5.4).
+        """
+        ...
+
+    def find_by_name(self, tenant_id: TenantId, name: str) -> JobFunction | None:
+        """Devolve a função homônima **do tenant**, ou `None`.
+
+        Devolve a **entidade**, não um booleano, de propósito: o `rename`
+        precisa saber **qual** função tem o nome para decidir se o conflito é
+        consigo mesma — com booleano, renomear uma função para o próprio nome
+        falharia. A comparação é **verbatim**: `"Cozinheiro"` e `"cozinheiro "`
+        são nomes distintos (workforce §3.2).
+        """
+        ...
+
+    def find_all_by_ids(
+        self, tenant_id: TenantId, job_function_ids: frozenset[JobFunctionId]
+    ) -> tuple[JobFunction, ...]:
+        """Resolve um conjunto de ids **dentro do tenant**.
+
+        **L-JF4 — devolve só as encontradas e não levanta erro** para ids
+        ausentes: quem compara com o conjunto pedido, para descobrir o que
+        falta, é o chamador. **Não filtra por estado porque a função não tem
+        estado** (ADR 3.2.0005). Id de outro tenant simplesmente não vem.
+        """
+        ...
+
+    def list_by_tenant(self, tenant_id: TenantId) -> tuple[JobFunction, ...]:
+        """Lista **todas** as funções do tenant, e nenhuma de outro.
+
+        **L-JF5 —** não há flag de estado porque não há estado.
+        """
+        ...

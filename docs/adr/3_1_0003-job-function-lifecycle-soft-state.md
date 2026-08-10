@@ -3,9 +3,10 @@ title: ADR 3.1.0003 — Job function lifecycle as soft active/inactive state, ha
 description: Architecture Decision Record
 when-use: Reference when implementing job-function deactivation or removal (Stages 3.1–3.3), when a use case must decide what an inactive function allows, or before changing the removal semantics
 keywords: [adr, staff, workforce, job-function, lifecycle, active, inactive, soft-delete, hard-delete, references]
-status: accepted
+status: superseded
+superseded_by: 3.2.0005
 created_at: 2026-07-27
-updated_at: 2026-07-27
+updated_at: 2026-08-08
 adr_id: 3.1.0003
 decision: JobFunction carries an active/inactive soft state — deactivation blocks NEW assignments but keeps existing references valid; definitive (hard) removal is allowed only when no employee references the function; both cross-aggregate checks are enforced in the application layer (Stage 3.2), while Stage 3.1 models the state and its transitions.
 context_stage: 3.1-staff-domain
@@ -18,7 +19,15 @@ bounded_context: staff
 
 ## Status
 
-`accepted`
+`superseded`
+
+> **Superseded (2026-08-08) by [ADR 3.2.0005](./3_2_0005-job-function-has-no-lifecycle-state.md)**
+> — the **human sponsor** decided that a job function carries **no lifecycle state at all**: an
+> unused function is inert and simply sits there, and whoever no longer wants it deletes it. The
+> **guarded removal** of decision 2 below survives (on its own rationale, restated in 3.2.0005);
+> the soft state of decision 1, the `deactivate()`/`reactivate()` transitions and the
+> "inactive function accepts no new assignment" rule **do not**. The body below is preserved
+> unedited as the historical record of what was decided on 2026-07-27 and why.
 
 ## Context
 

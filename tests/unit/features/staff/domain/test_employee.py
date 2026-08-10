@@ -253,6 +253,67 @@ def test_troca_perfil_de_fixa_para_sob_demanda_e_volta() -> None:
     assert de_volta.workload_profile == FixedSchedule(weekly_hours=Decimal("20.5"))
 
 
+# --- ciclo de vida (ADR 3.2.0006) --------------------------------------------
+
+
+def _demais_campos(funcionario: Employee) -> dict[str, object]:
+    """Todos os campos **exceto** `active`, para a comparação campo a campo.
+
+    `Employee.__eq__` compara só por id, então `assert copia == original` é
+    vacuoso aqui: só a leitura campo a campo prova que a transição não mexeu em
+    mais nada.
+    """
+    return {
+        campo.name: getattr(funcionario, campo.name)
+        for campo in dataclasses.fields(funcionario)
+        if campo.name != "active"
+    }
+
+
+def test_funcionario_nasce_ativo_por_default() -> None:
+    # `active` é aditivo: nenhum call-site da 3.1 passa o campo.
+    assert _funcionario().active is True
+
+
+def test_deactivate_devolve_nova_instancia_desligada() -> None:
+    original = _funcionario()
+    desligado = original.deactivate()
+    assert desligado.active is False
+    assert original.active is True  # original imutado
+
+
+def test_reactivate_devolve_nova_instancia_ativa() -> None:
+    original = _funcionario(active=False)
+    recontratado = original.reactivate()
+    assert recontratado.active is True
+    assert original.active is False  # original imutado
+
+
+def test_transicoes_repetidas_sao_idempotentes_no_valor() -> None:
+    # ADR 3.2.0006: repetir não é erro — desligar o já desligado preserva o valor.
+    assert _funcionario(active=False).deactivate().active is False
+    assert _funcionario(active=True).reactivate().active is True
+
+
+@pytest.mark.parametrize("transicao", ["deactivate", "reactivate"])
+def test_transicao_de_ciclo_de_vida_nao_altera_nenhum_outro_campo(transicao: str) -> None:
+    # O desligado SOBREVIVE com toda a história: funções, indisponibilidades e
+    # preferência ficam onde estavam.
+    original = _funcionario(
+        shift_preference=_PREFERENCIA,
+        job_function_ids=frozenset({JobFunctionId("f1"), JobFunctionId("f2")}),
+        unavailabilities=(_periodo(8, 12), _periodo(14, 16)),
+    )
+    transicionado: Employee = getattr(original, transicao)()
+    assert _demais_campos(transicionado) == _demais_campos(original)
+
+
+def test_estado_de_ciclo_de_vida_nao_e_atribuivel() -> None:
+    # O campo novo entra sob a mesma regra frozen do resto: só via transição.
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _funcionario().active = False  # type: ignore[misc]
+
+
 # --- identidade e imutabilidade ----------------------------------------------
 
 

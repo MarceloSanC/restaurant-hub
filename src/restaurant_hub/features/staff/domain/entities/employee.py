@@ -3,8 +3,9 @@
 Raiz de agregado: agrega os períodos de indisponibilidade, cuja
 **não-sobreposição por funcionário** é consistência transacional do agregado
 (workforce §3.6). Referencia `JobFunction` **só por id** — conjunto não-vazio
-(ADR 3.1.0006); validade referencial e bloqueio de função inativa são
-enforcement da 3.2/3.3.
+(ADR 3.1.0006); a **validade referencial** do conjunto (toda id existe no
+tenant) continua sendo enforcement da 3.2/3.3. Não há bloqueio de função
+inativa: a função não tem estado (ADR 3.2.0005).
 
 Entidade **frozen**: transições devolvem nova instância via
 `dataclasses.replace`, revalidada pelo `__post_init__` — as invariantes valem
@@ -56,6 +57,10 @@ class Employee:
         job_function_ids: funções do registro, no mínimo uma (ADR 3.1.0006).
         unavailabilities: períodos de indisponibilidade, sem sobreposição
             par a par (semântica semi-aberta — ADR 3.1.0001).
+        active: estado do ciclo de vida (ADR 3.2.0006). O registro desligado
+            **sobrevive** com toda a história: some da listagem default da
+            unidade, continua endereçável por id e continua contando como
+            **referência** para a guarda de remoção da função que ele aponta.
     """
 
     id: EmployeeId
@@ -66,6 +71,7 @@ class Employee:
     shift_preference: ShiftPreference | None
     job_function_ids: frozenset[JobFunctionId]
     unavailabilities: tuple[UnavailabilityPeriod, ...] = ()
+    active: bool = True
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -113,6 +119,18 @@ class Employee:
             raise UnavailabilityNotFoundError()
         restantes = tuple(existente for existente in self.unavailabilities if existente != period)
         return dataclasses.replace(self, unavailabilities=restantes)
+
+    def deactivate(self) -> "Employee":
+        """Desliga o registro — idempotente no valor (já desligado não é erro).
+
+        Desligar não apaga: a história (funções, indisponibilidades,
+        preferência) permanece no registro (ADR 3.2.0006).
+        """
+        return dataclasses.replace(self, active=False)
+
+    def reactivate(self) -> "Employee":
+        """Recontrata o registro — idempotente no valor (já ativo não é erro)."""
+        return dataclasses.replace(self, active=True)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Employee):

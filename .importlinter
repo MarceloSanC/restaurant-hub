@@ -160,6 +160,35 @@ forbidden_modules =
     argon2
     jwt
 
+# Ativado na Stage 3.2 (1ª camada application do BC staff). Espelha para
+# features.staff.application o contrato que identity-application-purity aplica a
+# features.identity.application (LAYOUT §3 Application: nunca importa adapters
+# nem infrastructure). NÃO proíbe restaurant_hub.shared.domain nem
+# restaurant_hub.shared.application (dependências legítimas: os erros herdam de
+# StaffError/NotFoundError, e os use cases consomem o port IdGenerator), nem
+# restaurant_hub.features (auto-proibiria o import do próprio domínio de staff,
+# que é a dependência central desta camada — o import de features.identity já é
+# barrado pelo contrato bc-independence).
+[importlinter:contract:staff-application-purity]
+name = features.staff.application nao importa adapters nem frameworks (LAYOUT §3 Application)
+type = forbidden
+source_modules =
+    restaurant_hub.features.staff.application
+forbidden_modules =
+    restaurant_hub.features.staff.adapters
+    restaurant_hub.shared.infrastructure
+    fastapi
+    starlette
+    uvicorn
+    sqlalchemy
+    alembic
+    psycopg
+    pydantic
+    pydantic_settings
+    httpx
+    argon2
+    jwt
+
 # Ativado na Stage 3.1 (1º código do BC staff). Espelha para features.staff.domain
 # o contrato de pureza de identity-domain-purity (LAYOUT §3 Domain). NÃO proíbe
 # restaurant_hub.features (auto-proibiria imports internos de staff) nem
