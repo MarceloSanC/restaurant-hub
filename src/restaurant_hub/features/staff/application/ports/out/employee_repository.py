@@ -1,9 +1,34 @@
 """Port de saída: persistência de registros de funcionário.
 
 **As docstrings deste módulo são especificação, não comentário.** Cada método
-cita a lei nomeada do concept §4 (L-E1…L-E7) que o governa e o erro que levanta
-— é o texto que a Stage 3.3 implementa em Postgres e que o teste de contrato de
-lá pareia lei a lei (ADR 2.3.0003).
+cita a lei nomeada do concept §4 da Stage 3.2 (L-E1…L-E7) **+ `L-ORD`
+(ADR 3.3.0003, Stage 3.3)** que o governa e o erro que levanta — é o texto que a
+Stage 3.3 implementa em Postgres e que o teste de contrato de lá pareia lei a
+lei (ADR 2.3.0003).
+
+**`L-ORD` — ordem total, determinística e independente de ambiente.** Duas
+cláusulas, uma para a listagem e outra para dentro do agregado:
+
+- **`list_by_unit`** devolve os registros ordenados por `name` e, em empate, por
+  `id` — comparação **byte a byte** (codepoint), que em Postgres é
+  `ORDER BY name COLLATE "C", id COLLATE "C"` e em Python é
+  `sorted(…, key=lambda e: (e.name, e.id))`, medidos como **idênticos**. O
+  desempate por `id` não é zelo: nome de funcionário **não é único** — homônimos
+  são legítimos (concept 3.1 §5.2) —, então sem ele a ordem não é total, e ordem
+  não-total pagina duplicando e omitindo linhas na Stage 3.4. As duas colunas
+  levam a colação explícita porque `COLLATE` liga-se ao operando à sua esquerda:
+  um `id` sem ela volta a depender da colação do banco, justamente no termo que
+  a paginação usa como cursor.
+- **`find_by_id` e `list_by_unit`** — os dois métodos que montam agregado —
+  reidratam `Employee.unavailabilities` ordenadas por `start`. É ordem **total
+  por funcionário** porque períodos do mesmo registro não se sobrepõem, logo o
+  início é único dentro do agregado.
+
+`shift_preference` e `job_function_ids` são `frozenset`: **sem ordem, sem lei**.
+
+A lei vale para as **duas** implementações — o fake in-memory ordena igual, e a
+lei não se relaxa para acomodá-lo (precedente literal do ADR 2.3.0003). É isso
+que permite à suíte de contrato ter **um** corpo de teste só.
 
 **Escopo de tenant na assinatura** (ADR 3.2.0002), e a listagem exige também a
 **unidade**: não existe listagem tenant-wide de funcionário. A ausência é
@@ -100,6 +125,8 @@ class EmployeeRepository(Protocol):
 
         Não filtra por estado: o **desligado continua endereçável por id**
         (ADR 3.2.0006) — ele some da listagem default, não do sistema.
+
+        **`L-ORD` —** `unavailabilities` vem ordenada por `start`.
         """
         ...
 
@@ -112,6 +139,9 @@ class EmployeeRepository(Protocol):
         `include_inactive=True` é opt-in explícito. Não existe listagem
         tenant-wide de funcionário nesta Stage, e essa ausência é o que torna a
         consulta que vazaria unidades irrepresentável.
+
+        **`L-ORD` —** ordenado por `name`, desempatando por `id`, byte a byte;
+        e cada agregado devolvido tem `unavailabilities` ordenada por `start`.
         """
         ...
 

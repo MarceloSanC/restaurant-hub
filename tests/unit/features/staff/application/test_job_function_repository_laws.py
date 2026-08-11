@@ -11,6 +11,7 @@ diretamente, porque um par sobre stores diferentes faria L-JF3 passar
 **vacuamente** (a remoção não enxergaria referenciador nenhum).
 """
 
+import sys
 from decimal import Decimal
 
 import pytest
@@ -20,6 +21,9 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
+)
+from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
+    JobFunctionRepository,
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
@@ -280,6 +284,110 @@ def test_l_jf5_list_by_tenant_devolve_todas_do_tenant_e_nenhuma_de_outro() -> No
     fakes.job_functions.add(_funcao(id_=JobFunctionId("f3"), tenant=_B, name="Garçom"))
     assert {funcao.id for funcao in fakes.job_functions.list_by_tenant(_A)} == {_F1, _F2}
     assert {funcao.id for funcao in fakes.job_functions.list_by_tenant(_B)} == {JobFunctionId("f3")}
+
+
+# --- L-ORD: ordem total das listagens (ADR 3.3.0003) -------------------------
+
+
+def _com_funcoes_adversariais() -> StaffFakes:
+    """Dado que exercita cada metade **alcançável** da lei neste port.
+
+    - nome **acentuado** (`"Álvaro"`) e **case misto** (`"ana"`/`"Ana"`): sob
+      colação linguística eles se agrupam; por codepoint, maiúsculas vêm antes
+      de minúsculas e o acentuado vem **depois** de tudo. É o que distingue a
+      lei de "mais ou menos ordenado".
+    - **espaço à direita** (`"Zeus "`), que a unicidade verbatim aceita ao lado
+      de `"Zeus"` (L-JF1) e que uma normalização silenciosa colapsaria.
+
+    **Sem homônimos, e a ausência é declarada, não esquecimento.** L-JF1 torna
+    dois nomes iguais no mesmo tenant **irrepresentáveis** — é o índice único
+    `(tenant_id, name)` da 3.3 —, e as duas listagens deste port são
+    tenant-scoped. Logo o desempate por `id` é **inalcançável por dado aqui**:
+    tentar semeá-lo levanta `JobFunctionNameAlreadyExistsError`, como o teste
+    `test_l_jf1_add_com_nome_ja_usado_no_tenant_...` já trava.
+
+    Ele continua sendo lei — o `ORDER BY` leva os dois termos, e o cursor da
+    paginação da 3.4 depende disso —, e é travado nos dois lugares onde **é**
+    alcançável: no port de funcionário, onde homônimos são legítimos por
+    declaração (concept 3.1 §5.2), e na asserção sobre o SQL compilado da
+    Task 08 (CA10b), única capaz de reprovar a omissão da cláusula nesta imagem.
+    """
+    fakes = staff_repositories()
+    for id_, name in (
+        ("f5", "Zeus"),
+        ("f1", "Álvaro"),
+        ("f3", "ana"),
+        ("f2", "Ana"),
+        ("f4", "Zeus "),
+    ):
+        fakes.job_functions.add(_funcao(id_=JobFunctionId(id_), name=name))
+    return fakes
+
+
+def test_l_ord_list_by_tenant_ordena_por_nome_byte_a_byte() -> None:
+    """A sequência é exatamente a do `sorted()` do Python — CA10, metade `[fake]`.
+
+    O `sorted()` sobre `str` compara por **codepoint**, e foi medido como
+    idêntico a `ORDER BY name COLLATE "C", id COLLATE "C"` no Postgres. A
+    asserção é sobre a **sequência inteira**, e não sobre "está ordenado":
+    monotonicidade é satisfeita por qualquer ordem estável — inclusive uma
+    linguística, que é exatamente a que divergiria entre o fake e um cluster
+    glibc/ICU.
+    """
+    fakes = _com_funcoes_adversariais()
+    listadas = fakes.job_functions.list_by_tenant(_A)
+
+    # O contraintuitivo da ordem por codepoint, por extenso: maiúsculas antes
+    # de minúsculas, o acentuado (`"Á"` = U+00C1) **depois** de `"ana"`
+    # (`"a"` = U+0061), e o espaço à direita depois do prefixo. É o limite
+    # honesto declarado no ADR 3.3.0003 — ordem de cursor, não de exibição.
+    assert [(funcao.name, funcao.id) for funcao in listadas] == [
+        ("Ana", "f2"),
+        ("Zeus", "f5"),
+        ("Zeus ", "f4"),
+        ("ana", "f3"),
+        ("Álvaro", "f1"),
+    ]
+
+
+def test_l_ord_find_all_by_ids_ordena_igual_e_nao_herda_a_ordem_do_pedido() -> None:
+    """O parâmetro é `frozenset`: não há ordem no pedido para o resultado herdar.
+
+    Sem a lei, a ordem viria da iteração do `dict` do fake (inserção) de um lado
+    e do plano do Postgres do outro — divergentes por construção, e a do fake
+    ainda dependente de `PYTHONHASHSEED`.
+    """
+    fakes = _com_funcoes_adversariais()
+    pedidas = frozenset({JobFunctionId("f3"), JobFunctionId("f1"), JobFunctionId("f2")})
+
+    encontradas = fakes.job_functions.find_all_by_ids(_A, pedidas)
+
+    assert [(funcao.name, funcao.id) for funcao in encontradas] == [
+        ("Ana", "f2"),
+        ("ana", "f3"),
+        ("Álvaro", "f1"),
+    ]
+
+
+def test_l_ord_esta_declarada_no_port_com_a_ancora_da_stage_33() -> None:
+    """CA12 travado por **teste**, não por revisão.
+
+    Sem a âncora, a lei existe no código e não existe na fonte que o código
+    nomeia — referência pendurada, e é o defeito de "afirmar sobre outro arquivo
+    o que ele não diz". Mesma forma do
+    `test_l_e5_..._documentada_no_port` que já existe no port irmão.
+    """
+    documentacao = JobFunctionRepository.__doc__ or ""
+    modulo = sys.modules[JobFunctionRepository.__module__].__doc__ or ""
+    texto = documentacao + modulo
+
+    assert "L-ORD" in texto
+    assert "ADR 3.3.0003" in texto
+    assert "concept §4 da Stage 3.2" in texto
+    # As duas metades da cláusula de listagem, nomeadas.
+    assert 'COLLATE "C"' in texto
+    for metodo in (JobFunctionRepository.list_by_tenant, JobFunctionRepository.find_all_by_ids):
+        assert "L-ORD" in (metodo.__doc__ or ""), metodo.__name__
 
 
 # --- escopo de tenant (teste dedicado do port) -------------------------------

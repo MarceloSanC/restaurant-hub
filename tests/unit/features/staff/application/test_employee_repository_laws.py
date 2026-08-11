@@ -12,6 +12,7 @@ verdes enquanto o port confirmasse a existência de registro alheio.
 """
 
 import dataclasses
+import sys
 from datetime import datetime
 from decimal import Decimal
 
@@ -314,12 +315,14 @@ def test_l_e4_reporta_a_id_ausente_de_forma_deterministica() -> None:
     assert "f97" in str(excecao.value)
 
 
-# Nota deliberada: a **ordem** de `list_by_unit`, `list_by_tenant` e
-# `find_all_by_ids` NÃO é travada por teste, e isso não é esquecimento. O
-# concept não declara ordem nenhuma para essas leituras, e fixá-la aqui
-# quebraria o reuso desta suíte como teste de contrato contra o Postgres na
-# 3.3, onde um `SELECT` sem `ORDER BY` não garante ordem. As asserções usam
-# conjuntos de propósito.
+# A "Nota deliberada" que ficava aqui — declarando que a **ordem** dessas
+# leituras NÃO era travada por teste — saiu na Stage 3.3, no commit que
+# introduziu `L-ORD`. Ela era verdadeira e virou **falsa** na linha em que o
+# primeiro `test_l_ord_*` entrou: hoje o concept declara a ordem (ADR 3.3.0003),
+# ela vale para as duas implementações, e é justamente ela que torna o reuso
+# desta suíte como contrato possível — o contrário do que a nota dizia. As
+# asserções de conjunto dos testes abaixo continuam como estão, porque o que
+# elas travam é **pertinência**; a ordem tem testes próprios (`test_l_ord_*`).
 
 
 def test_l_e6_list_by_unit_devolve_so_a_unidade_pedida() -> None:
@@ -375,6 +378,135 @@ def test_l_e7_exists_by_job_function_e_false_para_referencia_de_outro_tenant() -
     )
     assert fakes.employees.exists_by_job_function(_A, JobFunctionId("f-b")) is False
     assert fakes.employees.exists_by_job_function(_B, JobFunctionId("f-b")) is True
+
+
+# --- L-ORD: ordem total da listagem e da reidratação (ADR 3.3.0003) ----------
+
+
+def _com_funcionarios_adversariais() -> StaffFakes:
+    """Mesmo dado adversarial do port irmão, e pela mesma razão.
+
+    Nome acentuado, case misto, espaço à direita e **dois homônimos com ids
+    diferentes** — sem os homônimos, o desempate por `id` (o cursor da paginação
+    da 3.4) é inalcançável. Aqui os homônimos são ainda mais legítimos que lá:
+    nome de funcionário **não é único** por declaração (concept 3.1 §5.2).
+    """
+    fakes = _com_funcoes_gravadas()
+    for id_, name in (
+        ("e5", "Zeus"),
+        ("e9", "Ana"),
+        ("e1", "Álvaro"),
+        ("e3", "ana"),
+        ("e2", "Ana"),
+        ("e4", "Zeus "),
+    ):
+        fakes.employees.add(_funcionario(id=EmployeeId(id_), name=name))
+    return fakes
+
+
+def test_l_ord_list_by_unit_ordena_por_nome_e_desempata_por_id() -> None:
+    """CA10, metade `[fake]` — a sequência inteira, não "está ordenado".
+
+    O `sorted()` do Python compara por **codepoint** e foi medido como idêntico
+    a `ORDER BY name COLLATE "C", id COLLATE "C"`. Uma asserção de
+    monotonicidade passaria com os dois homônimos em ordem arbitrária, que é
+    exatamente onde a paginação quebra.
+    """
+    fakes = _com_funcionarios_adversariais()
+    listados = fakes.employees.list_by_unit(_A, _U1)
+
+    # A sequência **literal**, com o que a ordem por codepoint tem de
+    # contraintuitivo escrito por extenso: maiúsculas antes de minúsculas
+    # (`"Ana"` antes de `"ana"`), o acentuado **depois** de tudo
+    # (`"Álvaro"` = U+00C1, depois de `"ana"` = U+0061), e o espaço à direita
+    # depois do prefixo (`"Zeus"` < `"Zeus "`). É o limite honesto que o
+    # ADR 3.3.0003 declara — ordem de cursor, não ordem de exibição.
+    assert [(registro.name, registro.id) for registro in listados] == [
+        ("Ana", "e2"),
+        ("Ana", "e9"),
+        ("Zeus", "e5"),
+        ("Zeus ", "e4"),
+        ("ana", "e3"),
+        ("Álvaro", "e1"),
+    ]
+
+
+def test_l_ord_o_desempate_e_por_id_entre_homonimos() -> None:
+    """Nome de funcionário não é único **por declaração** — o desempate é a lei.
+
+    Isolado do teste acima porque é a metade que a 3.4 usa como cursor: quando
+    quebrar, é este nome que aparece no relatório de CI.
+    """
+    fakes = _com_funcionarios_adversariais()
+    homonimos = [
+        registro for registro in fakes.employees.list_by_unit(_A, _U1) if registro.name == "Ana"
+    ]
+    assert [registro.id for registro in homonimos] == ["e2", "e9"]
+
+
+def test_l_ord_periodos_reidratam_ordenados_por_inicio_no_find_by_id() -> None:
+    """CA11 — e a divergência aqui corre na direção **contrária** à habitual.
+
+    `Employee.add_unavailability` **concatena**, não ordena, e o fake guarda o
+    agregado inteiro como foi entregue. Sem a reordenação na leitura seria o
+    **fake** a reprovar esta lei enquanto o Postgres passaria, porque lá a ordem
+    vem do `ORDER BY start_at` do adapter. Inserir fora de ordem cronológica é o
+    ponto do teste, não um detalhe do arranjo.
+    """
+    fakes = _com_funcoes_gravadas()
+    tarde = UnavailabilityPeriod(
+        start=datetime(2026, 8, 20, 8, 0), end=datetime(2026, 8, 20, 12, 0)
+    )
+    cedo = UnavailabilityPeriod(start=datetime(2026, 8, 3, 8, 0), end=datetime(2026, 8, 3, 12, 0))
+    meio = UnavailabilityPeriod(start=datetime(2026, 8, 10, 8, 0), end=datetime(2026, 8, 10, 12, 0))
+    fakes.employees.add(_funcionario(unavailabilities=(tarde, cedo, meio)))
+
+    lido = fakes.employees.find_by_id(_A, _E1)
+
+    assert lido is not None
+    assert lido.unavailabilities == (cedo, meio, tarde)
+
+
+def test_l_ord_periodos_reidratam_ordenados_tambem_no_list_by_unit() -> None:
+    """A lei fala dos **dois** métodos que montam agregado, não só do `find_by_id`.
+
+    Travar só um deixaria a listagem — que é justamente a que a 3.4 pagina —
+    livre para devolver o agregado em ordem de inserção.
+    """
+    fakes = _com_funcoes_gravadas()
+    tarde = UnavailabilityPeriod(
+        start=datetime(2026, 8, 20, 8, 0), end=datetime(2026, 8, 20, 12, 0)
+    )
+    cedo = UnavailabilityPeriod(start=datetime(2026, 8, 3, 8, 0), end=datetime(2026, 8, 3, 12, 0))
+    fakes.employees.add(_funcionario(unavailabilities=(tarde, cedo)))
+
+    listados = fakes.employees.list_by_unit(_A, _U1)
+
+    assert len(listados) == 1
+    assert listados[0].unavailabilities == (cedo, tarde)
+
+
+def test_l_ord_esta_declarada_no_port_com_a_ancora_da_stage_33() -> None:
+    """CA12 travado por **teste**, não por revisão.
+
+    Sem a âncora, a lei existe no código e não existe na fonte que o código
+    nomeia — referência pendurada. Mesma forma do
+    `test_l_e5_employee_in_use_error_existe_e_a_lei_esta_documentada_no_port`.
+    """
+    documentacao = EmployeeRepository.__doc__ or ""
+    modulo = sys.modules[EmployeeRepository.__module__].__doc__ or ""
+    texto = documentacao + modulo
+
+    assert "L-ORD" in texto
+    assert "ADR 3.3.0003" in texto
+    assert "concept §4 da Stage 3.2" in texto
+    assert 'COLLATE "C"' in texto
+    # A cláusula do agregado é distinta da cláusula da listagem, e as duas
+    # precisam estar declaradas: são ordens sobre coisas diferentes.
+    assert "start" in texto
+    assert "frozenset" in texto  # `shift_preference`/`job_function_ids`: sem ordem, sem lei
+    for metodo in (EmployeeRepository.list_by_unit, EmployeeRepository.find_by_id):
+        assert "L-ORD" in (metodo.__doc__ or ""), metodo.__name__
 
 
 # --- escopo de tenant (teste dedicado do port) -------------------------------

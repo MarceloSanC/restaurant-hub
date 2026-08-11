@@ -1,10 +1,20 @@
 """Fake in-memory de `JobFunctionRepository` — visão de funções do store do par.
 
-Implementa as cinco leis L-JF1…L-JF5 do concept §4. **Não é atalho de teste:**
-um fake que virasse upsert em silêncio faria a suíte passar verde enquanto o
-Postgres da 3.3 rejeitaria a mesma escrita — o defeito histórico do BC identity
-(ADR 2.3.0003). Os testes que travam as leis vivem na Task 06.
+Implementa as cinco leis L-JF1…L-JF5 do concept §4 **e a `L-ORD`**
+(ADR 3.3.0003, Stage 3.3). **Não é atalho de teste:** um fake que virasse upsert
+em silêncio faria a suíte passar verde enquanto o Postgres da 3.3 rejeitaria a
+mesma escrita — o defeito histórico do BC identity (ADR 2.3.0003). Os testes que
+travam as leis vivem na Task 06.
+
+**Sobre a ordenação (`L-ORD`):** o `sorted()` do Python sobre `str` compara por
+**codepoint**, e foi medido contra o Postgres como **idêntico** a
+`ORDER BY name COLLATE "C", id COLLATE "C"`. É essa coincidência — e não uma
+conveniência — que permite à suíte de contrato ter um corpo só para as duas
+implementações. Qualquer normalização aqui (`casefold`, remoção de acento)
+reintroduziria a divergência que a lei existe para remover.
 """
+
+from collections.abc import Iterable
 
 from restaurant_hub.features.staff.application.errors import (
     JobFunctionAlreadyExistsError,
@@ -21,6 +31,11 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
 )
 from tests.fakes.features.staff.in_memory_staff_store import InMemoryStaffStore
+
+
+def _em_ordem(job_functions: Iterable[JobFunction]) -> tuple[JobFunction, ...]:
+    """`L-ORD` — por `name`, desempatando por `id`, sem normalização alguma."""
+    return tuple(sorted(job_functions, key=lambda funcao: (funcao.name, funcao.id)))
 
 
 class InMemoryJobFunctionRepository:
@@ -93,18 +108,25 @@ class InMemoryJobFunctionRepository:
     def find_all_by_ids(
         self, tenant_id: TenantId, job_function_ids: frozenset[JobFunctionId]
     ) -> tuple[JobFunction, ...]:
-        """L-JF4 — devolve só as encontradas; id ausente não é erro aqui."""
+        """L-JF4 — devolve só as encontradas; id ausente não é erro aqui.
+
+        `L-ORD` — ordenado por `(name, id)`; o parâmetro é `frozenset` e não
+        carrega ordem alguma para o resultado herdar.
+        """
         self._store.record("job_functions.find_all_by_ids")
-        return tuple(
+        return _em_ordem(
             job_function
             for job_function in self._store.job_functions.values()
             if job_function.tenant_id == tenant_id and job_function.id in job_function_ids
         )
 
     def list_by_tenant(self, tenant_id: TenantId) -> tuple[JobFunction, ...]:
-        """L-JF5 — todas as do tenant, nenhuma de outro; sem flag de estado."""
+        """L-JF5 — todas as do tenant, nenhuma de outro; sem flag de estado.
+
+        `L-ORD` — ordenado por `(name, id)`.
+        """
         self._store.record("job_functions.list_by_tenant")
-        return tuple(
+        return _em_ordem(
             job_function
             for job_function in self._store.job_functions.values()
             if job_function.tenant_id == tenant_id
