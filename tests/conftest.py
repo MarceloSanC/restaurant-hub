@@ -51,10 +51,16 @@ TABELAS_EM_ORDEM_DE_LIMPEZA = (
     "users",
     "units",
     "restaurants",
-    # Stage 3.3 — BC staff. As três filhas antes de `employees`, e
-    # `employee_job_functions` também antes de `job_functions`, que ela
-    # referencia com `RESTRICT`: fora de ordem, o truncamento da função esbarra
-    # na guarda de remoção em vez de limpar o banco.
+    # Stage 3.3 — BC staff, na mesma disciplina: filhas antes das mães, e
+    # `employee_job_functions` antes de `job_functions`, que ela referencia com
+    # `RESTRICT`.
+    #
+    # **A ordem aqui é documentação, não necessidade** — medido contra o banco
+    # real: um `TRUNCATE a, b, c CASCADE` único trata as tabelas como **uma**
+    # operação, e a lista invertida funciona igual, inclusive com o `RESTRICT`
+    # ativo. O que a ordem entrega é o grafo de dependências legível para quem
+    # acrescentar a próxima tabela, exatamente como o comentário de identity
+    # acima já dizia.
     "employee_shift_preferences",
     "employee_unavailabilities",
     "employee_job_functions",

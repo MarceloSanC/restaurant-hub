@@ -30,6 +30,12 @@ import pytest
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
+from restaurant_hub.features.staff.adapters.out.postgres.tables import (
+    WORKLOAD_KIND_FIXED,
+    WORKLOAD_KINDS,
+)
+from restaurant_hub.features.staff.domain.value_objects.shift_preference import DayPeriod
+
 pytestmark = [pytest.mark.integration]
 
 _TABELAS_DE_STAFF = (
@@ -109,8 +115,15 @@ def test_constraints_de_staff_existem_no_banco_com_os_nomes_esperados(engine: En
                 {"tabelas": list(_TABELAS_DE_STAFF)},
             )
         }
-    faltando = _CONSTRAINTS_ESPERADAS - nomes
-    assert faltando == set(), f"faltando no banco: {sorted(faltando)}"
+    # **Igualdade, não subconjunto** — espelha o gêmeo unitário
+    # (`test_nomes_de_constraint_de_cada_tabela`). Com `>=`, uma constraint que
+    # existisse só na migration e não em `tables.py` passaria despercebida, que
+    # é justamente a divergência que este módulo existe para pegar: entre a
+    # declaração e o banco existe a migration, escrita à mão.
+    assert nomes == _CONSTRAINTS_ESPERADAS, (
+        f"faltando: {sorted(_CONSTRAINTS_ESPERADAS - nomes)}; "
+        f"sobrando: {sorted(nomes - _CONSTRAINTS_ESPERADAS)}"
+    )
 
 
 def test_os_dois_indices_nao_unicos_existem(engine: Engine) -> None:
@@ -254,6 +267,73 @@ def test_tenant_id_existe_apenas_onde_ancora_um_cerco(engine: Engine) -> None:
     assert ("employee_unavailabilities", "tenant_id") not in colunas
     assert ("employee_shift_preferences", "tenant_id") not in colunas
     assert colunas[("employee_job_functions", "tenant_id")] == "NO"
+
+
+# ---------------------------------------------------------------------------
+# A concordância enum↔banco — o lado positivo, que CA15 não pede
+# ---------------------------------------------------------------------------
+#
+# CA15, como escrito, só exige que a **linha ilegal** seja recusada, e um único
+# caso negativo (`'dawn'`) satisfaz a letra. Mas a propriedade que importa é a
+# **concordância**: todo valor que o domínio considera legal tem de ser aceito
+# pelo banco. Medido no Checkpoint C — removendo `"overnight"` da lista congelada
+# da migration, a suíte inteira continuava verde, e uma preferência de turno
+# legítima passaria a ser recusada em runtime sem nenhum gate notar. A derivação
+# assertada em `test_tables.py` fecha só o lado da declaração; a migration é
+# congelada de propósito e não deriva de nada.
+
+
+@pytest.mark.parametrize("periodo", list(DayPeriod), ids=[p.value for p in DayPeriod])
+def test_cada_periodo_do_enum_e_aceito_pelo_banco(banco_limpo: Engine, periodo: DayPeriod) -> None:
+    """Um caso positivo por valor corrente de `DayPeriod` — o teste que morde.
+
+    É o contrário do teste de `'dawn'`: aquele prova que o conjunto é **fechado**,
+    este prova que ele é **completo**. Só os dois juntos travam a concordância.
+    """
+    _semear_funcao_e_funcionario(banco_limpo)
+    with banco_limpo.begin() as conexao:
+        conexao.execute(
+            text(
+                "INSERT INTO employee_shift_preferences (employee_id, period) "
+                "VALUES ('e1', :periodo)"
+            ),
+            {"periodo": periodo.value},
+        )
+        gravado = conexao.execute(
+            text("SELECT period FROM employee_shift_preferences WHERE employee_id = 'e1'")
+        ).scalar_one()
+    assert gravado == periodo.value
+
+
+@pytest.mark.parametrize("kind", WORKLOAD_KINDS)
+def test_cada_tipo_de_jornada_conhecido_e_aceito_pelo_banco(banco_limpo: Engine, kind: str) -> None:
+    """Mesma propriedade para `WORKLOAD_KINDS`, e pela mesma razão.
+
+    A lista da migration é congelada e não deriva das constantes de `tables.py`;
+    sem este caso positivo, apagar `'fixed'` de lá sobreviveria à suíte — os
+    outros testes ou inserem `on_demand`, ou esperam recusa.
+
+    As horas acompanham o discriminador porque o **iff** as amarra: é o mesmo
+    par que `workload_profile_to_columns` produz.
+    """
+    horas = Decimal("22.50") if kind == WORKLOAD_KIND_FIXED else None
+    with banco_limpo.begin() as conexao:
+        conexao.execute(
+            text(
+                "INSERT INTO employees "
+                "(id, tenant_id, unit_id, name, workload_kind, weekly_hours, active) "
+                "VALUES ('e1', 't1', 'u1', 'Ana', :kind, :horas, true)"
+            ),
+            {"kind": kind, "horas": horas},
+        )
+        gravado = conexao.execute(
+            text("SELECT workload_kind, weekly_hours FROM employees WHERE id = 'e1'")
+        ).one()
+    assert gravado[0] == kind
+    # CA17 de passagem: a escala do `Decimal` sobrevive à `NUMERIC` sem precisão.
+    assert gravado[1] == horas
+    if horas is not None:
+        assert str(gravado[1]) == "22.50"
 
 
 # ---------------------------------------------------------------------------

@@ -1306,4 +1306,57 @@ compra é com o módulo que a própria D4 declara ser **a dívida**, não o padr
 diferentes; a razão está no docstring do módulo de staff e nesta entrada, e a
 divergência é a mesma já aceita para `integrity_errors.py`.
 
+### 2026-08-10 — [deviation] os comandos de Alembic da Task 02 e da §3 exigem `-c migrations/alembic.ini` — Claude
+
+**Contexto:** o comando de verificação da Task 02 (linha 390) e o do gate de
+saída §3 (linha 1058) estão escritos como
+`uv run alembic upgrade head; uv run alembic downgrade base; uv run alembic upgrade head`.
+Executados literalmente na raiz do repo, os três **falham**:
+
+```
+FAILED: No 'script_location' key found in configuration.
+EXIT=255
+```
+
+O `alembic.ini` deste projeto não fica na raiz — vive em `migrations/`, e o
+`Makefile:74-79` já documenta a consequência (`make migrate` é
+`uv run alembic -c migrations/alembic.ini upgrade head`). O comando correto,
+verificado nesta execução, é:
+
+```powershell
+uv run alembic -c migrations/alembic.ini upgrade head
+uv run alembic -c migrations/alembic.ini downgrade base
+uv run alembic -c migrations/alembic.ini upgrade head
+```
+
+Saída da execução real, na Task 02:
+`Running upgrade 0002 -> 0003` → `Running downgrade 0003 -> 0002 … 0001 -> ` →
+`Running upgrade -> 0001 … 0002 -> 0003`, `EXIT=0`.
+
+**O que mudou vs. o plano:** nada de implementação — só a **forma de invocar**
+o comando de verificação. A migration em si foi exercitada nos dois sentidos, e
+continua sendo exercitada a cada sessão de pytest pela fixture `engine`
+(`_recriar_schema` faz `downgrade base` + `upgrade head` usando o
+`_ALEMBIC_INI` correto), que é o caminho que os testes de CA13 percorrem.
+
+**Por que a correção está aqui e não nas linhas 390/1058:** as duas ficam
+**fora** dos marcadores `post-execution`, e o `technical.md` está `status: done`
+com a Stage ainda não mergeada. Verificado, não presumido — a edição foi
+tentada e recusada:
+
+```
+docs\stages\3.3-staff-persistence\technical.md: status=done mas há mudanças
+fora dos marcadores post-execution (baseline: 4ed4eb14 `stage technical approved`):
+  replace: baseline[1057:1058] (lines 1058-1058) vs current[1057:1058]
+2 erro(s) em 1 arquivo(s).  EXIT=1
+```
+
+Corrigir ali exigiria regredir o technical a `draft`, o que o critério de
+regressão não autoriza: não muda contrato, fronteira nem critério de aceite —
+é erro de transcrição de um comando. **Quem for executar o gate de saída da §3
+deve usar a forma com `-c` colada acima**, e esta entrada existe para que a
+divergência seja encontrável por grep (`script_location`, `-c
+migrations/alembic.ini`) em vez de virar um vermelho lido como "quebrei a
+migration".
+
 <!-- END: post-execution -->
