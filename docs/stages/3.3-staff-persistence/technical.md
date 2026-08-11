@@ -78,7 +78,8 @@ A ordem resolve seis restrições simultâneas:
 4. **Postgres real é pré-condição de execução, não de uma Task.** Desde a Task 02
    a suíte exige banco no ar e **falha alto** quando ele não está (ADR 2.3.0001):
    não há caminho de skip, aqui nem no CI. Todo comando de verificação abaixo
-   assume `docker compose up -d postgres`.
+   assume o bloco de subida **com espera de prontidão** das Pré-condições — o
+   `docker compose up -d` sozinho retorna antes de o banco aceitar conexão.
 5. **Conduta separada de resultado.** Os três invariantes que o concept mediu
    empiricamente — dupla semântica da mesma FK, leitura rasgada sob
    `READ COMMITTED`, deadlock por reescrita cega das filhas — ganham **Task
@@ -86,11 +87,13 @@ A ordem resolve seis restrições simultâneas:
    herdado nº 4 ("a suíte travava resultado, não conduta") e, por construção,
    nenhuma asserção sobre estado final os distingue de sua ausência.
 6. **Exceções declaradas ao critério de ≤ 5 arquivos** (PIPELINE §4.3, critério
-   2): Tasks **02, 04 e 09** passam de cinco. Em todas, o excedente é mecânico
-   (`__init__.py` de cadeia de pacote) ou é a **mesma** mudança lógica vista nas
-   duas pontas obrigatórias (a lei `L-ORD` na declaração, na implementação de
-   referência e no teste que a trava). Nenhuma delas mistura escopos
-   independentes, que é o que o critério protege.
+   2): **só as Tasks 02 (9 arquivos) e 04 (7)** passam de cinco. Na 02 o
+   excedente é mecânico — 4 dos 9 são `__init__.py` vazios de cadeia de pacote;
+   na 04 os 7 são a **mesma** mudança lógica (a lei `L-ORD`) vista na
+   declaração, na implementação de referência, no teste que a trava e na fonte
+   que a âncora cita. Nenhuma das duas mistura escopos independentes, que é o
+   que o critério protege. As demais ficam dentro do limite — inclusive a 05
+   (5, contando os 2 movidos) e a 09 (3).
 
 ### A promoção do contrato, em duas Tasks — e por quê
 
@@ -138,15 +141,31 @@ porque são decisões **de plano** e não de execução:
    statement reconstruído pelo teste) e não obriga o adapter a expor os
    statements como atributo de módulo só para ser testável. A substância de
    CA10b — a asserção é sobre a **cláusula**, nunca sobre o resultado — fica
-   intacta. As duas formas são aceitas pelo critério de aceite da Task 08.
+   intacta. As duas formas são aceitas pelo critério de aceite da Task 08, e a
+   reconciliação com o texto literal do concept está registrada como
+   `[decision]` datada na [§7](#7-execução-post-hoc-editável-após-done) —
+   com a razão de por que ela **não** regride o concept.
 
 ### Pré-condições
 
 - Stage `3.2-staff-application` em `done` e **mergeada** em `develop` (PR #36).
 - Issue **#38** OPEN; branch `feat/38-3-3-staff-persistence` a partir de `develop`.
-- Docker rodando; `docker compose up -d postgres` sobe `postgres:16-alpine`.
-- `.env` da worktree define a `DATABASE_URL`/`POSTGRES_PORT` desta worktree —
-  **não presumir 5432** (worktrees paralelas usam portas próprias; concept §3).
+- Docker rodando. **Subir o banco e esperar a prontidão** — `docker compose up -d`
+  (e `start`) retornam **antes** de o Postgres aceitar conexão, e a fixture
+  `engine` usa `connect_timeout: 5`: sem a espera, a suíte falha com a mensagem
+  de "Postgres não está acessível" tendo o container **no ar**, que é o
+  diagnóstico errado. Bloco canônico, usado em todos os comandos desta Stage:
+  ```powershell
+  docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
+  ```
+- **Esta worktree não tem `.env`** — só `.env.example`. Consequência **medida**,
+  não suposição: `Settings()` cai no default embutido de `settings.py:42`
+  (`postgresql+psycopg://user:pass@localhost:5432/restaurant_hub`), e a suíte
+  roda contra o banco de `localhost:5432`. O concept §3 registra exatamente isso
+  como premissa, e esta Stage **não** a muda. Se em algum momento passar a haver
+  `.env` nesta worktree (ou se outra worktree paralela estiver de pé), conferir a
+  porta antes de rodar — **não presumir 5432 nem presumir o default**.
 - `.venv` instalado (`make setup`).
 
 ### Premissas técnicas
@@ -258,10 +277,36 @@ docs/roadmap.md                                           (M — fechamento, com
   - Cinco `CHECK`: `ck_employees_workload_kind_known`,
     `ck_employees_workload_iff_hours`, `ck_employees_weekly_hours_positive`,
     `ck_employee_unavailabilities_period` (`start_at < end_at`),
-    `ck_employee_shift_preferences_period_known`. Os valores aceitos por
-    `workload_kind` e por `period` são **derivados** dos tipos de domínio
-    (`DayPeriod`), não repetidos à mão — duas listas divergem no dia em que uma
-    delas crescer (precedente `tables.py` de identity com `Role`).
+    `ck_employee_shift_preferences_period_known`.
+  - **Os valores de `period` são derivados do domínio; os de `workload_kind`
+    NÃO têm de onde ser derivados, e por isso nascem aqui — com dono.** A
+    distinção é material e foi verificada, não presumida:
+    - `period` vem de `DayPeriod`, que é `StrEnum`
+      (`morning`/`afternoon`/`night`/`overnight`). Derivar
+      (`tuple(p.value for p in DayPeriod)`) é o precedente literal de
+      `_ROLE_VALUES`/`_PURPOSE_IN_LIST` no `tables.py` de identity: repetir a
+      lista criaria duas fontes que divergem no dia em que um período novo
+      entrar, e a divergência só apareceria como `IntegrityError` em produção.
+    - `workload_kind` **não tem fonte**: `WorkloadProfile = FixedSchedule | OnDemand`
+      é união de dois dataclasses **sem string discriminadora** — medido,
+      `grep -rn "on_demand\|\"fixed\"" src/ tests/fakes/` dá **zero
+      ocorrências**. Os literais `"fixed"` e `"on_demand"` existem hoje só na
+      **prosa** do concept (§9, linha do probe "barra `fixed` sem horas e
+      `on_demand` com horas"). Esta Task é onde eles passam a existir em código.
+    - **Fonte única, e é `tables.py`:** constantes de módulo **públicas**
+      `WORKLOAD_KIND_FIXED = "fixed"`, `WORKLOAD_KIND_ON_DEMAND = "on_demand"` e
+      `WORKLOAD_KINDS = (WORKLOAD_KIND_FIXED, WORKLOAD_KIND_ON_DEMAND)`.
+      Públicas — sem underscore — porque, ao contrário de `_ROLE_VALUES`, elas
+      atravessam módulo: a `CHECK` as consome aqui e o `mappers.py` da Task 03 as
+      consome para escolher entre `FixedSchedule` e `OnDemand` nas duas
+      direções. Literal de string repetido no mapper é a mesma dívida de duas
+      fontes, só que dentro do mesmo pacote.
+    - **Isto não é decisão nova de formato persistido** — os dois valores já
+      estavam fixados pelo concept §9 e exercitados no probe contra o banco
+      real. O que a Task faz é dar-lhes **dono em código** em vez de deixá-los
+      escritos à mão em três lugares (`CHECK`, mapper de leitura, mapper de
+      escrita). Se algum dia um terceiro perfil entrar em `WorkloadProfile`, o
+      lugar de acrescentá-lo é aqui, e a `CHECK` acompanha por construção.
   - Três índices e só três (D5, ADR 3.3.0005): `uq_job_functions_tenant_name`
     (que já serve `find_by_name` e `list_by_tenant`), `ix_employees_tenant_unit`,
     `ix_employee_job_functions_function(job_function_id, tenant_id)` — este
@@ -272,11 +317,19 @@ docs/roadmap.md                                           (M — fechamento, com
   `employee_job_functions` tem **duas** FKs compostas com `ondelete` `CASCADE` e
   `RESTRICT` respectivamente, que as duas filhas sem cerco **não** têm coluna
   `tenant_id`, que `weekly_hours` é `Numeric` **sem** `precision`/`scale`, e que
-  nenhuma FK aponta para tabela fora de `staff_metadata`.
+  nenhuma FK aponta para tabela fora de `staff_metadata`. Assere também que
+  `WORKLOAD_KINDS == ("fixed", "on_demand")` e que os valores de `period` na
+  `CHECK` são **exatamente** `tuple(p.value for p in DayPeriod)` — esta segunda
+  asserção é a que reprova o dia em que um período novo entrar no enum sem
+  entrar no schema, que é o defeito que a derivação existe para impedir.
+  **CA20, parte desta Task:** `tables.py` aparece com **≥ 90%** no
+  `term-missing` — o `fail_under` do `pyproject.toml` é **global** e não reprova
+  arquivo individual (concept CA20).
 - **Comando de verificação:**
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   uv run pytest tests/unit/features/staff/adapters/test_tables.py -v
+  uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing | Select-String "staff.*tables"
   make check
   ```
 - **Commit sugerido:** `feat(staff): descrever schema do BC em sqlalchemy core [3.3/task-01]`
@@ -333,11 +386,23 @@ docs/roadmap.md                                           (M — fechamento, com
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   uv run alembic upgrade head; uv run alembic downgrade base; uv run alembic upgrade head
   uv run pytest tests/integration -v
-  docker compose stop postgres; uv run pytest tests/integration; docker compose start postgres
+  # CA21 — com o banco fora do ar a suíte FALHA (nunca pula, nunca fica verde)
+  docker compose stop postgres
+  uv run pytest tests/integration
+  docker compose start postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   make check
   ```
+  > A espera de prontidão **depois** do `start` não é zelo: `docker compose start`
+  > retorna assim que o container está rodando, e o Postgres ainda leva alguns
+  > segundos para aceitar conexão. Sem ela, o `make check` seguinte falha com a
+  > mensagem de "Postgres não está acessível" (`connect_timeout: 5`) e o
+  > executor lê "quebrei a Task 02" onde o fato é "não esperei o banco" — falso
+  > vermelho é tão caro quanto falso verde, porque manda corrigir o que não está
+  > quebrado.
 - **Commit sugerido:** `feat(staff): migration do schema de staff e limpeza compartilhada [3.3/task-02]`
   > **Exceção declarada ao critério de ≤ 5 arquivos:** são 9, dos quais **4 são
   > `__init__.py` vazios** da cadeia de pacote. O conteúdo é uma única mudança
@@ -390,6 +455,11 @@ docs/roadmap.md                                           (M — fechamento, com
     escondendo um bug do mapper.
   - Extração do nome por `diag.constraint_name`, **nunca** por texto de mensagem
     (mesma função utilitária de identity, reescrita aqui com nome em inglês).
+  - **O mapper consome `WORKLOAD_KIND_FIXED`/`WORKLOAD_KIND_ON_DEMAND` de
+    `tables.py`** (Task 01) nas duas direções — leitura e escrita. Repetir os
+    literais `"fixed"`/`"on_demand"` aqui recriaria a segunda fonte que a Task
+    01 existe para eliminar, e a divergência só apareceria como violação de
+    `ck_employees_workload_kind_known` em produção.
 - **Critério de aceite:** CA15b e a metade unitária de CA8b — testes sem banco
   cobrem o round-trip de `JobFunction` e de `Employee` (incluindo `OnDemand` sem
   horas, `shift_preference` ausente e presente, e períodos), a preservação de
@@ -398,10 +468,14 @@ docs/roadmap.md                                           (M — fechamento, com
   `fk_employee_job_functions_job_function` devolve `JobFunctionNotFoundError` sob
   `ON_WRITE_EMPLOYEE` e `JobFunctionInUseError` sob `ON_DELETE_JOB_FUNCTION` — um
   mapa global não conseguiria as duas.
+  **CA20, parte desta Task:** `mappers.py` **e** `integrity_errors.py` aparecem
+  com **≥ 90%** cada no `term-missing`, lidos arquivo a arquivo — a média global
+  do `fail_under` não substitui (gate míope, concept CA20).
 - **Comando de verificação:**
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   uv run pytest tests/unit/features/staff/adapters/ -v
+  uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing | Select-String "staff.*(mappers|integrity_errors)"
   make check
   ```
 - **Commit sugerido:** `feat(staff): mappers de persistência e tradução de integridade por operação [3.3/task-03]`
@@ -543,6 +617,7 @@ docs/roadmap.md                                           (M — fechamento, com
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   uv run pytest tests/contract/features/staff/ -v
   uv run pytest tests/unit/features/staff/ -v
   uv run pytest tests/ --collect-only -q | Select-String "laws" | Measure-Object -Line
@@ -599,6 +674,7 @@ docs/roadmap.md                                           (M — fechamento, com
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   uv run pytest tests/integration/features/staff/ -v
   uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing | Select-String "job_function_repository"
   make check
@@ -670,6 +746,7 @@ docs/roadmap.md                                           (M — fechamento, com
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   uv run pytest tests/integration/features/staff/ -v
   uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing | Select-String "employee_repository"
   make check
@@ -700,11 +777,31 @@ docs/roadmap.md                                           (M — fechamento, com
     funções. O ponto de entrelace precisa ser forçado (evento
     `after_cursor_execute` ou barreira entre statements) — sem forçá-lo o teste
     passa por sorte e não prova nada.
-  - **Deadlock por reescrita cega (§5.20).** Um `update` que **não** mexe no
-    conjunto de funções, concorrente com um `delete_job_function` de outra função,
-    **não** levanta `40P01`. O teste é a regressão que impede a "simplificação"
-    futura de trocar a escrita por diferença por `DELETE`-tudo-`INSERT`-tudo —
-    que passa em todos os outros testes.
+  - **Deadlock por reescrita cega (§5.20) — o terceiro invariante medido.** Um
+    `update` que **não** mexe no conjunto de funções, concorrente com um
+    `delete_job_function`, **não** levanta `40P01` e **não** é derrubado. É a
+    regressão que impede a "simplificação" futura de trocar a escrita por
+    diferença por `DELETE`-tudo-`INSERT`-tudo — que passa em **todos** os outros
+    testes desta Stage, inclusive nos de lei, porque o estado final é o mesmo.
+    - **Cenário:** funcionário `E` com o conjunto `{F1, F2}`. Conexão A executa
+      `employees.update(E)` com o **mesmo** conjunto `{F1, F2}`; conexão B
+      executa `job_functions.delete(tenant, F2)`.
+    - **Por que a reescrita cega deadlockaria:** ao reinserir os vínculos, A
+      pega `FOR KEY SHARE` nas linhas de `job_functions` de `F1` e `F2`;
+      B já segurava lock exclusivo na linha de `F2` e precisa varrer
+      `employee_job_functions` pelo `RESTRICT`. Ordem de lock invertida ⇒
+      `40P01`, e `40P01` é `OperationalError`, **não** `IntegrityError` — escapa
+      do tradutor e viraria 500 na 3.4. Por diferença, A não toca vínculo nenhum
+      e portanto não pega lock nenhum em `job_functions`.
+    - **Sincronização nomeada, sem `sleep`:** `threading.Barrier(2)` liberada
+      depois que **cada** lado abriu a transação e tomou o seu primeiro lock,
+      mais `SET lock_timeout = '2s'` nas **duas** conexões. A barreira dá o
+      entrelace determinístico (é a ordem de aquisição, não o relógio, que
+      produz o deadlock); o `lock_timeout` converte um bloqueio indefinido em
+      falha rápida e legível, em vez de a suíte pendurar.
+    - **Asserção:** o `update` de A **completa** — nem `DeadlockDetected`, nem
+      `OperationalError`, nem timeout. O que B recebe (`JobFunctionInUseError`,
+      pelo `RESTRICT`) é consequência esperada e não é o objeto do teste.
   - **CA8b — os dois lados da mesma constraint, contra o banco.** Um `INSERT` de
     vínculo que chegue à FK **sem** passar pela pré-checagem produz
     `IntegrityError` cujo `constraint_name` é
@@ -731,14 +828,29 @@ docs/roadmap.md                                           (M — fechamento, com
        `COLLATE "und-x-icu"` **diverge** do `sorted()` do Python
        (`Álvaro < ana < Ana < Zeus`) — prova que a escolha de colação tem efeito
        semântico e que a cláusula não é ruído.
-- **Critério de aceite:** CA6b, CA8b (metade de integração), CA8c, CA10b e CA17b
-  — cada um com teste dedicado que **reproduz** o comportamento, e não apenas
-  observa o estado final. Nenhum destes testes depende de ordenação de
-  agendamento do SO para passar (sem `sleep` como sincronização).
+- **Critério de aceite:** CA6b, CA8b (metade de integração), CA8c, CA10b, CA17b
+  **e a regressão de deadlock da §5.20** — **seis** testes dedicados, cada um
+  **reproduzindo** o comportamento e não apenas observando o estado final.
+  > **A §5.20 está no critério de propósito, e não só no corpo da Task.** Ela é
+  > o terceiro dos três invariantes que o concept mediu, e é o único que **não
+  > tem CA numerado no concept §11** — está declarado como invariante (§5.20) e
+  > na tabela de findings herdados (linha "3. Concorrência"), não como critério.
+  > Um executor que satisfizesse o critério ao pé da letra sem esta linha
+  > **pularia** exatamente a regressão que protege a escrita por diferença, que
+  > é a peça mais fácil de "simplificar" depois porque nenhum outro teste a
+  > distingue. Ver a [§7](#7-execução-post-hoc-editável-após-done) para a razão
+  > de fechá-la aqui em vez de regredir o concept para criar um CA novo.
+  - **Nenhum dos seis usa `sleep` como sincronização**, e cada um nomeia o seu
+    mecanismo: `lock_timeout` curto (CA6b), entrelace forçado por
+    `after_cursor_execute` (CA17b), `threading.Barrier(2)` + `lock_timeout`
+    (deadlock). Teste de concorrência sincronizado por relógio é teste que passa
+    por sorte — e que, quando falha no CI, é lido como flakiness em vez de como
+    o achado que é.
 - **Comando de verificação:**
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   uv run pytest tests/integration/features/staff/adapters/out/postgres/test_staff_conduct.py -v
   uv run pytest tests/integration/features/staff/adapters/out/postgres/test_staff_conduct.py -v --count 3
   make check
@@ -798,6 +910,7 @@ docs/roadmap.md                                           (M — fechamento, com
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   uv run pytest tests/contract/features/staff/ -v
   uv run pytest tests/contract/features/staff/ --collect-only -q
   uv run pytest tests/contract/features/staff/ -v -k "postgres"
@@ -848,6 +961,7 @@ docs/roadmap.md                                           (M — fechamento, com
   ```powershell
   $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
   docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   uv run pytest tests/unit/features/staff/adapters/test_composition_root_staff.py -v
   make check
   ```
@@ -920,7 +1034,7 @@ Task que o entrega, e nenhuma Task existe sem item que a justifique.
 | **3.3.0003** — ordem total com `COLLATE "C"` como lei de port | **04**, **06**, **07**, **08**, **09** |
 | **3.3.0004** — tradução por constraint **e** por operação | **03**, **06**, **07**, **08** |
 | **3.3.0005** — três índices pelo acesso medido; RLS rejeitada | **01** (índices), **02** (`pg_indexes`; nenhuma policy) |
-| **3.3.0006** — atomicidade nas duas pontas, sem lock otimista | **07** (transação + `FOR UPDATE` + filhas por diferença + `REPEATABLE READ`), **08** (as provas) |
+| **3.3.0006** — atomicidade nas duas pontas, sem lock otimista | **07** (transação + `FOR UPDATE` + filhas por diferença + `REPEATABLE READ`), **08** (as provas — CA6b, CA17b **e a regressão de deadlock da §5.20**, esta última sem CA numerado no concept e por isso listada explicitamente no critério da Task 08 e na §3) |
 | **3.3.0007** — suítes de lei **promovidas**, não copiadas | **05** (`git mv`), **09** (parametrização) |
 
 ### Decisões sem ADR (D8–D11) → Task
@@ -939,6 +1053,7 @@ Task que o entrega, e nenhuma Task existe sem item que a justifique.
 ```powershell
 $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
 docker compose up -d postgres          # o gate exige banco real (ADR 2.3.0001)
+do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
 make check                             # lint + typecheck + layout + import + lock + docs + testes com cobertura
 uv run alembic upgrade head; uv run alembic downgrade base; uv run alembic upgrade head
 uv run python scripts/check_technical_postexec.py docs/stages/3.3-staff-persistence/technical.md
@@ -955,6 +1070,11 @@ uv run pytest tests/contract/features/staff/ --collect-only -q
       `--collect-only` mostrando `[fake]` e `[postgres]` para cada teste de lei.
 - [ ] Com o container de Postgres parado, a suíte **falha** — nunca fica verde
       por ter pulado (CA21).
+- [ ] **Regressão de deadlock (§5.20) verde**, com a saída colada: um `update`
+      que não mexe no conjunto de funções, concorrente com um
+      `delete_job_function`, **não** levanta `40P01`. É o único dos três
+      invariantes medidos sem CA numerado no concept §11, e por isso é o que
+      some se ninguém o listar aqui.
 - [ ] `wire_dependencies()` executado de verdade (não só importado) devolvendo os
       16 use cases de staff montados sobre os adapters Postgres.
 
@@ -1076,7 +1196,80 @@ Pontos que costumam ser lidos errado:
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
   diz o que mudou e por que ficou abaixo do threshold de perguntar.
 
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+> **Nota sobre as duas entradas abaixo.** Elas nascem na **Fase 3B**, não na
+> Fase 4, e isso é deliberado: as duas reconciliam este technical com o
+> `concept.md` já `done`, e a §7 é a **única** região que continua editável
+> depois de `status: done` (`scripts/check_technical_postexec.py`). Registrá-las
+> aqui é o que as mantém legíveis para quem executar e para quem auditar; num
+> parágrafo de §1 elas seriam congeladas junto com o resto e sumiriam do lugar
+> onde a auditoria olha.
+
+### 2026-08-10 — [decision] CA10b — o normativo é o objeto da asserção, não o mecanismo — Claude
+
+**Contexto:** o concept §11 escreve CA10b parte 1 como "asserção sobre
+`str(stmt.compile(dialect=postgresql.dialect()))`". O plano da Task 08 aceita
+**também** obter o mesmo texto pelo evento `before_cursor_execute` do `Engine`.
+É alargamento do texto **literal** de um critério de aceite de um artefato
+`done`, e por isso não passa em silêncio.
+
+**Pergunta:** isto é gap material — que exigiria regredir o concept a `draft`
+(CONVENTIONS §3.2) — ou refinamento de detalhe?
+
+**Opções:**
+- A — Regredir o concept: `chore(concept): revert to draft — revision-from-technical: …`
+  + correção + novo `stage 3.3: conceptual approved`.
+- B — Estreitar o plano ao texto literal, exigindo que o adapter exponha os
+  statements como builders de módulo só para serem compiláveis pelo teste.
+- C — Registrar a reconciliação aqui, mantendo o concept `done`. ✅ recomendada
+
+**Decisão:** C.
+
+**Razão:** o critério de regressão do fluxo é explícito — regride **apenas** o
+que muda **contrato**, **fronteira da Stage** ou **critério de aceite**;
+"refinamento de detalhe que não muda contrato **NÃO** regride". O que CA10b
+normatiza, e a razão inteira de ela existir, é o **objeto** da asserção: a
+cláusula `COLLATE "C"` no SQL, **nunca** o resultado — porque nesta imagem
+(musl) nenhum resultado distingue a presença da ausência do `COLLATE`. Esse
+objeto fica intacto; o que varia é **como** o teste obtém o texto do SQL, que é
+mecânica de teste. A alternativa aceita é ainda **mais forte** que a literal:
+assere o SQL que o adapter realmente emitiu, não um statement reconstruído pelo
+teste. A opção B foi rejeitada porque deixaria a **forma do adapter** ser
+ditada por uma escolha de mecanismo de teste — a cauda balançando o cachorro. A
+opção A foi rejeitada por custo desproporcional (dois commits reservados + nova
+aprovação) e, pior, por precedente: se refinamento de mecanismo de teste
+regride o concept, a regressão deixa de sinalizar gap material e vira ruído de
+processo. **Limite honesto:** quem ler CA10b no concept e o teste no código verá
+mecanismos diferentes; é esta entrada que os concilia, e ela cita "CA10b"
+literalmente para ser encontrável por grep.
+
+### 2026-08-10 — [decision] §5.20 entra no critério da Task 08 sem virar CA no concept — Claude
+
+**Contexto:** o concept mediu **três** invariantes de concorrência no probe.
+Dois viraram critério numerado — CA6b (o `FOR UPDATE` bloqueia) e CA17b (a
+leitura não é rasgada). O terceiro — **deadlock por reescrita cega das
+filhas** — ficou declarado como **invariante** (§5.20) e como linha da tabela de
+findings herdados ("3. Concorrência"), mas **sem CA numerado** em §11.
+
+**Pergunta:** criar o CA no concept (regressão) ou fechar a lacuna no technical?
+
+**Opções:**
+- A — Regredir o concept e acrescentar "CA17c" a §11.
+- B — Listar a §5.20 explicitamente no critério de aceite da Task 08 e na §3
+  do technical, com o mecanismo de sincronização nomeado. ✅ recomendada
+
+**Decisão:** B.
+
+**Razão:** a §5.20 **já é normativa** no concept — invariante numerada, com a
+medição do probe por trás ("`40P01` derruba o `update` legítimo; `40P01` é
+`OperationalError`, não `IntegrityError`"). Não falta regra no concept; faltava
+**check** no technical, e check é território do technical. O defeito real era
+meu: a §1 prometia "os três invariantes ganham Task própria com testes que os
+reproduzem" e o critério de aceite da Task 08 listava só cinco itens, todos
+CA — um executor literal pularia justamente a regressão que protege a escrita
+por diferença, que é a peça mais fácil de "simplificar" depois porque **nenhum
+outro teste a distingue** (o estado final é idêntico). Corrigido no lugar certo:
+o critério da Task 08 agora nomeia a §5.20 como sexto item, com
+`threading.Barrier(2)` + `lock_timeout` como sincronização, e a §3 traz a linha
+com exigência de saída colada.
 
 <!-- END: post-execution -->
