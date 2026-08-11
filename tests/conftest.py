@@ -51,11 +51,20 @@ TABELAS_EM_ORDEM_DE_LIMPEZA = (
     "users",
     "units",
     "restaurants",
+    # Stage 3.3 — BC staff. As três filhas antes de `employees`, e
+    # `employee_job_functions` também antes de `job_functions`, que ela
+    # referencia com `RESTRICT`: fora de ordem, o truncamento da função esbarra
+    # na guarda de remoção em vez de limpar o banco.
+    "employee_shift_preferences",
+    "employee_unavailabilities",
+    "employee_job_functions",
+    "employees",
+    "job_functions",
 )
 
 
 def truncar_tudo(engine: Engine) -> None:
-    """Esvazia todas as tabelas do BC identity."""
+    """Esvazia todas as tabelas dos BCs identity e staff."""
     with engine.begin() as conexao:
         conexao.execute(text(f"TRUNCATE {', '.join(TABELAS_EM_ORDEM_DE_LIMPEZA)} CASCADE"))
 

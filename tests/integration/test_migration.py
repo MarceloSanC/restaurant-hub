@@ -8,6 +8,12 @@ que o `upgrade` criou.
 O `downgrade` importa mais do que costuma parecer: é o caminho de rollback de um
 deploy que deu errado, e é justamente o que ninguém exercita até precisar dele às
 três da manhã.
+
+A Stage 3.3 acrescentou a `0003_staff` e, com ela, a metade **staff** do mesmo
+par (CA13): as cinco tabelas do BC existem após o `upgrade` e **nenhuma**
+sobrevive ao `downgrade base`. O detalhe de constraint, índice e tipo daquele
+schema fica em `features/staff/adapters/out/postgres/test_schema.py`; aqui só a
+existência e a reversibilidade.
 """
 
 import pytest
@@ -27,6 +33,15 @@ _TABELAS_ESPERADAS = {
     "sessions",
 }
 
+# Stage 3.3 — as cinco do BC staff, criadas pela `0003_staff`.
+_TABELAS_DE_STAFF = {
+    "job_functions",
+    "employees",
+    "employee_job_functions",
+    "employee_unavailabilities",
+    "employee_shift_preferences",
+}
+
 
 def _tabelas(engine: Engine) -> set[str]:
     with engine.connect() as conexao:
@@ -39,6 +54,17 @@ def _tabelas(engine: Engine) -> set[str]:
 def test_migration_criou_as_cinco_tabelas(engine: Engine) -> None:
     """A fixture de sessão aplica a migration; aqui só conferimos o resultado."""
     assert _tabelas(engine) >= _TABELAS_ESPERADAS
+
+
+def test_migration_criou_as_cinco_tabelas_de_staff(engine: Engine) -> None:
+    """CA13, metade do `upgrade` — a `0003_staff` chegou ao banco.
+
+    A cadeia inteira é exercitada a cada sessão de pytest (`_recriar_schema` faz
+    `downgrade base` + `upgrade head`), então uma `0003` com `down_revision`
+    errado ou ordem de `create_table` inválida falha aqui, e não em quem clonar
+    o repo depois.
+    """
+    assert _tabelas(engine) >= _TABELAS_DE_STAFF
 
 
 def test_sessions_nao_tem_coluna_para_o_valor_do_refresh_token(engine: Engine) -> None:
@@ -131,10 +157,10 @@ def test_downgrade_remove_o_que_o_upgrade_criou(engine: Engine, database_url: st
 
     try:
         command.downgrade(config, "base")
-        restantes = _tabelas(engine) & _TABELAS_ESPERADAS
+        restantes = _tabelas(engine) & (_TABELAS_ESPERADAS | _TABELAS_DE_STAFF)
         assert restantes == set(), f"downgrade deixou tabelas para trás: {sorted(restantes)}"
     finally:
         command.upgrade(config, "head")
 
     # E o upgrade de volta reconstrói tudo — o par é reversível, não só destrutivo.
-    assert _tabelas(engine) >= _TABELAS_ESPERADAS
+    assert _tabelas(engine) >= _TABELAS_ESPERADAS | _TABELAS_DE_STAFF
