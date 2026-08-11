@@ -1444,4 +1444,39 @@ ali enquanto a Stage não mergeou (verificado nesta execução — ver a entrada
 comando de Alembic acima). Esta entrada **é** a extensão do critério; quem
 executar a Task 09 deve lê-la junto com o critério de §2.
 
+### 2026-08-11 — [finding] Task 07 — o `except IntegrityError` do adapter de funcionário não tem teste que passe por ele — Claude
+
+**Contexto:** a Task 07 fechou com **96%** de cobertura em
+`employee_repository.py` (critério: ≥ 90%). As linhas descobertas são exatamente
+uma coisa só: os dois `raise translate(erro, ON_WRITE_EMPLOYEE, …)` de `add` e
+`update`, e o ramo de `_detalhe_do_conflito` que escolhe o **conjunto** em vez
+do id.
+
+Não é descuido de suíte — é consequência de o adapter estar **certo**. As
+guardas explícitas (`_guard_id_livre` para L-E1, `_guard_job_functions` para
+L-E4) respondem antes de qualquer constraint ser alcançada, e as constraints que
+sobram (`pk_employees`, `uq_employees_id_tenant`,
+`fk_employee_job_functions_job_function`) só são atingíveis quando o estado muda
+**entre** a guarda e a escrita — isto é, sob concorrência. Um teste sequencial
+não tem como chegar lá; e um adapter que **removesse** as guardas passaria em
+todos os testes de lei da Task 07, respondendo os mesmos erros pela via do
+tradutor.
+
+**Direção sugerida:** a Task 08 já leva CA8b e CA8c, que exercitam
+`ON_WRITE_EMPLOYEE` e as duas formas de mensagem. Mas o texto de CA8b as
+descreve chamando `translate(erro, ON_WRITE_EMPLOYEE, …)` sobre uma
+`IntegrityError` obtida do Postgres — **fora** do adapter. Satisfeito ao pé da
+letra, ele deixa o `except` de `add`/`update` sem nenhum teste que passe por
+ele, e o `_detalhe_do_conflito` do lado do conjunto idem. Quem executar a Task 08
+deve fazer **pelo menos um** dos seis testes entrar pelo método público
+(`repositorio.add(...)`), forçando o entrelace com o mesmo mecanismo já previsto
+ali para CA17b (`after_cursor_execute` entre a pré-checagem e o `INSERT` do
+vínculo, apagando a função no meio): é a corrida real de L-E4, é o único caminho
+que prova que a cadeia guarda → tradução → erro tipado está ligada de ponta a
+ponta, e é o que impede que a 3.4 receba um `IntegrityError` cru onde o contrato
+promete `JobFunctionNotFoundError`.
+
+**Stage candidata:** esta mesma (Task 08). Não é dívida para depois — é uma
+linha a mais no escopo já planejado da Task seguinte.
+
 <!-- END: post-execution -->
