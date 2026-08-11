@@ -1359,4 +1359,89 @@ divergência seja encontrável por grep (`script_location`, `-c
 migrations/alembic.ini`) em vez de virar um vermelho lido como "quebrei a
 migration".
 
+### 2026-08-10 — [deviation] Task 04 — homônimos são irrepresentáveis no port de função — Claude
+
+**Contexto:** o plano da Task 04 e o CA10 (Task 09) exigem dado adversarial com
+"**dois homônimos de ids diferentes**" nas **três** listagens
+(`list_by_tenant`, `find_all_by_ids`, `list_by_unit`), porque sem eles o
+desempate por `id` — o termo que a paginação da 3.4 usa como **cursor** — nunca
+é exercitado. O ADR 3.3.0003 repete a exigência em "Implementation notes".
+
+**O que foi encontrado, ao executar:** nas duas listagens de
+`JobFunctionRepository` isso é **irrepresentável**. L-JF1 declara unicidade de
+nome **por tenant**, imposta pelo fake (`_guard_name`) e, na 3.3, pelo índice
+`uq_job_functions_tenant_name`; e as duas listagens são tenant-scoped
+(`list_by_tenant(tenant_id)` e `find_all_by_ids(tenant_id, …)`). Não há como
+semear dois homônimos alcançáveis pela mesma chamada — a tentativa levanta
+`JobFunctionNameAlreadyExistsError`, que é o comportamento correto e já travado
+por `test_l_jf1_add_com_nome_ja_usado_no_tenant_e_erro_e_nao_altera_o_registro`.
+Medido: o primeiro rascunho da Task 04 seguia o plano ao pé da letra e falhou
+exatamente aí.
+
+**O que mudou vs. o plano:** o dado adversarial de
+`test_job_function_repository_laws.py` tem nome acentuado, case misto e espaço à
+direita, **sem** o par de homônimos. O desempate por `id` continua sendo lei (o
+`ORDER BY` leva os dois termos) e é travado nos dois lugares onde **é**
+alcançável:
+
+1. **`test_employee_repository_laws.py`** — nome de funcionário **não é único**
+   por declaração (concept 3.1 §5.2), então `list_by_unit` recebe `"Ana"` em
+   `e2` e `e9` e o teste assere a sequência inteira. É a listagem que a 3.4
+   pagina.
+2. **CA10b parte 1, Task 08** — a asserção sobre o **SQL compilado**, única
+   capaz de reprovar a omissão da cláusula nesta imagem (musl, cuja colação
+   default já é byte-order). Vale para as **três** listagens, inclusive as duas
+   de função.
+
+**Por que ficou abaixo do threshold de perguntar:** não muda contrato, fronteira
+nem critério — a lei é a mesma e continua verificada; o que muda é **por qual
+dado** uma de suas metades é alcançada em um dos dois arquivos. A alternativa
+seria relaxar L-JF1 no dado de teste, isto é, quebrar uma lei para testar outra.
+
+**Consequência para quem executar a Task 09:** ao reler CA10 ("as três listagens
+… com dado adversarial … dois homônimos de ids diferentes"), **não** procurar o
+par de homônimos nas duas listagens de função — ele não existe e não pode
+existir. A explicação está também no docstring de `_com_funcoes_adversariais`,
+mas é esta entrada que a torna encontrável a partir do critério.
+
+### 2026-08-10 — [decision] Task 09 — o critério ganha um teste de que `[postgres]` não é o fake — Claude
+
+**Contexto:** achado do Checkpoint C sobre a fixture `repos` da Task 05,
+**reproduzido**: trocando o corpo da fixture por um `return` incondicional do
+par in-memory, os testes de lei rodam `[fake]` **e** `[postgres]` — 122
+execuções — todos contra o **fake**, e a suíte reporta verde. A guarda que
+escrevi (`raise AssertionError` para parâmetro desconhecido) protege contra o
+ramo **ausente**, não contra o ramo **errado**.
+
+**Pergunta:** isto é gap material do critério da Task 09, ou basta a revisão?
+
+**Opções:**
+- A — Deixar como está: nenhum critério pede a verificação, e "o ramo constrói o
+  adapter certo" é evidente na leitura do conftest.
+- B — Acrescentar ao critério de aceite da Task 09 um teste que assere que o par
+  de `[postgres]` **não** é o par in-memory. ✅ recomendada
+
+**Decisão:** B, a ser implementado na Task 09.
+
+**Razão:** é o risco central desta Stage, e o único que anula o entregável
+inteiro em silêncio. A Stage existe para provar `fake ≡ real`; uma fixture que
+devolve o fake nos dois ramos transforma a prova em duas execuções da mesma
+implementação — e o sintoma é o **melhor** resultado possível (tudo verde, com o
+`--collect-only` mostrando `[fake]` e `[postgres]` para cada teste), que é
+precisamente por que ninguém investigaria. Nenhum critério de §11 o alcança:
+CA1 conta as execuções, CA2 proíbe ramificação **no corpo do teste** e CA3 pede
+as leis verdes nos dois params — todos satisfeitos pelo defeito.
+
+**Forma acordada:** um teste **fora** dos dois módulos de lei (para não violar
+CA2, que proíbe o corpo de teste de lei conhecer a implementação), asserindo
+sobre o par de `[postgres]` que ele não é `InMemory*` — por exemplo, que carrega
+um `Engine`. É barato, e é a asserção de **conduta** correspondente ao que a
+Task 08 faz pelo `COLLATE`: travar o mecanismo, não só o resultado.
+
+**Onde isto foi registrado:** o critério da Task 09 vive em §2, **fora** dos
+marcadores `post-execution`, e o `check_technical_postexec.py` recusa edições
+ali enquanto a Stage não mergeou (verificado nesta execução — ver a entrada do
+comando de Alembic acima). Esta entrada **é** a extensão do critério; quem
+executar a Task 09 deve lê-la junto com o critério de §2.
+
 <!-- END: post-execution -->

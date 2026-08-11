@@ -41,6 +41,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     UnitId,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.conftest import _REPO_ROOT
 from tests.contract.features.staff.conftest import RepositoriosDeStaff
 
 pytestmark = pytest.mark.contract
@@ -391,12 +392,18 @@ def test_l_ord_find_all_by_ids_ordena_igual_e_nao_herda_a_ordem_do_pedido(
 
 
 def test_l_ord_esta_declarada_no_port_com_a_ancora_da_stage_33(repos: RepositoriosDeStaff) -> None:
-    """CA12 travado por **teste**, não por revisão.
+    """CA12 travado por **teste**, não por revisão — nas **duas** pontas.
 
     Sem a âncora, a lei existe no código e não existe na fonte que o código
     nomeia — referência pendurada, e é o defeito de "afirmar sobre outro arquivo
     o que ele não diz". Mesma forma do
     `test_l_e5_..._documentada_no_port` que já existe no port irmão.
+
+    **A segunda ponta não é zelo.** Asserir só que a docstring **diz** "concept
+    §4 da Stage 3.2" trava a citação e não o citado: apagar a seção datada do
+    concept da 3.2 deixaria esta suíte verde e restauraria exatamente a
+    referência pendurada que a D11 existe para eliminar — o defeito seria
+    reintroduzido pelo lado que nenhum teste olha.
     """
     documentacao = JobFunctionRepository.__doc__ or ""
     modulo = sys.modules[JobFunctionRepository.__module__].__doc__ or ""
@@ -409,6 +416,15 @@ def test_l_ord_esta_declarada_no_port_com_a_ancora_da_stage_33(repos: Repositori
     assert 'COLLATE "C"' in texto
     for metodo in (JobFunctionRepository.list_by_tenant, JobFunctionRepository.find_all_by_ids):
         assert "L-ORD" in (metodo.__doc__ or ""), metodo.__name__
+
+    # A outra ponta: a fonte citada **contém** a lei. Caminho derivado de
+    # `_REPO_ROOT` (e não do cwd) para que o teste não mude de resultado
+    # conforme o diretório de onde o pytest foi invocado; `encoding` explícito
+    # porque o default do Windows não é UTF-8 e o arquivo tem acento.
+    concept_da_32 = _REPO_ROOT / "docs" / "stages" / "3.2-staff-application" / "concept.md"
+    fonte = concept_da_32.read_text(encoding="utf-8")
+    assert "L-ORD" in fonte, f"a âncora citada pelo port não declara a lei: {concept_da_32}"
+    assert "ADR 3.3.0003" in fonte
 
 
 # --- escopo de tenant (teste dedicado do port) -------------------------------
