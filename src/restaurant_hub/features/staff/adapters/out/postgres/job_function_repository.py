@@ -10,8 +10,12 @@ UoW**, a camada `application` está proibida de importar SQLAlchemy (contrato
 atomicidade **entre** repositórios. Inventar um port de UoW agora seria contrato
 novo sem consumidor.
 
-Para manter a troca barata quando esse consumidor existir, cada método público
-só abre a transação e delega a um privado que recebe `Connection`.
+Para manter a troca barata quando esse consumidor existir, o núcleo reusado
+opera sobre `Connection` — as três escritas e o lookup de `delete`, que é o
+único ponto em que uma operação precisa do resultado de outra. As três leituras
+sem reuso (`find_by_name`, `find_all_by_ids`, `list_by_tenant`) embutem a
+consulta no método público: extrair um privado de um só chamador seria
+indireção sem ponto de troca a servir.
 
 Três decisões deste arquivo carregam lei e não são estilo:
 

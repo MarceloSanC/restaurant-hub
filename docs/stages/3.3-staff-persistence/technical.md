@@ -1444,6 +1444,26 @@ ali enquanto a Stage não mergeou (verificado nesta execução — ver a entrada
 comando de Alembic acima). Esta entrada **é** a extensão do critério; quem
 executar a Task 09 deve lê-la junto com o critério de §2.
 
+### 2026-08-11 — [deviation] Task 06 — escrita por um executor e commitada por outro — Claude
+
+**Contexto:** os dois arquivos da Task 06 foram escritos por uma sessão de
+execução que foi **interrompida antes do commit**. A sessão seguinte os
+encontrou como arquivos não rastreados na worktree, auditou-os contra a Task 06
+e o concept, e os commitou **sem alterar uma linha** — a auditoria não encontrou
+critério descoberto, resíduo de trabalho interrompido nem código fora do escopo
+da Task. O único ponto examinado e descartado foi a formulação do docstring
+sobre delegação a privados, corrigida depois pelo Checkpoint C (F2, commit
+`[3.3/task-06-fix]`).
+
+**Razão de registrar:** o histórico do git atribui o conteúdo a quem commitou, e
+nada mais na Stage documenta a troca de mãos. Não muda contrato, comportamento
+nem critério — mas é fato de procedência que a auditoria de saída não teria como
+reconstruir a partir dos artefatos, e "quem escreveu não é quem revisou" é
+justamente a circunstância em que uma auto-aprovação passaria despercebida. O
+Checkpoint C do bloco 3 testou essa hipótese de forma independente (verificou o
+SQL emitido, mediu o isolamento contra o banco e conferiu a escrita por
+diferença) e ela não se sustentou.
+
 ### 2026-08-11 — [finding] Task 07 — o `except IntegrityError` do adapter de funcionário não tem teste que passe por ele — Claude
 
 **Contexto:** a Task 07 fechou com **96%** de cobertura em
