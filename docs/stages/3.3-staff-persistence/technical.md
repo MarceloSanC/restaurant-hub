@@ -1467,10 +1467,21 @@ diferença) e ela não se sustentou.
 ### 2026-08-11 — [finding] Task 07 — o `except IntegrityError` do adapter de funcionário não tem teste que passe por ele — Claude
 
 **Contexto:** a Task 07 fechou com **96%** de cobertura em
-`employee_repository.py` (critério: ≥ 90%). As linhas descobertas são exatamente
-uma coisa só: os dois `raise translate(erro, ON_WRITE_EMPLOYEE, …)` de `add` e
-`update`, e o ramo de `_detalhe_do_conflito` que escolhe o **conjunto** em vez
-do id.
+`employee_repository.py` (critério: ≥ 90%). As linhas descobertas, medidas, são
+**143, 159 e 539–541**:
+
+| Linha | O que é |
+|---|---|
+| 143 | `raise translate(…)` de `add` |
+| 159 | `raise translate(…)` de `update` |
+| 539 | `if constraint_name(erro) == "fk_employee_job_functions_job_function"` |
+| 540 | `return str(sorted(employee.job_function_ids))` — o ramo do **conjunto** |
+| 541 | `return employee.id` — o ramo do **id** |
+
+Ou seja: `_detalhe_do_conflito` está descoberto **por inteiro**, os **dois**
+ramos. (Uma versão anterior desta entrada dizia "o ramo que escolhe o conjunto
+em vez do id", o que fazia crer que o outro estava coberto — corrigido pelo
+Checkpoint C do bloco 3, que mediu as linhas.)
 
 Não é descuido de suíte — é consequência de o adapter estar **certo**. As
 guardas explícitas (`_guard_id_livre` para L-E1, `_guard_job_functions` para
@@ -1486,15 +1497,30 @@ tradutor.
 `ON_WRITE_EMPLOYEE` e as duas formas de mensagem. Mas o texto de CA8b as
 descreve chamando `translate(erro, ON_WRITE_EMPLOYEE, …)` sobre uma
 `IntegrityError` obtida do Postgres — **fora** do adapter. Satisfeito ao pé da
-letra, ele deixa o `except` de `add`/`update` sem nenhum teste que passe por
-ele, e o `_detalhe_do_conflito` do lado do conjunto idem. Quem executar a Task 08
-deve fazer **pelo menos um** dos seis testes entrar pelo método público
-(`repositorio.add(...)`), forçando o entrelace com o mesmo mecanismo já previsto
-ali para CA17b (`after_cursor_execute` entre a pré-checagem e o `INSERT` do
-vínculo, apagando a função no meio): é a corrida real de L-E4, é o único caminho
-que prova que a cadeia guarda → tradução → erro tipado está ligada de ponta a
-ponta, e é o que impede que a 3.4 receba um `IntegrityError` cru onde o contrato
-promete `JobFunctionNotFoundError`.
+letra, ele deixa o `except` de `add`/`update` e o `_detalhe_do_conflito` inteiro
+sem nenhum teste que passe por eles. Quem executar a Task 08 deve fazer os
+testes entrarem pelo **método público** (`repositorio.add(...)` /
+`repositorio.update(...)`), forçando o entrelace com o mesmo mecanismo já
+previsto ali para CA17b (`after_cursor_execute` entre a pré-checagem e a
+escrita, mudando o estado no meio). É a corrida real, é o único caminho que
+prova que a cadeia guarda → tradução → erro tipado está ligada de ponta a ponta,
+e é o que impede que a 3.4 receba um `IntegrityError` cru onde o contrato
+promete erro tipado.
+
+**Aritmética do que fecha o quê** — importa porque **um** teste não basta:
+
+- `add` com corrida na **FK** (`fk_employee_job_functions_job_function`) fecha
+  143, 539 e 540 — e deixa **159 e 541** abertos.
+- `add` com corrida na **identidade** (`pk_employees` / `uq_employees_id_tenant`
+  — outra transação insere o mesmo id entre `_guard_id_livre` e o `INSERT`)
+  fecha 143, 539 e **541**.
+- `update` com corrida na **FK** fecha **159**, 539 e 540. (`update` não escreve
+  `id` nem `tenant_id`, então a identidade não é alcançável por ele; 541 só vem
+  pelo `add`.)
+
+**Duas** corridas zeram o arquivo: `add` na identidade + `update` na FK. É
+também a combinação que exercita as **duas** entradas de `ON_WRITE_EMPLOYEE` com
+significados diferentes, que é a razão de o mapa ser por operação.
 
 **Stage candidata:** esta mesma (Task 08). Não é dívida para depois — é uma
 linha a mais no escopo já planejado da Task seguinte.
