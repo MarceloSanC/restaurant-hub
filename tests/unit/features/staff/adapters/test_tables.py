@@ -55,6 +55,17 @@ def _literais(sql: str) -> tuple[str, ...]:
     return tuple(re.findall(r"'([^']*)'", sql))
 
 
+def _normalizado(sql: str) -> str:
+    """Texto da CHECK com os brancos colapsados, para comparação por igualdade.
+
+    Igualdade e não substring: uma asserção de substring trava o **caso** e não a
+    **propriedade** — `"=" in sql` continua verdadeiro depois de trocar o `=` do
+    iff por `OR`, que é exatamente a formulação permissiva que o teste existe
+    para reprovar. Só o texto inteiro fecha a operação lógica.
+    """
+    return " ".join(sql.split())
+
+
 def _fks(table: Table) -> dict[str, ForeignKeyConstraint]:
     return {
         str(c.name): c for c in table.constraints if isinstance(c, ForeignKeyConstraint) and c.name
@@ -334,14 +345,57 @@ def test_check_de_jornada_cobre_exatamente_as_constantes_do_modulo() -> None:
 def test_check_de_jornada_e_um_iff_com_as_horas() -> None:
     """Barra `fixed` sem horas **e** `on_demand` com horas (medido no probe).
 
-    Um `weekly_hours IS NOT NULL OR workload_kind = 'on_demand'` — a formulação
-    "permissiva" que parece equivalente — aceitaria `on_demand` com horas, que é
-    justamente o estado que a união de tipos torna irrepresentável no domínio.
+    Uma formulação "permissiva" que parece equivalente —
+    `(workload_kind = 'fixed') OR (weekly_hours IS NOT NULL)` — aceitaria
+    `on_demand` com horas, que é justamente o estado que a união de tipos torna
+    irrepresentável no domínio.
+
+    **A asserção é de igualdade sobre o texto normalizado, e a versão anterior
+    (três substrings) era o defeito que ela agora impede.** Trocar o `=` por
+    `OR` deixava `"=" in sql` verdadeiro — o `=` interno de `workload_kind =`
+    sobrevive — e a suíte inteira ficava verde sobre um schema permissivo. A
+    integração não alcança este caso: o DDL vem da migration, não deste arquivo,
+    e `compare_metadata()` foi rejeitado com razão (fixture `_recriar_schema`).
+    Aqui é o único lugar onde a operação lógica é verificável.
     """
     sql = _checks(employees)["ck_employees_workload_iff_hours"]
-    assert "=" in sql
-    assert WORKLOAD_KIND_FIXED in sql
-    assert "weekly_hours IS NOT NULL" in sql
+    assert (
+        _normalizado(sql)
+        == f"(workload_kind = '{WORKLOAD_KIND_FIXED}') = (weekly_hours IS NOT NULL)"
+    )
+
+
+def test_texto_exato_das_outras_quatro_checks() -> None:
+    """Mesma disciplina do teste acima, para as CHECK restantes.
+
+    A propriedade que cada uma carrega é a **operação lógica**, não a presença
+    dos operandos: `IN` virando `NOT IN`, `>` virando `>=`, `IS NULL OR`
+    sumindo — nenhuma dessas mutações move uma asserção de substring. Onde a
+    lista de valores é derivada, ela é derivada **aqui também**, senão o teste
+    reintroduziria a segunda fonte que a derivação existe para eliminar.
+    """
+    jornadas = ", ".join(f"'{kind}'" for kind in WORKLOAD_KINDS)
+    periodos = ", ".join(f"'{period.value}'" for period in DayPeriod)
+
+    checks_de_employees = _checks(employees)
+    assert (
+        _normalizado(checks_de_employees["ck_employees_workload_kind_known"])
+        == f"workload_kind IN ({jornadas})"
+    )
+    assert (
+        _normalizado(checks_de_employees["ck_employees_weekly_hours_positive"])
+        == "weekly_hours IS NULL OR weekly_hours > 0"
+    )
+    assert (
+        _normalizado(_checks(employee_unavailabilities)["ck_employee_unavailabilities_period"])
+        == "start_at < end_at"
+    )
+    assert (
+        _normalizado(
+            _checks(employee_shift_preferences)["ck_employee_shift_preferences_period_known"]
+        )
+        == f"period IN ({periodos})"
+    )
 
 
 def test_check_de_periodo_deriva_do_enum_de_dominio() -> None:
