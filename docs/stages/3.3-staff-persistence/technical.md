@@ -1272,4 +1272,38 @@ o critério da Task 08 agora nomeia a §5.20 como sexto item, com
 `threading.Barrier(2)` + `lock_timeout` como sincronização, e a §3 traz a linha
 com exigência de saída colada.
 
+### 2026-08-10 — [decision] Task 03 — `mappers.py` de staff também nasce em inglês — Claude
+
+**Contexto:** o plano e o concept (D4, ADR 3.3.0004) mandam **inglês** apenas
+para `integrity_errors.py`, com a razão de que aqueles seis nomes são API de
+módulo. Nada foi dito sobre `mappers.py`, e o precedente vizinho — o
+`mappers.py` de identity — está inteiro em **português**
+(`linha_para_usuario`, `sessao_para_linha`, `_para_utc`).
+
+**Pergunta:** as funções de `mappers.py` de staff nascem em PT (simetria com o
+arquivo homólogo de identity) ou em EN (CONVENTIONS §1 + a razão de D4)?
+
+**Opções:**
+- A — PT, por simetria com o `mappers.py` de identity, que é o arquivo que
+  qualquer leitor vai comparar lado a lado.
+- B — EN, aplicando a `mappers.py` a mesma razão que D4 aplica a
+  `integrity_errors.py`. ✅ recomendada
+
+**Decisão:** B.
+
+**Razão:** o argumento de D4 não é sobre *aquele* arquivo, é sobre a **classe**:
+CONVENTIONS §1 é literal ("todo código-fonte… classes, funções, métodos"), e a
+§7 do technical da 3.2 já registrou `[finding]` cuja direção declarada é
+"renomear os locais em PT de **todo** o BC staff para inglês". Estes nomes são
+API de módulo — os adapters das Tasks 06/07 os importam —, exatamente o critério
+que D4 usa para separar "API" de "identificador local". Nascer em PT criaria, no
+mesmo commit, dívida que uma varredura já agendada teria de desfazer, e deixaria
+o BC staff com dois idiomas em dois arquivos vizinhos do **mesmo** pacote
+(`integrity_errors.py` em EN, `mappers.py` em PT), que é pior que qualquer das
+duas escolhas consistentes. A opção A foi rejeitada porque a simetria que ela
+compra é com o módulo que a própria D4 declara ser **a dívida**, não o padrão.
+**Limite honesto:** quem ler os dois `mappers.py` lado a lado verá idiomas
+diferentes; a razão está no docstring do módulo de staff e nesta entrada, e a
+divergência é a mesma já aceita para `integrity_errors.py`.
+
 <!-- END: post-execution -->
