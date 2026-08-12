@@ -118,6 +118,39 @@ def test_l_e1_add_com_id_gravado_em_outro_tenant_tambem_e_erro(repos: Repositori
         )
 
 
+def test_ca5b_l_e1_precede_l_e4_quando_id_e_conjunto_falham_juntos(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """CA5b — a entrada viola **as duas** leis, e a resposta é a de L-E1 (§5.5).
+
+    **É o único caso que discrimina a ordem das duas guardas, e nenhum dos 46
+    testes herdados o alcança** — todos violam uma lei de cada vez, e sob uma
+    violação só as duas ordens respondem igual.
+
+    A ordem não é preferência: ela é a do fake
+    (`in_memory_employee_repository.py`), e o adapter tem de replicá-la
+    **contra a ordem natural do SQL**. Num `INSERT` puro a colisão de id só
+    apareceria ao gravar — isto é, **depois** da pré-checagem referencial —, e
+    esta entrada responderia `JobFunctionNotFoundError` no Postgres e
+    `EmployeeAlreadyExistsError` no fake. Duas implementações do mesmo port
+    respondendo erros diferentes para a mesma entrada é exatamente a divergência
+    que esta suíte existe para revelar, e ela só é revelada aqui.
+
+    Por isso o adapter faz um `SELECT` de id explícito antes da pré-checagem: é
+    trabalho que o SQL não pediria, feito para honrar o contrato.
+    """
+    _com_funcionario_gravado(repos)
+
+    with pytest.raises(EmployeeAlreadyExistsError):
+        repos.employees.add(
+            _funcionario(name="Joana", job_function_ids=frozenset({JobFunctionId("f-inexistente")}))
+        )
+
+    gravado = repos.employees.find_by_id(_A, _E1)
+    assert gravado is not None
+    assert gravado.name == "Maria"
+
+
 # --- L-E2: `update` é UPDATE, não upsert -------------------------------------
 
 

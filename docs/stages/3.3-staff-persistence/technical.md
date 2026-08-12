@@ -1444,6 +1444,27 @@ ali enquanto a Stage não mergeou (verificado nesta execução — ver a entrada
 comando de Alembic acima). Esta entrada **é** a extensão do critério; quem
 executar a Task 09 deve lê-la junto com o critério de §2.
 
+**Como foi implementado (Task 09, 2026-08-11).** Em
+`tests/contract/features/staff/test_no_implementation_branching.py` — módulo
+fora das duas suítes de lei, como a decisão previa —, e em **dois** testes, não
+um, porque medindo apareceram **duas** formas independentes de falhar:
+
+- `test_o_par_postgres_nao_e_o_par_in_memory` — parametrização indireta força o
+  ramo `postgres` e assere o tipo concreto dos dois repositórios. Mata a mutação
+  "a fixture devolve o fake nos dois ramos".
+- `test_a_suite_de_contrato_roda_sobre_as_duas_implementacoes` — assere que
+  `IMPLEMENTACOES` (constante nomeada nova, de onde `params` passa a ser lido)
+  contém os dois ids. **É necessário porque o primeiro sozinho não basta:** a
+  parametrização indireta força o ramo independentemente do que a fixture
+  declare, então com `"postgres"` removido de `IMPLEMENTACOES` aquele teste
+  continuaria verde enquanto a suíte inteira voltava a rodar contra uma
+  implementação só. Medido: a mutação derruba a contagem de 126 para 67 testes,
+  e **nenhum** outro teste do repositório reclama.
+
+Os dois arquivos tocados por isto (`conftest.py` e
+`test_no_implementation_branching.py`) — o segundo não consta da lista de
+"arquivos a modificar" da Task 09 em §2, que é anterior a esta decisão.
+
 ### 2026-08-11 — [deviation] Task 06 — escrita por um executor e commitada por outro — Claude
 
 **Contexto:** os dois arquivos da Task 06 foram escritos por uma sessão de

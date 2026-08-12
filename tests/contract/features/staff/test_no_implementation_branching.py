@@ -23,6 +23,14 @@ from pathlib import Path
 
 import pytest
 
+from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
+    PostgresEmployeeRepository,
+)
+from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
+    PostgresJobFunctionRepository,
+)
+from tests.contract.features.staff.conftest import IMPLEMENTACOES, RepositoriosDeStaff
+
 pytestmark = pytest.mark.contract
 
 _PASTA = Path(__file__).parent
@@ -155,3 +163,54 @@ def test_todo_teste_de_lei_recebe_a_fixture(modulo: str) -> None:
         and "repos" not in {argumento.arg for argumento in funcao.args.args}
     ]
     assert sem_fixture == [], f"{modulo}: teste de lei sem a fixture `repos`: {sem_fixture}"
+
+
+# ---------------------------------------------------------------------------
+# O risco central da Stage: `[postgres]` rodar contra o fake
+# ---------------------------------------------------------------------------
+#
+# A Stage inteira existe para provar `fake ≡ real`. Uma fixture que devolvesse o
+# **fake** nos dois ramos transformaria a prova em duas execuções da mesma
+# implementação — e o sintoma seria o **melhor resultado possível**: tudo verde,
+# com o `--collect-only` mostrando `[fake]` e `[postgres]` para cada teste. É
+# precisamente por isso que ninguém investigaria.
+#
+# Nenhum critério de §11 alcança esse defeito: CA1 conta as execuções, CA2 proíbe
+# ramificação **no corpo do teste** e CA3 pede as leis verdes nos dois params —
+# todos satisfeitos pelo defeito. Os dois testes abaixo são a extensão de
+# critério registrada como `[decision]` na §7 do technical, e fecham as **duas**
+# formas de falhar: o parâmetro sumir, e o ramo construir a coisa errada.
+#
+# Eles vivem aqui, e não nos módulos de lei, para não violar CA2 — o corpo de um
+# teste de lei não pode conhecer a implementação.
+
+
+def test_a_suite_de_contrato_roda_sobre_as_duas_implementacoes() -> None:
+    """Primeira forma de falhar: o parâmetro `postgres` sumir de `IMPLEMENTACOES`.
+
+    A suíte voltaria a exercitar uma implementação só e continuaria verde — com
+    metade do contrato não verificado e nenhum sinal disso no output, porque o
+    que desaparece é a **ausência** de uma variante, e ausência não falha.
+    """
+    assert set(IMPLEMENTACOES) == {"fake", "postgres"}
+
+
+@pytest.mark.parametrize("repos", ["postgres"], indirect=True)
+def test_o_par_postgres_nao_e_o_par_in_memory(repos: RepositoriosDeStaff) -> None:
+    """Segunda forma de falhar: o ramo existir e construir a implementação errada.
+
+    A asserção é sobre o **tipo concreto** — a única coisa que distingue as duas
+    implementações de fora, já que ambas satisfazem o mesmo `Protocol` e por
+    construção respondem igual a tudo que a suíte de lei pergunta.
+
+    A parametrização indireta força o ramo `postgres` independentemente do que
+    `IMPLEMENTACOES` declare, e é por isso que o teste acima existe **também**:
+    sozinho, este passaria com o parâmetro removido da suíte inteira.
+
+    `isinstance` sobre `repos` é proibido nos módulos de lei
+    (`test_nenhum_corpo_inspeciona_o_tipo_de_um_repositorio`) e obrigatório aqui
+    — a mesma introspecção é abuso lá e é o instrumento aqui, e a diferença é o
+    escopo daquela regra, que lista os módulos de lei nominalmente.
+    """
+    assert isinstance(repos.job_functions, PostgresJobFunctionRepository)
+    assert isinstance(repos.employees, PostgresEmployeeRepository)

@@ -38,14 +38,29 @@ critério da CA16 de identity.
 from dataclasses import dataclass
 
 import pytest
+from sqlalchemy import Engine
 
+from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
+    PostgresEmployeeRepository,
+)
+from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
+    PostgresJobFunctionRepository,
+)
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from tests.conftest import truncar_tudo
 from tests.fakes.features.staff.in_memory_staff_store import staff_repositories
+
+# As implementações sobre as quais a suíte inteira roda. **Constante nomeada, e
+# não literal dentro de `params`**, porque é sobre ela que
+# `test_no_implementation_branching.py` assere: retirar `"postgres"` daqui faria
+# a suíte voltar a exercitar uma implementação só, e o sintoma seria o melhor
+# possível — tudo verde, metade do contrato não verificada.
+IMPLEMENTACOES = ("fake", "postgres")
 
 
 @dataclass(frozen=True)
@@ -63,21 +78,24 @@ class RepositoriosDeStaff:
     employees: EmployeeRepository
 
 
-@pytest.fixture(params=["fake"])
+@pytest.fixture(params=IMPLEMENTACOES)
 def repos(request: pytest.FixtureRequest) -> RepositoriosDeStaff:
-    """Parametriza a suíte inteira sobre as implementações do contrato.
+    """Parametriza a suíte inteira sobre as duas implementações do contrato.
 
-    **Um só parâmetro nesta Task, de propósito.** O `"postgres"` entra na
-    Task 09, quando os dois adapters já existirem e já tiverem sido verificados
-    lei a lei contra o banco real. A separação é o que torna um vermelho
-    diagnosticável: aqui, qualquer falha é da **mecânica do movimento** (mesmos
-    testes, mesmas asserções, mesma implementação por trás); lá, qualquer falha
-    é **divergência fake↔adapter**. Fundidas, um vermelho seria ambíguo entre as
-    duas causas — ambiguidade que o `git bisect` existe para evitar.
+    **É aqui que a Stage cobra o seu objetivo.** As doze leis mais `L-ORD` foram
+    escritas na 3.2 como especificação nas docstrings dos ports e travadas contra
+    um implementador só; a partir desta linha elas valem para os dois, com **um
+    corpo de teste só**. Lei verificada contra um implementador só é lei não
+    verificada — foi assim que identity acumulou a dívida que a 2.3 retroagiu
+    (ADR 2.3.0003).
 
-    O id do parâmetro aparece no nome do teste (`[fake]`, e depois
-    `[postgres]`), então a divergência é lida direto no output: o mesmo teste
-    passa numa implementação e falha na outra.
+    O id do parâmetro aparece no nome do teste (`[fake]` / `[postgres]`), então
+    uma divergência é lida direto no output: **o mesmo teste** passa numa
+    implementação e falha na outra. É o sintoma que a 2.3 não teve.
+
+    Os dois adapters são construídos sobre o **mesmo** `Engine` — a razão está no
+    docstring do módulo: L-JF3 e L-E4 falam de dados que vivem no outro agregado,
+    e um par montado sobre bancos diferentes as satisfaria vacuamente.
     """
     if request.param == "fake":
         fakes = staff_repositories()
@@ -86,7 +104,18 @@ def repos(request: pytest.FixtureRequest) -> RepositoriosDeStaff:
             employees=fakes.employees,
         )
 
-    # O ramo `postgres` entra na Task 09. Levantar aqui — em vez de deixar a
-    # função cair no `None` implícito — é o que impede um parâmetro novo em
-    # `params` de produzir uma suíte que roda contra nada e reporta verde.
+    if request.param == "postgres":
+        # `engine` vem de `tests/conftest.py` e **falha alto** quando o Postgres
+        # não está no ar (ADR 2.3.0001) — o contrato herda a exigência, e é o que
+        # impede a suíte de reportar verde por não ter olhado.
+        engine: Engine = request.getfixturevalue("engine")
+        truncar_tudo(engine)
+        return RepositoriosDeStaff(
+            job_functions=PostgresJobFunctionRepository(engine),
+            employees=PostgresEmployeeRepository(engine),
+        )
+
+    # Levantar — em vez de deixar a função cair no `None` implícito — é o que
+    # impede um parâmetro novo em `IMPLEMENTACOES` de produzir uma suíte que roda
+    # contra nada e reporta verde.
     raise AssertionError(f"implementação desconhecida no contrato de staff: {request.param!r}")
