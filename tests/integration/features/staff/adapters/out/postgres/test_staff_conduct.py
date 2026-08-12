@@ -493,9 +493,18 @@ def test_regressao_5_20_update_que_nao_mexe_no_conjunto_nao_deadlocka_com_delete
     que produz o deadlock — e o `lock_timeout` converte um bloqueio indefinido em
     falha rápida em vez de pendurar a suíte.
 
-    A asserção é sobre **A**: o `update` legítimo completa. O que B recebe
-    (`JobFunctionInUseError`, pelo `RESTRICT`) é consequência esperada e não é o
-    objeto do teste.
+    **Qual asserção carrega a regressão — e não é a que o plano nomeia.**
+    Medido contra duas variantes da reescrita cega: das reprovações observadas,
+    **todas** caem na asserção sobre B, com `40P01 DeadlockDetected` — nenhuma
+    em A (classificado pelo número de linha do `AssertionError`). Ou seja,
+    `resultados["a"] is None` (o critério **literal** do plano, "o `update` de A
+    completa") **passa** sob o mutante: o deadlock elege B como vítima. O que
+    reprova é B voltar `40P01` em vez do `JobFunctionInUseError` do `RESTRICT` —
+    e `40P01` é `OperationalError`, escapa do tradutor e viraria 500 na 3.4.
+
+    Por isso a linha marcada abaixo é load-bearing, e a frase do plano ("o que B
+    recebe é consequência esperada e não é o objeto do teste") **não** vale como
+    licença para apagá-la: apagada, este teste passa a aceitar o mutante.
     """
     motor_a = motores()
     motor_b = motores()
@@ -540,12 +549,21 @@ def test_regressao_5_20_update_que_nao_mexe_no_conjunto_nao_deadlocka_com_delete
 
     assert not thread_a.is_alive() and not thread_b.is_alive(), "algum lado pendurou"
     assert disparou_a[0] and disparou_b[0], "a barreira não sincronizou os dois lados"
+    # O critério literal do plano. Medido: **passa** sob o mutante — o deadlock
+    # nunca cai em A. Fica porque descreve o que a lei promete, mas não é ele
+    # que reprova a reescrita cega.
     assert resultados["a"] is None, (
         f"o `update` legítimo foi derrubado: {resultados['a']!r}. "
         f"É a assinatura da reescrita cega das filhas (§5.20)."
     )
+    # >>> LOAD-BEARING: é ESTA linha que mata a reescrita cega (§5.20). <<<
+    # Medido contra dois mutantes: **todas** as reprovações caem aqui, com B
+    # voltando `40P01 DeadlockDetected` em vez do `RESTRICT`; nenhuma reprova na
+    # asserção acima. Não a enxugue com base no "não é o objeto do teste" do
+    # plano — ver o docstring.
     assert isinstance(resultados["b"], JobFunctionInUseError), (
-        f"esperado `RESTRICT` do lado B, veio {resultados['b']!r}"
+        f"esperado o `RESTRICT` respondendo em negócio do lado B, veio "
+        f"{resultados['b']!r} — `40P01` aqui é a assinatura da reescrita cega (§5.20)"
     )
 
     gravado = PostgresEmployeeRepository(motor_a).find_by_id(_A, _E1)
@@ -557,24 +575,35 @@ def test_regressao_5_20_update_que_nao_mexe_no_conjunto_nao_deadlocka_com_delete
 def test_regressao_5_20_update_sem_mudanca_no_conjunto_nao_segura_lock_em_job_functions(
     motores: Callable[[], Engine],
 ) -> None:
-    """§5.20 pela **pegada de lock** — e é este teste, não o de deadlock, que mata a mutação.
+    """§5.20 pela **pegada de lock** — a mesma regressão do teste acima, medida na causa.
 
-    **Medido nesta execução, e é a razão de este teste existir:** com
-    `_sincronizar_funcoes` trocado por `DELETE`-tudo/`INSERT`-tudo, o teste de
-    deadlock acima **passou** — as 10 conduta verdes, 70 verdes nas Tasks 06/07.
-    O motivo é estrutural, não de ajuste: o deadlock exige que A pause **entre**
-    o seu `DELETE` e o seu `INSERT` de vínculos, e é exatamente aí que a
-    implementação **correta** não emite statement nenhum. Uma barreira ancorada
-    ali penduraria sob o adapter certo; ancorada em qualquer statement que exista
-    nas duas variantes, o entrelace vira corrida de microssegundos — e B, que tem
-    um statement só, termina antes de A chegar aos vínculos. Sincronizar por
-    relógio para "ajudar" seria trocar um teste decorativo por um teste flaky.
+    **Os dois testes matam a reescrita cega**; este existe por ser
+    **determinístico e sem thread**, e por medir a **causa** em vez do sintoma.
+    Medido contra duas variantes do mutante (uma mantém a leitura dos vínculos e
+    zera a diferença; a outra apaga tudo e reinsere sem ler), somando todas as
+    execuções da medição:
 
-    A saída é medir a **causa** em vez do sintoma. O que a reescrita cega faz de
-    errado não é deadlockar — é **tomar lock em `job_functions`** num `update`
-    que não mexeu no conjunto. Ao reinserir os vínculos, a transação pega
-    `FOR KEY SHARE` nas linhas de `f1` e `f2`; por diferença ela não emite
-    statement nenhum sobre os vínculos e portanto não toca `job_functions`.
+    | | contra os mutantes | limpo |
+    |---|---|---|
+    | teste de deadlock (acima) | 154 de 160 reprovam (~96%) | 25/25 passam |
+    | **este teste** | **50 de 50 reprovam** | 25/25 passam |
+
+    As 6 sobreviventes são o que se espera de um teste de concorrência com duas
+    threads: quando B completa a varredura do `RESTRICT` antes de A tomar os
+    locks das linhas de vínculo, não há inversão e não há deadlock. Não é
+    ajustável por sincronização — a barreira já está no ponto certo (o gatilho
+    casa com um statement presente nas duas variantes, e sob o mutante ele cai
+    colado às escritas de vínculo) —, porque o **sintoma** depende de
+    escalonamento. Este teste não tem essa cauda: sem thread, o entrelace é um
+    evento entre statements, e a **causa** que ele mede não depende de quem
+    chega primeiro.
+
+    O que a reescrita cega faz de errado não é deadlockar — deadlock é a
+    consequência, e é ela que depende de escalonamento. É **tomar lock em
+    `job_functions`** num `update` que não mexeu no conjunto: ao reinserir os
+    vínculos, a transação pega `FOR KEY SHARE` nas linhas de `f1` e `f2`. Por
+    diferença ela não emite statement nenhum sobre os vínculos e portanto não
+    toca `job_functions`. A pegada de lock é determinística; o deadlock não.
 
     Aqui isso é observado com a transação do `update` **aberta e não
     commitada** — o entrelace dispara no último statement dela —, tentando

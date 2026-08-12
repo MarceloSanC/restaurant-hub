@@ -1458,12 +1458,29 @@ um, porque medindo apareceram **duas** formas independentes de falhar:
   parametrização indireta força o ramo independentemente do que a fixture
   declare, então com `"postgres"` removido de `IMPLEMENTACOES` aquele teste
   continuaria verde enquanto a suíte inteira voltava a rodar contra uma
-  implementação só. Medido: a mutação derruba a contagem de 126 para 67 testes,
-  e **nenhum** outro teste do repositório reclama.
+  implementação só. Medido por `--collect-only`: a mutação derruba a coleta de
+  **126 para 68** testes, e o único vermelho é o próprio guarda (`1 failed, 67
+  passed`) — **nenhum** outro teste do repositório reclama. (Uma versão anterior
+  desta entrada dizia "126 para 67", confundindo a contagem **coletada** com a
+  de **aprovados**; corrigido no commit `[3.3/task-08-fix]` com medição fresca.)
 
-Os dois arquivos tocados por isto (`conftest.py` e
-`test_no_implementation_branching.py`) — o segundo não consta da lista de
-"arquivos a modificar" da Task 09 em §2, que é anterior a esta decisão.
+**A lista de "arquivos a modificar" da Task 09 diverge do executado nas duas
+pontas** (conferido com `git show --stat` do commit `a7af30f`):
+
+| Arquivo | Plano §2 | Executado |
+|---|---|---|
+| `conftest.py` | listado | tocado |
+| `test_employee_repository_laws.py` | listado | tocado (CA5b) |
+| `test_job_function_repository_laws.py` | listado | **não tocado** |
+| `test_no_implementation_branching.py` | **não listado** | tocado |
+
+A segunda ponta é esta decisão (o módulo fora das suítes de lei). A primeira é
+que o plano previa acréscimos de CA10 nos **dois** módulos de lei, e no de função
+não havia o que acrescentar: `test_l_ord_list_by_tenant_ordena_por_nome_byte_a_byte`
+e `test_l_ord_find_all_by_ids_ordena_igual_e_nao_herda_a_ordem_do_pedido` já
+existiam desde a Task 04, com o dado adversarial, e o que a Task 09 lhes dá é o
+segundo parâmetro da fixture — que vem do `conftest.py`, sem tocar o arquivo. O
+módulo **é** exercitado contra o Postgres; ele só não precisou de edição.
 
 ### 2026-08-11 — [deviation] Task 06 — escrita por um executor e commitada por outro — Claude
 
@@ -1556,53 +1573,68 @@ acima entraram como testes que passam pelo **método público**:
 `ON_WRITE_EMPLOYEE` por um mapa global, que sobrevivia às Tasks 06/07 inteiras,
 agora reprova (ver a tabela mutação→resultado no corpo do commit da Task 08).
 
-### 2026-08-11 — [deviation] Task 08 — a regressão da §5.20 mede a pegada de lock, não o deadlock — Claude
+### 2026-08-11 — [deviation] Task 08 — a §5.20 ganha um segundo teste, determinístico e sobre a pegada de lock — Claude
 
-**Contexto:** o plano da Task 08 prescreve, para a regressão da §5.20,
-`threading.Barrier(2)` + `SET lock_timeout` nas duas conexões, com a asserção "o
-`update` de A **completa**". Implementado exatamente assim, e então **medido por
-mutação**: com `_sincronizar_funcoes` trocado por `DELETE`-tudo/`INSERT`-tudo,
-o teste **passou** — 11/11 na suíte de conduta e 70/70 nas Tasks 06/07. Ou seja,
-a regressão que a §5.20 existe para carregar não reprovava a implementação que
-ela proíbe.
+> **Esta entrada foi reescrita em 2026-08-11 (commit `[3.3/task-08-fix]`) porque
+> a versão original afirmava um resultado de medição que é falso.** Ela dizia que
+> o teste prescrito, sob o mutante, "**passou** — 11/11 na suíte de conduta", e
+> concluía que não havia ancoragem de barreira capaz de matá-lo. As duas coisas
+> estão erradas, e o erro tem causa identificável: a medição foi feita com o
+> gatilho da barreira **antigo** (`"FOR UPDATE"`), o gatilho foi então reancorado
+> em `"FROM employee_job_functions"`, e a conclusão antiga foi gravada sem
+> **remedir**. O próprio commit da Task 08 já se contradizia — a tabela do corpo
+> registrava "as duas regressões reprovam" enquanto o docstring dizia o oposto.
+> É o padrão "não afirmar conformidade sem verificar", desta vez sobre uma
+> medição própria e não sobre um arquivo alheio. Apontado pelo Checkpoint C.
 
-**Por que, e por que não é questão de ajustar a barreira.** O deadlock exige
-esta ordem: (1) A apaga os vínculos e segura as linhas; (2) B apaga a função,
-toma o lock exclusivo e **bloqueia** na varredura do `RESTRICT`; (3) A reinsere
-os vínculos e bloqueia no `FOR KEY SHARE` que B segura. Para forçá-la, A tem de
-pausar **entre** o seu `DELETE` e o seu `INSERT` de vínculos — e é exatamente
-esse intervalo que a implementação **correta** não tem: por diferença ela não
-emite statement nenhum ali. Uma barreira ancorada nesse ponto **penduraria** sob
-o adapter certo; ancorada em qualquer statement que exista nas duas variantes, o
-entrelace vira corrida de microssegundos, e B — que tem um statement só — termina
-antes de A chegar aos vínculos. Não há colocação da barreira que seja ao mesmo
-tempo determinística e alcançável nas duas variantes.
+**Contexto:** o plano prescreve, para a regressão da §5.20, `threading.Barrier(2)`
++ `lock_timeout` nas duas conexões, com a asserção "o `update` de A **completa**".
+Implementado assim, e medido por mutação em duas variantes da reescrita cega
+(uma que mantém a leitura dos vínculos e zera a diferença; outra que apaga tudo e
+reinsere sem ler), com o gatilho de barreira que está no artefato:
 
-**O que foi feito:** o teste prescrito **permanece** (é regressão válida contra
-uma implementação que deadlocke, e reancorá-lo na leitura dos vínculos o fez
-também reprovar a mutação, embora por corrida e não por construção), e entrou
-**ao lado dele** um teste determinístico que mede a **causa** em vez do sintoma:
-`test_regressao_5_20_update_sem_mudanca_no_conjunto_nao_segura_lock_em_job_functions`.
+| | contra os mutantes | limpo |
+|---|---|---|
+| teste prescrito (deadlock) | **154 de 160** reprovam (~96%) | 25/25 passam |
+| teste acrescentado (pegada de lock) | **50 de 50** reprovam | 25/25 passam |
+| suíte de conduta inteira | 2 failed, 9 passed (nas duas variantes) | 11 passed (×9) |
 
-O que a reescrita cega faz de errado não é deadlockar — deadlock é a
-consequência. É **tomar lock em `job_functions`** num `update` que não mexeu no
-conjunto. Com a transação do `update` aberta e não commitada (entrelace no seu
-último statement), outra conexão tenta remover a função:
+**O teste prescrito mata o mutante.** A conclusão original estava errada.
+
+**O que continua verdade, e é o motivo do teste adicional.** Duas coisas:
+
+1. **O critério literal do plano não é o que mata.** Das 154 reprovações,
+   **todas** caem na asserção sobre B, nenhuma em A (classificado pelo número de
+   linha do `AssertionError`, não por texto). Logo `resultados["a"] is None` — a
+   asserção que o plano nomeia — **passa** sob o mutante: o deadlock elege B como
+   vítima. Quem reprova é B voltar `40P01 DeadlockDetected` no lugar do
+   `JobFunctionInUseError`, e o plano descreve exatamente essa asserção como
+   "consequência esperada e não é o objeto do teste". Um enxugamento futuro
+   apagaria a linha **com autoridade do plano** e deixaria o teste decorativo. A
+   linha está marcada como load-bearing no código.
+2. **O teste prescrito tem cauda de escalonamento; o outro não.** As 6
+   sobreviventes em 160 são o caso em que B completa a varredura do `RESTRICT`
+   antes de A tomar os locks das linhas de vínculo: sem inversão, sem deadlock.
+   Não é ajustável por sincronização — a barreira já está no ponto certo —,
+   porque o **sintoma** depende de escalonamento. A **causa** não: a reescrita
+   cega toma `FOR KEY SHARE` em `job_functions` num `update` que não mexeu no
+   conjunto, sempre. Daí o segundo teste medir a causa: 50/50, sem cauda.
+
+**O que foi feito:** o teste prescrito **permanece**, e entrou ao lado dele
+`test_regressao_5_20_update_sem_mudanca_no_conjunto_nao_segura_lock_em_job_functions`,
+que mede a causa. Com a transação do `update` aberta e não commitada (entrelace
+no seu último statement), outra conexão tenta remover a função:
 
 - por diferença ⇒ `JobFunctionInUseError` (`23503`), a resposta de negócio do
   `RESTRICT`;
 - por reescrita cega ⇒ bloqueio no lock indevido e `lock_timeout` (`55P03`), um
   `OperationalError` que escapa do tradutor e vira 500 na 3.4.
 
-Sem thread, sem barreira, sem relógio — e mata a mutação por construção.
+Sem thread, sem barreira e sem relógio — um evento entre statements.
 
 **Razão de ficar abaixo do threshold de perguntar:** não muda contrato, critério
-de aceite nem escopo. A §5.20 continua sendo travada por teste dedicado na
-Task 08, com a asserção sobre **conduta** que o plano exige; o que mudou foi o
-instrumento, depois de o prescrito ter sido implementado, medido e mostrado
-insuficiente. O plano já autoriza a substância ("cada um **reproduzindo** o
-comportamento"), e a alternativa — manter só o teste prescrito — seria deixar no
-gate a peça que o próprio plano chama de "a mais fácil de simplificar depois"
-protegida por um teste que a mutação atravessa.
+de aceite nem escopo — é um teste **a mais** sobre a mesma invariante, não a
+troca de um instrumento por outro. A §5.20 continua travada pelo teste que o
+plano prescreve, na forma que o plano prescreve.
 
 <!-- END: post-execution -->
