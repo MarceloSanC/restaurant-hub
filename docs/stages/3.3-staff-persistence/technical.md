@@ -1698,4 +1698,68 @@ significado à forma. Sem ação nesta Stage; a nota existe para o dia em que
 alguém escrever um teste esperando `str(...) == "1E+2"` e concluir que o mapper
 está errado.
 
+### 2026-08-12 — [finding] a regex de `ORDER BY` de CA10b casa até o fim do statement — auditoria da Stage
+
+**Contexto:** `tests/integration/.../test_staff_conduct.py:194` define
+`_ORDER_BY = re.compile(r'ORDER BY (?P<clausula>.+?)(?:\s*$)', re.DOTALL)`. Com
+`re.DOTALL` e a âncora em fim de string, o grupo `clausula` captura **tudo** o
+que vier depois de `ORDER BY` — e as três asserções de CA10b (linhas 252-262)
+comparam essa captura por **igualdade** com
+`'…name COLLATE "C", …id COLLATE "C"'`.
+
+**Por que vira `[finding]` e não correção nesta Stage:** hoje o `ORDER BY` é o
+último elemento dos três statements, a captura é exatamente a cláusula de ordem,
+e as igualdades são a forma **certa** de asserir — a asserção por substring é o
+que CA10b rejeita de propósito (`COLLATE` liga-se ao operando à esquerda, e
+`ORDER BY name, id COLLATE "C"` **contém** a substring com o `name` na colação do
+banco). Não há defeito a corrigir agora.
+
+**O que quebra, e quando:** a paginação da **3.4** acrescenta `LIMIT`/`OFFSET`
+depois do `ORDER BY`. A captura passa a incluí-los, as três igualdades falham
+**sobre adapter correto**, e o sinal será lido como regressão de colação —
+levando a investigação para o lugar errado. O antídoto é de uma linha, mas
+precisa ser escrito por quem acrescentar a paginação: ancorar a captura no fim da
+cláusula de ordem (ex.: `(?=\s+LIMIT|\s+OFFSET|\s*$)`) em vez de no fim do
+statement. **Stage candidata: `3.4-staff-http`** — junto dos outros três
+`[finding]` já escalados para lá (concept §10).
+
+### 2026-08-12 — [decision] Fase de aplicação da auditoria da Stage (skill `stage-audit`) — sessão de auditoria + subagente de aplicação
+
+**Contexto:** a auditoria read-only da Stage 3.3 (PR #39) **aprovou com
+findings, nenhum bloqueante**. Validou os **28** critérios do concept §11 e
+**todos** os itens do checklist §3 deste technical, item a item e com evidência
+própria — não por leitura do que a execução afirmava. Gates **reproduzidos pela
+auditoria**: `make check` exit 0; **1814 passed**; cobertura **99,93%** global;
+ciclo `alembic upgrade head → downgrade base → upgrade head` limpo; **132**
+testes em `tests/contract/features/staff/` coletados, **57/58** funções de lei
+com os dois parâmetros `[fake]`/`[postgres]`; CA21 verificado pelo negativo (com
+o container parado a suíte **erra**, não pula).
+
+**Decisão sobre as caixinhas do §3:** o flip literal `[ ]`→`[x]` dos 15 itens do
+§3 (Verificações funcionais + Checklist de fechamento) fica **adiado para
+pós-merge**. O freeze de `status: done` (CONVENTIONS §3.4,
+`scripts/check_technical_postexec.py`) rejeita edição fora da janela §7 enquanto
+a Stage não mergeia — **verificado empiricamente nesta sessão**: o flip produz
+`10 erro(s)` contra a baseline `4ed4eb1` (`stage 3.3: technical approved`), e foi
+revertido. A validação de cada item vive nesta entrada e no comentário de
+veredito do PR #39. As caixinhas do concept §11 (que **não** têm freeze — o
+script varre só `docs/stages/*/technical.md`) foram marcadas no mesmo commit
+desta entrada, mesmo tratamento da 3.1 (`384400c`) e da 3.2 (`1441b5a`).
+
+**Disposição dos dez findings da auditoria.** Os cinco de código foram fechados
+no commit `2f1f0ea` (`[3.3/--]`); os de doc, no commit desta entrada.
+
+| # | O que era | Disposição |
+|---|---|---|
+| F1 | concept §7 D10 item 5 e a nota do bloco 3.3 do `roadmap.md` diziam "**seis** `non_goals`"; §1 tem **oito** | **corrigido** nos dois arquivos + correção datada sob D10. É o defeito que a própria Stage policia (D11) |
+| F2 | `_MODULOS_DE_LEI` era tupla de dois literais — um terceiro módulo de lei ficaria invisível às quatro asserções de AST de CA2 | **corrigido** (`2f1f0ea`) — `test_a_lista_de_modulos_de_lei_cobre_a_pasta_inteira` cobra a pasta (`glob("test_*laws*.py")`) contra a lista, mesmo antídoto de `test_composition_root_staff.py` |
+| F3 | `_funcoes` filtrava só `ast.FunctionDef`; `ast.AsyncFunctionDef` é classe distinta — um teste de lei `async` escaparia dos quatro guardas, inclusive do "todo teste recebe a fixture" | **corrigido** (`2f1f0ea`) — alias `_Funcao` cobrindo as duas classes |
+| F4 | `assert _ordenado_por("ORDER BY name") == esperado` travava propriedade do **ambiente** (musl); ficaria vermelha sobre adapter correto num cluster glibc/ICU | **corrigido** (`2f1f0ea`) — condicionada a uma sonda semântica da colação default (`SELECT 'a' > 'B'`), com asserção nos **dois** ramos. Passa a travar a relação (colação de bytes ⇔ omissão indistinguível), que é o fato que justifica CA10b |
+| F5 | a regex `_ORDER_BY` captura até o fim do statement; `LIMIT`/`OFFSET` da 3.4 quebram as três igualdades sobre adapter correto | **escalado** — `[finding]` acima, Stage candidata `3.4-staff-http` |
+| F6 | `mappers.py:74` `Row = Any` era o único escape de tipagem sem nota nos cinco arquivos de `src/` desta Stage | **corrigido** (`2f1f0ea`) — comentário com a razão (limitação do `Row` genérico do SQLAlchemy Core) e o preço assumido; os dois `Any` de `employee_repository.py` passam a referenciar `mappers.Row`, e o `from typing import Any` sai do arquivo |
+| F7 | imprecisão de redação em concept §5.2 | **sem ação** — o código segue §6, que descreve o mecanismo certo |
+| F8 | docstring da regressão §5.20 citava "os **46** de lei"; hoje são 58 funções / 122 ids | **corrigido** (`2f1f0ea`) — números atuais, com a nota de que "46" são os **herdados** da 3.2 |
+| F8b | `truncar_tudo` no **setup** e não no teardown do conftest de contrato | **anotado, sem mudar comportamento** (`2f1f0ea`) — é a convenção do projeto inteiro (integration, e2e e o conftest de contrato de identity fazem igual); cada suíte garante o banco vazio de que ela precisa. Simetrizar só aqui tornaria este arquivo o único divergente |
+| F9 | suspeita de que os `[finding]` escalados ficariam fora do varredor | **refutado pela própria auditoria** — os cinco estão em local que `PIPELINE.md` §7.2/§7.3 manda varrer |
+
 <!-- END: post-execution -->

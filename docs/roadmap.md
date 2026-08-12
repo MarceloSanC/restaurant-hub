@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-08-11
-last_reviewed_at: 2026-08-11
+updated_at: 2026-08-12
+last_reviewed_at: 2026-08-12
 ---
 
 # Roadmap — restaurant-hub
@@ -709,7 +709,7 @@ skills_hint: [repository-pattern]
 > port, promoção de 46 testes de lei e wiring de 16 use cases não é `S` — a 3.2,
 > com 16 use cases, é `M`. Deixar `S` faria o gate de tamanho de PIPELINE §4.2
 > avaliar outra Stage.
-> **`non_goals: []` → seis** (concept §1), dois deles substantivos: **RLS
+> **`non_goals: []` → oito** (concept §1), dois deles substantivos: **RLS
 > avaliada e rejeitada** (ADR 3.3.0005) e **controle otimista de concorrência
 > escalado** (ADR 3.3.0006, que fecha atomicidade das duas pontas mas deixa
 > *lost update* declarado como limite).
@@ -1314,7 +1314,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-20 | Stage 2.5-email-invite concluída (`done`); bloco corrigido (nota datada — 5 divergências: persistência no escopo, 3 use cases, sem adapter real, sem `TokenIssuer`, port em `ports/out/`; 4 ADRs). **Todas as Stages de backend do Step 2 estão `done`; o Step permanece `in_progress`** — falta a contraparte de frontend (regra do §Escopo deste roadmap e §Lacunas conhecidas) | Execução da Stage 2.5 — issue #27 |
 | 2026-07-29 | Stage 3.1-staff-domain concluída (`done`); bloco corrigido (nota datada — `.importlinter` modificado com contratos de pureza `staff.domain` e independência identity × staff, `identifiers.py`, placeholders application/adapters, `DayPeriod` co-locado, hierarquia `StaffError` + 8 subclasses; ADRs 3.1.0001–0006); Step 3 → `in_progress` (primeiro código do BC staff) | Execução da Stage 3.1 — issue #32 |
 | 2026-08-09 | Stage 3.2-staff-application concluída (`done`); bloco corrigido (nota datada — **quatro** eixos: camada-alvo expandida para o domínio da 3.1, file-scope real, DTOs/erros/use cases/fakes nos contratos introduzidos, `IdGenerator` e `DomainError`/`NotFoundError` nos consumidos). Decisões do sponsor mudaram o ciclo de vida das duas entidades da 3.1 (ADR 3.2.0005 supersede o 3.1.0003; ADR 3.2.0006), e o **ADR 3.2.0007** nasceu na execução, quando a auditoria de testes provou que a interação entre editar e desligar nunca fora especificada | Execução da Stage 3.2 — issue #35 |
-| 2026-08-11 | Stage 3.3-staff-persistence concluída (`done`); bloco corrigido (nota datada — **cinco** eixos: migration `0003` e não `0002`, file-scope real incluindo `migrations/env.py`/`tests/conftest.py`/fakes/ports e a **promoção** das suítes de lei para `tests/contract/`, `L-ORD` nos contratos introduzidos, `complexidade_estimada` `S`→`M`, seis `non_goals`). ADRs 3.3.0001–3.3.0007. A auditoria de testes independente encontrou **5 mutações sobreviventes em arquivos com 100% de cobertura de linha e branch** — entre elas o escopo por `employee_id` dos `DELETE` de filha, cuja ausência destruiria dado **cross-tenant** em silêncio; todas fechadas por teste com prova de mutação | Execução da Stage 3.3 — issue #38 |
+| 2026-08-11 | Stage 3.3-staff-persistence concluída (`done`); bloco corrigido (nota datada — **cinco** eixos: migration `0003` e não `0002`, file-scope real incluindo `migrations/env.py`/`tests/conftest.py`/fakes/ports e a **promoção** das suítes de lei para `tests/contract/`, `L-ORD` nos contratos introduzidos, `complexidade_estimada` `S`→`M`, oito `non_goals`). ADRs 3.3.0001–3.3.0007. A auditoria de testes independente encontrou **5 mutações sobreviventes em arquivos com 100% de cobertura de linha e branch** — entre elas o escopo por `employee_id` dos `DELETE` de filha, cuja ausência destruiria dado **cross-tenant** em silêncio; todas fechadas por teste com prova de mutação | Execução da Stage 3.3 — issue #38 |
 
 ## Próxima revisão de roadmap
 

@@ -543,12 +543,25 @@ de qual das duas camadas de guarda respondeu.
      adapters, mappers, tradutor por operação, lei nova de port, promoção de 46
      testes e wiring de 16 use cases não é `S`; a 3.2, com 16 use cases, é `M`.
      Deixar `S` faria o gate de tamanho de PIPELINE §4.2 avaliar outra Stage.
-  5. **`non_goals: []`:** são seis (§1), dois deles substantivos — RLS rejeitada e
-     lock otimista escalado.
+  5. **`non_goals: []`:** são **oito** (§1), dois deles substantivos — RLS
+     rejeitada e lock otimista escalado.
 - **Por quê:** silenciar faria o roadmap afirmar um recorte que a execução
   contradiz — e afirmar um número de migration que colidiria com a existente.
 - **Fonte:** `ls migrations/versions/`; `docs/roadmap.md` bloco 3.3;
   concept 2.3 §7 Decisão 9; PIPELINE §4.2.
+
+> **Correção datada (2026-08-12, fase de aplicação da auditoria da Stage).** O
+> item 5 dizia "são **seis**". A contagem dos bullets de §1 "Fora do escopo" é
+> **oito** —
+> `awk '/^### Fora do escopo/,/^### Vínculo/' concept.md | grep -c '^- \*\*'`
+> → `8`. Corrigido no corpo, e não só anotado, porque o número errado é
+> **exatamente** o defeito que esta Stage policia (D11: "afirmar sobre outro
+> arquivo o que ele não diz") e deixá-lo de pé, ainda que com nota embaixo,
+> manteria o falso vivo para quem lê o item. O que muda é uma contagem, não uma
+> decisão: nenhum non-goal entrou ou saiu de §1, e por isso o caminho é correção
+> factual — não regressão `done → draft` (CONVENTIONS §3.2, reservada a gap
+> **material**). A mesma contagem foi corrigida na nota do bloco 3.3 do
+> `roadmap.md`, que é a outra ponta da afirmação.
 
 ### D11 — A âncora de `L-ORD` é reconciliada nas duas pontas
 - **O quê:** as docstrings de módulo dos dois ports dizem hoje que cada método
@@ -690,56 +703,56 @@ Executado antes de aprovar o schema, no padrão do §9 da 2.3, contra
 
 ### Contrato — a prova de fake ≡ real
 
-- [ ] **CA1.** As duas suítes de lei vivem em `tests/contract/features/staff/`,
+- [x] **CA1.** As duas suítes de lei vivem em `tests/contract/features/staff/`,
       marcadas `pytest.mark.contract`, e **cada** teste roda duas vezes
       (`[fake]`, `[postgres]`) — verificável em `pytest --collect-only -q`.
-- [ ] **CA2.** Nenhum corpo de teste de contrato ramifica por implementação. A
+- [x] **CA2.** Nenhum corpo de teste de contrato ramifica por implementação. A
       verificação é por **AST** (nenhum `if`/`assert` que alcance o parâmetro da
       fixture), não por grep — grep dá falso positivo em comprehension.
-- [ ] **CA3.** As doze leis **e `L-ORD`** têm teste com o nome da lei no
+- [x] **CA3.** As doze leis **e `L-ORD`** têm teste com o nome da lei no
       identificador, e todos passam nos dois parâmetros. Nenhum teste de lei
       permanece em `tests/unit/`.
-- [ ] **CA4.** `tests/unit/features/staff/application/` continua verde após a
+- [x] **CA4.** `tests/unit/features/staff/application/` continua verde após a
       remoção das duas suítes (nenhum teste órfão, nenhum import quebrado), e a
       "Nota deliberada" sobre ordem não-travada foi removida.
 
 ### Leis específicas do banco
 
-- [ ] **CA5.** `add` com id já gravado **em outro tenant** levanta
+- [x] **CA5.** `add` com id já gravado **em outro tenant** levanta
       `*AlreadyExistsError` nas duas implementações (colisão global de id).
-- [ ] **CA5b.** `add` de funcionário com id **já gravado** e conjunto de funções
+- [x] **CA5b.** `add` de funcionário com id **já gravado** e conjunto de funções
       **inexistente** levanta `EmployeeAlreadyExistsError` — não
       `JobFunctionNotFoundError` — nas duas implementações (§5.5).
-- [ ] **CA6.** `update` de funcionário com `tenant_id` alheio **e** `unit_id`
+- [x] **CA6.** `update` de funcionário com `tenant_id` alheio **e** `unit_id`
       divergente levanta `EmployeeNotFoundError` — nunca `EmployeeRelocationError`.
-- [ ] **CA6b.** *(conduta)* Duas conexões: com o `update` de A em curso e não
+- [x] **CA6b.** *(conduta)* Duas conexões: com o `update` de A em curso e não
       commitado, o `update` do **mesmo** registro por B **bloqueia** até o commit
       de A. Prova que o `FOR UPDATE` existe — o resultado final sozinho não o
       distingue de sua ausência.
-- [ ] **CA7.** `delete` de função referenciada por funcionário **desligado**
+- [x] **CA7.** `delete` de função referenciada por funcionário **desligado**
       levanta `JobFunctionInUseError` e a função continua legível.
-- [ ] **CA8.** `add`/`update` de funcionário com função de outro tenant levanta
+- [x] **CA8.** `add`/`update` de funcionário com função de outro tenant levanta
       `JobFunctionNotFoundError`, e **nada** é gravado (releitura confirma).
-- [ ] **CA8b.** *(o outro lado da mesma constraint)* Um `INSERT` de vínculo que
+- [x] **CA8b.** *(o outro lado da mesma constraint)* Um `INSERT` de vínculo que
       chegue à FK **sem** passar pela pré-checagem produz `IntegrityError` cujo
       `constraint_name` é `fk_employee_job_functions_job_function`, e
       `translate(erro, ON_WRITE_EMPLOYEE, …)` devolve `JobFunctionNotFoundError`
       — **não** `JobFunctionInUseError`. Um mapa global falha aqui.
-- [ ] **CA8c.** *(conduta)* A mensagem do caminho comum cita a **menor** id
+- [x] **CA8c.** *(conduta)* A mensagem do caminho comum cita a **menor** id
       ausente (`"f97"` com `{f97, f99}`, estável entre execuções); a do backstop
       cita o conjunto `sorted()`. É a evidência de qual camada respondeu (§5.15,
       finding nº 4).
-- [ ] **CA9.** As quatro variantes verbatim (`"cozinheiro "`, `"Cozinheiro "`,
+- [x] **CA9.** As quatro variantes verbatim (`"cozinheiro "`, `"Cozinheiro "`,
       `"COZINHEIRO"`, `" Cozinheiro"`) são aceitas ao lado de `"Cozinheiro"` no
       mesmo tenant.
 
 ### `L-ORD`
 
-- [ ] **CA10.** `list_by_tenant`, `list_by_unit` e `find_all_by_ids` devolvem a
+- [x] **CA10.** `list_by_tenant`, `list_by_unit` e `find_all_by_ids` devolvem a
       mesma sequência nas duas implementações, com dado que inclui **nome
       acentuado, case misto, espaço à direita e dois homônimos de ids diferentes**
       — e essa sequência é igual a `sorted()` do Python com desempate por `id`.
-- [ ] **CA10b.** *(prova de que a cláusula existe — asserção de conduta, não de
+- [x] **CA10b.** *(prova de que a cláusula existe — asserção de conduta, não de
       resultado)* Duas partes, e a primeira é a que reprova a omissão:
       1. **Sobre o SQL do adapter:** o statement compilado de cada uma das três
          listagens contém `COLLATE "C"` nos **dois** termos do `ORDER BY`
@@ -753,54 +766,54 @@ Executado antes de aprovar o schema, no padrão do §9 da 2.3, contra
          escolha de colação tem efeito semântico e que a cláusula não é ruído.
       Sem a parte 1, esquecer o `COLLATE "C"` passa despercebido nesta imagem,
       hoje e sempre, e explode no primeiro cluster glibc/ICU.
-- [ ] **CA11.** Períodos inseridos fora de ordem cronológica reidratam ordenados
+- [x] **CA11.** Períodos inseridos fora de ordem cronológica reidratam ordenados
       por `start_at`, nas duas implementações.
-- [ ] **CA12.** As docstrings dos dois ports declaram `L-ORD` **e** citam a nova
+- [x] **CA12.** As docstrings dos dois ports declaram `L-ORD` **e** citam a nova
       âncora (D11); o concept da 3.2 tem a nota datada de acréscimo.
 
 ### Integração (exclusivo do banco real)
 
-- [ ] **CA13.** `alembic upgrade head` seguido de `downgrade base` deixa o banco
+- [x] **CA13.** `alembic upgrade head` seguido de `downgrade base` deixa o banco
       sem nenhuma tabela de staff, e o `upgrade` seguinte funciona
       (espelho de `test_migration.py`).
-- [ ] **CA14.** Consulta a `pg_constraint` **e** `pg_indexes` confirma: os nomes
+- [x] **CA14.** Consulta a `pg_constraint` **e** `pg_indexes` confirma: os nomes
       esperados de constraint; os **dois índices não-únicos**
       (`ix_employees_tenant_unit`, `ix_employee_job_functions_function`), que não
       aparecem em `pg_constraint`; o `confdeltype` de cada FK (`r` para a de
       função, `c` para as três de filha); e os **tipos** de coluna — em especial
       `weekly_hours` como `numeric` **sem** precisão.
-- [ ] **CA15.** Um `INSERT` direto de linha ilegal (jornada `fixed` sem horas;
+- [x] **CA15.** Um `INSERT` direto de linha ilegal (jornada `fixed` sem horas;
       `on_demand` com horas; período com `start >= end`; `period` desconhecido) é
       recusado pelo banco.
-- [ ] **CA15b.** Uma `IntegrityError` de constraint **não mapeada** sobe intacta
+- [x] **CA15b.** Uma `IntegrityError` de constraint **não mapeada** sobe intacta
       (`translate` devolve o próprio erro), e as três FKs de filha para pai não
       são traduzidas. Sem isto, "traduzir tudo" volta sem ninguém notar.
-- [ ] **CA16.** Linhas gravadas por SQL direto que violem as **três** invariantes
+- [x] **CA16.** Linhas gravadas por SQL direto que violem as **três** invariantes
       não impostas pelo schema (§5.19) — funcionário sem nenhuma função; nome
       vazio/whitespace; dois períodos sobrepostos — fazem `find_by_id`
       **levantar** (`EmptyJobFunctionsError`, `InvalidNameError`,
       `OverlappingUnavailabilityError`), e não devolver entidade inválida.
-- [ ] **CA17.** Round-trip preserva `Decimal` em notação posicional (valor **e**
+- [x] **CA17.** Round-trip preserva `Decimal` em notação posicional (valor **e**
       escala: `22.50` volta `22.50`) e `datetime` ingênuo (microssegundos
       inclusive, `tzinfo is None`).
-- [ ] **CA17b.** *(isolamento)* Com uma escrita concorrente commitando entre os
+- [x] **CA17b.** *(isolamento)* Com uma escrita concorrente commitando entre os
       statements da leitura, `find_by_id` devolve um agregado **consistente** —
       nunca pai antigo com filha nova, nunca funcionário sem funções (§5.18).
 
 ### Wiring e gates
 
-- [ ] **CA18.** `wire_dependencies()` devolve os 16 use cases de staff montados
+- [x] **CA18.** `wire_dependencies()` devolve os 16 use cases de staff montados
       sobre os adapters Postgres, e nenhum módulo fora do composition root
       instancia adapter de staff (teste mecânico espelhando o de identity).
-- [ ] **CA19.** `make check` verde — incluindo `import-check` (os contratos
+- [x] **CA19.** `make check` verde — incluindo `import-check` (os contratos
       `[importlinter:contract:staff-application-purity]` e
       `[importlinter:contract:bc-independence]` continuam verdes) e `layout-check`.
-- [ ] **CA20.** Cobertura ≥ 90% em **cada** arquivo novo de
+- [x] **CA20.** Cobertura ≥ 90% em **cada** arquivo novo de
       `features/staff/adapters/out/postgres/`, medida por
       `uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing` e
       lida arquivo a arquivo (o `fail_under = 90` do `pyproject.toml` é **global**
       e não reprova arquivo individual).
-- [ ] **CA21.** Nenhum teste desta Stage pula por falta de banco — a fixture
+- [x] **CA21.** Nenhum teste desta Stage pula por falta de banco — a fixture
       falha alto (ADR 2.3.0001).
 
 ## 12. Checklist de validação interna
