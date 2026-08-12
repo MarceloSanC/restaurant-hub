@@ -1637,4 +1637,65 @@ de aceite nem escopo — é um teste **a mais** sobre a mesma invariante, não a
 troca de um instrumento por outro. A §5.20 continua travada pelo teste que o
 plano prescreve, na forma que o plano prescreve.
 
+### 2026-08-11 — [finding] fake ≢ real fora do alcance do contrato: nome com byte NUL — Claude
+
+**Contexto:** achado pela auditoria de testes independente e reproduzido aqui. Um
+nome de função contendo `\x00` é **aceito pelo fake** e **recusado no caminho do
+Postgres**. Medido nesta worktree, com o mesmo `JobFunction` pelos dois
+repositórios:
+
+| Entrada | fake | Postgres |
+|---|---|---|
+| `"a\x00b"` | grava verbatim | `sqlalchemy.exc.DataError` |
+| aspas, acento, emoji com ZWJ, `\n`, 1000 caracteres | grava verbatim | grava verbatim |
+
+**Só o NUL diverge** — o resto do dado adversarial faz round-trip perfeito nos
+dois lados, o que é um resultado positivo para a disciplina verbatim.
+
+**Uma precisão em relação ao relatório da auditoria:** ela registra `sqlstate`
+`22021`. Medido aqui, o `sqlstate` é **`None`**, e a mensagem é `psycopg.DataError:
+PostgreSQL text fields cannot contain NUL (0x00) bytes`. A diferença importa: a
+recusa é do **driver, client-side**, antes de o statement chegar ao servidor —
+não há código de erro de servidor para mapear, e `constraint_name` também é
+`None`. Qualquer tratamento futuro tem de casar por **tipo de exceção**, não por
+sqlstate.
+
+**Por que escapa de tudo que esta Stage construiu:** `DataError` não é
+`IntegrityError`, então `translate` nunca é chamado e o erro sobe cru. E a lista
+de "erros que sobem crus" do concept §6 nomeia só `40P01` e `40001` — este não
+está lá. O contrato também não o alcança: a suíte de lei não exercita nome com
+NUL, e se exercitasse **reprovaria em `[postgres]`**, porque a divergência é real.
+
+**Direção sugerida**, em ordem de preferência:
+
+1. **Rejeitar no domínio.** `JobFunction`/`Employee` já recusam nome vazio; um
+   nome com caractere de controle é igualmente indefensável como dado de
+   negócio, e recusá-lo em `__post_init__` faz o fake e o real concordarem **por
+   construção** — que é o único conserto que fecha a divergência em vez de
+   documentá-la. Custo: é mudança de domínio (3.1), não de persistência.
+2. Mapear `DataError` para erro tipado na borda HTTP, junto de `40P01`/`40001`.
+   Fecha o 500, mas mantém fake e real discordando sobre o que é gravável.
+
+**Stage candidata:** `3.4-staff-http` — é lá que hoje isto viraria **500**, e é
+lá que o mapeamento dos outros erros crus já está escalado. Se a opção 1 for a
+escolhida, ela precede e torna a 2 desnecessária.
+
+### 2026-08-11 — [finding] o escopo de CA17 é notação posicional, não round-trip verbatim de `Decimal` — Claude
+
+**Contexto:** a auditoria observou que `Decimal("1E+2")` volta do banco como
+`Decimal("100")` — valor igual, **representação** diferente. Não é gap: CA17 foi
+escrito de propósito sobre **notação posicional** (`22.50` volta `22.50`, valor e
+escala), porque é ali que a perda silenciosa acontece — uma `NUMERIC(5,2)`
+arredondaria `22.555` e `0.001`, e a igualdade de `Decimal` não pegaria a
+mudança de escala.
+
+**Registrado para que ninguém leia CA17 como garantia maior do que é.** O que a
+Stage garante é que valor e escala sobrevivem ao round-trip em notação
+posicional; **não** que a representação exponencial sobreviva como tal. O
+Postgres normaliza `1E+2` para `100` na coluna `NUMERIC`, e as duas são o mesmo
+número — `FixedSchedule` aceita qualquer `Decimal` finito positivo e não atribui
+significado à forma. Sem ação nesta Stage; a nota existe para o dia em que
+alguém escrever um teste esperando `str(...) == "1E+2"` e concluir que o mapper
+está errado.
+
 <!-- END: post-execution -->
