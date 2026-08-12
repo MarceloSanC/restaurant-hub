@@ -386,12 +386,27 @@ def _mudar_nome_e_funcoes(motor: Engine) -> Callable[[], None]:
     return _acao
 
 
-def test_ca17b_find_by_id_devolve_agregado_consistente_sob_escrita_concorrente(
-    motores: Callable[[], Engine],
+def _ler_agregado(repositorio: PostgresEmployeeRepository, metodo: str) -> Employee | None:
+    """Os **dois** métodos que montam agregado de quatro tabelas (§5.18).
+
+    A §5.18 nomeia `find_by_id` **e** `list_by_unit`, e os dois têm o mesmo
+    problema pela mesma razão. Parametrizar sobre eles é o que impede que só um
+    fique preso: com CA17b travando apenas `find_by_id`, `list_by_unit` podia
+    voltar a `READ COMMITTED` sem sintoma em teste nenhum.
+    """
+    if metodo == "find_by_id":
+        return repositorio.find_by_id(_A, _E1)
+    encontrados = repositorio.list_by_unit(_A, _U1)
+    return encontrados[0] if encontrados else None
+
+
+@pytest.mark.parametrize("metodo", ["find_by_id", "list_by_unit"])
+def test_ca17b_a_leitura_de_agregado_e_consistente_sob_escrita_concorrente(
+    motores: Callable[[], Engine], metodo: str
 ) -> None:
     """CA17b — com uma escrita commitando **entre** os statements, o agregado é coerente.
 
-    `find_by_id` monta o `Employee` a partir de quatro tabelas em statements
+    Os dois métodos montam o `Employee` a partir de quatro tabelas em statements
     separados. Sob `READ COMMITTED` — o default — **cada statement pega um
     snapshot novo**, e uma escrita que comite no meio produz uma entidade que
     nunca existiu: pai antigo com filha nova.
@@ -412,7 +427,7 @@ def test_ca17b_find_by_id_devolve_agregado_consistente_sob_escrita_concorrente(
     with _entrelacar(motor_leitor, "FROM employees", _mudar_nome_e_funcoes(motor_escritor)) as (
         disparou
     ):
-        lido = repositorio.find_by_id(_A, _E1)
+        lido = _ler_agregado(repositorio, metodo)
 
     assert disparou[0], "o entrelace não disparou — o teste não exercitou nada"
     assert lido is not None
