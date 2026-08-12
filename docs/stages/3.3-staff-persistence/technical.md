@@ -1525,4 +1525,63 @@ significados diferentes, que é a razão de o mapa ser por operação.
 **Stage candidata:** esta mesma (Task 08). Não é dívida para depois — é uma
 linha a mais no escopo já planejado da Task seguinte.
 
+**Fechado na Task 08 (2026-08-11).** As duas corridas previstas na aritmética
+acima entraram como testes que passam pelo **método público**:
+`test_ca8c_o_backstop_de_l_e4_responde_pelo_metodo_publico_e_cita_o_conjunto`
+(`update`, corrida na FK) e
+`test_o_backstop_de_identidade_responde_pelo_metodo_publico_e_cita_a_id`
+(`add`, corrida na identidade). `employee_repository.py` foi de **96% para
+100%** — as linhas 143, 159 e 539–541 estão cobertas. E a mutação que troca
+`ON_WRITE_EMPLOYEE` por um mapa global, que sobrevivia às Tasks 06/07 inteiras,
+agora reprova (ver a tabela mutação→resultado no corpo do commit da Task 08).
+
+### 2026-08-11 — [deviation] Task 08 — a regressão da §5.20 mede a pegada de lock, não o deadlock — Claude
+
+**Contexto:** o plano da Task 08 prescreve, para a regressão da §5.20,
+`threading.Barrier(2)` + `SET lock_timeout` nas duas conexões, com a asserção "o
+`update` de A **completa**". Implementado exatamente assim, e então **medido por
+mutação**: com `_sincronizar_funcoes` trocado por `DELETE`-tudo/`INSERT`-tudo,
+o teste **passou** — 11/11 na suíte de conduta e 70/70 nas Tasks 06/07. Ou seja,
+a regressão que a §5.20 existe para carregar não reprovava a implementação que
+ela proíbe.
+
+**Por que, e por que não é questão de ajustar a barreira.** O deadlock exige
+esta ordem: (1) A apaga os vínculos e segura as linhas; (2) B apaga a função,
+toma o lock exclusivo e **bloqueia** na varredura do `RESTRICT`; (3) A reinsere
+os vínculos e bloqueia no `FOR KEY SHARE` que B segura. Para forçá-la, A tem de
+pausar **entre** o seu `DELETE` e o seu `INSERT` de vínculos — e é exatamente
+esse intervalo que a implementação **correta** não tem: por diferença ela não
+emite statement nenhum ali. Uma barreira ancorada nesse ponto **penduraria** sob
+o adapter certo; ancorada em qualquer statement que exista nas duas variantes, o
+entrelace vira corrida de microssegundos, e B — que tem um statement só — termina
+antes de A chegar aos vínculos. Não há colocação da barreira que seja ao mesmo
+tempo determinística e alcançável nas duas variantes.
+
+**O que foi feito:** o teste prescrito **permanece** (é regressão válida contra
+uma implementação que deadlocke, e reancorá-lo na leitura dos vínculos o fez
+também reprovar a mutação, embora por corrida e não por construção), e entrou
+**ao lado dele** um teste determinístico que mede a **causa** em vez do sintoma:
+`test_regressao_5_20_update_sem_mudanca_no_conjunto_nao_segura_lock_em_job_functions`.
+
+O que a reescrita cega faz de errado não é deadlockar — deadlock é a
+consequência. É **tomar lock em `job_functions`** num `update` que não mexeu no
+conjunto. Com a transação do `update` aberta e não commitada (entrelace no seu
+último statement), outra conexão tenta remover a função:
+
+- por diferença ⇒ `JobFunctionInUseError` (`23503`), a resposta de negócio do
+  `RESTRICT`;
+- por reescrita cega ⇒ bloqueio no lock indevido e `lock_timeout` (`55P03`), um
+  `OperationalError` que escapa do tradutor e vira 500 na 3.4.
+
+Sem thread, sem barreira, sem relógio — e mata a mutação por construção.
+
+**Razão de ficar abaixo do threshold de perguntar:** não muda contrato, critério
+de aceite nem escopo. A §5.20 continua sendo travada por teste dedicado na
+Task 08, com a asserção sobre **conduta** que o plano exige; o que mudou foi o
+instrumento, depois de o prescrito ter sido implementado, medido e mostrado
+insuficiente. O plano já autoriza a substância ("cada um **reproduzindo** o
+comportamento"), e a alternativa — manter só o teste prescrito — seria deixar no
+gate a peça que o próprio plano chama de "a mais fácil de simplificar depois"
+protegida por um teste que a mutação atravessa.
+
 <!-- END: post-execution -->
