@@ -1,10 +1,33 @@
 """Port de saída: persistência de funções de trabalho.
 
 **As docstrings deste módulo são especificação, não comentário.** Cada método
-cita a lei nomeada do concept §4 (L-JF1…L-JF5) que o governa e o erro que
-levanta, porque é este texto que a Stage 3.3 implementa em Postgres e que o
-teste de contrato de lá pareia lei a lei. Declarar o comportamento só no fake é
-o defeito que a 2.2→2.3 pagou retroagindo o contrato (ADR 2.3.0003).
+cita a lei nomeada do concept §4 da Stage 3.2 (L-JF1…L-JF5) **+ `L-ORD`
+(ADR 3.3.0003, Stage 3.3)** que o governa e o erro que levanta, porque é este
+texto que a Stage 3.3 implementa em Postgres e que o teste de contrato de lá
+pareia lei a lei. Declarar o comportamento só no fake é o defeito que a 2.2→2.3
+pagou retroagindo o contrato (ADR 2.3.0003).
+
+**`L-ORD` — ordem total, determinística e independente de ambiente.**
+`list_by_tenant` e `find_all_by_ids` devolvem as funções ordenadas por `name` e,
+em empate, por `id` — comparação **byte a byte** (codepoint), que em Postgres é
+`ORDER BY name COLLATE "C", id COLLATE "C"` e em Python é
+`sorted(…, key=lambda f: (f.name, f.id))`, medidos como **idênticos**.
+
+Três coisas que esta lei declara e que não são detalhe de implementação:
+
+- **O desempate por `id` é o que a torna total.** Nome de função é único por
+  tenant hoje, mas o mesmo corpo de lei vale para o port de funcionário, onde
+  homônimos são legítimos; e é o termo de desempate que a paginação da Stage 3.4
+  usa como cursor. Ordem não-total pagina duplicando e omitindo linhas.
+- **As duas colunas levam a colação explícita.** `COLLATE` liga-se ao operando à
+  sua esquerda: um `id` sem ela volta a depender da colação do banco, justamente
+  no termo do cursor.
+- **A lei vale para as duas implementações.** O fake in-memory ordena igual; a
+  lei não se relaxa para acomodá-lo (precedente literal do ADR 2.3.0003). É isso
+  que permite à suíte de contrato ter **um** corpo de teste só.
+
+`find_by_id` e `find_by_name` devolvem no máximo um registro e não têm ordem a
+declarar.
 
 **Escopo de tenant na assinatura** (ADR 3.2.0002): não existe operação sem
 `tenant_id`. A alternativa — buscar por id e comparar `entity.tenant_id` no use
@@ -104,6 +127,10 @@ class JobFunctionRepository(Protocol):
         ausentes: quem compara com o conjunto pedido, para descobrir o que
         falta, é o chamador. **Não filtra por estado porque a função não tem
         estado** (ADR 3.2.0005). Id de outro tenant simplesmente não vem.
+
+        **`L-ORD` —** o resultado vem ordenado por `name`, desempatando por
+        `id`, byte a byte. O parâmetro é um `frozenset` e portanto não carrega
+        ordem: a do resultado é a da lei, não a do pedido.
         """
         ...
 
@@ -111,5 +138,7 @@ class JobFunctionRepository(Protocol):
         """Lista **todas** as funções do tenant, e nenhuma de outro.
 
         **L-JF5 —** não há flag de estado porque não há estado.
+
+        **`L-ORD` —** ordenado por `name`, desempatando por `id`, byte a byte.
         """
         ...

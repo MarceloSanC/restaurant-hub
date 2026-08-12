@@ -462,6 +462,45 @@ registra `NotFoundError` (404) e `DomainError` (422). O handler do BC precisa
 e, entre os dois genéricos, `NotFoundError` precisa vir antes de `DomainError`.
 Daí a asserção exata de §11 (índices na MRO, não `issubclass`).
 
+### Acréscimo posterior — `L-ORD`, a décima terceira lei (2026-08-10, Stage 3.3)
+
+> **Nota datada** (CONVENTIONS §3.4 — revisão posterior ao fechamento vai para
+> seção datada, o corpo aprovado acima **não** é reescrito).
+
+A Stage `3.3-staff-persistence` **acrescenta** uma lei nomeada às doze desta
+seção, sem emendar nenhuma delas: **`L-ORD` — ordem total, determinística e
+independente de ambiente**, decidida no
+[ADR 3.3.0003](../../adr/3_3_0003-total-ordering-with-c-collation-as-port-law.md).
+
+- `JobFunctionRepository.list_by_tenant` e `.find_all_by_ids`, e
+  `EmployeeRepository.list_by_unit`, ordenam por `name` e desempatam por `id`,
+  **byte a byte** — `ORDER BY name COLLATE "C", id COLLATE "C"` no Postgres,
+  `sorted(…, key=lambda x: (x.name, x.id))` no fake, medidos como idênticos.
+  **As duas colunas** levam a colação: `COLLATE` liga-se ao operando à sua
+  esquerda, e um `id` sem ela volta a depender da colação do banco, justamente
+  no termo que a paginação da Stage 3.4 usa como cursor.
+- `EmployeeRepository.find_by_id` e `.list_by_unit` — os dois métodos que montam
+  agregado — reidratam `Employee.unavailabilities` ordenadas por `start`. Total
+  por funcionário, porque períodos do mesmo registro não se sobrepõem.
+- `shift_preference` e `job_function_ids` são `frozenset`: **sem ordem, sem
+  lei**.
+
+**Por que a nota existe.** As docstrings de módulo dos dois ports diziam que
+cada método "cita a lei nomeada do **concept §4**" — desta seção. Ao passarem a
+declarar `L-ORD`, elas citariam uma fonte que não a continha: referência
+pendurada, e o defeito de afirmar sobre outro arquivo o que ele não diz. As
+docstrings passaram a citar "concept §4 da 3.2 **+ `L-ORD`
+(ADR 3.3.0003, Stage 3.3)**", e esta seção é a outra ponta da reconciliação
+(D11 do concept da 3.3).
+
+**O que isto não muda.** Nenhuma das doze leis, nenhuma assinatura, nenhum
+corpo de use case — o non-goal da issue #38 ("não redefinir comportamento dos
+use cases da 3.2") continua respeitado. O que muda é que uma leitura que antes
+**não declarava ordem** passa a declarar, e por isso a "Nota deliberada" de
+`test_employee_repository_laws.py`, que registrava a ausência como escolha
+consciente, saiu no mesmo commit em que a lei entrou: ela virou falsa na linha
+em que o primeiro `test_l_ord_*` foi escrito.
+
 ### Consumidos
 
 - **`Employee`, `JobFunction`** (entities) — Stage `3.1-staff-domain`

@@ -6,9 +6,13 @@ precisar trocar uma implementação (ex: Postgres → DynamoDB), mude APENAS aqu
 Nenhuma regra de negócio deve ser alterada.
 
 Regra: nenhum outro módulo deve instanciar diretamente classes de `infrastructure/`
-ou de `adapters/`. Há teste mecânico disso em
-`tests/unit/features/identity/adapters/test_composition_root_identity.py` — a regra
-é fácil de violar sem querer e invisível numa revisão de diff.
+ou de `adapters/`. Há teste mecânico disso **por bounded context** —
+`tests/unit/features/identity/adapters/test_composition_root_identity.py` e
+`tests/unit/features/staff/adapters/test_composition_root_staff.py` — porque a
+varredura de cada um é ancorada no seu próprio pacote de adapters: a de identity
+não olha para `features/staff/adapters`, então um BC novo sem o seu teste entra
+descoberto e o gate existente continua verde. A regra é fácil de violar sem
+querer e invisível numa revisão de diff.
 
 **Sobre o `ignore_imports` que este arquivo motiva** (Stage 2.3): a partir daqui o
 composition root importa `features.identity.adapters`, e
@@ -91,6 +95,60 @@ from restaurant_hub.features.identity.application.use_cases.revoke_session impor
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
 )
+from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
+    PostgresEmployeeRepository,
+)
+from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
+    PostgresJobFunctionRepository,
+)
+from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
+    AssignJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.change_workload_profile import (
+    ChangeWorkloadProfileUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.copy_employee_to_unit import (
+    CopyEmployeeToUnitUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.create_employee import (
+    CreateEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.create_job_function import (
+    CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
+    DeactivateEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.declare_shift_preference import (
+    DeclareShiftPreferenceUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.delete_employee import (
+    DeleteEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.delete_job_function import (
+    DeleteJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.list_employees import (
+    ListEmployeesUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.list_job_functions import (
+    ListJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.reactivate_employee import (
+    ReactivateEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
+    RegisterUnavailabilityUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.remove_unavailability import (
+    RemoveUnavailabilityUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.rename_employee import (
+    RenameEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
+    RenameJobFunctionUseCase,
+)
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
@@ -128,6 +186,33 @@ class ApplicationDependencies:
     # carregado por `importlib` — anotá-lo exigiria o import estático que a
     # keyword `in` torna sintaticamente impossível.
     identity_guard: Any
+
+    # --- staff (Stage 3.3) ---------------------------------------------------
+    #
+    # Os 16 use cases do BC, e não os dois repositórios: o docstring acima é
+    # explícito ("expõe **use cases**, não repositórios"), e o bloco 3.3 do
+    # roadmap lista este arquivo em `arquivos_a_modificar` (D9). Não há adapter
+    # de entrada de staff ainda — ele é da 3.4 —, então estes campos nascem
+    # **sem consumidor**, e o custo está declarado: CA18 prova que estão montados
+    # sobre os adapters Postgres, não que estão exercitados. A alternativa
+    # (esperar a 3.4) deixaria a Stage entregando persistência que nada no boot
+    # da aplicação alcança.
+    staff_create_job_function: CreateJobFunctionUseCase
+    staff_rename_job_function: RenameJobFunctionUseCase
+    staff_delete_job_function: DeleteJobFunctionUseCase
+    staff_list_job_functions: ListJobFunctionsUseCase
+    staff_create_employee: CreateEmployeeUseCase
+    staff_rename_employee: RenameEmployeeUseCase
+    staff_list_employees: ListEmployeesUseCase
+    staff_delete_employee: DeleteEmployeeUseCase
+    staff_assign_job_functions: AssignJobFunctionsUseCase
+    staff_change_workload_profile: ChangeWorkloadProfileUseCase
+    staff_declare_shift_preference: DeclareShiftPreferenceUseCase
+    staff_register_unavailability: RegisterUnavailabilityUseCase
+    staff_remove_unavailability: RemoveUnavailabilityUseCase
+    staff_deactivate_employee: DeactivateEmployeeUseCase
+    staff_reactivate_employee: ReactivateEmployeeUseCase
+    staff_copy_employee_to_unit: CopyEmployeeToUnitUseCase
 
 
 @dataclass
@@ -180,6 +265,13 @@ def wire_dependencies(
     sessions = PostgresSessionRepository(engine)
 
     setup_tokens = PostgresPasswordSetupTokenRepository(engine)
+
+    # Staff (Stage 3.3), sobre o **mesmo** `Engine` — não um novo. Os dois ports
+    # se cruzam (L-JF3 consulta funcionário, L-E4 consulta função), e dois
+    # `Engine` fariam a guarda de remoção e a validade referencial olharem para
+    # pools distintos do mesmo banco sem ganho nenhum.
+    staff_job_functions = PostgresJobFunctionRepository(engine)
+    staff_employees = PostgresEmployeeRepository(engine)
 
     hasher = Argon2PasswordHasher()
     setup_token_issuer = Sha256SetupTokenIssuer()
@@ -278,6 +370,34 @@ def wire_dependencies(
         ),
         identity_authorize_action=authorize_action,
         identity_guard=guard,
+        staff_create_job_function=CreateJobFunctionUseCase(
+            job_functions=staff_job_functions, id_generator=id_generator
+        ),
+        staff_rename_job_function=RenameJobFunctionUseCase(job_functions=staff_job_functions),
+        staff_delete_job_function=DeleteJobFunctionUseCase(
+            job_functions=staff_job_functions, employees=staff_employees
+        ),
+        staff_list_job_functions=ListJobFunctionsUseCase(job_functions=staff_job_functions),
+        staff_create_employee=CreateEmployeeUseCase(
+            employees=staff_employees,
+            job_functions=staff_job_functions,
+            id_generator=id_generator,
+        ),
+        staff_rename_employee=RenameEmployeeUseCase(employees=staff_employees),
+        staff_list_employees=ListEmployeesUseCase(employees=staff_employees),
+        staff_delete_employee=DeleteEmployeeUseCase(employees=staff_employees),
+        staff_assign_job_functions=AssignJobFunctionsUseCase(
+            employees=staff_employees, job_functions=staff_job_functions
+        ),
+        staff_change_workload_profile=ChangeWorkloadProfileUseCase(employees=staff_employees),
+        staff_declare_shift_preference=DeclareShiftPreferenceUseCase(employees=staff_employees),
+        staff_register_unavailability=RegisterUnavailabilityUseCase(employees=staff_employees),
+        staff_remove_unavailability=RemoveUnavailabilityUseCase(employees=staff_employees),
+        staff_deactivate_employee=DeactivateEmployeeUseCase(employees=staff_employees),
+        staff_reactivate_employee=ReactivateEmployeeUseCase(employees=staff_employees),
+        staff_copy_employee_to_unit=CopyEmployeeToUnitUseCase(
+            employees=staff_employees, id_generator=id_generator
+        ),
     )
 
 

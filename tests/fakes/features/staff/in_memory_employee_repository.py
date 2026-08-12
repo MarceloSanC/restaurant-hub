@@ -1,12 +1,25 @@
 """Fake in-memory de `EmployeeRepository` — visão de funcionários do store do par.
 
-Implementa as sete leis L-E1…L-E7 do concept §4. A **ordem de checagem** é
-normativa e está codificada aqui: lookup por `(tenant_id, id)` **antes** de
-qualquer outra guarda. Invertê-la faria o port responder um erro que confirma a
-existência de registro de outro tenant (§5.4) — e é o único defeito desta classe
-que passaria despercebido, porque o teste "erro certo no tenant certo"
-continuaria verde.
+Implementa as sete leis L-E1…L-E7 do concept §4 **e a `L-ORD`** (ADR 3.3.0003,
+Stage 3.3). A **ordem de checagem** é normativa e está codificada aqui: lookup
+por `(tenant_id, id)` **antes** de qualquer outra guarda. Invertê-la faria o port
+responder um erro que confirma a existência de registro de outro tenant (§5.4) —
+e é o único defeito desta classe que passaria despercebido, porque o teste "erro
+certo no tenant certo" continuaria verde.
+
+**Sobre a ordenação (`L-ORD`), e por que ela é mais que um `sorted` na
+listagem.** O `sorted()` do Python sobre `str` compara por **codepoint**, medido
+como **idêntico** a `ORDER BY name COLLATE "C", id COLLATE "C"` no Postgres — é
+essa coincidência que permite à suíte de contrato ter um corpo só. Mas há um
+segundo ponto, e é o que inverte a direção habitual da divergência: este fake
+guarda o agregado **inteiro** como foi entregue, e `Employee.add_unavailability`
+**não** ordena (ele concatena). Sem reordenar na leitura, seria o **fake** a
+reprovar CA11 enquanto o Postgres passaria, porque lá a ordem vem do
+`ORDER BY start_at` do adapter. A reordenação usa `dataclasses.replace`, que
+passa pelo `__post_init__` como uma construção direta passaria.
 """
+
+import dataclasses
 
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
@@ -25,6 +38,18 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     UnitId,
 )
 from tests.fakes.features.staff.in_memory_staff_store import InMemoryStaffStore
+
+
+def _com_periodos_ordenados(employee: Employee) -> Employee:
+    """`L-ORD` — `unavailabilities` sai por `start`, que é único no agregado.
+
+    Total por funcionário: períodos do mesmo registro não se sobrepõem, logo
+    não há empate a desempatar.
+    """
+    ordenados = tuple(sorted(employee.unavailabilities, key=lambda periodo: periodo.start))
+    if ordenados == employee.unavailabilities:
+        return employee
+    return dataclasses.replace(employee, unavailabilities=ordenados)
 
 
 class InMemoryEmployeeRepository:
@@ -81,22 +106,33 @@ class InMemoryEmployeeRepository:
 
     def find_by_id(self, tenant_id: TenantId, employee_id: EmployeeId) -> Employee | None:
         """Registro do tenant, ou `None`. **Não filtra por estado**: o desligado
-        continua endereçável por id (ADR 3.2.0006)."""
+        continua endereçável por id (ADR 3.2.0006).
+
+        `L-ORD` — `unavailabilities` sai ordenada por `start`.
+        """
         self._store.record("employees.find_by_id")
-        return self._find(tenant_id, employee_id)
+        employee = self._find(tenant_id, employee_id)
+        if employee is None:
+            return None
+        return _com_periodos_ordenados(employee)
 
     def list_by_unit(
         self, tenant_id: TenantId, unit_id: UnitId, *, include_inactive: bool = False
     ) -> tuple[Employee, ...]:
-        """L-E6 — só a unidade pedida, só ativos por default."""
+        """L-E6 — só a unidade pedida, só ativos por default.
+
+        `L-ORD` — ordenado por `(name, id)`, e cada agregado devolvido tem
+        `unavailabilities` ordenada por `start`.
+        """
         self._store.record("employees.list_by_unit")
-        return tuple(
-            employee
+        selecionados = (
+            _com_periodos_ordenados(employee)
             for employee in self._store.employees.values()
             if employee.tenant_id == tenant_id
             and employee.unit_id == unit_id
             and (include_inactive or employee.active)
         )
+        return tuple(sorted(selecionados, key=lambda registro: (registro.name, registro.id)))
 
     def exists_by_job_function(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> bool:
         """L-E7 — global no tenant, contando ativos **e** inativos."""

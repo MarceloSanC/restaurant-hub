@@ -1,0 +1,231 @@
+"""Adapter Postgres de `JobFunctionRepository` — L-JF1…L-JF5 e a metade de `L-ORD`.
+
+**Fronteira transacional** (D8; precedente literal do concept 2.3 §7 Decisão 6):
+o repositório recebe um `Engine` e abre a própria transação por método público,
+via `engine.begin()`. A skill `repository-pattern` recomenda o oposto —
+transação controlada por um unit-of-work externo —, e o desvio é o mesmo que
+identity já assumiu, pela mesma razão: os ports da 3.2 são **síncronos e sem
+UoW**, a camada `application` está proibida de importar SQLAlchemy (contrato
+`staff-application-purity`), e nenhum use case desta Stage precisa de
+atomicidade **entre** repositórios. Inventar um port de UoW agora seria contrato
+novo sem consumidor.
+
+Para manter a troca barata quando esse consumidor existir, o núcleo reusado
+opera sobre `Connection` — as três escritas e o lookup de `delete`, que é o
+único ponto em que uma operação precisa do resultado de outra. As três leituras
+sem reuso (`find_by_name`, `find_all_by_ids`, `list_by_tenant`) embutem a
+consulta no método público: extrair um privado de um só chamador seria
+indireção sem ponto de troca a servir.
+
+Três decisões deste arquivo carregam lei e não são estilo:
+
+1. **`add` é `INSERT` puro, sem `ON CONFLICT`** (§5.2, ADR 2.3.0003). Um upsert
+   silencioso é a dívida exata que a 2.3 pagou; aqui a colisão vira erro tipado
+   pela tradução da constraint.
+2. **`tenant_id` nunca entra no `SET`** (§5.3) — só no `WHERE`. O `UPDATE`
+   escreve `name` e mais nada, então "mover a função de restaurante" não é um
+   estado que este adapter saiba produzir.
+3. **A unicidade de nome é verbatim** (§5.6): sem `lower()`, sem `btrim`, sem
+   `ILIKE`, nem no `find_by_name` nem em guarda alguma. Normalizar "parece
+   certo" e é o erro mais fácil de cometer aqui — recusaria em silêncio nomes
+   que o gerente considera distintos, e CA9 existe para reprovar isso.
+
+E a ordem, que é lei do port desde a Stage 3.3 (`L-ORD`, ADR 3.3.0003):
+`ORDER BY name COLLATE "C", id COLLATE "C"` nas duas listagens, com a colação
+**nas duas colunas** — `COLLATE` liga-se ao operando à sua esquerda, e um `id`
+sem ela volta a depender da colação do banco justamente no termo que a paginação
+da 3.4 usa como cursor. Nesta imagem (musl) nenhum resultado distingue a
+presença da ausência da cláusula; quem reprova a omissão é a asserção sobre o
+SQL compilado (CA10b).
+"""
+
+from sqlalchemy import Connection, Engine, select
+from sqlalchemy.exc import IntegrityError
+
+from restaurant_hub.features.staff.adapters.out.postgres import mappers
+from restaurant_hub.features.staff.adapters.out.postgres.integrity_errors import (
+    ON_DELETE_JOB_FUNCTION,
+    ON_INSERT_JOB_FUNCTION,
+    ON_UPDATE_JOB_FUNCTION,
+    constraint_name,
+    translate,
+)
+from restaurant_hub.features.staff.adapters.out.postgres.tables import job_functions
+from restaurant_hub.features.staff.application.errors import JobFunctionNotFoundError
+from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    JobFunctionId,
+    TenantId,
+)
+
+# Ordem total do port (`L-ORD`). As duas colunas levam a colação explícita — ver
+# o docstring do módulo.
+_ORDEM_TOTAL = (
+    job_functions.c.name.collate("C"),
+    job_functions.c.id.collate("C"),
+)
+
+
+class PostgresJobFunctionRepository:
+    """Implementação PostgreSQL do port `JobFunctionRepository`."""
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    # ---- escrita ----------------------------------------------------------
+
+    def add(self, job_function: JobFunction) -> None:
+        """L-JF1 — inserção, nunca upsert. Id colide globalmente; nome, por tenant."""
+        try:
+            with self._engine.begin() as conexao:
+                self._add(conexao, job_function)
+        except IntegrityError as erro:
+            # `from erro` preserva a cadeia de causa: sem ela, o diagnóstico de
+            # um conflito de integridade perde o SQL e a constraint originais.
+            raise translate(
+                erro, ON_INSERT_JOB_FUNCTION, self._detalhe_do_conflito(erro, job_function)
+            ) from erro
+
+    def update(self, job_function: JobFunction) -> None:
+        """L-JF2 — `UPDATE` com `rowcount == 0` ⇒ `JobFunctionNotFoundError`.
+
+        A guarda de nome de L-JF1 vale aqui **ignorando a própria função**, e o
+        índice único resolve isso sozinho: renomear para o nome que a função já
+        tem atualiza a própria linha e não colide com ninguém. Uma pré-checagem
+        por `find_by_name` teria de reimplementar a exceção de si mesma — e
+        ainda seria check-then-act sob concorrência.
+        """
+        try:
+            with self._engine.begin() as conexao:
+                self._update(conexao, job_function)
+        except IntegrityError as erro:
+            raise translate(erro, ON_UPDATE_JOB_FUNCTION, job_function.name) from erro
+
+    def delete(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> None:
+        """L-JF3 — remoção guardada pelo `RESTRICT`, com o lookup **antes**.
+
+        A ordem é normativa (§5.4): função ausente **no tenant** responde
+        `JobFunctionNotFoundError`, nunca `JobFunctionInUseError` — este último
+        confirmaria ao tenant alheio que o registro existe **e** que está em uso
+        no restaurante do outro.
+
+        Guarda e escrita rodam na **mesma** transação. Fora dela a ordem seria
+        decorativa: entre o `SELECT` e o `DELETE`, um `INSERT` de vínculo
+        concorrente mudaria a resposta.
+        """
+        try:
+            with self._engine.begin() as conexao:
+                self._delete(conexao, tenant_id, job_function_id)
+        except IntegrityError as erro:
+            raise translate(erro, ON_DELETE_JOB_FUNCTION, job_function_id) from erro
+
+    # ---- leitura ----------------------------------------------------------
+
+    def find_by_id(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> JobFunction | None:
+        """Função **do tenant**, ou `None` — id alheio é indistinguível de inexistente."""
+        with self._engine.connect() as conexao:
+            return self._find_by_id(conexao, tenant_id, job_function_id)
+
+    def find_by_name(self, tenant_id: TenantId, name: str) -> JobFunction | None:
+        """Homônima do tenant, ou `None`. Comparação **verbatim** — `=`, nunca `ILIKE`."""
+        with self._engine.connect() as conexao:
+            linha = conexao.execute(
+                select(job_functions).where(
+                    job_functions.c.tenant_id == tenant_id,
+                    job_functions.c.name == name,
+                )
+            ).one_or_none()
+        return mappers.row_to_job_function(linha) if linha is not None else None
+
+    def find_all_by_ids(
+        self, tenant_id: TenantId, job_function_ids: frozenset[JobFunctionId]
+    ) -> tuple[JobFunction, ...]:
+        """L-JF4 — só as encontradas, sem levantar; `L-ORD` — em ordem total.
+
+        Conjunto vazio devolve `()` **sem ir ao banco**: é o caminho que
+        `create_employee` percorre, e uma ida ao banco para perguntar por nada
+        seria latência sem informação.
+        """
+        if not job_function_ids:
+            return ()
+        with self._engine.connect() as conexao:
+            linhas = conexao.execute(
+                select(job_functions)
+                .where(
+                    job_functions.c.tenant_id == tenant_id,
+                    # `sorted` só para que o texto do SQL seja estável entre
+                    # execuções (`frozenset` itera por `PYTHONHASHSEED`); a
+                    # ordem do resultado é a do `ORDER BY`, não a do `IN`.
+                    job_functions.c.id.in_(sorted(job_function_ids)),
+                )
+                .order_by(*_ORDEM_TOTAL)
+            ).all()
+        return tuple(mappers.row_to_job_function(linha) for linha in linhas)
+
+    def list_by_tenant(self, tenant_id: TenantId) -> tuple[JobFunction, ...]:
+        """L-JF5 — todas as do tenant e nenhuma de outro; `L-ORD` — em ordem total."""
+        with self._engine.connect() as conexao:
+            linhas = conexao.execute(
+                select(job_functions)
+                .where(job_functions.c.tenant_id == tenant_id)
+                .order_by(*_ORDEM_TOTAL)
+            ).all()
+        return tuple(mappers.row_to_job_function(linha) for linha in linhas)
+
+    # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) -----
+
+    def _add(self, conexao: Connection, job_function: JobFunction) -> None:
+        conexao.execute(job_functions.insert().values(**mappers.job_function_to_row(job_function)))
+
+    def _update(self, conexao: Connection, job_function: JobFunction) -> None:
+        resultado = conexao.execute(
+            job_functions.update()
+            .where(
+                job_functions.c.id == job_function.id,
+                job_functions.c.tenant_id == job_function.tenant_id,
+            )
+            # **Só `name`.** `tenant_id` não entra no `SET` (§5.3) e `id` é a
+            # identidade: incluí-los tornaria representável mover a função de
+            # restaurante por uma escrita que se parece com uma renomeação.
+            .values(name=job_function.name)
+        )
+        if resultado.rowcount == 0:
+            raise JobFunctionNotFoundError(job_function.id)
+
+    def _delete(
+        self, conexao: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
+    ) -> None:
+        if self._find_by_id(conexao, tenant_id, job_function_id) is None:
+            raise JobFunctionNotFoundError(job_function_id)
+        conexao.execute(
+            job_functions.delete().where(
+                job_functions.c.id == job_function_id,
+                job_functions.c.tenant_id == tenant_id,
+            )
+        )
+
+    def _find_by_id(
+        self, conexao: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
+    ) -> JobFunction | None:
+        linha = conexao.execute(
+            select(job_functions).where(
+                job_functions.c.id == job_function_id,
+                job_functions.c.tenant_id == tenant_id,
+            )
+        ).one_or_none()
+        return mappers.row_to_job_function(linha) if linha is not None else None
+
+    @staticmethod
+    def _detalhe_do_conflito(erro: IntegrityError, job_function: JobFunction) -> str:
+        """Qual valor entra na mensagem depende de **qual** regra foi violada.
+
+        `translate` recebe um `detail` só (contrato do concept §4), e as duas
+        constraints alcançáveis por um `INSERT` conflitam em valores diferentes:
+        a PK no `id`, o índice único no `name`. Uma mensagem dizendo "nome de
+        função já usado no restaurante: 'f1'" seria pior que nenhuma — descreve
+        o conflito errado com a confiança de quem sabe. Precedente literal:
+        `user_repository.py` de identity, na mesma situação.
+        """
+        if constraint_name(erro) == "uq_job_functions_tenant_name":
+            return job_function.name
+        return job_function.id

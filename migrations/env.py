@@ -15,6 +15,9 @@ from sqlalchemy import engine_from_config, pool
 from restaurant_hub.features.identity.adapters.out.postgres.tables import (
     identity_metadata,
 )
+from restaurant_hub.features.staff.adapters.out.postgres.tables import (
+    staff_metadata,
+)
 from restaurant_hub.shared.infrastructure.config.settings import get_settings
 
 # Objeto de configuração do Alembic — acessa valores do alembic.ini
@@ -38,7 +41,11 @@ if config.config_file_name is not None:
 #
 # Quando o 2º BC chegar, combine os metadatas em vez de trocar este por aquele —
 # `target_metadata` aceita uma lista.
-target_metadata = identity_metadata
+#
+# O 2º BC chegou na Stage 3.3 (staff), e a instrução acima foi seguida
+# literalmente: **lista**, não substituição. Trocar um pelo outro faria o
+# autogenerate deste BC propor o drop das tabelas do outro.
+target_metadata = [identity_metadata, staff_metadata]
 
 
 def run_migrations_offline() -> None:
