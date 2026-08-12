@@ -40,6 +40,10 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
     UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
+    DayPeriod,
+    ShiftPreference,
+)
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
     UnavailabilityPeriod,
 )
@@ -93,6 +97,122 @@ def _com_funcoes_gravadas(repos: RepositoriosDeStaff) -> None:
 def _com_funcionario_gravado(repos: RepositoriosDeStaff) -> None:
     _com_funcoes_gravadas(repos)
     repos.employees.add(_funcionario())
+
+
+# --- isolamento entre agregados: `update` de um não toca as filhas de outro ----
+#
+# **Por que estes três testes existem, e por que aqui.** A escrita das filhas por
+# diferença (§5.20) emite `DELETE` nas três tabelas-filhas. Se algum deles
+# esquecer o predicado de `employee_id`, o `update` de A apaga a linha
+# correspondente de **todo mundo** — e nenhuma asserção sobre o agregado de A
+# percebe, porque o de A fica exatamente como deveria.
+#
+# É propriedade de **port**, não de adapter: "gravar um agregado não altera
+# outro" vale para qualquer implementação. O fake a satisfaz por construção (o
+# `update` troca uma entrada de dicionário); o adapter precisa escopar cada
+# `DELETE`. Um teste de contrato é o único lugar onde a propriedade fica
+# afirmada para as duas — e onde o fake serve de oráculo do que o real deve
+# fazer.
+#
+# O setup é o que dá o poder de discriminação, e é o que faltava: **B compartilha
+# com A uma linha em cada tabela-filha** — a mesma função, um período de mesmo
+# `start_at` (que é a chave usada no `DELETE`) e o mesmo `period` de preferência.
+# Todo teste de `update` anterior usava um funcionário só, ou dois sem filha em
+# comum, e por isso passava com os três predicados removidos.
+
+_E2 = EmployeeId("e2")
+_PERIODO_COMPARTILHADO = UnavailabilityPeriod(
+    start=datetime(2026, 8, 5, 8, 0),
+    end=datetime(2026, 8, 5, 12, 0),
+)
+
+
+def _com_dois_funcionarios_com_filhas_em_comum(repos: RepositoriosDeStaff) -> None:
+    """A e B lado a lado, cada tabela-filha com uma linha em comum."""
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(
+        _funcionario(
+            job_function_ids=frozenset({_F1, _F2}),
+            unavailabilities=(_PERIODO, _PERIODO_COMPARTILHADO),
+            shift_preference=ShiftPreference(
+                periods=frozenset({DayPeriod.MORNING, DayPeriod.NIGHT})
+            ),
+        )
+    )
+    repos.employees.add(
+        _funcionario(
+            id=_E2,
+            name="Bruno",
+            job_function_ids=frozenset({_F1, _F2}),
+            unavailabilities=(_PERIODO_COMPARTILHADO,),
+            shift_preference=ShiftPreference(periods=frozenset({DayPeriod.NIGHT})),
+        )
+    )
+
+
+def _a_sem_uma_filha_de_cada_tabela() -> Employee:
+    """A perdendo exatamente a linha que compartilhava com B, nas três tabelas."""
+    return _funcionario(
+        job_function_ids=frozenset({_F1}),
+        unavailabilities=(_PERIODO,),
+        shift_preference=ShiftPreference(periods=frozenset({DayPeriod.MORNING})),
+    )
+
+
+def test_update_de_um_funcionario_nao_remove_as_funcoes_de_outro(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """A remoção de `f2` em A não pode alcançar o vínculo `f2` de B.
+
+    Com o `DELETE` desescopado, B perde a função e o estrago **não é reportado**:
+    a escrita de A responde sucesso. Pior, o dano é cross-tenant — o `DELETE`
+    também não filtra `tenant_id` —, e um B que ficasse sem nenhuma função
+    passaria a levantar `EmptyJobFunctionsError` na leitura, num caminho que o
+    port (`find_by_id -> Employee | None`) não prevê.
+    """
+    _com_dois_funcionarios_com_filhas_em_comum(repos)
+
+    repos.employees.update(_a_sem_uma_filha_de_cada_tabela())
+
+    vizinho = repos.employees.find_by_id(_A, _E2)
+    assert vizinho is not None
+    assert vizinho.job_function_ids == frozenset({_F1, _F2})
+
+
+def test_update_de_um_funcionario_nao_remove_as_indisponibilidades_de_outro(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """O `DELETE` de períodos é por `start_at`, que **não** é único entre funcionários.
+
+    A PK é `(employee_id, start_at)`: dois funcionários podem — e é comum —
+    ter indisponibilidade começando no mesmo instante. Sem o predicado de
+    `employee_id`, apagar o período de A apaga o de todos os colegas que
+    começavam junto.
+    """
+    _com_dois_funcionarios_com_filhas_em_comum(repos)
+
+    repos.employees.update(_a_sem_uma_filha_de_cada_tabela())
+
+    vizinho = repos.employees.find_by_id(_A, _E2)
+    assert vizinho is not None
+    assert vizinho.unavailabilities == (_PERIODO_COMPARTILHADO,)
+
+
+def test_update_de_um_funcionario_nao_remove_a_preferencia_de_outro(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """`period` é um dos quatro valores do enum — colisão entre funcionários é a regra.
+
+    Com o `DELETE` desescopado, A deixar de preferir a noite apaga a preferência
+    noturna de **todo** funcionário que a tivesse.
+    """
+    _com_dois_funcionarios_com_filhas_em_comum(repos)
+
+    repos.employees.update(_a_sem_uma_filha_de_cada_tabela())
+
+    vizinho = repos.employees.find_by_id(_A, _E2)
+    assert vizinho is not None
+    assert vizinho.shift_preference == ShiftPreference(periods=frozenset({DayPeriod.NIGHT}))
 
 
 # --- L-E1: `add` é inserção, não upsert --------------------------------------
