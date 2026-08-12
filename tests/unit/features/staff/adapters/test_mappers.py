@@ -33,6 +33,7 @@ from restaurant_hub.features.staff.domain.entities.job_function import JobFuncti
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmptyJobFunctionsError,
     InvalidNameError,
+    InvalidUnavailabilityPeriodError,
     OverlappingUnavailabilityError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -401,3 +402,72 @@ def test_as_tres_invariantes_que_o_schema_nao_impoe_levantam_ao_ser_lidas(
 
     with pytest.raises(esperado):
         mappers.row_to_employee(_linha_de_funcionario(**sobrescritas), **argumentos)
+
+
+# ---------------------------------------------------------------------------
+# A precedência entre as conversões de `row_to_employee`
+# ---------------------------------------------------------------------------
+#
+# **Por que estes três testes existem.** O docstring de `row_to_employee` afirma
+# que as três conversões saem para variáveis locais **de propósito**, porque
+# Python avalia argumentos na ordem da fonte e um reorder — de um formatter, ou
+# de quem só quis alinhar com a assinatura de `Employee` — "inverteria em
+# silêncio qual exceção o dado corrompido produz".
+#
+# A afirmação é verdadeira, e até aqui **nada a prendia**: reordenar as três
+# linhas passava na suíte inteira. Um docstring que afirma o que nenhum gate
+# confere é exatamente a classe de asserção aspiracional que este projeto já
+# catalogou — ou se trava, ou se rebaixa a prosa. Aqui se trava.
+#
+# A ordem travada é a da fonte: jornada → preferência → períodos → construtor.
+# Cada teste corrompe **duas** coisas ao mesmo tempo e exige a exceção da
+# **primeira**; com uma corrupção só, toda ordem responde igual e o teste não
+# discriminaria nada.
+
+
+def test_precedencia_jornada_invalida_vence_periodo_de_preferencia_invalido() -> None:
+    """1º `columns_to_workload_profile`, 2º `periods_to_shift_preference`.
+
+    As duas levantam `ValueError`, então a discriminação é pela **mensagem** — é
+    o preço de a segunda vir de `DayPeriod(...)`, do enum, cuja exceção não é
+    nossa para tipar.
+    """
+    with pytest.raises(ValueError, match="tipo de jornada desconhecido") as excecao:
+        mappers.row_to_employee(
+            _linha_de_funcionario(workload_kind="jornada-que-nao-existe"),
+            job_function_ids=["f1"],
+            unavailabilities=[],
+            shift_periods=["periodo-que-nao-existe"],
+        )
+    assert "DayPeriod" not in str(excecao.value)
+
+
+def test_precedencia_periodo_de_preferencia_invalido_vence_indisponibilidade_invalida() -> None:
+    """2º `periods_to_shift_preference`, 3º `rows_to_unavailabilities`."""
+    with pytest.raises(ValueError, match="DayPeriod"):
+        mappers.row_to_employee(
+            _linha_de_funcionario(),
+            job_function_ids=["f1"],
+            # `start >= end` faria `UnavailabilityPeriod` recusar — mas só depois.
+            unavailabilities=[
+                _linha(start_at=datetime(2026, 8, 10, 12, 0), end_at=datetime(2026, 8, 10, 8, 0))
+            ],
+            shift_periods=["periodo-que-nao-existe"],
+        )
+
+
+def test_precedencia_indisponibilidade_invalida_vence_invariante_da_entidade() -> None:
+    """3º `rows_to_unavailabilities`, 4º o construtor de `Employee`.
+
+    O nome vazio só é avaliado dentro do `__post_init__`, que roda por último —
+    então a linha com **os dois** defeitos responde pelo período, não pelo nome.
+    """
+    with pytest.raises(InvalidUnavailabilityPeriodError):
+        mappers.row_to_employee(
+            _linha_de_funcionario(name="   "),
+            job_function_ids=["f1"],
+            unavailabilities=[
+                _linha(start_at=datetime(2026, 8, 10, 12, 0), end_at=datetime(2026, 8, 10, 8, 0))
+            ],
+            shift_periods=[],
+        )
