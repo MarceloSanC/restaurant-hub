@@ -71,6 +71,16 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     WorkloadProfile,
 )
 
+# O único escape de tipagem do módulo, e é limitação da biblioteca, não atalho.
+# `sqlalchemy.Row` é genérico sobre a **tupla de colunas** do `select()` que o
+# produziu (`Row[tuple[str, str, ...]]`), e o acesso por atributo (`row.name`)
+# vive num `__getattr__` que o mypy não resolve: qualquer anotação mais estreita
+# que `Any` — inclusive `Row[Any]` — faz `row.<coluna>` virar erro em vez de
+# checagem. O preço, assumido: nenhum `row.<coluna>` deste módulo é conferido
+# estaticamente, e o que protege contra coluna renomeada é `tables.py` como fonte
+# única (Regra 3) mais o teste de integração que lê o schema real. O alias
+# nomeado existe para que a fronteira fique **visível** na assinatura, em vez de
+# um `Any` solto por parâmetro.
 Row = Any
 
 

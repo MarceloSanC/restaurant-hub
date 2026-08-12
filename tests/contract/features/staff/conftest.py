@@ -108,6 +108,15 @@ def repos(request: pytest.FixtureRequest) -> RepositoriosDeStaff:
         # `engine` vem de `tests/conftest.py` e **falha alto** quando o Postgres
         # não está no ar (ADR 2.3.0001) — o contrato herda a exigência, e é o que
         # impede a suíte de reportar verde por não ter olhado.
+        #
+        # A limpeza é no **setup**, e não no teardown — convenção do projeto
+        # inteiro (`tests/integration/conftest.py`, `tests/e2e/.../conftest.py` e
+        # o conftest de contrato de identity fazem o mesmo). Cada suíte garante o
+        # banco vazio de que **ela** precisa, em vez de confiar na higiene da
+        # anterior; o preço é que o último teste da sessão deixa linhas gravadas,
+        # o que é inócuo porque nenhuma suíte pressupõe banco limpo na entrada
+        # sem truncar. Simetrizar só aqui tornaria este arquivo o único
+        # divergente — e a divergência é que confunde.
         engine: Engine = request.getfixturevalue("engine")
         truncar_tudo(engine)
         return RepositoriosDeStaff(

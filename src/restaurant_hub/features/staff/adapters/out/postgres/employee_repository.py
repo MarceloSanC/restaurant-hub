@@ -74,7 +74,6 @@ funcionário porque períodos do mesmo registro não se sobrepõem.
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any
 
 from sqlalchemy import Connection, Engine, exists, select
 from sqlalchemy.exc import IntegrityError
@@ -468,7 +467,9 @@ class PostgresEmployeeRepository:
             yield conexao
 
     @staticmethod
-    def _montar_agregados(conexao: Connection, linhas: Sequence[Any]) -> tuple[Employee, ...]:
+    def _montar_agregados(
+        conexao: Connection, linhas: Sequence[mappers.Row]
+    ) -> tuple[Employee, ...]:
         """Monta N agregados em **quatro** statements, não em `1 + 3N`.
 
         `find_by_id` passa por aqui com uma linha só de propósito: um segundo
@@ -492,7 +493,7 @@ class PostgresEmployeeRepository:
 
         # `ORDER BY start_at` é a cláusula normativa (§5.13); agrupar por
         # `append` preserva essa ordem dentro de cada funcionário.
-        periodos: dict[str, list[Any]] = defaultdict(list)
+        periodos: dict[str, list[mappers.Row]] = defaultdict(list)
         for periodo in conexao.execute(
             select(employee_unavailabilities)
             .where(employee_unavailabilities.c.employee_id.in_(ids))

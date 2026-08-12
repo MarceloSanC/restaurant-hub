@@ -271,12 +271,23 @@ def test_ca10b_controle_positivo_a_colacao_escolhida_tem_efeito_semantico(
 
     - `COLLATE "C"` bate com o `sorted()` do Python — é a coincidência que
       permite à suíte de contrato ter um corpo só;
-    - **sem** cláusula bate também — é o falso verde desta imagem, medido aqui e
-      não suposto;
+    - **sem** cláusula, o resultado depende da colação **default do cluster**, e
+      é isso que a terceira leitura assere: sob colação de bytes ela bate (o
+      falso verde desta imagem, medido aqui e não suposto), sob colação
+      linguística ela **diverge**;
     - `COLLATE "und-x-icu"` **diverge** (`Álvaro` antes de `ana`, minúscula antes
       de maiúscula) — é a prova de que a escolha de colação decide o resultado, e
       de que o dia em que o banco tiver colação linguística a omissão deixa de
       ser inócua.
+
+    **Por que a terceira leitura é condicionada, e não uma igualdade fixa.**
+    Afirmar cru que "sem cláusula bate com o `sorted()`" trava uma propriedade do
+    **ambiente** (`postgres:16-alpine`, musl), não do adapter. No dia em que a
+    imagem virar glibc/ICU — exatamente o cenário contra o qual esta suíte
+    existe — a linha ficaria **vermelha sobre adapter correto**, e o sinal seria
+    lido como regressão de código. Condicionada à sonda de colação, a asserção
+    passa a travar a **relação** (colação de bytes ⇔ omissão indistinguível),
+    que é o fato que justifica CA10b asserir sobre o SQL emitido.
     """
     motor = motores()
     repositorio = PostgresJobFunctionRepository(motor)
@@ -293,14 +304,35 @@ def test_ca10b_controle_positivo_a_colacao_escolhida_tem_efeito_semantico(
                 ).scalars()
             )
 
+    def _cluster_ordena_por_bytes() -> bool:
+        """A colação **default** deste cluster ordena por byte?
+
+        `datcollate` não responde: esta imagem declara `en_US.utf8` e ordena por
+        byte assim mesmo, porque a musl não implementa locales. A sonda é
+        semântica e independe do dado do teste — sob colação de bytes `'a'`
+        (0x61) vem **depois** de `'B'` (0x42); sob qualquer colação linguística,
+        antes.
+        """
+        with motor.connect() as conexao:
+            return bool(conexao.execute(text("SELECT 'a' > 'B'")).scalar_one())
+
     esperado = sorted(nomes)
     assert _ordenado_por('ORDER BY name COLLATE "C"') == esperado
-    assert _ordenado_por("ORDER BY name") == esperado, (
-        "o falso verde desta imagem: sem cláusula o resultado é idêntico"
-    )
     assert _ordenado_por('ORDER BY name COLLATE "und-x-icu"') != esperado, (
         "se esta colação não divergisse, a cláusula seria de fato inócua"
     )
+
+    sem_clausula = _ordenado_por("ORDER BY name")
+    if _cluster_ordena_por_bytes():
+        assert sem_clausula == esperado, (
+            "sob colação de bytes, omitir a cláusula produz o mesmo resultado — "
+            "é este falso verde que obriga CA10b a asserir sobre o SQL emitido"
+        )
+    else:
+        assert sem_clausula != esperado, (
+            "num cluster de colação linguística a omissão passa a ser observável "
+            "— é exatamente o cenário contra o qual a cláusula do adapter existe"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +521,9 @@ def test_regressao_5_20_update_que_nao_mexe_no_conjunto_nao_deadlocka_com_delete
     É a regressão que impede a "simplificação" futura de trocar a escrita por
     diferença por `DELETE`-tudo-`INSERT`-tudo. Essa troca produz o **mesmo**
     estado final e passa em **todos** os outros testes desta Stage, inclusive nos
-    46 de lei — e foi medida contra o banco real produzindo `40P01
+    de lei — hoje **58 funções / 122 ids** (a parametrização `[fake]`/`[postgres]`
+    duplica cada uma); os "46" que o plano cita são os **herdados** da 3.2, antes
+    dos de `L-ORD`. E foi medida contra o banco real produzindo `40P01
     DeadlockDetected`, que é `OperationalError`, **não** `IntegrityError`: escapa
     do tradutor e vira 500 na 3.4.
 

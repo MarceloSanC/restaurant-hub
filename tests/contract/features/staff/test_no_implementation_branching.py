@@ -37,10 +37,22 @@ _PASTA = Path(__file__).parent
 
 # Só as suítes de lei promovidas. `conftest.py` e este próprio arquivo estão
 # fora — ver o docstring do módulo.
+#
+# A lista é **escrita à mão** de propósito: um módulo removido da pasta tem de
+# aparecer como falha, e não sumir da varredura. O preço é que ela mesma pode
+# envelhecer — um terceiro módulo de lei nasce, ninguém o acrescenta aqui, e as
+# quatro asserções de AST abaixo simplesmente não o enxergam, com a suíte verde.
+# `test_a_lista_de_modulos_de_lei_cobre_a_pasta_inteira` cobra a pasta contra a
+# lista, mesmo antídoto de `test_composition_root_staff.py` para a lista de use
+# cases.
 _MODULOS_DE_LEI = (
     "test_job_function_repository_laws.py",
     "test_employee_repository_laws.py",
 )
+
+# O padrão que nomeia uma suíte de lei promovida. É a fonte da verdade contra a
+# qual `_MODULOS_DE_LEI` é conferida.
+_PADRAO_DE_MODULO_DE_LEI = "test_*laws*.py"
 
 # Nomes que só fazem sentido para quem está olhando a **implementação por trás**
 # da fixture. `request`/`param` alcançam o parâmetro; `getfixturevalue` alcança
@@ -53,12 +65,20 @@ _NOMES_PROIBIDOS = frozenset({"request", "param", "getfixturevalue"})
 _LITERAIS_PROIBIDOS = frozenset({"fake", "postgres"})
 
 
-def _funcoes(modulo: str) -> list[ast.FunctionDef]:
+# `async def` é `ast.AsyncFunctionDef`, uma classe **distinta** de
+# `ast.FunctionDef` — não uma subclasse. Filtrar só a segunda deixaria um teste
+# de lei `async` invisível aos quatro guardas deste módulo, inclusive ao "todo
+# teste recebe a fixture": ele poderia rodar uma vez só, contra uma
+# implementação só, com a suíte verde.
+_Funcao = ast.FunctionDef | ast.AsyncFunctionDef
+
+
+def _funcoes(modulo: str) -> list[_Funcao]:
     arvore = ast.parse((_PASTA / modulo).read_text(encoding="utf-8"))
-    return [no for no in ast.walk(arvore) if isinstance(no, ast.FunctionDef)]
+    return [no for no in ast.walk(arvore) if isinstance(no, ast.FunctionDef | ast.AsyncFunctionDef)]
 
 
-def _corpo_sem_docstring(funcao: ast.FunctionDef) -> list[ast.stmt]:
+def _corpo_sem_docstring(funcao: _Funcao) -> list[ast.stmt]:
     """Descarta a docstring — ela é prosa, e prosa não ramifica.
 
     Sem isto, qualquer docstring que explique a diferença entre as duas
@@ -76,8 +96,27 @@ def _corpo_sem_docstring(funcao: ast.FunctionDef) -> list[ast.stmt]:
     return corpo
 
 
-def _nos(funcao: ast.FunctionDef) -> list[ast.AST]:
+def _nos(funcao: _Funcao) -> list[ast.AST]:
     return [no for stmt in _corpo_sem_docstring(funcao) for no in ast.walk(stmt)]
+
+
+def test_a_lista_de_modulos_de_lei_cobre_a_pasta_inteira() -> None:
+    """Fecha o buraco da lista explícita: ela pode ficar **incompleta**.
+
+    As quatro asserções abaixo são parametrizadas por `_MODULOS_DE_LEI`, uma
+    tupla de literais. Um terceiro módulo de lei nascendo na pasta não seria
+    varrido por nenhuma delas — e o sintoma seria o melhor possível: tudo verde,
+    com CA2 reportando conformidade sobre dois terços da suíte. É a mesma classe
+    de defeito que a lista de use cases de `test_composition_root_staff.py`
+    tinha, e o antídoto é o mesmo: cobrar a pasta contra a lista.
+    """
+    na_pasta = {arquivo.name for arquivo in _PASTA.glob(_PADRAO_DE_MODULO_DE_LEI)}
+
+    assert na_pasta == set(_MODULOS_DE_LEI), (
+        f"a lista deste teste divergiu da pasta — só na pasta: "
+        f"{sorted(na_pasta - set(_MODULOS_DE_LEI))}; "
+        f"só na lista: {sorted(set(_MODULOS_DE_LEI) - na_pasta)}"
+    )
 
 
 @pytest.mark.parametrize("modulo", _MODULOS_DE_LEI)
