@@ -2,7 +2,7 @@
 title: Concept — API de equipe
 description: Definição do que será feito nesta Stage e por quê, com decisões técnicas relevantes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
-keywords: [concept, staff-http, fastapi, router, schemas, rbac, depends, e2e, error-handlers, guard, copia, paginacao]
+keywords: [concept, staff-http, fastapi, router, schemas, rbac, depends, e2e, error-handlers, guard, copia, paginacao, permissao, escopo-unidade, tenant-wide]
 status: draft
 created_at: 2026-08-12
 updated_at: 2026-08-12
@@ -30,15 +30,17 @@ depends_on: [3.3-staff-persistence]
 > O Passo 8 do runbook (início da Fase 4) exige `concept.status == done`
 > **e** `technical.status == done` simultaneamente.
 
-> **⚠ Este concept está `draft` com TRÊS bifurcações materiais abertas
-> (§13 — F1, F2, F3).** Todas afetam **contrato** e **segurança**, e todas
-> convergem no mesmo ponto: **o vocabulário de permissões de staff vive no
-> domínio de identity**, e mexer nele é expansão de camada-alvo para um
-> segundo bounded context. O detalhe de cada bifurcação vai na **mensagem de
-> handoff** à sessão mestra, no formato rico — não neste arquivo, que só as
-> nomeia e ancora. As seções abaixo estão escritas até a fronteira do que as
-> fontes sustentam; o que depende das bifurcações está **nomeado como
-> dependente**, nunca preenchido por chute.
+> **As três bifurcações deste concept foram decididas pelo sponsor em
+> 2026-08-12** (F1 → ADR 3.4.0006, F2 → ADR 3.4.0007, F3 → ADR 3.4.0008), e
+> estão incorporadas abaixo. A expansão de camada-alvo para `features/identity`
+> foi **autorizada explicitamente** pelo sponsor e está declarada em §1.
+>
+> **⚠ Este concept permanece `draft` por um motivo diferente: o alarme de
+> tamanho.** Com as três decisões dentro, a Stage mede **14 Tasks** — o limiar
+> de "Stage grande demais" de [`CONVENTIONS.md`](../../CONVENTIONS.md) §6
+> (≥ 14 ⇒ declarar e PARAR). A proposta de corte está em §13 e precisa de
+> decisão antes da Fase 3B. Nada do conteúdo abaixo muda com o corte — muda
+> **em qual Stage** cada parte é executada.
 
 ## 1. Escopo
 
@@ -71,11 +73,25 @@ depends_on: [3.3-staff-persistence]
   ADR 3.4.0003): rejeição do byte NUL em nome e `DayPeriod.from_string`. As
   duas existem porque **a borda não tem como produzir o erro certo sem elas** —
   hoje virariam 500.
-- **Expansão de camada-alvo para o domínio de `identity`** — **dependente das
-  três bifurcações** (§13). Nenhuma delas é resolvível sem tocar
-  `features/identity/domain/value_objects/{role,permission}.py`, e a
-  assimetria com D4 (que recusa tocar identity pelo byte NUL) está tratada em
-  §13.
+- **Expansão declarada de camada-alvo para `features/identity`** (§7 D11/D13;
+  ADR 3.4.0006 e 3.4.0008), **autorizada pelo sponsor** em 2026-08-12
+  (*"não há problema em tocar o módulo de acesso — isso irá acontecer ao longo
+  do desenvolvimento quando forem surgindo mais features"*): duas permissões
+  novas em `permission.py`, o conjunto `TENANT_WIDE_PERMISSIONS`, as entradas
+  no mapa de papéis de `role.py` e a condição do passo 4 de
+  `authorize_action.py`.
+
+  > **A assimetria com D4 é deliberada e some aqui.** D4 recusa tocar identity
+  > pelo byte NUL porque **existe conserto dentro do BC de staff**; estas duas
+  > não têm — o vocabulário de permissões só existe em identity. A recusa de D4
+  > não é uma regra sobre identity, é uma regra sobre preferir o conserto local
+  > quando ele existe.
+
+- **Expansão declarada de camada-alvo para as Stages 3.2 e 3.3, ambas
+  mergeadas** (§7 D12, ADR 3.4.0007): a unidade entra na assinatura de
+  `EmployeeRepository.find_by_id`/`delete` e nos dez commands que atuam sobre
+  registro existente, com os fakes, os dois adapters Postgres e a suíte de
+  contrato reconciliados.
 
 ### Fora do escopo (explicitamente)
 
@@ -93,6 +109,21 @@ depends_on: [3.3-staff-persistence]
   `[finding]` em §10.
 - **Rota de seed de `platform_admin`** e qualquer ação de plataforma — o BC
   staff não tem ação de plataforma.
+- **Busca ampla de funcionário no restaurante inteiro** — o sponsor descreveu o
+  caso (ao cadastrar alguém novo, procurar entre os já cadastrados de todas as
+  unidades, *"se ele tiver a permissão de ver todos os funcionários de todas as
+  unidades"*). É **operação separada, com permissão própria**, e não existe
+  hoje. **Não pode ser obtida afrouxando a busca normal** — a busca normal é
+  escopada por unidade por ADR 3.4.0007. `[finding]` em §10.
+- **Habilitação de função de trabalho por unidade** — o sponsor pediu que cada
+  unidade veja as suas funções e que quem tem alcance extra-unidade crie para
+  todas, **mantendo o restaurante como dono** da função. É fatia vertical nas
+  quatro camadas e virou a **issue #41**. Nada dela entra aqui; o que esta Stage
+  entrega é o **alicerce** dela (a permissão de catálogo como capacidade de
+  primeira classe — ADR 3.4.0008 §7).
+- **Permissão de `hr` sobre a escala** — a divergência hr × manager
+  materializa-se no **Step 4**, não aqui (ADR 3.4.0006 §3). Restrição para
+  frente, não escopo desta Stage.
 
 ### Reconciliação do bloco 3.4 do roadmap
 
@@ -107,8 +138,11 @@ das notas da 2.3, 2.4, 3.2 e 3.3:
 3. **`arquivos_a_criar` incompleto** — faltam `dependencies.py`,
    `error_handlers.py` e `application/ports/out/access_guard.py`.
 4. **`camada_alvo: adapters/in/http` expandida** — para
-   `application/ports/out` (o port), para `domain` da 3.1 (D4/D5) e,
-   **dependendo de F1/F2/F3**, para `features/identity/domain`.
+   `application/ports/out` e `application/dtos` de staff (o port `AccessGuard`
+   e os dez commands), para `adapters/out/postgres` de staff (a unidade na
+   busca), para o `domain` da 3.1 (D4/D5) e para **`features/identity`**
+   (domain + application — D11/D13). São quatro camadas além da declarada, e a
+   expansão para identity foi autorizada pelo sponsor.
 5. **`complexidade_estimada: S` está errado** — a Stage é **M**.
 
 E **duas** afirmações de outras fontes ficam falsas com esta Stage, e a mesma
@@ -164,9 +198,10 @@ só a borda pode fazer:
 §Neutral: *"Restricting a manager to their own units is an **authorization**
 decision, and it belongs to Stage 3.4 with `authorize_action` — collapsing it
 into the repository would duplicate the RBAC rule in two places that can
-diverge."* Isto **não é** bifurcação: é requisito ancorado. O que é bifurcação
-é o **mecanismo**, porque nenhum dos mecanismos possíveis cabe dentro desta
-Stage sem emendar Stage fechada (F2).
+diverge."* O requisito era ancorado; o **mecanismo** foi decidido pelo sponsor em
+2026-08-12 — a unidade entra na **assinatura** do port e nos commands (§5.15,
+ADR 3.4.0007), o que emenda as Stages 3.2 e 3.3, ambas mergeadas. É a maior
+parcela do custo desta Stage, e a razão principal do alarme de tamanho (§13).
 
 **A Stage irmã é a 2.4.** O BC identity resolveu os mesmos quatro problemas e o
 código está no repo. Esta Stage **replica o desenho**, não o reinventa — e onde
@@ -259,8 +294,9 @@ handler daqui ganhar dos genéricos de `shared` (ADR 2.4.0001, mesma mecânica).
 
   > **O nome da permissão é `str` no port, e isso é deliberado.** O
   > vocabulário fechado de permissões vive em identity; staff nomeia o
-  > requisito e não conhece o mapa papel→permissão. Qual é o conjunto exato de
-  > nomes **depende de F1** (§13).
+  > requisito e não conhece o mapa papel→permissão. Os dois nomes que esta Stage
+  > usa são `"manage_staff"` e `"manage_job_functions"` (ADR 3.4.0006); staff os
+  > declara, identity os interpreta.
 
 - **`AuthorizedScope`** (`dto` de staff) — ver acima.
 
@@ -279,6 +315,33 @@ handler daqui ganhar dos genéricos de `shared` (ADR 2.4.0001, mesma mecânica).
   registrador de handlers; passa a carregar **coleções** (§7 D8).
 - **`DayPeriod`** — ganha `from_string` e o erro novo
   `InvalidDayPeriodError(StaffError)` (§7 D5).
+- **`Permission`** (identity) — ganha `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS`,
+  mais o conjunto `TENANT_WIDE_PERMISSIONS` (§7 D11/D13).
+- **`_ROLE_PERMISSIONS`** (identity) — `OWNER`, `MANAGER` e `HR` ganham as duas
+  permissões novas; `EMPLOYEE` e `PLATFORM_ADMIN` não ganham nada.
+- **`AuthorizeActionUseCase`** (identity) — o passo 4 passa a dispensar a
+  exigência de unidade para permissão tenant-wide. É aditivo no sentido estrito:
+  nenhuma chamada que hoje é autorizada passa a ser negada.
+
+**Restrição de assinatura** (chamadas hoje válidas deixam de compilar — §7 D12,
+ADR 3.4.0007):
+
+- **`EmployeeRepository.find_by_id` / `.delete`** — passam a receber
+  `(tenant_id, unit_id, employee_id)`. É **lei do port**, não filtro de SQL, para
+  que o fake carregue a mesma regra e a suíte de contrato prove os dois lados com
+  um corpo só.
+- **Os dez commands que atuam sobre registro existente** ganham `unit_id`:
+  renomear, atribuir funções, trocar jornada, declarar preferência, registrar e
+  remover indisponibilidade, desligar, recontratar, remover e copiar (a unidade
+  de **origem**; `target_unit_id` já existia). `CreateEmployeeCommand` já o
+  carregava; as duas queries não mudam.
+- **`L-E2`, `L-E3`, `L-E5`** — reescritas sobre o endereço de três partes. O
+  lookup passa a ser `(tenant_id, unit_id, employee_id)`, e **a regra de
+  não-encontrado vence**: registro que existe em **outra unidade do mesmo
+  tenant** é *não encontrado*, exatamente como já era o de outro tenant
+  (concept 3.2 §5.4). `EmployeeRelocationError` sobrevive como lei, com gatilho
+  mais estreito — inalcançável pelos use cases, que recarregam da mesma unidade
+  em que escrevem.
 
 **Restrição de contrato** (valor antes aceito passa a ser recusado — declarado
 como tal, não maquiado de aditivo):
@@ -300,48 +363,53 @@ como tal, não maquiado de aditivo):
 
 Prefixo `/api/v1`. Todas autenticadas — **não há rota pública em staff**.
 
-A coluna **"Papéis que devem passar"** registra o que a `workforce.md` §4
-(status `accepted`) já sustenta: `owner`, `manager` e `hr` gerenciam a equipe;
-`employee` **não enxerga nada de staff**; `platform_admin` não tem acesso de
-restaurante. **O nome da permissão exigida e a divergência hr × manager
-dependem de F1**, e o alvo de autorização das quatro primeiras rotas depende de
-**F3** — por isso as duas colunas restantes não estão preenchidas: preenchê-las
-por chute é exatamente o que o protocolo de bifurcação proíbe.
+Duas permissões governam as 16 rotas (ADR 3.4.0006), e as duas são detidas por
+`owner`, `manager` e `hr` — **o mesmo conjunto para os três**, porque em staff
+`hr` e `manager` são equivalentes (§5.13):
+
+- **`MANAGE_JOB_FUNCTIONS`** — as quatro rotas de catálogo. É **tenant-wide**:
+  não exige unidade alvo (ADR 3.4.0008).
+- **`MANAGE_STAFF`** — as doze rotas de funcionário. É **unit-scoped**: exige
+  unidade alvo, e a unidade do path é sempre autorizada.
 
 **Função de trabalho** (recurso **tenant-scoped** — `workforce.md` §3.2; o
 tenant vem do ator, nunca do corpo):
 
-| Método | Rota | Use case | Papéis que devem passar | Sucesso |
+| Método | Rota | Use case | Permissão · alvo | Sucesso |
 |---|---|---|---|---|
-| `POST` | `/job-functions` | `create_job_function` | owner, manager, hr | 201 |
-| `GET` | `/job-functions` | `list_job_functions` | owner, manager, hr | 200 |
-| `PATCH` | `/job-functions/{job_function_id}` | `rename_job_function` | owner, manager, hr | 200 |
-| `DELETE` | `/job-functions/{job_function_id}` | `delete_job_function` | owner, manager, hr | 204 |
+| `POST` | `/job-functions` | `create_job_function` | `MANAGE_JOB_FUNCTIONS` · tenant | 201 |
+| `GET` | `/job-functions` | `list_job_functions` | `MANAGE_JOB_FUNCTIONS` · tenant | 200 |
+| `PATCH` | `/job-functions/{job_function_id}` | `rename_job_function` | `MANAGE_JOB_FUNCTIONS` · tenant | 200 |
+| `DELETE` | `/job-functions/{job_function_id}` | `delete_job_function` | `MANAGE_JOB_FUNCTIONS` · tenant | 204 |
 
-> **⚠ F3 — estas quatro rotas são hoje inalcançáveis por `manager` e `hr`.**
-> Um recurso tenant-scoped não tem unidade alvo, e `authorize_action.py:81-83`
-> nega **qualquer** ator que não faça bypass de unidade quando `unit_id is None`
-> (`_UNIT_SCOPE_BYPASS_ROLES = {OWNER, PLATFORM_ADMIN}`). Como o DoD exige
-> *"gerente cria função customizada"*, a Stage não fecha sem resolver isto.
-> Ver §13 F3.
+> **Por que estas quatro rotas alcançam `manager` e `hr`.** Um recurso
+> tenant-scoped não tem unidade alvo, e `authorize_action.py:81-83` nega
+> **qualquer** ator que não faça bypass de unidade quando `unit_id is None`
+> (`_UNIT_SCOPE_BYPASS_ROLES = {OWNER, PLATFORM_ADMIN}`) — hoje, só `owner`
+> passaria, e o DoD exige *"gerente cria função customizada"*. A decisão do
+> sponsor (F3) mantém a função **tenant-scoped** e torna
+> `MANAGE_JOB_FUNCTIONS` uma permissão **tenant-wide**, dispensada da exigência
+> de unidade. A dispensa é **por permissão, nunca por papel**:
+> `MANAGE_STAFF` continua exigindo unidade para os mesmos atores.
+> Ver ADR 3.4.0008.
 
 **Funcionário** (recurso **unit-scoped**; a unidade vem do **path**, o tenant do
 ator):
 
-| Método | Rota | Use case | Papéis que devem passar | Sucesso |
+| Método | Rota | Use case | Permissão · alvo | Sucesso |
 |---|---|---|---|---|
-| `POST` | `/units/{unit_id}/employees` | `create_employee` | owner, manager, hr | 201 |
-| `GET` | `/units/{unit_id}/employees?include_inactive=` | `list_employees` | owner, manager, hr | 200 |
-| `PATCH` | `/units/{unit_id}/employees/{employee_id}` | `rename_employee` | owner, manager, hr | 200 |
-| `PUT` | `/units/{unit_id}/employees/{employee_id}/job-functions` | `assign_job_functions` | owner, manager, hr | 200 |
-| `PUT` | `/units/{unit_id}/employees/{employee_id}/workload-profile` | `change_workload_profile` | owner, manager, hr | 200 |
-| `PUT` | `/units/{unit_id}/employees/{employee_id}/shift-preference` | `declare_shift_preference` | owner, manager, hr | 200 |
-| `POST` | `/units/{unit_id}/employees/{employee_id}/unavailabilities` | `register_unavailability` | owner, manager, hr | 200 |
-| `DELETE` | `/units/{unit_id}/employees/{employee_id}/unavailabilities?start=&end=` | `remove_unavailability` | owner, manager, hr | 200 |
-| `POST` | `/units/{unit_id}/employees/{employee_id}/termination` | `deactivate_employee` | owner, manager, hr | 200 |
-| `POST` | `/units/{unit_id}/employees/{employee_id}/rehire` | `reactivate_employee` | owner, manager, hr | 200 |
-| `DELETE` | `/units/{unit_id}/employees/{employee_id}` | `delete_employee` | owner, manager, hr | 204 |
-| `POST` | `/units/{unit_id}/employees/{employee_id}/copies` | `copy_employee_to_unit` | owner, manager, hr | 201 |
+| `POST` | `/units/{unit_id}/employees` | `create_employee` | `MANAGE_STAFF` · tenant + unidade do path | 201 |
+| `GET` | `/units/{unit_id}/employees?include_inactive=` | `list_employees` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `PATCH` | `/units/{unit_id}/employees/{employee_id}` | `rename_employee` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `PUT` | `/units/{unit_id}/employees/{employee_id}/job-functions` | `assign_job_functions` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `PUT` | `/units/{unit_id}/employees/{employee_id}/workload-profile` | `change_workload_profile` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `PUT` | `/units/{unit_id}/employees/{employee_id}/shift-preference` | `declare_shift_preference` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `POST` | `/units/{unit_id}/employees/{employee_id}/unavailabilities` | `register_unavailability` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `DELETE` | `/units/{unit_id}/employees/{employee_id}/unavailabilities?start=&end=` | `remove_unavailability` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `POST` | `/units/{unit_id}/employees/{employee_id}/termination` | `deactivate_employee` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `POST` | `/units/{unit_id}/employees/{employee_id}/rehire` | `reactivate_employee` | `MANAGE_STAFF` · tenant + unidade do path | 200 |
+| `DELETE` | `/units/{unit_id}/employees/{employee_id}` | `delete_employee` | `MANAGE_STAFF` · tenant + unidade do path | 204 |
+| `POST` | `/units/{unit_id}/employees/{employee_id}/copies` | `copy_employee_to_unit` | `MANAGE_STAFF` · tenant + unidade do path **e** unidade destino (§5.6) | 201 |
 
 Três escolhas de forma valem justificativa, e nenhuma é cosmética:
 
@@ -357,9 +425,12 @@ Três escolhas de forma valem justificativa, e nenhuma é cosmética:
   `PATCH {"active": false}` faria a transição parecer atribuição de atributo —
   exatamente a leitura que o ADR 3.2.0007 recusa.
 
-**O aninhamento sob `/units/{unit_id}` dá alvo ao eixo de visibilidade**, mas
-**não** verifica que o funcionário pertence àquela unidade. É o buraco de F2, e
-está descrito em §13.
+**O aninhamento sob `/units/{unit_id}` serve a dois propósitos, e é preciso os
+dois.** Ele dá alvo ao eixo de visibilidade de identity (o ator enxerga aquela
+unidade?) **e** compõe o endereço do registro que desce até o port (o
+funcionário está naquela unidade? — §5.15, ADR 3.4.0007). Sozinho, o primeiro
+não implica o segundo: era exatamente esse o buraco que o Checkpoint A
+encontrou.
 
 ### 4.2 Inventário de schemas
 
@@ -433,8 +504,10 @@ cross-tenant (ADR 2.4.0003 §4). E ele **nunca é vazio** (L-AG3).
 **5.4 — O `unit_id` das rotas de funcionário vem do path e é sempre alvo de
 autorização.** Um path param nomeia o recurso e é resolvido contra o banco
 (`AuthorizeActionUseCase` faz `units.find_by_id`), ao contrário de um campo de
-corpo, que é afirmação não verificada do cliente. **Autorizar o `unit_id` do
-path não prova que o funcionário do path pertence a ele** — ver F2.
+corpo, que é afirmação não verificada do cliente. **E a unidade do path é
+também o endereço do registro**: ela desce até o port (§5.15), de modo que
+autorizar a unidade e alcançar o funcionário deixam de ser duas perguntas
+diferentes.
 
 **5.5 — A construção de value object acontece no router, não no schema.** É o
 que faz um período malformado levantar erro **de domínio** (`StaffError` → mapa
@@ -478,19 +551,39 @@ reordena nem a fatia. Sem `LIMIT`/`OFFSET`, a regex `_ORDER_BY` de
 `test_staff_conduct.py:194` continua correta — ver §7 D6.
 
 **5.12 — Toda resposta de escrita devolve o estado resultante**, exceto as duas
-remoções definitivas, que devolvem 204. **Consequência de segurança:** enquanto
-F2 estiver aberta, essa devolução transforma qualquer rota de mutação numa
-sonda de leitura de todo o tenant — está tratado em F2, não aqui.
+remoções definitivas, que devolvem 204. **Consequência de segurança, hoje
+fechada:** essa devolução transformaria qualquer rota de mutação numa sonda de
+leitura de todo o tenant, se o registro pudesse ser alcançado de outra unidade.
+Não pode — §5.15.
 
-**5.13 — Matriz papel × staff (a parte ancorada).** De `workforce.md` §4:
+**5.13 — Matriz papel × staff.** `workforce.md` §4 mais a decisão do sponsor de
+2026-08-12 (ADR 3.4.0006):
 
-| Papel | No BC staff |
-|---|---|
-| `owner` | gerencia a equipe; **bypassa** memberships (enxerga todas as unidades do tenant) |
-| `manager` | gerencia a equipe das unidades das quais é membro |
-| `hr` | gerencia a equipe; **diverge de `manager`** — e o **eixo da divergência é ratificado**: `workforce.md` §4 diz que "visibilidade e permissões de equipe são o **único** eixo de divergência". O que fica aberto é o **grau** (quais operações, e se hr enxerga o tenant inteiro) — **F1** |
-| `employee` | **nada**: nenhuma das 16 rotas |
-| `platform_admin` | **nada**: acesso de plataforma não é acesso de restaurante |
+| Papel | Permissões de staff | Alcance |
+|---|---|---|
+| `owner` | `MANAGE_STAFF`, `MANAGE_JOB_FUNCTIONS` | todas as unidades do tenant (**bypassa** memberships) |
+| `manager` | `MANAGE_STAFF`, `MANAGE_JOB_FUNCTIONS` | as unidades das quais é membro |
+| `hr` | `MANAGE_STAFF`, `MANAGE_JOB_FUNCTIONS` — **as mesmas do `manager`** | as unidades das quais é membro — **sem alcance extra** |
+| `employee` | nenhuma | — |
+| `platform_admin` | nenhuma | — |
+
+**Em staff, `hr` e `manager` são equivalentes.** A divergência que o kickoff #10
+previu é real e **materializa-se no Step 4**: o sponsor definiu o eixo como
+**família de operação**, não alcance — *"RH pode mexer nos cadastros dos
+funcionários (cadastrar, desativar, editar etc). Apenas o gerente ou dono pode
+mexer na escala."* E confirmou que **jornada contratada, preferência de turno e
+indisponibilidade são cadastro** (fatos contratuais e pessoais do funcionário),
+logo o RH mexe nelas. Todas as 16 operações desta Stage são cadastro.
+
+> **Restrição para frente, vinculante:** a **Stage 4.x não pode conceder a `hr`
+> nenhuma permissão sobre a escala**. É nisso, e só nisso, que a divergência
+> consiste. Registrada aqui e no ADR 3.4.0006 §3 — o arquivo que quem estender o
+> mapa de papéis vai ler.
+>
+> **O alcance cross-unidade do RH foi explicitamente NÃO concedido.** Era a
+> opção recomendada por este concept quando a bifurcação foi devolvida; o
+> sponsor não a tomou. Registrado para que a recomendação não seja lida depois
+> como se fosse a decisão.
 
 **5.14 — Todo identificador vindo de path ou query é validado na borda** antes
 de qualquer consulta: vazio, só-whitespace ou contendo o byte NUL ⇒
@@ -499,6 +592,25 @@ chega a `units.find_by_id("\x00")` **dentro de identity** e produz
 `psycopg.DataError` → 500 — um caminho que a correção de domínio de D4 não
 alcança, porque identificador não passa por entidade nenhuma
 (`identifiers.py`: "este módulo não tem lógica de runtime").
+
+**5.15 — A unidade faz parte do endereço do funcionário, até o port.** O lookup
+é `(tenant_id, unit_id, employee_id)` — na assinatura, não só no `WHERE` do
+adapter (ADR 3.4.0007). Consequências, todas verificáveis:
+
+- Registro de **outra unidade do mesmo tenant** é **não encontrado** (404), pela
+  mesma regra que já valia para outro tenant: nenhum erro confirma a existência
+  de registro que o chamador não pode endereçar.
+- A sonda de leitura via rota de mutação (§5.12) **não alcança** registro de
+  outra unidade.
+- A exfiltração por cópia — clonar funcionário de outra unidade para a própria —
+  **não alcança** a origem.
+- Quem não sabe a unidade **não consegue formar a chamada**. É a mesma
+  propriedade que fez o escopo de tenant do ADR 3.2.0002 valer: omissão não é
+  caminho.
+
+**A busca ampla continua não existindo, e não pode nascer daqui.** Procurar
+entre os funcionários de todas as unidades é operação separada, com permissão
+própria (§1, fora do escopo) — nunca esta busca com o filtro afrouxado.
 
 ## 6. Casos de erro e exceções
 
@@ -711,6 +823,67 @@ identity, no status e no corpo. É a propriedade desejada.
   e alcançado por MRO (§3 Premissas).
 - **Sem ADR:** extensão aditiva de forma, sem alternativa real defensável.
 
+### D11 — Duas permissões de staff em identity, e `hr` ≡ `manager` aqui
+
+- **O quê:** `Permission` ganha `MANAGE_STAFF` (unit-scoped, as 12 rotas de
+  funcionário) e `MANAGE_JOB_FUNCTIONS` (tenant-wide, as 4 de catálogo); as duas
+  vão para `OWNER`, `MANAGER` e `HR` no mapa de papéis. Em staff, `hr` e
+  `manager` têm o mesmo conjunto e o mesmo alcance.
+- **Por quê:** o sponsor reenquadrou o eixo da divergência hr × manager de
+  **alcance** para **família de operação** — RH mexe em cadastro (o que inclui
+  jornada, preferência e indisponibilidade, confirmado explicitamente); só
+  gerente e dono mexem na escala, que é Step 4. Como todas as 16 operações desta
+  Stage são cadastro, a divergência não é observável aqui.
+- **São duas permissões, não uma**, porque precisam divergir no eixo de unidade:
+  o catálogo pertence ao restaurante e não pode exigir unidade; o registro de
+  funcionário tem de exigir. Uma permissão só não pode ser as duas coisas — e a
+  separação é o que torna a issue #41 expressável depois.
+- **Não se reusou `MANAGE_USERS`**: ela é sobre **conta de login**. Soldá-la à
+  gestão de equipe faria conceder uma implicar a outra, em silêncio.
+- **Fonte:** decisão do sponsor, 2026-08-12; `workforce.md` §4; kickoff #10;
+  `permission.py` ("as Stages/BCs seguintes estendem o vocabulário").
+- **ADR:** [`../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md`](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)
+
+### D12 — A unidade entra no endereço do funcionário, na assinatura do port
+
+- **O quê:** `find_by_id`/`delete` passam a `(tenant_id, unit_id, employee_id)`;
+  dez commands ganham `unit_id`; fakes, adapters e suíte de contrato
+  reconciliados. Expansão declarada para 3.2 e 3.3, ambas mergeadas.
+- **Por quê:** o requisito já era ancorado — ADR 3.2.0002 §Neutral aloca o escopo
+  de unidade a esta Stage. O que o Checkpoint A mostrou é que a borda **sozinha**
+  não o alcança: autorizar a unidade do path não prova que o funcionário está
+  nela, e daí saíam três consequências (mutação, sonda de leitura, exfiltração
+  por cópia). O sponsor escolheu pôr a unidade no endereço.
+- **Na assinatura, não no SQL:** filtrar só no adapter deixaria o fake aceitando
+  o que o real recusa — a divergência fake ≢ real que este Step já pagou uma vez
+  (byte NUL), agora sobre um invariante de **segurança**. Como assinatura, a
+  suíte de contrato promovida (ADR 3.3.0007) prova os dois lados com um corpo só.
+- **Fonte:** decisão do sponsor, 2026-08-12; ADR 3.2.0002 §Neutral;
+  `workforce.md` §3.1; achados S2/C2 do Checkpoint A.
+- **ADR:** [`../../adr/3_4_0007-unit-enters-the-employee-address.md`](../../adr/3_4_0007-unit-enters-the-employee-address.md)
+
+### D13 — Permissão tenant-wide dispensa a exigência de unidade
+
+- **O quê:** `TENANT_WIDE_PERMISSIONS` em `permission.py`, consultado pelo passo
+  4 do `AuthorizeActionUseCase`. Hoje contém **um** membro,
+  `MANAGE_JOB_FUNCTIONS`.
+- **Por quê:** a função é tenant-scoped por regra canônica, então as quatro rotas
+  de catálogo não têm unidade a declarar — e o passo 4 nega quem não faz bypass
+  quando a unidade é `None`. Sem isto, só `owner` cria função, e o DoD exige o
+  gerente. Manter a função tenant-scoped e nomear a exceção numa permissão é a
+  única saída que não mente sobre o modelo nem dissolve o eixo de unidade.
+- **A dispensa é por permissão, nunca por papel.** Pôr `manager`/`hr` em
+  `_UNIT_SCOPE_BYPASS_ROLES` daria alcance tenant-wide sobre **todas** as
+  permissões, inclusive `MANAGE_STAFF` — o raio de explosão de um engano fica em
+  uma capacidade, não em um ator. O default segue fail-closed, e há teste sobre
+  o conteúdo do conjunto **e** sobre a ausência de `MANAGE_STAFF` nele.
+- **É o alicerce da issue #41**, que precisa de "gerir o catálogo" como
+  capacidade de primeira classe para depois distinguir "minha unidade × todas".
+  Nada aqui presume o desenho dela.
+- **Fonte:** decisão do sponsor, 2026-08-12; `workforce.md` §3.2;
+  `authorize_action.py` passo 4; `user.py:45`; achados C1/S1 do Checkpoint A.
+- **ADR:** [`../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md`](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)
+
 ### D9 — Sem `gate_mode: batch`
 
 O bloco 3.4 declara `gate_mode: strict`. Esta Stage toca autorização, mapa de
@@ -758,9 +931,10 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
 
 | Risco | Prob. | Impacto | Mitigação |
 |---|---|---|---|
-| **F2 não resolvida vira exfiltração intra-tenant**: `PATCH /units/A/employees/{id-de-B}` devolve o registro inteiro de B, e `…/copies` com destino A **clona** B para dentro da unidade do atacante | A | **A** | Bifurcação aberta em §13; a Stage não entra em Fase 4 sem ela fechada. CA9 é escrito para falhar enquanto o buraco existir |
-| **F3 não resolvida torna o DoD inalcançável**: `manager` recebe 403 nas 4 rotas de função | **A** | **A** | Bifurcação aberta em §13; CA29 é escrito com ator `manager` real, nunca `owner` |
-| F1 arrastar mudança no domínio de identity sem que a expansão seja declarada | A | M | §1 e §13 declaram a expansão como consequência conhecida das três bifurcações, com ADR e reconciliação de roadmap exigidos |
+| **A Stage mede 14 Tasks — limiar de "grande demais" (CONVENTIONS §6)** | **A** | **A** | Declarada em §12; proposta de corte em duas Stages sequenciais em §13. **Bloqueia a Fase 3B** |
+| Emendar 3.2 e 3.3 (D12) quebrar suíte de contrato já mergeada e o dano passar como "ajuste de assinatura" | A | **A** | Task dedicada por camada (contrato depois adapters), com a suíte de contrato rodando nos dois lados antes de qualquer rota existir; CA9 falha enquanto o buraco existir |
+| Mexer no passo 4 do guard fail-closed (D13) afrouxar acesso além do pretendido | M | **A** | Dispensa **por permissão, nunca por papel**; dois testes — conteúdo de `TENANT_WIDE_PERMISSIONS` e ausência de `MANAGE_STAFF` nele (CA36/CA37) |
+| Step 4 conceder à `hr` permissão de escala, dissolvendo a única divergência hr × manager | M | M | Restrição para frente registrada em §5.13 **e** no ADR 3.4.0006 §3, que é o arquivo lido antes de estender o mapa de papéis |
 | Mapa de status incompleto após erro novo em Stage futura | M | M | Totalidade + par classe→status por teste (§5.9, CA21 e CA22) |
 | Mudança no domínio da 3.1 (byte NUL) quebrar suíte já mergeada sem que o desvio de camada seja notado | M | M | Task dedicada, expansão declarada em §1 e no ADR 3.4.0003 |
 | 16 rotas + guard + handlers + e2e estourarem a faixa de 3–12 Tasks | M | M | Agrupamento por recurso: funções e funcionário viram blocos, não uma Task por rota |
@@ -784,6 +958,19 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
   introduzir, ou `6.x-hardening`.
 - **`[finding]` — cópia repetida sem sinal na borda** (D7) permanece aberto no
   eixo de **UX**. **Stage candidata:** a primeira Stage de frontend do Step 3.
+- **`[finding]` — busca ampla de funcionário no restaurante inteiro**, com
+  permissão própria, para o fluxo "ao cadastrar alguém novo, ver se já existe em
+  outra unidade" (sponsor, 2026-08-12). **Não** pode ser obtida afrouxando a
+  busca de ADR 3.4.0007. **Stage candidata:** a issue **#41** ou a Stage de
+  frontend que precise do fluxo — o que vier primeiro.
+- **`[finding]` — leitura de funcionário por id** (`GET .../employees/{id}`) não
+  existe após esta Stage: o mecanismo escolhido para F2 foi a assinatura, não o
+  use case de leitura, então a rota que qualquer tela vai querer segue
+  inexistente. **Stage candidata:** a primeira Stage de frontend do Step 3.
+- **`[finding]` — o texto de ADR 3.2.0002 §Neutral vira histórico**: a lacuna
+  que ele registrou é fechada por mecanismo que ele não previu (assinatura, não
+  autorização sozinha). Sem ação de código; a nota entra na reconciliação para
+  que ninguém leia o §Neutral como vigente. **Stage candidata:** esta.
 - **`[finding]` — o tradutor do `AccessGuard` mora no composition root** (D1).
   Quando a 3.5 trouxer o `IdentityGateway`, reavaliar mover os dois para
   `features/staff/adapters/out/identity/` com a supressão que se decidir pagar.
@@ -815,13 +1002,26 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
 - [ ] **CA8** — Toda rota de staff sem Bearer recebe 401 com corpo constante e
       header `WWW-Authenticate: Bearer`; teste **enumera as rotas do router**,
       não uma amostra.
-- [ ] **CA9** — *(dependente de F2)* Um ator escopado à unidade A não consegue
-      **ler nem mutar** funcionário da unidade B por nenhuma das 12 rotas de
-      funcionário, **e não consegue copiá-lo para A**; teste enumera as rotas.
+- [ ] **CA9** — Um ator escopado à unidade A não consegue **ler nem mutar**
+      funcionário da unidade B por nenhuma das 12 rotas de funcionário, **e não
+      consegue copiá-lo para A**; teste enumera as rotas e a resposta é **404**
+      (não encontrado naquela unidade), nunca 403 nem 200.
 - [ ] **CA10** — `employee` recebe 403 em **todas** as 16 rotas.
 - [ ] **CA11** — `platform_admin` recebe 403 em **todas** as 16 rotas.
-- [ ] **CA12** — *(dependente de F1 e F3)* A matriz de §5.13 é verificada rota a
-      rota com atores reais de cada papel, incluindo a divergência hr × manager.
+- [ ] **CA12** — A matriz de §5.13 é verificada rota a rota com atores reais de
+      cada papel; em particular, `hr` e `manager` obtêm o **mesmo resultado** nas
+      16 rotas (a equivalência é o que é verdade hoje, e é o que se testa).
+- [ ] **CA36** — `TENANT_WIDE_PERMISSIONS` contém **exatamente**
+      `{MANAGE_JOB_FUNCTIONS}`; teste com lista esperada explícita.
+- [ ] **CA37** — `MANAGE_STAFF` **não** está em `TENANT_WIDE_PERMISSIONS`, e um
+      ator unit-scoped chamando rota de funcionário **sem** unidade continua
+      recebendo 403 (`UnitScopeRequiredError`). *(Mata a mutação que daria
+      alcance cross-unidade sobre registros de funcionário.)*
+- [ ] **CA38** — `manager` e `hr` alcançam as 4 rotas de catálogo **sem**
+      declarar unidade, e `owner` também; nenhum outro papel alcança.
+- [ ] **CA39** — A suíte de contrato de `EmployeeRepository` prova a lei de
+      unidade nos **dois** lados (fake e Postgres) com um corpo de teste só:
+      registro da unidade A não é encontrado com `unit_id` da B.
 - [ ] **CA13** — Nenhum módulo em `features/staff/` importa `features.identity`
       nem nomeia `Role`/`Permission`; teste de varredura + `lint-imports` verde.
 - [ ] **CA14** — O contrato `bc-independence` do `.importlinter` continua **sem
@@ -899,101 +1099,94 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
 - [x] Toda integração externa tem contrato definido? — não há integração
       externa (§8).
 - [x] Decisões com alternativa real descartada têm ADR escrito? — sim
-      (3.4.0001–3.4.0005).
+      (3.4.0001–3.4.0008).
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? — sim.
-- [ ] Stage cabe em ~3–12 Tasks? — **provável 9–11**, **não confirmável**
-      enquanto F1/F2/F3 estiverem abertas: as três podem acrescentar Tasks em
-      `features/identity/domain` e em `features/staff/application`.
-- [x] Riscos críticos têm mitigação plausível? — sim, exceto os três que são as
-      próprias bifurcações.
-- [ ] **A matriz papel × operação está fixada?** — **parcialmente** (§5.13); o
-      eixo hr × manager e o nome da permissão são **F1**.
-- [ ] **O escopo de unidade das rotas de funcionário é enforçável?** — **não**
-      (F2).
-- [ ] **As rotas tenant-scoped são alcançáveis pelos papéis do DoD?** — **não**
-      (F3).
+- [ ] **Stage cabe em ~3–12 Tasks? — NÃO. Mede 14**, que é o limiar de alarme de
+      [`CONVENTIONS.md`](../../CONVENTIONS.md) §6 ("≥ 14 = Stage grande demais —
+      declare e PARE"). Contagem e proposta de corte em §13. **É o único item
+      que impede este concept de ir a `done`.**
+- [x] Riscos críticos têm mitigação plausível? — sim, exceto o de tamanho, cuja
+      mitigação é o corte de §13 e depende de decisão.
+- [x] **A matriz papel × operação está fixada?** — sim (§5.13, ADR 3.4.0006).
+- [x] **O escopo de unidade das rotas de funcionário é enforçável?** — sim
+      (§5.15, ADR 3.4.0007).
+- [x] **As rotas tenant-scoped são alcançáveis pelos papéis do DoD?** — sim
+      (§4.1, ADR 3.4.0008).
 - [x] O `complexidade_estimada: S` do roadmap foi conferido? — sim, e está
       **errado**; reconciliação declarada em §1.
 
 ## 13. Questões em aberto
 
-> Três bifurcações materiais. Todas afetam contrato e segurança; o **detalhe
-> rico de cada uma vai na mensagem de handoff à sessão mestra**, não neste
-> arquivo — aqui ficam o enunciado e a âncora. **Enquanto estiverem abertas
-> este concept permanece `draft`** e a Stage não entra em Fase 3B.
->
-> **O que as três têm em comum:** o vocabulário de permissões e o eixo de
-> visibilidade vivem em `features/identity/domain`. Qualquer resolução implica
-> **expansão de camada-alvo para um segundo bounded context** — maior que a
-> expansão do byte NUL (D4), e assimétrica com ela, já que D4 recusa tocar
-> identity. A assimetria é deliberada e está declarada: D4 tem conserto
-> alternativo dentro do BC de staff, e estas três não têm.
+### As três bifurcações estão FECHADAS (sponsor, 2026-08-12)
 
-### F1 — Qual é a divergência hr × manager, e onde vive a permissão de staff?
+| Fork | Decisão | ADR |
+|---|---|---|
+| **F1** — divergência hr × manager | Por **família de operação**, não alcance. Em staff `hr` ≡ `manager`; a divergência vive no Step 4 (escala). Duas permissões novas em identity. Alcance cross-unidade do RH **não** concedido | 3.4.0006 |
+| **F2** — escopo de unidade | A unidade entra no **endereço**: assinatura do port e dez commands. Não é filtro de SQL nem checagem só na borda | 3.4.0007 |
+| **F3** — recurso tenant-scoped × papel unit-scoped | A função continua tenant-scoped; `MANAGE_JOB_FUNCTIONS` é **tenant-wide** e dispensa a exigência de unidade, por permissão e nunca por papel | 3.4.0008 |
 
-**O que as fontes JÁ fixam** (e este concept registra em §5.13): `owner`
-gerencia com bypass de unidade; `manager` gerencia as unidades das quais é
-membro; `employee` não enxerga nada de staff; `platform_admin` não tem acesso
-de restaurante — `workforce.md` §4, status `accepted`.
+Nenhuma pergunta de conteúdo permanece aberta.
 
-**O eixo da divergência também já está fixado:** `workforce.md` §4 diz que, para
-o `hr`, *"é NO STAFF que hr diverge do manager — **visibilidade e permissões de
-equipe são o único eixo de divergência**"*. Não se procura um eixo novo.
+### ⚠ O que impede o `done`: a Stage mede 14 Tasks
 
-**O que fica aberto é o GRAU**, e a própria `workforce.md` §4 o endereça a este
-concept: *"o **detalhe da divergência hr × manager** (quais operações de staff
-cada um pode — hr vê tudo do tenant? só cadastro, sem jornada?) não está fixado
-em fonte ratificada **além de 'divergem na visibilidade e nas permissões de
-staff'** — o concept da 3.4 fixa a matriz exata."* Somado a isso, o
-**locus** da permissão: `Role.MANAGER` e `Role.HR` detêm hoje **exatamente** o
-mesmo conjunto (`{MANAGE_USERS}`), e o único `Permission` de restaurante
-disponível é `MANAGE_USERS` — então a divergência é **inexprimível** sem tocar
-`features/identity/domain/value_objects/{role,permission}.py`. O
-`permission.py` prevê a extensão ("as Stages/BCs seguintes estendem o
-vocabulário"), mas prever não é decidir.
+`CONVENTIONS.md` §6: **≥ 14 = Stage grande demais — declare e PARE.** A contagem,
+já com o agrupamento mais agressivo que os critérios de Task Atômica
+(PIPELINE §4.3) permitem sem estourar ~5 arquivos por Task:
 
-### F2 — Como a borda impede que um ator da unidade A alcance funcionário da unidade B?
+| # | Task | Camada |
+|---|---|---|
+| 1 | Permissões, `TENANT_WIDE_PERMISSIONS`, mapa de papéis e a condição do passo 4 | identity domain + application |
+| 2 | Unidade no port `EmployeeRepository` + dez commands + fakes | staff application (3.2) |
+| 3 | Os doze use cases reconciliados com a assinatura nova | staff application (3.2) |
+| 4 | Adapters Postgres + suíte de contrato sob a lei de unidade | staff adapters/out (3.3) |
+| 5 | Byte NUL, `DayPeriod.from_string`, `InvalidDayPeriodError` | staff domain (3.1) |
+| 6 | Port `AccessGuard` + leis + fake + tradutor no composition root | staff application + composition root |
+| 7 | `schemas.py`, conversores de VO, validação de identificador na borda | staff adapters/in |
+| 8 | `error_handlers.py` + totalidade + par classe→status | staff adapters/in |
+| 9 | Router: 4 rotas de catálogo | staff adapters/in |
+| 10-11 | Router: 12 rotas de funcionário (escrita simples; ciclo de vida e cópia) | staff adapters/in |
+| 12 | `HttpWiring` em coleções, `app.py`, overrides | composition root + shared |
+| 13-14 | e2e: fluxo feliz e isolamento; acesso negado e faixas de status | tests/e2e |
 
-**O requisito NÃO está em aberto** — ADR 3.2.0002 §Neutral aloca explicitamente
-o escopo de unidade a esta Stage, e `workforce.md` §3.1 ratifica a invariante
-("nenhuma operação de staff atravessa unidades implicitamente"). **O mecanismo
-está.**
+O crescimento não é inflação de plano: **7 das 14 Tasks (1-6, 12) não estavam no
+bloco do roadmap** e nasceram das decisões do sponsor e dos achados do
+Checkpoint A. A Stage original — "expor por HTTP os 16 use cases" — são as
+Tasks 7-11 e 13-14.
 
-O `unit_id` do path é autorizado **contra o ator**, não **contra o
-funcionário**. Nenhum command que atua sobre **registro existente** carrega
-`unit_id` (os que carregam são `CreateEmployeeCommand`, cujo `unit_id` vem do
-path e é gravado, e `CopyEmployeeToUnitCommand.target_unit_id`), e não existe
-use case de leitura por id entre os 16. Logo um gerente da unidade A alcança
-`{id-de-funcionário-da-unidade-B}` do mesmo tenant em **10 rotas de mutação**
-mais a cópia. Duas consequências, ambas piores que "mutação indevida":
+### Proposta de corte: duas Stages sequenciais
 
-- **Leitura.** Toda rota de mutação devolve `EmployeeResponse` completo (§5.12),
-  então um `PATCH` com o mesmo nome é uma sonda idempotente que devolve
-  `unit_id`, jornada, preferência e indisponibilidades de qualquer funcionário
-  do tenant.
-- **Exfiltração.** `POST /units/A/employees/{id-de-B}/copies` com destino A
-  **clona** o registro de B para dentro da unidade do atacante — as duas
-  chamadas de §5.6 passam, porque ele enxerga A duas vezes.
+Nada do conteúdo deste concept sai; muda **onde** cada parte executa. As duas
+mantêm `gate_mode: strict` e cada uma fecha com DoD verificável.
 
-Os mecanismos possíveis (acrescentar `unit_id` aos commands; criar use case de
-leitura por id; escopar `find_by_id` por unidade) **todos emendam Stage
-fechada**, e é essa conta que a mestra precisa levar ao sponsor.
+**3.4a — fundação de acesso e escopo de equipe** (Tasks 1-6 → **6 Tasks**)
+- Entrega: as duas permissões e a dispensa tenant-wide em identity; a unidade no
+  endereço do funcionário (port, commands, use cases, adapters, contrato); o
+  byte NUL e o `DayPeriod` no domínio; o port `AccessGuard` com as suas leis.
+- **DoD:** a suíte de contrato prova a lei de unidade nos dois lados; `manager` e
+  `hr` detêm as duas permissões; `TENANT_WIDE_PERMISSIONS` é exatamente
+  `{MANAGE_JOB_FUNCTIONS}`; `make check` verde. **Nenhuma rota HTTP.**
+- **Por que corta aqui:** é a fronteira entre *emendar Stage fechada* e
+  *escrever superfície nova*. Tudo o que toca 3.1, 3.2, 3.3 e identity fica de um
+  lado; o adapter de entrada, do outro. Os dois buracos de segurança
+  (exfiltração intra-tenant, DoD inalcançável) fecham já na 3.4a, antes de
+  qualquer rota existir — e não há Stage intermediária publicando API furada.
 
-### F3 — Como um recurso tenant-scoped é autorizado para um papel unit-scoped?
+**3.4b — a borda HTTP de equipe** (Tasks 7-14 → **8 Tasks**)
+- Entrega: schemas, handlers de erro, as 16 rotas, o wiring e os e2e.
+- **DoD:** o do roadmap, sem alteração — *"e2e: gerente cria função custom e
+  funcionário com jornada; funcionário de outra unidade não aparece"*, mais
+  acesso negado com 403.
 
-As quatro rotas de função de trabalho não têm unidade alvo — a função é
-**tenant-scoped** por regra canônica (`workforce.md` §3.2), e aninhá-la sob uma
-unidade seria mentir sobre o modelo. Mas `authorize_action.py:81-83` nega
-qualquer ator que não faça bypass de unidade quando `unit_id is None`, e
-`_UNIT_SCOPE_BYPASS_ROLES = {OWNER, PLATFORM_ADMIN}` (`user.py:45`). Resultado:
-**só `owner` alcança as quatro rotas**, e o DoD do roadmap exige *"gerente cria
-função customizada"*.
+**Alternativa rejeitada — seguir com 14 Tasks numa Stage só.** A 3.2 fechou com
+13 e declarou o aperto; 14 é o limiar em que CONVENTIONS manda parar, e esta
+Stage é pior que a 3.2 no eixo que importa: metade das Tasks emenda código
+mergeado de **quatro** Stages e de **dois** bounded contexts, o que torna o
+Checkpoint C por bloco muito menos capaz de segurar o diff.
 
-A regra que nega é deliberada e correta em identity — "omitir a unidade não
-pode ser caminho de escalada" (ADR 2.2.0002). O que falta é como um recurso
-legitimamente tenant-wide convive com ela. **Esta bifurcação não foi declarada
-na primeira versão deste concept; entrou pelo Checkpoint A**, encontrada
-independentemente pelos dois revisores.
+**O que NÃO é aceitável como corte**, e por quê: adiar a Task 2-4 (unidade no
+endereço) publicaria a exfiltração intra-tenant; adiar a Task 1 deixaria a Stage
+sem nenhuma rota autorizável; adiar a Task 5 reabriria o 500 do byte NUL, que a
+3.3 escalou explicitamente para cá.
 
 ## 14. Referências
 
@@ -1012,6 +1205,11 @@ independentemente pelos dois revisores.
   **3.2.0002** (§Neutral — o escopo de unidade é desta Stage), 3.2.0003,
   3.2.0004, 3.2.0005, 3.2.0006, 3.2.0007, 3.3.0002, 3.3.0003, 3.3.0004,
   3.3.0006, 3.3.0007
-- ADRs desta Stage: [`../../adr/`](../../adr/) — prefixo `3_4_`
+- ADRs desta Stage: [`../../adr/`](../../adr/) — prefixo `3_4_` (0001 a 0008)
+- **Issue #41** — `feat(staff): habilitação de função de trabalho por unidade`
+  (fatia vertical 3.1–3.4), aberta a pedido do sponsor em 2026-08-12. Evolução
+  prevista; nada dela nesta Stage (§1)
+- Decisões do sponsor de 2026-08-12 sobre os forks F1, F2 e F3 — registradas nos
+  ADRs 3.4.0006, 3.4.0007 e 3.4.0008
 - Skills: `fastapi-thin-adapter`, `composition-root`, `hex-arch-python`,
   `import-linter-rules`
