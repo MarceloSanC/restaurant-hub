@@ -2,10 +2,10 @@
 title: Technical — Acesso e escopo de equipe
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
-keywords: [technical, plano de execução, staff-access-scope, permissao, escopo-unidade]
+keywords: [technical, plano de execução, staff-access-scope, permissao, escopo-unidade, access-guard, byte-nul, tenant-wide]
 status: draft
 created_at: 2026-08-12
-updated_at: 2026-08-12
+updated_at: 2026-08-17
 stage_id: 3.4-staff-access-scope
 stage_title: Acesso e escopo de equipe
 step_id: 3
@@ -14,10 +14,10 @@ depends_on: [3.3-staff-persistence]
 concept_ref: ./concept.md
 issue_id: 40
 branch: feat/40-3-4-staff-http
-tasks_count: 0
+tasks_count: 6
 ---
 
-# Technical — Stage N.M — <Título da Stage>
+# Technical — Stage 3.4 — Acesso e escopo de equipe
 
 > **Como usar este documento (para code assistant):**
 > 1. Ler primeiro [§1 Contexto e estratégia](#1-contexto-e-estratégia-de-execução).
@@ -26,149 +26,913 @@ tasks_count: 0
 >    comando de verificação.
 > 4. **Não avançar para próxima Task sem verificação verde.**
 > 5. Mensagem de commit segue [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
->    `<type>(<scope>): <description> [N.M/task-NN]`
+>    `<type>(<scope>): <description> [3.4/task-NN]`
 > 6. Ao encontrar algo não previsto em §1–§6 ou no `concept.md`:
 >    **pausar**, perguntar ao humano com opções e recomendação, e
 >    registrar a decisão em [§7 Execução](#7-execução-post-hoc-editável-após-done).
 >    Nunca propagar silenciosamente.
 > 7. Ao fim da última Task, validar [§3 Gate de saída da Stage](#3-gate-de-saída-da-stage),
->    fazer commit `stage N.M: complete` e atualizar `roadmap.md`.
+>    fazer commit `stage 3.4: complete` e atualizar `roadmap.md`.
 >
 > **Stage = 1 branch.** Todo o trabalho desta Stage acontece em
-> `feat/<num-issue>-<N-M>-<slug>` (ver `CONVENTIONS.md` §4). Não há
-> sub-PRs internos. Sobre o fluxo Git completo ver
+> `feat/40-3-4-staff-http` — nome antigo, mantido de propósito: a branch nasceu
+> antes do corte da Fase 3A, e renomeá-la depois do primeiro push só produziria
+> ruído de referência. Não há sub-PRs internos. Sobre o fluxo Git completo ver
 > [`PIPELINE.md`](../../PIPELINE.md) §10.
 
 ## 1. Contexto e estratégia de execução
 
 ### Resumo
-<1 parágrafo. O que vamos construir nesta Stage, em termos técnicos.>
+
+Esta Stage **não escreve funcionalidade nova** — ela emenda código já mergeado de
+cinco Stages (`2.1`, `2.2`, `3.1`, `3.2`, `3.3`) em dois bounded contexts, para
+fechar dois defeitos de acesso e uma divergência fake ≢ real **antes** de existir
+borda HTTP que os exponha (a borda é a Stage 3.6). O trabalho tem quatro
+naturezas: (a) estender o vocabulário de acesso de `identity` com duas permissões
+de equipe e um conjunto tenant-wide que dispensa a exigência de unidade no passo 4
+do guard; (b) fazer a **unidade entrar no endereço do funcionário até a assinatura
+do port**, propagando por dez commands, dez use cases, os dois implementadores e a
+suíte de contrato; (c) rejeitar o byte NUL nos nomes do domínio de staff e dar a
+`DayPeriod` um `from_string` tipado; (d) criar o port `AccessGuard` de staff com
+quatro leis publicadas e montar o tradutor sobre o `IdentityGuard` no composition
+root, mantendo `bc-independence` sem nenhuma supressão. **Nenhuma rota nasce
+aqui.**
 
 ### Estratégia
-<Como vamos construir. Bottom-up? Top-down? Spike primeiro? Mock
-dependências externas? Ordem das Tasks e razão.>
+
+**O risco desta Stage é a emenda de contrato mergeado**, e a ordem foi montada em
+torno de uma pergunta só: *este commit deixa `make check` verde?* Duas
+propriedades mecânicas do repositório governam a resposta e precisam estar na
+cabeça de quem executa:
+
+- **`make typecheck` = `mypy src/ tests/fakes/`** (`Makefile:111`). Mudar a
+  assinatura de um método do `Protocol` quebra **no mesmo instante** todo chamador
+  em `src/` (os use cases), o adapter Postgres (verificado estruturalmente onde é
+  passado aos construtores tipados dos use cases, no `composition_root`) **e** o
+  fake. Os três não podem ser separados em commits distintos.
+- **`make test-gate` roda a suíte inteira**, e a suíte de contrato
+  (`tests/contract/features/staff/`) exercita **o mesmo corpo de teste** contra
+  fake e Postgres. Mudar a aridade de um lado só a derruba imediatamente.
+
+Daí a ordem abaixo, que **é exceção declarada ao default da skill
+`task-ordering-hex`**: esta não é uma vertical slice nova, é o caso "emenda sobre
+BC consolidado", em que o inside-out clássico (domain → application → adapters →
+wiring) não se aplica porque as camadas já existem e o que muda é um contrato que
+as atravessa.
+
+| # | Task | Natureza da mudança | Por que o commit fica verde |
+|---|---|---|---|
+| 01 | identity: permissões + `TENANT_WIDE_PERMISSIONS` + passo 4 | **aditiva** | acrescenta membros a um `StrEnum` e a três entradas de um mapa **total**; o passo 4 ganha uma condição que só pode **permitir mais**, e nenhuma permissão hoje em uso está no conjunto novo |
+| 02 | staff domain: byte NUL + `DayPeriod.from_string` | **restritiva, sem população violadora** | medido: **nenhum** teste do repositório constrói nome com `\x00` hoje (varredura de `tests/` = vazio), então a restrição não invalida fixture existente; `from_string` é puro acréscimo |
+| 03 | os dez commands ganham `unit_id` | **aditiva em `src/`, mecânica nos testes** | os commands **não têm chamador em `src/`** — não há adapter de entrada de staff (é o que a 3.3 declarou ao wirar 16 use cases sem consumidor) —, então o campo novo só exige atualizar os nove arquivos de teste que os constroem |
+| 04 | a unidade na assinatura do port | **restritiva e atômica** | é o commit grande, e é grande **por necessidade**: port + dez use cases + adapter Postgres + fake + suíte de contrato são o conjunto mínimo que mypy e a suíte de contrato aceitam junto (caixa abaixo) |
+| 05 | port `AccessGuard` + leis + fake | **criação isolada** | arquivos novos; nada existente os importa |
+| 06 | tradutor + wiring no composition root | **aditiva** | um campo novo no `dataclass` de dependências e uma construção nova em `wire_dependencies`; `build_http_wiring` **não** muda (CA21) |
+
+> **Por que a Task 04 não pode ser dividida.** Todo corte produz commit vermelho.
+> Vale nomear os três cortes tentadores, para que ninguém os tente na Fase 4:
+>
+> - *port + fake primeiro, use cases depois* → mypy reprova os dez use cases por
+>   argumento faltante (`src/` é checado).
+> - *port + use cases primeiro, adapter depois* → `PostgresEmployeeRepository`
+>   deixa de satisfazer o `Protocol` no ponto em que o `composition_root` o passa
+>   aos construtores tipados, **e** a suíte de contrato quebra no parâmetro
+>   `[postgres]`.
+> - *tudo em `src/` primeiro, fake depois* → `mypy tests/fakes/` reprova, e a
+>   suíte de contrato quebra no parâmetro `[fake]`.
+>
+> A alternativa a um commit grande seria dar a `unit_id` um **default `None`** por
+> um commit. É a única alternativa que se deve **recusar explicitamente**: ela
+> produziria um commit inteiro em que a lei de segurança está escrita no port e
+> **não é exigida** — exatamente a forma de defeito que esta Stage existe para
+> fechar.
+
+**A lei de unidade nasce no port, não no SQL.** É a razão declarada do
+ADR 3.4.0007 §2, e a Task 04 a executa nessa ordem: primeiro a **docstring do
+`Protocol`** (que é especificação neste projeto — ver o cabeçalho de
+`employee_repository.py`), depois o fake, depois o adapter, e a suíte de contrato
+provando os dois lados com **um corpo de teste só**. Um plano que pusesse a
+filtragem apenas no `WHERE` do Postgres estaria contra o concept §5.6 e
+reintroduziria a divergência fake ≢ real que este Step já pagou uma vez (byte
+NUL), agora sobre um invariante de **segurança**.
+
+### Desvio declarado em relação à tabela indicativa do concept §13
+
+O concept lista as mesmas 6 Tasks com um agrupamento ligeiramente diferente (port
++ commands + fakes | use cases | adapters + contrato como três Tasks separadas, e
+`AccessGuard` + tradutor como uma só). Este plano **regrupa sem mudar conteúdo,
+contrato, fronteira nem critério de aceite**, por duas razões mecânicas:
+
+- as três Tasks de escopo de unidade **colapsam em duas** (03 e 04), porque o
+  corte entre elas produz commit vermelho — a caixa acima demonstra;
+- a Task de `AccessGuard` **se divide em duas** (05 e 06), porque o critério 4 de
+  Task Atômica ([`PIPELINE.md`](../../PIPELINE.md) §4.3) proíbe criar port e
+  adapter desse port no mesmo commit — e o tradutor **é** o adapter do
+  `AccessGuard`.
+
+Total: **6 Tasks**, o mesmo número que o concept validou em §12. Pelo critério de
+[`PROMPT-stage-single-session.md`](../../PROMPT-stage-single-session.md)
+§"Verificação de gap no Concept", isto é **refinamento de detalhe**, não gap
+material — o concept **não regride**.
+
+### ⚠️ Contradição devolvida ao sponsor (NÃO decidida aqui)
+
+**CA20 do concept §11 — replicado literalmente no `definition_of_done` do bloco
+3.4 do `roadmap.md` — é inalcançável.** O texto diz:
+
+> *"A suíte de identity passa **sem alteração de asserção**. Se alguma precisar
+> mudar, a mudança não foi aditiva — é achado, não ajuste."*
+
+Medição em `tests/unit/features/identity/domain/test_role_permission.py`:
+
+- **linha 27** — `test_permission_e_conjunto_fechado` assere o conjunto **exato**
+  de valores do enum `Permission` (`{"manage_platform", "manage_tenant",
+  "manage_users"}`). Acrescentar `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS` **exige**
+  editar esta asserção.
+- **linhas 66–78** — `test_conteudo_exato_do_mapa_por_papel` é parametrizado com o
+  conjunto **exato** de permissões de cada papel. Dar as duas permissões novas a
+  `OWNER`, `MANAGER` e `HR` **exige** editar três dos cinco parâmetros.
+
+As duas são testes de **fechamento/exatidão** — precisamente o mecanismo que o
+ADR 3.4.0008 §5 pede (*"adding a permission to the set is a deliberate, reviewed
+act rather than a one-word diff that no test observes"*). Editá-las **é** o ato
+deliberado que o desenho quer, não o sintoma de mudança não-aditiva que CA20 tenta
+pegar. O concept, portanto, exige simultaneamente o teste de fechamento e a sua
+imutabilidade.
+
+**Não foi decidido aqui.** A leitura operativa que este plano executa — a que
+preserva a intenção de CA20 sem afirmar o falso — está escrita como critério da
+Task 01:
+
+> nenhuma asserção que expresse **uma decisão de acesso** (quem é negado, com qual
+> erro, em que ordem de passo) muda; mudam **apenas** as duas fixtures de
+> fechamento de vocabulário acima, e a lista exata das duas edições vai no corpo
+> do commit.
+
+O sponsor decide se (a) CA20 é reescrito nesses termos no concept (regressão
+`done → draft` + nota no `roadmap.md`), ou (b) o plano deve fazer outra coisa.
+**Enquanto não houver decisão, a Task 01 não é dada por aceita.**
 
 ### Pré-condições
-- <ex.: Stage `<stage_id>` em `done` e mergeada em develop>
-- <ex.: migration X aplicada localmente>
-- <ex.: variáveis de ambiente conforme `.env.example`>
+
+- Stage `3.3-staff-persistence` em `done` e **mergeada** em `develop` — é o código
+  que esta Stage emenda.
+- Branch `feat/40-3-4-staff-http`, working tree limpo, issue **#40** OPEN.
+- `concept.md` desta Stage em `status: done` (gate `09aab7a`).
+- **PostgreSQL real no ar** — exigência do ADR 2.3.0001, **sem skip**: a suíte de
+  contrato falha alto quando o banco não responde, e é isso que impede a Stage de
+  reportar verde por não ter olhado. As Tasks **02** e **04** e o gate de saída não
+  podem ser verificados sem ele:
+
+  ```powershell
+  docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
+  ```
+
+  > **Container órfão de worktree anterior retém a porta.** Se o `pg_isready`
+  > passar mas a suíte falhar sobre dados que ninguém gravou, confira `docker ps`
+  > — é infra da Stage anterior.
+
+- Ambiente de `make` no Windows: `$env:PATH += ";C:\msys64\usr\bin"` e
+  `$env:UV_SYSTEM_CERTS="1"` em toda sessão PowerShell.
 
 ### Premissas técnicas
-- <ex.: Python 3.12+, pyproject já existe>
-- <ex.: redis local rodando em porta 6379>
+
+- **`mypy` cobre `src/` e `tests/fakes/`** (`Makefile:111`) e **não** cobre o
+  restante de `tests/`. É a propriedade que define quais arquivos precisam viajar
+  no mesmo commit (§1 Estratégia).
+- **Não há migration nesta Stage.** O schema é o da 3.3 (`0003_staff`); a lei de
+  unidade é imposta na consulta, não na estrutura (concept §9). O ADR 3.3.0006
+  §Consequences aloca a coluna de versão do controle otimista à *"migration da
+  3.4"* — **isso é falso**, e já está reconciliado na nota datada do
+  `roadmap.md`. **Nenhum arquivo em `migrations/` é tocado.**
+- **Cobertura de `Protocol` medida, não suposta:** os módulos de port existentes
+  marcam **100%** no `term-missing` (corpo `docstring + ...` não conta como
+  statement não executado). O `access_guard.py` novo não vai precisar de
+  justificativa de cobertura.
+- **`create_engine` não abre conexão** — montar o tradutor no composition root não
+  muda o comportamento de boot.
+- **Nenhum teste do repositório usa `\x00` hoje** (varredura de `tests/` = vazio):
+  a restrição da Task 02 não invalida fixture existente.
+- **`AuthorizedActor.actor_tenant_id` é `RestaurantId | None`** — ausente só para
+  `platform_admin`. É a fonte do `tenant_id` do `AuthorizedScope` e o gatilho da
+  lei **L-AG3**.
+- **`IdentityGuard` vive sob o pacote `in`** e só é alcançável por `importlib`;
+  o `composition_root` já o guarda como `Any` (linhas 185–188). O tradutor herda
+  essa forma — é a razão medida do ADR 3.4.0001 §Decision 3.
 
 ### Estrutura de pastas afetada
 
 ```
 src/restaurant_hub/
-├── <camada-alvo>/
-│   └── <novos arquivos>
+├── composition_root.py                                    # M — tradutor + campo (Task 06)
+└── features/
+    ├── identity/
+    │   ├── domain/value_objects/permission.py             # M — 2 permissões + TENANT_WIDE (01)
+    │   ├── domain/value_objects/role.py                   # M — mapa de papéis (01)
+    │   └── application/use_cases/authorize_action.py      # M — passo 4 (01)
+    └── staff/
+        ├── domain/entities/employee.py                    # M — byte NUL (02)
+        ├── domain/entities/job_function.py                # M — byte NUL (02)
+        ├── domain/value_objects/shift_preference.py       # M — DayPeriod.from_string (02)
+        ├── domain/exceptions/errors.py                    # M — InvalidDayPeriodError (02)
+        ├── application/dtos/commands.py                   # M — 10 commands (03)
+        ├── application/ports/out/employee_repository.py   # M — unidade na assinatura (04)
+        ├── application/ports/out/access_guard.py          # N — port + AuthorizedScope (05)
+        ├── application/use_cases/*.py                     # M — 10 use cases (04)
+        └── adapters/out/postgres/employee_repository.py   # M — unidade no WHERE (04)
+
 tests/
-└── <pasta>/
-    └── <novos arquivos>
+├── fakes/features/staff/
+│   ├── in_memory_employee_repository.py                   # M — a mesma lei (04)
+│   └── in_memory_access_guard.py                          # N — 2ª implementação (05)
+├── contract/features/staff/
+│   ├── test_employee_repository_laws.py                   # M — NUL (02) + unidade (04)
+│   └── test_job_function_repository_laws.py               # M — NUL (02)
+└── unit/features/
+    ├── identity/domain/test_role_permission.py            # M (01)
+    ├── identity/application/test_authorize_action.py      # M (01)
+    └── staff/
+        ├── domain/test_{employee,job_function,shift_preference,exceptions}.py  # M (02)
+        ├── application/test_*.py                          # M (03, 04)
+        ├── application/test_access_guard_laws.py          # N (05)
+        ├── test_bc_independence.py                        # N (05)
+        └── adapters/test_composition_root_staff.py        # M (06)
 ```
+
+**Nenhum arquivo nasce em `src/restaurant_hub/features/staff/adapters/in/`** — é o
+CA21, e é o que torna esta Stage segura de mergear.
 
 ## 2. Tasks
 
-> Faixa saudável: **3–12 Tasks por Stage**. ≥ 14 = Stage provavelmente
-> está grande demais; reabrir Fase 3A para dividir.
+> Faixa saudável: **3–12 Tasks por Stage**. ≥ 14 = Stage grande demais. Esta tem
+> **6** — o mesmo número validado no concept §12, com o regrupamento justificado
+> em §1.
 
-### Task 01 — <descrição curta>
+### Task 01 — identity: duas permissões de staff, o mapa de papéis, `TENANT_WIDE_PERMISSIONS` e a dispensa do passo 4
+
+- **Arquivos a criar:** nenhum
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/identity/domain/value_objects/permission.py`
+  - `src/restaurant_hub/features/identity/domain/value_objects/role.py`
+  - `src/restaurant_hub/features/identity/application/use_cases/authorize_action.py`
+  - `tests/unit/features/identity/domain/test_role_permission.py`
+  - `tests/unit/features/identity/application/test_authorize_action.py`
+- **O que fazer:** dar a `identity` o vocabulário de acesso que o Step 3 precisa —
+  duas permissões novas, as entradas correspondentes no mapa de papéis, o conjunto
+  `TENANT_WIDE_PERMISSIONS` e a única condição de `AuthorizeActionUseCase` que o
+  consulta. É a Task que torna `manager` e `hr` capazes de alcançar o catálogo de
+  funções sem afrouxar nada sobre registro de funcionário.
+- **Detalhes técnicos:**
+  - **`Permission`** ganha `MANAGE_STAFF = "manage_staff"` e
+    `MANAGE_JOB_FUNCTIONS = "manage_job_functions"`. O docstring do módulo já
+    prevê a extensão (*"as Stages/BCs seguintes estendem o vocabulário"*); a
+    docstring passa a nomear o eixo de unidade das duas.
+  - **`TENANT_WIDE_PERMISSIONS: frozenset[Permission]`**, no **mesmo módulo**
+    (ADR 3.4.0008 §1), contendo **exatamente** `{MANAGE_JOB_FUNCTIONS}`. O comentário
+    de definição declara o critério de entrada: *permissão cujo alvo é o
+    restaurante, não a unidade* — e que `MANAGE_STAFF` está fora **de propósito**.
+  - **`_ROLE_PERMISSIONS`** (`role.py`): `OWNER`, `MANAGER` e `HR` ganham as duas;
+    `EMPLOYEE` e `PLATFORM_ADMIN` **nada**. O comentário sobre `manager`/`hr`
+    ("coincidem em identity e divergem no eixo de visibilidade") passa a citar a
+    restrição para frente do ADR 3.4.0006 §3 — **o Step 4 não pode dar a `hr`
+    permissão sobre a escala**, e este é o arquivo que quem estender o mapa lê.
+  - **Passo 4 de `AuthorizeActionUseCase`**, literal do ADR 3.4.0008 §2:
+
+    ```python
+    if (
+        command.unit_id is None
+        and not user.bypasses_unit_scope()
+        and command.permission not in TENANT_WIDE_PERMISSIONS
+    ):
+        raise UnitScopeRequiredError(user.role.value)
+    ```
+
+    Import de `TENANT_WIDE_PERMISSIONS` a partir de
+    `identity.domain.value_objects.permission` — `application → domain`, direção
+    legal (LAYOUT §3). **Passos 3 e 5 não são tocados** (concept §5.5).
+  - **A dispensa é por permissão, nunca por papel** (concept §5.4): nada é
+    acrescentado a `_UNIT_SCOPE_BYPASS_ROLES`, e a docstring do use case diz por
+    quê — pôr `manager`/`hr` lá daria alcance tenant-wide sobre **todas** as
+    permissões, inclusive `MANAGE_STAFF`.
+  - **Testes novos** em `test_role_permission.py`: CA2 (parametrizado sobre os
+    cinco papéis, cada um com o subconjunto de staff esperado), CA3 (`hr` e
+    `manager` têm conjuntos de permissão de staff **idênticos** — falha se alguém
+    os separar sem ADR), CA6 (`TENANT_WIDE_PERMISSIONS` == lista esperada
+    explícita), CA7 (`MANAGE_STAFF` **não** está no conjunto — mata a mutação que
+    daria alcance cross-unidade sobre registros).
+  - **Testes novos** em `test_authorize_action.py`: CA4 (ator unit-scoped
+    exercendo `MANAGE_JOB_FUNCTIONS` **sem** unidade é **autorizado**), CA5 (o
+    mesmo ator com `MANAGE_STAFF` sem unidade continua recebendo
+    `UnitScopeRequiredError`) e CA8 (passos 3 e 5 inalterados: ator de outro
+    tenant negado, e unidade não visível negada, **também** para permissão
+    tenant-wide). CA4 e CA5 juntos cobrem os dois ramos da condição nova — é o que
+    a cobertura de branch do projeto exige.
+- **Critério de aceite:**
+  - CA1, CA2, CA3, CA6, CA7 (vocabulário e mapa) e CA4, CA5, CA8 (autorização),
+    todos com teste verde.
+  - **CA20, na leitura operativa registrada em §1 (⚠️ devolvida ao sponsor):**
+    nenhuma asserção que expresse **decisão de acesso** muda; mudam **apenas** as
+    duas fixtures de fechamento de vocabulário
+    (`test_permission_e_conjunto_fechado`, linha 27; e os três parâmetros de
+    `test_conteudo_exato_do_mapa_por_papel`, linhas 66–78). O corpo do commit lista
+    as duas edições, nominalmente. **Esta Task não é dada por aceita antes da
+    decisão do sponsor sobre CA20.**
+  - Cobertura ≥ 90% nos três arquivos de `src/` tocados.
+- **Comando de verificação:**
+  ```powershell
+  $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
+  uv run pytest tests/unit/features/identity/ -v
+  git diff -- tests/unit/features/identity/   # confirmar: só as 2 fixtures de fechamento
+  uv run pytest tests/ --cov=src/restaurant_hub/features/identity --cov-report=term-missing
+  make check
+  ```
+- **Commit sugerido:** `feat(identity): permissoes de equipe, conjunto tenant-wide e a dispensa do passo 4 [3.4/task-01]`
+
+---
+
+### Task 02 — staff domain: byte NUL recusado no nome, `DayPeriod.from_string` e `InvalidDayPeriodError`
+
+- **Arquivos a criar:** nenhum
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/staff/domain/exceptions/errors.py`
+  - `src/restaurant_hub/features/staff/domain/entities/employee.py`
+  - `src/restaurant_hub/features/staff/domain/entities/job_function.py`
+  - `src/restaurant_hub/features/staff/domain/value_objects/shift_preference.py`
+  - `tests/unit/features/staff/domain/test_employee.py`
+  - `tests/unit/features/staff/domain/test_job_function.py`
+  - `tests/unit/features/staff/domain/test_shift_preference.py`
+  - `tests/unit/features/staff/domain/test_exceptions.py`
+  - `tests/contract/features/staff/test_employee_repository_laws.py`
+  - `tests/contract/features/staff/test_job_function_repository_laws.py`
+- **O que fazer:** fechar, no domínio, as duas divergências que a 3.3 mediu e
+  escalou — nome com byte NUL (que o fake gravava e o Postgres recusava
+  client-side com `psycopg.DataError`, sem `sqlstate`, fora do alcance do tradutor
+  de integridade) e a conversão de texto para `DayPeriod` (hoje `ValueError`, que
+  não é `StaffError`).
+- **Detalhes técnicos:**
+  - **`InvalidDayPeriodError(StaffError)`** em `errors.py`, no mesmo formato dos
+    demais (mensagem com o valor recebido), espelhando `InvalidRoleError` de
+    identity.
+  - **`DayPeriod.from_string(value: str) -> DayPeriod`** em `shift_preference.py`,
+    idêntico em forma ao `Role.from_string`: `try: return cls(value)` /
+    `except ValueError as exc: raise InvalidDayPeriodError(value) from exc`. **A
+    causa original é preservada** (`from exc`) — há teste equivalente em identity e
+    deve haver aqui.
+  - **Byte NUL em `Employee.__post_init__` e `JobFunction.__post_init__`:**
+    acrescentar, **junto** da checagem de nome vazio já existente
+    (`employee.py:83-84`, `job_function.py:56-57`), a recusa de `"\x00" in
+    self.name` com `InvalidNameError`. Por estar em `__post_init__`, vale para
+    **todos** os caminhos de construção — `rename` (que passa por
+    `dataclasses.replace`) e a **reidratação do mapper** da 3.3
+    (`mappers.py:103`, `:265`), que é o caminho que a CA16 nomeia.
+  - **Escopo da restrição: só o byte NUL** (concept §5.10, ADR 3.4.0003 §2). Nada
+    de outros caracteres de controle, normalização de espaço ou limite de
+    tamanho — a 3.3 mediu que todo o resto faz round-trip verbatim nos dois lados,
+    e alargar seria normalização silenciosa por outro nome (contra o ADR 2.3.0005).
+  - **A suíte de contrato ganha o caso** (CA17), nos dois arquivos de lei: gravar
+    um registro cujo nome contém `\x00` levanta `InvalidNameError` **na construção
+    da entidade**, antes de qualquer port — e por isso `[fake]` e `[postgres]`
+    concordam **por construção**. É esta asserção que hoje reprovaria em
+    `[postgres]` e passará nos dois. **É a razão de esta Task exigir Postgres no
+    ar.**
+  - **CA18 no mesmo commit:** teste parametrizado provando que acento, emoji com
+    ZWJ, `\n`, aspas e 1000 caracteres **continuam aceitos** e fazem round-trip
+    verbatim. Sem ele, a restrição não tem prova de que é do tamanho da
+    divergência, e nada impede que ela cresça depois.
+- **Critério de aceite:**
+  - CA16 (`InvalidNameError` para `\x00` em `Employee` e `JobFunction`, inclusive
+    pela reidratação do mapper), CA17 (a suíte de lei exercita o NUL e **os dois
+    parâmetros passam**), CA18 (os cinco adversariais continuam aceitos verbatim) e
+    CA19 (`DayPeriod.from_string("xpto")` → `InvalidDayPeriodError`, que é
+    `StaffError`).
+  - A suíte de staff inteira verde, **sem** alteração de fixture existente — a
+    varredura de §1 provou que nenhuma usa `\x00`.
+  - Cobertura ≥ 90% nos quatro arquivos de `src/` tocados.
+- **Comando de verificação:**
+  ```powershell
+  $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
+  docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
+  uv run pytest tests/unit/features/staff/domain/ -v
+  uv run pytest tests/contract/features/staff/ -v -k "nul or verbatim"
+  make check
+  ```
+- **Commit sugerido:** `feat(staff): recusar byte NUL no nome e tipar a conversao de periodo do dia [3.4/task-02]`
+  > **Exceção declarada ao critério de ≤ 5 arquivos** (PIPELINE §4.3): são 10, e as
+  > duas correções são a **mesma** mudança lógica vista em quatro pontas — a
+  > declaração (entidade/VO), o erro, o teste unitário e a suíte de contrato que
+  > prova que fake e real concordam. Separá-las em duas Tasks deixaria a suíte de
+  > contrato citando um erro que ainda não existe.
+
+---
+
+### Task 03 — os dez commands que atuam sobre registro existente ganham `unit_id`
+
+- **Arquivos a criar:** nenhum
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/staff/application/dtos/commands.py`
+  - `tests/unit/features/staff/application/test_dtos.py`
+  - `tests/unit/features/staff/application/test_assign_job_functions.py`
+  - `tests/unit/features/staff/application/test_copy_employee_to_unit.py`
+  - `tests/unit/features/staff/application/test_delete_employee.py`
+  - `tests/unit/features/staff/application/test_employee_edit_use_cases.py`
+  - `tests/unit/features/staff/application/test_employee_lifecycle.py`
+  - `tests/unit/features/staff/application/test_staff_flow.py`
+  - `tests/unit/features/staff/application/test_terminated_employee_edits.py`
+  - `tests/unit/features/staff/application/test_unavailability_use_cases.py`
+- **O que fazer:** pôr a unidade no **pedido**, antes de pô-la no **endereço**. É a
+  metade "expandir" da mudança de contrato: o campo passa a existir e a ser
+  obrigatório, e a Task 04 o consome.
+- **Detalhes técnicos:**
+  - **`unit_id: UnitId` obrigatório** (sem default) nos **dez** commands do
+    ADR 3.4.0007 §3: `RenameEmployeeCommand`, `AssignJobFunctionsCommand`,
+    `ChangeWorkloadProfileCommand`, `DeclareShiftPreferenceCommand`,
+    `RegisterUnavailabilityCommand`, `RemoveUnavailabilityCommand`,
+    `DeactivateEmployeeCommand`, `ReactivateEmployeeCommand`,
+    `DeleteEmployeeCommand` e `CopyEmployeeToUnitCommand`.
+  - **Em `CopyEmployeeToUnitCommand`, `unit_id` é a unidade de ORIGEM**
+    (`target_unit_id` já existia e é o destino). A docstring do command precisa
+    dizer isso em uma linha — é o par em que confundir os dois campos produz
+    exatamente a exfiltração cross-unidade que esta Stage fecha.
+  - **`CreateEmployeeCommand` já carrega `unit_id`** (`commands.py:83`) e não muda.
+    **As duas queries não mudam** — `ListEmployeesQuery` já o exige, e
+    `ListJobFunctionsQuery` é tenant-scoped por desenho.
+  - **Sem default, deliberadamente.** Um `unit_id: UnitId | None = None` faria o
+    campo ser esquecível, e "omitir vira caminho de escalada" é a propriedade que o
+    ADR 3.2.0002 já comprou para o tenant.
+  - Nos nove arquivos de teste, a mudança é mecânica: cada construção dos dez
+    commands ganha `unit_id=<a unidade do registro sob teste>`.
+- **Critério de aceite:**
+  - Os dez commands expõem `unit_id` obrigatório — metade "commands" do CA11.
+  - A suíte de staff inteira verde. **Nenhum arquivo de `src/` além de
+    `commands.py`** é tocado, e é o que prova que o campo ainda não tem consumidor
+    (a Task 04 é quem o dá).
+  - `test_dtos.py` cobre a obrigatoriedade (construir sem `unit_id` é `TypeError`)
+    e a distinção origem × destino em `CopyEmployeeToUnitCommand`.
+- **Comando de verificação:**
+  ```powershell
+  $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
+  uv run pytest tests/unit/features/staff/application/ -v
+  git diff --name-only -- src/    # deve listar APENAS dtos/commands.py
+  make check
+  ```
+- **Commit sugerido:** `feat(staff): os dez commands de registro existente passam a exigir a unidade [3.4/task-03]`
+  > **Exceção declarada ao critério de ≤ 5 arquivos:** são 10, e nove são os
+  > arquivos de teste que constroem os commands. A mudança lógica é **uma** (o
+  > pedido passa a nomear a unidade); dividi-la por command produziria dez commits
+  > sem valor de revisão.
+
+---
+
+### Task 04 — a unidade entra no endereço: port, use cases, fake, adapter Postgres e a suíte de contrato
+
+- **Arquivos a criar:** nenhum
+- **Arquivos a modificar (`src/`):**
+  - `application/ports/out/employee_repository.py` — **a lei**
+  - `application/use_cases/rename_employee.py`
+  - `application/use_cases/assign_job_functions.py`
+  - `application/use_cases/change_workload_profile.py`
+  - `application/use_cases/declare_shift_preference.py`
+  - `application/use_cases/register_unavailability.py`
+  - `application/use_cases/remove_unavailability.py`
+  - `application/use_cases/deactivate_employee.py`
+  - `application/use_cases/reactivate_employee.py`
+  - `application/use_cases/delete_employee.py`
+  - `application/use_cases/copy_employee_to_unit.py`
+  - `adapters/out/postgres/employee_repository.py`
+- **Arquivos a modificar (`tests/`):**
+  - `tests/fakes/features/staff/in_memory_employee_repository.py`
+  - `tests/contract/features/staff/test_employee_repository_laws.py`
+  - `tests/unit/features/staff/application/test_{assign_job_functions,copy_employee_to_unit,create_employee,delete_employee,employee_edit_use_cases,employee_lifecycle,list_employees,staff_repository_fakes,terminated_employee_edits,unavailability_use_cases}.py`
+- **O que fazer:** fazer a unidade parte do **endereço** do funcionário até a
+  assinatura do port, e reconciliar tudo que a assinatura alcança. É o coração da
+  Stage: depois deste commit, registro de outra unidade do mesmo tenant é
+  **inalcançável por construção**, e quem não sabe a unidade **não consegue formar
+  a chamada**.
+- **Detalhes técnicos, na ordem em que devem ser escritos:**
+  1. **A lei, no `Protocol`** (ADR 3.4.0007 §1 e §4). As assinaturas passam a ser
+     `find_by_id(tenant_id, unit_id, employee_id) -> Employee | None` e
+     `delete(tenant_id, unit_id, employee_id) -> None`. As docstrings — que **são
+     especificação** neste módulo — reescrevem **L-E2**, **L-E3** e **L-E5** sobre
+     o endereço de três partes, e a **ordem de checagem normativa** do cabeçalho
+     passa a dizer `(tenant_id, unit_id, id)`: lookup primeiro, ausente ⇒
+     `EmployeeNotFoundError`, e só depois qualquer outra guarda. Registro de outra
+     unidade é **não encontrado**, pela mesma regra que já valia para outro tenant
+     — nenhum erro confirma existência de registro que o chamador não pode
+     endereçar (concept 3.2 §5.4).
+  2. **`L-E3` sobrevive com gatilho mais estreito** (ADR 3.4.0007 §5): a docstring
+     de `update` passa a registrar que `EmployeeRelocationError` deixa de ser
+     alcançável **pelos use cases** — que agora recarregam da mesma unidade em que
+     escrevem — e permanece lei porque um segundo adapter de entrada poderia
+     tentá-la. **Não remover a lei nem o erro.**
+  3. **O fake carrega a mesma lei** — `in_memory_employee_repository.py` passa a
+     casar `(tenant_id, unit_id, id)` nos dois métodos. É o ponto do ADR 3.4.0007
+     §2: filtrar só no adapter deixaria o fake aceitando o que o real recusa.
+  4. **O adapter Postgres** acrescenta `unit_id` ao `WHERE` de `find_by_id` e de
+     `delete` (`employee_repository.py:178`, `:188`), **sem** mudar a ordem das
+     checagens nem o `FOR UPDATE`/`REPEATABLE READ` que a 3.3 fixou.
+  5. **Os dez use cases** passam `command.unit_id` ao port. `copy_employee_to_unit`
+     usa a **origem** (`command.unit_id`) na leitura e `target_unit_id` na
+     escrita — o único ponto onde os dois convivem.
+  6. **`create_employee` e `list_employees` não mudam**: já endereçam por unidade
+     (`add` grava a entidade, que carrega `unit_id`; `list_by_unit` já a exige).
+     Com eles, são **doze** use cases de funcionário sob a lei — é o CA11.
+  7. **A suíte de contrato** ganha os casos de CA9 nos dois parâmetros: registro
+     criado na unidade A **não é encontrado** com `unit_id` da B, em `find_by_id`
+     **e** em `delete`, e o erro é `EmployeeNotFoundError` — nunca um que confirme
+     a existência. Um corpo de teste só, rodando `[fake]` e `[postgres]` (CA10).
+  8. **Teste de não-regressão do endereço (CA11, metade "use cases"):** com o
+     `store.calls` do fake, assere que cada use case chamou o port com **três**
+     argumentos e com a unidade do command. Falha se algum voltar a resolver por
+     `(tenant, id)`.
+- **Critério de aceite:**
+  - CA9, CA10 e CA11 verdes; a suíte de contrato prova a lei de unidade nos **dois**
+    parâmetros com um corpo de teste só.
+  - **Nenhum `skip`** na suíte de contrato — banco parado ⇒ suíte **falha**.
+  - `make check` verde: mypy sobre `src/` e `tests/fakes/`, `lint-imports`,
+    `layout-check` e a suíte inteira.
+  - Cobertura ≥ 90% em cada arquivo de `src/` tocado.
+- **Comando de verificação:**
+  ```powershell
+  $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
+  docker compose up -d postgres
+  do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
+  uv run mypy src/ tests/fakes/
+  uv run pytest tests/contract/features/staff/ -v
+  uv run pytest tests/unit/features/staff/ tests/integration/features/staff/ -v
+  make check
+  ```
+- **Commit sugerido:** `feat(staff): a unidade entra no endereco do funcionario ate a assinatura do port [3.4/task-04]`
+  > **Exceção declarada ao critério de ≤ 5 arquivos, com razão mecânica:** são ~24,
+  > e **nenhum corte deixa o commit verde** — os três cortes tentadores e a razão de
+  > cada um estão nomeados na caixa da §1. A mudança lógica é **uma** (o endereço do
+  > funcionário ganha uma parte), e cada arquivo a recebe em 1–3 linhas.
+  >
+  > **Sobre o critério 4 (não misturar port com adapter):** aqui não há criação de
+  > port nem de adapter — os dois existem desde as Stages 3.2 e 3.3. O que o
+  > critério protege (desenhar port e implementação no mesmo fôlego, deixando o SQL
+  > moldar o contrato) está preservado pela **ordem de escrita** dos passos 1–4: a
+  > lei primeiro, na docstring do `Protocol`; o SQL por último.
+
+---
+
+### Task 05 — port `AccessGuard` de staff: `AuthorizedScope`, as quatro leis, o fake e a guarda de `bc-independence`
 
 - **Arquivos a criar:**
-  - `src/restaurant_hub/<camada>/<arquivo>.py`
-  - `tests/<pasta>/test_<arquivo>.py`
-- **Arquivos a modificar:**
-  - <caminho ou "nenhum">
-- **O que fazer:**
-  <Prosa direta descrevendo a mudança material. Sem código completo;
-  apenas indicações como "criar Protocol com método `X(arg: A) -> B`".>
+  - `src/restaurant_hub/features/staff/application/ports/out/access_guard.py`
+  - `tests/fakes/features/staff/in_memory_access_guard.py`
+  - `tests/unit/features/staff/application/test_access_guard_laws.py`
+  - `tests/unit/features/staff/test_bc_independence.py`
+- **Arquivos a modificar:** nenhum
+- **O que fazer:** dar a staff um vocabulário próprio para pedir autorização, sem
+  que nenhum módulo do BC saiba que `identity` existe. O port declara **o que staff
+  precisa**; nunca **como identity decide**.
 - **Detalhes técnicos:**
-  - <interface esperada, comportamento esperado, exceções>
+  - **Forma do port** (concept §4, ADR 3.4.0001 §1):
+
+    ```python
+    Actor = object   # credencial já verificada; staff não a interpreta
+
+    @dataclass(frozen=True)
+    class AuthorizedScope:
+        tenant_id: TenantId          # nunca None — lei L-AG3
+        unit_id: UnitId | None
+
+    class AccessGuard(Protocol):
+        def authenticate(self, request: object) -> Actor: ...
+        def authorize(
+            self,
+            actor: Actor,
+            permission: str,
+            *,
+            tenant_id: str | None = None,
+            unit_id: str | None = None,
+        ) -> AuthorizedScope: ...
+    ```
+
+    **Entradas como `str` opaca** (regra literal do `identifiers.py` de staff e do
+    contrato `bc-independence`); **saída** com os `NewType` de staff. O nome da
+    permissão é `str` porque o vocabulário fechado vive em identity; os dois nomes
+    que o Step 3 usa são `"manage_staff"` e `"manage_job_functions"`, e o port os
+    cita na docstring como **valores**, jamais importando `Permission`.
+  - **As quatro leis, na docstring do módulo** — sem elas uma segunda implementação
+    satisfaz o tipo e destrói as propriedades de segurança sem falhar nenhum type
+    check:
+    - **L-AG1** — `authenticate` levanta quando não há credencial válida, e a
+      exceção **sai crua**: o implementador não a traduz.
+    - **L-AG2** — `authorize` levanta quando o ator não pode agir sobre o alvo, e
+      a exceção **sai crua**, pela mesma razão.
+    - **L-AG3** — `authorize` **nunca** devolve `AuthorizedScope` com `tenant_id`
+      vazio ou ausente. Ator sem tenant é **negado**, não coagido para `""`:
+      `TenantId` é `NewType` sem validação de runtime, então
+      `TenantId(actor_tenant_id or "")` compilaria, passaria mypy strict e
+      produziria consultas de tenant vazio.
+    - **L-AG4** — `authorize` é chamado **uma vez por alvo**; autorizar um alvo
+      não autoriza outro.
+  - **Onde o port mora, e por quê** (ADR 3.4.0001 §4): `application/ports/out/`, e
+    **não** dentro do adapter HTTP. O consumidor da Stage 3.6 é o router, o que
+    argumentaria por `adapters/in/http/`; a colocação antecipa a Stage 3.5, cujo
+    `IdentityGateway` é consumido por **use case**. A justificativa é o critério de
+    escalabilidade progressiva do projeto, **não** LAYOUT §5 — que descreve port de
+    saída como consumido por use case e ainda não é literalmente verdade aqui.
+    **Esta frase precisa estar na docstring do módulo**, pelo mesmo princípio que
+    esta Stage aplica a si mesma: não afirmar conformidade que não se tem.
+  - **O fake** (`in_memory_access_guard.py`) é a **segunda implementação** que dá
+    às leis o seu poder de refutação: credencial configurável, mapa de
+    `(permissão, tenant, unidade)` autorizados, exceções-sentinela próprias e um
+    **registro de chamadas** (mesma forma do `InMemoryStaffStore.record`) para
+    L-AG4. `mypy tests/fakes/` já o verifica contra o `Protocol`.
+  - **`test_access_guard_laws.py` (CA14):** um teste por lei, com o nome da lei no
+    identificador (convenção das suítes de lei do Step 3) — L-AG1 e L-AG2 asserem
+    **identidade do objeto levantado** (`excinfo.value is sentinela`, que é o que
+    prova "sai crua"; `pytest.raises(TipoX)` sozinho não prova); L-AG3 assere
+    recusa quando o ator não tem tenant, e que **nenhum** `AuthorizedScope`
+    devolvido tem `tenant_id` falsy; L-AG4 assere uma chamada por alvo pelo
+    registro.
+  - **`test_bc_independence.py` (CA12 + CA13):** varredura por AST de **todos** os
+    módulos sob `src/restaurant_hub/features/staff/` — nenhum importa
+    `features.identity`, e nenhum **nomeia** `Role` ou `Permission` (a segunda
+    metade importa: um `Literal["manage_staff"]` é aceitável, um import do enum
+    não). E leitura do `.importlinter`: a seção
+    `[importlinter:contract:bc-independence]` **não tem** chave `ignore_imports`
+    — o teste falha se a lista aparecer. A forma é a do
+    `test_composition_root_staff.py`, que já faz varredura por AST.
 - **Critério de aceite:**
-  - <ex.: testes em `tests/.../test_<arquivo>.py` cobrem happy path e erro>
+  - CA12, CA13 e CA14 verdes; `lint-imports` verde.
+  - `mypy src/ tests/fakes/` limpo — o fake satisfaz o `Protocol` estruturalmente.
+  - Cobertura ≥ 90% em `access_guard.py`.
+  - **Nada em `features/staff/` importa `features/identity/`**, e o `.importlinter`
+    segue com **zero** supressão em `bc-independence`.
 - **Comando de verificação:**
-  ```bash
-  pytest tests/<pasta>/test_<arquivo>.py -v
-  mypy --strict src/restaurant_hub/<camada>/<arquivo>.py
-  python scripts/check_layout.py
+  ```powershell
+  $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
+  uv run pytest tests/unit/features/staff/application/test_access_guard_laws.py -v
+  uv run pytest tests/unit/features/staff/test_bc_independence.py -v
+  uv run lint-imports
+  uv run mypy src/ tests/fakes/
+  make check
   ```
-- **Commit sugerido:** `feat(<scope>): <description> [N.M/task-01]`
+- **Commit sugerido:** `feat(staff): port AccessGuard com as quatro leis e o fake que as prova [3.4/task-05]`
+  > **Exceção declarada ao critério 4 de Task Atômica** (não misturar criação de
+  > port com criação de implementação): o **fake** é implementação do port. É a
+  > mesma exceção da Task 04 da Stage 3.3 e da Task 02 da 2.3, pela mesma razão
+  > mecânica — publicar leis num `Protocol` sem uma implementação que as obedeça
+  > deixaria as leis sem refutação por um commit inteiro. O que o critério protege
+  > de verdade — desenhar port e implementação **de produção** no mesmo fôlego —
+  > está preservado: **o tradutor é a Task 06.**
 
 ---
 
-### Task 02 — <descrição curta>
+### Task 06 — o tradutor sobre `IdentityGuard` no composition root, e a prova de que nenhuma rota nasceu
 
-- **Arquivos a criar:** <...>
-- **Arquivos a modificar:** <...>
-- **O que fazer:** <...>
-- **Detalhes técnicos:** <...>
-- **Critério de aceite:** <...>
+- **Arquivos a criar:** nenhum
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/composition_root.py`
+  - `tests/unit/features/staff/adapters/test_composition_root_staff.py`
+- **O que fazer:** montar a implementação de produção do `AccessGuard` **no único
+  módulo que já importa os dois bounded contexts por desenho**, fechando a Stage
+  sem nenhuma supressão de import — e travar por teste que a Stage não publicou
+  superfície.
+- **Detalhes técnicos:**
+  - **O tradutor é definido no próprio `composition_root.py`** (ADR 3.4.0001 §3).
+    A alternativa — um adapter em `features/staff/adapters/out/identity/` — caiu na
+    medição do ADR: `IdentityGuard` vive sob o pacote `in`, keyword Python, então o
+    adapter não conseguiria sequer **anotar** o objeto que embrulha, e a supressão
+    seriam **três** pares de `ignore_imports`, não um. Aqui são **zero**.
+  - **Ele embrulha o MESMO `IdentityGuard`** que já é construído em
+    `wire_dependencies` (linha 299) e exposto como `identity_guard` — não um
+    segundo grafo. É metade do CA15, e o teste assere identidade de objeto.
+  - **Tradução de `authorize`:** `permission: str` → `Permission(permission)`;
+    `tenant_id`/`unit_id` `str` → os `NewType` de identity; o `AuthorizedActor`
+    devolvido → `AuthorizedScope`.
+  - **L-AG3 no tradutor:** se `AuthorizedActor.actor_tenant_id` for `None` (hoje só
+    `platform_admin`), o tradutor **nega** — nunca `TenantId(... or "")`. Ver a
+    entrada `[decision]` da §7 sobre qual exceção usar.
+  - **L-AG1/L-AG2 no tradutor:** `authenticate` e `authorize` **não** têm
+    `try/except`. Toda exceção de identity sobe crua — é o que fará a faixa 401/403
+    da Stage 3.6 ser byte-idêntica à de identity.
+  - **`ApplicationDependencies` ganha `staff_access_guard: AccessGuard`**, anotado
+    com o **port** e não com a classe concreta: é o campo cujo tipo precisa ser
+    abstrato, ao contrário dos campos de use case (o docstring do contêiner explica
+    a assimetria).
+  - **`build_http_wiring` NÃO muda.** Não há router de staff a registrar, e é
+    exatamente o que o CA21 trava.
+  - **Testes** em `test_composition_root_staff.py`:
+    - **CA15** — `deps.staff_access_guard` satisfaz `AccessGuard`; o
+      `IdentityGuard` que ele embrulha **é** (`is`) `deps.identity_guard`; e as
+      asserções mecânicas já existentes (os 16 use cases sobre os adapters
+      Postgres, nada instanciando adapter fora do composition root) seguem verdes.
+    - **CA21** — o diretório `src/restaurant_hub/features/staff/adapters/in/`
+      **não existe**, e `build_http_wiring(deps).router` é o router de identity —
+      único registrado. Assim a promessa "nenhuma rota nasce aqui" é verificada,
+      não afirmada.
+- **Critério de aceite:**
+  - CA15 e CA21 verdes; `make check` verde.
+  - `bc-independence` sem supressão (o teste da Task 05 continua verde).
+  - Cobertura ≥ 90% em `composition_root.py`.
+  - `uv run uvicorn restaurant_hub.main:app` sobe — o grafo montado não quebrou o
+    boot (é a verificação funcional da §3).
 - **Comando de verificação:**
-  ```bash
-  <comando>
+  ```powershell
+  $env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
+  uv run pytest tests/unit/features/staff/adapters/test_composition_root_staff.py -v
+  uv run pytest tests/unit/test_bootstrap.py tests/e2e/ -v
+  uv run python -c "from restaurant_hub.composition_root import wire_dependencies; d = wire_dependencies(); print(type(d.staff_access_guard).__name__)"
+  make check
   ```
-- **Commit sugerido:** `<type>(<scope>): <description> [N.M/task-02]`
+- **Commit sugerido:** `feat(staff): montar o tradutor do AccessGuard sobre o IdentityGuard no composition root [3.4/task-06]`
 
----
+## 2.1 Matriz de rastreabilidade
 
-<Repetir Tasks.>
+**Regra:** nada órfão nos dois sentidos — todo critério, lei e ADR de fundação tem
+ao menos uma Task que o entrega, e nenhuma Task existe sem item que a justifique.
+
+### Critérios de aceite do concept §11 → Task
+
+| Critério | Task(s) | Onde o check acontece |
+|---|---|---|
+| CA1 — as duas permissões existem; mapa de papéis continua **total** | **01** | `test_role_permission.py::test_mapa_de_permissoes_e_total_sobre_todos_os_papeis` (já existente) |
+| CA2 — `owner`/`manager`/`hr` detêm as duas; `employee`/`platform_admin` nenhuma | **01** | teste parametrizado sobre os cinco papéis |
+| CA3 — `hr` e `manager` com conjuntos de staff **idênticos** | **01** | teste dedicado, falha se alguém os separar sem ADR |
+| CA4 — unit-scoped com `MANAGE_JOB_FUNCTIONS` sem unidade é **autorizado** | **01** | `test_authorize_action.py` (ramo verdadeiro da condição nova) |
+| CA5 — unit-scoped com `MANAGE_STAFF` sem unidade → `UnitScopeRequiredError` | **01** | `test_authorize_action.py` (ramo falso) |
+| CA6 — `TENANT_WIDE_PERMISSIONS` == `{MANAGE_JOB_FUNCTIONS}`, lista explícita | **01** | `test_role_permission.py` |
+| CA7 — `MANAGE_STAFF` **não** está no conjunto | **01** | idem — mata a mutação de alcance cross-unidade |
+| CA8 — passos 3 e 5 inalterados, inclusive para permissão tenant-wide | **01** | `test_authorize_action.py` |
+| CA9 — registro da unidade A não é encontrado com unidade B (`find_by_id` **e** `delete`) | **04** | suíte de contrato de funcionário |
+| CA10 — CA9 provado nos **dois** lados com um corpo de teste só | **04** | `pytest -v` mostrando `[fake]` e `[postgres]` |
+| CA11 — dez commands carregam `unit_id`; doze use cases o repassam | **03** (commands) + **04** (use cases) | `test_dtos.py` + asserção sobre `store.calls` |
+| CA12 — nada em `features/staff/` importa `features.identity` nem nomeia `Role`/`Permission` | **05** | `test_bc_independence.py` (AST) + `lint-imports` |
+| CA13 — `bc-independence` sem nenhum `ignore_imports` | **05** | `test_bc_independence.py` lê o `.importlinter` |
+| CA14 — L-AG1…L-AG4 testadas contra uma **segunda** implementação | **05** | `test_access_guard_laws.py` contra o fake |
+| CA15 — tradutor montado sobre o **mesmo** `IdentityGuard`; teste mecânico verde | **06** | `test_composition_root_staff.py` (`is`) |
+| CA16 — `\x00` rejeitado em `Employee` e `JobFunction`, **inclusive na reidratação** | **02** | `tests/unit/features/staff/domain/` |
+| CA17 — a suíte de lei exercita o NUL e **fake e Postgres concordam** | **02** | suíte de contrato, `[fake]` **e** `[postgres]` |
+| CA18 — acento, ZWJ, `\n`, aspas, 1000 chars continuam aceitos verbatim | **02** | teste parametrizado (prova que a restrição não cresceu) |
+| CA19 — `DayPeriod.from_string("xpto")` → `InvalidDayPeriodError` (`StaffError`) | **02** | `test_shift_preference.py` + `test_exceptions.py` |
+| CA20 — suíte de identity sem alteração de asserção **(⚠️ devolvido — §1)** | **01** | `git diff -- tests/unit/features/identity/`, na leitura operativa da §1 |
+| CA21 — nenhuma rota nasce; sem `features/staff/adapters/in/` | **06** | `test_composition_root_staff.py` + §3 |
+| CA22 — `make check` verde | **todas** + §3 | comando de verificação de cada Task |
+| CA23 — cobertura ≥ 90% em cada arquivo novo/tocado | **todas** + §3 | `--cov-report=term-missing` lido arquivo a arquivo |
+
+### Leis novas ou alteradas → Task que as entrega
+
+| Lei | Estado | Task | Provada onde |
+|---|---|---|---|
+| **L-E2** `update` é `UPDATE` | **reescrita** sobre o endereço de três partes | **04** | contrato, nos dois parâmetros |
+| **L-E3** localização imutável | **reescrita** — gatilho mais estreito, lei preservada (ADR 3.4.0007 §5) | **04** | contrato, nos dois parâmetros |
+| **L-E5** remoção guardada | **reescrita** — `delete` exige a unidade | **04** | contrato, nos dois parâmetros |
+| **L-E1, L-E4, L-E6, L-E7, L-JF1…L-JF5, `L-ORD`** | **inalteradas** — consumidas | — | suítes de contrato da 3.3 seguem verdes (não-regressão) |
+| **L-AG1** exceção de autenticação sai crua | **nova** | **05** (declarada + fake) | `test_access_guard_laws.py`; tradutor sem `try/except` na **06** |
+| **L-AG2** exceção de autorização sai crua | **nova** | **05** | idem |
+| **L-AG3** `tenant_id` nunca vazio; ator sem tenant é negado | **nova** | **05** (declarada) + **06** (tradutor a cumpre) | `test_access_guard_laws.py` + `test_composition_root_staff.py` |
+| **L-AG4** uma autorização por alvo | **nova** | **05** | registro de chamadas do fake |
+| **Nome sem byte NUL** (invariante de `Employee`/`JobFunction`) | **nova** — restrição de contrato de domínio | **02** | unit + contrato nos dois parâmetros |
+| **Dispensa de unidade por permissão tenant-wide** | **nova** — condição do passo 4 | **01** | `test_authorize_action.py`, os dois ramos |
+
+### ADRs de fundação desta Stage → Task que os efetiva
+
+| ADR | O que decide | Task(s) |
+|---|---|---|
+| **3.4.0001** — port `AccessGuard` de staff, tradutor no composition root | §1 port e vocabulário, §2 as quatro leis, §4 colocação em `ports/out/` | **05** |
+| | §3 implementação montada no composition root, zero `ignore_imports` | **06** (com a guarda de CA13 na **05**) |
+| **3.4.0003** — byte NUL recusado no domínio; `DayPeriod.from_string` | §1–§4 (o §5 "identity não é tocada" é `[finding]`, não Task) | **02** |
+| **3.4.0006** — duas permissões e `hr` ≡ `manager` em staff | §2 paridade, §4 as duas permissões e o mapa, §3 restrição para frente registrada no `role.py` | **01** |
+| **3.4.0007** — a unidade entra no endereço do funcionário | §3 os dez commands | **03** |
+| | §1 assinatura, §2 lei de port e não SQL, §4 ordem de checagem, §5 `L-E3`, §6 expansão declarada | **04** |
+| **3.4.0008** — permissão tenant-wide dispensa o escopo de unidade | §1 o conjunto, §2 a condição do passo 4, §3 por permissão nunca por papel, §4 passos 3 e 5 intactos, §5 totalidade é teste | **01** |
+
+**Os três ADRs da Stage 3.6 (3.4.0002 mapa de status, 3.4.0004 sem paginação,
+3.4.0005 cópia repetida) não têm Task aqui, e é o correto** — decididos nesta
+Stage, executados na 3.6 (concept §13). Se alguma Task deste plano os citasse como
+entregável, seria escopo vazado.
+
+### Decisões de §7 do concept sem ADR → Task
+
+| Decisão | Task |
+|---|---|
+| **D6** — o corte, e a fronteira com a 3.6 | processo; já registrada na nota datada do `roadmap.md` |
+| **D7** — sem `gate_mode: batch` | §3 (Checkpoints A/B/C completos, sem alívio) |
 
 ## 3. Gate de saída da Stage
 
-> O que precisa estar verdadeiro para a Stage receber o commit
-> `stage N.M: complete` e ser mergeada em `develop`.
-
 ### Verificações automatizadas
-```bash
-make check                # lint + type + import-linter + check_layout + testes
-pytest tests/             # todos os testes
-<outros comandos específicos da Stage>
+
+```powershell
+$env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"
+docker compose up -d postgres          # o gate exige banco real (ADR 2.3.0001), sem skip
+do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
+make check                             # lint + typecheck + layout + import + lock + docs + testes com cobertura
+uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
+uv run python scripts/check_technical_postexec.py docs/stages/3.4-staff-access-scope/technical.md
+git diff --name-only (git merge-base origin/develop HEAD) HEAD -- src/   # cobertura por arquivo tocado
 ```
 
 ### Verificações funcionais
-- [ ] <comportamento end-to-end que precisa funcionar — ex.: "rodar `python -m restaurant_hub.cli ingest sample.csv` produz N registros no banco">
-- [ ] <outro>
+
+- [ ] **Nenhuma rota nova** — `build_http_wiring(deps)` registra **só** o router de
+      identity, e `src/restaurant_hub/features/staff/adapters/in/` não existe
+      (CA21).
+- [ ] **A app sobe** — `uv run uvicorn restaurant_hub.main:app` inicia com o
+      `staff_access_guard` montado; o grafo de dependências não quebrou o boot.
+- [ ] **A suíte de contrato roda contra o banco real** — o output mostra `[fake]`
+      **e** `[postgres]` para cada lei; com o container **parado**, a suíte
+      **falha** (não pula).
+- [ ] **O escopo de unidade é inalcançável por omissão** — não existe forma de
+      chamar `find_by_id`/`delete` sem nomear a unidade (verificação por
+      assinatura, não por convenção).
+- [ ] **Nenhuma migration nova** — `git diff --name-only origin/develop..HEAD --
+      migrations/` vazio.
 
 ### Checklist de fechamento da Stage
-- [ ] Todas as Tasks commitadas, cada uma com seu check verde
+
+- [ ] Todas as 6 Tasks commitadas, cada uma com seu check verde
 - [ ] `make check` verde no branch
-- [ ] Commit final `stage N.M: complete` aplicado
-- [ ] Branch mergeado em `develop`
-- [ ] `roadmap.md` atualizado: Stage marcada `done`, `updated_at` e
-      `last_reviewed_at` no mesmo merge (ou em PR de docs imediato)
-- [ ] ADRs novos (se houve) em `status: accepted`
-- [ ] Runbooks operacionais criados se aplicável
-- [ ] `concept.md` desta Stage não precisa de retoque retrospectivo
-      (se precisa, abrir TODO ou nova Stage de correção)
+- [ ] **Decisão do sponsor sobre CA20 registrada** (§1 ⚠️) — concept ajustado ou
+      leitura operativa confirmada
+- [ ] Cobertura ≥ 90% global **e** em cada arquivo de `src/` tocado
+- [ ] Auditoria de Testes com todos os itens "sim"
+- [ ] Checkpoints A, B e C executados, com todos os achados dispostos
+- [ ] §7 deste documento reflete a execução real
+- [ ] `[finding]` escalados têm Stage candidata identificada (os sete do concept
+      §10 + os que a execução produzir)
+- [ ] Commit final `stage 3.4: complete` aplicado
+- [ ] `roadmap.md` atualizado: Stage `3.4-staff-access-scope` em `status: done`,
+      `updated_at` e `last_reviewed_at` na data do merge
+- [ ] ADRs `3_4_0001`–`3_4_0008` seguem em `status: accepted`
+- [ ] `concept.md` não precisa de retoque retrospectivo (se precisar por causa de
+      CA20, é regressão declarada, não silêncio)
 
 ## 4. Ordem de dependência entre Tasks
 
-<Texto ou lista mostrando quais Tasks dependem de quais. Por padrão a
-ordem listada em §2 já respeita dependências; explicitar aqui só os
-casos não óbvios.>
+```
+Task 01 (identity: permissões + passo 4) ───────────────┐
+                                                        │
+Task 02 (staff domain: NUL + DayPeriod) ──► Task 04     │
+                                             ▲          │
+Task 03 (commands +unit_id) ─────────────────┘          │
+                                                        ▼
+Task 05 (port AccessGuard + leis + fake) ─────────► Task 06 (tradutor + wiring)
+```
 
-```
-Task 01 ─► Task 02 ─► Task 04
-              │
-              └──► Task 03
-```
+- **02 → 04:** a suíte de contrato de funcionário é tocada nas duas; com o domínio
+  já recusando o NUL, a Task 04 mexe num arquivo cuja asserção nova já é verde.
+- **03 → 04:** os use cases da 04 leem `command.unit_id`, que a 03 criou. Invertê-las
+  faria a 04 alterar `commands.py` **e** o port no mesmo commit, sem ganho.
+- **01 → 06:** o tradutor converte `str` em `Permission`; os dois nomes que o Step 3
+  usa precisam existir para o teste de wiring ser mais do que sintático.
+- **05 → 06:** critério 4 de Task Atômica — port antes do seu adapter de produção.
+- **01, 02, 03 e 05 são mutuamente independentes.** A ordem entre elas é de leitura
+  (do vocabulário de acesso para o escopo, e do escopo para o port), não de
+  compilação.
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
-| <ex.: lib X não suporta caso Y> | <ex.: cair para lib Z, ADR registrando> |
+| A Task 04 é grande e a tentação de dividi-la reaparece durante a execução | Os três cortes e a razão de cada um estão nomeados na caixa da §1. Se ainda assim aparecer um corte verde não previsto, **PARE e registre** — é achado sobre o plano, não licença |
+| Um teste de use case constrói o command sem `unit_id` e passa por acidente na 03 | `unit_id` é **obrigatório sem default**: construir sem ele é `TypeError` na coleta. É o teste que falha, não o silêncio |
+| A cobertura de branch cair no passo 4 do guard (condição de três termos) | CA4 e CA5 são os dois ramos, e o projeto mede **branch coverage** (`branch = true`). Se o `term-missing` apontar ramo faltante, cobrir — nunca justificar |
+| O tradutor coagir `tenant_id` para `""` sem que nada reclame | L-AG3 tem teste contra o fake (Task 05) **e** asserção no wiring (Task 06). Se aparecer um caminho em que o ator sem tenant chega ao `AuthorizedScope`, é **blocker**, não ajuste |
+| Postgres da worktree anterior retido na porta, e a Stage testar contra infra alheia | `docker ps` antes do gate; a limpeza é no **setup** de cada suíte (convenção do projeto), não no teardown |
+| CA20 permanecer indecidido e a Task 01 ser dada por aceita por inércia | O critério da Task 01 diz literalmente que ela **não é aceita** sem a decisão. O checklist da §3 repete |
+| A execução inventar migration por causa do texto do ADR 3.3.0006 | §Premissas e a verificação funcional da §3: `git diff -- migrations/` **vazio**. O texto do ADR já está reconciliado na nota do `roadmap.md` |
+| A execução tentar resolver algum `[finding]` da 3.6 (mapa de status, paginação, cópia repetida) | A matriz §2.1 declara que os três ADRs da 3.6 **não têm Task aqui**; qualquer arquivo em `adapters/in/` reprova CA21 |
 
 ## 6. Referências
 
-- [`./concept.md`](./concept.md) — conceito desta Stage
-- [`../../overview.md`](../../overview.md)
-- [`../../roadmap.md`](../../roadmap.md)
-- [`../../CONVENTIONS.md`](../../CONVENTIONS.md) — branches, commits, status
-- ADRs desta Stage: [`../../adr/`](../../adr/) (filtrar por prefixo `N_M_`)
-- Skills aplicáveis: <ids de `skills/`>
-- Docs externos: <links>
+- [`./concept.md`](./concept.md) — conceito desta Stage (§4 contratos, §5
+  invariantes, §11 critérios, §13 fronteira com a 3.6)
+- [`../../roadmap.md`](../../roadmap.md) — bloco `3.4-staff-access-scope` e a nota
+  datada de 2026-08-12 (o corte e as reconciliações)
+- [`../../overview.md`](../../overview.md) §3, §6, §9
+- [`../../domain/staff/workforce.md`](../../domain/staff/workforce.md) §3.1, §3.2, §4
+- [`../../CONVENTIONS.md`](../../CONVENTIONS.md) §1 (idioma do código), §4
+  (commits), §6 (tamanho de Stage)
+- [`../../LAYOUT.md`](../../LAYOUT.md) §3 (dependências), §6 (composition root), §8
+  (o pacote `in`)
+- [`../../PIPELINE.md`](../../PIPELINE.md) §4.3 (Task Atômica)
+- Stages precedentes: [`../3.2-staff-application/concept.md`](../3.2-staff-application/concept.md)
+  (leis dos ports), [`../3.3-staff-persistence/technical.md`](../3.3-staff-persistence/technical.md)
+  (§7 byte NUL; a promoção da suíte de contrato),
+  [`../2.4-identity-http/technical.md`](../2.4-identity-http/technical.md) (a Stage
+  que construiu o guard que esta estende)
+- **ADRs de fundação desta Stage:** [`3.4.0001`](../../adr/3_4_0001-staff-owned-access-guard-port.md),
+  [`3.4.0003`](../../adr/3_4_0003-reject-nul-byte-in-staff-domain-names.md),
+  [`3.4.0006`](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md),
+  [`3.4.0007`](../../adr/3_4_0007-unit-enters-the-employee-address.md),
+  [`3.4.0008`](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)
+- **ADRs decididos aqui e executados na 3.6** (fora do escopo deste plano):
+  `3.4.0002`, `3.4.0004`, `3.4.0005`
+- ADRs consumidos: 2.1.0001, 2.2.0002, 2.3.0001, 2.3.0003, 2.3.0005, 2.4.0001,
+  2.4.0003, 3.1.0001, 3.1.0002, 3.1.0006, 3.2.0002, 3.2.0003, 3.2.0006, 3.2.0007,
+  3.3.0002, 3.3.0003, 3.3.0004, 3.3.0006, 3.3.0007
+- Skills aplicáveis: `task-ordering-hex`, `hex-arch-python`, `composition-root`,
+  `pytest-with-fakes`, `repository-pattern`, `import-linter-rules`
+- **Issue [#40](https://github.com/MarceloSanC/restaurant-hub/issues/40)** (esta
+  Stage); issue #41 (habilitação de função por unidade — alicerçada aqui, não
+  implementada)
 
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
@@ -179,14 +943,13 @@ Task 01 ─► Task 02 ─► Task 04
 > [`RUNBOOK-STAGE-LIFECYCLE.md`](../../RUNBOOK-STAGE-LIFECYCLE.md) via
 > `scripts/check_technical_postexec.py`. O frontmatter `updated_at`
 > **não muda** com edições aqui — cada entrada carrega data + autor.
-> Seção pode estar vazia se a execução não produziu notas relevantes.
 >
 > **Regra de pergunta antes da nota.** Ao encontrar durante a Fase 4
 > algo não previsto no Concept ou neste Technical, **pause** e
 > levante a pergunta para o humano com 2–4 opções e uma marcada como
-> **recomendada** + razão (via `AskUserQuestion` ou equivalente).
-> Apenas após a decisão, registre a entrada abaixo. Na dúvida sobre
-> se algo é "pequeno o suficiente para decidir sozinho", **pergunte**.
+> **recomendada** + razão. Apenas após a decisão, registre a entrada
+> abaixo. Na dúvida sobre se algo é "pequeno o suficiente para decidir
+> sozinho", **pergunte**.
 
 **Formato de cada entrada** (ADR-like, ordem cronológica):
 
@@ -202,13 +965,62 @@ Task 01 ─► Task 02 ─► Task 04
 ```
 
 - `[decision]` — algo não previsto foi decidido durante a execução.
-  Inclui pergunta, opções, decisão, razão.
-- `[finding]` — gap/observação a tratar em **próxima Stage**; corpo
-  inclui "direção sugerida" e Stage candidata.
-- `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
-  diz o que mudou e por que ficou abaixo do threshold de perguntar.
+- `[finding]` — gap/observação a tratar em **próxima Stage**; corpo inclui
+  "direção sugerida" e Stage candidata.
+- `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+---
+
+### 2026-08-17 — [decision] Fase 3B — exceção que o tradutor levanta ao cumprir L-AG3 — Claude
+
+**Contexto:** L-AG3 exige que o ator sem tenant seja **negado**, não coagido para
+`TenantId("")`. O concept e o ADR 3.4.0001 fixam a **propriedade** (negar) mas não
+o **tipo de exceção**, e o único ator sem tenant hoje (`platform_admin`) já seria
+negado antes, no passo 2 do guard, por não deter nenhuma das duas permissões novas.
+**Pergunta:** que exceção o tradutor levanta nesse caminho?
+**Opções:**
+- A — exceção nova, de staff, no módulo do port.
+- B — `PermissionDeniedError` de identity, levantada pelo tradutor. ✅ recomendada
+**Decisão:** B.
+**Razão:** trivial e sem alternativa real de desenho, ancorada em princípio
+existente: L-AG2 exige que a exceção de autorização **saia crua** para que a faixa
+403 da Stage 3.6 tenha corpo constante. Uma exceção nova de staff produziria uma
+faixa de erro distinta para um caminho que é, semanticamente, "este ator não pode
+agir sobre este alvo". `PermissionDeniedError` mora em identity e é levantada no
+composition root, que já importa os dois BCs — `bc-independence` intacto.
+
+---
+
+### 2026-08-17 — [decision] Fase 3B — onde mora o teste de `bc-independence` de staff — Claude
+
+**Contexto:** CA12 e CA13 são varreduras sobre o BC **inteiro** (todos os módulos
+de `features/staff/` + o arquivo `.importlinter`), e não sobre uma camada. O
+espelho de `tests/unit/features/staff/` é por camada
+(`domain/`, `application/`, `adapters/`), então nenhuma delas é o lugar natural.
+**Decisão:** `tests/unit/features/staff/test_bc_independence.py`, na raiz do pacote
+de testes da feature.
+**Razão:** trivial e sem alternativa real. Segue o precedente de
+`tests/unit/test_bootstrap.py`, que já ocupa a raiz por ser transversal às camadas
+(LAYOUT §2). Pô-lo dentro de `application/` afirmaria que a regra é da camada
+application, o que é falso — ela vale para o BC inteiro.
+
+---
+
+### 2026-08-17 — [finding] Fase 3B — CA20 é literalmente inalcançável — Claude
+
+**Contexto:** CA20 do concept §11 e o `definition_of_done` do bloco 3.4 do
+`roadmap.md` exigem que a suíte de identity passe *"sem alteração de asserção"*.
+Medição em `tests/unit/features/identity/domain/test_role_permission.py`: a linha
+27 assere o conjunto **exato** dos valores do enum `Permission`, e as linhas 66–78
+parametrizam o conjunto **exato** de permissões por papel. Acrescentar duas
+permissões e concedê-las a três papéis **exige** editar as duas — e são exatamente
+os testes de fechamento que o ADR 3.4.0008 §5 pede que existam.
+**Direção sugerida:** reescrever CA20 nos termos operativos da §1 deste documento
+(nenhuma asserção que expresse **decisão de acesso** muda; mudam apenas as fixtures
+de fechamento de vocabulário, listadas nominalmente no commit), com a mesma
+correção na nota datada do `roadmap.md`.
+**Stage candidata:** **esta** — a correção é do concept desta Stage e precisa da
+decisão do sponsor **antes** do aceite da Task 01. **Não foi decidida pelo autor
+deste plano.**
 
 <!-- END: post-execution -->
