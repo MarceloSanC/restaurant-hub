@@ -33,7 +33,10 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
-from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
+from restaurant_hub.features.staff.domain.exceptions.errors import (
+    InvalidNameError,
+    StaffError,
+)
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -729,3 +732,57 @@ def test_escopo_de_tenant_registro_do_a_e_invisivel_e_intocavel_com_tenant_b(
     with pytest.raises(EmployeeNotFoundError):
         repos.employees.delete(_B, _E1)
     assert repos.employees.find_by_id(_A, _E1) is not None
+
+
+# --- o byte NUL: a divergência fake ≢ real que a 3.4 fecha ------------------
+#
+# Esta é a asserção que **reprovaria em `[postgres]`** antes da Stage 3.4: o
+# fake gravava o nome com NUL verbatim e o `psycopg` o recusava client-side com
+# `DataError` (sem `sqlstate`, fora do alcance do tradutor de integridade da
+# 3.3). Com a regra no domínio os dois parâmetros concordam **por construção** —
+# e é isso que distingue este conserto de apenas esconder o 500
+# (ADR 3.4.0003 §4).
+_NOMES_ADVERSARIAIS = (
+    "José Antônio",
+    "\U0001f469\u200d\U0001f373",
+    "linha1\nlinha2",
+    'Ana "Nana" O\'Brien',
+    "a" * 1000,
+)
+_IDS_ADVERSARIAIS = ["acento", "emoji_zwj", "quebra_de_linha", "aspas", "mil_caracteres"]
+
+
+def test_ca17_nome_com_byte_nul_e_recusado_antes_de_alcancar_o_port(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """A recusa acontece na **construção da entidade**, não no port.
+
+    Por isso `[fake]` e `[postgres]` passam pela mesma razão, e não por duas
+    razões que casualmente coincidem hoje.
+    """
+    _com_funcoes_gravadas(repos)
+
+    with pytest.raises(InvalidNameError):
+        repos.employees.add(_funcionario(name="Mar\x00ia"))
+
+    # Nada chegou ao store, nos dois parâmetros.
+    assert repos.employees.find_by_id(_A, _E1) is None
+
+
+@pytest.mark.parametrize("nome", _NOMES_ADVERSARIAIS, ids=_IDS_ADVERSARIAIS)
+def test_ca18_nome_adversarial_sem_nul_faz_round_trip_verbatim(
+    repos: RepositoriosDeStaff, nome: str
+) -> None:
+    """CA18 — a restrição é do tamanho da divergência, não maior.
+
+    Sem este teste nada impede que a regra do NUL cresça depois para o C0
+    inteiro, normalização de espaço ou limite de tamanho — normalização
+    silenciosa por outro nome, contra o ADR 2.3.0005.
+    """
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_funcionario(name=nome))
+
+    lido = repos.employees.find_by_id(_A, _E1)
+
+    assert lido is not None
+    assert lido.name == nome

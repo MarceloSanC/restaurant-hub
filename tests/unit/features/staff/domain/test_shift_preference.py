@@ -4,7 +4,10 @@ import dataclasses
 
 import pytest
 
-from restaurant_hub.features.staff.domain.exceptions.errors import EmptyShiftPreferenceError
+from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmptyShiftPreferenceError,
+    InvalidDayPeriodError,
+)
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
     ShiftPreference,
@@ -68,3 +71,29 @@ def test_preferencia_e_imutavel() -> None:
     preferencia = ShiftPreference(periods=frozenset({DayPeriod.MORNING}))
     with pytest.raises(dataclasses.FrozenInstanceError):
         preferencia.periods = frozenset({DayPeriod.NIGHT})  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# CA19 — DayPeriod.from_string
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("valor", ["morning", "afternoon", "night", "overnight"])
+def test_from_string_aceita_periodo_conhecido(valor: str) -> None:
+    assert DayPeriod.from_string(valor).value == valor
+
+
+@pytest.mark.parametrize("desconhecido", ["xpto", "", "MORNING", "madrugada", "dawn"])
+def test_from_string_rejeita_periodo_desconhecido(desconhecido: str) -> None:
+    """CA19 — `DayPeriod("xpto")` era `ValueError` cru: nem `StaffError`, nem
+    handler, logo 500 na borda. Agora é erro de domínio (ADR 3.4.0003 §3)."""
+    with pytest.raises(InvalidDayPeriodError, match="período do dia inválido"):
+        DayPeriod.from_string(desconhecido)
+
+
+def test_from_string_preserva_a_causa_original() -> None:
+    """`raise ... from exc` mantém o `ValueError` do enum como causa — há teste
+    equivalente em identity (`Role.from_string`), e deve haver aqui."""
+    with pytest.raises(InvalidDayPeriodError) as excinfo:
+        DayPeriod.from_string("xpto")
+    assert isinstance(excinfo.value.__cause__, ValueError)

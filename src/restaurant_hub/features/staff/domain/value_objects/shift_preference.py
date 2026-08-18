@@ -9,7 +9,10 @@ vive no `Employee` (o campo é `ShiftPreference | None`), não aqui: preferênci
 from dataclasses import dataclass
 from enum import StrEnum
 
-from restaurant_hub.features.staff.domain.exceptions.errors import EmptyShiftPreferenceError
+from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmptyShiftPreferenceError,
+    InvalidDayPeriodError,
+)
 
 
 class DayPeriod(StrEnum):
@@ -25,6 +28,19 @@ class DayPeriod(StrEnum):
     AFTERNOON = "afternoon"
     NIGHT = "night"
     OVERNIGHT = "overnight"
+
+    @classmethod
+    def from_string(cls, value: str) -> "DayPeriod":
+        """Converte texto em `DayPeriod`, com erro de domínio se for desconhecido.
+
+        Idêntico em forma ao `Role.from_string` de identity (ADR 3.4.0003 §3): a
+        causa original é preservada com `from exc`, para que o rastro do
+        `ValueError` do enum sobreviva para depuração nas camadas de fora.
+        """
+        try:
+            return cls(value)
+        except ValueError as exc:
+            raise InvalidDayPeriodError(value) from exc
 
 
 @dataclass(frozen=True)

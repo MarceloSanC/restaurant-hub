@@ -352,3 +352,49 @@ def test_eq_delega_ao_outro_operando_quando_o_tipo_e_estranho() -> None:
     # __eq__ devolve NotImplemented para tipo alheio: o outro operando decide.
     assert _funcionario() == _SempreIgual()
     assert _SempreIgual() == _funcionario()
+
+
+# ---------------------------------------------------------------------------
+# CA16 / CA18 — o byte NUL, e só ele
+# ---------------------------------------------------------------------------
+
+# Bateria adversarial medida na Stage 3.3: destes cinco, **nenhum** divergia
+# entre fake e Postgres — só o byte NUL divergia. Congelá-los aqui é o que
+# prova que a restrição da 3.4 é do tamanho da divergência, e não maior (CA18).
+_NOMES_ADVERSARIAIS = (
+    "José Antônio",
+    "\U0001f469\u200d\U0001f373",
+    "linha1\nlinha2",
+    'Ana "Nana" O\'Brien',
+    "a" * 1000,
+)
+_IDS_ADVERSARIAIS = ["acento", "emoji_zwj", "quebra_de_linha", "aspas", "mil_caracteres"]
+
+
+@pytest.mark.parametrize("nome", ["a\x00b", "\x00", "Maria\x00"])
+def test_ca16_nome_com_byte_nul_e_rejeitado_na_construcao(nome: str) -> None:
+    """O `psycopg` recusa o NUL client-side; sem esta regra o fake gravaria o
+    que o banco real não aceita — a divergência que a 3.3 mediu
+    (ADR 3.4.0003 §1)."""
+    with pytest.raises(InvalidNameError, match="nome de funcionário"):
+        _funcionario(name=nome)
+
+
+def test_ca16_nome_com_byte_nul_e_rejeitado_no_rename() -> None:
+    """`rename` passa por `dataclasses.replace`, logo pelo mesmo `__post_init__`."""
+    with pytest.raises(InvalidNameError, match="nome de funcionário"):
+        _funcionario().rename("Ma\x00ria")
+
+
+def test_ca16_a_mensagem_do_nul_nao_afirma_que_o_nome_esta_vazio() -> None:
+    """Recusar por "não pode ser vazio" um nome que tem conteúdo descreveria
+    o defeito errado a quem recebe o 422 na Stage 3.6."""
+    with pytest.raises(InvalidNameError) as excinfo:
+        _funcionario(name="Ma\x00ria")
+    assert "byte NUL" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("nome", _NOMES_ADVERSARIAIS, ids=_IDS_ADVERSARIAIS)
+def test_ca18_nomes_adversariais_sem_nul_continuam_aceitos_verbatim(nome: str) -> None:
+    """A restrição não cresceu: nada de C0, normalização de espaço ou limite."""
+    assert _funcionario(name=nome).name == nome

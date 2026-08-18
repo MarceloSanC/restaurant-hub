@@ -1178,4 +1178,49 @@ tests/unit/features/identity/` sem edição fora das **duas** fixtures de
 fechamento"* deve ser lido como **três**, nominadas no corpo do commit da Task 01
 junto das outras duas. O conjunto de comportamentos protegidos não mudou.
 
+---
+
+### 2026-08-17 — [decision] Task 02 — `InvalidNameError` ganha um `reason` opcional — Claude
+
+**Contexto:** o ADR 3.4.0003 manda **reutilizar** `InvalidNameError` para o byte
+NUL (*"a dedicated error class would fragment the 422 band"*), e o plano seguiu.
+Mas a mensagem do erro é fixa: `"nome de {entity} não pode ser vazio"`. Aplicada a
+um nome que **tem** conteúdo e só carrega um `\x00`, ela descreve o defeito errado
+— e é essa mensagem que a Stage 3.6 devolve no corpo do 422.
+
+**Pergunta:** reusar a mensagem existente, ou dar ao erro um motivo variável?
+**Opções:**
+- A — manter a mensagem única; o 422 diz "não pode ser vazio" para um nome não-vazio.
+- B — `reason: str = "não pode ser vazio"` como segundo parâmetro opcional. ✅ recomendada
+**Decisão:** B.
+**Razão:** reversível-barata e **ancorada**: a disciplina que este Step vem
+policiando é a de não afirmar o que não é verdade, e A produz exatamente uma
+afirmação falsa na superfície que o usuário lê. O default preserva byte a byte
+todas as mensagens existentes — nenhuma asserção de suíte anterior muda —, o erro
+continua **um só** (a faixa 422 do ADR 3.4.0003 não fragmenta) e o mapa de status
+da 3.6 não ganha entrada nova. `test_exceptions.py` trava as duas mensagens.
+
+---
+
+### 2026-08-17 — [deviation] Task 02 — a reidratação do mapper entra no commit — Claude
+
+**Contexto:** CA16 exige o NUL rejeitado *"em **todos** os caminhos de construção,
+**inclusive a reidratação do mapper**"*. A lista de arquivos da Task 02 cobre as
+entidades, os erros, os testes de domínio e as duas suítes de contrato — mas não
+`tests/unit/features/staff/adapters/test_mappers.py`, que é onde o caminho do
+mapper é exercitado. Com a lista literal, a metade "reidratação" do critério
+ficaria provada por **argumento** (*"a validação está em `__post_init__`, logo o
+mapper a herda"*) e não por teste.
+
+**Ajuste aplicado:** um teste novo,
+`test_ca16_byte_nul_na_linha_levanta_ao_ser_lido_nas_duas_entidades`, cobrindo
+`row_to_job_function` e `row_to_employee`. É **puramente aditivo** — nenhum teste
+existente do arquivo foi renomeado, reparametrizado ou teve asserção alterada.
+
+**Razão:** o argumento é verdadeiro, mas "afirmar conformidade sem verificar" é a
+classe de defeito que esta Stage inteira existe para fechar, e o critério nomeia a
+reidratação de propósito. O custo é um teste; o risco evitado é um
+`object.__setattr__` futuro no lugar do construtor apagando a garantia sem quebrar
+nada.
+
 <!-- END: post-execution -->

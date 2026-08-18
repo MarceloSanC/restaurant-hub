@@ -123,6 +123,26 @@ def test_funcao_com_nome_vazio_na_linha_levanta_ao_ser_lida() -> None:
         mappers.row_to_job_function(_linha(id="f1", tenant_id="t1", name="   "))
 
 
+def test_ca16_byte_nul_na_linha_levanta_ao_ser_lido_nas_duas_entidades() -> None:
+    """CA16 — a regra do NUL vale na **reidratação**, e não só na entrada.
+
+    É `__post_init__` quem a impõe, então o caminho do mapper a herda de graça.
+    Sem este teste a herança seria **argumento**, e não verificação — e o
+    critério nomeia a reidratação explicitamente. Um `object.__setattr__` no
+    lugar do construtor apagaria a garantia sem quebrar mais nada.
+    """
+    with pytest.raises(InvalidNameError):
+        mappers.row_to_job_function(_linha(id="f1", tenant_id="t1", name="Cozi\x00nheiro"))
+
+    with pytest.raises(InvalidNameError):
+        mappers.row_to_employee(
+            _linha_de_funcionario(name="Ma\x00ria"),
+            job_function_ids=["f1"],
+            unavailabilities=[],
+            shift_periods=[],
+        )
+
+
 # ---------------------------------------------------------------------------
 # WorkloadProfile — a união e o discriminador persistido
 # ---------------------------------------------------------------------------

@@ -101,3 +101,41 @@ def test_eq_delega_ao_outro_operando_quando_o_tipo_e_estranho() -> None:
     # __eq__ devolve NotImplemented para tipo alheio: o outro operando decide.
     assert _funcao() == _SempreIgual()
     assert _SempreIgual() == _funcao()
+
+
+# ---------------------------------------------------------------------------
+# CA16 / CA18 — o byte NUL, e só ele
+# ---------------------------------------------------------------------------
+
+# Mesma bateria adversarial da suíte de `Employee`, pelo mesmo motivo (CA18).
+_NOMES_ADVERSARIAIS = (
+    "José Antônio",
+    "\U0001f469\u200d\U0001f373",
+    "linha1\nlinha2",
+    'Ana "Nana" O\'Brien',
+    "a" * 1000,
+)
+_IDS_ADVERSARIAIS = ["acento", "emoji_zwj", "quebra_de_linha", "aspas", "mil_caracteres"]
+
+
+@pytest.mark.parametrize("nome", ["a\x00b", "\x00", "Cozinheiro\x00"])
+def test_ca16_nome_com_byte_nul_e_rejeitado_na_construcao(nome: str) -> None:
+    """Mesma regra do `Employee`, pelo mesmo motivo (ADR 3.4.0003 §1)."""
+    with pytest.raises(InvalidNameError, match="nome de função"):
+        _funcao(name=nome)
+
+
+def test_ca16_nome_com_byte_nul_e_rejeitado_no_rename() -> None:
+    with pytest.raises(InvalidNameError, match="nome de função"):
+        _funcao().rename("Cozi\x00nheiro")
+
+
+def test_ca16_a_mensagem_do_nul_nao_afirma_que_o_nome_esta_vazio() -> None:
+    with pytest.raises(InvalidNameError) as excinfo:
+        _funcao(name="Cozi\x00nheiro")
+    assert "byte NUL" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("nome", _NOMES_ADVERSARIAIS, ids=_IDS_ADVERSARIAIS)
+def test_ca18_nomes_adversariais_sem_nul_continuam_aceitos_verbatim(nome: str) -> None:
+    assert _funcao(name=nome).name == nome

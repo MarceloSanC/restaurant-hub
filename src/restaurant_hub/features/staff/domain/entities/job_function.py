@@ -55,6 +55,10 @@ class JobFunction:
             raise InvalidIdentifierError("tenant da função")
         if not self.name.strip():
             raise InvalidNameError("função")
+        # Ver a nota gêmea em `Employee.__post_init__`: só o byte NUL, em
+        # `__post_init__`, para valer também na reidratação (ADR 3.4.0003 §1).
+        if "\x00" in self.name:
+            raise InvalidNameError("função", reason="não pode conter o byte NUL")
 
     def rename(self, name: str) -> "JobFunction":
         """Renomeia a função — nova instância revalidada (nome verbatim)."""

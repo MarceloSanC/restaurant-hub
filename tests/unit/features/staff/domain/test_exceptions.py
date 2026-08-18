@@ -6,6 +6,7 @@ from restaurant_hub.features.staff.domain.exceptions import errors as staff_erro
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmptyJobFunctionsError,
     EmptyShiftPreferenceError,
+    InvalidDayPeriodError,
     InvalidIdentifierError,
     InvalidNameError,
     InvalidUnavailabilityPeriodError,
@@ -30,6 +31,7 @@ def test_staff_error_e_um_domain_error() -> None:
     [
         InvalidIdentifierError,
         InvalidNameError,
+        InvalidDayPeriodError,
         InvalidWeeklyHoursError,
         EmptyShiftPreferenceError,
         EmptyJobFunctionsError,
@@ -64,6 +66,23 @@ def test_identificador_invalido_cita_a_entidade() -> None:
 def test_nome_invalido_cita_a_entidade() -> None:
     with pytest.raises(InvalidNameError, match="nome de função"):
         raise InvalidNameError("função")
+
+
+def test_nome_invalido_descreve_o_motivo_quando_ele_nao_e_o_default() -> None:
+    """CA16 — o mesmo erro cobre dois defeitos, e a mensagem distingue qual."""
+    assert str(InvalidNameError("funcionário")) == "nome de funcionário não pode ser vazio"
+    assert (
+        str(InvalidNameError("funcionário", reason="não pode conter o byte NUL"))
+        == "nome de funcionário não pode conter o byte NUL"
+    )
+
+
+def test_periodo_do_dia_invalido_preserva_o_valor_na_mensagem() -> None:
+    """CA19 — espelha `InvalidRoleError` de identity, inclusive no `!r`."""
+    with pytest.raises(InvalidDayPeriodError) as excinfo:
+        raise InvalidDayPeriodError("xpto")
+    assert "período do dia inválido" in str(excinfo.value)
+    assert "'xpto'" in str(excinfo.value)
 
 
 def test_carga_invalida_preserva_o_valor_na_mensagem() -> None:
