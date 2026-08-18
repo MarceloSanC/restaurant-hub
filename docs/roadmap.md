@@ -989,6 +989,20 @@ skills_hint: [fastapi-thin-adapter, composition-root]
 >   identificador não passa por entidade; e a **leitura de funcionário por id**, que
 >   não existe porque o escopo de unidade foi resolvido por assinatura e não por use
 >   case de leitura.
+> - **`AuthorizedScope.unit_id is None` NÃO significa "tenant-wide"** — o router
+>   **não pode** inferir escopo a partir dele: `owner` e `platform_admin` fazem
+>   bypass de escopo por **papel** (kickoff #9, ADR 2.1.0001), então `owner` +
+>   `manage_staff` sobre uma unidade também volta `None`; inferir trataria ação de
+>   funcionário de um `owner` como não-escopada, **e o erro é silencioso** (não há
+>   exceção, só alcance a mais). É o mais perigoso desta lista.
+> - **`DayPeriod.from_string` nasceu sem produtor em produção** (3.4, Task 02) — o
+>   parser HTTP desta Stage é o produtor natural: usar `from_string` (que levanta
+>   `InvalidDayPeriodError`, um `StaffError`, mapeável a 422) e **não**
+>   `DayPeriod(...)` direto, que reintroduziria `ValueError` fora da faixa mapeada.
+> - **Varrer os ADRs `3_4_0002`/`0004`/`0005` atrás de intervalos de CA defasados**
+>   pela renumeração de critérios feita no corte da Stage 3.4 — o mesmo defeito que
+>   gerou a `## Errata` do ADR 3.4.0001 —, e reconciliar os ponteiros antes de
+>   consumi-los na Fase 3A.
 
 #### Stage 3.5 — `3.5-employee-login-link`
 

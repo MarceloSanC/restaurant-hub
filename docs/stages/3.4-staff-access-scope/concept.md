@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de
 keywords: [concept, staff, acesso, permissao, rbac, escopo-unidade, tenant-wide, access-guard, port, byte-nul]
 status: done
 created_at: 2026-08-12
-updated_at: 2026-08-17
+updated_at: 2026-08-18
 stage_id: 3.4-staff-access-scope
 stage_title: Acesso e escopo de equipe
 step_id: 3
@@ -570,66 +570,66 @@ consulta, não na estrutura.
 
 ### Permissões e autorização
 
-- [ ] **CA1** — `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS` existem em `Permission`
+- [x] **CA1** — `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS` existem em `Permission`
       e o mapa de papéis continua **total** (teste já existente da 2.1 passa).
-- [ ] **CA2** — `owner`, `manager` e `hr` detêm **as duas**; `employee` e
+- [x] **CA2** — `owner`, `manager` e `hr` detêm **as duas**; `employee` e
       `platform_admin` **nenhuma**. Teste parametrizado sobre os cinco papéis.
-- [ ] **CA3** — `hr` e `manager` têm conjuntos de permissão de staff
+- [x] **CA3** — `hr` e `manager` têm conjuntos de permissão de staff
       **idênticos**; teste que falha se alguém os separar sem ADR (é a
       equivalência de §5.1, e é o que é verdade hoje).
-- [ ] **CA4** — Ator unit-scoped exercendo `MANAGE_JOB_FUNCTIONS` **sem**
+- [x] **CA4** — Ator unit-scoped exercendo `MANAGE_JOB_FUNCTIONS` **sem**
       declarar unidade é **autorizado**.
-- [ ] **CA5** — Ator unit-scoped exercendo `MANAGE_STAFF` **sem** declarar
+- [x] **CA5** — Ator unit-scoped exercendo `MANAGE_STAFF` **sem** declarar
       unidade continua recebendo `UnitScopeRequiredError`.
-- [ ] **CA6** — `TENANT_WIDE_PERMISSIONS` contém **exatamente**
+- [x] **CA6** — `TENANT_WIDE_PERMISSIONS` contém **exatamente**
       `{MANAGE_JOB_FUNCTIONS}`; teste com lista esperada explícita.
-- [ ] **CA7** — `MANAGE_STAFF` **não** está em `TENANT_WIDE_PERMISSIONS`.
+- [x] **CA7** — `MANAGE_STAFF` **não** está em `TENANT_WIDE_PERMISSIONS`.
       *(Mata a mutação que daria alcance cross-unidade sobre registros.)*
-- [ ] **CA8** — Os passos 3 e 5 do guard seguem inalterados: ator de outro
+- [x] **CA8** — Os passos 3 e 5 do guard seguem inalterados: ator de outro
       tenant é negado, e unidade não visível é negada, também para permissão
       tenant-wide.
 
 ### Escopo de unidade
 
-- [ ] **CA9** — Registro criado na unidade A **não é encontrado** com `unit_id`
+- [x] **CA9** — Registro criado na unidade A **não é encontrado** com `unit_id`
       da B, em `find_by_id` e em `delete` — e o erro é `EmployeeNotFoundError`,
       nunca um que confirme a existência.
-- [ ] **CA10** — A suíte de **contrato** prova CA9 nos **dois** lados (fake e
+- [x] **CA10** — A suíte de **contrato** prova CA9 nos **dois** lados (fake e
       Postgres) com um corpo de teste só.
-- [ ] **CA11** — Os dez commands carregam `unit_id`, e os doze use cases o
+- [x] **CA11** — Os dez commands carregam `unit_id`, e os doze use cases o
       repassam ao port; teste que falha se algum voltar a resolver por
       `(tenant, id)`.
 
 ### Port `AccessGuard`
 
-- [ ] **CA12** — Nenhum módulo em `features/staff/` importa `features.identity`
+- [x] **CA12** — Nenhum módulo em `features/staff/` importa `features.identity`
       nem nomeia `Role`/`Permission`; varredura + `lint-imports` verde.
-- [ ] **CA13** — O contrato `bc-independence` continua **sem nenhum
+- [x] **CA13** — O contrato `bc-independence` continua **sem nenhum
       `ignore_imports`**; teste lê o `.importlinter` e falha se a lista existir.
-- [ ] **CA14** — As leis L-AG1…L-AG4 são testadas contra uma **segunda
+- [x] **CA14** — As leis L-AG1…L-AG4 são testadas contra uma **segunda
       implementação** (fake): exceção que sai crua, recusa de `tenant_id`
       ausente, uma autorização por alvo.
-- [ ] **CA15** — O tradutor é montado no composition root sobre o **mesmo**
+- [x] **CA15** — O tradutor é montado no composition root sobre o **mesmo**
       `IdentityGuard` de identity, e o teste mecânico de composition root de
       staff continua verde.
 
 ### Domínio
 
-- [ ] **CA16** — Nome contendo `\x00` é rejeitado com `InvalidNameError` em
+- [x] **CA16** — Nome contendo `\x00` é rejeitado com `InvalidNameError` em
       `Employee` e em `JobFunction`, em **todos** os caminhos de construção,
       inclusive a reidratação do mapper.
-- [ ] **CA17** — A suíte de lei dos ports passa a exercitar o nome com NUL, e
+- [x] **CA17** — A suíte de lei dos ports passa a exercitar o nome com NUL, e
       **fake e Postgres concordam** — a asserção que hoje reprovaria em
       `[postgres]` passa nos dois.
-- [ ] **CA18** — Acentos, emoji com ZWJ, `\n`, aspas e 1000 caracteres
+- [x] **CA18** — Acentos, emoji com ZWJ, `\n`, aspas e 1000 caracteres
       **continuam aceitos** e fazem round-trip verbatim. *(Prova que a
       restrição é do tamanho da divergência, não maior.)*
-- [ ] **CA19** — `DayPeriod.from_string("xpto")` levanta
+- [x] **CA19** — `DayPeriod.from_string("xpto")` levanta
       `InvalidDayPeriodError`, que é `StaffError`.
 
 ### Não-regressão
 
-- [ ] **CA20** — **Não-regressão de decisão de acesso em identity, com
+- [x] **CA20** — **Não-regressão de decisão de acesso em identity, com
       aditividade provada.** O critério discrimina dois tipos de asserção, e a
       discriminação **é** o seu conteúdo:
       - **Proibido mudar** — qualquer asserção que expresse uma **decisão de
@@ -659,15 +659,37 @@ consulta, não na estrutura.
 > funcionando, não regressão. A regressão que CA20 existe para pegar — decisão de
 > acesso mudando — continua **integralmente** proibida acima. **O conjunto de
 > comportamentos protegidos não mudou; mudou a formulação que o descreve.**
-- [ ] **CA21** — Nenhuma rota HTTP nasce nesta Stage: o repo continua sem
+>
+> **Nota (2026-08-18) — a enumeração de fixtures acima é ilustrativa: foram
+> TRÊS, não duas.** A execução mediu que as fixtures de **fechamento de
+> vocabulário** que precisam acompanhar o conjunto que cresceu são **três**:
+> além das duas nomeadas acima,
+> `tests/unit/features/identity/adapters/test_http_dependencies.py::test_conjunto_de_permissoes_exigidas_por_papel_alvo`,
+> que é **derivada** do mapa de papéis
+> (`frozenset({MANAGE_USERS}) | target_role.permissions`) e portanto pertence à
+> categoria pela definição da própria categoria. **Nenhum critério muda de
+> conteúdo, e por isso não há regressão `done → draft`** (CONVENTIONS §3.2): o
+> que governa é a categoria *"fixtures de fechamento de vocabulário"*, definida
+> na mesma frase e verdadeira como está — a contagem entre parênteses exemplifica
+> a categoria e é intrinsecamente perecível (cresce sozinha a cada permissão
+> nova). A metade **proibida** — asserção de **decisão de acesso** — segue
+> integralmente intacta, provada mecanicamente por `test_rbac_additivity.py` e
+> por `test_matriz_de_quem_cria_quem_nao_regride`. A razão completa, com as
+> quatro medições que descartaram a regressão declarada — a decisiva sendo que o
+> 5º bullet do `definition_of_done` do bloco 3.4 do `roadmap.md` fala em
+> **categoria, sem contagem** —, está na `[decision]` da §7 do `technical.md`
+> (*"2026-08-18 — Gate de saída — a enumeração de fixtures do CA20 é
+> ilustrativa, não taxativa"*). As **três** estão nominadas no corpo do commit da
+> Task 01.
+- [x] **CA21** — Nenhuma rota HTTP nasce nesta Stage: o repo continua sem
       `features/staff/adapters/in/`, e o router de identity é o único
       registrado.
 
 ### Gates
 
-- [ ] **CA22** — `make check` verde (inclui `lint-imports`, `layout-check`,
+- [x] **CA22** — `make check` verde (inclui `lint-imports`, `layout-check`,
       `docs-check`, mypy strict).
-- [ ] **CA23** — Cobertura ≥ 90% em **cada** arquivo novo/tocado da Stage.
+- [x] **CA23** — Cobertura ≥ 90% em **cada** arquivo novo/tocado da Stage.
 
 ## 12. Checklist de validação interna
 
