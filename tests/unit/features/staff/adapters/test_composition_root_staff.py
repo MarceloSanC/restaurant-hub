@@ -525,6 +525,39 @@ def test_permissao_tenant_wide_atravessa_sem_unidade_e_volta_sem_unidade() -> No
     assert scope.tenant_id == "t1"
 
 
+def test_papel_com_bypass_volta_sem_unidade_em_permissao_unit_scoped() -> None:
+    """`unit_id=None` **não** significa "ação tenant-wide", e este é o caso que prova.
+
+    `owner` e `platform_admin` estão em `_UNIT_SCOPE_BYPASS_ROLES`
+    (`user.py:45`), então o passo 4 do guard os dispensa de nomear a unidade
+    **por papel** — kickoff #9, ADR 2.1.0001, `workforce.md` §4: o dono enxerga
+    o tenant inteiro por desenho. Um `owner` exercendo `manage_staff` sem
+    declarar unidade é autorizado, e o escopo volta com `unit_id=None` sobre uma
+    permissão que é **unit-scoped**.
+
+    **O tradutor não aperta isso, e é o correto.** Recusar aqui — exigir unidade
+    quando a permissão não é tenant-wide — contradiria decisão ratificada, e
+    mudá-la exigiria o sponsor. O que estava errado era a **docstring** do port,
+    que afirmava que `None` significa tenant-wide; foi corrigida no mesmo commit.
+    Sem este teste, a docstring corrigida voltaria a ser prosa não verificada, que
+    é a classe de defeito que esta Stage existe para fechar.
+
+    Consequência viva para a Stage 3.6, registrada como `[finding]` na §7: o
+    router **não pode** inferir "tenant-wide" de `unit_id is None`.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=None, role=Role.OWNER))
+    translator = _IdentityAccessGuard(spy)
+
+    scope = translator.authorize(object(), "manage_staff", tenant_id="t1")
+
+    assert scope.unit_id is None
+    assert scope.tenant_id == "t1"
+    # E o pedido chegou a identity **sem** unidade: é o passo 4 que dispensa, não
+    # o tradutor que inventa uma.
+    assert spy.received["unit_id"] is None
+    assert spy.received["permission"] is Permission.MANAGE_STAFF
+
+
 def test_o_tradutor_repassa_o_ator_de_authenticate_sem_tocar_nele() -> None:
     """`Actor = object`: staff não interpreta a credencial, e o tradutor tampouco."""
     spy = _SpyIdentityGuard()

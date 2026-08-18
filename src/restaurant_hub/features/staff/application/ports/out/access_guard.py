@@ -84,9 +84,26 @@ class AuthorizedScope:
         tenant_id: o restaurante dentro do qual a ação foi autorizada. **Nunca
             vazio nem ausente** — é a L-AG3, e é o campo cuja coerção silenciosa
             para `""` este port existe para impedir.
-        unit_id: a unidade alvo, quando a ação nomeia uma. `None` para ação
-            tenant-wide (`"manage_job_functions"`), cujo alvo é o restaurante
-            inteiro e que por isso não tem unidade a nomear.
+        unit_id: a unidade alvo quando a ação nomeia uma; `None` quando não
+            nomeia. **`None` não significa "ação tenant-wide"** — e a
+            afirmação contrária esteve escrita aqui até ser medida contra o
+            guard real. Há **dois** caminhos que chegam a `None`, e o escopo não
+            distingue entre eles:
+
+            - **por permissão** — `"manage_job_functions"` pertence ao conjunto
+              tenant-wide de identity: o alvo é o restaurante inteiro
+              (`workforce.md` §3.2), e não há unidade a nomear;
+            - **por papel** — `owner` e `platform_admin` fazem bypass de escopo
+              de unidade (kickoff #9, ADR 2.1.0001, `workforce.md` §4 — o dono
+              enxerga o tenant inteiro por desenho). Um `owner` exercendo
+              `"manage_staff"` **sem** declarar unidade é autorizado, e o escopo
+              volta com `unit_id=None` sobre uma permissão que é unit-scoped.
+
+            **Consequência para quem consome:** inferir "esta ação é
+            tenant-wide" de `unit_id is None` é **errado**, e o erro é
+            silencioso — trataria a ação de funcionário de um `owner` como
+            não-escopada. Quem precisa da distinção tem de carregar a permissão
+            exercida; o escopo sozinho não a carrega.
     """
 
     tenant_id: TenantId
@@ -127,8 +144,11 @@ class AccessGuard(Protocol):
             permission: o nome da permissão exigida, como **valor**
                 (`"manage_staff"`, `"manage_job_functions"`).
             tenant_id: o restaurante alvo, como string opaca.
-            unit_id: a unidade alvo, como string opaca. Ausente para permissão
-                tenant-wide.
+            unit_id: a unidade alvo, como string opaca. Ausente quando a ação
+                não nomeia unidade — seja por a permissão ser tenant-wide, seja
+                por o papel do ator dispensar o escopo de unidade. Ver
+                `AuthorizedScope.unit_id`: são dois caminhos, e a ausência
+                sozinha não diz qual deles.
 
         Returns:
             O `AuthorizedScope` concedido — **um por alvo** (L-AG4).

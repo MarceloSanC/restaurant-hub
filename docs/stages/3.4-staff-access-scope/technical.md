@@ -1456,4 +1456,37 @@ houver decisão, o critério aplicado aqui fica declarado: **inglês no que tem 
 além do teste** (classes, fakes, helpers reusáveis), **português no que é prosa de
 suíte** (nomes de `test_*` e os seus parâmetros).
 
+---
+
+### 2026-08-18 — [finding] Task 05/06 — `unit_id=None` no `AuthorizedScope` não significa "tenant-wide" — Claude
+
+**Contexto (F2 da auditoria de testes).** A docstring do port afirmava que
+`AuthorizedScope.unit_id is None` quer dizer *"ação tenant-wide
+(`manage_job_functions`)"*. O probe do auditor mostrou que é **falso**:
+`_UNIT_SCOPE_BYPASS_ROLES` (`user.py:45`) contém `OWNER` e `PLATFORM_ADMIN`, e o
+passo 4 de `AuthorizeActionUseCase` dispensa a exigência de unidade também
+**por papel** (`not user.bypasses_unit_scope()`, `authorize_action.py:99`). Logo
+`owner` + `manage_staff` **sem** unidade é autorizado e volta com
+`unit_id=None` — sobre uma permissão que é unit-scoped.
+
+**Disposição: a docstring estava errada, o código não.** Apertar o tradutor para
+recusar escopo sem unidade em permissão unit-scoped contradiria decisão
+ratificada — o bypass do `owner` vem do kickoff #9, do ADR 2.1.0001 e de
+`workforce.md` §4 (o dono enxerga o tenant inteiro por desenho) —, e mudá-la
+exigiria o sponsor. Manter o comportamento não exige ninguém. Corrigidos, no
+mesmo commit: a docstring de `AuthorizedScope.unit_id` e a de `authorize`
+(`Args: unit_id`), que agora nomeiam os **dois** caminhos que chegam a `None`; e
+`test_papel_com_bypass_volta_sem_unidade_em_permissao_unit_scoped`, para que a
+docturna corrigida não volte a ser prosa não verificada.
+
+**O que fica em aberto — direção sugerida / Stage candidata: 3.6.** O router
+**não pode** inferir "esta ação é tenant-wide" de `unit_id is None`: se o fizer,
+trata a ação de funcionário de um `owner` como não-escopada, e o erro é
+silencioso — nada falha, o alcance é que fica maior do que a rota supõe. Quem
+precisa da distinção tem de carregar a **permissão exercida** junto do escopo. A
+3.6 decide como: um campo a mais no `AuthorizedScope` (que muda o port), ou o
+router guardando a permissão que ele mesmo declarou (que não muda nada e é o
+caminho barato). A decisão não é desta Stage porque não há consumidor aqui — mas
+o consumidor da 3.6 tropeça nela no primeiro handler de funcionário.
+
 <!-- END: post-execution -->
