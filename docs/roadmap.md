@@ -751,7 +751,7 @@ definition_of_done:
   - "gerente e RH detem MANAGE_STAFF e MANAGE_JOB_FUNCTIONS; employee e platform_admin nao detem nenhuma"
   - "ator unit-scoped exerce MANAGE_JOB_FUNCTIONS sem declarar unidade; com MANAGE_STAFF continua negado"
   - "as leis L-AG1..L-AG4 do AccessGuard sao testadas contra uma segunda implementacao (fake), e bc-independence segue sem nenhum ignore_imports"
-  - "nome com byte NUL rejeitado no dominio, com fake e Postgres concordando; suite de identity passa sem alteracao de assercao"
+  - "nome com byte NUL rejeitado no dominio, com fake e Postgres concordando; nenhuma assercao de DECISAO DE ACESSO de identity muda, e as fixtures de fechamento de vocabulario acompanham o conjunto que cresceu com aditividade provada (CA20 refinado em 2026-08-17)"
   - "make check verde; nenhuma rota HTTP nasce nesta Stage"
 non_goals:
   - toda a superficie HTTP de equipe (router, schemas, handlers, e2e) — Stage 3.6
@@ -827,6 +827,19 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 >   unidade na assinatura do port) e 3.4.0008 (permissão tenant-wide). **Três governam
 >   a 3.6** e trazem o aviso no corpo: 3.4.0002 (mapa de status), 3.4.0004 (sem
 >   paginação), 3.4.0005 (cópia repetida como limite declarado).
+> - **Nota (2026-08-17): o 5º bullet do `definition_of_done` acima foi reescrito
+>   junto com o CA20 do concept.** A Fase 3B mediu que duas asserções de
+>   `tests/unit/features/identity/domain/test_role_permission.py` mudam
+>   necessariamente — a linha 27 assere o conjunto **exato** dos valores do enum
+>   `Permission`, e as linhas 66–78 o conjunto **exato** de permissões por papel.
+>   A redação anterior (*"suite de identity passa sem alteracao de assercao"*) tem
+>   **falso positivo para teste de fechamento**, que existe justamente para exigir
+>   atualização consciente quando o conjunto cresce legitimamente (o mecanismo que
+>   o ADR 3.4.0008 §5 pede). O DoD passa a exigir o que sempre quis: nenhuma
+>   asserção de **decisão de acesso** muda, e a aditividade das fixtures de
+>   fechamento é **provada**, não afirmada. **O conjunto de comportamentos
+>   protegidos é o mesmo** — mudou a formulação. Registro do achado: nota datada
+>   sob o CA20 do [`concept.md`](./stages/3.4-staff-access-scope/concept.md) §11.
 > - **O rascunho completo da borda** (inventário das 16 rotas, schemas de request e
 >   response, mapa de status e critérios de aceite) está no commit **`d878060`**, em
 >   `docs/stages/3.4-staff-http/concept.md` §4.1–4.3 — para que a Fase 3A da 3.6 não o
