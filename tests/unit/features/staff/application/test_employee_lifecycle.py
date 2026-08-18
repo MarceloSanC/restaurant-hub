@@ -129,7 +129,9 @@ def test_desligar_poe_inativo_sem_mexer_em_mais_nada() -> None:
     fakes = _fakes()
     antes = _result(fakes)
 
-    resultado = _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    resultado = _desligar(fakes).execute(
+        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
 
     assert resultado.active is False
     depois = _result(fakes)
@@ -140,11 +142,11 @@ def test_desligar_poe_inativo_sem_mexer_em_mais_nada() -> None:
 
 def test_recontratar_poe_ativo_sem_mexer_em_mais_nada() -> None:
     fakes = _fakes()
-    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
     antes = _result(fakes)
 
     resultado = _recontratar(fakes).execute(
-        ReactivateEmployeeCommand(tenant_id=_A, employee_id=_E1)
+        ReactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 
     assert resultado.active is True
@@ -157,8 +159,10 @@ def test_desligar_duas_vezes_e_idempotente_no_valor() -> None:
     """Repetir não é erro — a borda não precisa consultar o estado antes de agir."""
     fakes = _fakes()
     desligar = _desligar(fakes)
-    desligar.execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
-    resultado = desligar.execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    desligar.execute(DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    resultado = desligar.execute(
+        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
     assert resultado.active is False
     assert _result(fakes).active is False
 
@@ -166,7 +170,7 @@ def test_desligar_duas_vezes_e_idempotente_no_valor() -> None:
 def test_recontratar_quem_ja_esta_ativo_e_idempotente_no_valor() -> None:
     fakes = _fakes()
     resultado = _recontratar(fakes).execute(
-        ReactivateEmployeeCommand(tenant_id=_A, employee_id=_E1)
+        ReactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
     assert resultado.active is True
     assert _result(fakes).active is True
@@ -175,8 +179,10 @@ def test_recontratar_quem_ja_esta_ativo_e_idempotente_no_valor() -> None:
 def test_ciclo_desligar_e_recontratar_preserva_a_historia() -> None:
     fakes = _fakes()
     antes = _result(fakes)
-    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
-    _recontratar(fakes).execute(ReactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    _recontratar(fakes).execute(
+        ReactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
     assert _result(fakes) == antes  # volta idêntico, inclusive `active`
 
 
@@ -185,7 +191,7 @@ def test_ciclo_desligar_e_recontratar_preserva_a_historia() -> None:
 
 def test_desligado_some_da_listagem_default_mas_aparece_no_opt_in() -> None:
     fakes = _fakes()
-    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
     listar = ListEmployeesUseCase(fakes.employees)
 
     assert listar.execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1)) == ()
@@ -198,7 +204,7 @@ def test_desligado_some_da_listagem_default_mas_aparece_no_opt_in() -> None:
 def test_desligado_continua_enderecavel_por_id() -> None:
     """É o que torna a recontratação possível — e o que separa desligar de apagar."""
     fakes = _fakes()
-    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
     assert fakes.employees.find_by_id(_A, _E1) is not None
 
 
@@ -211,7 +217,7 @@ def test_desligado_continua_bloqueando_a_remocao_das_suas_funcoes() -> None:
     função" da 3.1.
     """
     fakes = _fakes()
-    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
 
     with pytest.raises(JobFunctionInUseError):
         DeleteJobFunctionUseCase(fakes.job_functions, fakes.employees).execute(
@@ -232,11 +238,11 @@ def test_transicoes_em_registro_inexistente_ou_alheio_nao_gravam(tenant: TenantI
 
     with pytest.raises(EmployeeNotFoundError):
         _desligar(fakes).execute(
-            DeactivateEmployeeCommand(tenant_id=tenant, employee_id=employee_id)
+            DeactivateEmployeeCommand(tenant_id=tenant, unit_id=_U1, employee_id=employee_id)
         )
     with pytest.raises(EmployeeNotFoundError):
         _recontratar(fakes).execute(
-            ReactivateEmployeeCommand(tenant_id=tenant, employee_id=employee_id)
+            ReactivateEmployeeCommand(tenant_id=tenant, unit_id=_U1, employee_id=employee_id)
         )
 
     assert "employees.update" not in fakes.store.calls[antes_calls:]

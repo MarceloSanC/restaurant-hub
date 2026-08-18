@@ -123,7 +123,7 @@ def test_copia_recebe_id_novo_unidade_destino_e_mesmo_tenant() -> None:
     fakes = _fakes()
     gerador = FakeIdGenerator()
     copia = _copiar(fakes, gerador).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
 
     assert copia.id == str(gerador.generated[0])
@@ -137,7 +137,7 @@ def test_copia_replica_todo_o_resto_do_cadastro() -> None:
     fakes = _fakes()
     origem = _result(fakes, _E1)
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
 
     assert (
@@ -167,7 +167,7 @@ def test_copia_carrega_o_estado_de_ciclo_de_vida_como_esta(active: bool) -> None
     """
     fakes = _fakes(active=active)
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
     assert copia.active is active
 
@@ -177,7 +177,7 @@ def test_a_origem_permanece_inalterada() -> None:
     fakes = _fakes()
     antes = _result(fakes, _E1)
     _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
     assert _result(fakes, _E1) == antes
 
@@ -188,17 +188,18 @@ def test_a_origem_permanece_inalterada() -> None:
 def test_editar_a_copia_nao_afeta_a_origem() -> None:
     fakes = _fakes()
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
     origem_antes = _result(fakes, _E1)
     copia_id = EmployeeId(copia.id)
 
     RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, employee_id=copia_id, name="Joana")
+        RenameEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=copia_id, name="Joana")
     )
     RegisterUnavailabilityUseCase(fakes.employees).execute(
         RegisterUnavailabilityCommand(
             tenant_id=_A,
+            unit_id=_U2,
             employee_id=copia_id,
             period=UnavailabilityPeriod(
                 start=datetime(2026, 8, 4, 8, 0), end=datetime(2026, 8, 4, 12, 0)
@@ -206,7 +207,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
         )
     )
     DeactivateEmployeeUseCase(fakes.employees).execute(
-        DeactivateEmployeeCommand(tenant_id=_A, employee_id=copia_id)
+        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=copia_id)
     )
 
     assert _result(fakes, _E1) == origem_antes
@@ -216,16 +217,16 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
     """O outro sentido — a independência não é assimétrica."""
     fakes = _fakes()
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
     copia_id = EmployeeId(copia.id)
     copia_antes = _result(fakes, copia_id)
 
     RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, employee_id=_E1, name="Joana")
+        RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
     )
     DeactivateEmployeeUseCase(fakes.employees).execute(
-        DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1)
+        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 
     assert _result(fakes, copia_id) == copia_antes
@@ -240,7 +241,9 @@ def test_destino_igual_a_origem_e_recusado_sem_gravar() -> None:
 
     with pytest.raises(SameUnitCopyError):
         _copiar(fakes).execute(
-            CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U1)
+            CopyEmployeeToUnitCommand(
+                tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U1
+            )
         )
 
     assert "employees.add" not in fakes.store.calls[antes:]
@@ -262,7 +265,7 @@ def test_unidade_destino_vazia_falha_depois_de_carregar_a_origem(invalido: str) 
     with pytest.raises(InvalidIdentifierError):
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
-                tenant_id=_A, employee_id=_E1, target_unit_id=UnitId(invalido)
+                tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=UnitId(invalido)
             )
         )
 
@@ -277,7 +280,7 @@ def test_origem_inexistente_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
-                tenant_id=_A, employee_id=EmployeeId("fantasma"), target_unit_id=_U2
+                tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("fantasma"), target_unit_id=_U2
             )
         )
 
@@ -297,7 +300,9 @@ def test_precedencia_origem_de_outro_tenant_vence_destino_igual() -> None:
 
     with pytest.raises(StaffError) as excecao:
         _copiar(fakes).execute(
-            CopyEmployeeToUnitCommand(tenant_id=_B, employee_id=_E1, target_unit_id=_U1)
+            CopyEmployeeToUnitCommand(
+                tenant_id=_B, unit_id=_U1, employee_id=_E1, target_unit_id=_U1
+            )
         )
     assert type(excecao.value) is EmployeeNotFoundError
 
@@ -321,7 +326,9 @@ def test_copiar_duas_vezes_para_o_mesmo_destino_cria_dois_registros() -> None:
     """
     fakes = _fakes()
     copiar = _copiar(fakes)
-    comando = CopyEmployeeToUnitCommand(tenant_id=_A, employee_id=_E1, target_unit_id=_U2)
+    comando = CopyEmployeeToUnitCommand(
+        tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+    )
 
     primeira = copiar.execute(comando)
     segunda = copiar.execute(comando)

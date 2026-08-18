@@ -87,7 +87,7 @@ def test_atribuicao_substitui_o_conjunto_e_nao_acumula() -> None:
     fakes = _fakes()
     resultado = _atribuir(fakes).execute(
         AssignJobFunctionsCommand(
-            tenant_id=_A, employee_id=_E1, job_function_ids=frozenset({_F2, _F3})
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, job_function_ids=frozenset({_F2, _F3})
         )
     )
     assert resultado.job_function_ids == frozenset({_F2, _F3})
@@ -98,7 +98,9 @@ def test_atribuicao_substitui_o_conjunto_e_nao_acumula() -> None:
 def test_atribuir_o_mesmo_conjunto_e_aceito() -> None:
     fakes = _fakes()
     resultado = _atribuir(fakes).execute(
-        AssignJobFunctionsCommand(tenant_id=_A, employee_id=_E1, job_function_ids=frozenset({_F1}))
+        AssignJobFunctionsCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, job_function_ids=frozenset({_F1})
+        )
     )
     assert resultado.job_function_ids == frozenset({_F1})
 
@@ -109,7 +111,10 @@ def test_funcao_inexistente_no_tenant_nao_grava() -> None:
     with pytest.raises(JobFunctionNotFoundError):
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
-                tenant_id=_A, employee_id=_E1, job_function_ids=frozenset({JobFunctionId("f99")})
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                job_function_ids=frozenset({JobFunctionId("f99")}),
             )
         )
     assert "employees.update" not in fakes.store.calls[antes:]
@@ -122,7 +127,7 @@ def test_funcao_de_outro_tenant_nao_grava() -> None:
     with pytest.raises(JobFunctionNotFoundError):
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
-                tenant_id=_A, employee_id=_E1, job_function_ids=frozenset({_FB})
+                tenant_id=_A, unit_id=_U1, employee_id=_E1, job_function_ids=frozenset({_FB})
             )
         )
     assert "employees.update" not in fakes.store.calls[antes:]
@@ -138,6 +143,7 @@ def test_conjunto_parcialmente_valido_e_rejeitado_inteiro() -> None:
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
                 tenant_id=_A,
+                unit_id=_U1,
                 employee_id=_E1,
                 job_function_ids=frozenset({_F2, JobFunctionId("f99")}),
             )
@@ -157,7 +163,9 @@ def test_id_de_funcao_ausente_reportada_e_deterministica() -> None:
     faltantes = frozenset({JobFunctionId("f97"), JobFunctionId("f99")})
     with pytest.raises(JobFunctionNotFoundError) as excecao:
         _atribuir(fakes).execute(
-            AssignJobFunctionsCommand(tenant_id=_A, employee_id=_E1, job_function_ids=faltantes)
+            AssignJobFunctionsCommand(
+                tenant_id=_A, unit_id=_U1, employee_id=_E1, job_function_ids=faltantes
+            )
         )
     assert "f97" in str(excecao.value)
 
@@ -167,7 +175,9 @@ def test_conjunto_vazio_e_erro_do_dominio_sem_gravar() -> None:
     antes = len(fakes.store.calls)
     with pytest.raises(EmptyJobFunctionsError):
         _atribuir(fakes).execute(
-            AssignJobFunctionsCommand(tenant_id=_A, employee_id=_E1, job_function_ids=frozenset())
+            AssignJobFunctionsCommand(
+                tenant_id=_A, unit_id=_U1, employee_id=_E1, job_function_ids=frozenset()
+            )
         )
     assert "employees.update" not in fakes.store.calls[antes:]
     assert _conjunto_gravado(fakes) == frozenset({_F1})
@@ -179,6 +189,7 @@ def test_registro_inexistente_e_not_found() -> None:
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
                 tenant_id=_A,
+                unit_id=_U1,
                 employee_id=EmployeeId("fantasma"),
                 job_function_ids=frozenset({_F2}),
             )
@@ -190,7 +201,7 @@ def test_registro_de_outro_tenant_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
-                tenant_id=_B, employee_id=_E1, job_function_ids=frozenset({_FB})
+                tenant_id=_B, unit_id=_U1, employee_id=_E1, job_function_ids=frozenset({_FB})
             )
         )
     assert _conjunto_gravado(fakes) == frozenset({_F1})
@@ -211,6 +222,7 @@ def test_precedencia_registro_inexistente_vence_funcao_inexistente() -> None:
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
                 tenant_id=_A,
+                unit_id=_U1,
                 employee_id=EmployeeId("fantasma"),
                 job_function_ids=frozenset({JobFunctionId("f99")}),
             )
