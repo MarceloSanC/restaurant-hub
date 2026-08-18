@@ -65,6 +65,7 @@ from restaurant_hub.features.identity.adapters.out.security.jwt_issuer import (
 from restaurant_hub.features.identity.adapters.out.security.setup_token_issuer import (
     Sha256SetupTokenIssuer,
 )
+from restaurant_hub.features.identity.application.errors import PermissionDeniedError
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
 )
@@ -95,11 +96,23 @@ from restaurant_hub.features.identity.application.use_cases.revoke_session impor
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
 )
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    RestaurantId,
+)
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    UnitId as IdentityUnitId,
+)
+from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
     PostgresEmployeeRepository,
 )
 from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
     PostgresJobFunctionRepository,
+)
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    AccessGuard,
+    Actor,
+    AuthorizedScope,
 )
 from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
     AssignJobFunctionsUseCase,
@@ -149,6 +162,12 @@ from restaurant_hub.features.staff.application.use_cases.rename_employee import 
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    TenantId as StaffTenantId,
+)
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    UnitId as StaffUnitId,
+)
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
@@ -159,6 +178,104 @@ from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import 
 )
 
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
+
+
+class _IdentityAccessGuard:
+    """Implementação de produção do `AccessGuard` de staff, sobre o `IdentityGuard`.
+
+    **Por que ela mora aqui, e não em `features/staff/adapters/out/identity/`**
+    (ADR 3.4.0001 §3 e alternativa A, medida e revertida no Checkpoint A): o
+    objeto embrulhado vive sob o pacote `in`, que é keyword Python. Um adapter
+    dentro de staff não conseguiria sequer **anotá-lo** — guardaria o mesmo `Any`
+    que este módulo guarda, e essa aresta seria invisível ao import-linter de
+    qualquer forma. O que ele importaria de verdade são `Permission`,
+    `RestaurantId` e `UnitId` de identity: **três** pares de `ignore_imports` em
+    `bc-independence`, não um. Aqui são **zero**, e há teste que lê o
+    `.importlinter` para provar que continuam zero
+    (`tests/unit/features/staff/test_bc_independence.py`).
+
+    **Isto é tradução de vocabulário, e tradução não é wiring.** O charter deste
+    módulo (LAYOUT §6) é instanciar e injetar; esta classe o estica, e o custo
+    está declarado no ADR 3.4.0001 §Consequences como finding a revisitar na
+    Stage 3.5 — quando houver um consumidor real do `IdentityGateway` e a
+    pergunta "onde mora o tradutor" puder ser respondida com o caso em mãos.
+
+    **Sem `try/except`, de propósito** — L-AG1 e L-AG2. Toda exceção de identity
+    sobe **crua**, e é isso que fará a faixa 401/403 da Stage 3.6 ser
+    byte-idêntica à de identity: `InvalidAccessTokenError`,
+    `PermissionDeniedError` e `UnitNotVisibleError` — inclusive a conversão de
+    `UnitNotFoundError`, que é o que fecha o oráculo de enumeração cross-tenant
+    (ADR 2.4.0001 §5) — chegam ao handler exatamente como identity as levantou.
+
+    **O `ValueError` de `Permission(permission)` é o preço declarado do `str`**
+    (ADR 3.4.0001 §Trade-offs): o nome da permissão atravessa a fronteira como
+    valor, então um erro de digitação não é pego pelo type-checker. Ele também
+    **não** é traduzido — nome de permissão inválido é defeito de programação da
+    borda, não decisão de acesso, e mascará-lo como 403 esconderia a rota
+    quebrada atrás de um erro de negação plausível.
+    """
+
+    def __init__(self, identity_guard: Any) -> None:  # noqa: ANN401
+        """Recebe o `IdentityGuard` já construído.
+
+        `Any` — e o `noqa` — pela mesma razão medida que o campo
+        `identity_guard` do contêiner: o tipo real vive sob o pacote `in`, que é
+        keyword Python, e não existe import estático capaz de nomeá-lo
+        (LAYOUT §8). Trocar por `object` só moveria o problema para o corpo dos
+        dois métodos, onde todo acesso viraria erro de tipo e a saída seria um
+        `cast` — a mesma perda de informação, com mais cerimônia.
+        """
+        self._guard = identity_guard
+
+    def authenticate(self, request: object) -> Actor:
+        """L-AG1 — repassa e não captura."""
+        # A variável intermediária existe para o type-checker, não para o
+        # runtime: `_guard` é `Any` (o pacote `in` é inalcançável estaticamente)
+        # e `strict` reprova devolver `Any` de função anotada. Nenhuma conversão
+        # acontece aqui — é o mesmo objeto que identity devolveu.
+        actor: Actor = self._guard.authenticate(request)
+        return actor
+
+    def authorize(
+        self,
+        actor: Actor,
+        permission: str,
+        *,
+        tenant_id: str | None = None,
+        unit_id: str | None = None,
+    ) -> AuthorizedScope:
+        """Traduz o pedido para identity, e a resposta de volta para staff.
+
+        **L-AG3 é imposta AQUI**, e não delegada à matriz de papéis
+        (ADR 3.4.0001 §Implementation notes). Confiar em *"`platform_admin` é
+        negado antes, no passo 2, por não deter as permissões de staff"* faria o
+        isolamento de tenant refém do mapa RBAC, que é editável e cuja edição
+        nenhum teste desta lei observaria. Ator sem tenant é **negado**:
+        `StaffTenantId(actor_tenant_id or "")` compilaria, passaria mypy strict
+        e produziria consultas de tenant vazio — e é precisamente o que as
+        linhas abaixo não fazem.
+        """
+        authorized = self._guard.authorize(
+            actor,
+            Permission(permission),
+            tenant_id=RestaurantId(tenant_id) if tenant_id is not None else None,
+            unit_id=IdentityUnitId(unit_id) if unit_id is not None else None,
+        )
+
+        actor_tenant_id = authorized.actor_tenant_id
+        if not actor_tenant_id:
+            # `PermissionDeniedError` de identity, e não uma exceção nova de
+            # staff: o caminho é, semanticamente, "este ator não pode agir sobre
+            # este alvo", e uma exceção nova produziria uma faixa de erro
+            # distinta para ele, contra o corpo constante que L-AG2 protege
+            # (technical §7, decisão de 2026-08-17).
+            raise PermissionDeniedError(authorized.role.value, permission)
+
+        scope_unit_id = authorized.scope_unit_id
+        return AuthorizedScope(
+            tenant_id=StaffTenantId(actor_tenant_id),
+            unit_id=StaffUnitId(scope_unit_id) if scope_unit_id is not None else None,
+        )
 
 
 @dataclass
@@ -213,6 +330,20 @@ class ApplicationDependencies:
     staff_deactivate_employee: DeactivateEmployeeUseCase
     staff_reactivate_employee: ReactivateEmployeeUseCase
     staff_copy_employee_to_unit: CopyEmployeeToUnitUseCase
+
+    # --- staff (Stage 3.4) ---------------------------------------------------
+    #
+    # **O único campo anotado com um port**, e a assimetria em relação a tudo o
+    # que está acima é deliberada — o docstring do contêiner explica a regra: os
+    # campos de use case levam a classe concreta porque use case é código nosso,
+    # e o que precisa ser abstrato é o que ele **consome**. Aqui o campo **é** o
+    # consumido: quem o recebe (o router da Stage 3.6) não pode ter de mudar
+    # quando a implementação mudar, e a implementação concreta é
+    # `_IdentityAccessGuard`, privada deste módulo.
+    #
+    # Nasce **sem consumidor**, como os 16 acima e pela mesma razão declarada:
+    # nenhuma rota de staff existe até a Stage 3.6 (CA21).
+    staff_access_guard: AccessGuard
 
 
 @dataclass
@@ -300,6 +431,13 @@ def wire_dependencies(
         token_issuer=token_issuer,
         authorize_action=authorize_action,
     )
+
+    # O tradutor embrulha o **mesmo** `IdentityGuard` que serve as rotas de
+    # identity — não um segundo grafo, não um segundo `Engine`
+    # (ADR 3.4.0001 §Implementation notes). CA15 assere a identidade do objeto,
+    # porque um segundo guard passaria em qualquer teste de tipo e faria as duas
+    # bordas decidirem acesso sobre estados diferentes.
+    staff_access_guard = _IdentityAccessGuard(guard)
 
     return ApplicationDependencies(
         identity_authenticate_user=AuthenticateUserUseCase(
@@ -398,6 +536,7 @@ def wire_dependencies(
         staff_copy_employee_to_unit=CopyEmployeeToUnitUseCase(
             employees=staff_employees, id_generator=id_generator
         ),
+        staff_access_guard=staff_access_guard,
     )
 
 

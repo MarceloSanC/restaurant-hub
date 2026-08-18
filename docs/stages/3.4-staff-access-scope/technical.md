@@ -1308,4 +1308,32 @@ possível pelo registro, e a lei ficaria provada só pelo ramo de recusa — met
 do que a Task pede. A escolha e o seu porquê estão na docstring do módulo do
 fake, para que a próxima implementação do port não a leia como acidente.
 
+---
+
+### 2026-08-17 — [deviation] Task 06 — o tradutor precisa de um `# noqa: ANN401` no construtor — Claude
+
+**Contexto:** o ADR 3.4.0001 §3 fixa que o tradutor embrulha o `IdentityGuard`, e
+o §Premissas deste technical registra que esse objeto só é alcançável por
+`importlib` — o `composition_root` já o guarda como `identity_guard: Any`. O que
+a Fase 3B não previu: aquele `Any` é anotação de **campo** de `dataclass`, e o
+ruleset `ANN` do Ruff (`ANN401`, *"dynamically typed expressions are
+disallowed"*) só reprova `Any` em **parâmetro de função**. O construtor
+`_IdentityAccessGuard.__init__(self, identity_guard: Any)` é a primeira ocorrência
+dessa forma no repositório, e reprovou o `make lint`.
+
+**Ajuste aplicado:** `# noqa: ANN401` na linha do construtor, com a justificativa
+na docstring do próprio `__init__` — não num comentário solto.
+
+**Por que não as duas alternativas.** `object` moveria o defeito para o corpo:
+todo acesso a `self._guard.authenticate/.authorize` viraria erro de tipo, e a
+saída seria um `cast(Any, ...)` — a mesma perda de informação com mais cerimônia
+e um ponto a mais para errar. Desligar `ANN401` no `pyproject` alargaria a
+supressão do arquivo inteiro (e do repositório) para resolver **uma** linha, que
+é a forma de alargamento que esta Stage recusa em `bc-independence` e não teria
+por que aceitar aqui. O `noqa` é a supressão mais estreita disponível: uma linha,
+com a razão medida ao lado.
+
+**Escopo:** nenhum arquivo fora da lista da Task 06 foi tocado — o commit fecha
+em `composition_root.py` e `test_composition_root_staff.py`, mais a §7.
+
 <!-- END: post-execution -->
