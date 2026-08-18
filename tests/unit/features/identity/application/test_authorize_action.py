@@ -378,3 +378,78 @@ def test_vinculo_de_outro_usuario_nao_concede_visibilidade() -> None:
 
     with pytest.raises(UnitNotVisibleError):
         fixture.use_case.execute(_command("m", unit=_UNIT_A1))
+
+
+# --------------------------------------------------------------------------
+# CA4, CA5 — a dispensa de unidade é por permissão, nunca por papel
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("role", [Role.MANAGER, Role.HR])
+def test_permissao_tenant_wide_dispensa_declarar_a_unidade(role: Role) -> None:
+    """CA4 — ramo verdadeiro da condição nova do passo 4.
+
+    O catálogo de funções pertence ao restaurante, não à unidade, então exigir
+    unidade o tornaria inalcançável para papel unit-scoped (ADR 3.4.0008 §1).
+    """
+    fixture = _Fixture()
+    fixture.add_user("u", role, _TENANT_A, (_UNIT_A1,))
+
+    actor = fixture.use_case.execute(_command("u", Permission.MANAGE_JOB_FUNCTIONS, unit=None))
+
+    assert actor.scope_unit_id is None
+    assert actor.scope_tenant_id == _TENANT_A
+
+
+@pytest.mark.parametrize("role", [Role.MANAGER, Role.HR])
+def test_permissao_unit_scoped_continua_exigindo_a_unidade(role: Role) -> None:
+    """CA5 — ramo falso da condição nova: a dispensa não virou bypass de papel.
+
+    O mesmo ator do teste acima, exercendo `MANAGE_STAFF`, segue negado por
+    omissão da unidade. É o que mantém o raio de explosão em uma capacidade.
+    """
+    fixture = _Fixture()
+    fixture.add_user("u", role, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(UnitScopeRequiredError):
+        fixture.use_case.execute(_command("u", Permission.MANAGE_STAFF, unit=None))
+
+
+# --------------------------------------------------------------------------
+# CA8 — os passos 3 e 5 seguem intactos, inclusive para permissão tenant-wide
+# --------------------------------------------------------------------------
+
+
+def test_passo_3_vale_para_permissao_tenant_wide() -> None:
+    """CA8 — escopo de tenant não foi afrouxado: ator de outro tenant é negado."""
+    fixture = _Fixture()
+    fixture.add_user("m", Role.MANAGER, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(TenantNotVisibleError):
+        fixture.use_case.execute(
+            _command("m", Permission.MANAGE_JOB_FUNCTIONS, tenant=_TENANT_B, unit=None)
+        )
+
+
+def test_passo_3_ainda_exige_declarar_o_tenant_em_permissao_tenant_wide() -> None:
+    """CA8 — "tenant-wide" é sobre unidade, não sobre tenant: omitir o tenant nega."""
+    fixture = _Fixture()
+    fixture.add_user("m", Role.MANAGER, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(TenantScopeRequiredError):
+        fixture.use_case.execute(
+            _command("m", Permission.MANAGE_JOB_FUNCTIONS, tenant=None, unit=None)
+        )
+
+
+def test_passo_5_vale_para_permissao_tenant_wide_quando_a_unidade_e_declarada() -> None:
+    """CA8 — a dispensa remove uma exigência de nomear, não uma checagem.
+
+    Declarada a unidade, a visibilidade continua rodando — e nega a unidade do
+    mesmo tenant de que o ator não é membro.
+    """
+    fixture = _Fixture()
+    fixture.add_user("m", Role.MANAGER, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(UnitNotVisibleError):
+        fixture.use_case.execute(_command("m", Permission.MANAGE_JOB_FUNCTIONS, unit=_UNIT_A2))

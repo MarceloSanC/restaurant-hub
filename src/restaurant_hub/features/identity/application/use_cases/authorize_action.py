@@ -17,6 +17,12 @@ caminho de escalada. Por isso quem pertence a um tenant **precisa** declarar o
 tenant alvo, e quem não faz bypass de unidade **precisa** declarar a unidade
 alvo. Negar por ausência é o que mantém o guard fail-closed.
 
+**A única dispensa é por permissão.** Uma permissão cujo alvo é o restaurante e
+não a unidade — as de `TENANT_WIDE_PERMISSIONS` — não tem unidade a nomear, e
+exigi-la tornaria o recurso inalcançável para papel unit-scoped. A dispensa
+remove uma *exigência de nomear unidade*; não remove nenhuma checagem: os passos
+3 e 5 seguem intactos (ADR 3.4.0008 §2 e §4).
+
 Nada de `can_view_unit` é reimplementado aqui: a regra de bypass e o casamento
 `user_id`+`unit_id` vivem no domínio, e duplicá-los criaria duas fontes de
 verdade capazes de divergir.
@@ -43,6 +49,9 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
 )
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.value_objects.identifiers import UnitId
+from restaurant_hub.features.identity.domain.value_objects.permission import (
+    TENANT_WIDE_PERMISSIONS,
+)
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 
@@ -62,7 +71,8 @@ class AuthorizeActionUseCase:
             TenantScopeRequiredError: ator de tenant não declarou o tenant alvo.
             TenantNotVisibleError: tenant alvo não é o do ator, ou o par
                 `tenant_id`/`unit_id` é incoerente.
-            UnitScopeRequiredError: ator escopado por unidade não declarou a unidade.
+            UnitScopeRequiredError: ator escopado por unidade não declarou a
+                unidade, e a permissão exercida não é tenant-wide.
             UnitNotFoundError: unidade alvo inexistente.
             UnitNotVisibleError: ator não enxerga a unidade (eixo visibilidade).
         """
@@ -78,8 +88,17 @@ class AuthorizeActionUseCase:
         # 3. Escopo de tenant (pulado para platform_admin, que não tem tenant)
         self._assert_tenant_scope(user, command)
 
-        # 4. Exigência de escopo de unidade
-        if command.unit_id is None and not user.bypasses_unit_scope():
+        # 4. Exigência de escopo de unidade, dispensada para permissão tenant-wide.
+        # A dispensa é **por permissão, nunca por papel**: pôr `manager`/`hr` em
+        # `_UNIT_SCOPE_BYPASS_ROLES` lhes daria alcance tenant-wide sobre TODAS as
+        # permissões que detêm — inclusive `MANAGE_STAFF`, ou seja, todo registro
+        # de funcionário do restaurante. Assim o raio de explosão de um engano fica
+        # em uma capacidade, não em um ator (ADR 3.4.0008 §3).
+        if (
+            command.unit_id is None
+            and not user.bypasses_unit_scope()
+            and command.permission not in TENANT_WIDE_PERMISSIONS
+        ):
             raise UnitScopeRequiredError(user.role.value)
 
         # 5. Eixo visibilidade

@@ -1141,4 +1141,41 @@ Concept > Technical. Commits: `c3523f5` (revert to draft), `e64f95e`
 achado), `9c4a30f` (reconciliação do DoD do roadmap, que carregava o mesmo texto).
 **O conjunto de comportamentos protegidos é o mesmo; mudou a formulação.**
 
+---
+
+### 2026-08-17 — [deviation] Task 01 — a fixture de fechamento de vocabulário são TRÊS, não duas — Claude
+
+**Contexto:** a §1 (*"O achado do CA20"*) mediu **duas** fixtures de fechamento em
+`tests/unit/features/identity/`, ambas em `domain/test_role_permission.py`. Ao
+rodar a Task 01, uma terceira reprovou:
+`adapters/test_http_dependencies.py::test_conjunto_de_permissoes_exigidas_por_papel_alvo`
+(3 dos 5 parâmetros: `manager`, `hr`, `owner`). Ela assere o retorno de
+`required_permissions_for_role`, que é **derivado** do mapa de papéis
+(`frozenset({MANAGE_USERS}) | target_role.permissions`, `dependencies.py:97`) — logo
+cresce sozinho toda vez que o vocabulário cresce. A medição da Fase 3B varreu
+`domain/`, não o BC inteiro; é a mesma classe de erro que a §1 já nomeia sobre o
+alcance do `mypy` (aplicar a propriedade onde ela alcança e parar aí).
+
+**Ajuste aplicado:** os três parâmetros foram atualizados, e o arquivo
+`tests/unit/features/identity/adapters/test_http_dependencies.py` entrou no commit
+da Task 01 **fora** da lista de "arquivos a modificar" do plano.
+
+**Por que é `[deviation]` e não achado bloqueante de CA20.** O critério refinado
+(concept §11) proíbe mudar **decisão de acesso** e obriga as fixtures de
+**fechamento de vocabulário** a acompanharem o conjunto. Esta é da segunda classe,
+e a prova foi feita **mecanicamente, não por prosa**: o mesmo commit acrescenta
+`test_matriz_de_quem_cria_quem_nao_regride`, com a matriz "quem pode criar quem"
+congelada no valor **anterior** à Stage e asserida por **igualdade** (não
+subconjunto — aqui encolher e crescer são ambos regressão). A matriz é idêntica
+antes e depois: as duas permissões novas são detidas por `owner`, `manager` e `hr`
+simultaneamente, então exigi-las a mais nunca retira alcance de quem já o tinha. O
+sentido da mudança é fail-closed (o conjunto exigido só cresce), e a derivação
+passar a cobrir as capacidades novas sozinha é o desenho de `dependencies.py`
+funcionando.
+
+**Consequência para o gate de saída:** o item da §3 que lê *"`git diff --
+tests/unit/features/identity/` sem edição fora das **duas** fixtures de
+fechamento"* deve ser lido como **três**, nominadas no corpo do commit da Task 01
+junto das outras duas. O conjunto de comportamentos protegidos não mudou.
+
 <!-- END: post-execution -->
