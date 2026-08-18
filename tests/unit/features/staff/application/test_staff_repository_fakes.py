@@ -133,14 +133,17 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
         ("employees.update", lambda: fakes.employees.update(_funcionario(id_="e-novo"))),
         (
             "employees.find_by_id",
-            lambda: fakes.employees.find_by_id(_TENANT, EmployeeId("e-novo")),
+            lambda: fakes.employees.find_by_id(_TENANT, _UNIDADE, EmployeeId("e-novo")),
         ),
         ("employees.list_by_unit", lambda: fakes.employees.list_by_unit(_TENANT, _UNIDADE)),
         (
             "employees.exists_by_job_function",
             lambda: fakes.employees.exists_by_job_function(_TENANT, JobFunctionId("f1")),
         ),
-        ("employees.delete", lambda: fakes.employees.delete(_TENANT, EmployeeId("e-novo"))),
+        (
+            "employees.delete",
+            lambda: fakes.employees.delete(_TENANT, _UNIDADE, EmployeeId("e-novo")),
+        ),
     ]
 
 
@@ -180,6 +183,30 @@ def test_as_invocacoes_cobrem_todo_metodo_declarado_nos_dois_protocolos() -> Non
     assert esperados == declarados
 
 
+@pytest.mark.parametrize("metodo", ["find_by_id", "delete"])
+def test_ca11_o_endereco_do_funcionario_tem_tres_partes_na_assinatura(metodo: str) -> None:
+    """CA11, metade mecânica: `(tenant_id, unit_id, employee_id)`, nesta ordem.
+
+    **Por que uma asserção de assinatura, se `mypy` já a cobre.** `make typecheck`
+    é `mypy src/ tests/fakes/` — ele **não** alcança `tests/integration/`. Lá um
+    call site de duas partes não vira erro de tipo: vira `TypeError` na execução,
+    e só se aquele caminho for exercitado. Esta asserção põe a aridade sob o
+    alcance da suíte, que roda inteira.
+
+    A **ordem** dos nomes importa tanto quanto a contagem: `UnitId` e
+    `EmployeeId` são `NewType` distintos, então trocá-los é erro de tipo em
+    `src/` — mas fora do alcance do `mypy` o troco passaria calado, e um
+    `find_by_id(tenant, employee_id, unit_id)` acharia sempre `None`,
+    convertendo a lei de isolamento em recusa universal.
+    """
+    parametros = list(inspect.signature(getattr(EmployeeRepository, metodo)).parameters)
+
+    assert parametros == ["self", "tenant_id", "unit_id", "employee_id"]
+    # O fake é a segunda implementação, e carrega a mesma lei (ADR 3.4.0007 §2).
+    concreto = list(inspect.signature(getattr(staff_repositories().employees, metodo)).parameters)
+    assert concreto == ["tenant_id", "unit_id", "employee_id"]
+
+
 def test_dois_helpers_nao_compartilham_estado() -> None:
     """Cada teste da Stage parte de um store limpo — do contrário a ordem importaria."""
     primeiro = staff_repositories()
@@ -215,7 +242,7 @@ def test_round_trip_de_funcionario() -> None:
     fakes.job_functions.add(_funcao())
     funcionario = _funcionario()
     fakes.employees.add(funcionario)
-    gravado = fakes.employees.find_by_id(_TENANT, EmployeeId("e1"))
+    gravado = fakes.employees.find_by_id(_TENANT, _UNIDADE, EmployeeId("e1"))
     assert gravado is not None
     assert (gravado.id, gravado.unit_id, gravado.name, gravado.job_function_ids) == (
         funcionario.id,
@@ -227,7 +254,7 @@ def test_round_trip_de_funcionario() -> None:
 
 def test_funcionario_inexistente_devolve_none() -> None:
     fakes = staff_repositories()
-    assert fakes.employees.find_by_id(_TENANT, EmployeeId("fantasma")) is None
+    assert fakes.employees.find_by_id(_TENANT, _UNIDADE, EmployeeId("fantasma")) is None
 
 
 # --- o par é acoplado: um store, duas visões ---------------------------------
@@ -239,7 +266,7 @@ def test_funcao_gravada_por_uma_visao_e_vista_pela_guarda_da_outra() -> None:
     fakes = staff_repositories()
     fakes.job_functions.add(_funcao())
     fakes.employees.add(_funcionario())  # não levanta JobFunctionNotFoundError
-    assert fakes.employees.find_by_id(_TENANT, EmployeeId("e1")) is not None
+    assert fakes.employees.find_by_id(_TENANT, _UNIDADE, EmployeeId("e1")) is not None
 
 
 def test_funcionario_gravado_por_uma_visao_e_visto_pela_guarda_da_outra() -> None:

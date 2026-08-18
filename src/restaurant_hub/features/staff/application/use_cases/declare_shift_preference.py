@@ -25,9 +25,11 @@ class DeclareShiftPreferenceUseCase:
         """Grava a preferência — ou a remove, quando o command traz `None`.
 
         Raises:
-            EmployeeNotFoundError: id inexistente **no tenant**.
+            EmployeeNotFoundError: id inexistente **no endereço (tenant + unidade)**.
         """
-        employee = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        employee = self._employees.find_by_id(
+            command.tenant_id, command.unit_id, command.employee_id
+        )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         declared = employee.declare_shift_preference(command.shift_preference)

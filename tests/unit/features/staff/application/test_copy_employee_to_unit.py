@@ -96,8 +96,11 @@ def _fakes(*, active: bool = True) -> StaffFakes:
     return fakes
 
 
-def _result(fakes: StaffFakes, employee_id: EmployeeId) -> EmployeeResult:
-    employee = fakes.employees.find_by_id(_A, employee_id)
+def _result(fakes: StaffFakes, unidade: UnitId, employee_id: EmployeeId) -> EmployeeResult:
+    """A releitura passa pelo endereço de três partes: a unidade é parâmetro
+    porque a origem e a cópia vivem em unidades **diferentes** (ADR 3.4.0007).
+    """
+    employee = fakes.employees.find_by_id(_A, unidade, employee_id)
     assert employee is not None
     return EmployeeResult(
         id=employee.id,
@@ -135,7 +138,7 @@ def test_copia_recebe_id_novo_unidade_destino_e_mesmo_tenant() -> None:
 def test_copia_replica_todo_o_resto_do_cadastro() -> None:
     """A lista do ADR 3.2.0003: nome, perfil, preferência, funções, períodos."""
     fakes = _fakes()
-    origem = _result(fakes, _E1)
+    origem = _result(fakes, _U1, _E1)
     copia = _copiar(fakes).execute(
         CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
@@ -154,7 +157,7 @@ def test_copia_replica_todo_o_resto_do_cadastro() -> None:
         origem.unavailabilities,
     )
     # E a releitura pelo port confirma que a cópia foi de fato gravada.
-    assert _result(fakes, EmployeeId(copia.id)) == copia
+    assert _result(fakes, _U2, EmployeeId(copia.id)) == copia
 
 
 @pytest.mark.parametrize("active", [True, False])
@@ -175,11 +178,11 @@ def test_copia_carrega_o_estado_de_ciclo_de_vida_como_esta(active: bool) -> None
 def test_a_origem_permanece_inalterada() -> None:
     """Comparação com snapshot tirado **antes** da cópia, campo a campo."""
     fakes = _fakes()
-    antes = _result(fakes, _E1)
+    antes = _result(fakes, _U1, _E1)
     _copiar(fakes).execute(
         CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
-    assert _result(fakes, _E1) == antes
+    assert _result(fakes, _U1, _E1) == antes
 
 
 # --- independência estrutural (muta e relê) ----------------------------------
@@ -190,7 +193,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
     copia = _copiar(fakes).execute(
         CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
-    origem_antes = _result(fakes, _E1)
+    origem_antes = _result(fakes, _U1, _E1)
     copia_id = EmployeeId(copia.id)
 
     RenameEmployeeUseCase(fakes.employees).execute(
@@ -210,7 +213,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
         DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=copia_id)
     )
 
-    assert _result(fakes, _E1) == origem_antes
+    assert _result(fakes, _U1, _E1) == origem_antes
 
 
 def test_editar_a_origem_nao_afeta_a_copia() -> None:
@@ -220,7 +223,7 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
         CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
     )
     copia_id = EmployeeId(copia.id)
-    copia_antes = _result(fakes, copia_id)
+    copia_antes = _result(fakes, _U2, copia_id)
 
     RenameEmployeeUseCase(fakes.employees).execute(
         RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
@@ -229,7 +232,7 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
         DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 
-    assert _result(fakes, copia_id) == copia_antes
+    assert _result(fakes, _U2, copia_id) == copia_antes
 
 
 # --- recusas -----------------------------------------------------------------
@@ -338,3 +341,40 @@ def test_copiar_duas_vezes_para_o_mesmo_destino_cria_dois_registros() -> None:
     assert {registro.id for registro in na_unidade_destino} == {primeira.id, segunda.id}
     # Indistinguíveis entre si — nomes de funcionário não são únicos por design.
     assert {registro.name for registro in na_unidade_destino} == {"Maria"}
+
+
+# --- CA11: o endereço do funcionário tem três partes (ADR 3.4.0007) ----------
+#
+# **O que estes testes matam.** Antes da Stage 3.4 o use case resolvia o
+# registro por `(tenant_id, employee_id)`, e a unidade do path só era conferida
+# contra o **ator** — nunca contra o **registro**. Um gerente da unidade A
+# alcançava qualquer funcionário do mesmo restaurante pondo a própria unidade no
+# endereço. Se algum use case voltar a resolver por `(tenant, id)`, o registro é
+# encontrado apesar da unidade alheia e a escrita acontece.
+#
+# A asserção sobre `fakes.store.calls` é o que dá poder ao teste: `pytest.raises`
+# sozinho não distingue "não encontrou porque a unidade não bate" de "não
+# encontrou por outro motivo e nada mais foi tentado". A conduta esperada é
+# **exatamente** uma chamada — o lookup — e nenhuma escrita depois dela.
+
+
+def test_ca11_copia_com_unidade_de_origem_alheia_nao_alcanca_o_registro() -> None:
+    """A cópia é o caminho de **exfiltração** que o ADR 3.4.0007 nomeia.
+
+    Com a origem lida por `(tenant, id)`, um ator da unidade B clonava para
+    dentro da própria unidade o cadastro de um funcionário da A — as duas
+    autorizações passavam, porque o ator via B duas vezes. Aqui o command declara
+    origem `_U2` (onde o registro **não** está) e destino `_U1`, e o resultado
+    tem de ser `EmployeeNotFoundError` sem nenhuma escrita.
+    """
+    fakes = _fakes()
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StaffError) as excecao:
+        _copiar(fakes).execute(
+            CopyEmployeeToUnitCommand(
+                tenant_id=_A, unit_id=_U2, employee_id=_E1, target_unit_id=_U1
+            )
+        )
+    assert type(excecao.value) is EmployeeNotFoundError
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"]

@@ -1223,4 +1223,52 @@ reidratação de propósito. O custo é um teste; o risco evitado é um
 `object.__setattr__` futuro no lugar do construtor apagando a garantia sem quebrar
 nada.
 
+---
+
+### 2026-08-17 — [deviation] Task 04 — o teste de CA11 não pôde nascer dentro do `store.calls` — Claude
+
+**Contexto:** o passo 8 dos detalhes técnicos da Task 04 pede *"com o `store.calls`
+do fake, assere que cada use case chamou o port com **três** argumentos e com a
+unidade do command"*. Medido na execução: `InMemoryStaffStore.record` recebe uma
+**`str` nua** e `calls` é `list[str]`
+(`tests/fakes/features/staff/in_memory_staff_store.py:54-58`) — ele registra o
+**nome** do método, nunca os argumentos. Enriquecer a string gravada (p.ex.
+`"employees.find_by_id(t,u,e)"`) quebraria as asserções de **igualdade e
+pertinência exata** sobre `calls` espalhadas por nove suítes
+(`test_job_function_use_cases.py:136`, `test_staff_repository_fakes.py:93`,
+`test_delete_job_function.py:93`, entre outras) — e `in_memory_staff_store.py`
+**não está** na lista de arquivos da Task 04.
+
+**Ajuste aplicado:** a metade "use cases" de CA11 virou **duas** provas, ambas
+dentro dos arquivos listados:
+
+- **comportamental (10 testes, todos os dez use cases)** — o command endereça uma
+  unidade **alheia** (`_U2`) para um registro gravado em `_U1`; o resultado tem de
+  ser `EmployeeNotFoundError` **e** `fakes.store.calls[antes:] == ["employees.find_by_id"]`.
+  A asserção de conduta é a peça que discrimina: um use case que voltasse a
+  resolver por `(tenant, id)` **encontraria** o registro e a lista traria também
+  `employees.update` / `employees.delete`. Distribuídos por
+  `test_assign_job_functions.py` (1), `test_delete_employee.py` (1),
+  `test_copy_employee_to_unit.py` (1), `test_employee_edit_use_cases.py` (3,
+  parametrizado), `test_employee_lifecycle.py` (2) e
+  `test_unavailability_use_cases.py` (2).
+- **mecânica (aridade e ordem)** — `test_ca11_o_endereco_do_funcionario_tem_tres_partes_na_assinatura`
+  em `test_staff_repository_fakes.py`, por `inspect.signature`, sobre o `Protocol`
+  **e** sobre o fake: `["self", "tenant_id", "unit_id", "employee_id"]`. É a metade
+  "três argumentos" do passo 8, e ela **ganha valor** justamente pela propriedade
+  que a §1 nomeia: `mypy` não alcança `tests/integration/`, e uma asserção que roda
+  na suíte alcança.
+
+**Razão:** o alvo do passo 8 é *"falha se algum voltar a resolver por
+`(tenant, id)`"*, e as duas provas juntas o cumprem com margem — verificado por
+**mutação**, não por leitura: removida a comparação de unidade do fake, os 10
+testes comportamentais reprovam (os 2 de assinatura passam, corretamente, porque
+não dependem da implementação); removida também do `WHERE` do adapter, 8 dos 10
+testes de CA9 da suíte de contrato reprovam nos dois parâmetros. O caminho
+alternativo — mudar a forma de `record()` — trocaria uma prova por uma regressão
+em nove suítes, e tocaria arquivo fora da lista.
+
+**Nenhum arquivo fora da lista da Task 04 foi tocado:** o commit fecha em
+**exatamente** os 26 previstos (12 em `src/`, 14 em `tests/`).
+
 <!-- END: post-execution -->

@@ -12,6 +12,7 @@ valor) ou campo a campo sobre a entidade relida.
 """
 
 import dataclasses
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 
@@ -60,6 +61,7 @@ pytestmark = pytest.mark.unit
 _A = TenantId("tenant-a")
 _B = TenantId("tenant-b")
 _U1 = UnitId("u1")
+_U2 = UnitId("u2")
 _F1 = JobFunctionId("f1")
 _E1 = EmployeeId("e1")
 _FIXA = FixedSchedule(weekly_hours=Decimal("44"))
@@ -96,7 +98,7 @@ def _com_funcionario(*, preferencia: ShiftPreference | None = None) -> StaffFake
 
 def _result(fakes: StaffFakes) -> EmployeeResult:
     """Snapshot do registro gravado, como `EmployeeResult` (igualdade por valor)."""
-    employee = fakes.employees.find_by_id(_A, _E1)
+    employee = fakes.employees.find_by_id(_A, _U1, _E1)
     assert employee is not None
     return EmployeeResult(
         id=employee.id,
@@ -310,3 +312,66 @@ def test_nome_vazio_em_registro_existente_e_erro_do_dominio_sem_gravar() -> None
 
     assert "employees.update" not in fakes.store.calls[antes_calls:]
     assert _result(fakes) == antes
+
+
+# --- CA11: o endereço do funcionário tem três partes (ADR 3.4.0007) ----------
+#
+# **O que estes testes matam.** Antes da Stage 3.4 o use case resolvia o
+# registro por `(tenant_id, employee_id)`, e a unidade do path só era conferida
+# contra o **ator** — nunca contra o **registro**. Um gerente da unidade A
+# alcançava qualquer funcionário do mesmo restaurante pondo a própria unidade no
+# endereço. Se algum use case voltar a resolver por `(tenant, id)`, o registro é
+# encontrado apesar da unidade alheia e a escrita acontece.
+#
+# A asserção sobre `fakes.store.calls` é o que dá poder ao teste: `pytest.raises`
+# sozinho não distingue "não encontrou porque a unidade não bate" de "não
+# encontrou por outro motivo e nada mais foi tentado". A conduta esperada é
+# **exatamente** uma chamada — o lookup — e nenhuma escrita depois dela.
+
+
+def _edicoes_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], object]]]:
+    """Um item por use case de edição — a lista **é** a superfície, não amostra."""
+    return [
+        (
+            "rename_employee",
+            lambda fakes: RenameEmployeeUseCase(fakes.employees).execute(
+                RenameEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=_E1, name="Joana")
+            ),
+        ),
+        (
+            "change_workload_profile",
+            lambda fakes: ChangeWorkloadProfileUseCase(fakes.employees).execute(
+                ChangeWorkloadProfileCommand(
+                    tenant_id=_A, unit_id=_U2, employee_id=_E1, workload_profile=OnDemand()
+                )
+            ),
+        ),
+        (
+            "declare_shift_preference",
+            lambda fakes: DeclareShiftPreferenceUseCase(fakes.employees).execute(
+                DeclareShiftPreferenceCommand(
+                    tenant_id=_A, unit_id=_U2, employee_id=_E1, shift_preference=None
+                )
+            ),
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("nome", "executar"),
+    _edicoes_com_unidade_alheia(),
+    ids=[nome for nome, _ in _edicoes_com_unidade_alheia()],
+)
+def test_ca11_edicao_com_unidade_alheia_nao_alcanca_o_registro(
+    nome: str, executar: Callable[[StaffFakes], object]
+) -> None:
+    fakes = _com_funcionario()
+    antes_estado = _result(fakes)
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StaffError) as excecao:
+        executar(fakes)
+    assert type(excecao.value) is EmployeeNotFoundError, nome
+
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"], nome
+    assert _result(fakes) == antes_estado, nome

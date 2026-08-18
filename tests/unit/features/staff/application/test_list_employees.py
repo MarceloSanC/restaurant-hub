@@ -143,7 +143,7 @@ def test_o_result_carrega_o_registro_campo_a_campo() -> None:
     fakes = _com_funcoes()
     _grava(fakes, "e1")
     (resultado,) = _listar(fakes).execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1))
-    gravado = fakes.employees.find_by_id(_A, EmployeeId("e1"))
+    gravado = fakes.employees.find_by_id(_A, _U1, EmployeeId("e1"))
     assert gravado is not None
     assert (
         resultado.id,

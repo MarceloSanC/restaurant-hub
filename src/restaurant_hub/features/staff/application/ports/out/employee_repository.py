@@ -35,12 +35,30 @@ que permite à suíte de contrato ter **um** corpo de teste só.
 deliberada — é o que torna impossível **por assinatura** a consulta que vazaria
 unidades (workforce §3.1).
 
-**Ordem de checagem, normativa** (concept §4/L-E3 e §5.4): todo método que
-recebe `tenant_id` resolve **primeiro** o lookup por `(tenant_id, id)` — ausente
-⇒ `EmployeeNotFoundError` — e só **depois** avalia qualquer outra guarda
+**O endereço do funcionário tem três partes** (ADR 3.4.0007, Stage 3.4):
+`(tenant_id, unit_id, id)`. `find_by_id` e `delete` **exigem a unidade**, e isso
+é **lei do port**, não filtro de SQL do adapter: quem não sabe a unidade **não
+consegue formar a chamada**, e as duas implementações carregam a mesma regra.
+Pôr o filtro apenas no `WHERE` do Postgres deixaria o fake in-memory aceitando o
+que o real recusa — a divergência fake ≢ real que este Step já pagou uma vez
+sobre o byte NUL, agora sobre um invariante de **segurança**. É por ser
+assinatura que a suíte de contrato prova os dois lados com **um** corpo só.
+
+`update` **não** recebe a unidade em separado: a entidade já a carrega, e é a
+comparação entre a unidade da entidade e a gravada que L-E3 guarda.
+`exists_by_job_function` segue **tenant-wide por desenho** — a guarda de remoção
+conta referências em **qualquer** unidade (workforce §3.2).
+
+**Ordem de checagem, normativa** (concept §4/L-E3 e §5.4, com a unidade dobrada
+no primeiro passo pelo ADR 3.4.0007 §4): todo método que recebe `tenant_id`
+resolve **primeiro** o lookup — por `(tenant_id, unit_id, id)` onde a assinatura
+traz a unidade, por `(tenant_id, id)` em `update` — ausente ⇒
+`EmployeeNotFoundError`, e só **depois** avalia qualquer outra guarda
 (divergência de `unit_id`, conjunto de funções, referências). Invertê-la faz o
 port responder um erro que **confirma a existência de registro de outro
-tenant**.
+tenant**. Pela mesma regra, registro que existe em **outra unidade do mesmo
+tenant** é **não encontrado**: nenhum erro confirma a existência de registro que
+o chamador não pode endereçar.
 
 **Não há `exists_by_name`**, e a ausência é declaração: nome de funcionário
 **não** é único — homônimos são legítimos (concept 3.1 §5.2).
@@ -81,7 +99,12 @@ class EmployeeRepository(Protocol):
         """Grava o agregado **inteiro** de um registro existente.
 
         **L-E2 — é `UPDATE`, não upsert.** Registro inexistente **no tenant** ⇒
-        `EmployeeNotFoundError`, e **nada** é gravado. Grava nome, perfil,
+        `EmployeeNotFoundError`, e **nada** é gravado. Aqui o lookup é por
+        `(tenant_id, id)`, e **não** pelo endereço de três partes: a unidade
+        vem dentro da entidade, e compará-la com a gravada é **exatamente** o
+        que a L-E3 faz no passo seguinte. Escopar o lookup pela unidade
+        recebida converteria toda relocalização em `EmployeeNotFoundError` e
+        apagaria a L-E3 do contrato. Grava nome, perfil,
         preferência, conjunto de funções, indisponibilidades **e estado** — as
         entidades são `frozen` e as transições devolvem nova instância, então
         não há mutação in-place que a persistência pudesse observar.
@@ -101,16 +124,32 @@ class EmployeeRepository(Protocol):
         vazaria a existência do registro alheio justamente no caso em que as
         duas divergem.
 
+        **A L-E3 sobrevive com gatilho mais estreito** (ADR 3.4.0007 §5). Desde
+        a Stage 3.4 os use cases recarregam o registro **da mesma unidade em
+        que escrevem** — o endereço de três partes de `find_by_id` —, então
+        nenhum caminho de use case consegue mais entregar aqui uma entidade com
+        unidade divergente: `EmployeeRelocationError` deixa de ser alcançável
+        **por eles**. A lei e o erro **permanecem**, e não são removidos: um
+        segundo adapter de entrada (CLI, worker, importador) monta a entidade
+        sozinho e ainda pode tentá-la, e é o port — não o use case — que
+        responde por ela.
+
         **L-E4** vale aqui igual ao `add`.
         """
         ...
 
-    def delete(self, tenant_id: TenantId, employee_id: EmployeeId) -> None:
+    def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """Remove o registro **definitivamente** — o oposto de desligar.
 
-        **L-E5 — remoção guardada.** Inexistente **no tenant** ⇒
-        `EmployeeNotFoundError`; **referenciado por qualquer registro de outro
-        agregado** ⇒ `EmployeeInUseError`.
+        **L-E5 — remoção guardada, no endereço de três partes.** Inexistente
+        **no par `(tenant_id, unit_id)`** ⇒ `EmployeeNotFoundError`;
+        **referenciado por qualquer registro de outro agregado** ⇒
+        `EmployeeInUseError`.
+
+        Registro que existe em **outra unidade do mesmo tenant** é **não
+        encontrado** — mesmo erro, mesma mensagem que o de outro tenant já
+        recebia (ADR 3.4.0007 §4). A distinção seria justamente o que confirma
+        a existência de um registro que o chamador não pode endereçar.
 
         Em v1 **nada referencia** o registro de funcionário, então a segunda
         metade é vacuamente satisfeita: o erro e a lei existem porque o
@@ -120,8 +159,15 @@ class EmployeeRepository(Protocol):
         """
         ...
 
-    def find_by_id(self, tenant_id: TenantId, employee_id: EmployeeId) -> Employee | None:
-        """Devolve o registro **do tenant**, ou `None` se não existir nele.
+    def find_by_id(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId
+    ) -> Employee | None:
+        """Devolve o registro **do tenant e da unidade**, ou `None`.
+
+        O endereço é `(tenant_id, unit_id, id)` (ADR 3.4.0007 §1). Registro que
+        existe em **outra unidade do mesmo tenant** devolve `None`, pela mesma
+        regra que já valia para outro tenant: o resultado não distingue "não
+        existe" de "existe onde você não alcança".
 
         Não filtra por estado: o **desligado continua endereçável por id**
         (ADR 3.2.0006) — ele some da listagem default, não do sistema.

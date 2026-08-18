@@ -24,9 +24,11 @@ class ChangeWorkloadProfileUseCase:
         """Troca o perfil.
 
         Raises:
-            EmployeeNotFoundError: id inexistente **no tenant**.
+            EmployeeNotFoundError: id inexistente **no endereço (tenant + unidade)**.
         """
-        employee = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        employee = self._employees.find_by_id(
+            command.tenant_id, command.unit_id, command.employee_id
+        )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         changed = employee.change_workload_profile(command.workload_profile)

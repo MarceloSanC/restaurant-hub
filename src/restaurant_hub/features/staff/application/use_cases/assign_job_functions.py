@@ -39,13 +39,15 @@ class AssignJobFunctionsUseCase:
         """Substitui o conjunto.
 
         Raises:
-            EmployeeNotFoundError: registro inexistente **no tenant**.
+            EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**.
             JobFunctionNotFoundError: alguma id do conjunto não existe no
                 tenant (ou existe em outro).
             EmptyJobFunctionsError: conjunto vazio (domínio, 3.1).
         """
         # (1) Existência do registro — antes de qualquer coisa (§5.4).
-        employee = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        employee = self._employees.find_by_id(
+            command.tenant_id, command.unit_id, command.employee_id
+        )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         # (2) Validade referencial do conjunto pedido.

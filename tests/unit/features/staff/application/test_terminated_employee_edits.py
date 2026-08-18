@@ -133,7 +133,7 @@ def _desligado() -> StaffFakes:
 
 
 def _relido(fakes: StaffFakes) -> Employee:
-    employee = fakes.employees.find_by_id(_A, _E1)
+    employee = fakes.employees.find_by_id(_A, _U1, _E1)
     assert employee is not None
     return employee
 

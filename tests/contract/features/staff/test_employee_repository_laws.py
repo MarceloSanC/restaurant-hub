@@ -177,7 +177,7 @@ def test_update_de_um_funcionario_nao_remove_as_funcoes_de_outro(
 
     repos.employees.update(_a_sem_uma_filha_de_cada_tabela())
 
-    vizinho = repos.employees.find_by_id(_A, _E2)
+    vizinho = repos.employees.find_by_id(_A, _U1, _E2)
     assert vizinho is not None
     assert vizinho.job_function_ids == frozenset({_F1, _F2})
 
@@ -196,7 +196,7 @@ def test_update_de_um_funcionario_nao_remove_as_indisponibilidades_de_outro(
 
     repos.employees.update(_a_sem_uma_filha_de_cada_tabela())
 
-    vizinho = repos.employees.find_by_id(_A, _E2)
+    vizinho = repos.employees.find_by_id(_A, _U1, _E2)
     assert vizinho is not None
     assert vizinho.unavailabilities == (_PERIODO_COMPARTILHADO,)
 
@@ -213,7 +213,7 @@ def test_update_de_um_funcionario_nao_remove_a_preferencia_de_outro(
 
     repos.employees.update(_a_sem_uma_filha_de_cada_tabela())
 
-    vizinho = repos.employees.find_by_id(_A, _E2)
+    vizinho = repos.employees.find_by_id(_A, _U1, _E2)
     assert vizinho is not None
     assert vizinho.shift_preference == ShiftPreference(periods=frozenset({DayPeriod.NIGHT}))
 
@@ -227,7 +227,7 @@ def test_l_e1_add_com_id_ja_gravado_e_erro_e_nao_altera_o_registro(
     _com_funcionario_gravado(repos)
     with pytest.raises(EmployeeAlreadyExistsError):
         repos.employees.add(_funcionario(name="Joana"))
-    gravado = repos.employees.find_by_id(_A, _E1)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria"
 
@@ -269,7 +269,7 @@ def test_ca5b_l_e1_precede_l_e4_quando_id_e_conjunto_falham_juntos(
             _funcionario(name="Joana", job_function_ids=frozenset({JobFunctionId("f-inexistente")}))
         )
 
-    gravado = repos.employees.find_by_id(_A, _E1)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria"
 
@@ -281,7 +281,7 @@ def test_l_e2_update_de_inexistente_no_tenant_nao_grava_nada(repos: Repositorios
     _com_funcoes_gravadas(repos)
     with pytest.raises(EmployeeNotFoundError):
         repos.employees.update(_funcionario())
-    assert repos.employees.find_by_id(_A, _E1) is None
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
     assert repos.employees.list_by_unit(_A, _U1) == ()
 
 
@@ -291,7 +291,7 @@ def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: Repositori
     editado = _funcionario(name="Joana", job_function_ids=frozenset({_F2}), active=False)
     editado = editado.change_workload_profile(OnDemand()).add_unavailability(_PERIODO)
     repos.employees.update(editado)
-    gravado = repos.employees.find_by_id(_A, _E1)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert (
         gravado.name,
@@ -311,7 +311,7 @@ def test_l_e3_update_com_unidade_divergente_no_mesmo_tenant_e_relocation(
     _com_funcionario_gravado(repos)
     with pytest.raises(EmployeeRelocationError):
         repos.employees.update(_funcionario(unit_id=_U2, name="Joana"))
-    gravado = repos.employees.find_by_id(_A, _E1)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     # Na unidade original E com os campos antigos: nada foi gravado.
     assert (gravado.unit_id, gravado.name) == (_U1, "Maria")
@@ -342,7 +342,7 @@ def test_l_e3_update_com_tenant_alheio_e_not_found_mesmo_com_unidade_divergente(
         repos.employees.update(_funcionario(tenant_id=_B, unit_id=_U2, name="Joana"))
     assert type(excecao.value) is EmployeeNotFoundError
 
-    gravado = repos.employees.find_by_id(_A, _E1)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert (gravado.tenant_id, gravado.unit_id, gravado.name) == (_A, _U1, "Maria")
 
@@ -376,7 +376,7 @@ def test_l_e3_update_com_a_mesma_unidade_e_aceito(repos: RepositoriosDeStaff) ->
     """O contrapositivo: a lei bloqueia relocalização, não edição."""
     _com_funcionario_gravado(repos)
     repos.employees.update(_funcionario(name="Joana"))
-    gravado = repos.employees.find_by_id(_A, _E1)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Joana"
 
@@ -390,7 +390,7 @@ def test_l_e4_add_com_funcao_inexistente_no_tenant_nao_grava_nada(
     _com_funcoes_gravadas(repos)
     with pytest.raises(JobFunctionNotFoundError):
         repos.employees.add(_funcionario(job_function_ids=frozenset({JobFunctionId("f99")})))
-    assert repos.employees.find_by_id(_A, _E1) is None
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_l_e4_add_com_funcao_existente_em_outro_tenant_nao_grava_nada(
@@ -400,7 +400,7 @@ def test_l_e4_add_com_funcao_existente_em_outro_tenant_nao_grava_nada(
     _com_funcoes_gravadas(repos)
     with pytest.raises(JobFunctionNotFoundError):
         repos.employees.add(_funcionario(job_function_ids=frozenset({JobFunctionId("f-b")})))
-    assert repos.employees.find_by_id(_A, _E1) is None
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_l_e4_add_rejeita_o_conjunto_quando_so_uma_das_funcoes_falta(
@@ -410,7 +410,7 @@ def test_l_e4_add_rejeita_o_conjunto_quando_so_uma_das_funcoes_falta(
     _com_funcoes_gravadas(repos)
     with pytest.raises(JobFunctionNotFoundError):
         repos.employees.add(_funcionario(job_function_ids=frozenset({_F1, JobFunctionId("f99")})))
-    assert repos.employees.find_by_id(_A, _E1) is None
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_l_e4_update_com_funcao_inexistente_nao_grava_nada(repos: RepositoriosDeStaff) -> None:
@@ -419,7 +419,7 @@ def test_l_e4_update_com_funcao_inexistente_nao_grava_nada(repos: RepositoriosDe
         repos.employees.update(
             _funcionario(name="Joana", job_function_ids=frozenset({JobFunctionId("f99")}))
         )
-    gravado = repos.employees.find_by_id(_A, _E1)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert (gravado.name, gravado.job_function_ids) == ("Maria", frozenset({_F1}))
 
@@ -430,13 +430,13 @@ def test_l_e4_update_com_funcao_inexistente_nao_grava_nada(repos: RepositoriosDe
 def test_l_e5_delete_de_inexistente_no_tenant_e_not_found(repos: RepositoriosDeStaff) -> None:
     _com_funcoes_gravadas(repos)
     with pytest.raises(EmployeeNotFoundError):
-        repos.employees.delete(_A, _E1)
+        repos.employees.delete(_A, _U1, _E1)
 
 
 def test_l_e5_delete_de_existente_remove_o_registro(repos: RepositoriosDeStaff) -> None:
     _com_funcionario_gravado(repos)
-    repos.employees.delete(_A, _E1)
-    assert repos.employees.find_by_id(_A, _E1) is None
+    repos.employees.delete(_A, _U1, _E1)
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_l_e5_nenhum_caminho_de_v1_produz_employee_in_use_error(repos: RepositoriosDeStaff) -> None:
@@ -456,8 +456,8 @@ def test_l_e5_nenhum_caminho_de_v1_produz_employee_in_use_error(repos: Repositor
     repos.employees.add(conectado.add_unavailability(_PERIODO))
     repos.employees.add(_funcionario(id=EmployeeId("e2"), job_function_ids=frozenset({_F1, _F2})))
 
-    repos.employees.delete(_A, _E1)  # não levanta EmployeeInUseError
-    assert repos.employees.find_by_id(_A, _E1) is None
+    repos.employees.delete(_A, _U1, _E1)  # não levanta EmployeeInUseError
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_l_e5_employee_in_use_error_existe_e_a_lei_esta_documentada_no_port(
@@ -520,7 +520,7 @@ def test_l_e6_list_by_unit_inclui_desligados_com_include_inactive(
     incluindo = repos.employees.list_by_unit(_A, _U1, include_inactive=True)
     assert {registro.id for registro in incluindo} == {_E1, EmployeeId("e2")}
     # E continua endereçável por id, com ou sem flag.
-    assert repos.employees.find_by_id(_A, EmployeeId("e2")) is not None
+    assert repos.employees.find_by_id(_A, _U1, EmployeeId("e2")) is not None
 
 
 # --- L-E7: consulta de referência a função -----------------------------------
@@ -643,7 +643,7 @@ def test_l_ord_periodos_reidratam_ordenados_por_inicio_no_find_by_id(
     meio = UnavailabilityPeriod(start=datetime(2026, 8, 10, 8, 0), end=datetime(2026, 8, 10, 12, 0))
     repos.employees.add(_funcionario(unavailabilities=(tarde, cedo, meio)))
 
-    lido = repos.employees.find_by_id(_A, _E1)
+    lido = repos.employees.find_by_id(_A, _U1, _E1)
 
     assert lido is not None
     assert lido.unavailabilities == (cedo, meio, tarde)
@@ -725,13 +725,121 @@ def test_escopo_de_tenant_registro_do_a_e_invisivel_e_intocavel_com_tenant_b(
     """
     _com_funcionario_gravado(repos)
 
-    assert repos.employees.find_by_id(_B, _E1) is None
+    assert repos.employees.find_by_id(_B, _U1, _E1) is None
     assert repos.employees.list_by_unit(_B, _U1) == ()
     assert repos.employees.list_by_unit(_B, _U1, include_inactive=True) == ()
 
     with pytest.raises(EmployeeNotFoundError):
-        repos.employees.delete(_B, _E1)
-    assert repos.employees.find_by_id(_A, _E1) is not None
+        repos.employees.delete(_B, _U1, _E1)
+    assert repos.employees.find_by_id(_A, _U1, _E1) is not None
+
+
+# --- escopo de UNIDADE: o endereço de três partes (Stage 3.4, ADR 3.4.0007) --
+#
+# **Por que estes testes vivem no contrato, e não numa suíte de adapter.** A
+# unidade entra na **assinatura** do port, não no `WHERE` do Postgres — é a
+# decisão do ADR 3.4.0007 §2. Posta só no adapter, a regra valeria em produção e
+# não valeria nos testes de unidade, que rodam contra o fake; e esta suíte, que
+# roda **um corpo de teste só** contra `[fake]` e `[postgres]`, não teria como
+# expressá-la, porque a assinatura não carregaria a unidade. É a mesma
+# divergência fake ≢ real que o byte NUL custou a este Step — agora sobre um
+# invariante de **segurança**, onde ela é estritamente pior.
+#
+# O defeito fechado aqui é concreto (concept §3): com o lookup por
+# `(tenant, id)`, um gerente da unidade A alcançava **qualquer** funcionário do
+# mesmo restaurante pondo a própria unidade no path — lendo o cadastro alheio
+# pela resposta de qualquer rota de mutação, e exfiltrando-o pela cópia.
+
+
+def test_ca9_find_by_id_com_unidade_alheia_nao_encontra_o_registro(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Registro criado na unidade A é `None` quando endereçado pela B.
+
+    A segunda asserção não é redundante: sem ela, uma implementação que
+    devolvesse `None` para **tudo** passaria. O que se trava é a discriminação —
+    invisível no endereço errado, alcançável no certo.
+    """
+    _com_funcionario_gravado(repos)
+
+    assert repos.employees.find_by_id(_A, _U2, _E1) is None
+    assert repos.employees.find_by_id(_A, _U1, _E1) is not None
+
+
+def test_ca9_delete_com_unidade_alheia_e_not_found_e_nao_remove(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """A metade de **escrita** da lei — e a que fecha a remoção cross-unidade.
+
+    A asserção é sobre o **tipo exato**, e não `pytest.raises(...)` puro: o que
+    distingue "o port acertou" de "levantou outra coisa que por acaso também não
+    é sucesso" é a comparação exata. E a releitura no endereço certo prova que a
+    recusa **não** apagou nada pelo caminho.
+    """
+    _com_funcionario_gravado(repos)
+
+    with pytest.raises(StaffError) as excecao:
+        repos.employees.delete(_A, _U2, _E1)
+    assert type(excecao.value) is EmployeeNotFoundError
+
+    assert repos.employees.find_by_id(_A, _U1, _E1) is not None
+
+
+def test_ca9_a_recusa_por_unidade_e_indistinguivel_da_recusa_por_tenant(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Nenhum erro confirma a existência de registro que o chamador não endereça.
+
+    É a regra de §5.4 estendida à unidade pelo ADR 3.4.0007 §4. Um
+    `EmployeeUnitMismatchError` — ou qualquer mensagem que diferisse da de
+    tenant alheio — devolveria ao atacante exatamente a informação que a lei
+    existe para reter: *este id existe neste restaurante, só não aqui*. Por isso
+    a asserção é sobre o **tipo e a mensagem**, não só sobre o tipo.
+    """
+    _com_funcionario_gravado(repos)
+
+    with pytest.raises(EmployeeNotFoundError) as por_unidade:
+        repos.employees.delete(_A, _U2, _E1)
+    with pytest.raises(EmployeeNotFoundError) as por_tenant:
+        repos.employees.delete(_B, _U1, _E1)
+
+    assert type(por_unidade.value) is type(por_tenant.value)
+    assert str(por_unidade.value) == str(por_tenant.value)
+
+
+def test_ca9_o_desligado_tambem_esta_sob_a_lei_de_unidade(repos: RepositoriosDeStaff) -> None:
+    """O escopo de unidade **não** se relaxa para o registro inativo.
+
+    `find_by_id` não filtra por estado (ADR 3.2.0006), e é justamente por isso
+    que o desligado precisa de asserção própria: uma implementação que aplicasse
+    a unidade só no caminho do ativo deixaria o cadastro do desligado alheio
+    legível, e nenhum outro teste desta suíte perceberia.
+    """
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_funcionario(active=False))
+
+    assert repos.employees.find_by_id(_A, _U2, _E1) is None
+    assert repos.employees.find_by_id(_A, _U1, _E1) is not None
+
+
+def test_ca9_a_lei_de_unidade_esta_declarada_no_port_com_a_ancora_do_adr(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """A lei nasce na docstring do `Protocol`, não no SQL — travado por teste.
+
+    Mesma forma de `test_l_ord_esta_declarada_no_port_com_a_ancora_da_stage_33`:
+    sem esta asserção, alguém poderia mover a filtragem de volta para o adapter
+    e deixar o contrato mudo sobre ela, com a suíte inteira verde — e o próximo
+    implementador do port não teria onde ler a regra que precisa cumprir.
+    """
+    modulo = sys.modules[EmployeeRepository.__module__].__doc__ or ""
+
+    assert "ADR 3.4.0007" in modulo
+    assert "(tenant_id, unit_id, id)" in modulo
+    for metodo in (EmployeeRepository.find_by_id, EmployeeRepository.delete):
+        assert "ADR 3.4.0007" in (metodo.__doc__ or ""), metodo.__name__
+    # E a L-E3 continua declarada, com o gatilho estreitado — não removida.
+    assert "EmployeeRelocationError" in (EmployeeRepository.update.__doc__ or "")
 
 
 # --- o byte NUL: a divergência fake ≢ real que a 3.4 fecha ------------------
@@ -766,7 +874,7 @@ def test_ca17_nome_com_byte_nul_e_recusado_antes_de_alcancar_o_port(
         repos.employees.add(_funcionario(name="Mar\x00ia"))
 
     # Nada chegou ao store, nos dois parâmetros.
-    assert repos.employees.find_by_id(_A, _E1) is None
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
 
 
 @pytest.mark.parametrize("nome", _NOMES_ADVERSARIAIS, ids=_IDS_ADVERSARIAIS)
@@ -782,7 +890,7 @@ def test_ca18_nome_adversarial_sem_nul_faz_round_trip_verbatim(
     _com_funcoes_gravadas(repos)
     repos.employees.add(_funcionario(name=nome))
 
-    lido = repos.employees.find_by_id(_A, _E1)
+    lido = repos.employees.find_by_id(_A, _U1, _E1)
 
     assert lido is not None
     assert lido.name == nome

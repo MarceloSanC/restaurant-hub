@@ -25,11 +25,13 @@ class RemoveUnavailabilityUseCase:
         """Remove o período.
 
         Raises:
-            EmployeeNotFoundError: registro inexistente **no tenant** (404).
+            EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)** (404).
             UnavailabilityNotFoundError: o registro não tem aquele período
                 (domínio, 3.1) — **422**, não 404.
         """
-        employee = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        employee = self._employees.find_by_id(
+            command.tenant_id, command.unit_id, command.employee_id
+        )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         updated = employee.remove_unavailability(command.period)

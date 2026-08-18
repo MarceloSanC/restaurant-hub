@@ -41,6 +41,7 @@ pytestmark = pytest.mark.unit
 _A = TenantId("tenant-a")
 _B = TenantId("tenant-b")
 _U1 = UnitId("u1")
+_U2 = UnitId("u2")
 _E1 = EmployeeId("e1")
 _F1 = JobFunctionId("f1")
 _F2 = JobFunctionId("f2")
@@ -72,7 +73,7 @@ def _atribuir(fakes: StaffFakes) -> AssignJobFunctionsUseCase:
 
 
 def _conjunto_gravado(fakes: StaffFakes) -> frozenset[JobFunctionId]:
-    employee = fakes.employees.find_by_id(_A, _E1)
+    employee = fakes.employees.find_by_id(_A, _U1, _E1)
     assert employee is not None
     return employee.job_function_ids
 
@@ -232,3 +233,37 @@ def test_precedencia_registro_inexistente_vence_funcao_inexistente() -> None:
     conduta = fakes.store.calls[antes:]
     assert "job_functions.find_all_by_ids" not in conduta
     assert "employees.update" not in conduta
+
+
+# --- CA11: o endereço do funcionário tem três partes (ADR 3.4.0007) ----------
+#
+# **O que estes testes matam.** Antes da Stage 3.4 o use case resolvia o
+# registro por `(tenant_id, employee_id)`, e a unidade do path só era conferida
+# contra o **ator** — nunca contra o **registro**. Um gerente da unidade A
+# alcançava qualquer funcionário do mesmo restaurante pondo a própria unidade no
+# endereço. Se algum use case voltar a resolver por `(tenant, id)`, o registro é
+# encontrado apesar da unidade alheia e a escrita acontece.
+#
+# A asserção sobre `fakes.store.calls` é o que dá poder ao teste: `pytest.raises`
+# sozinho não distingue "não encontrou porque a unidade não bate" de "não
+# encontrou por outro motivo e nada mais foi tentado". A conduta esperada é
+# **exatamente** uma chamada — o lookup — e nenhuma escrita depois dela.
+
+
+def test_ca11_atribuicao_com_unidade_alheia_nao_alcanca_o_registro() -> None:
+    """O registro vive em `_U1`; o command endereça `_U2`."""
+    fakes = _fakes()
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StaffError) as excecao:
+        _atribuir(fakes).execute(
+            AssignJobFunctionsCommand(
+                tenant_id=_A,
+                unit_id=_U2,
+                employee_id=_E1,
+                job_function_ids=frozenset({_F2}),
+            )
+        )
+    assert type(excecao.value) is EmployeeNotFoundError
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"]
+    assert _conjunto_gravado(fakes) == frozenset({_F1})

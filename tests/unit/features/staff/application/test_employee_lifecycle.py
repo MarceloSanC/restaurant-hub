@@ -12,6 +12,7 @@ disso.
 """
 
 import dataclasses
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 
@@ -42,6 +43,7 @@ from restaurant_hub.features.staff.application.use_cases.reactivate_employee imp
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -63,6 +65,7 @@ pytestmark = pytest.mark.unit
 _A = TenantId("tenant-a")
 _B = TenantId("tenant-b")
 _U1 = UnitId("u1")
+_U2 = UnitId("u2")
 _E1 = EmployeeId("e1")
 _F1 = JobFunctionId("f1")
 _PERIODO = UnavailabilityPeriod(
@@ -91,7 +94,7 @@ def _fakes() -> StaffFakes:
 
 
 def _result(fakes: StaffFakes) -> EmployeeResult:
-    employee = fakes.employees.find_by_id(_A, _E1)
+    employee = fakes.employees.find_by_id(_A, _U1, _E1)
     assert employee is not None
     return EmployeeResult(
         id=employee.id,
@@ -205,7 +208,7 @@ def test_desligado_continua_enderecavel_por_id() -> None:
     """É o que torna a recontratação possível — e o que separa desligar de apagar."""
     fakes = _fakes()
     _desligar(fakes).execute(DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
-    assert fakes.employees.find_by_id(_A, _E1) is not None
+    assert fakes.employees.find_by_id(_A, _U1, _E1) is not None
 
 
 def test_desligado_continua_bloqueando_a_remocao_das_suas_funcoes() -> None:
@@ -247,3 +250,55 @@ def test_transicoes_em_registro_inexistente_ou_alheio_nao_gravam(tenant: TenantI
 
     assert "employees.update" not in fakes.store.calls[antes_calls:]
     assert _result(fakes) == antes
+
+
+# --- CA11: o endereço do funcionário tem três partes (ADR 3.4.0007) ----------
+#
+# **O que estes testes matam.** Antes da Stage 3.4 o use case resolvia o
+# registro por `(tenant_id, employee_id)`, e a unidade do path só era conferida
+# contra o **ator** — nunca contra o **registro**. Um gerente da unidade A
+# alcançava qualquer funcionário do mesmo restaurante pondo a própria unidade no
+# endereço. Se algum use case voltar a resolver por `(tenant, id)`, o registro é
+# encontrado apesar da unidade alheia e a escrita acontece.
+#
+# A asserção sobre `fakes.store.calls` é o que dá poder ao teste: `pytest.raises`
+# sozinho não distingue "não encontrou porque a unidade não bate" de "não
+# encontrou por outro motivo e nada mais foi tentado". A conduta esperada é
+# **exatamente** uma chamada — o lookup — e nenhuma escrita depois dela.
+
+
+def _transicoes_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], object]]]:
+    return [
+        (
+            "deactivate_employee",
+            lambda fakes: _desligar(fakes).execute(
+                DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=_E1)
+            ),
+        ),
+        (
+            "reactivate_employee",
+            lambda fakes: _recontratar(fakes).execute(
+                ReactivateEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=_E1)
+            ),
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("nome", "executar"),
+    _transicoes_com_unidade_alheia(),
+    ids=[nome for nome, _ in _transicoes_com_unidade_alheia()],
+)
+def test_ca11_transicao_com_unidade_alheia_nao_alcanca_o_registro(
+    nome: str, executar: Callable[[StaffFakes], object]
+) -> None:
+    fakes = _fakes()
+    antes_estado = _result(fakes)
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StaffError) as excecao:
+        executar(fakes)
+    assert type(excecao.value) is EmployeeNotFoundError, nome
+
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"], nome
+    assert _result(fakes) == antes_estado, nome

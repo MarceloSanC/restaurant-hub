@@ -35,10 +35,13 @@ class DeleteEmployeeUseCase:
         """Remove o registro.
 
         Raises:
-            EmployeeNotFoundError: registro inexistente **no tenant**.
+            EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**.
             EmployeeInUseError: levantado **pelo port** quando algum outro
                 agregado referenciar o registro. Sem produtor em v1 (L-E5).
         """
-        if self._employees.find_by_id(command.tenant_id, command.employee_id) is None:
+        if (
+            self._employees.find_by_id(command.tenant_id, command.unit_id, command.employee_id)
+            is None
+        ):
             raise EmployeeNotFoundError(command.employee_id)
-        self._employees.delete(command.tenant_id, command.employee_id)
+        self._employees.delete(command.tenant_id, command.unit_id, command.employee_id)

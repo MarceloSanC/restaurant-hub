@@ -49,14 +49,19 @@ class CopyEmployeeToUnitUseCase:
         """Cria a cópia na unidade destino.
 
         Raises:
-            EmployeeNotFoundError: origem inexistente **no tenant**. Vence o
+            EmployeeNotFoundError: origem inexistente **no endereço (tenant + unidade)**. Vence o
                 `SameUnitCopyError` quando as duas condições ocorrem — a
                 resposta não pode revelar que o registro existe em outro tenant
                 nem em que unidade ele está (§5.4).
             SameUnitCopyError: destino igual à unidade de origem.
+
+        **`command.unit_id` é a ORIGEM; `command.target_unit_id` é o destino.**
+        É o único ponto do BC onde as duas unidades convivem, e trocá-las
+        reabriria exatamente a exfiltração que o ADR 3.4.0007 fecha: ler com o
+        destino encontraria o registro alheio a partir da unidade do atacante.
         """
-        # (1) Origem.
-        origin = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        # (1) Origem — lida **pela unidade de origem** (ADR 3.4.0007 §3).
+        origin = self._employees.find_by_id(command.tenant_id, command.unit_id, command.employee_id)
         if origin is None:
             raise EmployeeNotFoundError(command.employee_id)
         # (2) Destino diferente da origem.
