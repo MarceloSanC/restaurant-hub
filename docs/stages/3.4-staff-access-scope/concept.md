@@ -3,9 +3,9 @@ title: Concept — Acesso e escopo de equipe
 description: Definição do que será feito nesta Stage e por quê, com decisões técnicas relevantes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff, acesso, permissao, rbac, escopo-unidade, tenant-wide, access-guard, port, byte-nul]
-status: done
+status: draft
 created_at: 2026-08-12
-updated_at: 2026-08-12
+updated_at: 2026-08-17
 stage_id: 3.4-staff-access-scope
 stage_title: Acesso e escopo de equipe
 step_id: 3
