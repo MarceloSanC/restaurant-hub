@@ -3,7 +3,7 @@ title: Technical — Acesso e escopo de equipe
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, staff-access-scope, permissao, escopo-unidade, access-guard, byte-nul, tenant-wide]
-status: draft
+status: done
 created_at: 2026-08-12
 updated_at: 2026-08-17
 stage_id: 3.4-staff-access-scope
