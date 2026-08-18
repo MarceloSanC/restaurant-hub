@@ -5,7 +5,7 @@ when-use: Reference before letting any staff module import from features.identit
 keywords: [adr, bounded-context, independence, port, adapter, authorization, import-linter, composition-root, staff, identity]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-08-12
+updated_at: 2026-08-18
 adr_id: 3.4.0001
 decision: The staff HTTP adapter depends on an AccessGuard Protocol owned by staff (opaque string identifiers, permission named as str, four published laws), whose implementation is assembled in composition_root.py — the module that already imports both bounded contexts — so bc-independence stays absolute with zero ignore_imports
 context_stage: 3.4-staff-access-scope
@@ -86,7 +86,7 @@ already imports both bounded contexts by design and already holds the guard as
 `Any`. The router receives the port through `dependency_overrides`.
 **No module under `features/staff/` imports `features/identity/`**, and
 `bc-independence` keeps **zero** `ignore_imports` — a property pinned by a test
-that reads `.importlinter` and fails if the list ever appears (concept CA14).
+that reads `.importlinter` and fails if the list ever appears (concept CA13).
 
 **4. The port lives in `application/ports/out/`, not inside the HTTP adapter.**
 This Stage's only consumer is the router, which would argue for
@@ -153,7 +153,7 @@ would stay unvalidated, which is the finding this Stage inherited. Not acceptabl
 
 ### Positive
 - **`bc-independence` stays absolute.** No suppression, no precedent, and the
-  absence is testable (CA14) rather than a matter of review vigilance.
+  absence is testable (CA13) rather than a matter of review vigilance.
 - The security properties of `IdentityGuard` are inherited **by law, not by
   coincidence**: L-AG1/L-AG2 make "the exception propagates raw" a contract that a
   fake must satisfy, so the constant-body bands cannot be lost by swapping the
@@ -196,7 +196,32 @@ would stay unvalidated, which is the finding this Stage inherited. Not acceptabl
 - `docs/roadmap.md` — blocks Stage 3.4 and Stage 3.5
 - `.importlinter` — contract `bc-independence`
 - `docs/LAYOUT.md` §1, §4, §5, §6, §8
-- `src/restaurant_hub/composition_root.py:24-27` (the `in` keyword) and `:185-188`
+- `src/restaurant_hub/composition_root.py:24-27` (the `in` keyword) and `:300-305`
   (`identity_guard: Any`)
 - ADR 2.2.0002, ADR 2.4.0001 §5, ADR 2.4.0003
 - `src/restaurant_hub/features/staff/domain/value_objects/identifiers.py`
+
+## Errata
+
+**2026-08-18 — referência cruzada corrigida; decisão inalterada.** Achado no
+Checkpoint C da Fase 4 e corrigido aqui como **errata**, não como revisão: o que
+muda é para onde o texto aponta, e nenhuma frase de `## Decision`,
+`## Alternatives considered` ou `## Consequences` teve o seu conteúdo alterado.
+
+| Onde | Dizia | Diz | Medição |
+|---|---|---|---|
+| `## Decision` §3 | *"a property pinned by a test that reads `.importlinter` … (concept **CA14**)"* | **CA13** | `concept.md` §11: CA13 é *"o contrato `bc-independence` continua sem nenhum `ignore_imports`; teste lê o `.importlinter`"*; **CA14** é *"as leis L-AG1…L-AG4 são testadas contra uma segunda implementação"* — outra propriedade, outro teste |
+| `## Consequences` | *"the absence is testable (**CA14**)"* | **CA13** | idem — "a ausência" é a ausência de `ignore_imports` |
+| `## References` | `composition_root.py:185-188` | `:300-305` | o campo `identity_guard: Any` está hoje na linha **305**; o intervalo antigo ficou obsoleto quando a Task 06 desta Stage acrescentou o tradutor **acima** dele |
+
+O erro entrou em `7676a95` (o corte da Stage 3.4 em fundação + borda 3.6), que
+**renumerou os critérios do concept** sem reconciliar os ponteiros deste ADR.
+
+**O que NÃO foi corrigido, e por quê.** `## Trade-offs` cita *"the per-role,
+per-route tests of concept CA10–CA12"*. Aquele intervalo também é anterior ao
+corte, mas o conserto **não** é uma renumeração: os testes por papel e por rota
+não existem mais nesta Stage — migraram para a **3.6** junto com a borda HTTP.
+Escolher o texto novo seria decidir onde a propriedade passa a ser provada, e
+isso é mudança de conteúdo de um ADR `accepted`, não errata. Fica registrado como
+`[finding]` na §7 do `technical.md` desta Stage, para a auditoria dispor com a
+3.6 em mãos.

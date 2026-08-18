@@ -393,7 +393,31 @@ def test_l_ag2_o_tradutor_nao_traduz_a_excecao_de_autorizacao() -> None:
     assert excinfo.value is spy.authorization_error
 
 
-def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor() -> None:
+# Os dois valores que L-AG3 nomeia — *"`tenant_id` vazio **ou** ausente"* —, e
+# são casos **distintos** na implementação, não sinônimos:
+#
+# - `None` é o que `AuthorizedActor.actor_tenant_id` traz hoje para
+#   `platform_admin`, o único papel sem tenant;
+# - `""` é o que a coerção proibida (`StaffTenantId(actor_tenant_id or "")`)
+#   produziria, e é o balde de falso isolamento que `InvalidIdentifierError`
+#   nomeia — um tenant vazio consulta como se fosse um tenant.
+#
+# Parametrizar é o que dá refutação à guarda escrita: com só `None` na suíte,
+# trocar `if not actor_tenant_id` por `if actor_tenant_id is None` deixa tudo
+# verde e reabre o caso vazio. É a mesma parametrização que
+# `test_access_guard_laws.py` já aplica do lado do fake — as duas
+# implementações do port passam a ser cobradas pelo mesmo par de valores.
+_ATOR_SEM_TENANT = [
+    pytest.param(None, Role.PLATFORM_ADMIN, id="ausente"),
+    pytest.param("", Role.MANAGER, id="vazio"),
+]
+
+
+@pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
+def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
+    actor_tenant_id: str | None,
+    role: Role,
+) -> None:
     """L-AG3 imposta no tradutor, e não delegada à matriz de papéis.
 
     Hoje `platform_admin` já seria negado antes, no passo 2 do guard, por não
@@ -402,21 +426,25 @@ def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor() -> None:
     observaria. Por isso o cenário montado é o pior caso: identity **autorizou**
     e devolveu um ator sem tenant.
     """
-    spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=None, role=Role.PLATFORM_ADMIN))
+    spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
     translator = _IdentityAccessGuard(spy)
 
     with pytest.raises(PermissionDeniedError):
         translator.authorize(object(), "manage_staff", tenant_id="t1", unit_id="u1")
 
 
-def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia() -> None:
+@pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
+def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
+    actor_tenant_id: str | None,
+    role: Role,
+) -> None:
     """A mutação que L-AG3 existe para matar, escrita como asserção.
 
     `StaffTenantId(actor_tenant_id or "")` compila, passa mypy strict e devolve
     um escopo de tenant vazio — consultas que atravessariam todos os tenants.
     A exigência aqui é dupla: **nada** é devolvido, e o que sobe é negação.
     """
-    spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=None, role=Role.PLATFORM_ADMIN))
+    spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
     translator = _IdentityAccessGuard(spy)
 
     scopes = []

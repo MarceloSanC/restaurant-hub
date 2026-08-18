@@ -1324,7 +1324,7 @@ dessa forma no repositório, e reprovou o `make lint`.
 **Ajuste aplicado:** `# noqa: ANN401` na linha do construtor, com a justificativa
 na docstring do próprio `__init__` — não num comentário solto.
 
-**Por que não as duas alternativas.** `object` moveria o defeito para o corpo:
+**Por que não as TRÊS alternativas.** `object` moveria o defeito para o corpo:
 todo acesso a `self._guard.authenticate/.authorize` viraria erro de tipo, e a
 saída seria um `cast(Any, ...)` — a mesma perda de informação com mais cerimônia
 e um ponto a mais para errar. Desligar `ANN401` no `pyproject` alargaria a
@@ -1333,7 +1333,127 @@ supressão do arquivo inteiro (e do repositório) para resolver **uma** linha, q
 por que aceitar aqui. O `noqa` é a supressão mais estreita disponível: uma linha,
 com a razão medida ao lado.
 
+**A terceira alternativa, nomeada no Checkpoint C: um `Protocol` estrutural
+local** ao `composition_root`, descrevendo a forma do `IdentityGuard`
+(`authenticate`/`authorize`) e usado como anotação do parâmetro. O custo de
+import é quase zero — o módulo já importa `Permission`, `RestaurantId` e `UnitId`
+de identity para traduzir —, e ela removeria as **três** marcas de fricção de uma
+vez: o `Any`, o `noqa: ANN401` e a variável intermediária de `authenticate`, que
+só existe para o `warn_return_any` do mypy strict. É a mais forte das três, e não
+é adotada por uma razão medida: **o objeto chega por `importlib`, isto é, como
+`Any`**, e mypy aceita `Any` contra qualquer tipo — atribuí-lo a um parâmetro
+anotado com o `Protocol` **não é verificado por ninguém**. O que se compraria é
+ergonomia (o corpo do tradutor passaria a ser checado contra a forma declarada),
+não garantia: seria um `cast` com nome melhor, e o risco é o nome sugerir uma
+conformidade que gate nenhum confere — a exata classe de afirmação-sem-verificação
+que este Step vem policiando. **Fica nomeada e não adotada**; se a Stage 3.5 mover
+o tradutor para um adapter de staff, é a forma a reavaliar primeiro, porque lá a
+ergonomia do corpo passa a valer mais.
+
 **Escopo:** nenhum arquivo fora da lista da Task 06 foi tocado — o commit fecha
 em `composition_root.py` e `test_composition_root_staff.py`, mais a §7.
+
+---
+
+### 2026-08-18 — [deviation] Task 06 — a metade "tenant vazio" de L-AG3 não estava travada na produção — Claude
+
+**Contexto (F-1 do Checkpoint C, MAJOR).** O tradutor escreve
+`if not actor_tenant_id:`, que é correto para `None` **e** para vazio. Mas os
+dois testes de L-AG3 em `test_composition_root_staff.py` montavam só
+`actor_tenant_id=None`. Mutação do revisor: trocar a guarda por
+`if actor_tenant_id is None:` deixava a suíte **inteira verde** (17 passed),
+reabrindo o caso de tenant vazio que a lei nomeia — *"`tenant_id` vazio **ou**
+ausente"* (concept §4, ADR 3.4.0001 §2, docstring do port).
+
+**A assimetria era o sintoma.** Do lado do **fake**, a mesma lei já era
+parametrizada sobre os dois valores em `test_access_guard_laws.py`, com o
+docstring argumentando que *"os dois valores importam e são casos distintos"*, e
+lá a mutação equivalente morria. As duas implementações do port estavam sendo
+cobradas por conjuntos de valores **diferentes** — e a de produção, pelo menor. A
+§Riscos deste technical classifica como **blocker** um ator sem tenant alcançar o
+`AuthorizedScope`.
+
+**Ajuste aplicado:** os dois testes passam a ser parametrizados por
+`_ATOR_SEM_TENANT`, com os ids `ausente` (`None`, `PLATFORM_ADMIN`) e `vazio`
+(string vazia, `MANAGER`), via o `_authorized_actor(actor_tenant_id=...)` que já
+aceitava o valor vazio sem mudança. Os dois casos são distintos por **origem**, e
+o papel de cada um o diz: `None` é o que `AuthorizedActor.actor_tenant_id` traz
+hoje para `platform_admin`; a string vazia é o que a coerção proibida produziria
+para um ator **de tenant**. Nenhum arquivo fora da lista da Task 06.
+
+**Prova por mutação, re-rodada.** Com `if not actor_tenant_id:` trocado por
+`if actor_tenant_id is None:`, os dois parâmetros `[vazio]` reprovam, e a
+mensagem exibe o vazamento literal:
+
+```
+FAILED ...::test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor[vazio]
+FAILED ...::test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia[vazio]
+E       AssertionError: assert [AuthorizedSc...unit_id='u1')] == []
+E         Left contains one more item: AuthorizedScope(tenant_id='', unit_id='u1')
+2 failed, 29 passed
+```
+
+Revertida a mutação (`git diff` do `composition_root.py` vazio), **31 passed**.
+Antes da correção, a mesma mutação produzia **zero** falhas.
+
+---
+
+### 2026-08-18 — [finding] Task 06 — ponteiros de CA do ADR 3.4.0001 defasados pelo corte da Stage — Claude
+
+**Contexto (F-3 do Checkpoint C).** O ADR 3.4.0001 citava `CA14` em dois pontos
+para a propriedade *"zero `ignore_imports`"*, que no concept §11 é **CA13**
+(CA14 são as leis contra a segunda implementação). O erro entrou em `7676a95`, o
+commit que cortou a Stage 3.4 e **renumerou** os critérios sem reconciliar os
+ponteiros do ADR.
+
+**Disposição das duas metades — corrigida uma, escalada a outra.**
+
+- **Errata aplicada** (`docs/adr/3_4_0001-staff-owned-access-guard-port.md`,
+  seção `## Errata` nova, com `updated_at` bumpado): as duas ocorrências de
+  `CA14` viram `CA13`, mais o ponteiro `composition_root.py:185-188` que vira
+  `:300-305` — este último a própria Task 06 tornou obsoleto ao inserir o
+  tradutor **acima** do campo `identity_guard: Any`. Ponteiro errado não é
+  decisão: nenhuma frase de `Decision`/`Alternatives`/`Consequences` mudou de
+  conteúdo, e a tabela da errata traz antes/depois com a medição ao lado.
+- **Escalado como finding:** o `## Trade-offs` cita *"the per-role, per-route
+  tests of concept CA10–CA12"*. Esse intervalo **não** se conserta por
+  renumeração — os testes por papel e por rota não existem mais nesta Stage,
+  migraram para a **3.6** com a borda HTTP. Escolher o texto novo é decidir onde
+  a propriedade passa a ser provada, e isso é mudança de conteúdo de um ADR
+  `accepted`, não errata.
+
+**Direção sugerida / Stage candidata: 3.6.** Ao escrever os testes por papel e
+por rota, reconciliar o `## Trade-offs` do ADR 3.4.0001 com os critérios reais da
+3.6 — e, na mesma passada, varrer os ADRs `3_4_0002`, `3_4_0004` e `3_4_0005`
+(que também nasceram antes do corte) atrás de intervalos de CA herdados da
+numeração antiga.
+
+---
+
+### 2026-08-18 — [finding] Task 06 — CONVENTIONS §Idioma diverge da suíte de testes inteira — Claude
+
+**Contexto.** CONVENTIONS §1 (*"Idioma do código"*) manda inglês para *"classes,
+funções, métodos, variáveis, parâmetros, constantes"*, com docstrings e
+comentários em português. A suíte não segue isso e **nunca seguiu**: o
+levantamento do Checkpoint C sobre os nomes de `parametrize` do repositório
+inteiro achou `invalido` (20×), `role` (9×), `nome` (6×) e `variante` (3×), entre
+outros — PT é a prática de fato, e os nomes de teste
+(`test_ca18_os_dezesseis_use_cases...`) são prosa em PT por desenho.
+
+**Por que não foi "corrigido" aqui.** O código novo desta Stage saiu com os
+identificadores estruturais em inglês (`AuthorizedScope`, `InMemoryAccessGuard`,
+`FakeActor`, `_IdentityAccessGuard`, `_SpyIdentityGuard`, `_authorized_actor`),
+que é o que a regra realmente protege. Sobrou um `tenant_do_ator` como nome de
+`parametrize` em `test_access_guard_laws.py`. Renomeá-lo isoladamente deixaria o
+arquivo **menos** consistente que os seus vizinhos sem fechar nada: o defeito não
+é aquele nome, é a divergência entre a regra e a prática.
+
+**Direção sugerida:** é decisão de convenção própria — ou CONVENTIONS §1 ganha
+exceção explícita para identificadores de teste (nomes de `test_*`, parâmetros de
+`parametrize`, helpers locais de suíte), ou o repositório assume a dívida e a paga
+de uma vez. **Não é escopo de Stage**; vira issue de documentação. Enquanto não
+houver decisão, o critério aplicado aqui fica declarado: **inglês no que tem vida
+além do teste** (classes, fakes, helpers reusáveis), **português no que é prosa de
+suíte** (nomes de `test_*` e os seus parâmetros).
 
 <!-- END: post-execution -->
