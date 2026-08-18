@@ -3,7 +3,7 @@ title: Concept — Acesso e escopo de equipe
 description: Definição do que será feito nesta Stage e por quê, com decisões técnicas relevantes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff, acesso, permissao, rbac, escopo-unidade, tenant-wide, access-guard, port, byte-nul]
-status: draft
+status: done
 created_at: 2026-08-12
 updated_at: 2026-08-17
 stage_id: 3.4-staff-access-scope
@@ -387,9 +387,12 @@ outro nome, contra o ADR 2.3.0005.
 
 **5.11 — Nenhuma regressão de comportamento observável em identity.** As duas
 permissões novas não são detidas por nenhum papel que já existisse com elas, e a
-dispensa só afeta permissão que esteja no conjunto. A suíte de identity passa
-sem alteração de asserção — se alguma precisar mudar, é sinal de que a mudança
-não foi aditiva, e isso é achado, não ajuste (CA20).
+dispensa só afeta permissão que esteja no conjunto. **Nenhuma asserção de
+decisão de acesso muda** — par papel↔permissão já existente, resultado de
+`authorize_action` nos casos já cobertos; se alguma precisar mudar, a mudança não
+foi aditiva, e isso é achado, não ajuste. As fixtures de **fechamento de
+vocabulário** são exceção declarada e **devem** acompanhar o conjunto que
+cresceu, com a aditividade provada (CA20).
 
 ## 6. Casos de erro e exceções
 
@@ -534,7 +537,7 @@ consulta, não na estrutura.
 | A fundação nascer sem consumidor e um defeito só aparecer na 3.6 | **A** | M | Declarado em §4; os CAs provam ligação (fake ≡ real, wiring montado), e a 3.6 é a Stage seguinte, não um horizonte distante |
 | Mudança no domínio da 3.1 quebrar suíte mergeada sem que o desvio de camada seja notado | M | M | Task dedicada, expansão declarada em §1 e no ADR 3.4.0003 |
 | Step 4 conceder à `hr` permissão de escala, dissolvendo a divergência | M | M | Restrição para frente em §5.2 **e** no ADR 3.4.0006 §3 |
-| Regressão silenciosa em identity (a suíte de lá passa por acidente) | B | A | CA20 exige que a suíte de identity passe **sem alteração de asserção** |
+| Regressão silenciosa em identity (a suíte de lá passa por acidente) | B | A | CA20 proíbe qualquer asserção de **decisão de acesso** mudar, e exige aditividade **provada** (nenhum membro removido do enum, nenhum papel perdendo permissão) nas fixtures de fechamento que legitimamente acompanham o conjunto |
 
 ### `[finding]` a escalar
 
@@ -626,8 +629,36 @@ consulta, não na estrutura.
 
 ### Não-regressão
 
-- [ ] **CA20** — A suíte de identity passa **sem alteração de asserção**. Se
-      alguma precisar mudar, a mudança não foi aditiva — é achado, não ajuste.
+- [ ] **CA20** — **Não-regressão de decisão de acesso em identity, com
+      aditividade provada.** O critério discrimina dois tipos de asserção, e a
+      discriminação **é** o seu conteúdo:
+      - **Proibido mudar** — qualquer asserção que expresse uma **decisão de
+        acesso**: par papel↔permissão **já existente**, e o resultado de
+        `AuthorizeActionUseCase` para os casos já cobertos. Se alguma precisar
+        mudar, a mudança não foi aditiva — **é achado, não ajuste**.
+      - **Obrigatório mudar** — as fixtures de **fechamento de vocabulário**
+        (`test_permission_e_conjunto_fechado`; os parâmetros de
+        `test_conteudo_exato_do_mapa_por_papel`) acompanham o conjunto que
+        cresceu. A aditividade é **provada, não afirmada**: nenhum membro
+        removido de `Permission`, nenhum papel perdendo permissão que já tinha,
+        e as duas fixtures listadas **nominalmente** no corpo do commit.
+
+> **Nota (2026-08-17) — por que CA20 foi refinado, e por que isso é o critério
+> funcionando.** A redação original era *"a suíte de identity passa sem alteração
+> de asserção; se alguma precisar mudar, a mudança não foi aditiva — é achado,
+> não ajuste"*. A Fase 3B mediu que **duas** asserções de
+> `tests/unit/features/identity/domain/test_role_permission.py` mudam
+> necessariamente: a linha 27 assere o conjunto **exato** dos valores do enum
+> `Permission`, e as linhas 66–78 parametrizam o conjunto **exato** de permissões
+> por papel. **O critério disparou como projetado** — a sua própria cláusula
+> mandava tratar o caso como achado, e é o que ocorreu. O achado é que a
+> inferência *"asserção mudou ⟹ a mudança não foi aditiva"* tem **falso positivo
+> para teste de fechamento**: um teste que assere o conjunto exato de um enum
+> existe **para** exigir atualização consciente quando o conjunto cresce
+> legitimamente (é o mecanismo que o ADR 3.4.0008 §5 pede). Ele mudar é o teste
+> funcionando, não regressão. A regressão que CA20 existe para pegar — decisão de
+> acesso mudando — continua **integralmente** proibida acima. **O conjunto de
+> comportamentos protegidos não mudou; mudou a formulação que o descreve.**
 - [ ] **CA21** — Nenhuma rota HTTP nasce nesta Stage: o repo continua sem
       `features/staff/adapters/in/`, e o router de identity é o único
       registrado.
