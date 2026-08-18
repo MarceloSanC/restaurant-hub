@@ -364,6 +364,40 @@ def test_ca15_o_access_guard_de_staff_tem_a_forma_do_port() -> None:
         assert translator_signature == port_signature, f"{method} divergiu do port"
 
 
+@pytest.mark.parametrize("method", ["authenticate", "authorize"])
+def test_o_spy_tem_a_mesma_assinatura_do_identity_guard_real(method: str) -> None:
+    """Fecha a outra ponta da conformidade — a que faltava.
+
+    Há teste de que o **tradutor** casa com o `AccessGuard`; não havia nenhum de
+    que o `_SpyIdentityGuard` casa com o `IdentityGuard` **real**. É a metade que
+    importa para os sete testes de comportamento acima: eles exercitam o tradutor
+    contra o dublê, e o objeto embrulhado em produção chega como `Any` (o pacote
+    `in` é keyword Python), então **nada** no repositório compara os dois. Um
+    parâmetro renomeado ou promovido a posicional em `IdentityGuard.authorize`
+    passaria por toda a suíte e só apareceria como `TypeError` no primeiro
+    request da Stage 3.6.
+
+    Comparam-se nome, `kind` e default — **não** as anotações. O spy anota tudo
+    como `object` de propósito: ele é um dublê, não uma segunda implementação, e
+    exigir os tipos de identity aqui obrigaria o arquivo a reencenar o
+    vocabulário do outro BC para provar uma propriedade de forma.
+    """
+    identity_guard = importlib.import_module(
+        "restaurant_hub.features.identity.adapters.in.http.dependencies"
+    ).IdentityGuard
+
+    def forma(alvo: object) -> list[tuple[str, object, object]]:
+        return [
+            (name, parameter.kind, parameter.default)
+            for name, parameter in inspect.signature(getattr(alvo, method)).parameters.items()
+        ]
+
+    assert forma(_SpyIdentityGuard) == forma(identity_guard), (
+        f"o dublê divergiu de IdentityGuard.{method} — os testes de comportamento "
+        f"do tradutor passariam contra uma forma que não existe mais"
+    )
+
+
 def test_ca15_o_tradutor_embrulha_o_mesmo_identity_guard_das_rotas() -> None:
     """Identidade de objeto, e não `isinstance`.
 
