@@ -8,7 +8,7 @@ created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0005
 decision: The copy route adds no duplicate-detection guard; the only heuristic available at the boundary — a name already present in the destination unit — is false by construction because the domain declares homonyms legitimate, so the limit stays declared and the response makes the outcome observable through a distinct new id
-context_stage: 3.4-staff-http
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -17,6 +17,13 @@ bounded_context: staff
 ## Status
 
 `accepted`
+
+> **Decidido na Stage 3.4, executado na Stage 3.6.** A Stage `3.4-staff-http`
+> foi cortada em duas (CONVENTIONS §6 — 14 Tasks): `3.4-staff-access-scope`
+> entrega a fundação de acesso e escopo, e `3.6-staff-http` entrega a borda HTTP.
+> Esta decisão é de **borda**, logo governa a 3.6. O `context_stage` continua
+> apontando para a 3.4 porque o campo registra a Stage em que a decisão foi
+> **tomada** (CONVENTIONS §2), e ADR `accepted` não migra.
 
 ## Context
 
@@ -149,5 +156,8 @@ this problem; it is just not an API answer.
   attributes, verbatim non-unique name)
 - `src/restaurant_hub/features/staff/domain/entities/employee.py` (docstring:
   homonyms are legitimate)
-- `docs/stages/3.4-staff-http/concept.md` §5.7, §7 D7, CA19, CA20
+- `docs/stages/3.4-staff-access-scope/concept.md` §13 (fronteira com a 3.6) — esta
+  decisão é executada na **3.6**; o desenho da rota de cópia e os critérios estão no
+  commit `d878060`, em `docs/stages/3.4-staff-http/concept.md` §5.6-5.7 e §11
+- `docs/roadmap.md` — bloco Stage 3.6
 - Skill `fastapi-thin-adapter`

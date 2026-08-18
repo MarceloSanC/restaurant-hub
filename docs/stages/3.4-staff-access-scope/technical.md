@@ -1,13 +1,13 @@
 ---
-title: Technical — API de equipe
+title: Technical — Acesso e escopo de equipe
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
-keywords: [technical, plano de execução, staff-http]
+keywords: [technical, plano de execução, staff-access-scope, permissao, escopo-unidade]
 status: draft
 created_at: 2026-08-12
 updated_at: 2026-08-12
-stage_id: 3.4-staff-http
-stage_title: API de equipe
+stage_id: 3.4-staff-access-scope
+stage_title: Acesso e escopo de equipe
 step_id: 3
 step_title: Equipe da unidade
 depends_on: [3.3-staff-persistence]

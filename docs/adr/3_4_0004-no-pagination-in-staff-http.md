@@ -7,8 +7,8 @@ status: accepted
 created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0004
-decision: Stage 3.4 exposes both staff listings unpaginated, because paginating would retroact the port signatures of Stages 3.2 and 3.3; L-ORD remains the prepared cursor, and the one-line antidote for the ORDER BY regex is escalated together with the pagination that will need it
-context_stage: 3.4-staff-http
+decision: The staff HTTP Stage (3.6) exposes both listings unpaginated, because paginating would retroact the port signatures of Stages 3.2 and 3.3; L-ORD remains the prepared cursor, and the one-line antidote for the ORDER BY regex is escalated together with the pagination that will need it
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -17,6 +17,13 @@ bounded_context: staff
 ## Status
 
 `accepted`
+
+> **Decidido na Stage 3.4, executado na Stage 3.6.** A Stage `3.4-staff-http`
+> foi cortada em duas (CONVENTIONS §6 — 14 Tasks): `3.4-staff-access-scope`
+> entrega a fundação de acesso e escopo, e `3.6-staff-http` entrega a borda HTTP.
+> Esta decisão é de **borda**, logo governa a 3.6. O `context_stage` continua
+> apontando para a 3.4 porque o campo registra a Stage em que a decisão foi
+> **tomada** (CONVENTIONS §2), e ADR `accepted` não migra.
 
 ## Context
 
@@ -57,7 +64,7 @@ signal reads as a collation regression.
 
 ## Decision
 
-**Stage 3.4 ships both listings unpaginated.** `GET /job-functions` and
+**The staff HTTP Stage ships both listings unpaginated.** `GET /job-functions` and
 `GET /units/{unit_id}/employees` return the full collection in the port's order.
 
 **`L-ORD` stays a prepared cursor, not a spent one.** Nothing about the law
@@ -153,5 +160,8 @@ record is the point.
 - ADR 3.3.0003 (total ordering with C collation as port law)
 - `docs/stages/3.3-staff-persistence/technical.md` §7 — `[finding]` of 2026-08-12
   on the `ORDER BY` regex
-- `docs/stages/3.4-staff-http/concept.md` §5.11, §7 D6, CA32, CA35
+- `docs/stages/3.4-staff-access-scope/concept.md` §13 (fronteira com a 3.6) — esta
+  decisão é executada na **3.6**; o critério de aceite correspondente está no commit
+  `d878060`, em `docs/stages/3.4-staff-http/concept.md` §11 (CA32, CA35)
+- `docs/roadmap.md` — bloco Stage 3.6
 - `src/restaurant_hub/features/staff/application/dtos/queries.py`

@@ -8,7 +8,7 @@ created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0006
 decision: Identity gains MANAGE_STAFF and MANAGE_JOB_FUNCTIONS, both granted to owner, manager and hr; within staff hr and manager are equivalent, because the sponsor placed the hr/manager divergence on the scheduling axis (Step 4) rather than on reach — hr edits employee records including workload, shift preference and unavailability, and only manager/owner touch the schedule itself
-context_stage: 3.4-staff-http
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -163,7 +163,7 @@ mais features."* The roadmap block of Stage 3.4 gets the reconciliation note.
 
 ## References
 - Sponsor decision, 2026-08-12 (via the coordinating session), on fork F1 of
-  `docs/stages/3.4-staff-http/concept.md`
+  `docs/stages/3.4-staff-access-scope/concept.md`
 - `docs/domain/staff/workforce.md` §4; kickoff decision #10
 - `src/restaurant_hub/features/identity/domain/value_objects/{role,permission}.py`
 - ADR 2.2.0002 (two fail-closed axes), ADR 2.4.0003 (composition at the boundary)

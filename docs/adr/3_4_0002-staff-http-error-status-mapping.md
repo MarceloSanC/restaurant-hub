@@ -8,7 +8,7 @@ created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0002
 decision: Register one FastAPI exception handler on StaffError that resolves status by walking the exception MRO against an explicit total map, guarded by a test enumerating every concrete subclass; UnavailabilityNotFoundError stays 422 because it names a value inside the aggregate, and the 409 band is reserved for conflicts with already-stored identity or references
-context_stage: 3.4-staff-http
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -17,6 +17,13 @@ bounded_context: staff
 ## Status
 
 `accepted`
+
+> **Decidido na Stage 3.4, executado na Stage 3.6.** A Stage `3.4-staff-http`
+> foi cortada em duas (CONVENTIONS §6 — 14 Tasks): `3.4-staff-access-scope`
+> entrega a fundação de acesso e escopo, e `3.6-staff-http` entrega a borda HTTP.
+> Esta decisão é de **borda**, logo governa a 3.6. O `context_stage` continua
+> apontando para a 3.4 porque o campo registra a Stage em que a decisão foi
+> **tomada** (CONVENTIONS §2), e ADR `accepted` não migra.
 
 ## Context
 
@@ -175,7 +182,10 @@ correct only by accident. Not acceptable.
   assert an entry keyed by the class itself, not by any ancestor.
 
 ## References
-- `docs/stages/3.4-staff-http/concept.md` §6, §7 D2
+- `docs/stages/3.4-staff-access-scope/concept.md` §13 (fronteira com a 3.6) — esta
+  decisão é executada na **3.6**; o desenho completo do mapa está no commit
+  `d878060`, em `docs/stages/3.4-staff-http/concept.md` §6
+- `docs/roadmap.md` — bloco Stage 3.6
 - `src/restaurant_hub/features/staff/application/errors.py` (module docstring)
 - `src/restaurant_hub/features/staff/domain/exceptions/errors.py`
 - `src/restaurant_hub/features/identity/adapters/in/http/error_handlers.py`

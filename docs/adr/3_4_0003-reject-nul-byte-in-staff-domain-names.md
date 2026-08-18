@@ -8,7 +8,7 @@ created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0003
 decision: Employee and JobFunction reject names containing the NUL byte in the domain (Stage 3.1 layer expansion), so fake and Postgres agree by construction instead of the boundary translating psycopg.DataError; and DayPeriod gains from_string raising InvalidDayPeriodError, so text-to-enum conversion fails as a domain error rather than a 500
-context_stage: 3.4-staff-http
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -155,7 +155,8 @@ stated acceptance criterion.
 - `docs/stages/3.3-staff-persistence/technical.md` §7 —
   `[finding]` of 2026-08-11, with the measurement table and the sqlstate correction
 - Issue #40, inherited finding nº 3
-- `docs/stages/3.4-staff-http/concept.md` §6.3, §7 D4, §7 D5
+- `docs/stages/3.4-staff-access-scope/concept.md` §5.10 (só o NUL), §6 (a tabela
+  do que muda no comportamento de erro), §7 D2, CA16–CA19
 - ADR 2.3.0005 (names persisted verbatim), ADR 3.3.0004 (per-operation integrity
   translation), ADR 3.2.0005 (precedent for a later Stage amending 3.1's domain)
 - `src/restaurant_hub/features/identity/domain/value_objects/role.py`

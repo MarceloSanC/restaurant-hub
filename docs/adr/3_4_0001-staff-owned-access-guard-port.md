@@ -8,7 +8,7 @@ created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0001
 decision: The staff HTTP adapter depends on an AccessGuard Protocol owned by staff (opaque string identifiers, permission named as str, four published laws), whose implementation is assembled in composition_root.py — the module that already imports both bounded contexts — so bc-independence stays absolute with zero ignore_imports
-context_stage: 3.4-staff-http
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -190,7 +190,9 @@ would stay unvalidated, which is the finding this Stage inherited. Not acceptabl
   production implementation satisfies is not a law, it is a description.
 
 ## References
-- `docs/stages/3.4-staff-http/concept.md` §4, §5.2, §5.8, §7 D1, CA13–CA15
+- `docs/stages/3.4-staff-access-scope/concept.md` §4 (o port e as leis), §5.8 (a
+  decisão de acesso não acontece em staff), §5.9 (`bc-independence` absoluto),
+  §7 D1, CA12–CA15
 - `docs/roadmap.md` — blocks Stage 3.4 and Stage 3.5
 - `.importlinter` — contract `bc-independence`
 - `docs/LAYOUT.md` §1, §4, §5, §6, §8

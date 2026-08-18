@@ -8,7 +8,7 @@ created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0008
 decision: Identity gains an explicit TENANT_WIDE_PERMISSIONS set consulted by step 4 of AuthorizeActionUseCase, so a permission opted into it does not demand a unit target and a unit-scoped role such as manager or hr can manage the restaurant-level job-function catalogue; the default stays fail-closed and membership is per permission, enumerated and tested
-context_stage: 3.4-staff-http
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -153,7 +153,7 @@ presumes the design of #41; it only avoids foreclosing it.
 
 ## References
 - Sponsor decision, 2026-08-12, on fork F3 of
-  `docs/stages/3.4-staff-http/concept.md`
+  `docs/stages/3.4-staff-access-scope/concept.md`
 - `src/restaurant_hub/features/identity/application/use_cases/authorize_action.py`
   (step 4) and `.../domain/entities/user.py` (`_UNIT_SCOPE_BYPASS_ROLES`)
 - `docs/domain/staff/workforce.md` §3.2

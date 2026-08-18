@@ -8,7 +8,7 @@ created_at: 2026-08-12
 updated_at: 2026-08-12
 adr_id: 3.4.0007
 decision: EmployeeRepository.find_by_id and delete take (tenant_id, unit_id, employee_id), and the ten commands acting on an existing record carry unit_id, so unit isolation is a port law that the fake and the Postgres adapter prove identically — rather than a filter added only in the adapter's SQL or only at the HTTP boundary
-context_stage: 3.4-staff-http
+context_stage: 3.4-staff-access-scope
 bounded_context: staff
 ---
 
@@ -155,7 +155,7 @@ The three consequences above ship. Not acceptable.
 
 ## References
 - Sponsor decision, 2026-08-12, on fork F2 of
-  `docs/stages/3.4-staff-http/concept.md`
+  `docs/stages/3.4-staff-access-scope/concept.md`
 - ADR 3.2.0002 §Neutral (the gap this closes), ADR 3.3.0007 (promoted contract
   suites), ADR 3.3.0003 (`L-ORD`)
 - `docs/domain/staff/workforce.md` §3.1
