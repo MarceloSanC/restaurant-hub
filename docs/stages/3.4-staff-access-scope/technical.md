@@ -1234,9 +1234,9 @@ unidade do command"*. Medido na execução: `InMemoryStaffStore.record` recebe u
 (`tests/fakes/features/staff/in_memory_staff_store.py:54-58`) — ele registra o
 **nome** do método, nunca os argumentos. Enriquecer a string gravada (p.ex.
 `"employees.find_by_id(t,u,e)"`) quebraria as asserções de **igualdade e
-pertinência exata** sobre `calls` espalhadas por nove suítes
+pertinência exata** sobre `calls` espalhadas por **11** arquivos de teste
 (`test_job_function_use_cases.py:136`, `test_staff_repository_fakes.py:93`,
-`test_delete_job_function.py:93`, entre outras) — e `in_memory_staff_store.py`
+`test_delete_job_function.py:99`, entre outros) — e `in_memory_staff_store.py`
 **não está** na lista de arquivos da Task 04.
 
 **Ajuste aplicado:** a metade "use cases" de CA11 virou **duas** provas, ambas
@@ -1266,9 +1266,46 @@ testes comportamentais reprovam (os 2 de assinatura passam, corretamente, porque
 não dependem da implementação); removida também do `WHERE` do adapter, 8 dos 10
 testes de CA9 da suíte de contrato reprovam nos dois parâmetros. O caminho
 alternativo — mudar a forma de `record()` — trocaria uma prova por uma regressão
-em nove suítes, e tocaria arquivo fora da lista.
+nesses 11 arquivos, e tocaria arquivo fora da lista.
+
+> **Correção de contagem e de citação — Checkpoint C (2026-08-17).** Esta
+> entrada dizia "nove suítes" e citava `test_delete_job_function.py:93`. Medido:
+> são **11** arquivos com asserção sobre `calls` — `test_assign_job_functions`,
+> `test_copy_employee_to_unit`, `test_create_employee`, `test_delete_employee`,
+> `test_delete_job_function`, `test_employee_edit_use_cases`,
+> `test_employee_lifecycle`, `test_job_function_use_cases`, `test_staff_flow`,
+> `test_staff_repository_fakes` e `test_unavailability_use_cases` —, e em
+> `test_delete_job_function.py` a linha **93** é a **captura**
+> (`conduta = list(fakes.store.calls[antes:])`): a asserção está na **99**. Os
+> dois números foram corrigidos acima. A conclusão da entrada não muda — o
+> custo de mudar `record()` é maior, não menor, do que a entrada afirmava.
 
 **Nenhum arquivo fora da lista da Task 04 foi tocado:** o commit fecha em
 **exatamente** os 26 previstos (12 em `src/`, 14 em `tests/`).
+
+---
+
+### 2026-08-17 — [deviation] Task 05 — o `calls` do fake de `AccessGuard` grava o alvo — Claude
+
+**Contexto:** a Task 05 pede um registro de chamadas *"mesma forma do
+`InMemoryStaffStore.record`"* para provar L-AG4. Medido: aquele `record()` grava
+`"<visão>.<método>"` — só o **nome** do método (`in_memory_staff_store.py:54-58`),
+que é a mesma limitação que a Task 04 já registrou. L-AG4 fala de *"uma chamada
+por **alvo**"*, e um `calls` com apenas `"authorize"` repetido não distingue duas
+autorizações do **mesmo** alvo de duas de alvos **diferentes** — que é exatamente
+a distinção que a lei existe para travar.
+
+**Ajuste aplicado:** o fake mantém a **forma** (`record(call: str)` acrescentando
+a `calls: list[str]`) e enriquece o **conteúdo**:
+`"authorize(<permissão>,<tenant>,<unidade>)"`, e `"authenticate"` sem alvo,
+porque autenticação não tem um. Nenhum risco de regressão: o fake é **novo** e
+nada mais lê o seu `calls` — ao contrário do `InMemoryStaffStore`, cujo `calls` é
+asserido por igualdade exata em 11 arquivos, que foi a razão de não o mexer na
+Task 04.
+
+**Razão:** a alternativa (registrar só `"authorize"`) deixaria L-AG4 sem asserção
+possível pelo registro, e a lei ficaria provada só pelo ramo de recusa — metade
+do que a Task pede. A escolha e o seu porquê estão na docstring do módulo do
+fake, para que a próxima implementação do port não a leia como acidente.
 
 <!-- END: post-execution -->
