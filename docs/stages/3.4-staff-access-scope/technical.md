@@ -1489,4 +1489,28 @@ router guardando a permissão que ele mesmo declarou (que não muda nada e é o
 caminho barato). A decisão não é desta Stage porque não há consumidor aqui — mas
 o consumidor da 3.6 tropeça nela no primeiro handler de funcionário.
 
+---
+
+### 2026-08-18 — [finding] Task 02 — `InvalidDayPeriodError` nasce sem produtor em produção — Claude
+
+**Contexto (F4 da auditoria de testes, informativo).** `DayPeriod.from_string` e o
+`InvalidDayPeriodError` que ele levanta entraram na Task 02 (ADR 3.4.0003 §3), mas
+**nenhum caminho de produção os chama** nesta Stage: o mapper reidrata com
+`DayPeriod(valor)` cru e declara isso no próprio corpo, e não há adapter de
+entrada de staff (CA21). O erro é, portanto, **vacuamente satisfeito** — existe,
+é testado unitariamente, e não tem produtor.
+
+**Por que é finding e não defeito.** É a mesma situação que a Stage 3.3 registrou
+para `EmployeeInUseError`, e pela mesma razão: a fundação nasce antes da borda que
+a exercita, e esta Stage declara esse custo em §4 do concept (*"consumidor desta
+Stage: nenhum"*). A diferença — e o que este registro corrige — é que lá a
+ausência estava **declarada** e aqui não estava.
+
+**Direção sugerida / Stage candidata: 3.6.** O produtor natural é o parser do
+adapter HTTP, que recebe o período do dia como string do corpo da requisição:
+`from_string` é exatamente a função que converte `"xpto"` em erro tipado em vez de
+`ValueError` cru. Ao escrever esse parser, conferir que ele **usa** `from_string`
+— e não `DayPeriod(...)` direto, que reintroduziria o `ValueError` não mapeado na
+faixa 422.
+
 <!-- END: post-execution -->
