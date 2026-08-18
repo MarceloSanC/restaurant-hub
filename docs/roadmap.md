@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-08-12
-last_reviewed_at: 2026-08-12
+updated_at: 2026-08-18
+last_reviewed_at: 2026-08-18
 ---
 
 # Roadmap — restaurant-hub
@@ -117,7 +117,7 @@ graph LR
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
-| `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | draft | `3.3-staff-persistence` |
+| `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
 | `3.6-staff-http` | API de equipe | adapters/in/http | draft | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) | draft | `3.6-staff-http` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.5-employee-login-link` |
@@ -845,6 +845,89 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 >   `docs/stages/3.4-staff-http/concept.md` §4.1–4.3 — para que a Fase 3A da 3.6 não o
 >   re-derive.
 
+> **Nota (2026-08-18): reconciliação pós-execução da Stage 3.4.** A nota do corte
+> acima é de 2026-08-12 e foi conferida linha a linha contra o executado —
+> **continua fiel**, inclusive nas cinco desatualizações que ela mesma corrigiu.
+> O que segue é o que **só a execução** podia dizer.
+>
+> - **O bloco se sustentou.** `arquivos_a_criar`, `arquivos_a_modificar`,
+>   `contratos_introduzidos`, `contratos_consumidos`, `non_goals` e
+>   `complexidade_estimada: M` foram medidos contra o diff e **valem como
+>   escritos** — é a primeira Stage do Step 3 em que o bloco não precisou de
+>   correção estrutural, e o motivo é que ele foi reescrito **depois** do
+>   Checkpoint A, com os achados em mãos. **6 Tasks** planejadas e executadas,
+>   mais **5 commits** de `fix`/`extra` vindos do Checkpoint C e da auditoria de
+>   testes independente. File-scope real: **22 arquivos de `src/`** —
+>   `composition_root.py`, três de `features/identity/` (as duas permissões, o
+>   mapa de papéis e o passo 4) e dezoito de `features/staff/` (os dez commands,
+>   os dez use cases, os dois ports, o adapter Postgres, as duas entidades,
+>   `shift_preference.py` e `errors.py`).
+> - **O valor da Stage, em uma frase:** um gerente da unidade A **deixou de
+>   conseguir** ler, editar e clonar o funcionário da unidade B informando a
+>   própria unidade. A unidade entrou no **endereço** do funcionário até a
+>   assinatura do port (ADR 3.4.0007), então quem não sabe a unidade **não
+>   consegue formar a chamada** — e o registro alheio responde
+>   `EmployeeNotFoundError`, indistinguível de id inexistente. O revisor construiu
+>   um cenário de ataque do zero e o provou nos **dois** parâmetros da suíte de
+>   contrato (`[fake]` e `[postgres]`), com um corpo de teste só.
+> - **`arquivos_a_criar` cresceu em testes, não em código.** Além do port e das
+>   suítes previstas, nasceram `tests/unit/features/staff/test_bc_independence.py`
+>   (varredura por AST do BC inteiro + leitura do `.importlinter`, que é o que
+>   torna "zero `ignore_imports`" uma propriedade **medida** e não uma promessa) e
+>   `tests/unit/features/identity/domain/test_rbac_additivity.py` (a prova
+>   mecânica da metade "obrigatório" do CA20).
+> - **CA20: as fixtures de fechamento de vocabulário são TRÊS, não duas.** A
+>   terceira é
+>   `test_http_dependencies.py::test_conjunto_de_permissoes_exigidas_por_papel_alvo`,
+>   e ela é **derivada** do mapa de papéis (`dependencies.py:97`), logo cresce
+>   sozinha quando o vocabulário cresce. **O 5º bullet do `definition_of_done`
+>   acima continua verdadeiro** — ele fala da *categoria*, sem contagem, e foi por
+>   isso que esta Stage **não** precisou de regressão do concept; a decisão e as
+>   quatro medições que a sustentam estão na §7 do `technical.md`. A metade
+>   **proibida** do critério (asserção de decisão de acesso) permanece intacta,
+>   provada por igualdade em `test_matriz_de_quem_cria_quem_nao_regride`.
+> - **A auditoria de testes independente encontrou 2 mutações sobreviventes** em
+>   arquivos com 100% de cobertura de linha e branch, e as duas são da mesma
+>   família — **lei universal travada num representante estreito**: (a) L-AG3
+>   estava codificada sobre `manage_staff` nas duas implementações do port, então
+>   condicionar a recusa à outra permissão deixava a suíte verde e um
+>   `AuthorizedScope` de tenant vazio sair do guard; (b) a mesma estreiteza valia
+>   para os ramos de **recusa** de L-AG2 e L-AG4, que nunca rodavam com a permissão
+>   tenant-wide. Fechadas parametrizando as duas suítes sobre os **dois** alvos,
+>   com prova de mutação antes e depois. Antes disso o Checkpoint C já havia pego a
+>   mesma família num eixo diferente (L-AG3 testada só com tenant `None`, nunca com
+>   string vazia).
+> - **A auditoria também pegou a docstring do port afirmando o que o código não
+>   faz:** `AuthorizedScope.unit_id is None` **não** significa "ação tenant-wide" —
+>   `owner` e `platform_admin` fazem bypass de escopo de unidade **por papel**
+>   (kickoff #9, ADR 2.1.0001, `workforce.md` §4), então `owner` + `manage_staff`
+>   sem unidade também volta com `None`. **O código está certo e a prosa mentia:**
+>   apertar o tradutor contradiria decisão ratificada. Corrigida a docstring e
+>   travado o caso do `owner` por teste.
+> - **Errata no ADR 3.4.0001** (o ADR segue `accepted`; ver a sua seção
+>   `## Errata`): duas citações de `CA14` para a propriedade "zero
+>   `ignore_imports`" eram **CA13**, e o ponteiro `composition_root.py:185-188`
+>   passou a `:300-305`. O erro entrou no commit do corte, que renumerou os
+>   critérios do concept sem reconciliar os ponteiros do ADR.
+> - **Quatro `[finding]` novos escalados**, todos com Stage candidata na §7 do
+>   `technical.md`: (1) **3.6** — o router **não pode** inferir "tenant-wide" de
+>   `unit_id is None`, sob pena de tratar ação de funcionário de um `owner` como
+>   não-escopada; (2) **3.6** — `DayPeriod.from_string` nasceu **sem produtor** em
+>   produção, e o parser HTTP é o produtor natural (usá-lo, e não `DayPeriod(...)`
+>   direto, que reintroduziria `ValueError` fora da faixa 422); (3) **3.6** —
+>   varrer os ADRs 3.4.0002/0004/0005 atrás de intervalos de CA herdados da
+>   numeração anterior ao corte, e reconciliar o `## Trade-offs` do 3.4.0001, cujos
+>   `CA10–CA12` apontam para testes que migraram para a 3.6; (4) **issue futura** —
+>   `CONVENTIONS.md` §Idioma manda inglês para identificadores e a suíte inteira
+>   usa PT em nomes de `parametrize`; é divergência regra × prática, não defeito de
+>   Stage.
+> - **Nenhuma rota nasceu (CA21), e nenhuma migration.** Verificado no gate de
+>   saída: `features/staff/adapters/in/` não existe, `build_http_wiring` devolve o
+>   router **de identity** por identidade de objeto, as 10 rotas registradas não
+>   endereçam recurso de staff, e `git diff -- migrations/` é vazio. Os 16 use
+>   cases e o `AccessGuard` seguem **sem consumidor** — custo declarado no concept
+>   §4, que a 3.6 consome.
+
 #### Stage 3.6 — `3.6-staff-http`
 
 **Descrição humana:** a borda HTTP do BC staff — 16 rotas para os 16 use cases (4 de catálogo de função, 12 de funcionário), schemas Pydantic só no boundary, handler único de erro com mapa de status total, wiring de dois routers, e e2e cobrindo fluxo feliz, isolamento entre unidades e acesso negado. É a segunda metade da Stage 3.4 original (ver a nota do bloco 3.4).
@@ -1483,6 +1566,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-08-11 | Stage 3.3-staff-persistence concluída (`done`); bloco corrigido (nota datada — **cinco** eixos: migration `0003` e não `0002`, file-scope real incluindo `migrations/env.py`/`tests/conftest.py`/fakes/ports e a **promoção** das suítes de lei para `tests/contract/`, `L-ORD` nos contratos introduzidos, `complexidade_estimada` `S`→`M`, oito `non_goals`). ADRs 3.3.0001–3.3.0007. A auditoria de testes independente encontrou **5 mutações sobreviventes em arquivos com 100% de cobertura de linha e branch** — entre elas o escopo por `employee_id` dos `DELETE` de filha, cuja ausência destruiria dado **cross-tenant** em silêncio; todas fechadas por teste com prova de mutação | Execução da Stage 3.3 — issue #38 |
 
 | 2026-08-12 | Stage 3.4 **cortada em duas** na Fase 3A (issue #40): `3.4-staff-access-scope` (fundação de acesso e escopo, 6 Tasks, sem rota) e **`3.6-staff-http`** (a borda HTTP, 8 Tasks). Motivo: com as três decisões do sponsor sobre os forks F1/F2/F3 e os achados do Checkpoint A, o plano mediu **14 Tasks** — o alarme de CONVENTIONS §6 —, e **7 delas não estavam no bloco original**. A fronteira separa emendar Stage fechada de escrever superfície nova, e faz os dois buracos de acesso fecharem antes de existir rota que os exponha. `3.5` passou a depender de `3.6`; a numeração fora de ordem é legal (número é identidade, ordem é `depends_on`). 8 ADRs (3.4.0001–3.4.0008), cinco governando a 3.4 e três a 3.6. Expansão de camada-alvo para `features/identity` autorizada pelo sponsor | Fase 3A da Stage 3.4 — issue #40 |
+| 2026-08-18 | Stage 3.4-staff-access-scope concluída (`done`); bloco **confirmado sem correção estrutural** (primeira do Step 3) e acrescido de nota datada de reconciliação pós-execução: file-scope real de 22 arquivos de `src/`, as fixtures de fechamento do CA20 são **três** e não duas (sem regressão do concept — o DoD fala da categoria; decisão e medições na §7), errata no ADR 3.4.0001 e quatro `[finding]` novos. A Stage fecha o **furo de acesso intra-tenant**: a unidade entrou no endereço do funcionário até a assinatura do port (ADR 3.4.0007), provado nos dois parâmetros da suíte de contrato com um corpo de teste só. A auditoria de testes independente encontrou **2 mutações sobreviventes** em arquivos com 100% de cobertura — as duas da mesma família, lei universal travada num representante estreito —, ambas fechadas com prova de mutação. Nenhuma rota e nenhuma migration | Execução da Stage 3.4 — issue #40 |
 
 ## Próxima revisão de roadmap
 

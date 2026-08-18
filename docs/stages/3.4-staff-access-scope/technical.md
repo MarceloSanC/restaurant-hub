@@ -1513,4 +1513,69 @@ adapter HTTP, que recebe o período do dia como string do corpo da requisição:
 — e não `DayPeriod(...)` direto, que reintroduziria o `ValueError` não mapeado na
 faixa 422.
 
+---
+
+### 2026-08-18 — [decision] Gate de saída — a enumeração de fixtures do CA20 é ilustrativa, não taxativa — Claude
+
+**Contexto.** O checklist de fechamento da §3 tem o item literal *"`concept.md`
+não precisa de retoque retrospectivo (se precisar por causa de CA20, é regressão
+declarada, não silêncio)"*. Ele **estava vivo**: o concept §11 enumera
+nominalmente **duas** fixtures de fechamento
+(`test_permission_e_conjunto_fechado`; os parâmetros de
+`test_conteudo_exato_do_mapa_por_papel`) e diz *"as **duas** fixtures listadas
+nominalmente no corpo do commit"*, e a execução provou que são **três** — a
+terceira é `test_http_dependencies.py::test_conjunto_de_permissoes_exigidas_por_papel_alvo`
+(deviation da Task 01). Marcar o item sem decidir seria inércia.
+
+**Pergunta:** a enumeração do concept é ilustrativa da categoria já definida, ou
+o concept precisa de **regressão declarada** (CONVENTIONS §3.2)?
+**Opções:**
+- A — declarar a enumeração **ilustrativa**: a categoria *"fixtures de fechamento
+  de vocabulário"*, definida na mesma frase, é o que governa. ✅ recomendada
+- B — regressão do concept (`revert to draft` → editar → `conceptual approved`),
+  trocando "duas" por "três".
+**Decisão:** A.
+
+**Razão — e o que a separa do caso da Fase 3B, que foi B.** Quatro medições, e
+a primeira é a decisiva:
+
+1. **O artefato mais alto já está correto.** O que **forçou** a regressão da
+   Fase 3B foi o 5º bullet do `definition_of_done` do bloco 3.4 do
+   `roadmap.md` carregar o **mesmo texto** do critério — *"uma nota só aqui
+   deixaria dois artefatos superiores afirmando o que a Stage viola"*. Medido
+   agora: o DoD do roadmap diz *"as fixtures de fechamento de vocabulario
+   acompanham o conjunto que cresceu com aditividade provada"* — **categoria, sem
+   contagem**, e é **verdadeiro como está**. A condição que justificou B não
+   ocorre.
+2. **O concept diz a mesma coisa em forma durável, no seu próprio corpo
+   normativo.** §5.11: *"As fixtures de **fechamento de vocabulário** são exceção
+   declarada e **devem** acompanhar o conjunto que cresceu"* — sem contagem, e
+   verdadeiro. A contagem de §11 está no parêntese que exemplifica a categoria
+   definida na mesma frase.
+3. **Nenhum comportamento protegido difere.** A metade **proibida** — asserção de
+   **decisão de acesso** — está intacta: `git diff` mostra quatro arquivos de
+   `tests/unit/features/identity/` tocados, e a aditividade é provada
+   **mecanicamente** por `test_rbac_additivity.py` (subconjunto) e por
+   `test_matriz_de_quem_cria_quem_nao_regride`, que congela a matriz "quem pode
+   criar quem" no valor **anterior** à Stage e a assere por **igualdade**. A
+   terceira fixture é **derivada** do mapa de papéis
+   (`frozenset({MANAGE_USERS}) | target_role.permissions`, `dependencies.py:97`),
+   isto é, é fixture de fechamento pela definição da própria categoria.
+4. **A contagem é intrinsecamente perecível.** Por ser derivada, ela cresce
+   sozinha a cada crescimento do vocabulário: trocar "duas" por "três" gravaria
+   um número que volta a estar errado na próxima Stage que acrescente permissão.
+   A forma durável é a categoria — e é a que o roadmap e o §5.11 já usam.
+
+**O que faria a decisão ser outra.** Se a terceira asserção fosse de **decisão de
+acesso** (papel perdendo permissão, `authorize` passando a permitir o que negava),
+não seria nem A nem B: seria **blocker**, pela metade proibida do critério. E se o
+roadmap carregasse a contagem, seria B, pela mesma regra da Fase 3B.
+
+**Reconciliação — onde "duas" deve ser lido como "três".** Esta entrada reconcilia
+**todas** as ocorrências no technical, que o freeze impede de editar fora da §7:
+§1 (*"O achado do CA20"*), a linha do CA20 na matriz §2.1, o 3º item do checklist
+da §3 e a linha de risco da §5. As três fixtures estão nominadas no corpo do
+commit da Task 01. **O concept não é retocado, e o silêncio não é o motivo — a
+decisão está escrita aqui.**
+
 <!-- END: post-execution -->
