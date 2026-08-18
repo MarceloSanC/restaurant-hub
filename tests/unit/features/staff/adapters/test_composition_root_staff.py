@@ -317,6 +317,25 @@ def _authorized_actor(
     )
 
 
+# **A segunda dimensão de L-AG3 — e ela não é simetria decorativa.**
+#
+# Com as leis escritas só sobre `manage_staff`, a recusa fica travada **por
+# permissão** e não como propriedade do guard: condicionar a guarda a
+# `permission != "manage_job_functions"` mantinha a suíte inteira verde e
+# deixava `AuthorizedScope(tenant_id=StaffTenantId(None))` sair daqui. Medido —
+# a mutação sobrevivia nesta suíte e na do fake, e a permissão que escapava era
+# justamente a de alcance **tenant-wide**.
+#
+# O código do tradutor já argumenta contra isso: ele impõe L-AG3 em vez de
+# confiar no "`platform_admin` é negado antes, no passo 2" porque o mapa RBAC é
+# editável. Uma profundidade de defesa que cobre metade do vocabulário é meia
+# defesa.
+_ALVOS = [
+    pytest.param("manage_staff", "u1", id="unit-scoped"),
+    pytest.param("manage_job_functions", None, id="tenant-wide"),
+]
+
+
 def test_ca15_o_access_guard_de_staff_tem_a_forma_do_port() -> None:
     """`AccessGuard` é `Protocol` — `isinstance` não responde, a assinatura sim.
 
@@ -375,20 +394,28 @@ def test_l_ag1_o_tradutor_nao_traduz_a_excecao_de_autenticacao() -> None:
     assert excinfo.value is spy.authentication_error
 
 
-def test_l_ag2_o_tradutor_nao_traduz_a_excecao_de_autorizacao() -> None:
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_l_ag2_o_tradutor_nao_traduz_a_excecao_de_autorizacao(
+    permission: str,
+    unit: str | None,
+) -> None:
     """L-AG2, e com `UnitNotVisibleError` de propósito.
 
     É a exceção que carrega a conversão de `UnitNotFoundError` feita por
     identity — o fechamento do oráculo de enumeração cross-tenant
     (ADR 2.4.0001 §5). Embrulhá-la aqui apagaria essa propriedade sem que nenhum
     teste de identity notasse.
+
+    Parametrizado sobre as duas permissões porque este é o **ramo de recusa**:
+    sem isso, `manage_job_functions` só apareceria em caminho de sucesso, e um
+    `except` que a tratasse à parte não teria teste que o observasse.
     """
     spy = _SpyIdentityGuard()
     spy.authorization_error = UnitNotVisibleError("user-1", "u9")
     translator = _IdentityAccessGuard(spy)
 
     with pytest.raises(UnitNotVisibleError) as excinfo:
-        translator.authorize(object(), "manage_staff", tenant_id="t1", unit_id="u9")
+        translator.authorize(object(), permission, tenant_id="t1", unit_id=unit)
 
     assert excinfo.value is spy.authorization_error
 
@@ -414,7 +441,10 @@ _ATOR_SEM_TENANT = [
 
 
 @pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
 def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
+    permission: str,
+    unit: str | None,
     actor_tenant_id: str | None,
     role: Role,
 ) -> None:
@@ -424,17 +454,21 @@ def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
     deter as permissões de staff. Confiar nisso faria o isolamento de tenant
     refém do mapa RBAC — que é editável, e cuja edição nenhum teste desta lei
     observaria. Por isso o cenário montado é o pior caso: identity **autorizou**
-    e devolveu um ator sem tenant.
+    e devolveu um ator sem tenant — e vale para as **duas** permissões, porque
+    L-AG3 é propriedade do guard e não de uma capacidade.
     """
     spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
     translator = _IdentityAccessGuard(spy)
 
     with pytest.raises(PermissionDeniedError):
-        translator.authorize(object(), "manage_staff", tenant_id="t1", unit_id="u1")
+        translator.authorize(object(), permission, tenant_id="t1", unit_id=unit)
 
 
 @pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
 def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
+    permission: str,
+    unit: str | None,
     actor_tenant_id: str | None,
     role: Role,
 ) -> None:
@@ -449,7 +483,7 @@ def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
 
     scopes = []
     with contextlib.suppress(PermissionDeniedError):
-        scopes.append(translator.authorize(object(), "manage_staff", tenant_id="t1"))
+        scopes.append(translator.authorize(object(), permission, tenant_id="t1", unit_id=unit))
 
     assert scopes == []
 

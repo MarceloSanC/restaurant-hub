@@ -30,8 +30,32 @@ pytestmark = pytest.mark.unit
 _MANAGE_STAFF = "manage_staff"
 _MANAGE_JOB_FUNCTIONS = "manage_job_functions"
 _TENANT = "t1"
+_OTHER_TENANT = "t2"
 _UNIT = "u1"
 _OTHER_UNIT = "u2"
+
+# **Os dois alvos do Step 3, e o par é a unidade de parametrização das leis.**
+#
+# Não é simetria decorativa. Com as leis escritas só sobre `manage_staff`, a
+# recusa passa a estar travada **por permissão**, e não como propriedade: uma
+# guarda condicionada — `if not actor_tenant_id and permission !=
+# "manage_job_functions"` — satisfaz a suíte inteira e deixa
+# `AuthorizedScope(tenant_id=None)` sair do guard. Medido: essa mutação
+# sobrevivia antes desta parametrização, nas **duas** implementações do port.
+#
+# O agravante é que o desenho já argumenta contra ela: o tradutor impõe L-AG3
+# em vez de confiar no *"platform_admin é negado antes, no passo 2"* justamente
+# porque o mapa RBAC é editável. Uma profundidade de defesa que cobre metade do
+# vocabulário é meia defesa — e a metade descoberta era a permissão **cujo alvo
+# é o restaurante inteiro**.
+#
+# A unidade viaja junto da permissão porque as duas são um alvo só: ação
+# tenant-wide não nomeia unidade, e um par `(manage_job_functions, "u1")` não é
+# um alvo que exista.
+_ALVOS = [
+    pytest.param(_MANAGE_STAFF, _UNIT, id="unit-scoped"),
+    pytest.param(_MANAGE_JOB_FUNCTIONS, None, id="tenant-wide"),
+]
 
 
 def _guard_with_actor(*, tenant_id: str | None = _TENANT) -> InMemoryAccessGuard:
@@ -70,32 +94,47 @@ def test_l_ag1_credencial_valida_devolve_o_ator_sem_levantar() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_l_ag2_alvo_nao_concedido_levanta_a_sentinela_crua() -> None:
-    """Ator legítimo, alvo não concedido: levanta **o mesmo objeto**."""
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_l_ag2_alvo_nao_concedido_levanta_a_sentinela_crua(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """Ator legítimo, alvo não concedido: levanta **o mesmo objeto**.
+
+    Parametrizado sobre as duas permissões porque é um ramo de **recusa**: sem
+    isso, a permissão tenant-wide só apareceria em caminho de sucesso, e uma
+    negação que a dispensasse não teria teste que a observasse.
+    """
     guard = _guard_with_actor()
     actor = guard.authenticate(request=object())
 
     with pytest.raises(FakeAuthorizationRejected) as excinfo:
-        guard.authorize(actor, _MANAGE_STAFF, tenant_id=_TENANT, unit_id=_UNIT)
+        guard.authorize(actor, permission, tenant_id=_TENANT, unit_id=unit)
 
     assert excinfo.value is guard.authorization_error
 
 
-def test_l_ag2_ator_que_este_guard_nao_emitiu_e_negado() -> None:
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_l_ag2_ator_que_este_guard_nao_emitiu_e_negado(
+    permission: str,
+    unit: str | None,
+) -> None:
     """`Actor = object` deixa qualquer objeto passar pelo type-checker.
 
     Quem fecha essa porta é a implementação, em runtime — e sem esta asserção o
-    fake poderia autorizar um ator forjado e a suíte não notaria.
+    fake poderia autorizar um ator forjado e a suíte não notaria. O alvo está
+    **concedido** de propósito: o que se prova é que a recusa vem do ator, não
+    da falta de concessão — e vale para as duas permissões.
     """
     guard = _guard_with_actor()
-    guard.grant(_MANAGE_STAFF, tenant_id=_TENANT, unit_id=_UNIT)
+    guard.grant(permission, tenant_id=_TENANT, unit_id=unit)
 
     with pytest.raises(FakeAuthorizationRejected) as excinfo:
         guard.authorize(
             FakeActor(id="forjado", tenant_id=_TENANT),
-            _MANAGE_STAFF,
+            permission,
             tenant_id=_TENANT,
-            unit_id=_UNIT,
+            unit_id=unit,
         )
 
     assert excinfo.value is guard.authorization_error
@@ -134,23 +173,34 @@ def test_l_ag2_permissao_tenant_wide_devolve_escopo_sem_unidade() -> None:
 
 
 @pytest.mark.parametrize("tenant_do_ator", [None, ""])
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
 def test_l_ag3_ator_sem_tenant_e_negado_mesmo_com_o_alvo_concedido(
+    permission: str,
+    unit: str | None,
     tenant_do_ator: str | None,
 ) -> None:
     """A recusa **não** depende de o alvo estar fora do mapa de concessões.
 
-    Os dois valores importam e são casos distintos: `None` é o
-    `platform_admin` de hoje (`AuthorizedActor.actor_tenant_id` é
-    `RestaurantId | None`), e `""` é o resultado que a coerção proibida
-    (`TenantId(actor_tenant_id or "")`) produziria se alguém a escrevesse mais
-    acima na cadeia. Os dois têm de terminar em recusa, não em escopo.
+    Duas dimensões, e as duas foram medidas como necessárias.
+
+    **O valor do tenant:** `None` é o `platform_admin` de hoje
+    (`AuthorizedActor.actor_tenant_id` é `RestaurantId | None`), e `""` é o
+    resultado que a coerção proibida (`TenantId(actor_tenant_id or "")`)
+    produziria se alguém a escrevesse mais acima na cadeia.
+
+    **A permissão:** L-AG3 é propriedade do *guard*, não de uma capacidade. Com
+    só `manage_staff`, condicionar a recusa a `permission !=
+    "manage_job_functions"` mantinha a suíte verde — e a permissão dispensada
+    seria justamente a de alcance tenant-wide.
+
+    As quatro combinações têm de terminar em recusa, não em escopo.
     """
     guard = InMemoryAccessGuard(credential=FakeActor(id="a1", tenant_id=tenant_do_ator))
-    guard.grant(_MANAGE_STAFF, tenant_id=_TENANT, unit_id=_UNIT)
+    guard.grant(permission, tenant_id=_TENANT, unit_id=unit)
     actor = guard.authenticate(request=object())
 
     with pytest.raises(FakeAuthorizationRejected) as excinfo:
-        guard.authorize(actor, _MANAGE_STAFF, tenant_id=_TENANT, unit_id=_UNIT)
+        guard.authorize(actor, permission, tenant_id=_TENANT, unit_id=unit)
 
     assert excinfo.value is guard.authorization_error
 
@@ -184,7 +234,7 @@ def test_l_ag3_nenhum_escopo_devolvido_carrega_tenant_falsy() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_l_ag4_autorizar_um_alvo_nao_autoriza_outro() -> None:
+def test_l_ag4_autorizar_uma_unidade_nao_autoriza_a_vizinha() -> None:
     """Unidade concedida não arrasta a vizinha — nem com a mesma permissão."""
     guard = _guard_with_actor()
     guard.grant(_MANAGE_STAFF, tenant_id=_TENANT, unit_id=_UNIT)
@@ -194,6 +244,44 @@ def test_l_ag4_autorizar_um_alvo_nao_autoriza_outro() -> None:
 
     with pytest.raises(FakeAuthorizationRejected) as excinfo:
         guard.authorize(actor, _MANAGE_STAFF, tenant_id=_TENANT, unit_id=_OTHER_UNIT)
+
+    assert excinfo.value is guard.authorization_error
+
+
+def test_l_ag4_autorizar_um_tenant_nao_autoriza_o_outro_em_permissao_tenant_wide() -> None:
+    """A forma que L-AG4 assume quando o alvo **não é** uma unidade.
+
+    Sem este caso, o ramo de **recusa** de L-AG4 nunca rodaria com
+    `manage_job_functions`: a permissão tenant-wide só aparecia em caminho de
+    sucesso, e "autorizar um alvo não autoriza outro" ficava provado apenas para
+    o eixo que ela não usa. Aqui o alvo que muda é o **restaurante**, que é o que
+    o catálogo de funções endereça (`workforce.md` §3.2).
+    """
+    guard = _guard_with_actor()
+    guard.grant(_MANAGE_JOB_FUNCTIONS, tenant_id=_TENANT)
+    actor = guard.authenticate(request=object())
+
+    guard.authorize(actor, _MANAGE_JOB_FUNCTIONS, tenant_id=_TENANT)
+
+    with pytest.raises(FakeAuthorizationRejected) as excinfo:
+        guard.authorize(actor, _MANAGE_JOB_FUNCTIONS, tenant_id=_OTHER_TENANT)
+
+    assert excinfo.value is guard.authorization_error
+
+
+def test_l_ag4_autorizar_uma_permissao_nao_autoriza_a_outra() -> None:
+    """O terceiro eixo do alvo: a **permissão**.
+
+    `manage_staff` concedido numa unidade não concede `manage_job_functions` no
+    mesmo tenant, e vice-versa. Sem esta asserção, um guard que resolvesse por
+    `(tenant, unidade)` ignorando a permissão passaria em tudo o que está acima.
+    """
+    guard = _guard_with_actor()
+    guard.grant(_MANAGE_STAFF, tenant_id=_TENANT, unit_id=_UNIT)
+    actor = guard.authenticate(request=object())
+
+    with pytest.raises(FakeAuthorizationRejected) as excinfo:
+        guard.authorize(actor, _MANAGE_JOB_FUNCTIONS, tenant_id=_TENANT)
 
     assert excinfo.value is guard.authorization_error
 
@@ -220,13 +308,17 @@ def test_l_ag4_cada_alvo_produz_a_sua_propria_chamada_no_registro() -> None:
     ]
 
 
-def test_l_ag4_a_autorizacao_negada_tambem_aparece_no_registro() -> None:
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_l_ag4_a_autorizacao_negada_tambem_aparece_no_registro(
+    permission: str,
+    unit: str | None,
+) -> None:
     """Contar só as bem-sucedidas esconderia a tentativa — e L-AG4 é sobre chamadas."""
     guard = _guard_with_actor()
     actor = guard.authenticate(request=object())
     guard.calls.clear()
 
     with pytest.raises(FakeAuthorizationRejected):
-        guard.authorize(actor, _MANAGE_STAFF, tenant_id=_TENANT, unit_id=_UNIT)
+        guard.authorize(actor, permission, tenant_id=_TENANT, unit_id=unit)
 
-    assert guard.calls == [f"authorize({_MANAGE_STAFF},{_TENANT},{_UNIT})"]
+    assert guard.calls == [f"authorize({permission},{_TENANT},{unit})"]
