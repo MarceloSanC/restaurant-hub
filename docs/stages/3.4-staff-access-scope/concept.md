@@ -699,6 +699,14 @@ consulta, não na estrutura.
 
 ### As 6 Tasks desta Stage
 
+> **Nota (2026-08-17): esta tabela é indicativa; o mapa executável é o
+> [`technical.md`](./technical.md) §2.** A Fase 3B manteve as **6** Tasks e o
+> mesmo conteúdo, com agrupamento diferente por duas razões mecânicas: as três
+> Tasks de escopo de unidade (2–4 abaixo) colapsam em duas, porque o corte entre
+> elas produz commit vermelho; e a Task 6 abaixo se divide em duas, porque
+> [`PIPELINE.md`](../../PIPELINE.md) §4.3 proíbe criar port e adapter desse port
+> no mesmo commit. Justificativa completa em `technical.md` §1.
+
 | # | Task | Camada |
 |---|---|---|
 | 1 | Permissões, `TENANT_WIDE_PERMISSIONS`, mapa de papéis e a condição do passo 4 | identity domain + application |

@@ -3,7 +3,7 @@ title: Technical — Acesso e escopo de equipe
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, staff-access-scope, permissao, escopo-unidade, access-guard, byte-nul, tenant-wide]
-status: done
+status: draft
 created_at: 2026-08-12
 updated_at: 2026-08-17
 stage_id: 3.4-staff-access-scope
@@ -83,14 +83,15 @@ as atravessa.
 | # | Task | Natureza da mudança | Por que o commit fica verde |
 |---|---|---|---|
 | 01 | identity: permissões + `TENANT_WIDE_PERMISSIONS` + passo 4 | **aditiva** | acrescenta membros a um `StrEnum` e a três entradas de um mapa **total**; o passo 4 ganha uma condição que só pode **permitir mais**, e nenhuma permissão hoje em uso está no conjunto novo |
-| 02 | staff domain: byte NUL + `DayPeriod.from_string` | **restritiva, sem população violadora** | medido: **nenhum** teste do repositório constrói nome com `\x00` hoje (varredura de `tests/` = vazio), então a restrição não invalida fixture existente; `from_string` é puro acréscimo |
+| 02 | staff domain: byte NUL + `DayPeriod.from_string` | **restritiva, sem população violadora** | medido: **nenhum `.py` de `tests/` contém `\x00`** (varredura por bytes; os 158 arquivos com NUL bruto sob `tests/` são todos `.pyc` de `__pycache__`), então a restrição não invalida fixture existente; `from_string` é puro acréscimo |
 | 03 | os dez commands ganham `unit_id` | **aditiva em `src/`, mecânica nos testes** | os commands **não têm chamador em `src/`** — não há adapter de entrada de staff (é o que a 3.3 declarou ao wirar 16 use cases sem consumidor) —, então o campo novo só exige atualizar os nove arquivos de teste que os constroem |
-| 04 | a unidade na assinatura do port | **restritiva e atômica** | é o commit grande, e é grande **por necessidade**: port + dez use cases + adapter Postgres + fake + suíte de contrato são o conjunto mínimo que mypy e a suíte de contrato aceitam junto (caixa abaixo) |
+| 04 | a unidade na assinatura do port | **restritiva e atômica** | é o commit grande, e é grande **por necessidade**: port + dez use cases + adapter Postgres + fake + suíte de contrato **+ a suíte de integração de Postgres** são o conjunto mínimo que deixa a suíte verde. A integração viaja junto por um motivo que a §Premissas não pega sozinha: `mypy` **não** alcança `tests/integration/`, então lá o desalinhamento de aridade não vira erro de tipo — vira `TypeError` em execução, nos **31** call sites medidos (caixa abaixo) |
 | 05 | port `AccessGuard` + leis + fake | **criação isolada** | arquivos novos; nada existente os importa |
 | 06 | tradutor + wiring no composition root | **aditiva** | um campo novo no `dataclass` de dependências e uma construção nova em `wire_dependencies`; `build_http_wiring` **não** muda (CA21) |
 
-> **Por que a Task 04 não pode ser dividida.** Todo corte produz commit vermelho.
-> Vale nomear os três cortes tentadores, para que ninguém os tente na Fase 4:
+> **Por que a Task 04 fica atômica.** **Nenhum corte por camada** deixa o commit
+> verde — e vale nomear os três cortes tentadores, para que ninguém os tente na
+> Fase 4:
 >
 > - *port + fake primeiro, use cases depois* → mypy reprova os dez use cases por
 >   argumento faltante (`src/` é checado).
@@ -101,11 +102,28 @@ as atravessa.
 > - *tudo em `src/` primeiro, fake depois* → `mypy tests/fakes/` reprova, e a
 >   suíte de contrato quebra no parâmetro `[fake]`.
 >
-> A alternativa a um commit grande seria dar a `unit_id` um **default `None`** por
-> um commit. É a única alternativa que se deve **recusar explicitamente**: ela
-> produziria um commit inteiro em que a lei de segurança está escrita no port e
-> **não é exigida** — exatamente a forma de defeito que esta Stage existe para
-> fechar.
+> **Existe um quarto corte, e ele É verde: o corte por MÉTODO.** Commit A dá
+> `unit_id` só a `find_by_id` (docstring, fake, adapter, os dez use cases de
+> leitura e os call sites de leitura); commit B faz o mesmo com `delete`. Cada
+> metade é internamente consistente — mypy verde, contrato verde nos dois
+> parâmetros —, e o fake permite porque o seu `delete` resolve pelo privado
+> `_find`, e não pelo `find_by_id` público
+> (`in_memory_employee_repository.py:101`): os dois métodos públicos são de fato
+> desacoplados. **Registrar isto é obrigação** — a alternativa seria uma premissa
+> absoluta falsa sustentando a exceção ao critério de ≤ 5 arquivos.
+>
+> **Recusamos o corte por método por COESÃO, não por vermelhidão.** `find_by_id` e
+> `delete` recebem **uma** lei — a unidade entra no endereço do funcionário
+> (ADR 3.4.0007 §1) —, e a suíte de contrato a prova com um corpo só. Parti-la em
+> dois commits dobra a superfície de revisão do **mesmo** invariante e abre uma
+> janela em que metade do endereço está protegida e metade não, sem que nada no
+> repositório sinalize a assimetria. O ganho seria de ~6 arquivos num commit de 26;
+> o custo é revisar duas vezes a mesma decisão de segurança.
+>
+> A alternativa a recusar **por vermelhidão de propósito** é outra: dar a `unit_id`
+> um **default `None`** por um commit. Ela produziria um commit inteiro em que a
+> lei de segurança está escrita no port e **não é exigida** pelo sistema de tipos —
+> exatamente a forma de defeito que esta Stage existe para fechar.
 
 **A lei de unidade nasce no port, não no SQL.** É a razão declarada do
 ADR 3.4.0007 §2, e a Task 04 a executa nessa ordem: primeiro a **docstring do
@@ -196,8 +214,10 @@ descreve. O critério refinado (concept §11) discrimina:
 - `concept.md` desta Stage em `status: done` (gate `09aab7a`).
 - **PostgreSQL real no ar** — exigência do ADR 2.3.0001, **sem skip**: a suíte de
   contrato falha alto quando o banco não responde, e é isso que impede a Stage de
-  reportar verde por não ter olhado. As Tasks **02** e **04** e o gate de saída não
-  podem ser verificados sem ele:
+  reportar verde por não ter olhado. **Vale para TODA Task, não só para as duas que
+  tocam o banco diretamente:** as seis terminam em `make check`, que encadeia
+  `test-gate` → `pytest tests/`, e `tests/conftest.py` não tem caminho de skip.
+  Subir e esperar o banco é passo de abertura de **toda** sessão desta Stage:
 
   ```powershell
   docker compose up -d postgres
@@ -227,8 +247,10 @@ descreve. O critério refinado (concept §11) discrimina:
   justificativa de cobertura.
 - **`create_engine` não abre conexão** — montar o tradutor no composition root não
   muda o comportamento de boot.
-- **Nenhum teste do repositório usa `\x00` hoje** (varredura de `tests/` = vazio):
-  a restrição da Task 02 não invalida fixture existente.
+- **Nenhum `.py` de `tests/` contém `\x00`** — varredura por bytes sobre todos os
+  arquivos de `tests/`: 158 acusam NUL bruto e **todos** são `.pyc` de
+  `__pycache__`; nos `.py`, zero. A restrição da Task 02 não invalida fixture
+  existente.
 - **`AuthorizedActor.actor_tenant_id` é `RestaurantId | None`** — ausente só para
   `platform_admin`. É a fonte do `tenant_id` do `AuthorizedScope` e o gatilho da
   lei **L-AG3**.
@@ -286,13 +308,15 @@ CA21, e é o que torna esta Stage segura de mergear.
 
 ### Task 01 — identity: duas permissões de staff, o mapa de papéis, `TENANT_WIDE_PERMISSIONS` e a dispensa do passo 4
 
-- **Arquivos a criar:** nenhum
+- **Arquivos a criar:**
+  - `tests/unit/features/identity/domain/test_rbac_additivity.py`
 - **Arquivos a modificar:**
   - `src/restaurant_hub/features/identity/domain/value_objects/permission.py`
   - `src/restaurant_hub/features/identity/domain/value_objects/role.py`
   - `src/restaurant_hub/features/identity/application/use_cases/authorize_action.py`
   - `tests/unit/features/identity/domain/test_role_permission.py`
   - `tests/unit/features/identity/application/test_authorize_action.py`
+  - `tests/unit/features/identity/domain/test_rbac_additivity.py` **(criar)**
 - **O que fazer:** dar a `identity` o vocabulário de acesso que o Step 3 precisa —
   duas permissões novas, as entradas correspondentes no mapa de papéis, o conjunto
   `TENANT_WIDE_PERMISSIONS` e a única condição de `AuthorizeActionUseCase` que o
@@ -343,6 +367,31 @@ CA21, e é o que torna esta Stage segura de mergear.
     tenant negado, e unidade não visível negada, **também** para permissão
     tenant-wide). CA4 e CA5 juntos cobrem os dois ramos da condição nova — é o que
     a cobertura de branch do projeto exige.
+  - **A aditividade do CA20 vira teste, não inspeção** (`test_rbac_additivity.py`).
+    Sem isto, as três provas do critério dependem de alguém ler um `git diff` e uma
+    mensagem de commit — auditoria por olho, que é o modo de falha que esta Stage
+    inteira existe para fechar. Duas asserções de **subconjunto**, com as baselines
+    congeladas como constantes do módulo (os valores anteriores a esta Stage):
+
+    ```python
+    BASELINE_PERMISSIONS = {"manage_platform", "manage_tenant", "manage_users"}
+    BASELINE_ROLE_PERMISSIONS = {
+        Role.PLATFORM_ADMIN: {Permission.MANAGE_PLATFORM},
+        Role.OWNER: {Permission.MANAGE_TENANT, Permission.MANAGE_USERS},
+        Role.MANAGER: {Permission.MANAGE_USERS},
+        Role.HR: {Permission.MANAGE_USERS},
+        Role.EMPLOYEE: set(),
+    }
+    # nenhum membro removido do enum
+    assert BASELINE_PERMISSIONS <= {p.value for p in Permission}
+    # nenhum papel perdeu permissão que já tinha
+    for papel, antes in BASELINE_ROLE_PERMISSIONS.items():
+        assert antes <= papel.permissions
+    ```
+
+    **É `<=`, não `==`, de propósito:** crescer é permitido, encolher não. O teste
+    sobrevive a esta Stage e passa a guardar **toda** extensão futura do
+    vocabulário — é o antídoto permanente para o falso positivo que o CA20 tinha.
 - **Critério de aceite:**
   - CA1, CA2, CA3, CA6, CA7 (vocabulário e mapa) e CA4, CA5, CA8 (autorização),
     todos com teste verde.
@@ -357,7 +406,9 @@ CA21, e é o que torna esta Stage segura de mergear.
       de `test_conteudo_exato_do_mapa_por_papel`, linhas 66–78) acompanham o
       conjunto que cresceu. A prova é positiva, não a ausência de falha: nenhum
       membro removido de `Permission`, nenhum papel perdendo permissão que já
-      tinha, e **as duas fixtures listadas nominalmente no corpo do commit**.
+      tinha, e **as duas fixtures listadas nominalmente no corpo do commit**. As
+      duas primeiras provas são **mecânicas** (`test_rbac_additivity.py`); só a
+      listagem nominal no commit é de olho.
   - Cobertura ≥ 90% nos três arquivos de `src/` tocados.
 - **Comando de verificação:**
   ```powershell
@@ -525,6 +576,26 @@ CA21, e é o que torna esta Stage segura de mergear.
   - `tests/fakes/features/staff/in_memory_employee_repository.py`
   - `tests/contract/features/staff/test_employee_repository_laws.py`
   - `tests/unit/features/staff/application/test_{assign_job_functions,copy_employee_to_unit,create_employee,delete_employee,employee_edit_use_cases,employee_lifecycle,list_employees,staff_repository_fakes,terminated_employee_edits,unavailability_use_cases}.py`
+  - `tests/integration/features/staff/adapters/out/postgres/test_employee_repository.py`
+  - `tests/integration/features/staff/adapters/out/postgres/test_staff_conduct.py`
+
+  > **Por que a suíte de integração está nesta lista, e por que ela quase não
+  > esteve.** A §Premissas nomeia o alcance do `mypy` como a propriedade que decide
+  > quais arquivos viajam juntos — e `make typecheck` é `mypy src/ tests/fakes/`,
+  > **sem `tests/integration/`**. Aplicar a propriedade onde ela alcança e parar aí
+  > deixa de fora justamente os arquivos onde o desalinhamento **não** vira erro de
+  > tipo: vira `TypeError` em tempo de execução. Contagem medida dos call sites do
+  > repositório de **funcionário** (os de função de trabalho não mudam):
+  >
+  > | Arquivo | `find_by_id` | `delete` | Total |
+  > |---|---|---|---|
+  > | `test_employee_repository.py` | 24 | 4 | **28** |
+  > | `test_staff_conduct.py` | 3 | 0 | **3** |
+  > | | | | **31** |
+  >
+  > `test_job_function_repository.py` e `test_schema.py` **não** entram: o primeiro
+  > só toca o port de função (assinatura inalterada) e o único `find_by_id` do
+  > segundo está dentro de uma docstring.
 - **O que fazer:** fazer a unidade parte do **endereço** do funcionário até a
   assinatura do port, e reconciliar tudo que a assinatura alcança. É o coração da
   Stage: depois deste commit, registro de outra unidade do mesmo tenant é
@@ -584,10 +655,13 @@ CA21, e é o que torna esta Stage segura de mergear.
   make check
   ```
 - **Commit sugerido:** `feat(staff): a unidade entra no endereco do funcionario ate a assinatura do port [3.4/task-04]`
-  > **Exceção declarada ao critério de ≤ 5 arquivos, com razão mecânica:** são ~24,
-  > e **nenhum corte deixa o commit verde** — os três cortes tentadores e a razão de
-  > cada um estão nomeados na caixa da §1. A mudança lógica é **uma** (o endereço do
-  > funcionário ganha uma parte), e cada arquivo a recebe em 1–3 linhas.
+  > **Exceção declarada ao critério de ≤ 5 arquivos:** são **26** (12 em `src/`, 14
+  > em `tests/`). Nenhum corte **por camada** deixa o commit verde — os três cortes
+  > tentadores estão diagnosticados na caixa da §1. O corte **por método** (um commit
+  > para `find_by_id`, outro para `delete`) **seria** verde, e está recusado lá por
+  > **coesão**: é uma lei só, provada por um corpo de teste só. A mudança lógica é
+  > **uma** (o endereço do funcionário ganha uma parte), e cada arquivo a recebe em
+  > 1–3 linhas.
   >
   > **Sobre o critério 4 (não misturar port com adapter):** aqui não há criação de
   > port nem de adapter — os dois existem desde as Stages 3.2 e 3.3. O que o
@@ -791,7 +865,7 @@ ao menos uma Task que o entrega, e nenhuma Task existe sem item que a justifique
 | CA17 — a suíte de lei exercita o NUL e **fake e Postgres concordam** | **02** | suíte de contrato, `[fake]` **e** `[postgres]` |
 | CA18 — acento, ZWJ, `\n`, aspas, 1000 chars continuam aceitos verbatim | **02** | teste parametrizado (prova que a restrição não cresceu) |
 | CA19 — `DayPeriod.from_string("xpto")` → `InvalidDayPeriodError` (`StaffError`) | **02** | `test_shift_preference.py` + `test_exceptions.py` |
-| CA20 — nenhuma asserção de **decisão de acesso** muda; fixtures de fechamento com aditividade **provada** (critério refinado — §1) | **01** | `git diff -- tests/unit/features/identity/` + as duas fixtures nominadas no commit |
+| CA20 — nenhuma asserção de **decisão de acesso** muda; fixtures de fechamento com aditividade **provada** (critério refinado — §1) | **01** | `test_rbac_additivity.py` (as duas asserções de subconjunto, mecânicas) + `git diff -- tests/unit/features/identity/` + as duas fixtures nominadas no commit |
 | CA21 — nenhuma rota nasce; sem `features/staff/adapters/in/` | **06** | `test_composition_root_staff.py` + §3 |
 | CA22 — `make check` verde | **todas** + §3 | comando de verificação de cada Task |
 | CA23 — cobertura ≥ 90% em cada arquivo novo/tocado | **todas** + §3 | `--cov-report=term-missing` lido arquivo a arquivo |
@@ -913,7 +987,7 @@ Task 05 (port AccessGuard + leis + fake) ─────────► Task 06 
 
 | Risco | Fallback |
 |---|---|
-| A Task 04 é grande e a tentação de dividi-la reaparece durante a execução | Os três cortes e a razão de cada um estão nomeados na caixa da §1. Se ainda assim aparecer um corte verde não previsto, **PARE e registre** — é achado sobre o plano, não licença |
+| A Task 04 é grande e a tentação de dividi-la reaparece durante a execução | Os três cortes **por camada** estão diagnosticados como vermelhos na caixa da §1, e o corte **por método** está lá reconhecido como verde e recusado por **coesão** — a decisão já foi tomada, não é para retomá-la na Fase 4. Se aparecer um corte verde **ainda não catalogado**, **PARE e registre**: é achado sobre o plano, não licença |
 | Um teste de use case constrói o command sem `unit_id` e passa por acidente na 03 | `unit_id` é **obrigatório sem default**: construir sem ele é `TypeError` na coleta. É o teste que falha, não o silêncio |
 | A cobertura de branch cair no passo 4 do guard (condição de três termos) | CA4 e CA5 são os dois ramos, e o projeto mede **branch coverage** (`branch = true`). Se o `term-missing` apontar ramo faltante, cobrir — nunca justificar |
 | O tradutor coagir `tenant_id` para `""` sem que nada reclame | L-AG3 tem teste contra o fake (Task 05) **e** asserção no wiring (Task 06). Se aparecer um caminho em que o ator sem tenant chega ao `AuthorizedScope`, é **blocker**, não ajuste |
@@ -991,6 +1065,15 @@ Task 05 (port AccessGuard + leis + fake) ─────────► Task 06 
   "direção sugerida" e Stage candidata.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
+> **As três entradas de 2026-08-17 são PRÉ-execução, e isso é deliberado.** O
+> cabeçalho acima descreve a §7 como preenchida durante/após a Fase 4; estas
+> nasceram na Fase 3B, antes da Task 01. Elas podem estar aqui porque o gate
+> reservado `stage 3.4: technical approved` **ainda não existe** — sem ele,
+> `check_technical_postexec.py` não tem baseline com que comparar e não arma o
+> freeze (script §2, "sem commit de aprovação ⇒ nada a comparar"). Consequência
+> prática: as três **fazem parte da baseline aprovada**, não são desvios sobre
+> ela. As entradas da Fase 4 virão depois destas, e aí sim sob o freeze.
+
 ---
 
 ### 2026-08-17 — [decision] Fase 3B — exceção que o tradutor levanta ao cumprir L-AG3 — Claude
@@ -1021,10 +1104,16 @@ espelho de `tests/unit/features/staff/` é por camada
 (`domain/`, `application/`, `adapters/`), então nenhuma delas é o lugar natural.
 **Decisão:** `tests/unit/features/staff/test_bc_independence.py`, na raiz do pacote
 de testes da feature.
-**Razão:** trivial e sem alternativa real. Segue o precedente de
-`tests/unit/test_bootstrap.py`, que já ocupa a raiz por ser transversal às camadas
-(LAYOUT §2). Pô-lo dentro de `application/` afirmaria que a regra é da camada
-application, o que é falso — ela vale para o BC inteiro.
+**Razão:** trivial e sem alternativa real. Pô-lo dentro de `application/`
+afirmaria que a regra é da camada application, o que é falso — ela vale para o BC
+inteiro. **É analogia, não precedente literal, e a distinção importa:**
+`tests/unit/test_bootstrap.py` ocupa a raiz de `tests/unit/` por ser transversal
+às camadas; o arquivo proposto ocupa a raiz de `tests/unit/features/staff/`, que
+hoje só tem `__init__.py`. O raciocínio é o mesmo (teste de regra transversal sobe
+ao nível cuja fronteira a regra descreve), mas **abre um slot novo** naquele nível
+em vez de ocupar um já usado. Nada valida caminhos sob `tests/` — `check_layout.py`
+só olha `src/` —, então a escolha é de convenção, e fica declarada aqui em vez de
+implícita.
 
 ---
 
