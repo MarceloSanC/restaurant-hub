@@ -1578,4 +1578,73 @@ da §3 e a linha de risco da §5. As três fixtures estão nominadas no corpo do
 commit da Task 01. **O concept não é retocado, e o silêncio não é o motivo — a
 decisão está escrita aqui.**
 
+---
+
+### 2026-08-18 — [decision] Fase de aplicação da auditoria da Stage (skill `stage-audit`) — sessão de auditoria + subagente de aplicação
+
+**Contexto.** A auditoria read-only da Stage 3.4 (PR #42, HEAD `fcf26fd`)
+**aprovou com findings, nenhum bloqueante**. Validou os **23** critérios do
+concept §11 e os **17** itens do §3 deste technical (5 verificações funcionais +
+12 do checklist de fechamento), **item a item e com evidência própria** — não por
+leitura do que a execução afirmava.
+
+**Gates reproduzidos pela auditoria, em árvore limpa:**
+
+- `make check` verde; **1987 passed**;
+- cobertura **99,93%** global e **100%** em **cada um** dos **22** arquivos de
+  `src/` do diff da Stage;
+- **9** contratos de `lint-imports` `KEPT` (inclusive `bc-independence`, sem
+  nenhum `ignore_imports` — CA13);
+- suíte de contrato: **167 passed**, com `[fake]` **e** `[postgres]` por lei;
+- CA21 verificado **pelo negativo**: com o container parado a suíte **falha
+  alto**, não pula.
+
+**Verificações que a auditoria fez além do checklist.**
+
+- **Cenário de ataque reproduzido** — gerente da unidade A agindo sobre
+  funcionário da unidade B: morre nos **dois** lados (guard, pelo passo 5; e
+  port, por `EmployeeNotFoundError` em `find_by_id`/`delete`, nunca um erro que
+  confirme a existência — CA9/CA10).
+- **Mutação de L-AG3 re-rodada** (`if not actor_tenant_id` → `if actor_tenant_id
+  is None`): a defesa é **real** — os parâmetros `[vazio]` reprovam, como a
+  `[deviation]` de 2026-08-18 registrou.
+
+**Decisão sobre as caixinhas do §3 — via e justificativa.** O flip literal
+`[ ]`→`[x]` dos **17** itens do §3 fica **adiado para pós-merge**. O freeze de
+`status: done` (CONVENTIONS §3.4, `scripts/check_technical_postexec.py`) rejeita
+edição fora da janela §7 enquanto a Stage não mergeia — **verificado
+empiricamente nesta sessão**: o flip produz `10 erro(s)` contra a baseline
+`9e9ac66` (`stage 3.4: technical approved`), e foi **revertido** (o script volta
+a `OK — 1 arquivo(s) validado(s)`). A validação integral de cada item vive
+**nesta entrada** e no comentário de veredito do PR #42 — mesmo tratamento das
+Stages 3.1 (`384400c`), 3.2 (`1441b5a`) e 3.3 (`7bb20ad`). As caixinhas do
+concept §11 (que **não** têm freeze — o script varre só
+`docs/stages/*/technical.md`) foram marcadas, as **23**, no commit `1ec39a2`.
+
+**Disposição dos seis findings da auditoria** — todos **documentais**, nenhum de
+código:
+
+| # | O que era | Disposição |
+|---|---|---|
+| F1 | concept §11 (CA20) ainda dizia *"as **duas** fixtures"* de fechamento de vocabulário; a execução provou que são **três** | **corrigido** (`1ec39a2`) — nota datada (2026-08-18) sob o CA20, o mesmo dispositivo já usado ali em 2026-08-17, remetendo à `[decision]` desta §7. **Sem** regressão `done → draft`: nenhum critério muda de conteúdo. As quatro medições foram **reconferidas** pela auditoria e as quatro se confirmam — em especial a decisiva, o 5º bullet do `definition_of_done` do bloco 3.4 do `roadmap.md` (`roadmap.md:754`), que fala em **categoria sem contagem**; a condição que forçou a regressão da Fase 3B **não** ocorre |
+| F2 | o bloco 3.6 do `roadmap.md` listava **dois** findings recebidos da 3.4; faltavam os **três** que a execução produziu | **corrigido** (`1ec39a2`) — três linhas novas em *"Insumos já decididos"*: (i) o router **não pode** inferir "tenant-wide" de `unit_id is None` (trataria ação de funcionário de um `owner` como não-escopada, **com erro silencioso** — o mais perigoso da lista); (ii) `DayPeriod.from_string` sem produtor, sendo o parser HTTP o produtor natural; (iii) varrer os ADRs `3_4_0002`/`0004`/`0005` atrás de intervalos de CA defasados pela renumeração do corte |
+| F3 | `unit_id` **vazio** (string vazia) não tem lei simétrica à de `tenant_id` no port | **sem ação** — é **fail-closed**: unidade vazia não casa registro nenhum, e o efeito é negar, não vazar. Já coberto pelo `[finding]` escalado do identificador vazio na borda (Stage candidata **3.6**) |
+| F4 | os 16 use cases e o `AccessGuard` seguem **sem consumidor** | **sem ação** — é **decisão declarada** da Stage, não omissão: concept §4 ("consumidor desta Stage") e §12 assumem o custo, e a 3.6 é quem o consome |
+| F5 | um único `# noqa: ANN401` em todo o diff | **observação, sem ação** — justificado na `[deviation]` da Task 06, com a terceira alternativa (`Protocol` estrutural local) nomeada e recusada com razão |
+| F6 | o corpo do PR #42 trazia `> **Auditoria:** \`review\`` | **corrigido nesta fase** — gravado como `` `complete` `` (CONVENTIONS §3.6), com o veredito comentado no PR |
+
+**Aprendizado registrado em skill** (item 6 do relatório de auditoria). Os
+**três** achados de refutação que vieram **de fora** nesta Stage (Checkpoint C e
+auditoria de testes) são a **mesma** falha em três eixos — lei com quantificador
+(*"nunca"*, *"vazio **ou** ausente"*, *"uma vez **por alvo**"*) travada por teste
+que fixa **um** valor do domínio quantificado, com 100% de linha e de branch.
+Virou o conceito de falso verde **"Lei universal, representante estreito"** em
+`.claude/skills/stage-audit/SKILL.md` (commit `6fbf41f`), com pergunta de caça,
+procedimento (enumerar o domínio → parametrizar nas **duas** implementações;
+onde fixar representante, **mutar a guarda para condicioná-la a esse
+representante e exigir vermelho**), o sinal de alerta forte (as duas
+implementações de um port cobradas por conjuntos de valores **diferentes** — foi
+a assimetria que denunciou o caso) e a tabela das três instâncias com os hashes
+`5d69846` e `d0fafe0`.
+
 <!-- END: post-execution -->
