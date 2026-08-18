@@ -3,7 +3,7 @@ title: Technical — Acesso e escopo de equipe
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, staff-access-scope, permissao, escopo-unidade, access-guard, byte-nul, tenant-wide]
-status: draft
+status: done
 created_at: 2026-08-12
 updated_at: 2026-08-17
 stage_id: 3.4-staff-access-scope
@@ -135,43 +135,58 @@ Total: **6 Tasks**, o mesmo número que o concept validou em §12. Pelo critéri
 §"Verificação de gap no Concept", isto é **refinamento de detalhe**, não gap
 material — o concept **não regride**.
 
-### ⚠️ Contradição devolvida ao sponsor (NÃO decidida aqui)
+### O achado do CA20, e por que ele é o critério funcionando
 
-**CA20 do concept §11 — replicado literalmente no `definition_of_done` do bloco
-3.4 do `roadmap.md` — é inalcançável.** O texto diz:
-
-> *"A suíte de identity passa **sem alteração de asserção**. Se alguma precisar
-> mudar, a mudança não foi aditiva — é achado, não ajuste."*
+**Não houve contradição, e não há decisão pendente.** A redação original do CA20
+dizia: *"A suíte de identity passa sem alteração de asserção. Se alguma precisar
+mudar, a mudança não foi aditiva — **é achado, não ajuste**."* A cláusula final
+**antecipa** este caso e prescreve o tratamento; a Fase 3B mediu o caso e o
+registrou como achado, que é exatamente o que o critério mandava.
 
 Medição em `tests/unit/features/identity/domain/test_role_permission.py`:
 
 - **linha 27** — `test_permission_e_conjunto_fechado` assere o conjunto **exato**
-  de valores do enum `Permission` (`{"manage_platform", "manage_tenant",
+  dos valores do enum `Permission` (`{"manage_platform", "manage_tenant",
   "manage_users"}`). Acrescentar `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS` **exige**
   editar esta asserção.
 - **linhas 66–78** — `test_conteudo_exato_do_mapa_por_papel` é parametrizado com o
   conjunto **exato** de permissões de cada papel. Dar as duas permissões novas a
   `OWNER`, `MANAGER` e `HR` **exige** editar três dos cinco parâmetros.
 
-As duas são testes de **fechamento/exatidão** — precisamente o mecanismo que o
+**O conteúdo do achado:** a inferência do CA20 — *"asserção mudou ⟹ a mudança não
+foi aditiva"* — tem **falso positivo para teste de fechamento**. Um teste que
+assere o conjunto exato de um enum é *projetado* para exigir atualização
+consciente quando o conjunto cresce legitimamente; é o mecanismo que o
 ADR 3.4.0008 §5 pede (*"adding a permission to the set is a deliberate, reviewed
-act rather than a one-word diff that no test observes"*). Editá-las **é** o ato
-deliberado que o desenho quer, não o sintoma de mudança não-aditiva que CA20 tenta
-pegar. O concept, portanto, exige simultaneamente o teste de fechamento e a sua
-imutabilidade.
+act rather than a one-word diff that no test observes"*). Ele mudar é o teste
+funcionando. A regressão que CA20 existe para pegar é outra: **decisão de acesso**
+mudando — papel perdendo permissão, permissão sumindo do enum, `authorize`
+passando a permitir o que negava.
 
-**Não foi decidido aqui.** A leitura operativa que este plano executa — a que
-preserva a intenção de CA20 sem afirmar o falso — está escrita como critério da
-Task 01:
+**Disposição — corrigido, via regressão de CONVENTIONS §3.2.** CA20 é **critério
+de aceite**, e a §7 deste technical pode *registrar* um achado mas não pode
+*emendar* um critério do concept sem inverter a hierarquia Concept > Technical.
+Além disso o **mesmo texto vivia no 5º bullet do `definition_of_done` do bloco 3.4
+do `roadmap.md`** (fonte mais alta), de modo que uma nota só aqui deixaria dois
+artefatos superiores afirmando o que a Stage viola na leitura literal — a classe
+de afirmação-sobre-outro-arquivo que este Step vem policiando. Os três commits:
 
-> nenhuma asserção que expresse **uma decisão de acesso** (quem é negado, com qual
-> erro, em que ordem de passo) muda; mudam **apenas** as duas fixtures de
-> fechamento de vocabulário acima, e a lista exata das duas edições vai no corpo
-> do commit.
+| Commit | O que faz |
+|---|---|
+| `c3523f5` | `chore(concept): revert to draft — revision-from-technical: falso positivo do CA20` |
+| `e64f95e` | `stage 3.4: conceptual approved` — CA20 refinado + nota datada com o achado; §5.11 e a linha de risco da §10 em sincronia |
+| `9c4a30f` | `docs(staff): reconciliar o DoD do bloco 3.4 com o CA20 refinado [3.4/--]` |
 
-O sponsor decide se (a) CA20 é reescrito nesses termos no concept (regressão
-`done → draft` + nota no `roadmap.md`), ou (b) o plano deve fazer outra coisa.
-**Enquanto não houver decisão, a Task 01 não é dada por aceita.**
+**O conjunto de comportamentos protegidos não mudou** — mudou a formulação que o
+descreve. O critério refinado (concept §11) discrimina:
+
+- **proibido** — qualquer asserção de **decisão de acesso** mudar (par
+  papel↔permissão já existente; resultado de `AuthorizeActionUseCase` nos casos já
+  cobertos);
+- **obrigatório** — as fixtures de **fechamento de vocabulário** acompanharem o
+  conjunto que cresceu, com a aditividade **provada**: nenhum membro removido de
+  `Permission`, nenhum papel perdendo permissão que já tinha, e as duas fixtures
+  listadas nominalmente no corpo do commit.
 
 ### Pré-condições
 
@@ -331,13 +346,18 @@ CA21, e é o que torna esta Stage segura de mergear.
 - **Critério de aceite:**
   - CA1, CA2, CA3, CA6, CA7 (vocabulário e mapa) e CA4, CA5, CA8 (autorização),
     todos com teste verde.
-  - **CA20, na leitura operativa registrada em §1 (⚠️ devolvida ao sponsor):**
-    nenhuma asserção que expresse **decisão de acesso** muda; mudam **apenas** as
-    duas fixtures de fechamento de vocabulário
-    (`test_permission_e_conjunto_fechado`, linha 27; e os três parâmetros de
-    `test_conteudo_exato_do_mapa_por_papel`, linhas 66–78). O corpo do commit lista
-    as duas edições, nominalmente. **Esta Task não é dada por aceita antes da
-    decisão do sponsor sobre CA20.**
+  - **CA20 (refinado — concept §11), nas duas metades:**
+    - *proibido* — nenhuma asserção de **decisão de acesso** muda: nenhum par
+      papel↔permissão **já existente** é alterado, e nenhum caso já coberto de
+      `AuthorizeActionUseCase` muda de resultado. Verificação:
+      `git diff -- tests/unit/features/identity/` não mostra edição fora das duas
+      fixtures de fechamento.
+    - *obrigatório, com aditividade **provada*** — as duas fixtures de fechamento
+      (`test_permission_e_conjunto_fechado`, linha 27; e três dos cinco parâmetros
+      de `test_conteudo_exato_do_mapa_por_papel`, linhas 66–78) acompanham o
+      conjunto que cresceu. A prova é positiva, não a ausência de falha: nenhum
+      membro removido de `Permission`, nenhum papel perdendo permissão que já
+      tinha, e **as duas fixtures listadas nominalmente no corpo do commit**.
   - Cobertura ≥ 90% nos três arquivos de `src/` tocados.
 - **Comando de verificação:**
   ```powershell
@@ -771,7 +791,7 @@ ao menos uma Task que o entrega, e nenhuma Task existe sem item que a justifique
 | CA17 — a suíte de lei exercita o NUL e **fake e Postgres concordam** | **02** | suíte de contrato, `[fake]` **e** `[postgres]` |
 | CA18 — acento, ZWJ, `\n`, aspas, 1000 chars continuam aceitos verbatim | **02** | teste parametrizado (prova que a restrição não cresceu) |
 | CA19 — `DayPeriod.from_string("xpto")` → `InvalidDayPeriodError` (`StaffError`) | **02** | `test_shift_preference.py` + `test_exceptions.py` |
-| CA20 — suíte de identity sem alteração de asserção **(⚠️ devolvido — §1)** | **01** | `git diff -- tests/unit/features/identity/`, na leitura operativa da §1 |
+| CA20 — nenhuma asserção de **decisão de acesso** muda; fixtures de fechamento com aditividade **provada** (critério refinado — §1) | **01** | `git diff -- tests/unit/features/identity/` + as duas fixtures nominadas no commit |
 | CA21 — nenhuma rota nasce; sem `features/staff/adapters/in/` | **06** | `test_composition_root_staff.py` + §3 |
 | CA22 — `make check` verde | **todas** + §3 | comando de verificação de cada Task |
 | CA23 — cobertura ≥ 90% em cada arquivo novo/tocado | **todas** + §3 | `--cov-report=term-missing` lido arquivo a arquivo |
@@ -849,8 +869,10 @@ git diff --name-only (git merge-base origin/develop HEAD) HEAD -- src/   # cober
 
 - [ ] Todas as 6 Tasks commitadas, cada uma com seu check verde
 - [ ] `make check` verde no branch
-- [ ] **Decisão do sponsor sobre CA20 registrada** (§1 ⚠️) — concept ajustado ou
-      leitura operativa confirmada
+- [ ] **CA20 nas duas metades** — `git diff -- tests/unit/features/identity/` sem
+      edição fora das duas fixtures de fechamento, e as duas nominadas no commit da
+      Task 01 (o critério refinado vive no concept §11; o achado que o produziu,
+      na §7 deste documento)
 - [ ] Cobertura ≥ 90% global **e** em cada arquivo de `src/` tocado
 - [ ] Auditoria de Testes com todos os itens "sim"
 - [ ] Checkpoints A, B e C executados, com todos os achados dispostos
@@ -896,7 +918,7 @@ Task 05 (port AccessGuard + leis + fake) ─────────► Task 06 
 | A cobertura de branch cair no passo 4 do guard (condição de três termos) | CA4 e CA5 são os dois ramos, e o projeto mede **branch coverage** (`branch = true`). Se o `term-missing` apontar ramo faltante, cobrir — nunca justificar |
 | O tradutor coagir `tenant_id` para `""` sem que nada reclame | L-AG3 tem teste contra o fake (Task 05) **e** asserção no wiring (Task 06). Se aparecer um caminho em que o ator sem tenant chega ao `AuthorizedScope`, é **blocker**, não ajuste |
 | Postgres da worktree anterior retido na porta, e a Stage testar contra infra alheia | `docker ps` antes do gate; a limpeza é no **setup** de cada suíte (convenção do projeto), não no teardown |
-| CA20 permanecer indecidido e a Task 01 ser dada por aceita por inércia | O critério da Task 01 diz literalmente que ela **não é aceita** sem a decisão. O checklist da §3 repete |
+| A metade "obrigatório" do CA20 virar licença para editar qualquer asserção de identity que atrapalhe | A aditividade é **provada, não afirmada**: nenhum membro removido de `Permission`, nenhum papel perdendo permissão, e só as duas fixtures de fechamento nominadas no commit. Edição fora delas é **achado**, e o `git diff` da §3 a expõe |
 | A execução inventar migration por causa do texto do ADR 3.3.0006 | §Premissas e a verificação funcional da §3: `git diff -- migrations/` **vazio**. O texto do ADR já está reconciliado na nota do `roadmap.md` |
 | A execução tentar resolver algum `[finding]` da 3.6 (mapa de status, paginação, cópia repetida) | A matriz §2.1 declara que os três ADRs da 3.6 **não têm Task aqui**; qualquer arquivo em `adapters/in/` reprova CA21 |
 
@@ -1006,21 +1028,28 @@ application, o que é falso — ela vale para o BC inteiro.
 
 ---
 
-### 2026-08-17 — [finding] Fase 3B — CA20 é literalmente inalcançável — Claude
+### 2026-08-17 — [finding] Fase 3B — a inferência do CA20 tem falso positivo para teste de fechamento — Claude (achado **corrigido** nesta Stage)
 
-**Contexto:** CA20 do concept §11 e o `definition_of_done` do bloco 3.4 do
-`roadmap.md` exigem que a suíte de identity passe *"sem alteração de asserção"*.
-Medição em `tests/unit/features/identity/domain/test_role_permission.py`: a linha
-27 assere o conjunto **exato** dos valores do enum `Permission`, e as linhas 66–78
-parametrizam o conjunto **exato** de permissões por papel. Acrescentar duas
-permissões e concedê-las a três papéis **exige** editar as duas — e são exatamente
-os testes de fechamento que o ADR 3.4.0008 §5 pede que existam.
-**Direção sugerida:** reescrever CA20 nos termos operativos da §1 deste documento
-(nenhuma asserção que expresse **decisão de acesso** muda; mudam apenas as fixtures
-de fechamento de vocabulário, listadas nominalmente no commit), com a mesma
-correção na nota datada do `roadmap.md`.
-**Stage candidata:** **esta** — a correção é do concept desta Stage e precisa da
-decisão do sponsor **antes** do aceite da Task 01. **Não foi decidida pelo autor
-deste plano.**
+**Contexto:** CA20 do concept §11 — e o 5º bullet do `definition_of_done` do bloco
+3.4 do `roadmap.md`, que carregava o **mesmo texto** — exigiam que a suíte de
+identity passasse *"sem alteração de asserção"*. Medição em
+`tests/unit/features/identity/domain/test_role_permission.py`: a linha 27 assere o
+conjunto **exato** dos valores do enum `Permission`, e as linhas 66–78 parametrizam
+o conjunto **exato** de permissões por papel. Acrescentar duas permissões e
+concedê-las a três papéis **exige** editar as duas.
+
+**O achado:** a inferência *"asserção mudou ⟹ a mudança não foi aditiva"* tem falso
+positivo para teste de **fechamento** — que existe justamente para exigir
+atualização consciente quando o conjunto cresce legitimamente (o mecanismo que o
+ADR 3.4.0008 §5 pede). A cláusula *"é achado, não ajuste"* do próprio CA20 mandava
+tratar o caso assim: **o critério disparou como projetado.**
+
+**Disposição: corrigido** (não escalado, não devolvido) — regressão de
+CONVENTIONS §3.2, porque CA20 é **critério de aceite** e porque a §7 de um
+technical não pode emendar um critério do concept sem inverter a hierarquia
+Concept > Technical. Commits: `c3523f5` (revert to draft), `e64f95e`
+(`stage 3.4: conceptual approved`, com CA20 refinado + nota datada com este
+achado), `9c4a30f` (reconciliação do DoD do roadmap, que carregava o mesmo texto).
+**O conjunto de comportamentos protegidos é o mesmo; mudou a formulação.**
 
 <!-- END: post-execution -->
