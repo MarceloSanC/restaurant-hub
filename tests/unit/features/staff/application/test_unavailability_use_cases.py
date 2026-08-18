@@ -11,6 +11,7 @@ trocado por `<` deixaria de rejeitar — ou passaria a rejeitar — sem que nenh
 outro caso percebesse.
 """
 
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 
@@ -51,6 +52,7 @@ pytestmark = pytest.mark.unit
 _A = TenantId("tenant-a")
 _B = TenantId("tenant-b")
 _U1 = UnitId("u1")
+_U2 = UnitId("u2")
 _E1 = EmployeeId("e1")
 _F1 = JobFunctionId("f1")
 
@@ -81,7 +83,7 @@ def _fakes(*periodos: UnavailabilityPeriod) -> StaffFakes:
 
 
 def _gravados(fakes: StaffFakes) -> tuple[UnavailabilityPeriod, ...]:
-    employee = fakes.employees.find_by_id(_A, _E1)
+    employee = fakes.employees.find_by_id(_A, _U1, _E1)
     assert employee is not None
     return employee.unavailabilities
 
@@ -100,7 +102,9 @@ def _remover(fakes: StaffFakes) -> RemoveUnavailabilityUseCase:
 def test_registrar_acrescenta_o_periodo() -> None:
     fakes = _fakes()
     resultado = _registrar(fakes).execute(
-        RegisterUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(8, 12))
+        RegisterUnavailabilityCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+        )
     )
     assert resultado.unavailabilities == (_periodo(8, 12),)
     assert _gravados(fakes) == (_periodo(8, 12),)
@@ -109,7 +113,9 @@ def test_registrar_acrescenta_o_periodo() -> None:
 def test_registrar_acrescenta_sem_apagar_os_existentes() -> None:
     fakes = _fakes(_periodo(8, 12))
     _registrar(fakes).execute(
-        RegisterUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(14, 16))
+        RegisterUnavailabilityCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(14, 16)
+        )
     )
     assert _gravados(fakes) == (_periodo(8, 12), _periodo(14, 16))
 
@@ -120,7 +126,9 @@ def test_periodo_sobreposto_e_recusado_e_nada_e_gravado() -> None:
 
     with pytest.raises(OverlappingUnavailabilityError):
         _registrar(fakes).execute(
-            RegisterUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(10, 14))
+            RegisterUnavailabilityCommand(
+                tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(10, 14)
+            )
         )
 
     assert "employees.update" not in fakes.store.calls[antes:]
@@ -131,7 +139,9 @@ def test_periodo_adjacente_e_aceito() -> None:
     """Fronteira exata da semântica semi-aberta: fim == início **não** conflita."""
     fakes = _fakes(_periodo(8, 12))
     _registrar(fakes).execute(
-        RegisterUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(12, 14))
+        RegisterUnavailabilityCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(12, 14)
+        )
     )
     assert _gravados(fakes) == (_periodo(8, 12), _periodo(12, 14))
 
@@ -141,7 +151,10 @@ def test_registrar_em_registro_inexistente_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _registrar(fakes).execute(
             RegisterUnavailabilityCommand(
-                tenant_id=_A, employee_id=EmployeeId("fantasma"), period=_periodo(8, 12)
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=EmployeeId("fantasma"),
+                period=_periodo(8, 12),
             )
         )
 
@@ -150,7 +163,9 @@ def test_registrar_em_registro_de_outro_tenant_e_not_found() -> None:
     fakes = _fakes()
     with pytest.raises(EmployeeNotFoundError):
         _registrar(fakes).execute(
-            RegisterUnavailabilityCommand(tenant_id=_B, employee_id=_E1, period=_periodo(8, 12))
+            RegisterUnavailabilityCommand(
+                tenant_id=_B, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+            )
         )
     assert _gravados(fakes) == ()
 
@@ -161,7 +176,10 @@ def test_precedencia_registro_inexistente_vence_periodo_sobreposto() -> None:
     with pytest.raises(StaffError) as excecao:
         _registrar(fakes).execute(
             RegisterUnavailabilityCommand(
-                tenant_id=_A, employee_id=EmployeeId("fantasma"), period=_periodo(10, 14)
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=EmployeeId("fantasma"),
+                period=_periodo(10, 14),
             )
         )
     assert type(excecao.value) is EmployeeNotFoundError
@@ -174,7 +192,9 @@ def test_remover_tira_o_periodo_por_valor() -> None:
     """O período não tem identidade: quem o remove reapresenta o **valor**."""
     fakes = _fakes(_periodo(8, 12), _periodo(14, 16))
     resultado = _remover(fakes).execute(
-        RemoveUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(8, 12))
+        RemoveUnavailabilityCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+        )
     )
     assert resultado.unavailabilities == (_periodo(14, 16),)
     assert _gravados(fakes) == (_periodo(14, 16),)
@@ -186,7 +206,9 @@ def test_remover_periodo_ausente_e_erro_e_nada_e_gravado() -> None:
 
     with pytest.raises(UnavailabilityNotFoundError):
         _remover(fakes).execute(
-            RemoveUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(14, 16))
+            RemoveUnavailabilityCommand(
+                tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(14, 16)
+            )
         )
 
     assert "employees.update" not in fakes.store.calls[antes:]
@@ -198,7 +220,10 @@ def test_remover_de_registro_inexistente_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _remover(fakes).execute(
             RemoveUnavailabilityCommand(
-                tenant_id=_A, employee_id=EmployeeId("fantasma"), period=_periodo(8, 12)
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=EmployeeId("fantasma"),
+                period=_periodo(8, 12),
             )
         )
 
@@ -207,7 +232,9 @@ def test_remover_de_registro_de_outro_tenant_e_not_found() -> None:
     fakes = _fakes(_periodo(8, 12))
     with pytest.raises(EmployeeNotFoundError):
         _remover(fakes).execute(
-            RemoveUnavailabilityCommand(tenant_id=_B, employee_id=_E1, period=_periodo(8, 12))
+            RemoveUnavailabilityCommand(
+                tenant_id=_B, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+            )
         )
     assert _gravados(fakes) == (_periodo(8, 12),)
 
@@ -223,7 +250,10 @@ def test_precedencia_registro_inexistente_vence_periodo_ausente() -> None:
     with pytest.raises(StaffError) as excecao:
         _remover(fakes).execute(
             RemoveUnavailabilityCommand(
-                tenant_id=_A, employee_id=EmployeeId("fantasma"), period=_periodo(14, 16)
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=EmployeeId("fantasma"),
+                period=_periodo(14, 16),
             )
         )
     assert type(excecao.value) is EmployeeNotFoundError
@@ -232,9 +262,68 @@ def test_precedencia_registro_inexistente_vence_periodo_ausente() -> None:
 def test_ciclo_registrar_e_remover_volta_ao_estado_inicial() -> None:
     fakes = _fakes()
     _registrar(fakes).execute(
-        RegisterUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(8, 12))
+        RegisterUnavailabilityCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+        )
     )
     _remover(fakes).execute(
-        RemoveUnavailabilityCommand(tenant_id=_A, employee_id=_E1, period=_periodo(8, 12))
+        RemoveUnavailabilityCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+        )
     )
     assert _gravados(fakes) == ()
+
+
+# --- CA11: o endereço do funcionário tem três partes (ADR 3.4.0007) ----------
+#
+# **O que estes testes matam.** Antes da Stage 3.4 o use case resolvia o
+# registro por `(tenant_id, employee_id)`, e a unidade do path só era conferida
+# contra o **ator** — nunca contra o **registro**. Um gerente da unidade A
+# alcançava qualquer funcionário do mesmo restaurante pondo a própria unidade no
+# endereço. Se algum use case voltar a resolver por `(tenant, id)`, o registro é
+# encontrado apesar da unidade alheia e a escrita acontece.
+#
+# A asserção sobre `fakes.store.calls` é o que dá poder ao teste: `pytest.raises`
+# sozinho não distingue "não encontrou porque a unidade não bate" de "não
+# encontrou por outro motivo e nada mais foi tentado". A conduta esperada é
+# **exatamente** uma chamada — o lookup — e nenhuma escrita depois dela.
+
+
+def _movimentos_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], object]]]:
+    return [
+        (
+            "register_unavailability",
+            lambda fakes: _registrar(fakes).execute(
+                RegisterUnavailabilityCommand(
+                    tenant_id=_A, unit_id=_U2, employee_id=_E1, period=_periodo(8, 12)
+                )
+            ),
+        ),
+        (
+            "remove_unavailability",
+            lambda fakes: _remover(fakes).execute(
+                RemoveUnavailabilityCommand(
+                    tenant_id=_A, unit_id=_U2, employee_id=_E1, period=_periodo(8, 12)
+                )
+            ),
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("nome", "executar"),
+    _movimentos_com_unidade_alheia(),
+    ids=[nome for nome, _ in _movimentos_com_unidade_alheia()],
+)
+def test_ca11_movimento_com_unidade_alheia_nao_alcanca_o_registro(
+    nome: str, executar: Callable[[StaffFakes], object]
+) -> None:
+    fakes = _fakes(_periodo(8, 12))
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StaffError) as excecao:
+        executar(fakes)
+    assert type(excecao.value) is EmployeeNotFoundError, nome
+
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"], nome
+    assert _gravados(fakes) == (_periodo(8, 12),), nome

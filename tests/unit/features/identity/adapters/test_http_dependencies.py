@@ -252,17 +252,82 @@ def test_unidade_de_outro_tenant_tambem_e_recusada() -> None:
     ("papel_alvo", "esperado"),
     [
         (Role.EMPLOYEE, {Permission.MANAGE_USERS}),
-        (Role.MANAGER, {Permission.MANAGE_USERS}),
-        (Role.HR, {Permission.MANAGE_USERS}),
-        (Role.OWNER, {Permission.MANAGE_USERS, Permission.MANAGE_TENANT}),
+        (
+            Role.MANAGER,
+            {
+                Permission.MANAGE_USERS,
+                Permission.MANAGE_STAFF,
+                Permission.MANAGE_JOB_FUNCTIONS,
+            },
+        ),
+        (
+            Role.HR,
+            {
+                Permission.MANAGE_USERS,
+                Permission.MANAGE_STAFF,
+                Permission.MANAGE_JOB_FUNCTIONS,
+            },
+        ),
+        (
+            Role.OWNER,
+            {
+                Permission.MANAGE_USERS,
+                Permission.MANAGE_TENANT,
+                Permission.MANAGE_STAFF,
+                Permission.MANAGE_JOB_FUNCTIONS,
+            },
+        ),
         (Role.PLATFORM_ADMIN, {Permission.MANAGE_USERS, Permission.MANAGE_PLATFORM}),
     ],
 )
 def test_conjunto_de_permissoes_exigidas_por_papel_alvo(
     papel_alvo: Role, esperado: set[Permission]
 ) -> None:
-    """A regra sai do mapa da 2.1, papel a papel — os cinco, sem exceção."""
+    """A regra sai do mapa da 2.1, papel a papel — os cinco, sem exceção.
+
+    **Terceira fixture de fechamento de vocabulário** (as duas primeiras estão em
+    `test_role_permission.py`): o conjunto é **derivado** do mapa de papéis, então
+    ele cresce sozinho toda vez que uma Stage estende o vocabulário — aqui, com as
+    duas permissões de equipe da 3.4. Ele crescer é a derivação funcionando: "não
+    se concede o que não se detém" passa a cobrir as capacidades novas sem que
+    ninguém precise lembrar de uma segunda tabela.
+
+    A não-regressão de **decisão de acesso** é provada logo abaixo, em
+    `test_matriz_de_quem_cria_quem_nao_regride`.
+    """
     assert dependencies.required_permissions_for_role(papel_alvo) == esperado
+
+
+# Matriz congelada de **decisão de acesso** — quem pode criar quem, medida antes
+# da Stage 3.4. Ao contrário do conjunto exigido acima (que é derivado e cresce),
+# esta matriz **não pode mudar**: ela é o comportamento observável da regra.
+# Crescer o vocabulário só pode tornar a exigência mais estrita, e mais estrita
+# sobre permissões que o próprio criador ganhou no mesmo ato é neutro.
+_BASELINE_QUEM_CRIA_QUEM: dict[Role, frozenset[Role]] = {
+    Role.PLATFORM_ADMIN: frozenset(),
+    Role.OWNER: frozenset({Role.EMPLOYEE, Role.MANAGER, Role.HR, Role.OWNER}),
+    Role.MANAGER: frozenset({Role.EMPLOYEE, Role.MANAGER, Role.HR}),
+    Role.HR: frozenset({Role.EMPLOYEE, Role.MANAGER, Role.HR}),
+    Role.EMPLOYEE: frozenset(),
+}
+
+
+@pytest.mark.parametrize("criador", list(_BASELINE_QUEM_CRIA_QUEM))
+def test_matriz_de_quem_cria_quem_nao_regride(criador: Role) -> None:
+    """Nenhuma decisão de acesso muda quando o vocabulário cresce (CA20).
+
+    A asserção é de **igualdade**, e de propósito: esta matriz é o resultado
+    observável da regra, não um vocabulário. Se uma permissão nova fizer um papel
+    ganhar ou perder a capacidade de criar outro, este teste falha — que é a
+    regressão que a fixture derivada acima, sozinha, não detectaria.
+    """
+    alcance = frozenset(
+        alvo
+        for alvo in Role
+        if dependencies.required_permissions_for_role(alvo) <= criador.permissions
+    )
+
+    assert alcance == _BASELINE_QUEM_CRIA_QUEM[criador]
 
 
 def test_nenhum_papel_pode_criar_platform_admin() -> None:

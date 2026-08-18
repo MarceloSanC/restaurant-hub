@@ -25,11 +25,13 @@ class ReactivateEmployeeUseCase:
         """Reativa o registro.
 
         Raises:
-            EmployeeNotFoundError: registro inexistente **no tenant**. O
+            EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**. O
                 desligado **não** cai aqui: ele continua endereçável por id, que
                 é justamente o que torna a recontratação possível.
         """
-        employee = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        employee = self._employees.find_by_id(
+            command.tenant_id, command.unit_id, command.employee_id
+        )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         reactivated = employee.reactivate()

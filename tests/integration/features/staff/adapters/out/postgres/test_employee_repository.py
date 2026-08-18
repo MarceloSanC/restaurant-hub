@@ -165,7 +165,7 @@ def test_l_e1_add_grava_o_agregado_inteiro_e_e_lido_de_volta(
     )
     repositorio.add(original)
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria"
     assert gravado.unit_id == _U1
@@ -185,7 +185,7 @@ def test_l_e1_add_sem_preferencia_e_sem_indisponibilidade_reidrata_none_e_vazio(
     """
     repositorio.add(_funcionario())
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.shift_preference is None
     assert gravado.unavailabilities == ()
@@ -207,7 +207,7 @@ def test_l_e1_add_com_jornada_sob_demanda_nao_grava_carga(
         )
     )
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.workload_profile == OnDemand()
 
@@ -221,7 +221,7 @@ def test_l_e1_add_com_id_ja_gravado_e_erro_e_nao_altera_o_registro(
         repositorio.add(_funcionario(name="Joana", job_function_ids=frozenset({_F2})))
     assert "e1" in str(excecao.value)
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria"
     assert gravado.job_function_ids == frozenset({_F1})
@@ -257,7 +257,7 @@ def test_l_e4_add_com_funcao_inexistente_nao_grava_nada(
         repositorio.add(_funcionario(job_function_ids=frozenset({_F1, JobFunctionId("f99")})))
     assert "f99" in str(excecao.value)
 
-    assert repositorio.find_by_id(_A, _E1) is None
+    assert repositorio.find_by_id(_A, _U1, _E1) is None
     assert _contar(banco_limpo, "employee_job_functions", "e1") == 0
 
 
@@ -303,7 +303,7 @@ def test_l_e4_vale_no_update_e_nao_grava_nada(
             _funcionario(name="Joana", job_function_ids=frozenset({JobFunctionId("f99")}))
         )
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria"
     assert gravado.job_function_ids == frozenset({_F1})
@@ -333,7 +333,7 @@ def test_l_e2_update_grava_o_agregado_inteiro(
         )
     )
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria Silva"
     assert gravado.workload_profile == OnDemand()
@@ -361,7 +361,7 @@ def test_update_escreve_as_filhas_por_diferenca_e_o_resultado_e_o_conjunto_pedid
     repositorio.add(_funcionario(job_function_ids=frozenset({_F1, _F2})))
     repositorio.update(_funcionario(job_function_ids=frozenset({_F2, _F3})))
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.job_function_ids == frozenset({_F2, _F3})
     assert _contar(banco_limpo, "employee_job_functions", "e1") == len(gravado.job_function_ids)
@@ -394,7 +394,7 @@ def test_update_que_nao_muda_nada_nas_filhas_preserva_as_filhas(
         )
     )
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria Silva"
     assert gravado.job_function_ids == frozenset({_F1, _F2})
@@ -415,7 +415,7 @@ def test_update_de_periodo_que_muda_so_o_fim_reescreve_a_linha_da_mesma_pk(
     repositorio.add(_funcionario(unavailabilities=(_periodo(10),)))
     repositorio.update(_funcionario(unavailabilities=(_periodo(10, hora_final=18),)))
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.unavailabilities == (_periodo(10, hora_final=18),)
 
@@ -436,7 +436,7 @@ def test_update_que_limpa_preferencia_e_periodos_apaga_as_filhas(
     )
     repositorio.update(_funcionario())
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.shift_preference is None
     assert gravado.unavailabilities == ()
@@ -449,7 +449,7 @@ def test_l_e2_update_de_funcionario_inexistente_nao_grava_nada(
 ) -> None:
     with pytest.raises(EmployeeNotFoundError):
         repositorio.update(_funcionario())
-    assert repositorio.find_by_id(_A, _E1) is None
+    assert repositorio.find_by_id(_A, _U1, _E1) is None
 
 
 def test_l_e2_update_com_tenant_alheio_nao_grava_nada(
@@ -459,7 +459,7 @@ def test_l_e2_update_com_tenant_alheio_nao_grava_nada(
     with pytest.raises(EmployeeNotFoundError):
         repositorio.update(_funcionario(tenant_id=_B, name="Joana"))
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria"
 
@@ -474,7 +474,7 @@ def test_l_e3_update_com_unidade_divergente_no_mesmo_tenant_e_relocacao(
     assert "u1" in str(excecao.value)
     assert "u2" in str(excecao.value)
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.unit_id == _U1
     assert gravado.name == "Maria"
@@ -507,11 +507,11 @@ def test_update_nao_move_o_funcionario_de_tenant_nem_de_unidade(
     repositorio.add(_funcionario())
     repositorio.update(_funcionario(name="Maria Silva"))
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.tenant_id == _A
     assert gravado.unit_id == _U1
-    assert repositorio.find_by_id(_B, _E1) is None
+    assert repositorio.find_by_id(_B, _U1, _E1) is None
 
 
 # ---------------------------------------------------------------------------
@@ -532,9 +532,9 @@ def test_l_e5_delete_remove_o_registro_e_as_tres_filhas_em_cascata(
             unavailabilities=(_periodo(10),),
         )
     )
-    repositorio.delete(_A, _E1)
+    repositorio.delete(_A, _U1, _E1)
 
-    assert repositorio.find_by_id(_A, _E1) is None
+    assert repositorio.find_by_id(_A, _U1, _E1) is None
     assert _contar(banco_limpo, "employee_job_functions", "e1") == 0
     assert _contar(banco_limpo, "employee_unavailabilities", "e1") == 0
     assert _contar(banco_limpo, "employee_shift_preferences", "e1") == 0
@@ -544,7 +544,7 @@ def test_l_e5_delete_de_funcionario_inexistente_e_not_found(
     repositorio: PostgresEmployeeRepository,
 ) -> None:
     with pytest.raises(EmployeeNotFoundError):
-        repositorio.delete(_A, _E1)
+        repositorio.delete(_A, _U1, _E1)
 
 
 def test_l_e5_delete_com_tenant_alheio_e_not_found_e_nao_remove(
@@ -552,8 +552,8 @@ def test_l_e5_delete_com_tenant_alheio_e_not_found_e_nao_remove(
 ) -> None:
     repositorio.add(_funcionario())
     with pytest.raises(EmployeeNotFoundError):
-        repositorio.delete(_B, _E1)
-    assert repositorio.find_by_id(_A, _E1) is not None
+        repositorio.delete(_B, _U1, _E1)
+    assert repositorio.find_by_id(_A, _U1, _E1) is not None
 
 
 def test_l_e5_remover_o_funcionario_libera_a_funcao_que_ele_referenciava(
@@ -568,7 +568,7 @@ def test_l_e5_remover_o_funcionario_libera_a_funcao_que_ele_referenciava(
     repositorio.add(_funcionario())
     assert repositorio.exists_by_job_function(_A, _F1) is True
 
-    repositorio.delete(_A, _E1)
+    repositorio.delete(_A, _U1, _E1)
 
     assert repositorio.exists_by_job_function(_A, _F1) is False
     funcoes.delete(_A, _F1)
@@ -729,7 +729,7 @@ def test_ca11_periodos_inseridos_fora_de_ordem_reidratam_por_start(
     """
     repositorio.add(_funcionario(unavailabilities=(_periodo(14), _periodo(10), _periodo(12))))
 
-    por_id = repositorio.find_by_id(_A, _E1)
+    por_id = repositorio.find_by_id(_A, _U1, _E1)
     assert por_id is not None
     assert por_id.unavailabilities == (_periodo(10), _periodo(12), _periodo(14))
 
@@ -836,7 +836,7 @@ def test_ca16_funcionario_sem_nenhuma_funcao_levanta_ao_ser_lido(
     """
     _gravar_linha_crua(banco_limpo, com_funcao=False)
     with pytest.raises(EmptyJobFunctionsError):
-        repositorio.find_by_id(_A, _E1)
+        repositorio.find_by_id(_A, _U1, _E1)
 
 
 @pytest.mark.parametrize("nome_invalido", ["", "   "])
@@ -846,7 +846,7 @@ def test_ca16_nome_vazio_ou_so_espacos_levanta_ao_ser_lido(
     """`TEXT` aceita string vazia; a invariante é do domínio, não do schema."""
     _gravar_linha_crua(banco_limpo, name=nome_invalido)
     with pytest.raises(InvalidNameError):
-        repositorio.find_by_id(_A, _E1)
+        repositorio.find_by_id(_A, _U1, _E1)
 
 
 def test_ca16_periodos_sobrepostos_levantam_ao_serem_lidos(
@@ -865,7 +865,7 @@ def test_ca16_periodos_sobrepostos_levantam_ao_serem_lidos(
         ),
     )
     with pytest.raises(OverlappingUnavailabilityError):
-        repositorio.find_by_id(_A, _E1)
+        repositorio.find_by_id(_A, _U1, _E1)
 
 
 def test_ca16_a_listagem_tambem_levanta_e_nao_omite_a_linha_corrompida(
@@ -910,7 +910,7 @@ def test_ca17_round_trip_preserva_valor_e_escala_do_decimal(
         )
     )
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     perfil = gravado.workload_profile
     assert isinstance(perfil, FixedSchedule)
@@ -935,7 +935,7 @@ def test_ca17_round_trip_preserva_datetime_ingenuo_com_microssegundos(
     )
     repositorio.add(_funcionario(unavailabilities=(periodo,)))
 
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     (voltou,) = gravado.unavailabilities
     assert voltou == periodo

@@ -98,23 +98,32 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
         workload_profile=_FIXA,
         job_function_ids=frozenset({_FUNCAO}),
     ),
-    RenameEmployeeCommand(tenant_id=_TENANT, employee_id=_FUNCIONARIO, name="Joana"),
+    RenameEmployeeCommand(
+        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, name="Joana"
+    ),
     AssignJobFunctionsCommand(
-        tenant_id=_TENANT, employee_id=_FUNCIONARIO, job_function_ids=frozenset({_FUNCAO})
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        job_function_ids=frozenset({_FUNCAO}),
     ),
     ChangeWorkloadProfileCommand(
-        tenant_id=_TENANT, employee_id=_FUNCIONARIO, workload_profile=OnDemand()
+        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, workload_profile=OnDemand()
     ),
     DeclareShiftPreferenceCommand(
-        tenant_id=_TENANT, employee_id=_FUNCIONARIO, shift_preference=_PREFERENCIA
+        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, shift_preference=_PREFERENCIA
     ),
-    RegisterUnavailabilityCommand(tenant_id=_TENANT, employee_id=_FUNCIONARIO, period=_PERIODO),
-    RemoveUnavailabilityCommand(tenant_id=_TENANT, employee_id=_FUNCIONARIO, period=_PERIODO),
-    DeactivateEmployeeCommand(tenant_id=_TENANT, employee_id=_FUNCIONARIO),
-    ReactivateEmployeeCommand(tenant_id=_TENANT, employee_id=_FUNCIONARIO),
-    DeleteEmployeeCommand(tenant_id=_TENANT, employee_id=_FUNCIONARIO),
+    RegisterUnavailabilityCommand(
+        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, period=_PERIODO
+    ),
+    RemoveUnavailabilityCommand(
+        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, period=_PERIODO
+    ),
+    DeactivateEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO),
+    ReactivateEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO),
+    DeleteEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO),
     CopyEmployeeToUnitCommand(
-        tenant_id=_TENANT, employee_id=_FUNCIONARIO, target_unit_id=UnitId("u2")
+        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, target_unit_id=UnitId("u2")
     ),
     ListJobFunctionsQuery(tenant_id=_TENANT),
     ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE),
@@ -339,3 +348,106 @@ def test_nenhum_campo_de_dto_e_anotado_com_entidade(dto_class: type) -> None:
         assert JobFunction not in folhas, (
             f"{dto_class.__name__}.{nome} expõe a entidade JobFunction"
         )
+
+
+# ---------------------------------------------------------------------------
+# CA11, metade "commands" — a unidade entra no pedido
+# ---------------------------------------------------------------------------
+
+_COMMANDS_DE_REGISTRO_EXISTENTE = (
+    RenameEmployeeCommand,
+    AssignJobFunctionsCommand,
+    ChangeWorkloadProfileCommand,
+    DeclareShiftPreferenceCommand,
+    RegisterUnavailabilityCommand,
+    RemoveUnavailabilityCommand,
+    DeactivateEmployeeCommand,
+    ReactivateEmployeeCommand,
+    DeleteEmployeeCommand,
+    CopyEmployeeToUnitCommand,
+)
+# Contagem do ADR 3.4.0007 §3, na mesma forma do `_DTOS_ESPERADOS` da §4.
+_COMMANDS_DE_REGISTRO_EXISTENTE_ESPERADOS = 10
+
+
+def test_sao_dez_os_commands_que_atuam_sobre_registro_existente() -> None:
+    """Guarda a contagem do ADR 3.4.0007 §3, como `_DTOS_ESPERADOS` guarda a §4.
+
+    Um 11º command de registro existente que nascesse sem `unit_id` escaparia da
+    parametrizacao abaixo se a lista fosse literal e ninguem a confrontasse.
+    """
+    dos_dez = set(_COMMANDS_DE_REGISTRO_EXISTENTE)
+    com_employee_id = {
+        cls
+        for cls in _dtos_declarados()
+        if any(campo.name == "employee_id" for campo in dataclasses.fields(cls))
+        and cls.__module__ == commands.__name__
+    }
+    assert dos_dez == com_employee_id
+    assert len(dos_dez) == _COMMANDS_DE_REGISTRO_EXISTENTE_ESPERADOS
+
+
+@pytest.mark.parametrize(
+    "command_class", _COMMANDS_DE_REGISTRO_EXISTENTE, ids=lambda cls: cls.__name__
+)
+def test_a_unidade_e_obrigatoria_e_sem_default(command_class: type) -> None:
+    """CA11 — `unit_id` existe e **nao** tem default.
+
+    Um `unit_id: UnitId | None = None` faria o campo ser esquecivel, e omitir
+    viraria caminho de escalada — a propriedade que o ADR 3.2.0002 ja comprou
+    para o tenant. Sem default, construir sem ele e `TypeError` na coleta.
+    """
+    campos = {campo.name: campo for campo in dataclasses.fields(command_class)}
+
+    assert "unit_id" in campos, f"{command_class.__name__} nao carrega a unidade"
+    assert campos["unit_id"].default is dataclasses.MISSING
+    assert campos["unit_id"].default_factory is dataclasses.MISSING
+
+
+@pytest.mark.parametrize(
+    "command_class", _COMMANDS_DE_REGISTRO_EXISTENTE, ids=lambda cls: cls.__name__
+)
+def test_construir_sem_a_unidade_e_type_error(command_class: type) -> None:
+    """A obrigatoriedade e do sistema de tipos **e** do runtime.
+
+    A assercao sobre `dataclasses.MISSING` prova a declaracao; esta prova o
+    efeito. Sao coisas diferentes: um `__init__` escrito a mao poderia declarar
+    o campo sem default e ainda assim aceitar a omissao.
+    """
+    argumentos: dict[str, object] = {
+        "tenant_id": _TENANT,
+        "employee_id": _FUNCIONARIO,
+        "name": "Joana",
+        "job_function_ids": frozenset({_FUNCAO}),
+        "workload_profile": OnDemand(),
+        "shift_preference": _PREFERENCIA,
+        "period": _PERIODO,
+        "target_unit_id": UnitId("u2"),
+    }
+    nomes = {campo.name for campo in dataclasses.fields(command_class)} - {"unit_id"}
+
+    with pytest.raises(TypeError, match="unit_id"):
+        command_class(**{nome: argumentos[nome] for nome in nomes})
+
+
+def test_copiar_distingue_a_unidade_de_origem_da_de_destino() -> None:
+    """O par em que confundir os dois campos produz a exfiltracao cross-unidade.
+
+    `unit_id` e a ORIGEM — a unidade que endereca o registro a ser lido — e
+    `target_unit_id` e o destino. Sao campos distintos e nao permutaveis: trocar
+    um pelo outro copiaria o registro errado, ou leria de uma unidade a que o
+    chamador nao tem acesso.
+    """
+    origem = UnitId("u-origem")
+    destino = UnitId("u-destino")
+
+    comando = CopyEmployeeToUnitCommand(
+        tenant_id=_TENANT,
+        unit_id=origem,
+        employee_id=_FUNCIONARIO,
+        target_unit_id=destino,
+    )
+
+    assert comando.unit_id == origem
+    assert comando.target_unit_id == destino
+    assert comando.unit_id != comando.target_unit_id

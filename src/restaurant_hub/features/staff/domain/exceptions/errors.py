@@ -26,14 +26,35 @@ class InvalidIdentifierError(StaffError):
 
 
 class InvalidNameError(StaffError):
-    """Nome obrigatório vazio ou só-whitespace (`Employee`/`JobFunction`).
+    """Nome obrigatório vazio, só-whitespace, ou contendo o byte NUL.
 
-    Nomes válidos são preservados verbatim (ADR 3.1.0002); o único formato
-    rejeitado é a ausência de conteúdo (nenhum caractere não-whitespace).
+    Nomes válidos são preservados verbatim (ADR 3.1.0002). São **dois** os
+    formatos rejeitados, e só dois: a ausência de conteúdo (nenhum caractere
+    não-whitespace) e a presença do byte NUL (0x00) — este último porque o driver do
+    Postgres o recusa client-side, e sem a regra no domínio o fake gravaria o que
+    o banco real não aceita (ADR 3.4.0003 §1 e §2). Acento, emoji com ZWJ,
+    quebra de linha, aspas e strings longas **continuam aceitos**: a restrição é exatamente do
+    tamanho da divergência medida, não maior.
+
+    `reason` existe para que a mensagem não afirme algo falso — dizer "não pode
+    ser vazio" sobre um nome que tem conteúdo seria descrever o defeito errado a
+    quem recebe o 422.
     """
 
-    def __init__(self, entity: str) -> None:
-        super().__init__(f"nome de {entity} não pode ser vazio")
+    def __init__(self, entity: str, reason: str = "não pode ser vazio") -> None:
+        super().__init__(f"nome de {entity} {reason}")
+
+
+class InvalidDayPeriodError(StaffError):
+    """Período do dia desconhecido — fora do conjunto fechado de `DayPeriod`.
+
+    Espelha `InvalidRoleError` de identity: a conversão de texto para o enum
+    falha como **erro de domínio**, e não como o `ValueError` cru do `StrEnum`
+    (que não é `StaffError`, não tem handler, e viraria 500 na borda).
+    """
+
+    def __init__(self, value: str) -> None:
+        super().__init__(f"período do dia inválido: {value!r}")
 
 
 class InvalidWeeklyHoursError(StaffError):

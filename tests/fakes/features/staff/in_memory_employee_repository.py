@@ -1,11 +1,25 @@
 """Fake in-memory de `EmployeeRepository` — visão de funcionários do store do par.
 
 Implementa as sete leis L-E1…L-E7 do concept §4 **e a `L-ORD`** (ADR 3.3.0003,
-Stage 3.3). A **ordem de checagem** é normativa e está codificada aqui: lookup
-por `(tenant_id, id)` **antes** de qualquer outra guarda. Invertê-la faria o port
-responder um erro que confirma a existência de registro de outro tenant (§5.4) —
-e é o único defeito desta classe que passaria despercebido, porque o teste "erro
-certo no tenant certo" continuaria verde.
+Stage 3.3). A **ordem de checagem** é normativa e está codificada aqui: o lookup
+vem **antes** de qualquer outra guarda. Invertê-la faria o port responder um erro
+que confirma a existência de registro de outro tenant (§5.4) — e é o único
+defeito desta classe que passaria despercebido, porque o teste "erro certo no
+tenant certo" continuaria verde.
+
+**O endereço tem três partes desde a Stage 3.4** (ADR 3.4.0007): `find_by_id` e
+`delete` resolvem por `(tenant_id, unit_id, id)`, e este fake carrega a mesma lei
+que o adapter Postgres — **é o ponto do ADR §2**. Filtrar a unidade só no `WHERE`
+do real deixaria este fake aceitando o que o real recusa, e a suíte de contrato,
+que roda **um corpo só** contra os dois, não teria como expressar a diferença.
+Sobre um invariante de **segurança**, essa divergência é estritamente pior do que
+sobre um detalhe de armazenamento.
+
+`update` continua resolvendo por `(tenant_id, id)`: a unidade vem dentro da
+entidade, e compará-la com a gravada **é** a L-E3. Escopar o lookup do `update`
+pela unidade recebida transformaria toda relocalização em `EmployeeNotFoundError`
+e apagaria a lei — por isso `_find` (tenant + id) e `_find_no_endereco`
+(tenant + unidade + id) são dois métodos, e não um.
 
 **Sobre a ordenação (`L-ORD`), e por que ela é mais que um `sorted` na
 listagem.** O `sorted()` do Python sobre `str` compara por **codepoint**, medido
@@ -89,8 +103,11 @@ class InMemoryEmployeeRepository:
         self._guard_job_functions(employee)
         self._store.employees[employee.id] = employee
 
-    def delete(self, tenant_id: TenantId, employee_id: EmployeeId) -> None:
-        """L-E5 — remoção definitiva guardada.
+    def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
+        """L-E5 — remoção definitiva guardada, no endereço de três partes.
+
+        Registro de **outra unidade do mesmo tenant** é `EmployeeNotFoundError`,
+        idêntico ao de outro tenant (ADR 3.4.0007 §4).
 
         A guarda de referências **não tem produtor em v1**: nada referencia o
         registro de funcionário no escopo atual. Quem a preenche é o Step 4
@@ -98,20 +115,25 @@ class InMemoryEmployeeRepository:
         agora para que a 3.4/Step 4 não precisem retroagir o contrato do port.
         """
         self._store.record("employees.delete")
-        if self._find(tenant_id, employee_id) is None:
+        if self._find_no_endereco(tenant_id, unit_id, employee_id) is None:
             raise EmployeeNotFoundError(employee_id)
         del self._store.employees[employee_id]
 
     # --- leitura -------------------------------------------------------------
 
-    def find_by_id(self, tenant_id: TenantId, employee_id: EmployeeId) -> Employee | None:
-        """Registro do tenant, ou `None`. **Não filtra por estado**: o desligado
-        continua endereçável por id (ADR 3.2.0006).
+    def find_by_id(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId
+    ) -> Employee | None:
+        """Registro do tenant **e da unidade**, ou `None`. **Não filtra por
+        estado**: o desligado continua endereçável por id (ADR 3.2.0006).
+
+        Registro de outra unidade do mesmo tenant devolve `None` — o resultado
+        não distingue "não existe" de "existe onde você não alcança".
 
         `L-ORD` — `unavailabilities` sai ordenada por `start`.
         """
         self._store.record("employees.find_by_id")
-        employee = self._find(tenant_id, employee_id)
+        employee = self._find_no_endereco(tenant_id, unit_id, employee_id)
         if employee is None:
             return None
         return _com_periodos_ordenados(employee)
@@ -145,9 +167,27 @@ class InMemoryEmployeeRepository:
     # --- internos ------------------------------------------------------------
 
     def _find(self, tenant_id: TenantId, employee_id: EmployeeId) -> Employee | None:
-        """Lookup por `(tenant_id, id)` — espelha o `WHERE tenant_id = … AND id = …`."""
+        """Lookup por `(tenant_id, id)` — espelha o `WHERE tenant_id = … AND id = …`.
+
+        **Só o `update` o usa**, e de propósito: é ele quem precisa enxergar o
+        registro cuja unidade diverge da recebida, para poder levantar
+        `EmployeeRelocationError` em vez de `EmployeeNotFoundError` (L-E3).
+        """
         employee = self._store.employees.get(employee_id)
         if employee is None or employee.tenant_id != tenant_id:
+            return None
+        return employee
+
+    def _find_no_endereco(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId
+    ) -> Employee | None:
+        """Lookup pelo endereço de três partes — espelha o `WHERE` do adapter.
+
+        `find_by_id` e `delete` resolvem por aqui (ADR 3.4.0007 §1): registro de
+        outra unidade do mesmo tenant é **indistinguível de inexistente**.
+        """
+        employee = self._find(tenant_id, employee_id)
+        if employee is None or employee.unit_id != unit_id:
             return None
         return employee
 

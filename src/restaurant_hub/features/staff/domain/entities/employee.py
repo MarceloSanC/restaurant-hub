@@ -82,6 +82,12 @@ class Employee:
             raise InvalidIdentifierError("unidade do funcionário")
         if not self.name.strip():
             raise InvalidNameError("funcionário")
+        # Só o byte NUL, e nada além dele (ADR 3.4.0003 §2): é a única entrada da
+        # bateria adversarial da 3.3 em que fake e Postgres divergiam. Aqui, em
+        # `__post_init__`, a regra vale para TODO caminho de construção — `rename`
+        # (que passa por `dataclasses.replace`) e a reidratação do mapper da 3.3.
+        if "\x00" in self.name:
+            raise InvalidNameError("funcionário", reason="não pode conter o byte NUL")
         if not self.job_function_ids:
             raise EmptyJobFunctionsError()
         # Par a par sobre a coleção inteira: cobre a reidratação da 3.3 e as

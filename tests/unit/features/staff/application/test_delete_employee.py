@@ -35,6 +35,7 @@ from restaurant_hub.features.staff.application.use_cases.list_employees import (
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -52,6 +53,7 @@ pytestmark = pytest.mark.unit
 _A = TenantId("tenant-a")
 _B = TenantId("tenant-b")
 _U1 = UnitId("u1")
+_U2 = UnitId("u2")
 _E1 = EmployeeId("e1")
 _F1 = JobFunctionId("f1")
 _F2 = JobFunctionId("f2")
@@ -98,15 +100,15 @@ def _apagar(fakes: StaffFakes) -> DeleteEmployeeUseCase:
 def test_remove_o_registro_definitivamente() -> None:
     fakes = _fakes()
     _grava(fakes)
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, employee_id=_E1))
-    assert fakes.employees.find_by_id(_A, _E1) is None
+    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    assert fakes.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_o_removido_some_das_duas_listagens() -> None:
     """Diferente do desligado, que só some de uma."""
     fakes = _fakes()
     _grava(fakes)
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
     listar = ListEmployeesUseCase(fakes.employees)
     assert listar.execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1)) == ()
     assert (
@@ -119,17 +121,17 @@ def test_remover_desligado_tambem_funciona() -> None:
     fakes = _fakes()
     _grava(fakes)
     DeactivateEmployeeUseCase(fakes.employees).execute(
-        DeactivateEmployeeCommand(tenant_id=_A, employee_id=_E1)
+        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, employee_id=_E1))
-    assert fakes.employees.find_by_id(_A, _E1) is None
+    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    assert fakes.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_remover_libera_a_funcao_que_o_registro_bloqueava() -> None:
     """O contrapositivo da guarda de L-JF3: sem referenciador, a função sai."""
     fakes = _fakes()
     _grava(fakes)
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, employee_id=_E1))
+    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
     assert fakes.employees.exists_by_job_function(_A, _F1) is False
 
 
@@ -138,7 +140,7 @@ def test_registro_inexistente_e_not_found_sem_tentar_apagar() -> None:
     antes = len(fakes.store.calls)
     with pytest.raises(EmployeeNotFoundError):
         _apagar(fakes).execute(
-            DeleteEmployeeCommand(tenant_id=_A, employee_id=EmployeeId("fantasma"))
+            DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("fantasma"))
         )
     assert "employees.delete" not in fakes.store.calls[antes:]
 
@@ -149,10 +151,10 @@ def test_registro_de_outro_tenant_e_not_found_e_nao_e_removido() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(EmployeeNotFoundError):
-        _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_B, employee_id=_E1))
+        _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_B, unit_id=_U1, employee_id=_E1))
 
     assert "employees.delete" not in fakes.store.calls[antes:]
-    assert fakes.employees.find_by_id(_A, _E1) is not None
+    assert fakes.employees.find_by_id(_A, _U1, _E1) is not None
 
 
 @pytest.mark.parametrize(
@@ -185,10 +187,39 @@ def test_nenhum_cenario_construivel_de_v1_produz_employee_in_use_error(cenario: 
     }
     _grava(fakes, **configuracoes[cenario])  # type: ignore[arg-type]
 
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, employee_id=_E1))
-    assert fakes.employees.find_by_id(_A, _E1) is None
+    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    assert fakes.employees.find_by_id(_A, _U1, _E1) is None
 
 
 def test_employee_in_use_error_existe_e_e_instanciavel() -> None:
     """A classe é contrato publicado para o Step 4, não classe morta por engano."""
     assert "e-1" in str(EmployeeInUseError("e-1"))
+
+
+# --- CA11: o endereço do funcionário tem três partes (ADR 3.4.0007) ----------
+#
+# **O que estes testes matam.** Antes da Stage 3.4 o use case resolvia o
+# registro por `(tenant_id, employee_id)`, e a unidade do path só era conferida
+# contra o **ator** — nunca contra o **registro**. Um gerente da unidade A
+# alcançava qualquer funcionário do mesmo restaurante pondo a própria unidade no
+# endereço. Se algum use case voltar a resolver por `(tenant, id)`, o registro é
+# encontrado apesar da unidade alheia e a escrita acontece.
+#
+# A asserção sobre `fakes.store.calls` é o que dá poder ao teste: `pytest.raises`
+# sozinho não distingue "não encontrou porque a unidade não bate" de "não
+# encontrou por outro motivo e nada mais foi tentado". A conduta esperada é
+# **exatamente** uma chamada — o lookup — e nenhuma escrita depois dela.
+
+
+def test_ca11_remocao_com_unidade_alheia_nao_alcanca_o_registro() -> None:
+    """O `delete` nem chega a ser tentado — e o registro sobrevive intacto."""
+    fakes = _fakes()
+    _grava(fakes)
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StaffError) as excecao:
+        _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=_E1))
+    assert type(excecao.value) is EmployeeNotFoundError
+
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"]
+    assert fakes.employees.find_by_id(_A, _U1, _E1) is not None

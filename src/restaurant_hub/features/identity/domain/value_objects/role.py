@@ -40,11 +40,39 @@ class Role(StrEnum):
 
 # Mapa total papel -> permissões. `platform_admin` fica restrito a MANAGE_PLATFORM:
 # acesso de plataforma não é acesso de restaurante (concept §5, regra 7).
-# `manager` e `hr` coincidem em identity e divergem no eixo de visibilidade.
+#
+# `manager` e `hr` coincidem em identity e divergem no eixo de visibilidade — e
+# **dentro do BC `staff` eles são equivalentes**: detêm exatamente as mesmas duas
+# permissões de equipe, com o mesmo alcance (as unidades de que são membros).
+# O eixo real da divergência é **família de operação**, não alcance: RH mexe no
+# cadastro do funcionário; escala é do gerente e do dono (ADR 3.4.0006 §1 e §2).
+#
+# **Restrição para frente, vinculante (ADR 3.4.0006 §3):** a Stage 4.x **não pode
+# conceder a `hr` nenhuma permissão sobre a escala**. É nisso, e só nisso, que a
+# divergência hr/manager consiste — este é o arquivo que quem estender o mapa lê.
 _ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.PLATFORM_ADMIN: frozenset({Permission.MANAGE_PLATFORM}),
-    Role.OWNER: frozenset({Permission.MANAGE_TENANT, Permission.MANAGE_USERS}),
-    Role.MANAGER: frozenset({Permission.MANAGE_USERS}),
-    Role.HR: frozenset({Permission.MANAGE_USERS}),
+    Role.OWNER: frozenset(
+        {
+            Permission.MANAGE_TENANT,
+            Permission.MANAGE_USERS,
+            Permission.MANAGE_STAFF,
+            Permission.MANAGE_JOB_FUNCTIONS,
+        }
+    ),
+    Role.MANAGER: frozenset(
+        {
+            Permission.MANAGE_USERS,
+            Permission.MANAGE_STAFF,
+            Permission.MANAGE_JOB_FUNCTIONS,
+        }
+    ),
+    Role.HR: frozenset(
+        {
+            Permission.MANAGE_USERS,
+            Permission.MANAGE_STAFF,
+            Permission.MANAGE_JOB_FUNCTIONS,
+        }
+    ),
     Role.EMPLOYEE: frozenset(),
 }

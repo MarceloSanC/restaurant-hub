@@ -16,19 +16,62 @@ Por isso as asserções são sobre **o que foi injetado**, não sobre o tipo do 
 case: `isinstance(deps.staff_create_employee, CreateEmployeeUseCase)` é
 verdadeiro por construção do `dataclass` e não prova nada que o type-checker já
 não provasse.
+
+**Stage 3.4 — o tradutor do `AccessGuard`, e a prova de que nada mais nasceu.**
+O arquivo ganha dois assuntos, e os dois pertencem a ele porque o sujeito é o
+mesmo módulo. O primeiro é o `_IdentityAccessGuard` (CA15): ele é a implementação
+de **produção** das quatro leis do port, e a Stage não teria onde prová-las de
+outro modo — o fake as prova em
+`tests/unit/features/staff/application/test_access_guard_laws.py`, e lei que só
+um dos dois obrigados cumpre não é lei. O segundo é o CA21: a Stage promete que
+**nenhuma rota nasce**, e a promessa fica verificada aqui, contra o
+`build_http_wiring` real, em vez de afirmada num documento.
 """
 
 import ast
+import contextlib
+import importlib
+import inspect
 import pathlib
 
 import pytest
 
-from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
+from restaurant_hub.composition_root import (
+    ApplicationDependencies,
+    _IdentityAccessGuard,
+    build_http_wiring,
+    wire_dependencies,
+)
+from restaurant_hub.features.identity.application.dtos.results import AuthorizedActor
+from restaurant_hub.features.identity.application.errors import (
+    InvalidAccessTokenError,
+    PermissionDeniedError,
+    UnitNotVisibleError,
+)
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    RestaurantId,
+    UserId,
+)
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    UnitId as IdentityUnitId,
+)
+from restaurant_hub.features.identity.domain.value_objects.permission import Permission
+from restaurant_hub.features.identity.domain.value_objects.role import Role
 from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
     PostgresEmployeeRepository,
 )
 from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
     PostgresJobFunctionRepository,
+)
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    AccessGuard,
+    AuthorizedScope,
+)
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    TenantId as StaffTenantId,
+)
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    UnitId as StaffUnitId,
 )
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 
@@ -201,3 +244,382 @@ def test_um_import_proibido_plantado_reprova() -> None:
     alvos = [no.module for no in ast.walk(arvore) if isinstance(no, ast.ImportFrom) and no.module]
 
     assert any(_MODULO_DE_ADAPTERS in alvo for alvo in alvos)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.4 — o tradutor do `AccessGuard` (CA15) e a prova de CA21
+#
+# O tradutor é a implementação de **produção** das quatro leis do port. O fake
+# as prova em `tests/unit/features/staff/application/test_access_guard_laws.py`;
+# aqui o sujeito é a outra implementação, porque lei que só um dos dois obrigados
+# cumpre não é lei (ADR 3.4.0001 §Implementation notes).
+# ---------------------------------------------------------------------------
+
+
+class _SpyIdentityGuard:
+    """`IdentityGuard` de mentira, para exercitar o tradutor sem banco.
+
+    Não é fake de port — é dublê do objeto **embrulhado**, que o composition
+    root guarda como `Any` por necessidade (o pacote `in` é keyword Python).
+    Guarda o que recebeu, para que as asserções de tradução sejam sobre o valor
+    que atravessou, e não sobre o que o teste imaginou ter passado.
+    """
+
+    def __init__(self, result: AuthorizedActor | None = None) -> None:
+        self.result = result
+        self.received: dict[str, object] = {}
+        self.authentication_error: Exception | None = None
+        self.authorization_error: Exception | None = None
+
+    def authenticate(self, request: object) -> object:
+        if self.authentication_error is not None:
+            raise self.authentication_error
+        return ("ator", request)
+
+    def authorize(
+        self,
+        actor: object,
+        permission: object,
+        *,
+        tenant_id: object = None,
+        unit_id: object = None,
+    ) -> AuthorizedActor:
+        self.received = {
+            "actor": actor,
+            "permission": permission,
+            "tenant_id": tenant_id,
+            "unit_id": unit_id,
+        }
+        if self.authorization_error is not None:
+            raise self.authorization_error
+        assert self.result is not None
+        return self.result
+
+
+def _authorized_actor(
+    *,
+    actor_tenant_id: str | None = "t1",
+    scope_unit_id: str | None = "u1",
+    role: Role = Role.MANAGER,
+) -> AuthorizedActor:
+    """`AuthorizedActor` **real**, e não um stub com os mesmos atributos.
+
+    O DTO de identity é o que o tradutor lê. Um stub anônimo passaria a testar a
+    forma que este arquivo imaginou, e um campo renomeado do outro lado da
+    fronteira sairia da suíte em silêncio para reaparecer em runtime.
+    """
+    return AuthorizedActor(
+        user_id=UserId("user-1"),
+        role=role,
+        actor_tenant_id=RestaurantId(actor_tenant_id) if actor_tenant_id is not None else None,
+        scope_tenant_id=RestaurantId("t1"),
+        scope_unit_id=IdentityUnitId(scope_unit_id) if scope_unit_id is not None else None,
+    )
+
+
+# **A segunda dimensão de L-AG3 — e ela não é simetria decorativa.**
+#
+# Com as leis escritas só sobre `manage_staff`, a recusa fica travada **por
+# permissão** e não como propriedade do guard: condicionar a guarda a
+# `permission != "manage_job_functions"` mantinha a suíte inteira verde e
+# deixava `AuthorizedScope(tenant_id=StaffTenantId(None))` sair daqui. Medido —
+# a mutação sobrevivia nesta suíte e na do fake, e a permissão que escapava era
+# justamente a de alcance **tenant-wide**.
+#
+# O código do tradutor já argumenta contra isso: ele impõe L-AG3 em vez de
+# confiar no "`platform_admin` é negado antes, no passo 2" porque o mapa RBAC é
+# editável. Uma profundidade de defesa que cobre metade do vocabulário é meia
+# defesa.
+_ALVOS = [
+    pytest.param("manage_staff", "u1", id="unit-scoped"),
+    pytest.param("manage_job_functions", None, id="tenant-wide"),
+]
+
+
+def test_ca15_o_access_guard_de_staff_tem_a_forma_do_port() -> None:
+    """`AccessGuard` é `Protocol` — `isinstance` não responde, a assinatura sim.
+
+    A conformidade estrutural já é gate em `make typecheck` (o campo do contêiner
+    é anotado com o port). Esta asserção cobre o que `mypy` não alcança —
+    `tests/integration/` e `tests/e2e/` —, onde uma aridade divergente viraria
+    `TypeError` em execução: a mesma propriedade que a Task 04 usou para a
+    assinatura de `find_by_id`.
+    """
+    deps = _dependencias()
+
+    for method in ("authenticate", "authorize"):
+        port_signature = [
+            (name, parameter.kind, parameter.default)
+            for name, parameter in inspect.signature(
+                getattr(AccessGuard, method)
+            ).parameters.items()
+            if name != "self"
+        ]
+        translator_signature = [
+            (name, parameter.kind, parameter.default)
+            for name, parameter in inspect.signature(
+                getattr(deps.staff_access_guard, method)
+            ).parameters.items()
+        ]
+        assert translator_signature == port_signature, f"{method} divergiu do port"
+
+
+@pytest.mark.parametrize("method", ["authenticate", "authorize"])
+def test_o_spy_tem_a_mesma_assinatura_do_identity_guard_real(method: str) -> None:
+    """Fecha a outra ponta da conformidade — a que faltava.
+
+    Há teste de que o **tradutor** casa com o `AccessGuard`; não havia nenhum de
+    que o `_SpyIdentityGuard` casa com o `IdentityGuard` **real**. É a metade que
+    importa para os sete testes de comportamento acima: eles exercitam o tradutor
+    contra o dublê, e o objeto embrulhado em produção chega como `Any` (o pacote
+    `in` é keyword Python), então **nada** no repositório compara os dois. Um
+    parâmetro renomeado ou promovido a posicional em `IdentityGuard.authorize`
+    passaria por toda a suíte e só apareceria como `TypeError` no primeiro
+    request da Stage 3.6.
+
+    Comparam-se nome, `kind` e default — **não** as anotações. O spy anota tudo
+    como `object` de propósito: ele é um dublê, não uma segunda implementação, e
+    exigir os tipos de identity aqui obrigaria o arquivo a reencenar o
+    vocabulário do outro BC para provar uma propriedade de forma.
+    """
+    identity_guard = importlib.import_module(
+        "restaurant_hub.features.identity.adapters.in.http.dependencies"
+    ).IdentityGuard
+
+    def forma(alvo: object) -> list[tuple[str, object, object]]:
+        return [
+            (name, parameter.kind, parameter.default)
+            for name, parameter in inspect.signature(getattr(alvo, method)).parameters.items()
+        ]
+
+    assert forma(_SpyIdentityGuard) == forma(identity_guard), (
+        f"o dublê divergiu de IdentityGuard.{method} — os testes de comportamento "
+        f"do tradutor passariam contra uma forma que não existe mais"
+    )
+
+
+def test_ca15_o_tradutor_embrulha_o_mesmo_identity_guard_das_rotas() -> None:
+    """Identidade de objeto, e não `isinstance`.
+
+    Um **segundo** `IdentityGuard` satisfaria qualquer teste de tipo e faria as
+    duas bordas — a de identity e a de staff da Stage 3.6 — decidirem acesso
+    sobre grafos distintos, com dois `AuthorizeActionUseCase` e dois `Engine`.
+    A divergência só apareceria como comportamento estranho em produção.
+    """
+    deps = _dependencias()
+
+    assert deps.staff_access_guard._guard is deps.identity_guard
+
+
+def test_l_ag1_o_tradutor_nao_traduz_a_excecao_de_autenticacao() -> None:
+    """L-AG1 na implementação de produção: **o mesmo objeto** sobe.
+
+    É o que fará a faixa 401 da Stage 3.6 ser byte-idêntica à de identity. Um
+    `try/except` que relançasse um `InvalidAccessTokenError()` novo passaria em
+    `pytest.raises(InvalidAccessTokenError)` e falha aqui.
+    """
+    spy = _SpyIdentityGuard()
+    spy.authentication_error = InvalidAccessTokenError()
+    translator = _IdentityAccessGuard(spy)
+
+    with pytest.raises(InvalidAccessTokenError) as excinfo:
+        translator.authenticate(object())
+
+    assert excinfo.value is spy.authentication_error
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_l_ag2_o_tradutor_nao_traduz_a_excecao_de_autorizacao(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """L-AG2, e com `UnitNotVisibleError` de propósito.
+
+    É a exceção que carrega a conversão de `UnitNotFoundError` feita por
+    identity — o fechamento do oráculo de enumeração cross-tenant
+    (ADR 2.4.0001 §5). Embrulhá-la aqui apagaria essa propriedade sem que nenhum
+    teste de identity notasse.
+
+    Parametrizado sobre as duas permissões porque este é o **ramo de recusa**:
+    sem isso, `manage_job_functions` só apareceria em caminho de sucesso, e um
+    `except` que a tratasse à parte não teria teste que o observasse.
+    """
+    spy = _SpyIdentityGuard()
+    spy.authorization_error = UnitNotVisibleError("user-1", "u9")
+    translator = _IdentityAccessGuard(spy)
+
+    with pytest.raises(UnitNotVisibleError) as excinfo:
+        translator.authorize(object(), permission, tenant_id="t1", unit_id=unit)
+
+    assert excinfo.value is spy.authorization_error
+
+
+# Os dois valores que L-AG3 nomeia — *"`tenant_id` vazio **ou** ausente"* —, e
+# são casos **distintos** na implementação, não sinônimos:
+#
+# - `None` é o que `AuthorizedActor.actor_tenant_id` traz hoje para
+#   `platform_admin`, o único papel sem tenant;
+# - `""` é o que a coerção proibida (`StaffTenantId(actor_tenant_id or "")`)
+#   produziria, e é o balde de falso isolamento que `InvalidIdentifierError`
+#   nomeia — um tenant vazio consulta como se fosse um tenant.
+#
+# Parametrizar é o que dá refutação à guarda escrita: com só `None` na suíte,
+# trocar `if not actor_tenant_id` por `if actor_tenant_id is None` deixa tudo
+# verde e reabre o caso vazio. É a mesma parametrização que
+# `test_access_guard_laws.py` já aplica do lado do fake — as duas
+# implementações do port passam a ser cobradas pelo mesmo par de valores.
+_ATOR_SEM_TENANT = [
+    pytest.param(None, Role.PLATFORM_ADMIN, id="ausente"),
+    pytest.param("", Role.MANAGER, id="vazio"),
+]
+
+
+@pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
+    permission: str,
+    unit: str | None,
+    actor_tenant_id: str | None,
+    role: Role,
+) -> None:
+    """L-AG3 imposta no tradutor, e não delegada à matriz de papéis.
+
+    Hoje `platform_admin` já seria negado antes, no passo 2 do guard, por não
+    deter as permissões de staff. Confiar nisso faria o isolamento de tenant
+    refém do mapa RBAC — que é editável, e cuja edição nenhum teste desta lei
+    observaria. Por isso o cenário montado é o pior caso: identity **autorizou**
+    e devolveu um ator sem tenant — e vale para as **duas** permissões, porque
+    L-AG3 é propriedade do guard e não de uma capacidade.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
+    translator = _IdentityAccessGuard(spy)
+
+    with pytest.raises(PermissionDeniedError):
+        translator.authorize(object(), permission, tenant_id="t1", unit_id=unit)
+
+
+@pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
+    permission: str,
+    unit: str | None,
+    actor_tenant_id: str | None,
+    role: Role,
+) -> None:
+    """A mutação que L-AG3 existe para matar, escrita como asserção.
+
+    `StaffTenantId(actor_tenant_id or "")` compila, passa mypy strict e devolve
+    um escopo de tenant vazio — consultas que atravessariam todos os tenants.
+    A exigência aqui é dupla: **nada** é devolvido, e o que sobe é negação.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
+    translator = _IdentityAccessGuard(spy)
+
+    scopes = []
+    with contextlib.suppress(PermissionDeniedError):
+        scopes.append(translator.authorize(object(), permission, tenant_id="t1", unit_id=unit))
+
+    assert scopes == []
+
+
+def test_o_tradutor_converte_o_vocabulario_nos_dois_sentidos() -> None:
+    """`str` opaca entra como tipo de identity; `AuthorizedActor` sai como escopo.
+
+    A asserção é sobre o que **chegou** ao objeto embrulhado, e não sobre o que o
+    teste passou: é a única forma de provar que a permissão virou `Permission` de
+    verdade. `IdentityGuard` aceitaria a `str` crua em runtime — `Permission` é
+    `StrEnum` —, então a tradução ausente não teria sintoma nenhum aqui, e
+    reapareceria no dia em que alguém trocasse uma comparação por identidade do
+    outro lado da fronteira.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor())
+    translator = _IdentityAccessGuard(spy)
+
+    scope = translator.authorize(object(), "manage_staff", tenant_id="t1", unit_id="u1")
+
+    assert spy.received["permission"] is Permission.MANAGE_STAFF
+    assert spy.received["tenant_id"] == "t1"
+    assert spy.received["unit_id"] == "u1"
+    assert scope == AuthorizedScope(tenant_id=StaffTenantId("t1"), unit_id=StaffUnitId("u1"))
+
+
+def test_permissao_tenant_wide_atravessa_sem_unidade_e_volta_sem_unidade() -> None:
+    """`manage_job_functions` não nomeia unidade — nos dois sentidos da tradução.
+
+    Sem este caso, o ramo `unit_id is None` das duas conversões ficaria sem
+    execução, e o `None` viraria `UnitId("None")` sem que nada reclamasse.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=None))
+    translator = _IdentityAccessGuard(spy)
+
+    scope = translator.authorize(object(), "manage_job_functions", tenant_id="t1")
+
+    assert spy.received["unit_id"] is None
+    assert scope.unit_id is None
+    assert scope.tenant_id == "t1"
+
+
+def test_papel_com_bypass_volta_sem_unidade_em_permissao_unit_scoped() -> None:
+    """`unit_id=None` **não** significa "ação tenant-wide", e este é o caso que prova.
+
+    `owner` e `platform_admin` estão em `_UNIT_SCOPE_BYPASS_ROLES`
+    (`user.py:45`), então o passo 4 do guard os dispensa de nomear a unidade
+    **por papel** — kickoff #9, ADR 2.1.0001, `workforce.md` §4: o dono enxerga
+    o tenant inteiro por desenho. Um `owner` exercendo `manage_staff` sem
+    declarar unidade é autorizado, e o escopo volta com `unit_id=None` sobre uma
+    permissão que é **unit-scoped**.
+
+    **O tradutor não aperta isso, e é o correto.** Recusar aqui — exigir unidade
+    quando a permissão não é tenant-wide — contradiria decisão ratificada, e
+    mudá-la exigiria o sponsor. O que estava errado era a **docstring** do port,
+    que afirmava que `None` significa tenant-wide; foi corrigida no mesmo commit.
+    Sem este teste, a docstring corrigida voltaria a ser prosa não verificada, que
+    é a classe de defeito que esta Stage existe para fechar.
+
+    Consequência viva para a Stage 3.6, registrada como `[finding]` na §7: o
+    router **não pode** inferir "tenant-wide" de `unit_id is None`.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=None, role=Role.OWNER))
+    translator = _IdentityAccessGuard(spy)
+
+    scope = translator.authorize(object(), "manage_staff", tenant_id="t1")
+
+    assert scope.unit_id is None
+    assert scope.tenant_id == "t1"
+    # E o pedido chegou a identity **sem** unidade: é o passo 4 que dispensa, não
+    # o tradutor que inventa uma.
+    assert spy.received["unit_id"] is None
+    assert spy.received["permission"] is Permission.MANAGE_STAFF
+
+
+def test_o_tradutor_repassa_o_ator_de_authenticate_sem_tocar_nele() -> None:
+    """`Actor = object`: staff não interpreta a credencial, e o tradutor tampouco."""
+    spy = _SpyIdentityGuard()
+    translator = _IdentityAccessGuard(spy)
+    request = object()
+
+    assert translator.authenticate(request) == ("ator", request)
+
+
+def test_ca21_nenhuma_rota_de_staff_nasceu_nesta_stage() -> None:
+    """CA21 — a promessa "nenhuma rota nasce aqui" verificada, não afirmada.
+
+    Três asserções, e as três são necessárias: o pacote de adapters de entrada de
+    staff **não existe**; `build_http_wiring` devolve o router **de identity**,
+    por identidade de objeto; e nenhuma rota registrada endereça recurso de
+    staff — que é o que pegaria uma rota de funcionário pendurada no router de
+    identity, cenário em que as duas primeiras asserções continuariam verdes.
+    """
+    assert not (_SRC / "features" / "staff" / "adapters" / "in").exists()
+
+    wiring = build_http_wiring(_dependencias())
+    identity_router = importlib.import_module(
+        "restaurant_hub.features.identity.adapters.in.http.router"
+    ).router
+
+    assert wiring.router is identity_router
+
+    paths = [getattr(rota, "path", "") for rota in wiring.router.routes]
+    assert not [
+        path for path in paths if "employee" in path or "job-function" in path or "staff" in path
+    ], f"rota de staff registrada nesta Stage: {paths}"

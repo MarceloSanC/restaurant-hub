@@ -91,7 +91,7 @@ def test_cria_registro_ativo_com_o_conjunto_pedido() -> None:
     assert resultado.active is True
     assert resultado.job_function_ids == frozenset({_F1, _F2})
 
-    gravado = fakes.employees.find_by_id(_A, EmployeeId(resultado.id))
+    gravado = fakes.employees.find_by_id(_A, _U1, EmployeeId(resultado.id))
     assert gravado is not None
     assert (gravado.name, gravado.unit_id, gravado.job_function_ids, gravado.active) == (
         "Maria",
@@ -106,7 +106,7 @@ def test_cria_registro_com_preferencia_declarada() -> None:
     preferencia = ShiftPreference(periods=frozenset({DayPeriod.NIGHT}))
     resultado = _criar(fakes).execute(_comando(preferencia=preferencia))
     assert resultado.shift_preference == preferencia
-    gravado = fakes.employees.find_by_id(_A, EmployeeId(resultado.id))
+    gravado = fakes.employees.find_by_id(_A, _U1, EmployeeId(resultado.id))
     assert gravado is not None
     assert gravado.shift_preference == preferencia
 
@@ -124,7 +124,7 @@ def test_cria_registro_sob_demanda() -> None:
     assert resultado.workload_profile == OnDemand()
     # Releitura pelo port, como o resto da suíte: o result é o que o use case
     # diz ter feito; a releitura é o que ele gravou.
-    gravado = fakes.employees.find_by_id(_A, EmployeeId(resultado.id))
+    gravado = fakes.employees.find_by_id(_A, _U1, EmployeeId(resultado.id))
     assert gravado is not None
     assert gravado.workload_profile == OnDemand()
 
@@ -137,7 +137,7 @@ def test_registro_novo_nasce_sem_indisponibilidades() -> None:
 def test_nome_e_gravado_verbatim() -> None:
     fakes = _com_funcoes()
     resultado = _criar(fakes).execute(_comando(name="  Maria "))
-    gravado = fakes.employees.find_by_id(_A, EmployeeId(resultado.id))
+    gravado = fakes.employees.find_by_id(_A, _U1, EmployeeId(resultado.id))
     assert gravado is not None
     assert gravado.name == "  Maria "
 

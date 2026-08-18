@@ -34,6 +34,7 @@ from restaurant_hub.features.staff.application.ports.out.job_function_repository
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.exceptions.errors import InvalidNameError
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -459,3 +460,39 @@ def test_escopo_de_tenant_funcao_do_a_e_invisivel_e_intocavel_com_tenant_b(
     with pytest.raises(JobFunctionNotFoundError):
         repos.job_functions.delete(_B, _F1)
     assert repos.job_functions.find_by_id(_A, _F1) is not None
+
+
+# --- o byte NUL: a divergência fake ≢ real que a 3.4 fecha ------------------
+#
+# Gêmea da suíte de funcionário: a recusa é do domínio, então `[fake]` e
+# `[postgres]` concordam por construção em vez de por coincidência.
+_NOMES_ADVERSARIAIS = (
+    "José Antônio",
+    "\U0001f469\u200d\U0001f373",
+    "linha1\nlinha2",
+    'Ana "Nana" O\'Brien',
+    "a" * 1000,
+)
+_IDS_ADVERSARIAIS = ["acento", "emoji_zwj", "quebra_de_linha", "aspas", "mil_caracteres"]
+
+
+def test_ca17_nome_com_byte_nul_e_recusado_antes_de_alcancar_o_port(
+    repos: RepositoriosDeStaff,
+) -> None:
+    with pytest.raises(InvalidNameError):
+        repos.job_functions.add(_funcao(name="Cozi\x00nheiro"))
+
+    assert repos.job_functions.find_by_id(_A, _F1) is None
+
+
+@pytest.mark.parametrize("nome", _NOMES_ADVERSARIAIS, ids=_IDS_ADVERSARIAIS)
+def test_ca18_nome_adversarial_sem_nul_faz_round_trip_verbatim(
+    repos: RepositoriosDeStaff, nome: str
+) -> None:
+    """CA18 — prova que a restrição não cresceu além do byte NUL."""
+    repos.job_functions.add(_funcao(name=nome))
+
+    lida = repos.job_functions.find_by_id(_A, _F1)
+
+    assert lida is not None
+    assert lida.name == nome

@@ -26,11 +26,13 @@ class RenameEmployeeUseCase:
         """Renomeia o registro.
 
         Raises:
-            EmployeeNotFoundError: id inexistente **no tenant** — registro de
+            EmployeeNotFoundError: id inexistente **no endereço (tenant + unidade)** — registro de
                 outro restaurante cai aqui (concept §5.4).
             InvalidNameError: nome vazio (domínio, 3.1) — não reembrulhado.
         """
-        employee = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        employee = self._employees.find_by_id(
+            command.tenant_id, command.unit_id, command.employee_id
+        )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         renamed = employee.rename(command.name)

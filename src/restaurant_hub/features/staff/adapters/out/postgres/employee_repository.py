@@ -159,8 +159,13 @@ class PostgresEmployeeRepository:
                 erro, ON_WRITE_EMPLOYEE, self._detalhe_do_conflito(erro, employee)
             ) from erro
 
-    def delete(self, tenant_id: TenantId, employee_id: EmployeeId) -> None:
+    def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """L-E5 — remoção definitiva; as filhas somem por `CASCADE` (§5.10).
+
+        O `WHERE` traz o endereço de **três** partes (ADR 3.4.0007): registro de
+        outra unidade do mesmo tenant não é alcançado, e o `rowcount` zero o
+        reporta como `EmployeeNotFoundError` — o mesmo erro do registro de outro
+        tenant, sem distinção observável.
 
         O `rowcount` do próprio `DELETE` é a checagem: um `SELECT` antes tornaria
         checagem e escrita duas operações, e entre elas o registro poderia sumir
@@ -178,6 +183,7 @@ class PostgresEmployeeRepository:
                 employees.delete().where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
+                    employees.c.unit_id == unit_id,
                 )
             )
             if resultado.rowcount == 0:
@@ -185,8 +191,16 @@ class PostgresEmployeeRepository:
 
     # ---- leitura ----------------------------------------------------------
 
-    def find_by_id(self, tenant_id: TenantId, employee_id: EmployeeId) -> Employee | None:
-        """Registro **do tenant**, ou `None`. Não filtra por estado (ADR 3.2.0006).
+    def find_by_id(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId
+    ) -> Employee | None:
+        """Registro **do tenant e da unidade**, ou `None`. Não filtra por estado
+        (ADR 3.2.0006).
+
+        O `WHERE` traz o endereço de **três** partes (ADR 3.4.0007), e o `None`
+        de "outra unidade" é indistinguível do `None` de "não existe": a lei
+        nasceu na docstring do `Protocol`, e este `WHERE` a implementa — não o
+        contrário.
 
         Sob snapshot único (§5.18): os quatro statements que montam o agregado
         enxergam **o mesmo** estado do banco.
@@ -196,6 +210,7 @@ class PostgresEmployeeRepository:
                 select(employees).where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
+                    employees.c.unit_id == unit_id,
                 )
             ).one_or_none()
             if linha is None:

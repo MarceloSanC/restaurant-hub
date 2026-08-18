@@ -127,19 +127,25 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     # 3. Jornada e preferência.
     ChangeWorkloadProfileUseCase(fakes.employees).execute(
         ChangeWorkloadProfileCommand(
-            tenant_id=_TENANT, employee_id=funcionario_id, workload_profile=OnDemand()
+            tenant_id=_TENANT,
+            unit_id=_UNIDADE_A,
+            employee_id=funcionario_id,
+            workload_profile=OnDemand(),
         )
     )
     DeclareShiftPreferenceUseCase(fakes.employees).execute(
         DeclareShiftPreferenceCommand(
-            tenant_id=_TENANT, employee_id=funcionario_id, shift_preference=_PREFERENCIA
+            tenant_id=_TENANT,
+            unit_id=_UNIDADE_A,
+            employee_id=funcionario_id,
+            shift_preference=_PREFERENCIA,
         )
     )
 
     # 4. Indisponibilidade.
     com_periodo = RegisterUnavailabilityUseCase(fakes.employees).execute(
         RegisterUnavailabilityCommand(
-            tenant_id=_TENANT, employee_id=funcionario_id, period=_PERIODO
+            tenant_id=_TENANT, unit_id=_UNIDADE_A, employee_id=funcionario_id, period=_PERIODO
         )
     )
     assert com_periodo.unavailabilities == (_PERIODO,)
@@ -147,7 +153,10 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     # 5. Cópia para a unidade B — leva o cadastro inteiro, já editado.
     copia = CopyEmployeeToUnitUseCase(fakes.employees, ids).execute(
         CopyEmployeeToUnitCommand(
-            tenant_id=_TENANT, employee_id=funcionario_id, target_unit_id=_UNIDADE_B
+            tenant_id=_TENANT,
+            unit_id=_UNIDADE_A,
+            employee_id=funcionario_id,
+            target_unit_id=_UNIDADE_B,
         )
     )
     assert copia.workload_profile == OnDemand()
@@ -157,7 +166,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
 
     # 6. Desligamento do registro da unidade A.
     DeactivateEmployeeUseCase(fakes.employees).execute(
-        DeactivateEmployeeCommand(tenant_id=_TENANT, employee_id=funcionario_id)
+        DeactivateEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE_A, employee_id=funcionario_id)
     )
 
     # 7. As listagens contam a história.

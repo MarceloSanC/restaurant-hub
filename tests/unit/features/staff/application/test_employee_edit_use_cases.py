@@ -12,6 +12,7 @@ valor) ou campo a campo sobre a entidade relida.
 """
 
 import dataclasses
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 
@@ -60,6 +61,7 @@ pytestmark = pytest.mark.unit
 _A = TenantId("tenant-a")
 _B = TenantId("tenant-b")
 _U1 = UnitId("u1")
+_U2 = UnitId("u2")
 _F1 = JobFunctionId("f1")
 _E1 = EmployeeId("e1")
 _FIXA = FixedSchedule(weekly_hours=Decimal("44"))
@@ -96,7 +98,7 @@ def _com_funcionario(*, preferencia: ShiftPreference | None = None) -> StaffFake
 
 def _result(fakes: StaffFakes) -> EmployeeResult:
     """Snapshot do registro gravado, como `EmployeeResult` (igualdade por valor)."""
-    employee = fakes.employees.find_by_id(_A, _E1)
+    employee = fakes.employees.find_by_id(_A, _U1, _E1)
     assert employee is not None
     return EmployeeResult(
         id=employee.id,
@@ -125,7 +127,7 @@ def test_renomear_troca_o_nome_verbatim_e_a_releitura_confirma() -> None:
     antes = _result(fakes)
 
     resultado = RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, employee_id=_E1, name="  Joana ")
+        RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="  Joana ")
     )
 
     assert resultado.name == "  Joana "
@@ -140,7 +142,7 @@ def test_renomear_nao_altera_tenant_nem_unidade() -> None:
     """§5.12: a localização do registro é imutável; nenhum use case a toca."""
     fakes = _com_funcionario()
     resultado = RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, employee_id=_E1, name="Joana")
+        RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
     )
     assert (resultado.tenant_id, resultado.unit_id) == (_A, _U1)
 
@@ -154,7 +156,9 @@ def test_troca_de_jornada_fixa_para_sob_demanda_e_de_volta() -> None:
     antes = _result(fakes)
 
     sob_demanda = trocar.execute(
-        ChangeWorkloadProfileCommand(tenant_id=_A, employee_id=_E1, workload_profile=OnDemand())
+        ChangeWorkloadProfileCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, workload_profile=OnDemand()
+        )
     )
     assert sob_demanda.workload_profile == OnDemand()
     assert _result(fakes).workload_profile == OnDemand()
@@ -163,6 +167,7 @@ def test_troca_de_jornada_fixa_para_sob_demanda_e_de_volta() -> None:
     de_volta = trocar.execute(
         ChangeWorkloadProfileCommand(
             tenant_id=_A,
+            unit_id=_U1,
             employee_id=_E1,
             workload_profile=FixedSchedule(weekly_hours=Decimal("20.5")),
         )
@@ -179,7 +184,9 @@ def test_declarar_preferencia_quando_nao_havia() -> None:
     antes = _result(fakes)
 
     resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
-        DeclareShiftPreferenceCommand(tenant_id=_A, employee_id=_E1, shift_preference=_PREFERENCIA)
+        DeclareShiftPreferenceCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=_PREFERENCIA
+        )
     )
 
     assert resultado.shift_preference == _PREFERENCIA
@@ -199,7 +206,9 @@ def test_declarar_none_limpa_a_preferencia() -> None:
     antes = _result(fakes)
 
     resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
-        DeclareShiftPreferenceCommand(tenant_id=_A, employee_id=_E1, shift_preference=None)
+        DeclareShiftPreferenceCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=None
+        )
     )
 
     assert resultado.shift_preference is None
@@ -212,7 +221,9 @@ def test_substituir_uma_preferencia_por_outra() -> None:
     fakes = _com_funcionario(preferencia=_PREFERENCIA)
     outra = ShiftPreference(periods=frozenset({DayPeriod.MORNING, DayPeriod.AFTERNOON}))
     resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
-        DeclareShiftPreferenceCommand(tenant_id=_A, employee_id=_E1, shift_preference=outra)
+        DeclareShiftPreferenceCommand(
+            tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=outra
+        )
     )
     assert resultado.shift_preference == outra
     assert _result(fakes).shift_preference == outra
@@ -223,12 +234,12 @@ def test_substituir_uma_preferencia_por_outra() -> None:
 
 def _comandos_dos_tres(tenant: TenantId, employee_id: EmployeeId) -> list[object]:
     return [
-        RenameEmployeeCommand(tenant_id=tenant, employee_id=employee_id, name="Joana"),
+        RenameEmployeeCommand(tenant_id=tenant, unit_id=_U1, employee_id=employee_id, name="Joana"),
         ChangeWorkloadProfileCommand(
-            tenant_id=tenant, employee_id=employee_id, workload_profile=OnDemand()
+            tenant_id=tenant, unit_id=_U1, employee_id=employee_id, workload_profile=OnDemand()
         ),
         DeclareShiftPreferenceCommand(
-            tenant_id=tenant, employee_id=employee_id, shift_preference=_PREFERENCIA
+            tenant_id=tenant, unit_id=_U1, employee_id=employee_id, shift_preference=_PREFERENCIA
         ),
     ]
 
@@ -281,7 +292,9 @@ def test_precedencia_registro_inexistente_vence_nome_vazio() -> None:
     fakes = _com_funcionario()
     with pytest.raises(StaffError) as excecao:
         RenameEmployeeUseCase(fakes.employees).execute(
-            RenameEmployeeCommand(tenant_id=_A, employee_id=EmployeeId("fantasma"), name="")
+            RenameEmployeeCommand(
+                tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("fantasma"), name=""
+            )
         )
     assert type(excecao.value) is EmployeeNotFoundError
 
@@ -294,8 +307,71 @@ def test_nome_vazio_em_registro_existente_e_erro_do_dominio_sem_gravar() -> None
 
     with pytest.raises(InvalidNameError):
         RenameEmployeeUseCase(fakes.employees).execute(
-            RenameEmployeeCommand(tenant_id=_A, employee_id=_E1, name="   ")
+            RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="   ")
         )
 
     assert "employees.update" not in fakes.store.calls[antes_calls:]
     assert _result(fakes) == antes
+
+
+# --- CA11: o endereço do funcionário tem três partes (ADR 3.4.0007) ----------
+#
+# **O que estes testes matam.** Antes da Stage 3.4 o use case resolvia o
+# registro por `(tenant_id, employee_id)`, e a unidade do path só era conferida
+# contra o **ator** — nunca contra o **registro**. Um gerente da unidade A
+# alcançava qualquer funcionário do mesmo restaurante pondo a própria unidade no
+# endereço. Se algum use case voltar a resolver por `(tenant, id)`, o registro é
+# encontrado apesar da unidade alheia e a escrita acontece.
+#
+# A asserção sobre `fakes.store.calls` é o que dá poder ao teste: `pytest.raises`
+# sozinho não distingue "não encontrou porque a unidade não bate" de "não
+# encontrou por outro motivo e nada mais foi tentado". A conduta esperada é
+# **exatamente** uma chamada — o lookup — e nenhuma escrita depois dela.
+
+
+def _edicoes_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], object]]]:
+    """Um item por use case de edição — a lista **é** a superfície, não amostra."""
+    return [
+        (
+            "rename_employee",
+            lambda fakes: RenameEmployeeUseCase(fakes.employees).execute(
+                RenameEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=_E1, name="Joana")
+            ),
+        ),
+        (
+            "change_workload_profile",
+            lambda fakes: ChangeWorkloadProfileUseCase(fakes.employees).execute(
+                ChangeWorkloadProfileCommand(
+                    tenant_id=_A, unit_id=_U2, employee_id=_E1, workload_profile=OnDemand()
+                )
+            ),
+        ),
+        (
+            "declare_shift_preference",
+            lambda fakes: DeclareShiftPreferenceUseCase(fakes.employees).execute(
+                DeclareShiftPreferenceCommand(
+                    tenant_id=_A, unit_id=_U2, employee_id=_E1, shift_preference=None
+                )
+            ),
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("nome", "executar"),
+    _edicoes_com_unidade_alheia(),
+    ids=[nome for nome, _ in _edicoes_com_unidade_alheia()],
+)
+def test_ca11_edicao_com_unidade_alheia_nao_alcanca_o_registro(
+    nome: str, executar: Callable[[StaffFakes], object]
+) -> None:
+    fakes = _com_funcionario()
+    antes_estado = _result(fakes)
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StaffError) as excecao:
+        executar(fakes)
+    assert type(excecao.value) is EmployeeNotFoundError, nome
+
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"], nome
+    assert _result(fakes) == antes_estado, nome

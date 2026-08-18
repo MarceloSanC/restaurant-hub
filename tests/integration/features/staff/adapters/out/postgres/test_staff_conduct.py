@@ -427,7 +427,7 @@ def _ler_agregado(repositorio: PostgresEmployeeRepository, metodo: str) -> Emplo
     voltar a `READ COMMITTED` sem sintoma em teste nenhum.
     """
     if metodo == "find_by_id":
-        return repositorio.find_by_id(_A, _E1)
+        return repositorio.find_by_id(_A, _U1, _E1)
     encontrados = repositorio.list_by_unit(_A, _U1)
     return encontrados[0] if encontrados else None
 
@@ -615,7 +615,7 @@ def test_regressao_5_20_update_que_nao_mexe_no_conjunto_nao_deadlocka_com_delete
         f"{resultados['b']!r} — `40P01` aqui é a assinatura da reescrita cega (§5.20)"
     )
 
-    gravado = PostgresEmployeeRepository(motor_a).find_by_id(_A, _E1)
+    gravado = PostgresEmployeeRepository(motor_a).find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Joana"
     assert gravado.job_function_ids == frozenset({_F1, _F2})
@@ -785,7 +785,7 @@ def test_ca8c_o_backstop_de_l_e4_responde_pelo_metodo_publico_e_cita_o_conjunto(
     )
 
     # E nada foi gravado: a transação inteira reverteu.
-    gravado = repositorio.find_by_id(_A, _E1)
+    gravado = repositorio.find_by_id(_A, _U1, _E1)
     assert gravado is not None
     assert gravado.name == "Maria"
     assert gravado.job_function_ids == frozenset({_F1})

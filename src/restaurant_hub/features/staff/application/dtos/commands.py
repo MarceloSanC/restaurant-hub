@@ -7,8 +7,19 @@ valores puros, indistinguíveis de primitivos para o consumidor. Entidades, não
 nem `Employee` nem `JobFunction` aparecem em nenhum campo.
 
 **Todos carregam `tenant_id`**, e os que atuam sobre um registro existente
-carregam também o id do registro: nenhuma operação desta camada é expressável
-sem escopo (ADR 3.2.0002).
+carregam também `unit_id` e o id do registro: nenhuma operação desta camada é
+expressável sem escopo (ADR 3.2.0002).
+
+**A unidade faz parte do endereço do funcionário** (ADR 3.4.0007 §3), e a ordem
+dos campos é a ordem normativa do lookup — `(tenant_id, unit_id, employee_id)`.
+Nenhum deles tem default, **de propósito**: um `unit_id: UnitId | None = None`
+faria o campo ser esquecível, e omitir viraria caminho de escalada — a mesma
+propriedade que o ADR 3.2.0002 já comprou para o tenant. Quem não sabe a
+unidade não consegue formar o pedido.
+
+`CreateEmployeeCommand` já a carregava; as duas queries não mudam
+(`ListEmployeesQuery` já a exige e `ListJobFunctionsQuery` é tenant-scoped por
+desenho, porque o catálogo pertence ao restaurante).
 
 A conversão de texto cru para VO (`FixedSchedule(...)`, `ShiftPreference(...)`,
 `UnavailabilityPeriod(...)`) é do adapter que recebe a requisição (Stage 3.4):
@@ -92,6 +103,7 @@ class RenameEmployeeCommand:
     """Renomeação do registro de funcionário (nome verbatim)."""
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
     name: str
 
@@ -104,6 +116,7 @@ class AssignJobFunctionsCommand:
     """
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
     job_function_ids: frozenset[JobFunctionId]
 
@@ -113,6 +126,7 @@ class ChangeWorkloadProfileCommand:
     """Troca do perfil de jornada (fixa ↔ sob demanda)."""
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
     workload_profile: WorkloadProfile
 
@@ -128,6 +142,7 @@ class DeclareShiftPreferenceCommand:
     """
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
     shift_preference: ShiftPreference | None
 
@@ -141,6 +156,7 @@ class RegisterUnavailabilityCommand:
     """
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
     period: UnavailabilityPeriod
 
@@ -153,6 +169,7 @@ class RemoveUnavailabilityCommand:
     """
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
     period: UnavailabilityPeriod
 
@@ -162,6 +179,7 @@ class DeactivateEmployeeCommand:
     """Desligamento do funcionário — o registro **sobrevive** (ADR 3.2.0006)."""
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
 
 
@@ -170,6 +188,7 @@ class ReactivateEmployeeCommand:
     """Recontratação do funcionário — devolve o registro à listagem default."""
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
 
 
@@ -182,6 +201,7 @@ class DeleteEmployeeCommand:
     """
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
 
 
@@ -189,10 +209,16 @@ class DeleteEmployeeCommand:
 class CopyEmployeeToUnitCommand:
     """Cópia do cadastro para **outra** unidade do mesmo restaurante.
 
+    **`unit_id` é a unidade de ORIGEM** — a que endereça o registro a ser lido;
+    `target_unit_id` é o destino, onde a cópia é gravada. É o único command em
+    que as duas convivem, e confundi-las produz exatamente a exfiltração
+    cross-unidade que esta Stage fecha.
+
     Não existe cópia cross-tenant, e não há como expressá-la: o command tem um
     `tenant_id` só (concept §5.11).
     """
 
     tenant_id: TenantId
+    unit_id: UnitId
     employee_id: EmployeeId
     target_unit_id: UnitId

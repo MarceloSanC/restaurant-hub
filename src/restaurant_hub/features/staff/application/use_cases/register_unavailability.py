@@ -29,12 +29,14 @@ class RegisterUnavailabilityUseCase:
         """Registra o período.
 
         Raises:
-            EmployeeNotFoundError: registro inexistente **no tenant**.
+            EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**.
             OverlappingUnavailabilityError: o período se sobrepõe a outro já
                 registrado (domínio, 3.1). Adjacente — fim == início — **não**
                 é sobreposição (semântica semi-aberta, ADR 3.1.0001).
         """
-        employee = self._employees.find_by_id(command.tenant_id, command.employee_id)
+        employee = self._employees.find_by_id(
+            command.tenant_id, command.unit_id, command.employee_id
+        )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         updated = employee.add_unavailability(command.period)

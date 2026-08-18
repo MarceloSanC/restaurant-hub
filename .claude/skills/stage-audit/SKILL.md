@@ -611,6 +611,60 @@ assinaturas, mappers de boundary, §7 post-execution, validators de
 invariante negativa). Ler à mão e conferir. Se não pediu verbatim,
 re-prompt antes de fechar. Codificado em Fase D-bis #9.
 
+### Lei universal, representante estreito
+
+A lei — do concept, de um ADR ou da docstring do port — fala de um
+**conjunto**: traz quantificador explícito (*"**nunca**"*, *"**todo**"*,
+*"**qualquer**"*, *"em **todos** os caminhos"*) ou implícito por disjunção
+(*"vazio **ou** ausente"*, *"uma vez **por alvo**"*). O teste que a trava fixa
+**um** representante do domínio quantificado. A suíte fica verde, a cobertura de
+linha **e de branch** fecha em 100%, e a lei está provada só para o
+representante — o resto do conjunto está **descoberto com aparência de coberto**.
+
+Não confundir com **Verificação assimétrica**: lá o assert prova o outro lado
+(presença ≠ ausência) ou não prova nada (execução sem asserção). Aqui a asserção
+é correta e real; o que está estreito é o **domínio** sobre o qual ela roda.
+Coverage não vê a diferença — por isso este conceito precisa existir separado.
+
+**Pergunta de caça:** *"a lei fala de um conjunto — o teste percorre o conjunto,
+ou um representante dele?"*
+
+**Sinal de alerta forte:** as **duas implementações de um mesmo port** (fake e
+real/produção) cobradas por conjuntos de valores **diferentes**. Foi a assimetria
+que denunciou o caso da 3.4: a mesma lei já era parametrizada sobre os dois
+valores no lado do fake e sobre um só no tradutor de produção — e é a
+implementação de **produção** que costuma ficar com o conjunto menor, porque a
+suíte do fake nasce junto da lei e a de produção nasce junto do wiring.
+Diff mental lei a lei: comparar os `parametrize` das duas suítes.
+
+**Procedimento:**
+
+1. Ler a lei e **enumerar o domínio de cada quantificador** — quais valores de
+   tenant, quais permissões, quais alvos, quais caminhos de construção. O
+   enunciado normalmente já traz a enumeração: a disjunção *"vazio ou ausente"*
+   **é** o domínio escrito por extenso.
+2. **Parametrizar sobre o domínio enumerado** (produto cartesiano quando há dois
+   eixos), nas **duas** implementações do port — não só na que falhou.
+3. Onde fixar um representante for deliberado, **mutar a guarda para
+   condicioná-la a esse representante** e **exigir vermelho**: `if not x` →
+   `if x is None`; `deny(...)` → `if permission != "<a permissão do teste>"`.
+   Suíte verde depois da mutação ⇒ a lei **não** está travada — é achado, não
+   estilo. Registrar a mutação e o número de testes que ela mata.
+4. Não aceitar cobertura como substituto: nos três casos abaixo a cobertura de
+   linha e de branch já era 100% **antes** da correção, e a mutação matava
+   **zero** testes.
+
+**As três instâncias da Stage 3.4** — a mesma falha em três eixos, todas achadas
+**de fora** (Checkpoint C e auditoria de testes), nenhuma pela suíte:
+
+| Lei | Quantificador | Representante fixado | Mutação que ficava verde | Correção |
+|---|---|---|---|---|
+| L-AG3 | *"tenant vazio **ou** ausente"* | só `None` na suíte do tradutor (o fake já cobria os dois) | `if not actor_tenant_id` → `if actor_tenant_id is None` | `5d69846` — `parametrize` `ausente`/`vazio` |
+| L-AG2 / L-AG3 | *"`authorize` **nunca** devolve escopo sem tenant"* (sobre **todas** as permissões) | só `"manage_staff"` codificado | guarda condicionada a `permission != "manage_job_functions"` | `d0fafe0` — `_ALVOS` nas duas implementações; L-AG3 vira produto cartesiano 2 tenants × 2 permissões |
+| L-AG4 | *"uma autorização **por alvo**"* | um só alvo (permissão + unidade) | mesma mutação por permissão | `d0fafe0` — eixos de alvo (tenant e permissão) acrescentados aos ramos de **recusa**, que eram onde a permissão tenant-wide nunca entrava |
+
+---
+
 ---
 
 ### Falso vermelho ambiental
@@ -641,7 +695,9 @@ cobre. Cresce sem inflar a seção conceitual.
 
 | Caso | Conceito | Onde aconteceu |
 |---|---|---|
-| _(preencher conforme o projeto encontrar falsos verdes — cada linha vira rastro de um caso real)_ | _(conceito que o cobre)_ | _(issue/PR/Stage/ADR)_ |
+| L-AG3 travada só em `tenant_id=None`; a lei diz "vazio **ou** ausente" | Lei universal, representante estreito | Stage 3.4 / PR #42 — fix `5d69846` |
+| L-AG2/L-AG3/L-AG4 travadas só em `"manage_staff"`; as leis valem para **toda** permissão e **todo** alvo | Lei universal, representante estreito | Stage 3.4 / PR #42 — fix `d0fafe0` |
+| Fake e tradutor de produção do mesmo port cobrados por conjuntos de valores diferentes (a assimetria que denunciou as duas linhas acima) | Lei universal, representante estreito (sinal de alerta) | Stage 3.4 / PR #42 |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
 pegou algo): **primeiro perguntar qual conceito existente ficou cego**.
