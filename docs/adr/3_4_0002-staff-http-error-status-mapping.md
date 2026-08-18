@@ -5,7 +5,7 @@ when-use: Reference when adding an error to the staff hierarchy, when a staff er
 keywords: [adr, http, error-handling, status-code, fastapi, mro, totality, staff]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-08-12
+updated_at: 2026-08-18
 adr_id: 3.4.0002
 decision: Register one FastAPI exception handler on StaffError that resolves status by walking the exception MRO against an explicit total map, guarded by a test enumerating every concrete subclass; UnavailabilityNotFoundError stays 422 because it names a value inside the aggregate, and the 409 band is reserved for conflicts with already-stored identity or references
 context_stage: 3.4-staff-access-scope
@@ -192,3 +192,24 @@ correct only by accident. Not acceptable.
 - ADR 2.4.0001, ADR 2.3.0003, ADR 3.2.0006
 - `docs/stages/3.2-staff-application/concept.md` §4 (the note on
   `UnavailabilityNotFoundError`), §6
+
+## Errata
+
+**2026-08-18 — contagem e atribuição corrigidas; decisão inalterada.** Achado na
+Fase 3A da Stage 3.6, ao varrer os ADRs pré-corte atrás de ponteiros defasados
+(o mesmo defeito que gerou a `## Errata` do ADR 3.4.0001). O que muda é uma
+contagem factual e a Stage a que ela atribui um acréscimo; **nenhuma frase de
+`Decision`, `Alternatives considered` ou `Consequences` teve o seu conteúdo
+alterado**, e o total de **18** entradas — que é o número que a decisão usa — é
+o mesmo antes e depois.
+
+| Onde | Dizia | Diz | Medição |
+|---|---|---|---|
+| `## Context` | *"The BC currently exposes **17** concrete error classes — **8** in `domain/exceptions/errors.py` … and **9** in `application/errors.py` — and **this Stage adds** `InvalidDayPeriodError`, for **18**"* | *"The BC exposes **18** concrete error classes — **9** in `domain/exceptions/errors.py` … and **9** in `application/errors.py`"* | `InvalidDayPeriodError` foi acrescentado pela **Stage 3.4** (Task 02, ADR 3.4.0003 §3), não pela Stage que executa este ADR. Contagem conferida no código: `domain/exceptions/errors.py` tem `InvalidIdentifierError`, `InvalidNameError`, `InvalidDayPeriodError`, `InvalidWeeklyHoursError`, `EmptyShiftPreferenceError`, `EmptyJobFunctionsError`, `InvalidUnavailabilityPeriodError`, `OverlappingUnavailabilityError`, `UnavailabilityNotFoundError` = **9** (mais a raiz `StaffError`, que não é entrada); `application/errors.py` tem **9** |
+
+**O que NÃO mudou, e por quê.** O texto redigido quando este ADR nasceu dizia
+"this Stage" para a Stage `3.4-staff-http` **antes do corte**, quando fundação e
+borda eram a mesma Stage. Depois do corte, o acréscimo do erro ficou na 3.4 e o
+mapa ficou na 3.6 — as duas metades da mesma frase foram para lados diferentes.
+A errata desfaz a ambiguidade nomeando a Stage, em vez de deixar "this Stage"
+significar coisas diferentes em parágrafos vizinhos do mesmo documento.
