@@ -1,0 +1,163 @@
+"""Mapa exceção → status HTTP do BC staff (ADR 3.4.0002, decidido na 3.4).
+
+**Mora na feature, não em `shared`.** O handler genérico de
+`shared/infrastructure/http/error_handlers.py` converte `DomainError` em 422 e
+`NotFoundError` em 404, e continua valendo como rede de segurança; mas as classes
+de staff não podem ser referenciadas de `shared`, que não importa de features
+(LAYOUT §7).
+
+**Um handler só, registrado sobre `StaffError`.** O status é resolvido
+percorrendo o `__mro__` da exceção contra o mapa abaixo. Starlette escolhe o
+handler pelo primeiro tipo do MRO que estiver registrado, e como `StaffError`
+precede `NotFoundError`/`DomainError` em todas as MROs deste BC, este handler
+ganha dos genéricos — o que é o desejado, porque o mapa daqui é mais específico.
+
+**A totalidade do mapa é um teste, não uma promessa.** Um erro novo sem entrada
+cairia no default 422 em silêncio, que é exatamente como um 409 vira 422 sem
+ninguém notar. O teste enumera recursivamente as subclasses e falha se alguma não
+tiver entrada própria.
+
+**Staff não registra entrada 401 nem 403, e a ausência é a decisão.** As duas
+faixas são de identity, cujo handler está registrado sobre a **app** e é
+alcançado por MRO: `InvalidAccessTokenError` e `PermissionDeniedError` sobem
+cruas do port `AccessGuard` (L-AG1/L-AG2) e chegam lá exatamente como identity as
+levantou. Uma entrada 401/403 aqui criaria uma **segunda** faixa distinguível
+para a mesma condição — e um 403 de staff distinguível de um 403 de identity é
+justamente o oráculo que L-AG1/L-AG2 compram ao proibir a tradução.
+
+**O corpo carrega um discriminador próprio (`"type": "staff_error"`), e ele é
+infraestrutura de teste, não enfeite.** Na faixa 422 esta app tem **duas**
+origens: um erro de staff e o `RequestValidationError` do framework, que o
+handler compartilhado renderiza com corpo constante
+(`{"detail": "requisição inválida", "type": "validation_error"}`). O
+ADR 3.6.0002, ao rejeitar a sua Alternativa A, já nomeava a diferença — *"a
+different body shape"*, *"dois formatos distinguíveis para a mesma classe de
+defeito"*. É este discriminador que as varreduras de borda asserem: sem ele, um
+422 do framework satisfaz um critério de segurança de staff, e a rota que
+esqueceu o validador de identificador passa no próprio teste.
+
+**As cinco classificações com leitura alternativa plausível são consumidas do
+ADR 3.4.0002 §4, não re-decididas aqui** — cada uma tem o seu porquê no
+comentário da entrada correspondente.
+"""
+
+from typing import Final
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from restaurant_hub.features.staff.application.errors import (
+    EmployeeAlreadyExistsError,
+    EmployeeInUseError,
+    EmployeeNotFoundError,
+    EmployeeRelocationError,
+    JobFunctionAlreadyExistsError,
+    JobFunctionInUseError,
+    JobFunctionNameAlreadyExistsError,
+    JobFunctionNotFoundError,
+    SameUnitCopyError,
+)
+from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmptyJobFunctionsError,
+    EmptyShiftPreferenceError,
+    InvalidDayPeriodError,
+    InvalidIdentifierError,
+    InvalidNameError,
+    InvalidUnavailabilityPeriodError,
+    InvalidWeeklyHoursError,
+    OverlappingUnavailabilityError,
+    StaffError,
+    UnavailabilityNotFoundError,
+)
+
+HTTP_NOT_FOUND: Final = 404
+HTTP_CONFLICT: Final = 409
+HTTP_UNPROCESSABLE: Final = 422
+
+# O discriminador do corpo de erro de staff. Ver o docstring do módulo: ele é o
+# que separa um 422 **desta** borda de um 422 do `RequestValidationError` do
+# framework, e as varreduras de identificador inválido dependem dessa separação
+# para não ficarem verdes contra o erro errado.
+STAFF_ERROR_TYPE: Final = "staff_error"
+
+STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
+    # 404 — recurso endereçável ausente **no tenant do ator** e, para
+    # funcionário, **na unidade do endereço** (ADR 3.4.0007). São os dois que
+    # herdam de `NotFoundError`, e a herança existe precisamente para isto.
+    JobFunctionNotFoundError: HTTP_NOT_FOUND,
+    EmployeeNotFoundError: HTTP_NOT_FOUND,
+    # 409 — conflito com estado **já gravado**: ou a chave existe, ou uma
+    # referência existente impede a remoção. É a definição de faixa do
+    # ADR 3.4.0002 §4, e é dela que sai o par `InUse`: o payload está correto,
+    # e o que impede a operação é **outro registro**.
+    JobFunctionNameAlreadyExistsError: HTTP_CONFLICT,
+    JobFunctionAlreadyExistsError: HTTP_CONFLICT,
+    EmployeeAlreadyExistsError: HTTP_CONFLICT,
+    JobFunctionInUseError: HTTP_CONFLICT,
+    # `EmployeeInUseError` continua **sem produtor em v1** (nasce com o Step 4) e
+    # mesmo assim tem entrada própria: totalidade é sobre a hierarquia, não sobre
+    # o que é alcançável hoje. Não escrever e2e esperando produzi-la.
+    EmployeeInUseError: HTTP_CONFLICT,
+    # 422 — invariante violada **pelo conteúdo enviado**.
+    InvalidNameError: HTTP_UNPROCESSABLE,
+    InvalidIdentifierError: HTTP_UNPROCESSABLE,
+    InvalidWeeklyHoursError: HTTP_UNPROCESSABLE,
+    InvalidDayPeriodError: HTTP_UNPROCESSABLE,
+    EmptyShiftPreferenceError: HTTP_UNPROCESSABLE,
+    EmptyJobFunctionsError: HTTP_UNPROCESSABLE,
+    InvalidUnavailabilityPeriodError: HTTP_UNPROCESSABLE,
+    # 422 e **não** 409: invariante do agregado violada pelo período que o
+    # cliente enviou, não colisão de chave gravada.
+    OverlappingUnavailabilityError: HTTP_UNPROCESSABLE,
+    # 422 e **não** 404: o período é um valor **dentro** do agregado, não um
+    # recurso endereçável — o funcionário existe e foi encontrado. A classe herda
+    # **só** de `StaffError`, precisamente para que a MRO não a leve ao 404.
+    UnavailabilityNotFoundError: HTTP_UNPROCESSABLE,
+    # Entrada por **totalidade**: `EmployeeRelocationError` é **inalcançável por
+    # HTTP nesta Stage**, porque nenhuma rota permite enviar `unit_id` num
+    # update. Registrado aqui para que ninguém escreva e2e esperando produzi-la.
+    EmployeeRelocationError: HTTP_UNPROCESSABLE,
+    # 422 e **não** 409: nada está em conflito — o cliente nomeou a origem como
+    # destino.
+    SameUnitCopyError: HTTP_UNPROCESSABLE,
+}
+
+
+def resolve_status(exc: StaffError) -> int:
+    """Status da exceção, resolvido pelo `__mro__`.
+
+    Percorrer o MRO — em vez de olhar só `type(exc)` — faz uma subclasse futura
+    herdar a classificação do pai em runtime. **Isso não relaxa a totalidade**: o
+    teste continua exigindo entrada própria para cada classe concreta, e a
+    herança existe só para que um erro não classificado degrade para algo
+    sensato em produção em vez de virar 500.
+    """
+    for classe in type(exc).__mro__:
+        status = STAFF_ERROR_STATUS.get(classe)
+        if status is not None:
+            return status
+    return HTTP_UNPROCESSABLE
+
+
+def build_error_response(exc: StaffError) -> JSONResponse:
+    """Monta a resposta do erro de staff, com o discriminador de corpo próprio.
+
+    Não há regra de corpo constante aqui, e a assimetria com identity é
+    deliberada: as faixas que exigem corpo constante são 401 e 403, que staff
+    **não** produz. As faixas de staff — 404, 409 e 422 — falam de um recurso que
+    o próprio cliente endereçou ou de uma invariante que o payload dele violou, e
+    a autorização já correu antes, de modo que a mensagem só fala do tenant do
+    ator.
+    """
+    return JSONResponse(
+        status_code=resolve_status(exc),
+        content={"detail": str(exc), "type": STAFF_ERROR_TYPE},
+    )
+
+
+def register_staff_error_handlers(app: FastAPI) -> None:
+    """Registra o handler único de `StaffError` na aplicação."""
+
+    @app.exception_handler(StaffError)
+    async def staff_error_handler(request: Request, exc: StaffError) -> JSONResponse:
+        return build_error_response(exc)
