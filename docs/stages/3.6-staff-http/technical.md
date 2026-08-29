@@ -3,7 +3,7 @@ title: Technical — API de equipe (borda HTTP)
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, staff-http, fastapi, router, schemas, rbac, error-handler, e2e]
-status: draft
+status: done
 created_at: 2026-08-18
 updated_at: 2026-08-29
 stage_id: 3.6-staff-http
