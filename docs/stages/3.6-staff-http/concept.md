@@ -3,7 +3,7 @@ title: Concept — API de equipe (borda HTTP)
 description: Definição do que será feito nesta Stage e por quê, com decisões técnicas relevantes
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, staff-http, fastapi, router, schemas, rbac, error-handler, e2e]
-status: draft
+status: done
 created_at: 2026-08-18
 updated_at: 2026-08-18
 stage_id: 3.6-staff-http
@@ -23,21 +23,21 @@ depends_on: [3.4-staff-access-scope]
 > humano. Regressão `done → draft` é permitida quando a Fase 3B revela gap
 > material aqui.
 
-> **⚠ Este concept está `draft` com UMA bifurcação material aberta (§13 — F1).**
-> Ela é de **contrato e de alcance**: medida contra o código real, **nenhuma das
-> 16 rotas é alcançável hoje por nenhum papel**, porque o router de staff não tem
-> como nomear o tenant alvo que `AuthorizeActionUseCase` exige. É a mesma família
-> da F3 que o Checkpoint A da Stage 3.4 encontrou no eixo de **unidade** — só que
-> no eixo de **tenant**, e este a 3.4 não fechou. O detalhe rico vai na mensagem
-> de handoff à sessão mestra; aqui ficam o enunciado, a medição e a âncora. As
-> seções abaixo estão escritas até a fronteira do que as fontes sustentam, e o
-> que depende de F1 está **nomeado como dependente**, nunca preenchido por chute.
+> **A bifurcação F1 foi decidida pelo sponsor em 2026-08-18 (§13).** Ela era de
+> contrato e de alcance: medido contra o código real, **nenhuma das 16 rotas era
+> alcançável por nenhum papel**, porque o router de staff não tinha como nomear o
+> tenant alvo que `AuthorizeActionUseCase` exige. A decisão está no
+> **[ADR 0.0.0005](../../adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md)**,
+> global e transversal: o tenant vem do token e é resolvido no `composition_root`;
+> o inventário de rotas **permanece sem tenant no path — agora por regra, não por
+> omissão**. Nenhuma assinatura de port muda.
 >
-> **Numeração de critério é estável.** A resolução de F1 **acrescenta** critérios
-> no fim da §11; não renumera nenhum. A regra existe porque a renumeração feita
-> no corte da Stage 3.4 quebrou os ponteiros de dois ADRs `accepted`
-> (`## Errata` do ADR 3.4.0001) — e esta Stage é justamente a que conserta o
-> estrago.
+> **Numeração de critério é estável.** A resolução de F1 **acrescentou** um
+> critério no fim da §11 (**CA36**, pulando o 35 — ver a nota da §11); não
+> renumerou nenhum, exatamente como esta seção
+> prometia. A regra existe porque a renumeração feita no corte da Stage 3.4
+> quebrou os ponteiros de dois ADRs `accepted` (`## Errata` do ADR 3.4.0001) — e
+> esta Stage é justamente a que conserta o estrago.
 
 ## 1. Escopo
 
@@ -63,6 +63,11 @@ depends_on: [3.4-staff-access-scope]
 - **Conversão de `weekly_hours` na borda** — `Decimal("abc")` levanta
   `decimal.InvalidOperation`, que **não** é `StaffError` e viraria 500; a borda
   converte e traduz para `InvalidWeeklyHoursError` (§6.3, ADR 3.6.0003).
+- **Resolução do tenant no `composition_root`** — o tradutor preenche o
+  `tenant_id` a partir do ator autenticado quando a rota não o nomeia, e o
+  significado de `tenant_id=None` passa a estar **escrito no docstring do port**,
+  valendo para as **duas** implementações (§5.3, §7 D9, ADR 0.0.0005). É o que
+  torna as 16 rotas alcançáveis.
 - **Mapa exceção → status HTTP do BC staff**, total e verificado par a par,
   honrando `UnavailabilityNotFoundError` = 422 (§6.1, ADR 3.4.0002).
 - **Schemas de boundary que preservam as garantias do domínio** — união
@@ -102,11 +107,11 @@ O bloco `3.6-staff-http` foi escrito **depois** do corte e com os achados em
 mãos, e por isso se sustenta em quase tudo. Três eixos precisam de nota datada no
 fechamento da Stage:
 
-1. **`arquivos_a_modificar` está incompleto em um item, e o item depende de
-   F1.** Se F1 for resolvida no tradutor/port, entra
-   `features/staff/application/ports/out/access_guard.py` (docstring do
-   contrato) — e possivelmente `tests/fakes/features/staff/in_memory_access_guard.py`,
-   porque a lei nova vale para as **duas** implementações do port.
+1. **`arquivos_a_modificar` está incompleto em dois itens**, e a decisão de F1 os
+   fixou: entram `features/staff/application/ports/out/access_guard.py` (docstring
+   do contrato — **não** a assinatura, que já declara
+   `tenant_id: str | None = None`) e `tests/fakes/features/staff/in_memory_access_guard.py`,
+   porque a lei do tenant resolvido vale para as **duas** implementações do port.
 2. **`contratos_introduzidos` está incompleto** — além dos schemas e do mapa
    `STAFF_ERROR_STATUS`, a Stage introduz o **validador de identificador de
    borda** (ADR 3.6.0002) e o **conversor de `weekly_hours`** (ADR 3.6.0003), os
@@ -147,7 +152,8 @@ pode fazer:
    (ADR 3.2.0002) e, desde a 3.4, os dez que atuam sobre registro existente
    carregam também `unit_id` (ADR 3.4.0007). Nenhuma camada de staff sabe de onde
    esses valores vêm. Vêm do ator autorizado e do endereço da requisição, e é a
-   borda que os extrai. **Como o tenant chega até aqui é a F1.**
+   borda que os extrai. **O tenant vem do token e é resolvido no
+   `composition_root`** — regra transversal do ADR 0.0.0005, §5.3.
 2. **Construção dos value objects.** Os commands chegam com `WorkloadProfile`,
    `ShiftPreference` e `UnavailabilityPeriod` **já construídos**; a Stage 3.2 §6
    declarou explicitamente que os erros de construção "não são alcançáveis por
@@ -294,6 +300,10 @@ alvo de autorização. Permissão `manage_staff`; alvo: **tenant + unidade do pa
 | R15 | `DELETE` | `/{employee_id}` | `delete_employee` | 204 |
 | R16 | `POST` | `/{employee_id}/copies` | `copy_employee_to_unit` | 201 |
 
+> **A ausência do tenant no path é regra, não omissão** — cláusula (2) do
+> ADR 0.0.0005, detalhada em §5.3: `staff` não é dona do restaurante como recurso,
+> e nenhum ator de staff age fora do próprio tenant.
+
 > **Os identificadores R01…R16 são o domínio enumerado** de todo critério de §11
 > que fala de "todas as rotas". Existem para que uma lei universal não seja
 > travada num representante (skill `stage-audit` §"Lei universal, representante
@@ -399,9 +409,45 @@ permissões nem lógica de bypass em `features/staff/`, e nenhum módulo do BC
 nomeia `Role` ou `Permission` de identity.
 
 **5.3 — O `tenant_id` de todo command/query vem do escopo autorizado, nunca do
-corpo nem do path.** Um `tenant_id` aceito do cliente é vetor de escalada
-cross-tenant. E ele nunca é vazio (L-AG3). *(A **origem** do tenant no pedido de
-autorização depende de F1; o destino — `AuthorizedScope.tenant_id` — não depende.)*
+corpo nem do path — e a rota não o nomeia, porque não tem como e não deve.**
+
+O tenant vem do **token**, e é resolvido no `composition_root`: o tradutor
+preenche `tenant_id` a partir do ator autenticado quando o chamador não o nomeia.
+`AuthorizedScope.tenant_id` continua sendo o único valor que o router lê, e nunca
+é vazio (L-AG3). Consequência: **ação cross-tenant é inexprimível a partir de
+staff** — não existe entrada pela qual um cliente nomeie outro restaurante.
+
+A regra que decide isso não é local desta Stage — é o **ADR 0.0.0005**, global, em
+três cláusulas: (1) o tenant que decide acesso sempre deriva do token, e um tenant
+que chega na requisição é **declaração confirmada contra** ele, nunca a fonte;
+(2) ele aparece no path **só quando** o BC **é dono do tenant como recurso
+endereçável**, ou quando o ator pode agir fora do próprio tenant; (3) onde vem do
+token, é resolvido numa **camada confiável única**, cujo lugar segue a **opacidade
+do ator**.
+
+É a cláusula (2) que explica a diferença entre os dois BCs, e ela é
+**estrutural**: `identity` **é dona** de `Restaurant` — cria, endereça e aninha
+unidades e owners sob ele —, enquanto `staff` **não pode** sê-lo, porque
+`bc-independence` proíbe importar qualquer coisa de identity e o restaurante lhe
+chega como string opaca. Não é preferência de estilo; é o contrato de
+independência entre BCs. Por isso o inventário de §4.1 fica como está.
+
+E é a cláusula (3) que explica por que a resolução mora em lugares diferentes: o
+router de `identity` lê `ator.claims.tenant_id` direto, e está certo — o token é
+dela e o ator não lhe é opaco; em `staff` o port declara `Actor = object`
+justamente para que staff **não** leia atributo de ator, então o único lugar
+possível é o `composition_root`.
+
+**A checagem não é vácua.** O tenant viaja claim do token → guard → passo 3 de
+`AuthorizeActionUseCase`, que o compara com o tenant do usuário **carregado do
+banco**: um token cujo tenant não corresponde mais ao usuário gravado é negado.
+
+**A lei vale para as duas implementações do port.** O fake resolve o tenant do
+ator do mesmo modo, e a suíte parametriza sobre os dois casos — tenant nomeado e
+tenant omitido — nos dois lados. Cobrar as duas implementações com conjuntos de
+valores diferentes é o sinal de alerta mais forte da família "lei universal,
+representante estreito", e foi exatamente assim que a Stage 3.4 vazou duas
+mutações.
 
 **5.4 — O `unit_id` de todo command é o da URL, já autorizado; o router não lê
 `AuthorizedScope.unit_id`.**
@@ -529,7 +575,7 @@ identity** (é o segundo alvo de autorização de R16, §5.6), os outros dois pa
 `find_all_by_ids` do repositório de funções, **antes** da construção da entidade.
 `Employee.__post_init__` valida `id`, `tenant_id`, `unit_id`, `name` e a
 não-vacuidade do conjunto — **nenhum elemento** de `job_function_ids`. Restringir
-a validação a path/query deixaria `{"job_function_ids": [" "]}` produzindo o
+a validação a path/query deixaria `{"job_function_ids": ["\x00"]}` produzindo o
 mesmo 500 que a Stage existe para fechar.
 
 **A ordem é parte da regra**, e é esta: **autenticar → validar identificador →
@@ -608,7 +654,7 @@ e2e esperando produzi-la.
 |---|---|---|---|
 | Sem header / esquema errado / token inválido ou expirado | `InvalidAccessTokenError` | 401 corpo constante + `WWW-Authenticate: Bearer` | handler de identity |
 | Papel não concede a permissão | `PermissionDeniedError` | 403 corpo constante | handler de identity |
-| Ator de tenant não declarou o tenant alvo | `TenantScopeRequiredError` | 403 | handler de identity — **é o eixo de F1** |
+| Ator de tenant não declarou o tenant alvo | `TenantScopeRequiredError` | 403 | handler de identity — **inalcançável pelas rotas de staff** desde o ADR 0.0.0005: o tradutor sempre resolve o tenant. Fica na tabela porque continua sendo o comportamento do guard, e porque CA36 assere que nenhuma das 16 rotas o produz |
 | Tenant alvo ≠ tenant do ator; unidade alvo de outro tenant | `TenantNotVisibleError` | 403 | handler de identity |
 | Ator escopado sem unidade declarada, em permissão não tenant-wide | `UnitScopeRequiredError` | 403 | handler de identity |
 | Unidade inexistente **ou** não visível | `UnitNotVisibleError` | 403 | guard converte, handler de identity |
@@ -778,6 +824,34 @@ delas contradiziam a primeira versão desta tabela.
 - **Fonte:** `roadmap.md` bloco 3.6 (`non_goals`: *"leitura de funcionario por
   id"*); ADR 3.4.0007; issue #43 finding nº 4.
 
+### D9 — O tenant vem do token e é resolvido no `composition_root`
+
+- **O quê:** o tradutor `_IdentityAccessGuard` preenche `tenant_id` a partir do
+  ator autenticado quando a rota não o nomeia; o significado de `tenant_id=None`
+  entra no docstring do port; o fake resolve igual, e a lei é cobrada nas duas
+  implementações. **Nenhuma assinatura muda** — `access_guard.py` já declara
+  `tenant_id: str | None = None`.
+- **Por quê:** é a aplicação, nesta Stage, de uma regra que vale para o projeto
+  inteiro — *o tenant aparece no caminho se e somente se é o recurso endereçado
+  ou o ator pode agir fora do próprio tenant*. Sem ela, as 16 rotas eram
+  inalcançáveis por todos os papéis (medição em §13).
+- **Alternativas reais descartadas, com fonte:** entregar o tenant ao router pelo
+  port (rejeitada por ASVS V4.1.1 — regra de acesso num único *trusted service
+  layer* — e por mover a identidade de **resultado** da decisão para **insumo**
+  dela); e pôr o tenant no path das 16 rotas (rejeitada por Hardy 1988 —
+  designação sem autoridade não é capability — e por OWASP API1:2023, que trata
+  path como entrada do cliente, logo somaria 16 rotas à superfície de BOLA sem
+  ganho medível).
+- **Decisão do sponsor**, 2026-08-18, após pesquisa de fontes primárias conduzida
+  pela sessão mestra.
+- **ADR:** [`../../adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md`](../../adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md)
+  — **global** (`bounded_context: transversal`), porque a regra governa também o
+  `identity` já mergeado e todo BC futuro. Traz o **gatilho de reabertura** (se
+  um usuário atravessar tenants, ou se `platform_admin` alcançar rotas de staff,
+  o confused deputy passa a ser instanciável) e os **limites que não remove** (a
+  checagem de unidade e de registro segue obrigatória em toda rota; a cópia, com
+  dois alvos, é onde ela é mais frágil).
+
 ### D8 — Sem `gate_mode: batch`
 
 O bloco 3.6 declara `gate_mode: strict`. Esta Stage escreve a superfície de
@@ -809,13 +883,14 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
 
 | Risco | Prob. | Impacto | Mitigação |
 |---|---|---|---|
-| **F1 não resolvida deixa as 16 rotas inalcançáveis** e o DoD impossível | **A** | **A** | Bifurcação aberta em §13, com a medição colada; a Stage não entra em Fase 3B sem ela fechada. CA10 é escrito com ator `manager` real, nunca `owner` |
+| A resolução do tenant no tradutor não valer para as **duas** implementações do port, deixando o fake e a produção cobertos por conjuntos diferentes | M | **A** | §5.3 + ADR 0.0.0005 §Decision; a lei é parametrizada sobre tenant nomeado × tenant omitido nos dois lados. É o sinal de alerta que vazou duas mutações na 3.4 |
+| Alcance das 16 rotas regredir sem ninguém notar (era o estado medido antes do ADR 0.0.0005) | B | **A** | CA10 com ator `manager` real, nunca `owner`, sobre R01…R16; CA36 assere que nenhuma rota produz `TenantScopeRequiredError` |
 | Ler `AuthorizedScope.unit_id` acopla o router a um eco que **nenhuma lei do port promete**, e em R16 (dois escopos) troca origem por destino | M | **A** | §5.4 + ADR 3.6.0001; CA14 (ausência de leitura, estrutural) e CA15 (comportamento, com dublê **adversarial** que devolve escopo divergente — o fake sancionado ecoa e não refutaria nada) |
 | Um identificador escapar da validação numa rota nova **ou num campo de corpo** | **A** | M | CA20 parametrizado sobre RID (derivado do router) **e** sobre os campos de id dos schemas (derivados por introspecção), com os valores adversariais aplicáveis a cada eixo |
 | A orientação origem→destino de R16 ser invertida no router sem que nada falhe | M | **A** | CA34 — cópia feliz A→B assere **em qual unidade** o clone caiu; sem ele, a inversão sobrevive a CA11, CA13, CA16 e CA25 |
 | Mapa de status incompleto após erro novo em Stage futura | M | M | Totalidade + par classe→status por teste (§5.9, CA17 e CA18) |
 | Lei universal travada num representante estreito (16 rotas × 5 papéis × 2 permissões multiplicam o risco) | **A** | M | Todo critério de §11 com quantificador nomeia o domínio enumerado (R01…R16, RJF, REMP, RID, os campos de id dos schemas, os 5 papéis, as 18 exceções) e é parametrizado sobre ele; CA33 exige a prova por mutação nas **quatro** leis mais críticas. Caso extremo tratado em separado: CA15, cujo domínio tem **um só valor observável** no sistema e exige dublê fabricado |
-| 16 rotas + schemas + handlers + wiring + e2e estourarem a faixa de 3–12 Tasks | **A** | M | Agrupamento por recurso e por camada; a estimativa do roadmap é 8 e o recorte real mede **12, ou 13 com F1** (§12) — dentro da faixa, mas encostando no alarme de `≥ 14`. A Fase 3B mede antes de tudo |
+| 16 rotas + schemas + handlers + wiring + e2e estourarem a faixa de 3–12 Tasks | M | M | Agrupamento por recurso e por camada; com F1 fechada o recorte mede **11** (§12), dentro da faixa. A Fase 3B confirma antes de tudo |
 | `weekly_hours` como string quebrar cliente que espera número | B | B | Declarado no contrato e no ADR 3.6.0003; não há cliente ainda (frontend é Step futuro) |
 
 ### `[finding]` a escalar
@@ -837,6 +912,17 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
   (ADR 3.4.0001). Quando a 3.5 trouxer o `IdentityGateway`, reavaliar mover os
   dois para `features/staff/adapters/out/identity/`. **Stage candidata:**
   `3.5-employee-login-link`.
+- **`[finding]` — dois resíduos em `identity` que o ADR 0.0.0005 nomeia e não
+  corrige.** (a) O docstring de `create_unit` (`router.py:343`) justifica o
+  `restaurant_id` do path pelo seu **efeito de autorização**, que é o argumento
+  **fraco** — e é o mesmo com que o ADR rejeita a Alternativa C em staff; o
+  argumento que sustenta a rota é o outro (o path endereça sub-recurso de um
+  recurso que identity possui, e a autorização vem de carona). (b) A resolução do
+  tenant em `POST /users` e `POST /users/invitations` vive no router, o que a
+  cláusula (3) cobre, mas que nenhum doc de identity declara. Direção sugerida:
+  uma frase em cada docstring apontando o ADR. **Stage candidata:** a próxima que
+  toque `features/identity/adapters/in/http`. Não é escopo de uma Stage cuja
+  camada-alvo é `staff`.
 - **`[finding]` — `workforce.md` §4 não foi reconciliado com o ADR 3.4.0006.** O
   doc de domínio ainda diz que *"é NO STAFF que hr diverge do manager"* e aponta
   a lacuna para *"o concept da 3.4"*, quando o ADR já a fechou com `hr` ≡
@@ -919,9 +1005,9 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       `{employee, platform_admin} × R01…R16` — 32 casos, não dois.
 - [ ] **CA10** — `manager` **alcança** as 16 rotas na sua própria unidade e no
       catálogo do seu tenant: teste parametrizado sobre R01…R16 com ator
-      `manager` real, exigindo que **nenhuma** resposta seja 401/403. *(É o
-      critério que F1 hoje reprova, e é escrito para reprovar enquanto ela
-      estiver aberta.)*
+      `manager` real, exigindo que **nenhuma** resposta seja 401/403. *(Era o
+      critério que a F1 reprovava; com o ADR 0.0.0005 ele passa a ser o teste de
+      não-regressão do alcance.)*
 - [ ] **CA11** — `owner` alcança as 16 rotas, inclusive as de unidade da qual
       **não é membro** (bypass por papel), e o efeito recai sobre a unidade do
       **path** — não sobre nenhuma outra. Parametrizado sobre REMP.
@@ -1054,6 +1140,23 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       sobrevive a CA11, CA13, CA16 e CA25, porque nenhum deles exercita uma cópia
       que dá certo e olha **onde** ela caiu. O use case nomeia a inversão como
       reabertura da exfiltração que o ADR 3.4.0007 fecha.)*
+- [ ] **CA36** — **Nenhuma das 16 rotas produz `TenantScopeRequiredError`**, para
+      **nenhum** dos papéis que detêm permissão de staff (`owner`, `manager`,
+      `hr`): teste parametrizado sobre `{owner, manager, hr} × R01…R16` que falha
+      se qualquer resposta trouxer o 403 daquele erro. **E a lei do tenant
+      resolvido é cobrada nas duas implementações do port** — produção e fake —,
+      parametrizada sobre tenant **nomeado** e tenant **omitido**, para que as
+      duas não fiquem cobertas por conjuntos de valores diferentes.
+      *(Critério acrescentado ao fim da lista com a decisão de F1, sem renumerar
+      nenhum critério anterior — a disciplina que o aviso do topo declara.)*
+
+> **Por que o número 35 é pulado.** `CA35` já aparece **neste arquivo**, na tabela
+> de §7 D6, como o critério da numeração **pré-corte** que a errata do ADR 3.4.0004
+> aposenta. Reusá-lo faria `grep -n "CA35" docs/stages/3.6-staff-http/concept.md`
+> devolver dois referentes incompatíveis no mesmo documento — exatamente a classe
+> de ambiguidade que esta Stage existe, em parte, para consertar. Número de
+> critério é identidade: não recicla, nem quando o referente antigo mora só numa
+> citação histórica.
 
 > **Nota sobre CA21 — por que a asserção é sobre `authorize`, e não sobre o
 > status.** A ordem "validar antes de autorizar" não é observável pelo status: um
@@ -1091,84 +1194,95 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       (3.6.0001–3.6.0003; as três de borda já decididas são 3.4.0002/0004/0005).
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? — sim, a
       `3.4-staff-access-scope` está `done` e mergeada (PR #42).
-- [ ] Stage cabe em ~3–12 Tasks? — **10–13 previstas, e o teto encosta no
-      alarme.** Decomposição realista, revisada no Checkpoint A: schemas +
-      conversores de borda (1); error handlers e mapa (1); dependências,
-      validador de identificador e declaração de requisito (1); rotas de catálogo
-      (1); rotas de funcionário em **três** blocos — CRUD, perfil/preferência/
-      indisponibilidade, ciclo de vida + cópia (3); `HttpWiring` em coleções com
-      identity ainda verde **isolada** (1); registro dos dois routers em `app.py`
-      (1); e2e do DoD (1); matriz papel × rota (1); provas de mutação e
-      varreduras por AST (1) = **12**. **Mais 1 se F1 exigir tocar o port e o
-      fake** ⇒ **13**, contra o alarme de `≥ 14` de CONVENTIONS §6. **Não
-      confirmável enquanto F1 estiver aberta**, e é a primeira coisa que a Fase
-      3B tem de medir: se passar de 13, o inventário de rotas precisa de
-      subdivisão — não de mais um corte arbitrário, porque esta Stage **já é** o
-      produto de um corte.
-- [x] Riscos críticos têm mitigação plausível? — sim, exceto o que é a própria
-      bifurcação.
+- [x] Stage cabe em ~3–12 Tasks? — **sim, 11**, agora que F1 está fechada e o
+      recorte é mensurável. Decomposição: (1) schemas + conversores de borda
+      (`weekly_hours`, `DayPeriod`, perfil discriminado); (2) `error_handlers.py`
+      — mapa total, `resolve_status`, `build_error_response`; (3)
+      `dependencies.py` — validador de identificador, declaração de requisito por
+      rota, provedor de ator; (4) **tenant resolvido no tradutor** — docstring do
+      port, `_IdentityAccessGuard`, fake, lei nas duas implementações; (5) rotas
+      de catálogo (RJF); (6) CRUD de funcionário (R05, R06, R07, R15); (7)
+      perfil/preferência/indisponibilidade (R08–R12); (8) ciclo de vida + cópia
+      (R13, R14, R16, com CA34); (9) wiring — `HttpWiring` em coleções,
+      `composition_root` com 17 overrides, `app.py` com os dois routers e
+      identity provada intacta; (10) e2e do DoD; (11) matriz papel × rota e
+      acesso negado pela API real.
+      **Duas consolidações contra a estimativa anterior de 12–13**, e as duas são
+      substantivas, não contábeis: as provas de mutação e as varreduras por AST
+      deixam de ser Task própria e viram **check** da Task que cria o módulo que
+      elas varrem (é onde o PIPELINE as põe); e o wiring das duas peças —
+      coleções e registro em `app.py` — é **uma** mudança lógica com dois checks,
+      não duas. A resolução do tenant (4) é Task porque toca outra camada
+      (composition root + port + fake) e precisa aterrissar **antes** de qualquer
+      rota funcionar. Margem de 1 até o teto saudável e de 3 até o alarme de
+      `≥ 14` de CONVENTIONS §6; se a Fase 3B medir acima de 12, o sinal é
+      subdividir o inventário de rotas — não cortar de novo, porque esta Stage
+      **já é** o produto de um corte.
+- [x] Riscos críticos têm mitigação plausível? — sim, **todos**: com a F1 fechada
+      pelo ADR 0.0.0005, não sobrou risco sem mitigação na tabela de §10.
 - [x] Os cinco findings herdados da issue #43 estão tratados? — sim: nº 1 em
       §5.4/D1, nº 2 em §5.14/D2, nº 3 em §5.15, nº 4 em D7, nº 5 em D6. **O
       quarto `[finding]` da §7 da 3.4** (CONVENTIONS §Idioma × a suíte de testes)
       não está entre os cinco da issue e não é escopo desta Stage; a disposição
       está declarada em §10.
-- [ ] **As 16 rotas são alcançáveis pelos papéis do DoD?** — **não** (F1).
+- [x] **As 16 rotas são alcançáveis pelos papéis do DoD?** — **sim**, desde o
+      ADR 0.0.0005; travado por CA10 e CA36.
 - [x] Todo critério com quantificador nomeia o domínio enumerado? — sim (nota no
       topo da §11).
 
 ## 13. Questões em aberto
 
-> **Uma bifurcação material.** Afeta contrato e alcance; o **detalhe rico vai na
-> mensagem de handoff à sessão mestra**, não neste arquivo — aqui ficam o
-> enunciado, a medição e a âncora. **Enquanto estiver aberta este concept
-> permanece `draft`** e a Stage não entra em Fase 3B.
+> **Nenhuma em aberto.** A única bifurcação material desta Stage — F1 — foi
+> decidida pelo sponsor em **2026-08-18**. A seção fica como registro: o problema
+> medido, a decisão, e as duas correções que a pesquisa de fontes fez no
+> enunciado original. Apagá-la esconderia que o inventário de rotas **é uma
+> decisão sustentada**, e não uma omissão que passou.
 
-### F1 — De onde o router de staff tira o tenant alvo que a autorização exige?
+### F1 — De onde o router de staff tira o tenant alvo que a autorização exige? — **DECIDIDA**
 
-**A medição, primeiro.** `AuthorizeActionUseCase` tem um passo 3
+**A medição que abriu a bifurcação.** `AuthorizeActionUseCase` tem um passo 3
 (`_assert_tenant_scope`) que **nega qualquer ator de tenant que não declare o
-tenant alvo**: `if command.tenant_id is None: raise TenantScopeRequiredError`
-(`authorize_action.py`). Probe rodado nesta sessão, com `manager` real e as duas
-permissões de staff:
+tenant alvo**: `if command.tenant_id is None: raise TenantScopeRequiredError`.
+Probe rodado na Fase 3A, com `manager` real e as duas permissões de staff:
 
 ```
 manage_staff          RAISED TenantScopeRequiredError  ação de papel 'manager' exige declarar o tenant alvo
 manage_job_functions  RAISED TenantScopeRequiredError  ação de papel 'manager' exige declarar o tenant alvo
 ```
 
-**O problema.** O inventário de rotas ratificado no `roadmap.md` **não tem o
-tenant em nenhuma URL** — `/job-functions` e `/units/{unit_id}/employees`. O port
-`AccessGuard.authorize` recebe `tenant_id: str | None = None`, e staff não tem
-como saber qual é: o ator é **opaco** por decisão do port (`Actor = object` —
-*"staff não interpreta o ator"*), e o tenant só aparece **depois**, no
-`AuthorizedScope` devolvido. Logo, com o código de hoje, **as 16 rotas devolvem
-403 para todos os papéis**, e o DoD (*"gerente cria função customizada e
-funcionário"*) é inalcançável.
+O inventário ratificado no `roadmap.md` não tem tenant em nenhuma URL, o ator é
+**opaco** por decisão do port (`Actor = object`), e o tenant só aparece **depois**,
+no `AuthorizedScope`. Com o código de então, **as 16 rotas devolviam 403 para
+todos os papéis** e o DoD era inalcançável.
 
-**Por que não decido sozinho.** As saídas possíveis diferem em **onde o contrato
-muda** — o docstring de um port mergeado há uma Stage, a assinatura desse port,
-ou a URL pública das 16 rotas, que é o item que o roadmap ratificou. Decidir a
-terceira seria decidir contra fonte mais alta na hierarquia (`roadmap.md`), o que
-o protocolo proíbe; decidir a primeira é mudar a semântica de um parâmetro de
-acesso de um port fechado, sem que ele conste do `arquivos_a_modificar` do bloco.
+**A decisão (sponsor, 2026-08-18):** opção **A** — o tradutor no
+`composition_root` preenche o `tenant_id` a partir do ator autenticado quando a
+rota não o nomeia. **Sem mudança de assinatura**: `access_guard.py:137` já declara
+`tenant_id: str | None = None`. O inventário de rotas **permanece sem tenant no
+path**, agora por regra e não por omissão. Registrada no **ADR 0.0.0005**
+(global, `bounded_context: transversal`), com as três alternativas, os
+trade-offs ancorados em seis fontes primárias, o gatilho de reabertura e os
+limites que a decisão **não** remove. Aplicação nesta Stage: §5.3, §7 D9, CA10 e
+CA36.
 
-**Sinal que as fontes dão (não é resposta, é indício):** o tradutor devolve
-`AuthorizedScope.tenant_id = authorized.actor_tenant_id` — o tenant **do ator**,
-não o do pedido. Esse desenho só faz sentido se quem chama **não sabe** o tenant
-e o aprende do escopo, o que aponta para a saída em que o tradutor resolve o
-tenant do ator. Mas o port não diz isso em lugar nenhum, e o tradutor de hoje
-repassa `None` adiante.
+**As duas correções que a pesquisa fez no enunciado desta seção** — registradas
+porque um fork bem decidido a partir de premissa errada continua sendo sorte:
 
-> **Correção de uma objeção que esta seção fazia, e que não se sustenta.** A
-> primeira redação argumentava que resolver o tenant no tradutor seria "dar
-> significado **permissivo** a um parâmetro de acesso ausente" — o padrão que já
-> mordeu este projeto duas vezes. Medido, é o **oposto**: fazer `tenant_id=None`
-> significar "o tenant do próprio ator" torna a ação cross-tenant
-> **inexprimível** a partir de staff, que é a leitura mais restritiva possível, e
-> replica literalmente o que o router de identity já faz com `tenant_id` vindo
-> das claims. A objeção real que resta é outra, e é menor: muda a semântica
-> documentada de um port fechado. Fica registrado porque um fork apresentado com
-> argumento errado é pior que um fork apresentado sem argumento.
+- **"Significado permissivo" estava invertido.** A primeira redação objetava que
+  resolver o tenant no tradutor seria dar sentido **permissivo** a um parâmetro de
+  acesso ausente — o padrão que já mordeu este projeto duas vezes. É o **oposto**:
+  fazer `tenant_id=None` significar "o tenant do próprio ator" torna a ação
+  cross-tenant **inexprimível** a partir de staff, a leitura mais restritiva das
+  três. A objeção que resta é menor: muda a semântica documentada de um port
+  fechado — e por isso ela vai para o docstring do port, não para o costume.
+- **A intuição de que o path seria "mais seguro" não tem fonte, e a literatura
+  aponta ao contrário.** Hardy (1988) prescreve que designação e autoridade viajem
+  **juntas**; um `restaurant_id` no path é designação **sem** autoridade, e cria a
+  obrigação de checagem que ele critica. OWASP API1:2023 trata path como entrada
+  do cliente igual a corpo e query, então pôr o tenant lá **somaria** 16 rotas à
+  superfície de BOLA. E o argumento de "consistência com `identity`" é fraco
+  porque a diferença entre os dois BCs é **principiada**: lá o `platform_admin`
+  age fora de qualquer tenant e o restaurante *é* o recurso.
 
 ## 14. Referências
 
@@ -1191,12 +1305,17 @@ repassa `None` adiante.
 - **Rascunho pré-corte**, consumido criticamente: commit `d878060`,
   `docs/stages/3.4-staff-http/concept.md` §4.1–4.3, §6 e §11
 - ADRs desta Stage: 3.6.0001, 3.6.0002, 3.6.0003
+- **ADR global decidido nesta Stage: 0.0.0005** — o tenant vem do token, salvo
+  quando é o recurso ou o ator age fora do próprio tenant (regra transversal;
+  governa `identity` e todo BC futuro)
 - ADRs de borda decididos na 3.4 e **executados aqui**: 3.4.0002, 3.4.0004,
   3.4.0005
 - ADRs consumidos: 2.1.0001, 2.2.0002, 2.3.0001, 2.3.0003, 2.3.0005, 2.4.0001,
   **2.4.0003**, 3.1.0004, 3.1.0005, 3.1.0006, 3.2.0002, 3.2.0003, 3.2.0006,
   3.2.0007, 3.3.0003, 3.3.0006, 3.4.0001, 3.4.0003, 3.4.0006, 3.4.0007,
   **3.4.0008**
-- **Issue #43** (esta Stage)
+- **Issue #43** (esta Stage); decisão do sponsor sobre a F1 em 2026-08-18
+- Fontes primárias de segurança/multi-tenancy: `## References` do ADR 0.0.0005;
+  ponteiro em [`../../overview.md`](../../overview.md) §10
 - Skills: `fastapi-thin-adapter`, `composition-root`, `hex-arch-python`,
   `stage-audit` (§"Lei universal, representante estreito")
