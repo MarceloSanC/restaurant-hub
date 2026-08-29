@@ -43,11 +43,11 @@ walking `type(exc).__mro__` and taking the first registered class, so a handler 
 `UnavailabilityNotFoundError` inherits **only** from `StaffError`, deliberately, so
 that no 404 handler ever sees it.
 
-The BC currently exposes **17** concrete error classes — **8** in
+The BC exposes **18** concrete error classes — **9** in
 `domain/exceptions/errors.py` (plus the root `StaffError` itself, which the handler
 is registered *on* and which is **not** an entry in the map) and **9** in
-`application/errors.py` — and this Stage
-adds `InvalidDayPeriodError`, for **18**. They must land on three bands: 404, 409 and
+`application/errors.py`; `InvalidDayPeriodError` was added by **Stage 3.4**
+(Task 02, ADR 3.4.0003 §3). They must land on three bands: 404, 409 and
 422. The 401/403 bands belong to identity's handler, because every error in them is
 raised by the guard.
 
@@ -213,3 +213,22 @@ borda eram a mesma Stage. Depois do corte, o acréscimo do erro ficou na 3.4 e o
 mapa ficou na 3.6 — as duas metades da mesma frase foram para lados diferentes.
 A errata desfaz a ambiguidade nomeando a Stage, em vez de deixar "this Stage"
 significar coisas diferentes em parágrafos vizinhos do mesmo documento.
+
+**2026-08-29 — a correção acima aplicada ao corpo; nada de novo foi decidido.**
+Achado no Checkpoint C da Fase 4 da Stage 3.6, que **executa** este ADR. A
+entrada de 2026-08-18 declarava o texto novo na coluna "Diz", mas o `## Context`
+nunca foi editado: o documento seguia dizendo *"**17** concrete error classes —
+**8** … and **9** … and this Stage adds `InvalidDayPeriodError`, for **18**"*
+enquanto o seu próprio `## Decision` §3b falava em *"all **18** entries"* —
+**dois números incompatíveis no mesmo documento**, que é exatamente a ambiguidade
+que a errata de 2026-08-18 existia para fechar.
+
+O corpo passa agora a dizer o que aquela linha já ratificou. A medição é a mesma
+e continua conferida no código: `domain/exceptions/errors.py` tem **9** concretas
+e `application/errors.py` tem **9**, total **18** — o número que
+`STAFF_ERROR_STATUS` implementa e que CA17/CA18 travam por enumeração recursiva.
+
+A lição, e é por isso que fica escrito: **errata que descreve a correção não é
+correção**. Uma tabela "Dizia → Diz" cujo "Diz" nunca chegou ao corpo deixa o
+documento com as duas versões vivas, e a errata passa a parecer conformidade que
+o arquivo não tem.

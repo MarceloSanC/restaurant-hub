@@ -1197,4 +1197,44 @@ Task 01 (tenant no token: port + tradutor + fake + as duas suítes de lei)
   candidata.
 - `[deviation]` — ajuste pequeno vs. o plano original.
 
+### 2026-08-29 - [decision] adapters/in/http/schemas.py (Task 02) - Marcelo
+
+**Contexto:** o ADR 3.6.0003 se contradiz. O `## Implementation notes` diz
+*"**Do not add `extra="forbid"` to the request models**... Diverging here would
+create two behaviours for the same class of request across the API"*; o **mesmo
+ADR**, `## Decision` 1 - e o concept CA06, que o cita - exige que
+`{"type":"on_demand","weekly_hours":"40"}` receba **422**. Sem `forbid`, o
+Pydantic ignora o campo e a resposta e **200**: metade da `Decision` 1 e
+inalcancavel. Medido por mutacao no Checkpoint C - trocar `forbid` por `ignore`
+derruba CA06.
+
+**Pergunta:** aceitar a instrucao literal (e deixar CA06 sem trava) ou estreitar
+o alcance dela ao nivel em que o dano que ela nomeia se realiza?
+
+**Opcoes:**
+- A - Seguir a instrucao literal: nenhum `extra="forbid"`, e CA06 vira criterio
+  sem teste possivel. Reprova o proprio ADR que a instrucao serve.
+- B - `extra="forbid"` em **todos** os schemas, de topo e aninhados. Realiza
+  exatamente o dano que a instrucao nomeia: um `tenant_id` enviado no corpo
+  passaria a receber 422 em vez de ser desarmado em silencio, e a borda de staff
+  divergiria da de identity na mesma classe de request.
+- C - `extra="forbid"` **so** nas duas variantes aninhadas da uniao de perfil de
+  jornada, mantendo o `ignore` default nos nove `*Request` de topo. ✅ recomendada
+
+**Decisao:** C.
+
+**Razao:** o campo extra que a instrucao protege e o campo **desconhecido** do
+request - e o desarme dele continua intacto: verificado em runtime que
+`CreateEmployeeRequest(..., tenant_id="ATACANTE")` descarta o campo em silencio,
+como os requests de identity. Ja o `weekly_hours` dentro de
+`{"type": "on_demand"}` nao e campo desconhecido a desarmar: e **o estado
+invalido** que a uniao discriminada existe para tornar irrepresentavel, e
+Decision 1 lhe atribui 422 nominalmente. Ignora-lo entregaria ao cliente uma
+jornada diferente da que ele pediu.
+
+**Registro no ADR:** a instrucao foi estreitada para *"top-level request
+models"* por **errata** no ADR 3.6.0003 (`## Errata`, 2026-08-29), com o alcance
+do `forbid` medido e declarado. Sem esse registro, quem lesse o ADR ao pe da
+letra removeria o `forbid` e derrubaria CA06 sem entender por que.
+
 <!-- END: post-execution -->

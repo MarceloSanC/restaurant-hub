@@ -160,11 +160,22 @@ The boundary mirrors the guarantee rather than the shape that is convenient:
   constructs `Decimal("40")` — the whitespace is trimmed silently, which is the
   normalisation ADR 2.3.0005 refuses. Either the converter rejects padded input or
   the trimming is accepted and declared; it must not be discovered by a client.
-- Do not add `extra="forbid"` to the request models: the identity boundary
-  deliberately keeps Pydantic's default of ignoring unknown fields so that a
-  malicious extra field is **disarmed** rather than answered with a 422, and the
-  test can observe the disarming. Diverging here would create two behaviours for
-  the same class of request across the API.
+- Do not add `extra="forbid"` to the **top-level** request models: the identity
+  boundary deliberately keeps Pydantic's default of ignoring unknown fields so
+  that a malicious extra field is **disarmed** rather than answered with a 422,
+  and the test can observe the disarming. Diverging there would create two
+  behaviours for the same class of request across the API.
+- **The nested variants of the workload-profile union are the exception, and the
+  exception is not a divergence from the rule above but a consequence of
+  Decision 1.** The union exists to make "on demand with a weekly load"
+  unrepresentable, so `weekly_hours` arriving inside `{"type": "on_demand"}` is
+  not an unknown field to be disarmed — it **is** the invalid state, and
+  Decision 1 (with concept CA06) requires a **422** for it. Ignoring it there
+  would hand the client a work schedule different from the one it asked for, and
+  would make that half of Decision 1 unreachable. Scope of the exception,
+  measured: the `forbid` lives **only** on the two nested variants; the nine
+  top-level `*Request` models keep Pydantic's default, so a `tenant_id` sent in
+  the body is still silently discarded. See `## Errata`.
 - The sort key for `job_function_ids` is the id itself; it is arbitrary but must
   be stable and stated, so nobody "improves" it into a name-based order that would
   require a second query.
@@ -183,3 +194,31 @@ The boundary mirrors the guarantee rather than the shape that is convenient:
 - ADR 3.1.0004, ADR 3.1.0005, **ADR 3.1.0006** (the order of the job-function set
   is not domain data), ADR 2.3.0005; Stage 3.3 CA17 (value **and** scale survive
   the Postgres round trip)
+
+## Errata
+
+**2026-08-29 — alcance de uma instrução estreitado; decisão inalterada.** Achado
+no Checkpoint C da Fase 4 da Stage 3.6, ao revisar a Task 02 que executa este
+ADR. O que muda é o **alcance** de uma frase de `## Implementation notes`;
+**nenhuma frase de `Decision`, `Alternatives considered` ou `Consequences` teve o
+seu conteúdo alterado** — ao contrário, a errata é o que torna a `Decision` 1
+inteiramente alcançável.
+
+| Onde | Dizia | Diz | Medição |
+|---|---|---|---|
+| `## Implementation notes` | *"**Do not add `extra="forbid"` to the request models**… Diverging here would create two behaviours for the same class of request across the API."* | *"…to the **top-level** request models"*, mais um bullet novo declarando que as duas variantes **aninhadas** da união de perfil de jornada são a exceção, e por quê | O **mesmo ADR**, `## Decision` 1, exige que `{"type":"on_demand","weekly_hours":"40"}` receba **422** — e o concept CA06 repete. Sem `extra="forbid"` na variante, o Pydantic **ignora** o campo e a resposta é **200**: metade da `Decision` 1 fica inalcançável. Medido por mutação na Fase 4 — trocar `forbid` por `ignore` derruba CA06 |
+
+**Por que é errata e não revisão.** As duas frases do documento original eram
+incompatíveis entre si, e uma delas — a `Decision` — é a que o concept cita como
+critério de aceite. A errata escolhe a leitura que torna o documento consistente,
+e estreita a instrução para o alcance em que ela é verdadeira: o dano que a
+instrução nomeia (*"dois comportamentos para a mesma classe de request"*) é sobre
+o **request**, e ele não se realiza — os nove `*Request` de topo continuam
+desarmando campo desconhecido em silêncio, exatamente como os de identity. O
+`forbid` está a um nível de aninhamento de distância, sobre um payload cuja razão
+de existir é recusar a combinação inválida.
+
+**O que NÃO mudou.** A convenção de `extra` dos requests de topo de staff é a
+mesma de identity, e continua sendo: campo extra enviado por cliente é
+**desarmado**, não respondido com 422. Quem quiser mudar isso muda um ADR, não um
+`model_config`.
