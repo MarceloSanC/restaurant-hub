@@ -180,6 +180,30 @@ from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import 
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
 
 
+def _tenant_id_do_ator(actor: Actor) -> str | None:
+    """Lê o tenant do ator autenticado — a cláusula 3 do ADR 0.0.0005 aplicada.
+
+    **Este módulo é a camada confiável, e a leitura acontece aqui por medição,
+    não por conveniência.** O ator é o `AuthenticatedActor` de identity, cujo
+    módulo vive sob o pacote `in` — keyword Python, inalcançável por import
+    estático (LAYOUT §8) —, e o port o declara `Actor = object` justamente para
+    que staff **não** leia atributo de ator. `actor.claims.tenant_id` é erro de
+    tipo em `strict` sobre `object`; o caminho já usado neste módulo para o mesmo
+    problema (o campo `identity_guard: Any` do contêiner) é a leitura por
+    **variável intermediária anotada**, sem `cast` de conveniência e sem mudar a
+    assinatura do port.
+
+    **Falha fechado, e é isso que torna a ausência segura.** Um ator sem
+    `claims` — ou com `claims` sem tenant — devolve `None`, e `None` viaja como
+    "não declarei tenant" até o passo 3 de `AuthorizeActionUseCase`, que **nega**
+    um ator escopado que não nomeia o tenant alvo. Nenhuma leitura malsucedida
+    alarga o alcance de ninguém.
+    """
+    claims = getattr(actor, "claims", None)
+    tenant_id: str | None = getattr(claims, "tenant_id", None)
+    return tenant_id
+
+
 class _IdentityAccessGuard:
     """Implementação de produção do `AccessGuard` de staff, sobre o `IdentityGuard`.
 
@@ -254,11 +278,31 @@ class _IdentityAccessGuard:
         `StaffTenantId(actor_tenant_id or "")` compilaria, passaria mypy strict
         e produziria consultas de tenant vazio — e é precisamente o que as
         linhas abaixo não fazem.
+
+        **`tenant_id` ausente significa "o tenant do próprio ator", e é aqui que
+        ele é resolvido** (ADR 0.0.0005, cláusula 3). Sem isto as 16 rotas de
+        staff são inalcançáveis por **todos** os papéis: o inventário de rotas
+        não carrega tenant (cláusula 2), então nada o nomeia, e o passo 3 de
+        `AuthorizeActionUseCase` recusa com `TenantScopeRequiredError` qualquer
+        ator escopado que não declare o alvo.
+
+        **A resolução acontece ANTES de delegar, e L-AG3 continua DEPOIS.** Quem
+        monta o `AuthorizeActionCommand` é o `IdentityGuard`, não este tradutor:
+        o que se resolve aqui é o argumento que ele recebe. Resolver depois seria
+        resolver um valor que a decisão de acesso já não usa. E a guarda de
+        L-AG3 permanece onde está, sobre o `actor_tenant_id` que **identity**
+        devolve: ator sem tenant é negado, jamais coagido para `""`.
         """
+        # Só a **ausência** carrega significado. Um `tenant_id=""` explícito é o
+        # chamador nomeando um tenant vazio, e segue para a decisão de acesso
+        # como qualquer outro alvo — que o negará. Trocar por truthiness aqui
+        # reescreveria o pedido em silêncio (ADR 2.3.0005).
+        target_tenant_id = tenant_id if tenant_id is not None else _tenant_id_do_ator(actor)
+
         authorized = self._guard.authorize(
             actor,
             Permission(permission),
-            tenant_id=RestaurantId(tenant_id) if tenant_id is not None else None,
+            tenant_id=RestaurantId(target_tenant_id) if target_tenant_id is not None else None,
             unit_id=IdentityUnitId(unit_id) if unit_id is not None else None,
         )
 

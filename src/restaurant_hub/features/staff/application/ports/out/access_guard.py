@@ -83,7 +83,10 @@ class AuthorizedScope:
     Attributes:
         tenant_id: o restaurante dentro do qual a ação foi autorizada. **Nunca
             vazio nem ausente** — é a L-AG3, e é o campo cuja coerção silenciosa
-            para `""` este port existe para impedir.
+            para `""` este port existe para impedir. Quando a chamada **omitiu**
+            `tenant_id`, este é o tenant do **próprio ator autenticado**, e não
+            um alvo mais largo: ver o parâmetro `tenant_id` de
+            `AccessGuard.authorize` e o ADR 0.0.0005.
         unit_id: a unidade alvo quando a ação nomeia uma; `None` quando não
             nomeia. **`None` não significa "ação tenant-wide"** — e a
             afirmação contrária esteve escrita aqui até ser medida contra o
@@ -143,7 +146,24 @@ class AccessGuard(Protocol):
             actor: o ator devolvido por `authenticate`, opaco para staff.
             permission: o nome da permissão exigida, como **valor**
                 (`"manage_staff"`, `"manage_job_functions"`).
-            tenant_id: o restaurante alvo, como string opaca.
+            tenant_id: o restaurante alvo, como string opaca. **Ausente
+                significa "o tenant do próprio ator autenticado"** — jamais
+                "qualquer tenant" nem "todos". O significado é do **contrato**,
+                e está escrito aqui em vez de inferível de uma implementação,
+                porque as **duas** são obrigadas por ele: um fake que não
+                resolva o tenant do ator não cumpre este port.
+
+                A regra é o **ADR 0.0.0005**, global, em três cláusulas: (1) o
+                tenant que decide acesso sempre deriva do token, e um tenant que
+                chega na requisição é declaração **confirmada contra** ele,
+                nunca a fonte; (2) ele aparece no path **só quando** o bounded
+                context é dono do tenant como recurso endereçável, ou o ator
+                pode agir fora do próprio tenant — **nenhuma das duas vale em
+                staff**, e por isso nenhuma rota o carrega; (3) onde vem do
+                token, é resolvido numa **camada confiável única**, cujo lugar
+                segue a **opacidade do ator** — e como este port declara
+                `Actor = object` de propósito, essa camada é o
+                `composition_root`, nunca o router de staff.
             unit_id: a unidade alvo, como string opaca. Ausente quando a ação
                 não nomeia unidade — seja por a permissão ser tenant-wide, seja
                 por o papel do ator dispensar o escopo de unidade. Ver

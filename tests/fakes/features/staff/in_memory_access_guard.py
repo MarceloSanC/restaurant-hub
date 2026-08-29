@@ -21,10 +21,26 @@ guardasse apenas `"authorize"` não distinguiria duas autorizações do mesmo al
 de duas de alvos diferentes, que é exatamente a distinção em jogo.
 
 **A ordem das guardas de `authorize` é deliberada**, e espelha a do tradutor de
-produção: ator (L-AG2) → tenant do ator (L-AG3) → concessão do alvo (L-AG2).
-Pôr a checagem de tenant **depois** da concessão tornaria L-AG3 dependente de o
-alvo não estar concedido — e a suíte prova o contrário, autorizando um alvo
-concedido com um ator sem tenant e exigindo a recusa mesmo assim.
+produção: ator (L-AG2) → tenant do ator (L-AG3) → **resolução do tenant ausente**
+→ concessão do alvo (L-AG2). Pôr a checagem de tenant **depois** da concessão
+tornaria L-AG3 dependente de o alvo não estar concedido — e a suíte prova o
+contrário, autorizando um alvo concedido com um ator sem tenant e exigindo a
+recusa mesmo assim.
+
+**O tenant ausente é resolvido aqui pela mesma regra que o tradutor de produção
+usa** (ADR 0.0.0005): `tenant_id=None` significa *"o tenant do próprio ator"*, e
+a resolução acontece **antes** da consulta a `grants`, de modo que uma concessão
+feita com o tenant nomeado seja alcançada pela chamada que o omite. Uma lei
+honrada só pela implementação de produção não é lei — e cobrar as duas com
+conjuntos de valores diferentes é o sinal de alerta mais forte da família *"lei
+universal, representante estreito"*, que foi como a Stage 3.4 vazou duas
+mutações. Por isso o eixo `tenant nomeado x tenant omitido` existe nas **duas**
+suítes de lei, comparável linha a linha.
+
+**O registro em `calls` guarda o pedido como veio, não o alvo resolvido.** L-AG4
+fala de *"uma chamada por alvo"*, e a chamada é o que o chamador fez: registrar o
+valor resolvido esconderia a diferença entre nomear e omitir, que é justamente a
+propriedade que esta resolução introduz.
 """
 
 from dataclasses import dataclass, field
@@ -67,7 +83,8 @@ class FakeActor:
         id: identidade do ator, usada só para legibilidade das falhas.
         tenant_id: o restaurante do ator. `None` reproduz o único caso real
             hoje — `platform_admin`, que não tem tenant —, e é o gatilho de
-            L-AG3.
+            L-AG3. É também o valor que `authorize` resolve quando a chamada
+            **omite** o tenant alvo (ADR 0.0.0005).
     """
 
     id: str
@@ -82,8 +99,9 @@ class InMemoryAccessGuard:
         credential: o ator que `authenticate` devolve. `None` ⇒ não há
             credencial válida, e L-AG1 dispara.
         grants: alvos autorizados, como `(permission, tenant_id, unit_id)` —
-            a tripla **exata** do pedido. Um alvo concedido não concede
-            nenhum outro, que é a forma de L-AG4 no mapa.
+            a tripla **exata** do alvo, já com o tenant resolvido (é o mesmo
+            valor com que a decisão consulta o mapa). Um alvo concedido não
+            concede nenhum outro, que é a forma de L-AG4 no mapa.
         calls: registro das chamadas recebidas, **com o alvo** (ver docstring do
             módulo).
         credential_error: a sentinela de L-AG1, levantada por identidade.
@@ -131,6 +149,9 @@ class InMemoryAccessGuard:
         então o escopo devolvido para `(perm, t1, u1)` não diz nada sobre
         `(perm, t1, u2)` — e a chamada seguinte tem de acontecer, aparecendo em
         `calls`.
+
+        **`tenant_id` ausente é resolvido para o tenant do ator** antes da
+        consulta ao mapa (ADR 0.0.0005) — ver o docstring do módulo.
         """
         self.record(f"authorize({permission},{tenant_id},{unit_id})")
 
@@ -145,8 +166,16 @@ class InMemoryAccessGuard:
         if not actor.tenant_id:
             raise self.authorization_error
 
+        # ADR 0.0.0005 — a ausência significa "o tenant do próprio ator", e a
+        # resolução acontece **antes** da consulta ao mapa: sem isto, uma
+        # concessão feita com o tenant nomeado ficaria inalcançável pela chamada
+        # que o omite, e o fake obedeceria a um contrato diferente do que o
+        # tradutor de produção obedece. Só a ausência carrega significado — um
+        # `""` explícito segue como alvo próprio, e não é reescrito.
+        target_tenant_id = tenant_id if tenant_id is not None else actor.tenant_id
+
         # L-AG2 — o alvo pedido precisa estar concedido, ele e não outro.
-        if (permission, tenant_id, unit_id) not in self.grants:
+        if (permission, target_tenant_id, unit_id) not in self.grants:
             raise self.authorization_error
 
         return AuthorizedScope(

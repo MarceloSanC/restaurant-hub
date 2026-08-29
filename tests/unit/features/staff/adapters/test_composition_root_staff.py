@@ -30,6 +30,7 @@ um dos dois obrigados cumpre não é lei. O segundo é o CA21: a Stage promete q
 
 import ast
 import contextlib
+import datetime
 import importlib
 import inspect
 import pathlib
@@ -42,7 +43,9 @@ from restaurant_hub.composition_root import (
     build_http_wiring,
     wire_dependencies,
 )
+from restaurant_hub.features.identity.application.dtos.identifiers import SessionId
 from restaurant_hub.features.identity.application.dtos.results import AuthorizedActor
+from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
 from restaurant_hub.features.identity.application.errors import (
     InvalidAccessTokenError,
     PermissionDeniedError,
@@ -317,6 +320,48 @@ def _authorized_actor(
     )
 
 
+def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
+    """`AuthenticatedActor` **real** de identity, e não um stub com um `.claims`.
+
+    É o objeto que `IdentityGuard.authenticate` devolve em produção, e é dele que
+    o tradutor lê o tenant quando a chamada o omite (ADR 0.0.0005, cláusula 3).
+    Um stub anônimo com os mesmos atributos testaria a forma que **este arquivo**
+    imaginou: `claims` renomeado do outro lado da fronteira sairia da suíte em
+    silêncio e reapareceria como 403 universal em runtime — que é precisamente o
+    defeito que a resolução do tenant existe para fechar.
+
+    O módulo mora sob o pacote `in`, keyword Python, então chega por `importlib`
+    (LAYOUT §8) — o mesmo caminho que o composition root usa.
+    """
+    dependencies = importlib.import_module(
+        "restaurant_hub.features.identity.adapters.in.http.dependencies"
+    )
+    actor: object = dependencies.AuthenticatedActor(
+        claims=AccessTokenClaims(
+            subject=UserId("user-1"),
+            role=Role.MANAGER,
+            tenant_id=RestaurantId(tenant_id) if tenant_id is not None else None,
+            session_id=SessionId("session-1"),
+            expires_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        )
+    )
+    return actor
+
+
+# **O eixo do tenant na chamada — nomeado x omitido** (ADR 0.0.0005).
+#
+# Mesmo `parametrize`, na mesma forma, que o de
+# `tests/unit/features/staff/application/test_access_guard_laws.py`: a lei do
+# tenant resolvido vale para as **duas** implementações do port, e cobrá-las com
+# conjuntos de valores diferentes é o sinal de alerta mais forte da família "lei
+# universal, representante estreito" — foi assim que a Stage 3.4 vazou duas
+# mutações. Os dois arquivos são comparáveis linha a linha de propósito.
+_TENANT_NA_CHAMADA = [
+    pytest.param("t1", id="tenant-nomeado"),
+    pytest.param(None, id="tenant-omitido"),
+]
+
+
 # **A segunda dimensão de L-AG3 — e ela não é simetria decorativa.**
 #
 # Com as leis escritas só sobre `manage_staff`, a recusa fica travada **por
@@ -454,6 +499,107 @@ def test_l_ag2_o_tradutor_nao_traduz_a_excecao_de_autorizacao(
     assert excinfo.value is spy.authorization_error
 
 
+@pytest.mark.parametrize("tenant_na_chamada", _TENANT_NA_CHAMADA)
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_o_tenant_omitido_e_resolvido_do_ator_antes_de_delegar_a_identity(
+    permission: str,
+    unit: str | None,
+    tenant_na_chamada: str | None,
+) -> None:
+    """ADR 0.0.0005 na implementação de produção — e a asserção é sobre o **pedido**.
+
+    Sem esta resolução as 16 rotas de staff são inalcançáveis por **todos** os
+    papéis: o inventário não carrega tenant (cláusula 2), então o tradutor
+    delegaria `tenant_id=None` e o passo 3 de `AuthorizeActionUseCase` recusaria
+    com `TenantScopeRequiredError`. O que se assere aqui é o que **chegou** ao
+    `IdentityGuard` — `spy.received["tenant_id"]` —, e não só o escopo devolvido:
+    o escopo sai do `actor_tenant_id` que identity devolve e carregaria `"t1"`
+    mesmo se a resolução tivesse sido esquecida, então uma asserção só sobre ele
+    ficaria verde com a mutação viva.
+
+    **A asserção é contra o valor esperado, escrito por extenso**, e não contra o
+    resultado do eixo vizinho: comparar nomeado com omitido passaria se os dois
+    estivessem errados do mesmo jeito.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=unit))
+    translator = _IdentityAccessGuard(spy)
+
+    scope = translator.authorize(
+        _ator_autenticado(tenant_id="t1"),
+        permission,
+        tenant_id=tenant_na_chamada,
+        unit_id=unit,
+    )
+
+    assert spy.received["tenant_id"] == "t1"
+    assert scope == AuthorizedScope(
+        tenant_id=StaffTenantId("t1"),
+        unit_id=StaffUnitId(unit) if unit is not None else None,
+    )
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_omitir_o_tenant_produz_o_mesmo_resultado_que_nomear_o_do_ator(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """A equivalência literal do critério, do lado do tradutor."""
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=unit))
+    translator = _IdentityAccessGuard(spy)
+    ator = _ator_autenticado(tenant_id="t1")
+
+    nomeado = translator.authorize(ator, permission, tenant_id="t1", unit_id=unit)
+    omitido = translator.authorize(ator, permission, tenant_id=None, unit_id=unit)
+
+    assert nomeado == omitido
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_o_tenant_nomeado_pelo_chamador_nao_e_sobrescrito_pelo_do_ator(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """Só a **ausência** carrega significado — o resto do contrato não mudou.
+
+    Uma resolução escrita como "sempre use o tenant do ator" satisfaria os dois
+    testes acima e apagaria em silêncio o alvo que o chamador nomeou. Quem
+    nomeia `t9` está declarando `t9`, e é `t9` que a decisão de acesso — passo 3,
+    contra o usuário carregado do banco — tem de receber para poder negá-lo.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=unit))
+    translator = _IdentityAccessGuard(spy)
+
+    translator.authorize(
+        _ator_autenticado(tenant_id="t1"),
+        permission,
+        tenant_id="t9",
+        unit_id=unit,
+    )
+
+    assert spy.received["tenant_id"] == "t9"
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_ator_sem_claims_com_tenant_omitido_falha_fechado(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """A leitura malsucedida **nega**, nunca alarga.
+
+    `Actor = object`: o port aceita qualquer objeto, e um ator que não seja o
+    `AuthenticatedActor` de identity não tem `claims` para ler. O tradutor
+    resolve `None` e delega `None` — que é "não declarei tenant" —, e a decisão
+    de acesso recusa. O que este teste trava é que a leitura ausente **não** vira
+    curinga: nada é inventado no lugar do tenant.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor())
+    translator = _IdentityAccessGuard(spy)
+
+    translator.authorize(object(), permission, tenant_id=None, unit_id=unit)
+
+    assert spy.received["tenant_id"] is None
+
+
 # Os dois valores que L-AG3 nomeia — *"`tenant_id` vazio **ou** ausente"* —, e
 # são casos **distintos** na implementação, não sinônimos:
 #
@@ -474,6 +620,7 @@ _ATOR_SEM_TENANT = [
 ]
 
 
+@pytest.mark.parametrize("tenant_na_chamada", _TENANT_NA_CHAMADA)
 @pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
 @pytest.mark.parametrize(("permission", "unit"), _ALVOS)
 def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
@@ -481,6 +628,7 @@ def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
     unit: str | None,
     actor_tenant_id: str | None,
     role: Role,
+    tenant_na_chamada: str | None,
 ) -> None:
     """L-AG3 imposta no tradutor, e não delegada à matriz de papéis.
 
@@ -490,14 +638,27 @@ def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
     observaria. Por isso o cenário montado é o pior caso: identity **autorizou**
     e devolveu um ator sem tenant — e vale para as **duas** permissões, porque
     L-AG3 é propriedade do guard e não de uma capacidade.
+
+    **O eixo do tenant omitido usa o mesmo dublê, e a escolha é o que separa o
+    teste do teatro.** Montar este caso com um `platform_admin` real produziria
+    verde pela **permissão** — `role.py` dá a ele só `MANAGE_PLATFORM`, negado no
+    passo 2, antes de a execução chegar à guarda desta lei —, e a mutação
+    "remover a checagem de tenant" sobreviveria com a suíte parecendo cobri-la.
+    O spy é o que faz o cenário ser o que a lei descreve.
     """
     spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
     translator = _IdentityAccessGuard(spy)
 
     with pytest.raises(PermissionDeniedError):
-        translator.authorize(object(), permission, tenant_id="t1", unit_id=unit)
+        translator.authorize(
+            _ator_autenticado(tenant_id=actor_tenant_id),
+            permission,
+            tenant_id=tenant_na_chamada,
+            unit_id=unit,
+        )
 
 
+@pytest.mark.parametrize("tenant_na_chamada", _TENANT_NA_CHAMADA)
 @pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
 @pytest.mark.parametrize(("permission", "unit"), _ALVOS)
 def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
@@ -505,19 +666,31 @@ def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
     unit: str | None,
     actor_tenant_id: str | None,
     role: Role,
+    tenant_na_chamada: str | None,
 ) -> None:
     """A mutação que L-AG3 existe para matar, escrita como asserção.
 
     `StaffTenantId(actor_tenant_id or "")` compila, passa mypy strict e devolve
     um escopo de tenant vazio — consultas que atravessariam todos os tenants.
     A exigência aqui é dupla: **nada** é devolvido, e o que sobe é negação.
+
+    O eixo `nomeado x omitido` entra porque a resolução do ADR 0.0.0005 abre um
+    segundo caminho até a mesma coerção: `tenant_id or actor_tenant or ""`
+    passaria no eixo nomeado e reabriria o tenant vazio no omitido.
     """
     spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
     translator = _IdentityAccessGuard(spy)
 
     scopes = []
     with contextlib.suppress(PermissionDeniedError):
-        scopes.append(translator.authorize(object(), permission, tenant_id="t1", unit_id=unit))
+        scopes.append(
+            translator.authorize(
+                _ator_autenticado(tenant_id=actor_tenant_id),
+                permission,
+                tenant_id=tenant_na_chamada,
+                unit_id=unit,
+            )
+        )
 
     assert scopes == []
 
