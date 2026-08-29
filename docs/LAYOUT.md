@@ -244,6 +244,7 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Fakes implementam os mesmos ports.** `InMemoryPaymentRepository` satisfaz `PaymentRepository` Protocol.
 - **Testes unitários usam fakes.** Nenhum teste unitário toca banco ou rede.
 - **Tests de contrato validam a equivalência.** A fake e a implementação real devem passar nos mesmos testes.
+- **O tenant que decide acesso vem do token.** Um tenant na requisição é declaração **confirmada contra** ele, nunca a fonte; só aparece no path quando o BC é dono do tenant como recurso endereçável, ou o ator pode agir fora do próprio tenant. Texto normativo (três cláusulas), fontes e gatilho de reabertura: [ADR 0.0.0005](./adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md).
 - **Imports sempre absolutos.** Nunca `from ..domain import` — use o caminho completo.
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
