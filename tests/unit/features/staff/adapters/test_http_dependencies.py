@@ -230,8 +230,8 @@ def test_as_permissoes_atravessam_a_fronteira_como_valores() -> None:
     e é por isso que os dois literais ficam num só lugar, conferidos aqui contra
     os valores que `AuthorizeActionUseCase` conhece.
     """
-    assert dependencies.PERMISSAO_GERIR_EQUIPE == "manage_staff"
-    assert dependencies.PERMISSAO_GERIR_FUNCOES == "manage_job_functions"
+    assert dependencies.PERMISSION_MANAGE_STAFF == "manage_staff"
+    assert dependencies.PERMISSION_MANAGE_JOB_FUNCTIONS == "manage_job_functions"
 
 
 def test_o_catalogo_de_funcoes_declara_alvo_sem_unidade() -> None:
@@ -241,14 +241,14 @@ def test_o_catalogo_de_funcoes_declara_alvo_sem_unidade() -> None:
     não por papel. Declarar `names_unit=True` aqui faria a rota do catálogo pedir
     uma unidade que ela não endereça.
     """
-    assert dependencies.GERIR_FUNCOES.permission == "manage_job_functions"
-    assert dependencies.GERIR_FUNCOES.names_unit is False
+    assert dependencies.MANAGE_JOB_FUNCTIONS_ACCESS.permission == "manage_job_functions"
+    assert dependencies.MANAGE_JOB_FUNCTIONS_ACCESS.names_unit is False
 
 
 def test_a_equipe_declara_alvo_com_unidade() -> None:
     """`manage_staff` endereça a unidade do path (ADR 3.4.0007)."""
-    assert dependencies.GERIR_EQUIPE_NA_UNIDADE.permission == "manage_staff"
-    assert dependencies.GERIR_EQUIPE_NA_UNIDADE.names_unit is True
+    assert dependencies.MANAGE_STAFF_IN_UNIT_ACCESS.permission == "manage_staff"
+    assert dependencies.MANAGE_STAFF_IN_UNIT_ACCESS.names_unit is True
 
 
 def test_o_requisito_de_acesso_nao_carrega_papel_nem_bypass() -> None:

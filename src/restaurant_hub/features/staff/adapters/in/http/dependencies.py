@@ -89,8 +89,8 @@ _BYTE_NUL: Final = "\x00"
 # `bc-independence` proíbe as duas direções sem nenhum `ignore_imports`. O preço
 # está declarado no ADR 3.4.0001 — um erro de digitação aqui não é pego pelo
 # type-checker, e sim pelos testes por papel e por rota desta Stage.
-PERMISSAO_GERIR_EQUIPE: Final = "manage_staff"
-PERMISSAO_GERIR_FUNCOES: Final = "manage_job_functions"
+PERMISSION_MANAGE_STAFF: Final = "manage_staff"
+PERMISSION_MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
 
 
 def validate_identifier(raw: str, *, entity: str) -> str:
@@ -138,9 +138,17 @@ class AccessRequirement:
 
 # Os dois requisitos desta Stage. O catálogo de funções endereça o tenant inteiro
 # (`workforce.md` §3.2); o funcionário endereça a unidade do path (ADR 3.4.0007).
-GERIR_FUNCOES: Final = AccessRequirement(permission=PERMISSAO_GERIR_FUNCOES, names_unit=False)
-GERIR_EQUIPE_NA_UNIDADE: Final = AccessRequirement(
-    permission=PERMISSAO_GERIR_EQUIPE, names_unit=True
+#
+# O sufixo `_ACCESS` não é decoração: sem ele, `MANAGE_JOB_FUNCTIONS` importado
+# aqui teria o **mesmo nome** que o membro `Permission.MANAGE_JOB_FUNCTIONS` de
+# identity — que é justamente o símbolo que staff nunca pode importar (CA07). Um
+# leitor do router veria o nome proibido e concluiria a coisa errada sobre a
+# fronteira entre os dois bounded contexts.
+MANAGE_JOB_FUNCTIONS_ACCESS: Final = AccessRequirement(
+    permission=PERMISSION_MANAGE_JOB_FUNCTIONS, names_unit=False
+)
+MANAGE_STAFF_IN_UNIT_ACCESS: Final = AccessRequirement(
+    permission=PERMISSION_MANAGE_STAFF, names_unit=True
 )
 
 
