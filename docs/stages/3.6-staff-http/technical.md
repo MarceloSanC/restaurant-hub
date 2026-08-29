@@ -1307,4 +1307,80 @@ depois). E' o que da ao ambiente as **duas** origens de 422 que a app real tem, 
 portanto o que torna o discriminador de corpo uma trava de verdade em vez de uma
 asserção sobre ausencia de chave.
 
+### 2026-08-29 - [decision] test_http_boundary_sweeps.py (Task 06) - Marcelo
+
+**Contexto:** com as quatro rotas de funcionario, o eixo de **path** de CA24
+passou a incluir `unit_id`, e onze casos ficaram vermelhos. A causa nao e' defeito
+do router: para um `unit_id` de **formato valido** que o ator nao tem concedido,
+o `InMemoryAccessGuard` levanta a sua propria sentinela, que nao e' `StaffError`
+nem `IdentityError` e nao tem handler na app minima dos testes unitarios.
+
+**Pergunta:** o que CA24 deve exigir quando o identificador de path e' o **alvo de
+autorizacao**?
+
+**Opcoes:**
+- A - Manter a exigencia de resposta HTTP com status < 500. Obrigaria a conceder
+  no fake toda unidade do conjunto adversarial, isto e', a montar o cenario para
+  que a assercao passe — e o que passaria a ser medido seria a montagem.
+- B - Tirar `unit_id` do eixo de CA24. Perde cobertura real: e' justamente o
+  parametro por onde o NUL produzia 500 **dentro de identity**.
+- C - Reconhecer os **dois** desfechos legitimos por especie de parametro, e
+  asserir a **identidade** do objeto levantado quando o desfecho e' a recusa do
+  guard. ✅ recomendada
+
+**Decisao:** C.
+
+**Razao — e a razao e' erro de categoria, nao afrouxamento.** Os parametros de
+path deste inventario sao de duas especies. `job_function_id` e `employee_id`
+entram num command e a resposta e' HTTP: ali a assercao continua sendo sobre o
+**status**, intacta. `unit_id` e' o **alvo de autorizacao**: um valor bem-formado
+que o ator nao tem concedido **passa** pelo validador de identificador — ele e'
+bem-formado, e a peca que recusaria e' outra — e e' negado pelo **guard**. Exigir
+422 ali mede a peca errada: o validador nao tem por que recusar um identificador
+valido, e quem nega e' a autorizacao.
+
+**A assercao nova e' estritamente mais forte que a antiga.** Ela exige
+`exc is ambiente.guard.authorization_error` — **identidade de objeto**, que e'
+L-AG2: a excecao sobe **crua**, sem traducao. Um adapter que a capturasse e
+relancasse uma excecao nova passaria em `pytest.raises(TipoX)` e falha aqui. A
+antiga exigia apenas "algum status abaixo de 500".
+
+**Precedente no proprio plano.** A Task 05 ja declara o mesmo limite para CA08 —
+*"o fake levanta a sua propria sentinela, que **nao** e' `IdentityError` e nao tem
+handler. A propriedade depende do handler de identity registrado sobre a app, e
+por isso vive no e2e (Task 11)"*. Em producao a recusa e' 403 de corpo constante,
+e e' a Task 11 que a mede.
+
+### 2026-08-29 - [deviation] escopo da Task 06 - Marcelo
+
+**Contexto:** a Task 06 declara `Arquivos a modificar: router.py`. Com as quatro
+rotas novas, `test_http_boundary_sweeps.py` e
+`test_http_router_job_functions.py` — **ambos da Task 05** — ficaram com 16
+falhas, e nenhuma delas e' defeito do router: cinco pela lista literal
+`_INVENTARIO_DE_ROTAS` ter quatro entradas contra oito rotas, e onze pelo erro de
+categoria de CA24 registrado na entrada acima. Sem toca-los, o gate "nao avancar
+sem verificacao verde" e' insatisfazivel dentro do escopo declarado — e o comando
+de verificacao da propria Task 06 roda o modulo de varreduras.
+
+**Ajuste, autorizado explicitamente antes de ser feito:** a Task 06 tocou os dois
+arquivos para (i) dobrar o status de sucesso do §4.1 **dentro** da declaracao
+`INVOCACOES` de cada modulo de rota, aposentando `_INVENTARIO_DE_ROTAS`, e (ii)
+aplicar a correcao do CA24. A alternativa — estender a lista literal a cada Task
+— foi recusada pelo eixo que esta Stage inteira defende: uma lista que cada Task
+futura precisa **lembrar** de estender reinstala a familia *"lei universal,
+representante estreito"* no proprio instrumento que existe para mata-la.
+
+**O que NAO se perdeu, e a verificacao disso.** A transcricao do §4.1 continua
+**manual** (o campo `sucesso`, escrito por quem leu a tabela do concept) e nao
+derivada de `rota.status_code` — derivar provaria so que o codigo concorda
+consigo mesmo. A totalidade continua sendo o que trava o inventario: uma rota
+plantada sem declaracao reprova **quatro** testes, entre eles os dois de
+totalidade. Verificado por mutacao real, com a saida no relatorio da Task.
+
+**Precedente no plano:** a Task 07 ja sanciona a edicao analoga — *"a unica edicao
+de teste permitida e' acrescentar a chave das cinco rotas novas ao
+`_INVOCACOES`"*. A permissao existia; faltava na Task 06. Com a mudanca (i), as
+Tasks 07 e 08 deixam de precisar dela: as suas declaracoes moram nos seus
+proprios modulos.
+
 <!-- END: post-execution -->

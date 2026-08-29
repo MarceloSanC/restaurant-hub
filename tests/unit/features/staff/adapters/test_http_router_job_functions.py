@@ -67,29 +67,41 @@ error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_han
 _TENANT = "rest-1"
 _UNIDADE = "unit-1"
 
-# **As invocações válidas das quatro rotas desta Task** — ver o docstring do
-# módulo. `path` traz um valor válido para cada parâmetro de path; `query` e
-# `body` trazem o mínimo que a rota aceita sem que o framework recuse a forma.
+# **A declaração de cada rota desta Task** — ver o docstring do módulo. `path`
+# traz um valor válido para cada parâmetro de path; `query` e `body` trazem o
+# mínimo que a rota aceita sem que o framework recuse a forma.
+#
+# **`sucesso` é a transcrição manual da tabela do concept §4.1, e a manualidade é
+# o ponto.** Derivá-lo de `rota.status_code` provaria apenas que o código
+# concorda consigo mesmo; escrito à mão, ele é o contrato externo conferido
+# contra a implementação. Mora aqui, junto da invocação, porque as duas coisas
+# são a **mesma** declaração: quem acrescenta uma rota declara de uma vez como
+# invocá-la e o que a §4.1 promete que ela responde — e a asserção de totalidade
+# cobra as duas de uma vez.
 INVOCACOES: dict[tuple[str, str], dict[str, object]] = {
     ("POST", "/job-functions"): {
         "path": {},
         "query": {},
         "body": {"name": "Garçom"},
+        "sucesso": HTTPStatus.CREATED,
     },
     ("GET", "/job-functions"): {
         "path": {},
         "query": {},
         "body": None,
+        "sucesso": HTTPStatus.OK,
     },
     ("PATCH", "/job-functions/{job_function_id}"): {
         "path": {"job_function_id": "jf-1"},
         "query": {},
         "body": {"name": "Garçom Sênior"},
+        "sucesso": HTTPStatus.OK,
     },
     ("DELETE", "/job-functions/{job_function_id}"): {
         "path": {"job_function_id": "jf-1"},
         "query": {},
         "body": None,
+        "sucesso": HTTPStatus.NO_CONTENT,
     },
 }
 

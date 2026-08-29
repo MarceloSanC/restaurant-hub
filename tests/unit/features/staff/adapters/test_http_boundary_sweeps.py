@@ -41,6 +41,7 @@ from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import BaseModel
 
+from tests.fakes.features.staff.in_memory_access_guard import FakeAuthorizationRejected
 from tests.unit.features.staff.adapters.test_http_router_job_functions import Ambiente
 
 pytestmark = pytest.mark.unit
@@ -95,11 +96,23 @@ ChaveDeRota = tuple[str, str]
 
 @dataclass(frozen=True)
 class Invocacao:
-    """Como invocar **uma** rota com corpo e query que o framework aceita."""
+    """A declaração de **uma** rota: como invocá-la, e o que a §4.1 promete.
+
+    Attributes:
+        path: um valor válido para cada parâmetro de path.
+        query: os parâmetros de query que a rota exige.
+        body: o corpo mínimo que o framework aceita, ou `None`.
+        sucesso: o status de sucesso da tabela do concept §4.1 — **transcrito à
+            mão**, e não derivado de `rota.status_code`. Derivá-lo provaria
+            apenas que o código concorda consigo mesmo; é o contrato externo que
+            precisa ser conferido contra a implementação, e para isso ele tem de
+            vir de fora dela.
+    """
 
     path: dict[str, str]
     query: dict[str, str]
     body: dict[str, Any] | None
+    sucesso: int
 
 
 def _rotas() -> list[APIRoute]:
@@ -141,6 +154,7 @@ def _invocacoes_declaradas() -> dict[ChaveDeRota, Invocacao]:
                 path=dict(bruta["path"]),
                 query=dict(bruta["query"]),
                 body=bruta["body"],
+                sucesso=int(bruta["sucesso"]),
             )
     return reunidas
 
@@ -158,6 +172,25 @@ def test_a_fixture_de_invocacao_e_total_sobre_as_rotas_do_router() -> None:
     relaxar CA17 porque "um erro novo não tem entrada".
     """
     assert set(_INVOCACOES) == {chave(rota) for rota in _rotas()}
+
+
+def test_a_totalidade_e_o_que_trava_o_inventario_de_rotas() -> None:
+    """CA01, a metade "nem rota a mais nem a menos" — e onde ela agora vive.
+
+    Com a aposentadoria da lista literal, é a **totalidade** que impede uma 17ª
+    rota de existir em silêncio: ela teria de vir acompanhada de uma declaração
+    escrita à mão num módulo de teste, que é um ato deliberado e visível em
+    revisão — exatamente o que a lista literal cobrava, sem o custo de alguém ter
+    de lembrar de estendê-la.
+
+    É assim que o `non_goal` "leitura de funcionário por id" fica travado: não
+    por ninguém lembrar dele, mas porque a rota nova reprova até ser declarada.
+    """
+    declaradas = set(_INVOCACOES)
+    registradas = {chave(rota) for rota in _rotas()}
+
+    assert declaradas == registradas
+    assert len(declaradas) == len(_rotas()), "duas rotas com a mesma chave"
 
 
 def _url(chave_da_rota: ChaveDeRota, invocacao: Invocacao, *, sobrescreve: dict[str, str]) -> str:
@@ -218,34 +251,27 @@ async def client(ambiente: Ambiente) -> AsyncIterator[AsyncClient]:
 # ---------------------------------------------------------------------------
 # CA01 — o inventário de rotas
 # ---------------------------------------------------------------------------
-
-# A tabela do concept §4.1, e é a **única** lista literal deste arquivo: ela é o
-# contrato externo, e derivá-la do código provaria apenas que o código concorda
-# consigo mesmo. Cresce nas Tasks 06/07/08 junto com as rotas.
-_INVENTARIO_DE_ROTAS: dict[ChaveDeRota, int] = {
-    ("POST", "/job-functions"): HTTPStatus.CREATED,
-    ("GET", "/job-functions"): HTTPStatus.OK,
-    ("PATCH", "/job-functions/{job_function_id}"): HTTPStatus.OK,
-    ("DELETE", "/job-functions/{job_function_id}"): HTTPStatus.NO_CONTENT,
-}
-
-
-def test_ca01_as_rotas_registradas_sao_exatamente_as_do_inventario() -> None:
-    """Nem rota a mais nem a menos — uma 17ª rota reprovaria aqui.
-
-    É assim que o `non_goal` "leitura de funcionário por id" fica travado: ele
-    não é impedido por ninguém lembrar dele, é impedido por esta igualdade.
-    """
-    assert {chave(rota) for rota in _rotas()} == set(_INVENTARIO_DE_ROTAS)
+#
+# **Não há lista literal de rotas neste arquivo, e a ausência é a decisão.** Uma
+# tabela aqui teria de ser estendida por cada Task que acrescenta rota — isto é,
+# o instrumento que existe para matar a família "lei universal, representante
+# estreito" reinstalaria a mesma família em si mesmo, na forma de uma lista que
+# alguém precisa lembrar de manter. O contrato do §4.1 continua **transcrito à
+# mão**, rota a rota, no campo `sucesso` da declaração — só que co-locado com a
+# invocação, no módulo da Task que escreveu a rota.
 
 
 @pytest.mark.parametrize("rota", _rotas(), ids=lambda r: f"{sorted(r.methods)[0]} {r.path}")
-def test_ca01_o_status_de_sucesso_bate_com_o_inventario(rota: APIRoute) -> None:
-    """Método e status de sucesso, rota a rota."""
+def test_ca01_o_status_de_sucesso_bate_com_o_declarado_no_concept(rota: APIRoute) -> None:
+    """Método e status de sucesso, rota a rota, contra a transcrição do §4.1.
+
+    O valor comparado **não** sai do router: sai da declaração escrita por quem
+    leu a tabela do concept. É isso que faz esta asserção medir conformidade com
+    o contrato em vez de tautologia.
+    """
     # `status_code` fica `None` quando a rota não o declara — o default do
-    # FastAPI é 200, e é ele que o inventário registra.
-    esperado = _INVENTARIO_DE_ROTAS[chave(rota)]
-    assert (rota.status_code or HTTPStatus.OK) == esperado
+    # FastAPI é 200, e é ele que a declaração registra.
+    assert (rota.status_code or HTTPStatus.OK) == _INVOCACOES[chave(rota)].sucesso
 
 
 @pytest.mark.parametrize("rota", _rotas(), ids=lambda r: f"{sorted(r.methods)[0]} {r.path}")
@@ -669,15 +695,42 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
 
 @pytest.mark.parametrize("valor", _VALORES_ADVERSARIAIS)
 async def test_ca24_nenhum_identificador_de_path_adversarial_devolve_500(
-    client: AsyncClient, valor: str
+    client: AsyncClient, ambiente: Ambiente, valor: str
 ) -> None:
     """O mesmo conjunto no eixo de path, onde o NUL produzia 500 dentro de identity.
 
-    Restrito às rotas com identificador de path — que é onde o eixo existe.
+    **Há dois desfechos legítimos, e reconhecer o segundo é correção de erro de
+    categoria, não afrouxamento.** Os parâmetros de path deste inventário são de
+    duas espécies:
+
+    - `job_function_id` e `employee_id` — o valor entra num command e a resposta
+      é HTTP; aqui a asserção é sobre o **status**;
+    - `unit_id` — o valor é o **alvo de autorização**. Um valor bem-formado que
+      o ator não tem concedido passa pelo validador de identificador (ele é
+      bem-formado: a peça que recusaria é outra) e é negado pelo **guard**.
+      Exigir 422 aí mediria a peça errada — o validador não tem por que recusar
+      um identificador válido, e quem nega é a autorização.
+
+    Nesse segundo caso o `InMemoryAccessGuard` levanta a **sua própria
+    sentinela**, que não é `StaffError` nem `IdentityError` e não tem handler
+    nesta app mínima. Em produção quem responde é o handler de identity, com 403
+    de corpo constante — a mesma razão pela qual CA08/CA09 vivem no e2e, já
+    declarada no plano.
+
+    **A asserção sobre a sentinela é estritamente mais forte que uma sobre
+    status:** ela exige **identidade de objeto**, que é L-AG2 — a exceção sobe
+    **crua**, sem tradução. Um adapter que a capturasse e relançasse uma exceção
+    nova passaria em `pytest.raises(TipoX)` e falha aqui.
     """
     for rota in _rotas():
         for parametro in _params_de_path_de_id(rota):
-            resposta = await _invocar(client, chave(rota), path={parametro: valor})
+            try:
+                resposta = await _invocar(client, chave(rota), path={parametro: valor})
+            except FakeAuthorizationRejected as exc:
+                assert exc is ambiente.guard.authorization_error, (
+                    f"{rota.path}: a recusa do guard foi traduzida no caminho (L-AG2)"
+                )
+                continue
             assert resposta.status_code < HTTPStatus.INTERNAL_SERVER_ERROR, (
                 f"{rota.path} devolveu {resposta.status_code} para {valor!r}"
             )
