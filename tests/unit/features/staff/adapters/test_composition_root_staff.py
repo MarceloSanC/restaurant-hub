@@ -774,17 +774,22 @@ def test_o_tradutor_repassa_o_ator_de_authenticate_sem_tocar_nele() -> None:
     assert translator.authenticate(request) == ("ator", request)
 
 
-def test_ca21_nenhuma_rota_de_staff_nasceu_nesta_stage() -> None:
-    """CA21 — a promessa "nenhuma rota nasce aqui" verificada, não afirmada.
+def test_nenhuma_rota_de_staff_esta_registrada_na_app() -> None:
+    """A promessa "nenhuma rota nasce até o wiring" verificada, não afirmada.
 
-    Três asserções, e as três são necessárias: o pacote de adapters de entrada de
-    staff **não existe**; `build_http_wiring` devolve o router **de identity**,
+    **A asserção sobre a inexistência do pacote `adapters/in` saiu aqui**, e a
+    saída é a Stage 3.6 cumprindo o seu plano: a Task 02 cria
+    `adapters/in/http/schemas.py`, o que a tornaria falsa por construção. O que
+    ela media — "staff ainda não tem superfície HTTP" — continua medido pelas
+    **duas** asserções que ficam, e elas são mais fortes: o pacote existir não
+    é o mesmo que a app servir rota de staff.
+
+    As duas restantes só saem na Task 09, que é quando o wiring passa a carregar
+    dois routers. Até lá: `build_http_wiring` devolve o router **de identity**,
     por identidade de objeto; e nenhuma rota registrada endereça recurso de
     staff — que é o que pegaria uma rota de funcionário pendurada no router de
-    identity, cenário em que as duas primeiras asserções continuariam verdes.
+    identity, cenário em que a primeira asserção continuaria verde.
     """
-    assert not (_SRC / "features" / "staff" / "adapters" / "in").exists()
-
     wiring = build_http_wiring(_dependencias())
     identity_router = importlib.import_module(
         "restaurant_hub.features.identity.adapters.in.http.router"
