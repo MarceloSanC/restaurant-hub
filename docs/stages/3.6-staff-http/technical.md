@@ -14,7 +14,7 @@ depends_on: [3.4-staff-access-scope]
 concept_ref: ./concept.md
 issue_id: 43
 branch: feat/43-3-6-staff-http
-tasks_count: 11
+tasks_count: 12
 ---
 
 # Technical — Stage 3.6 — API de equipe (borda HTTP)
@@ -106,9 +106,11 @@ de diff, porque as duas mudam o que a borda aceita ou o que uma suíte prova.
   espaços em volta, levantando `InvalidWeeklyHoursError` (422). **Âncora:**
   ADR 2.3.0005 (nada de normalização silenciosa) e a cláusula 6 do ADR 3.6.0002
   (*"nothing else is normalised, trimmed or rewritten"*), que já governa o
-  validador de identificador do **mesmo módulo**. Aceitar o trim daria duas
-  políticas opostas para espaço em branco dentro de um adapter só, e a
-  divergência seria invisível. Isto **fecha** o `[finding]` do concept §10 — ele
+  validador de identificador do **mesmo pacote** — `dependencies.py` (Task 04) e
+  `schemas.py` (Task 02) são módulos distintos sob `adapters/in/http/`, e é a
+  política do pacote que precisa ser uma só. Aceitar o trim daria duas políticas
+  opostas para espaço em branco dentro de um adapter só, e a divergência seria
+  invisível. Isto **fecha** o `[finding]` do concept §10 — ele
   não é escalado. Travado por critério de aceite da Task 02.
 - **D-3B2 — o dublê adversarial mora em `tests/fakes/`, não inline no teste.**
   O ADR 3.6.0001 §Decision 5 exige que ele seja *"documented as contradicting
@@ -192,15 +194,19 @@ tests/
     ├── __init__.py + conftest.py                          (N) 10
     ├── test_staff_flow.py                                 (N) 10
     ├── test_staff_authorization.py                        (N) 11
-    └── test_staff_status_bands.py                         (N) 11
+    └── test_staff_status_bands.py                         (N) 12
 ```
 
 ## 2. Tasks
 
-> Faixa saudável: **3–12 Tasks** (CONVENTIONS §6). Este plano mede **11**, o que o
-> concept §12 já estimava. **Se a execução medir acima de 12, o sinal é
-> subdividir o inventário de rotas — não cortar de novo:** esta Stage já é o
-> produto de um corte (nota do bloco 3.4 do `roadmap.md`).
+> Faixa saudável: **3–12 Tasks** (CONVENTIONS §6). Este plano mede **12** — o
+> concept §12 estimava 11, e a diferença é uma só, nomeada: a matriz de acesso e
+> as faixas de status pela API real, que uma primeira versão deste plano juntava
+> num commit, são **dois assuntos** (quem pode alcançar × como o erro é
+> classificado) e ~140 casos e2e contra Postgres real. Viraram as Tasks 11 e 12.
+> **A subdivisão NÃO tocou o inventário de rotas**, que continua reservado para o
+> caso de a execução estourar 12: esta Stage já é o produto de um corte (nota do
+> bloco 3.4 do `roadmap.md`).
 
 ### Task 01 — o tenant vem do token, resolvido nas duas implementações do port
 
@@ -221,9 +227,11 @@ tests/
      tocar em L-AG1…L-AG4 nem no texto de `AuthorizedScope.unit_id`, que a §5.4 do
      concept já mediu como correto.
   2. **`_IdentityAccessGuard.authorize`:** quando o chamador não nomeia
-     `tenant_id`, preencher com o tenant do ator autenticado antes de montar o
-     `AuthorizeActionCommand` de identity. L-AG3 continua imposta **depois**, como
-     está: ator sem tenant é **negado**, jamais coagido para `""`.
+     `tenant_id`, preencher com o tenant do ator autenticado **antes de delegar ao
+     `IdentityGuard`** (`composition_root.py:258-263` — quem monta o
+     `AuthorizeActionCommand` é o guard de identity, não o tradutor). L-AG3
+     continua imposta **depois**, como está: ator sem tenant é **negado**, jamais
+     coagido para `""`.
   3. **`InMemoryAccessGuard.authorize`:** resolver o tenant do `FakeActor` pela
      mesma regra **antes** de consultar `grants`, de modo que uma concessão feita
      com o tenant nomeado seja alcançada por uma chamada que o omite. L-AG4 segue
@@ -236,8 +244,24 @@ tests/
     `claims.tenant_id` acontece **aqui**, que é o *trusted layer* que a cláusula 3
     do ADR 0.0.0005 nomeia para um port que mantém o ator opaco. Staff continua
     sem ler atributo de ator.
-  - `platform_admin` não tem tenant: com tenant omitido ele continua sendo negado
-    por L-AG3 (`PermissionDeniedError`), e não promovido a nada.
+  - **`platform_admin` com tenant omitido continua negado — mas pela matriz RBAC,
+    não por L-AG3, e a distinção é a diferença entre teste e teatro.**
+    `role.py:54` dá a `PLATFORM_ADMIN` apenas `MANAGE_PLATFORM`, então ele é
+    recusado no **passo 2** de `AuthorizeActionUseCase`, antes de o tradutor
+    chegar ao `if not actor_tenant_id`. É exatamente por isso que a suíte mergeada
+    monta o pior caso com `_SpyIdentityGuard` — identity **autorizou** e devolveu
+    ator sem tenant (`test_composition_root_staff.py:485-492`). **O eixo novo
+    ("tenant omitido") tem de usar o mesmo spy**: sem ele o verde vem da
+    permissão ausente, e a lei fica sem trava enquanto a suíte parece cobri-la.
+  - **Como o tradutor lê o tenant do ator sob `Actor = object` e mypy strict.** O
+    ator é o `AuthenticatedActor` de identity, que mora sob o pacote `in` (keyword
+    Python) e **não é alcançável por import estático** — `actor.claims.tenant_id`
+    é erro de tipo em `strict`. O caminho já usado neste módulo para o mesmo
+    problema é o campo `identity_guard: Any` do contêiner, com `noqa: ANN401` e
+    docstring explicando a medição (LAYOUT §8): a leitura acontece por uma
+    variável intermediária anotada, **sem** `cast` de conveniência e **sem**
+    mudar a assinatura do port. Se durante a execução aparecer forma melhor, é
+    `[decision]` na §7 — **não** pedido de escopo extra no meio da Task.
   - **Cobrar as duas implementações com conjuntos de valores diferentes é o sinal
     de alerta mais forte da família "lei universal, representante estreito"** e foi
     como a 3.4 vazou duas mutações: o `parametrize` das duas suítes tem de ser
@@ -313,6 +337,11 @@ tests/
   - Varredura de `model_fields` de **todos** os `*Request` do módulo (derivados por
     introspecção, não listados) não encontra `tenant_id` nem os aliases
     `restaurant_id`, `tenant`, `restaurant` — **CA02(a)**.
+  - **A mesma varredura recusa `user_id` e `employee_user_id`**, e a razão é
+    diferente da anterior: não é sobre tenant, é sobre o `non_goal` **vínculo de
+    login**, que a Stage 3.5 vai acrescentar. O concept §4.3 é honesto ao chamar a
+    ausência de *"hoje vacuamente verdadeiro"*; só vira **trava** se o nome
+    estiver na lista negra, e é este item que a converte de declaração em check.
   - `{"type":"on_demand","weekly_hours":"40"}` e `{"type":"fixed"}` são recusados;
     os dois payloads válidos produzem o VO correspondente — **CA06**.
   - `"22.50"` sobrevive em **valor e escala**; os dois campos de conjunto saem
@@ -365,6 +394,17 @@ tests/
     é **inalcançável por HTTP** nesta Stage: têm entrada por **totalidade**, e a
     inalcançabilidade fica no docstring para que ninguém escreva e2e esperando
     produzi-las.
+  - **`build_error_response` emite um discriminador de corpo próprio
+    (`"type": "staff_error"`), e ele é infraestrutura de teste, não enfeite.**
+    Na faixa 422 esta app tem **duas** origens: um erro de staff e o
+    `RequestValidationError` do framework, que o handler compartilhado renderiza
+    com corpo **constante** — `{"detail": "requisição inválida", "type":
+    "validation_error"}`, em
+    `shared/infrastructure/http/error_handlers.py:37`. O ADR 3.6.0002, ao
+    rejeitar a Alternativa A, já nomeava a diferença: *"a **different body
+    shape**"*, *"dois formatos **distinguíveis** para a mesma classe de
+    defeito"*. É esse discriminador que as varreduras da Task 05 asserem — sem
+    ele, um 422 do framework satisfaz um critério de segurança de staff.
 - **Critério de aceite:**
   - **CA17** — o teste enumera **recursivamente** as subclasses concretas de
     `StaffError` (raiz excluída) e exige entrada **própria** para cada uma; classe
@@ -459,7 +499,17 @@ tests/
   2. **Os testes de rota** com app mínima montada sobre o `InMemoryAccessGuard` e
      os fakes de repositório (o padrão de `test_http_router.py` de identity):
      caminho feliz, erro de domínio e o mapeamento de status pelo handler.
-  3. **O módulo de varreduras** — o coração da estratégia. **Nenhum `parametrize`
+  3. **A fixture de invocação, e a totalidade dela — sem isto as varreduras do
+     item 4 ficam verdes sem trava nenhuma.** Um `_INVOCACOES: dict[<chave de
+     rota>, Invocacao]` que dá, **por rota**, um corpo e uma query **válidos**.
+     Travada por **totalidade derivada**, no mesmo padrão que CA17 aplica às
+     exceções:
+     ```
+     assert set(_INVOCACOES) == {chave(rota) for rota in router.routes}
+     ```
+     Chave faltando **reprova** — é o que obriga a Task que escreve uma rota nova
+     a declarar como invocá-la, em vez de deixá-la entrar muda na varredura.
+  4. **O módulo de varreduras** — o coração da estratégia. **Nenhum `parametrize`
      lista rota ou campo à mão:**
      - **CA01** — as rotas de `router.routes` batem, uma a uma, com a tabela de
        §4.1 em método e status de sucesso, e cada uma chama **exatamente um** use
@@ -474,11 +524,14 @@ tests/
        parâmetros de path se chamam legitimamente `unit_id`. Declarar no docstring
        que isto é **defesa em profundidade, não a trava**: `getattr`, `astuple` e
        `asdict` a contornam; a trava é CA15 (Task 06).
-     - **CA20** — identificador inválido → 422, com o domínio enumerado **por
-       eixo** e valores **diferentes** por eixo: **path** = `RID × {"   ", "\x00"}`
-       (RID derivado de `router.routes`; `""` fora, por medição); **query** =
-       `{params de query com id} × {"", "   ", "\x00"}`; **corpo** =
-       `{campos de id derivados por introspecção} × {"", "   ", "\x00"}`.
+     - **CA20** — identificador inválido → 422 **com o corpo de erro de staff**,
+       com o domínio enumerado **por eixo** e valores **diferentes** por eixo:
+       **path** = `RID × {"   ", "\x00"}` (RID derivado de `router.routes`; `""`
+       fora, por medição); **query** = `{params de query com id} × {"", "   ",
+       "\x00"}`; **corpo** = `{campos de id derivados por introspecção} × {"",
+       "   ", "\x00"}`. **Cada caso invoca a rota pelo `_INVOCACOES`** — corpo e
+       query válidos, só o identificador sob teste corrompido — e assere
+       `type == "staff_error"`, **nunca só o status**.
      - **CA21** — a validação roda **antes de autorizar**, provada pela **ausência
        de chamada**: com `InMemoryAccessGuard.calls`, uma requisição com
        identificador inválido não produz **nenhuma** entrada `authorize(`. A
@@ -488,13 +541,24 @@ tests/
      - **CA24** — nenhum campo escalar de request nem parâmetro de query devolve
        500 para o conjunto adversarial da 3.3 mais os numéricos degenerados
        (`"abc"`, `""`, `"40,5"`, `"NaN"`, `"Infinity"`, `"-1"`, `"0"`), com o
-       domínio **derivado por introspecção**.
+       domínio **derivado por introspecção** e a invocação vinda do `_INVOCACOES`.
+       Onde o valor degenerado é recusado, a asserção inclui o **corpo de staff**.
      - **CA05** — a varredura de imports da Task 02, agora alcançando `router.py`
        por já estar no pacote.
 - **Detalhes técnicos:**
   - **Todas as varreduras derivam o domínio do código.** É o que faz uma rota
     escrita nas Tasks 06/07/08 entrar automaticamente na trava, e é a razão de este
     módulo nascer com 4 rotas em vez de 16.
+  - **Por que a fixture de invocação é pré-requisito da estratégia, e não
+    conforto.** Das 14 rotas de RID, **oito têm corpo obrigatório** (R05, R08,
+    R09, R10, R11, R13, R14, R16) e R12 exige `start`/`end` na query. Invocada sem
+    corpo válido, qualquer uma delas responde **422 pelo `RequestValidationError`
+    do framework** — ou seja, uma varredura que assere só `status == 422` fica
+    **verde mesmo com o validador de identificador ausente**: a rota nova da
+    Task 07 não reprovaria a si mesma, e a mutação (b) de CA33 sobreviveria no
+    eixo de path. **Duas defesas, e as duas são necessárias:** invocar sempre
+    pelo `_INVOCACOES` (para que o 422 do framework não apareça) e asserir o
+    **discriminador de corpo** de staff (para que, se aparecer, não conte).
   - O `unit_id` das rotas de RJF é **ausente** por desenho: `manage_job_functions`
     está em `TENANT_WIDE_PERMISSIONS` (ADR 3.4.0008), e o passo 4 de
     `AuthorizeActionUseCase` dispensa a unidade **por permissão**.
@@ -502,12 +566,19 @@ tests/
     levanta a sua própria sentinela, que **não** é `IdentityError` e não tem
     handler. A propriedade depende do handler de identity registrado sobre a app,
     e por isso vive no e2e (Task 11).
-- **Critério de aceite:** CA01, CA02(b), CA14, CA20, CA21, CA23, CA24 e CA05 verdes
-  sobre o domínio **derivado**; as quatro rotas de RJF com caminho feliz e faixas
-  de erro cobertos.
+- **Critério de aceite:**
+  - CA01, CA02(b), CA14, CA20, CA21, CA23, CA24 e CA05 verdes sobre o domínio
+    **derivado**; as quatro rotas de RJF com caminho feliz e faixas de erro
+    cobertos.
+  - **`set(_INVOCACOES) == {chave(r) for r in router.routes}`** — a totalidade da
+    fixture é asserção, não convenção.
+  - **Nenhuma asserção de CA20/CA23/CA24 é status-only:** cada uma exige o corpo
+    de erro de staff (`type`/`detail` de `build_error_response`).
   - **Prova por mutação (metade (b) de CA33), com a saída colada:** condicionar a
     validação de identificador a um único eixo (só path, ou só `employee_id`) e
-    exigir vermelho em CA20.
+    exigir vermelho em CA20. **Se a mutação ficar verde, a causa mais provável é
+    invocação sem corpo válido** — o falso verde que a fixture existe para fechar
+    —, e isso é blocker, não ajuste.
 - **Comando de verificação:**
   ```powershell
   uv run pytest tests/unit/features/staff/adapters/test_http_router_job_functions.py tests/unit/features/staff/adapters/test_http_boundary_sweeps.py -v
@@ -600,8 +671,11 @@ tests/
     silenciosa; período sobreposto → 422; período inexistente em R12 → **422**
     (`UnavailabilityNotFoundError`), **não** 404.
   - As varreduras da Task 05 e a CA15 da Task 06 **continuam verdes com o domínio
-    ampliado** — sem edição de teste. É este item que prova que a estratégia de
-    domínio derivado funciona.
+    ampliado**, e a única edição de teste permitida é **acrescentar a chave das
+    cinco rotas novas ao `_INVOCACOES`** — que a asserção de totalidade cobra, e
+    que é o ponto em que esta Task declara como as suas rotas são invocadas com
+    corpo/query válidos. É este item que prova que a estratégia de domínio
+    derivado funciona: sem o validador, as rotas de R08–R12 reprovam **aqui**.
 - **Comando de verificação:**
   ```powershell
   uv run pytest tests/unit/features/staff/adapters/ -v
@@ -642,7 +716,8 @@ tests/
     `target_unit_id` é o do **corpo**. *(A metade que olha **onde a cópia caiu** é
     e2e, na Task 10.)*
   - As varreduras da Task 05 e a CA15 da Task 06 cobrem agora **R01…R16** — CA01
-    fecha o inventário completo.
+    fecha o inventário completo, e `_INVOCACOES` fecha em 16 chaves pela asserção
+    de totalidade.
   - **Prova por mutação (metade (d) de CA33), com a saída colada:** inverter origem
     e destino em R16 e exigir vermelho.
 - **Comando de verificação:**
@@ -750,24 +825,31 @@ tests/
 
 ---
 
-### Task 11 — matriz papel × rota, acesso negado e faixas de status pela API real
+### Task 11 — matriz papel × rota e acesso negado pela API real
 
 - **Arquivos a criar:**
   - `tests/e2e/features/staff/test_staff_authorization.py`
-  - `tests/e2e/features/staff/test_staff_status_bands.py`
 - **Arquivos a modificar:** nenhum.
-- **O que fazer:** o eixo de segurança inteiro pelo entrypoint real, **sempre
-  parametrizado sobre o domínio enumerado** — as rotas derivadas de
-  `router.routes`, os cinco papéis do concept §5.13, e as faixas do §6.1.
+- **O que fazer:** o eixo de **quem alcança o quê**, pelo entrypoint real,
+  **sempre parametrizado sobre o domínio enumerado** — as rotas derivadas de
+  `router.routes` e os cinco papéis do concept §5.13.
 - **Detalhes técnicos:**
   - Cada critério abaixo é um produto cartesiano explícito, não uma amostra. É o
-    ponto em que esta Stage multiplica representantes (16 × 5 × 2), e é onde o
-    conceito *"lei universal, representante estreito"* cobra o preço.
+    ponto em que esta Stage multiplica representantes (16 rotas × 5 papéis × 2
+    permissões), e é onde o conceito *"lei universal, representante estreito"*
+    cobra o preço.
   - `hr` ≡ `manager` **dentro** de staff (ADR 3.4.0006 §1) é decisão, não omissão:
-    CA12 a trava como propriedade.
+    CA12 a trava como propriedade, não como comentário.
+  - **Por que esta Task não carrega também as faixas de status.** São dois
+    assuntos — *quem pode alcançar* e *como o erro é classificado* — e só os
+    produtos desta Task somam ~100 casos e2e contra Postgres real. Para calibrar:
+    a suíte e2e inteira de identity, mergeada, tem 1498 linhas em 5 arquivos.
+    Juntá-las produziria um commit que nenhum revisor lê e cujo vermelho não diz
+    qual dos dois assuntos quebrou.
 - **Critério de aceite:**
   - **CA08** — toda rota **sem** Bearer recebe 401 com corpo constante e
-    `WWW-Authenticate: Bearer`; teste **enumera** `router.routes`, não uma amostra.
+    `WWW-Authenticate: Bearer`; o teste **enumera** `router.routes`, não uma
+    amostra.
   - **CA09** — `employee` e `platform_admin` recebem **403** nas 16 rotas: produto
     `{employee, platform_admin} × R01…R16` = **32 casos**, não dois.
   - **CA10** — `manager` real **alcança** as 16 rotas na sua unidade e no catálogo
@@ -785,19 +867,54 @@ tests/
   - **CA36** — **nenhuma** das 16 rotas produz `TenantScopeRequiredError`, para
     **nenhum** dos papéis que detêm permissão de staff: produto
     `{owner, manager, hr} × R01…R16`.
-  - **CA19** — cada uma das três faixas de §6.1 exercitada pelo **HTTP real**, e
-    `UnavailabilityNotFoundError` respondendo **422**.
-  - **CA22** — nome com `\x00` recebe 422 pelo HTTP real em **todas** as rotas que
-    aceitam nome — R01, R03, R05 e R07 —, não só nas duas de criação.
-  - **CA24 (metade e2e)** e **CA29** — ator `employee` autenticado recebe 403 ao
-    criar função e ao listar funcionários, **pela API**.
+  - **CA29** — ator `employee` autenticado recebe 403 ao criar função e ao listar
+    funcionários, **pela API**, não por unit test.
 - **Comando de verificação:**
   ```powershell
-  uv run pytest tests/e2e/features/staff/ -v
+  uv run pytest tests/e2e/features/staff/test_staff_authorization.py -v
+  make check
+  ```
+- **Commit:** `test(staff): matriz papel x rota e acesso negado pela API real [3.6/task-11]`
+
+---
+
+### Task 12 — faixas de status pela API real
+
+- **Arquivos a criar:**
+  - `tests/e2e/features/staff/test_staff_status_bands.py`
+- **Arquivos a modificar:** nenhum.
+- **O que fazer:** o eixo de **como o erro é classificado**, pelo HTTP real — as
+  três faixas do concept §6.1, o NUL em nome, e a metade e2e de CA24. É o espelho
+  de `tests/e2e/features/identity/test_status_bands.py`, que já existe mergeado.
+- **Detalhes técnicos:**
+  - **"Pelo HTTP real" é o ponto do critério**, e não redundância com a Task 03:
+    ali o mapa é verificado par a par contra o dicionário; aqui prova-se que a
+    exceção **atravessa** o handler registrado, com o corpo que
+    `build_error_response` monta.
+  - **O domínio de CA22 é derivado, não listado.** As rotas que aceitam nome saem
+    do helper de introspecção da Task 04 — schemas cujo `model_fields` contém
+    `name` —, exatamente como o eixo de corpo de CA20 deriva os `*_id`. Listar
+    "R01, R03, R05, R07" deixaria uma quinta rota que aceite nome escapar em
+    silêncio, no documento cuja tese é derivar.
+  - As asserções incluem o **corpo** de staff (`type`/`detail`), nunca só o
+    status — mesma razão da Task 05.
+- **Critério de aceite:**
+  - **CA19** — cada uma das três faixas de §6.1 exercitada pelo **HTTP real**
+    (não por chamada direta ao handler), e `UnavailabilityNotFoundError`
+    respondendo **422**.
+  - **CA22** — nome contendo `\x00` recebe 422 pelo HTTP real em **todas** as
+    rotas que aceitam nome, **domínio derivado por introspecção** — não só nas
+    duas de criação.
+  - **CA24 (metade e2e)** — nenhum campo escalar de request nem parâmetro de
+    query devolve 500 pela API real, sobre o conjunto adversarial e os numéricos
+    degenerados.
+- **Comando de verificação:**
+  ```powershell
+  uv run pytest tests/e2e/features/staff/test_staff_status_bands.py -v
   uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
   make check
   ```
-- **Commit:** `test(staff): matriz papel x rota, acesso negado e faixas de status [3.6/task-11]`
+- **Commit:** `test(staff): faixas de status do BC staff pela API real [3.6/task-12]`
 
 ## 2.1 Matriz de rastreabilidade
 
@@ -827,12 +944,12 @@ justifique.
 | CA16 — R16 chama o guard duas vezes; três recusas indistinguíveis | **08** | `test_http_router_lifecycle_and_copy.py` |
 | CA17 — mapa **total** por enumeração recursiva de subclasses | **03** | `test_http_error_handlers.py` |
 | CA18 — verificação **par a par** classe→status (18 entradas) | **03** | idem |
-| CA19 — as três faixas pelo HTTP real; `UnavailabilityNotFound` = 422 | **11** (+ guarda de MRO na **03**) | `test_staff_status_bands.py` |
+| CA19 — as três faixas pelo HTTP real; `UnavailabilityNotFound` = 422 | **12** (+ guarda de MRO na **03**) | `test_staff_status_bands.py` |
 | CA20 — identificador inválido → 422, três eixos com valores diferentes | **04** (validador) + **05** (varredura derivada) | `test_http_dependencies.py` + sweeps |
 | CA21 — validar **antes** de autorizar, provado por ausência de `authorize(` | **05** | sweeps, sobre `InMemoryAccessGuard.calls` |
-| CA22 — `\x00` em nome → 422 em R01, R03, R05, R07 | **11** | `test_staff_status_bands.py` |
+| CA22 — `\x00` em nome → 422 em **todas** as rotas que aceitam nome (derivadas) | **12** | `test_staff_status_bands.py` |
 | CA23 — período do dia desconhecido → 422; nenhum `DayPeriod(...)` direto | **05** (AST) + **07** (comportamento) | sweeps + testes de rota |
-| CA24 — nenhum campo escalar devolve 500 (domínio por introspecção) | **05** (unit) + **11** (e2e) | sweeps + e2e |
+| CA24 — nenhum campo escalar devolve 500 (domínio por introspecção) | **05** (unit) + **12** (e2e) | sweeps + e2e |
 | CA25 — e2e feliz com ator **`manager`** | **10** | `test_staff_flow.py` |
 | CA26 — funcionário de A não aparece em `GET /units/B/employees` | **10** | idem |
 | CA27 — desligado some da default e volta com `include_inactive` | **10** | idem |
@@ -844,6 +961,14 @@ justifique.
 | CA33 — prova por **mutação** das quatro leis mais críticas | (a) **06** · (b) **05** · (c) **03** · (d) **08** | saída colada no relatório final |
 | CA34 — a cópia cai na unidade certa | **08** (unit) + **10** (e2e) | command + `GET /units/B/employees` |
 | CA36 — nenhuma rota produz `TenantScopeRequiredError`; lei nas duas implementações | **11** (rotas) + **01** (as duas implementações) | e2e `{owner,manager,hr} × R01…R16` + as duas suítes de lei |
+
+> **A fixture `_INVOCACOES` não é critério do concept, e mesmo assim é gate.** Ela
+> é a **pré-condição de validade** de CA20, CA22, CA23 e CA24: sem corpo/query
+> válidos por rota, os quatro ficam verdes contra o 422 do `RequestValidationError`
+> em vez do erro de staff. A totalidade dela (`set(_INVOCACOES)` == chaves de
+> `router.routes`) é o mesmo mecanismo que CA17 aplica às exceções — e removê-la
+> porque "uma rota nova não tem chave" é o mesmo movimento que relaxar CA17 porque
+> "um erro novo não tem entrada": **blocker**, não ajuste.
 
 > **CA35 não existe** — foi aposentado por errata (concept §7 D6 e a nota ao fim da
 > §11). Número de critério é identidade e **não recicla**. Uma linha para ele nesta
@@ -863,7 +988,7 @@ justifique.
 | | §6 nada além dos três é normalizado | **04** + **02** (D-3B1 aplica a mesma regra a `weekly_hours`) |
 | **3.6.0003** | §Decision 1 união discriminada; 2 conversor de `weekly_hours`; 3 datetimes ingênuos; 4 os **dois** campos ordenados | **02** |
 | | §Decision 5 CA04 assere contra a lista esperada, não entre execuções | **02** + **10** |
-| **3.4.0002** (decidido na 3.4, **executado aqui**) | handler único, mapa total por MRO, par a par, `UnavailabilityNotFound` = 422, 409 só para estado gravado | **03** (+ **11** para o HTTP real) |
+| **3.4.0002** (decidido na 3.4, **executado aqui**) | handler único, mapa total por MRO, par a par, `UnavailabilityNotFound` = 422, 409 só para estado gravado | **03** (+ **12** para o HTTP real) |
 | **3.4.0004** (idem) | sem paginação; `L-ORD` intocada; regex `_ORDER_BY` sem antídoto | **09** (CA31) + **10** (CA28) — **nenhuma Task acrescenta `LIMIT`/`OFFSET`** |
 | **3.4.0005** (idem) | cópia repetida = limite declarado, sem guarda e sem campo informativo | **nenhuma Task** — consumido como decidido; §5 registra o risco de alguém "consertá-lo" |
 | **3.4.0001** | tradutor no composition root, sem `try/except` (L-AG1/L-AG2) | **01** (preservado ao mexer no tradutor) |
@@ -893,7 +1018,7 @@ justifique.
 | paginação | nenhuma Task acrescenta `LIMIT`/`OFFSET`; CA31 exige a regex `_ORDER_BY` **intocada**, e o `git diff` do arquivo entra no gate da Task 09 |
 | guarda de duplicidade na cópia | Task 08 não tem critério sobre nome repetido no destino; homônimos são legítimos (ADR 3.4.0005) |
 | leitura de funcionário por id | CA01 fecha o inventário em **16** rotas derivadas de `router.routes`; uma 17ª reprova |
-| vínculo de login (`user_id`, `IdentityGateway`) | nenhum schema tem `user_id` (CA02(a) varre `model_fields`); nenhum port novo nasce |
+| vínculo de login (`user_id`, `IdentityGateway`) | `user_id` e `employee_user_id` entram na **lista negra** de CA02(a) na Task 02 — sem isso a varredura só reprovaria os aliases de tenant, e a célula seria vazia (o concept §4.3 chama a ausência de *"hoje vacuamente verdadeiro"*; é a Task 02 que a converte em trava). Nenhum port novo nasce |
 
 > **Se algum destes se mostrar necessário durante a Fase 4, é `[finding]` na §7 —
 > não Task.** Escopo estrito (PIPELINE §4.3): tocar arquivo fora da lista da Task
@@ -931,12 +1056,18 @@ git diff --name-only (git merge-base origin/develop HEAD) HEAD -- src/   # cober
 
 ### Checklist de fechamento da Stage
 
-- [ ] Todas as **11** Tasks commitadas, cada uma com seu check verde
+- [ ] Todas as **12** Tasks commitadas, cada uma com seu check verde
 - [ ] `make check` verde no branch
 - [ ] Cobertura ≥ 90% global **e** em cada arquivo de `src/` tocado
 - [ ] **As quatro provas por mutação de CA33 executadas de verdade**, com a saída
       colada — inclusive o registro de que a mutação (a) **sobrevive** ao fake
       sancionado e só morre com o dublê adversarial
+- [ ] **Nenhuma varredura da faixa 422 é status-only** — cada asserção de
+      CA20/CA22/CA23/CA24 exige o corpo de erro de **staff**, e não o corpo
+      constante do `RequestValidationError`. `grep` por asserção de status sem
+      asserção de corpo nos módulos de varredura e nos e2e de faixa
+- [ ] **`set(_INVOCACOES)` cobre as 16 rotas** pela asserção de totalidade
+      derivada, não por inspeção
 - [ ] Auditoria de Testes com todos os itens "sim"
 - [ ] Checkpoints A, B e C executados, com todos os achados dispostos
 - [ ] §7 deste documento reflete a execução real
@@ -964,7 +1095,8 @@ Task 01 (tenant no token: port + tradutor + fake + as duas suítes de lei)
                                                     └─────────────────┴──► Task 09 (wiring)
                                                                               │
                                                                               ├──► Task 10 (e2e do DoD)
-                                                                              └──► Task 11 (papel × rota)
+                                                                              ├──► Task 11 (papel × rota)
+                                                                              └──► Task 12 (faixas de status)
 ```
 
 - **01 → tudo:** sem o tenant resolvido, nenhuma rota é alcançável por nenhum
@@ -982,14 +1114,22 @@ Task 01 (tenant no token: port + tradutor + fake + as duas suítes de lei)
   edição de teste**. É o que faz uma Task de rota reprovar a si mesma.
 - **08 → 09:** o wiring registra o router **completo**; registrá-lo antes faria a
   não-regressão de identity ser medida contra alvo móvel.
-- **09 → 10/11:** os e2e exigem a app real com as duas superfícies montadas.
-- **10 e 11 são independentes entre si** e poderiam trocar de ordem; 10 vem antes
-  porque o `conftest.py` de e2e de staff nasce nela e a 11 o consome.
+- **09 → 10/11/12:** os e2e exigem a app real com as duas superfícies montadas.
+- **10 → 11 e 12:** o `conftest.py` de e2e de staff (cadeia de setup por rotas
+  reais, papéis semeados) nasce na 10 e as outras duas o consomem.
+- **11 e 12 são independentes entre si** e poderiam trocar de ordem. Ficam
+  separadas porque são **assuntos** distintos — *quem alcança* × *como o erro é
+  classificado* —, cada uma com o seu arquivo, e porque juntas somariam ~140 casos
+  e2e contra Postgres real num único commit. **Esta é a única subdivisão que este
+  plano fez em relação à estimativa de 11 do concept, e ela não toca o inventário
+  de rotas** — que continua reservado para o caso de a execução estourar 12.
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
+| **Varredura da faixa 422 asserindo só o status.** 8 das 14 rotas de RID têm corpo obrigatório e R12 exige query: invocadas sem carga válida, respondem 422 pelo `RequestValidationError` **sem que o validador rode**, e a varredura fica verde sem trava | **Achado de Checkpoint C, não estilo** — é falso verde da família "lei universal, representante estreito", agora no eixo da *origem* do status. Duas defesas obrigatórias: invocar pelo `_INVOCACOES` (totalidade derivada) e asserir o discriminador de corpo `"staff_error"`. O argumento já estava escrito no ADR 3.6.0002 (*"a different body shape"*) e não fora aplicado ao próprio teste |
+| Uma rota nova entrar na varredura **sem** chave no `_INVOCACOES`, e o executor "consertar" removendo a asserção de totalidade | A totalidade é o que obriga a Task da rota nova a declarar como invocá-la. Removê-la é o mesmo movimento que relaxar CA17 quando um erro novo não tem entrada no mapa — **blocker**, e a §2.1 registra o paralelo |
 | A suíte de CA15 ser escrita com o `InMemoryAccessGuard` "porque já existe" | **Blocker, não ajuste.** Os dois implementadores ecoam a unidade pedida; a mutação (a) de CA33 fica verde e a cobertura fecha em 100%. O gate da Task 06 exige a mutação executada **de verdade**, com a saída colada, e o registro de que ela sobrevive ao fake |
 | Um `parametrize` ser escrito como lista literal de rotas "para ir mais rápido" | O domínio é **derivado** (`router.routes`, `model_fields`, `__subclasses__`) por decisão de §1. Lista literal é achado do Checkpoint C, não estilo: é a forma exata da falha que a 3.4 vazou três vezes |
 | `make check` verde com Postgres de outra worktree ocupando a porta | `docker ps` + `DATABASE_URL` **antes** de confiar no verde. Container órfão foi a causa de uma Stage testar contra infra alheia |
@@ -999,7 +1139,9 @@ Task 01 (tenant no token: port + tradutor + fake + as duas suítes de lei)
 | O router ler `scope.unit_id` por `getattr`/`astuple`, contornando a AST | CA14 é declaradamente **defesa em profundidade**; a trava é CA15 com o dublê. Se a AST for a única evidência apresentada, o gate não fecha |
 | A validação de identificador ser posta **depois** do guard "porque o status é o mesmo" | CA21 assere a **ausência** de `authorize(` em `calls` — o status não distingue as duas ordens, e é por isso que a asserção é sobre o efeito colateral |
 | R16 inverter origem e destino sem que nada falhe | CA34 nas duas metades (command na 08, unidade de destino na 10) + a mutação (d) de CA33 |
-| A Stage estourar 12 Tasks durante a execução | **PARAR e devolver proposta.** O sinal é subdividir o inventário de rotas (as Tasks 06–08), **não** cortar a Stage de novo: ela já é produto de um corte |
+| A Stage estourar 12 Tasks durante a execução | **PARAR e devolver proposta.** A subdivisão de e2e **já foi usada** (Tasks 11 e 12); o próximo sinal é subdividir o inventário de rotas (Tasks 06–08), **não** cortar a Stage de novo: ela já é produto de um corte |
+| O eixo novo de Task 01 ("tenant omitido") ficar verde pela matriz RBAC em vez de pela lei | `platform_admin` é negado no **passo 2** por não deter permissão de staff (`role.py:54`), antes de L-AG3. O cenário tem de usar `_SpyIdentityGuard` — identity **autorizou** e devolveu ator sem tenant —, como a suíte mergeada já faz (`test_composition_root_staff.py:485-492`) |
+| `user_id` entrar num schema na 3.5 sem que nada reclame | A lista negra de CA02(a) inclui `user_id` e `employee_user_id` desde a Task 02. Sem isso a célula do `non_goal` seria declaração, não trava |
 | `weekly_hours` como string quebrar cliente que espera número | Declarado no contrato e no ADR 3.6.0003; não há cliente (frontend é Step futuro) |
 
 ## 6. Referências
