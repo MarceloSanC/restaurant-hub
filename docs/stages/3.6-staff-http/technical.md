@@ -1237,4 +1237,74 @@ models"* por **errata** no ADR 3.6.0003 (`## Errata`, 2026-08-29), com o alcance
 do `forbid` medido e declarado. Sem esse registro, quem lesse o ADR ao pe da
 letra removeria o `forbid` e derrubaria CA06 sem entender por que.
 
+### 2026-08-29 - [decision] test_http_boundary_sweeps.py (Task 05) - Marcelo
+
+**Contexto:** o plano descreve `_INVOCACOES` como um mapa **dentro** do modulo de
+varreduras. Escrito assim, toda Task que acrescenta rota (06, 07, 08) teria de
+editar `test_http_boundary_sweeps.py` para declarar a invocacao da rota nova —
+arquivo que **nao esta** na lista de nenhuma delas. A Task 06 e' o caso agudo: ela
+acrescenta quatro rotas, o seu comando de verificacao roda as varreduras, e a
+assercao de totalidade (`set(_INVOCACOES) == {chave(r) for r in router.routes}`)
+ficaria vermelha sem a edicao — isto e', o gate "nao avancar sem verificacao
+verde" seria insatisfazivel dentro do escopo declarado.
+
+**Pergunta:** onde a declaracao de invocacao de cada rota deve morar?
+
+**Opcoes:**
+- A - Mapa literal no modulo de varreduras, editado por cada Task de rota. Fiel a
+  letra do plano, mas poe cada Task para tocar arquivo fora da sua lista.
+- B - Uma invocacao **derivada** da rota (corpo montado por introspeccao do
+  schema). Elimina a declaracao — e com ela a trava: a fixture existe justamente
+  para que a Task **declare** como a rota e' invocada, e um corpo gerado seria uma
+  segunda implementacao do schema, capaz de concordar com um router errado.
+- C - Cada modulo `test_http_router_*` exporta o seu proprio `INVOCACOES`, e o
+  modulo de varreduras os **colhe do pacote** por `pkgutil`. ✅ recomendada
+
+**Decisao:** C.
+
+**Razao:** e' a mesma disciplina de "derivar o dominio do codigo" que a §1 do
+plano usa para `router.routes`, `StaffError.__subclasses__` e `model_fields`,
+aplicada ao arranjo dos testes. A propriedade que a fixture protege fica
+**identica** — a assercao de totalidade e' preservada literalmente, e rota sem
+declaracao continua reprovando —, mas a declaracao passa a morar no arquivo da
+Task que escreveu a rota, que e' onde o plano ja diz que ela pertence
+conceitualmente ("obriga a Task que escreve uma rota nova a declarar como
+invoca-la"). Efeito colateral desejado: as Tasks 06, 07 e 08 deixam de precisar
+tocar o modulo de varreduras, e as suas listas de arquivos ficam corretas como
+escritas.
+
+**Mesma forma, mesma razao, para o wiring de use case.** `Ambiente` monta os
+`dependency_overrides` por reflexao sobre os provedores `_get_*` do router (a
+anotacao de retorno nomeia a classe do use case; os 16 construtores pedem apenas
+`employees`, `job_functions` e `id_generator`). Sem isso, cada Task de rota teria
+de editar o ambiente de teste pelo mesmo motivo — e pela mesma via.
+
+### 2026-08-29 - [deviation] test_http_boundary_sweeps.py (Task 05) - Marcelo
+
+**Contexto:** o eixo de **path** de CA20 exige enviar `"   "` e `" "` num
+segmento de URL. Medido: `httpx` **recusa montar** a URL com o caractere cru
+(`InvalidURL: Invalid non-printable ASCII character ... at position 22`), entao o
+teste falharia no cliente antes de alcancar a rota.
+
+**Ajuste:** os parametros de path sao percent-encoded (`urllib.parse.quote`) antes
+de montar a URL. Nao e' contorno de teste: e' como o caso chega em producao — o
+concept nomeia literalmente `GET /units/%00/employees`, e um cliente HTTP nao tem
+outra forma de por um NUL num path. O Starlette decodifica antes de entregar o
+parametro ao handler, que e' exatamente o caminho que o validador fecha. Nenhum
+criterio muda; o que muda e' a forma de exercita-lo, e ela ficou **mais** fiel.
+
+### 2026-08-29 - [deviation] test_http_router_job_functions.py (Task 05) - Marcelo
+
+**Contexto:** a app minima dos testes de rota registrava apenas
+`register_staff_error_handlers`. Com isso o 422 do `RequestValidationError` sai
+com o corpo **default** do FastAPI, que nao tem a chave `type` — e asserir
+`type == "staff_error"` passava por `KeyError` evitado, nao por diferenca de
+origem.
+
+**Ajuste:** o ambiente passa a registrar tambem o `register_error_handlers` de
+`shared`, na mesma ordem que `create_app` usa (genericos primeiro, de feature
+depois). E' o que da ao ambiente as **duas** origens de 422 que a app real tem, e
+portanto o que torna o discriminador de corpo uma trava de verdade em vez de uma
+asserção sobre ausencia de chave.
+
 <!-- END: post-execution -->
