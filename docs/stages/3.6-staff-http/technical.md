@@ -1281,7 +1281,7 @@ de editar o ambiente de teste pelo mesmo motivo — e pela mesma via.
 
 ### 2026-08-29 - [deviation] test_http_boundary_sweeps.py (Task 05) - Marcelo
 
-**Contexto:** o eixo de **path** de CA20 exige enviar `"   "` e `" "` num
+**Contexto:** o eixo de **path** de CA20 exige enviar `"   "` e `"\x00"` num
 segmento de URL. Medido: `httpx` **recusa montar** a URL com o caractere cru
 (`InvalidURL: Invalid non-printable ASCII character ... at position 22`), entao o
 teste falharia no cliente antes de alcancar a rota.
