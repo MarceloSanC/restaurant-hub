@@ -57,7 +57,7 @@ _ALVOS = [
     pytest.param(_MANAGE_JOB_FUNCTIONS, None, id="tenant-wide"),
 ]
 
-# **O eixo do tenant na chamada — nomeado x omitido** (ADR 0.0.0005).
+# **O eixo do tenant na chamada — nomeado x omitido x vazio** (ADR 0.0.0005).
 #
 # `tenant_id=None` significa *"o tenant do próprio ator"*, e o significado é do
 # **contrato**: as duas implementações do port são obrigadas por ele. Este
@@ -67,6 +67,17 @@ _ALVOS = [
 # alerta mais forte da família "lei universal, representante estreito", e foi
 # assim que a Stage 3.4 vazou duas mutações.
 #
+# **O terceiro valor é `""`, e a sua ausência era reincidência de `L-AG3`.** A
+# cláusula que resolve o tenant é uma **disjunção escrita**: *"só a **ausência**
+# carrega significado; um `tenant_id=""` explícito é o chamador nomeando um
+# tenant vazio, e segue para a decisão de acesso como qualquer outro alvo"*
+# (`composition_root.py`, comentário da linha da resolução). Com só dois valores
+# no eixo, trocar `tenant_id if tenant_id is not None else …` por
+# `tenant_id or …` sobrevivia — nas **duas** implementações, que escrevem a mesma
+# cláusula. A correção de `5d69846` já tinha enumerado `ausente`/`vazio`, mas do
+# lado do tenant que identity **devolve**; o mesmo par no **argumento de entrada**
+# — o tenant que o chamador **pede** — nunca tinha sido enumerado.
+#
 # O eixo entra em **produto** com `_ALVOS` porque a resolução do tenant não pode
 # ser propriedade de uma permissão: uma resolução condicionada a `permission ==
 # "manage_staff"` deixaria o catálogo de funções — cujo alvo é o restaurante
@@ -75,7 +86,31 @@ _ALVOS = [
 _TENANT_NA_CHAMADA = [
     pytest.param(_TENANT, id="tenant-nomeado"),
     pytest.param(None, id="tenant-omitido"),
+    pytest.param("", id="tenant-vazio"),
 ]
+
+# O mesmo eixo com o **alvo que a decisão tem de consultar** para cada valor —
+# a metade do contrato que só o caminho de sucesso observa. Nomeado e vazio
+# seguem como estão; só a ausência é substituída pelo tenant do ator.
+_TENANT_RESOLVIDO = [
+    pytest.param(_TENANT, _TENANT, id="tenant-nomeado"),
+    pytest.param(None, _TENANT, id="tenant-omitido"),
+    pytest.param("", "", id="tenant-vazio"),
+]
+
+_VALORES_DO_EIXO_DO_TENANT = 3
+
+
+def test_o_eixo_do_tenant_na_chamada_tem_os_tres_valores_do_contrato() -> None:
+    """A cardinalidade do eixo, asserida junto da lei que roda sobre ele.
+
+    Um `parametrize` que perdesse o `""` continuaria verde com dois terços dos
+    casos, e a disjunção *"nomeado, omitido **ou** vazio"* voltaria a ter dois
+    representantes de três. A contagem é o que faz o encolhimento reprovar.
+    """
+    assert len(_TENANT_NA_CHAMADA) == _VALORES_DO_EIXO_DO_TENANT
+    assert len(_TENANT_RESOLVIDO) == _VALORES_DO_EIXO_DO_TENANT
+    assert [caso.id for caso in _TENANT_NA_CHAMADA] == [caso.id for caso in _TENANT_RESOLVIDO]
 
 
 def _guard_with_actor(*, tenant_id: str | None = _TENANT) -> InMemoryAccessGuard:
@@ -192,20 +227,29 @@ def test_l_ag2_permissao_tenant_wide_devolve_escopo_sem_unidade() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("tenant_na_chamada", _TENANT_NA_CHAMADA)
+@pytest.mark.parametrize(("tenant_na_chamada", "tenant_alvo"), _TENANT_RESOLVIDO)
 @pytest.mark.parametrize(("permission", "unit"), _ALVOS)
-def test_o_tenant_omitido_resolve_para_o_do_ator_e_alcanca_a_concessao(
+def test_o_tenant_da_chamada_decide_o_alvo_consultado(
+    # A aridade é a do produto cartesiano: as duas coordenadas do alvo e as duas
+    # do eixo do tenant. Agrupá-las esconderia que o segundo valor do eixo é o
+    # **esperado**, que é o que dá conteúdo à lei.
     permission: str,
     unit: str | None,
     tenant_na_chamada: str | None,
+    tenant_alvo: str,
 ) -> None:
-    """A concessão é feita com o tenant **nomeado**, e a chamada que o omite a alcança.
+    """A concessão é feita no alvo esperado, e a chamada tem de alcançá-la — nos três valores.
 
     É a lei do ADR 0.0.0005 do lado do fake, e ela tem duas metades que este
-    único teste cobra porque são a mesma travessia: o **pedido** (a ausência
-    resolve para o tenant do ator antes de consultar `grants` — sem isso a
-    chamada omissa não acharia a concessão e cairia na recusa) e a **resposta**
-    (o escopo devolvido carrega o tenant do ator).
+    único teste cobra porque são a mesma travessia: o **pedido** (o alvo
+    consultado em `grants` é o que a cláusula resolve — só a ausência vira o
+    tenant do ator) e a **resposta** (o escopo devolvido carrega o tenant do
+    ator, seja qual for o alvo pedido).
+
+    **O caso `""` é o que refuta a truthiness.** Com `tenant_id or actor.tenant_id`
+    a chamada que nomeia o tenant vazio passa a consultar a concessão de `t1` —
+    o pedido é reescrito em silêncio, e um alvo que a decisão negaria vira o
+    tenant do próprio ator, concedido. É a mutação que sobrevivia aos 2791 testes.
 
     **A asserção é contra o escopo esperado, escrito por extenso, e não entre as
     duas execuções.** Comparar o resultado nomeado com o omitido passaria se os
@@ -213,7 +257,7 @@ def test_o_tenant_omitido_resolve_para_o_do_ator_e_alcanca_a_concessao(
     sobre `sorted`, aplicada aqui.
     """
     guard = _guard_with_actor()
-    guard.grant(permission, tenant_id=_TENANT, unit_id=unit)
+    guard.grant(permission, tenant_id=tenant_alvo, unit_id=unit)
     actor = guard.authenticate(request=object())
 
     escopo = guard.authorize(actor, permission, tenant_id=tenant_na_chamada, unit_id=unit)
@@ -222,6 +266,29 @@ def test_o_tenant_omitido_resolve_para_o_do_ator_e_alcanca_a_concessao(
         tenant_id=TenantId(_TENANT),
         unit_id=UnitId(unit) if unit is not None else None,
     )
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_o_tenant_vazio_nomeado_nao_e_reescrito_para_o_do_ator(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """A outra face do caso `""`: nomeá-lo **não** dá acesso ao tenant do ator.
+
+    O teste acima prova que o alvo `""` é consultado; este prova que ele **não é
+    substituído**. As duas metades são necessárias: uma implementação que
+    ignorasse o argumento por completo satisfaria a primeira montando a concessão
+    no lugar certo por acaso, e é aqui que ela reprova — a concessão existe só
+    para `t1`, e a chamada que nomeia o tenant vazio tem de ser negada.
+    """
+    guard = _guard_with_actor()
+    guard.grant(permission, tenant_id=_TENANT, unit_id=unit)
+    actor = guard.authenticate(request=object())
+
+    with pytest.raises(FakeAuthorizationRejected) as excinfo:
+        guard.authorize(actor, permission, tenant_id="", unit_id=unit)
+
+    assert excinfo.value is guard.authorization_error
 
 
 @pytest.mark.parametrize(("permission", "unit"), _ALVOS)
@@ -279,10 +346,11 @@ def test_l_ag3_ator_sem_tenant_e_negado_mesmo_com_o_alvo_concedido(
 
     Três dimensões, e as três foram medidas como necessárias.
 
-    **O tenant na chamada:** L-AG3 tem de valer nos **dois** eixos do
-    ADR 0.0.0005. O eixo omitido é o que a resolução nova cria, e é o perigoso:
-    uma resolução escrita como `TenantId(tenant_id or actor.tenant_id or "")`
-    passaria no eixo nomeado e reabriria o tenant vazio no omitido.
+    **O tenant na chamada:** L-AG3 tem de valer nos **três** valores do eixo do
+    ADR 0.0.0005 — nomeado, omitido e vazio. O eixo omitido é o que a resolução
+    nova cria, e é o perigoso: uma resolução escrita como
+    `TenantId(tenant_id or actor.tenant_id or "")` passaria no eixo nomeado e
+    reabriria o tenant vazio nos outros dois.
 
     **O valor do tenant:** `None` é o `platform_admin` de hoje
     (`AuthorizedActor.actor_tenant_id` é `RestaurantId | None`), e `""` é o
@@ -294,7 +362,8 @@ def test_l_ag3_ator_sem_tenant_e_negado_mesmo_com_o_alvo_concedido(
     "manage_job_functions"` mantinha a suíte verde — e a permissão dispensada
     seria justamente a de alcance tenant-wide.
 
-    As oito combinações têm de terminar em recusa, não em escopo.
+    As doze combinações — 2 alvos x 2 tenants do ator x 3 valores do eixo da
+    chamada — têm de terminar em recusa, não em escopo.
     """
     guard = InMemoryAccessGuard(credential=FakeActor(id="a1", tenant_id=tenant_do_ator))
     guard.grant(permission, tenant_id=_TENANT, unit_id=unit)

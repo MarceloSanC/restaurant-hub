@@ -388,10 +388,55 @@ _ROTAS_DE_IDENTITY: frozenset[tuple[str, str]] = frozenset(
     }
 )
 
+# **O eixo do tenant na chamada — nomeado x omitido x vazio** (ADR 0.0.0005).
+#
+# O terceiro valor é `""`, e a sua ausência era **reincidência de L-AG3**. A
+# cláusula que este tradutor escreve é uma disjunção declarada no comentário da
+# própria linha: *"só a **ausência** carrega significado; um `tenant_id=""`
+# explícito é o chamador nomeando um tenant vazio, e segue para a decisão de
+# acesso como qualquer outro alvo — que o negará. Trocar por truthiness aqui
+# reescreveria o pedido em silêncio (ADR 2.3.0005)"*.
+#
+# Com só dois valores no eixo, `tenant_id if tenant_id is not None else …` →
+# `tenant_id or …` sobrevivia aos 2791 testes, aqui e na suíte do fake — as duas
+# implementações escrevem a mesma cláusula, e as duas ficavam cobertas pelo mesmo
+# conjunto **incompleto**. Medido com spy: o chamador pede `tenant_id=""` e
+# identity recebe `"rest-do-ator"`; um alvo que a decisão negaria vira o tenant do
+# próprio ator, concedido.
+#
+# `5d69846` já tinha enumerado `ausente`/`vazio` para esta mesma disjunção, mas
+# no `actor_tenant_id` — o tenant que identity **devolve**. O par no **argumento
+# de entrada**, o tenant que o chamador **pede**, nunca tinha sido enumerado.
 _TENANT_NA_CHAMADA = [
     pytest.param("t1", id="tenant-nomeado"),
     pytest.param(None, id="tenant-omitido"),
+    pytest.param("", id="tenant-vazio"),
 ]
+
+# O mesmo eixo com o **tenant que tem de chegar ao `IdentityGuard`** para cada
+# valor. Nomeado e vazio seguem como estão; só a ausência é substituída pelo
+# tenant do ator. É a metade do contrato que só o caminho de sucesso observa.
+_TENANT_RESOLVIDO = [
+    pytest.param("t1", "t1", id="tenant-nomeado"),
+    pytest.param(None, "t1", id="tenant-omitido"),
+    pytest.param("", "", id="tenant-vazio"),
+]
+
+_VALORES_DO_EIXO_DO_TENANT = 3
+
+
+def test_o_eixo_do_tenant_na_chamada_tem_os_tres_valores_do_contrato() -> None:
+    """A cardinalidade do eixo, asserida junto das leis que rodam sobre ele.
+
+    Um `parametrize` que perdesse o `""` continuaria verde com dois terços dos
+    casos, e a disjunção *"nomeado, omitido **ou** vazio"* voltaria a ter dois
+    representantes de três — exatamente a forma do achado que esta correção
+    fecha. A suíte do fake carrega a asserção gêmea, para que os dois lados do
+    port não possam divergir em silêncio.
+    """
+    assert len(_TENANT_NA_CHAMADA) == _VALORES_DO_EIXO_DO_TENANT
+    assert len(_TENANT_RESOLVIDO) == _VALORES_DO_EIXO_DO_TENANT
+    assert [caso.id for caso in _TENANT_NA_CHAMADA] == [caso.id for caso in _TENANT_RESOLVIDO]
 
 
 # **A segunda dimensão de L-AG3 — e ela não é simetria decorativa.**
@@ -531,12 +576,16 @@ def test_l_ag2_o_tradutor_nao_traduz_a_excecao_de_autorizacao(
     assert excinfo.value is spy.authorization_error
 
 
-@pytest.mark.parametrize("tenant_na_chamada", _TENANT_NA_CHAMADA)
+@pytest.mark.parametrize(("tenant_na_chamada", "tenant_alvo"), _TENANT_RESOLVIDO)
 @pytest.mark.parametrize(("permission", "unit"), _ALVOS)
-def test_o_tenant_omitido_e_resolvido_do_ator_antes_de_delegar_a_identity(
+def test_o_tenant_da_chamada_decide_o_que_chega_a_identity(
+    # A aridade é a do produto cartesiano: as duas coordenadas do alvo e as duas
+    # do eixo do tenant. Agrupá-las esconderia que o segundo valor do eixo é o
+    # **esperado**, que é o que dá conteúdo à lei.
     permission: str,
     unit: str | None,
     tenant_na_chamada: str | None,
+    tenant_alvo: str,
 ) -> None:
     """ADR 0.0.0005 na implementação de produção — e a asserção é sobre o **pedido**.
 
@@ -548,6 +597,13 @@ def test_o_tenant_omitido_e_resolvido_do_ator_antes_de_delegar_a_identity(
     o escopo sai do `actor_tenant_id` que identity devolve e carregaria `"t1"`
     mesmo se a resolução tivesse sido esquecida, então uma asserção só sobre ele
     ficaria verde com a mutação viva.
+
+    **O caso `""` é o que refuta a truthiness, e é o único dos três que a
+    refuta.** Com `tenant_id or _tenant_id_do_ator(actor)` o chamador que nomeia
+    o tenant vazio faz identity receber `"t1"`: o pedido é reescrito em silêncio,
+    e um alvo que a decisão de acesso negaria vira o tenant do próprio ator. Os
+    outros dois valores do eixo sobrevivem à mutação — foi por isso que ela passou
+    a Stage inteira.
 
     **A asserção é contra o valor esperado, escrito por extenso**, e não contra o
     resultado do eixo vizinho: comparar nomeado com omitido passaria se os dois
@@ -563,7 +619,7 @@ def test_o_tenant_omitido_e_resolvido_do_ator_antes_de_delegar_a_identity(
         unit_id=unit,
     )
 
-    assert spy.received["tenant_id"] == "t1"
+    assert spy.received["tenant_id"] == tenant_alvo
     assert scope == AuthorizedScope(
         tenant_id=StaffTenantId("t1"),
         unit_id=StaffUnitId(unit) if unit is not None else None,
