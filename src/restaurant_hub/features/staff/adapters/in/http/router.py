@@ -48,11 +48,14 @@ from fastapi import APIRouter, Depends, Response, status
 from restaurant_hub.features.staff.application.dtos.commands import (
     AssignJobFunctionsCommand,
     ChangeWorkloadProfileCommand,
+    CopyEmployeeToUnitCommand,
     CreateEmployeeCommand,
     CreateJobFunctionCommand,
+    DeactivateEmployeeCommand,
     DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
     DeleteJobFunctionCommand,
+    ReactivateEmployeeCommand,
     RegisterUnavailabilityCommand,
     RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
@@ -68,11 +71,17 @@ from restaurant_hub.features.staff.application.use_cases.assign_job_functions im
 from restaurant_hub.features.staff.application.use_cases.change_workload_profile import (
     ChangeWorkloadProfileUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.copy_employee_to_unit import (
+    CopyEmployeeToUnitUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.create_employee import (
     CreateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
+    DeactivateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.declare_shift_preference import (
     DeclareShiftPreferenceUseCase,
@@ -88,6 +97,9 @@ from restaurant_hub.features.staff.application.use_cases.list_employees import (
 )
 from restaurant_hub.features.staff.application.use_cases.list_job_functions import (
     ListJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.reactivate_employee import (
+    ReactivateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
     RegisterUnavailabilityUseCase,
@@ -124,6 +136,7 @@ from .dependencies import (
 from .schemas import (
     AssignJobFunctionsRequest,
     ChangeWorkloadProfileRequest,
+    CopyEmployeeRequest,
     CreateEmployeeRequest,
     CreateJobFunctionRequest,
     DeclareShiftPreferenceRequest,
@@ -199,6 +212,18 @@ def _get_register_unavailability() -> RegisterUnavailabilityUseCase:
 
 def _get_remove_unavailability() -> RemoveUnavailabilityUseCase:
     _nao_conectado("staff_remove_unavailability")
+
+
+def _get_deactivate_employee() -> DeactivateEmployeeUseCase:
+    _nao_conectado("staff_deactivate_employee")
+
+
+def _get_reactivate_employee() -> ReactivateEmployeeUseCase:
+    _nao_conectado("staff_reactivate_employee")
+
+
+def _get_copy_employee_to_unit() -> CopyEmployeeToUnitUseCase:
+    _nao_conectado("staff_copy_employee_to_unit")
 
 
 def _to_shift_preference(periodos: list[str] | None) -> ShiftPreference | None:
@@ -586,6 +611,119 @@ def remove_unavailability(  # noqa: PLR0913
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
             period=UnavailabilityPeriod(start=start, end=end),
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+# ---------------------------------------------------------------------------
+# Ciclo de vida e cópia
+#
+# `termination` e `rehire` são **sub-recursos `POST`** porque são as duas
+# transições nomeadas do ciclo de vida (ADR 3.2.0006), não edição de campo. Um
+# `PATCH {"active": false}` faria a transição parecer atribuição de atributo — a
+# leitura que o ADR 3.2.0007 recusa, e que apagaria a diferença entre "desligar"
+# e "corrigir um booleano".
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/units/{unit_id}/employees/{employee_id}/termination",
+    response_model=EmployeeResponse,
+)
+def deactivate_employee(
+    unit_id: str,
+    employee_id: str,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[DeactivateEmployeeUseCase, Depends(_get_deactivate_employee)],
+) -> EmployeeResponse:
+    """Desliga o funcionário — o registro **sobrevive** (ADR 3.2.0006)."""
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        DeactivateEmployeeCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.post(
+    "/units/{unit_id}/employees/{employee_id}/rehire",
+    response_model=EmployeeResponse,
+)
+def reactivate_employee(
+    unit_id: str,
+    employee_id: str,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[ReactivateEmployeeUseCase, Depends(_get_reactivate_employee)],
+) -> EmployeeResponse:
+    """Recontrata o funcionário, devolvendo-o à listagem default."""
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        ReactivateEmployeeCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.post(
+    "/units/{unit_id}/employees/{employee_id}/copies",
+    response_model=EmployeeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def copy_employee_to_unit(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    payload: CopyEmployeeRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[CopyEmployeeToUnitUseCase, Depends(_get_copy_employee_to_unit)],
+) -> EmployeeResponse:
+    """Copia o registro para **outra** unidade do mesmo restaurante.
+
+    **Duas chamadas ao guard, com alvos distintos, e a duplicação é L-AG4
+    aplicada — não uma otimização esquecida.** A origem (`unit_id` do path) e o
+    destino (`target_unit_id` do corpo) são dois alvos: reusar o escopo da origem
+    para alcançar o destino é escalada de escopo, e é assim que uma cópia vira
+    exfiltração para uma unidade que o ator não enxerga.
+
+    **A orientação é fixa e é o que CA34 trava:** `unit_id` do command é a
+    **origem** (de onde se lê) e `target_unit_id` é o **destino** (onde a cópia
+    cai). Inverter os dois sobrevive a todo critério que só olha status —
+    autorizar as duas unidades e gravar na errada continua respondendo 201.
+
+    `target_unit_id` passa pelo **validador de identificador antes de qualquer
+    autorização**: ele é o segundo alvo, e vai para `units.find_by_id` **dentro
+    de identity**, onde o byte NUL vira `DataError` e 500.
+
+    As três recusas do destino — outro tenant, inexistente, não visível —
+    produzem o **mesmo** status e o **mesmo** corpo, por desenho: quem não
+    enxerga a unidade não pode distinguir "não existe" de "existe e não é sua".
+    """
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    destino = validate_identifier(payload.target_unit_id, entity=_UNIT)
+
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=destino)
+
+    result = use_case.execute(
+        CopyEmployeeToUnitCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+            target_unit_id=UnitId(destino),
         )
     )
     return EmployeeResponse.from_result(result)

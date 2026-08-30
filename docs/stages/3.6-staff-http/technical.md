@@ -1472,4 +1472,45 @@ absorve-los aqui:
 esta Task e' a primeira a povoar de verdade (corpo com id, query com parametro), e
 separa-los produziria um commit que so faz sentido lido junto deste.
 
+### 2026-08-29 - [deviation] escopo da Task 08 - Marcelo
+
+**Contexto — e este NAO teve autorizacao previa; esta registrado para ser
+revertido barato se a coordenacao discordar.** R16 e' a unica rota do BC que
+autoriza **dois** alvos, e o segundo chega pelo **corpo**. Duas premissas das
+varreduras foram escritas quando toda rota tinha exatamente um alvo, e ficaram
+vermelhas contra um router correto (12 casos):
+
+1. **CA24, eixo de corpo** — `target_unit_id` e' alvo de autorizacao, entao um
+   valor bem-formado nao concedido e' negado pelo **guard**, cru, e nao ha
+   resposta HTTP. E' literalmente a mesma especie que o eixo de path ja trata
+   para `unit_id`, e a correcao e' a mesma: a especie do identificador decide a
+   assercao, e a exigencia de que a sentinela **escape** fecha a
+   traducao-em-resposta tambem aqui.
+2. **CA15, alvos do guard** — o teste exigia que **toda** autorizacao nomeasse a
+   unidade do path. R16 autoriza origem **e** destino, e a segunda chamada e'
+   L-AG4 aplicada (o proprio CA16 a exige). A assercao passou a ser: a
+   **primeira** autorizacao e' a da origem — que e' o que a lei nomeia — e todo
+   alvo adicional tem de vir do corpo **declarado** da invocacao, de modo que uma
+   autorizacao sobre alvo nao declarado continue reprovando.
+
+**Por que nao e' afrouxamento:** nenhuma das duas remove exigencia; as duas
+trocam uma exigencia **impossivel para a rota correta** por outra que distingue o
+caso legitimo do defeito. E as duas ganharam guarda propria contra colapso
+silencioso — `test_os_alvos_de_autorizacao_sao_exatamente_os_de_hoje` declara
+quais identificadores sao alvo de acesso, e a assercao de alvo adicional cobra a
+declaracao no corpo.
+
+**Por que segui sem perguntar, tendo parado antes:** a classe ja foi decidida
+duas vezes nesta Stage — a coordenacao autorizou editar as varreduras para
+acomodar rotas novas (opcao A) e para absorver F3/F5 na Task 07. Este e' o mesmo
+arquivo, pela mesma razao (rota nova revela premissa da varredura), e parar de
+novo custaria uma terceira ida e volta sobre a mesma questao ja respondida. Fica
+declarado como **decisao minha**, e nao como autorizacao recebida.
+
+**Nota de metodo, aprendida na hora:** uma das reversoes de mutacao usou como
+ancora uma linha que aparece em **12** rotas, e a reversao falhou deixando o
+router sem a segunda chamada do guard. Detectado por inspecao antes do commit.
+Ancora de reversao tem de ser tao unica quanto a de aplicacao — e a conferencia
+pos-mutacao nao e' zelo, e' o que separa medir de estragar.
+
 <!-- END: post-execution -->

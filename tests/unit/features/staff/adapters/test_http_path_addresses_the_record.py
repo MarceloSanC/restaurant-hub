@@ -229,7 +229,20 @@ async def test_ca15_o_guard_e_consultado_com_a_unidade_do_path(rota: APIRoute) -
 
     autorizacoes = [c for c in guard.calls if c.startswith("authorize(")]
     assert autorizacoes, "a rota não autorizou nada"
-    assert all(c.endswith(f",{_UNIDADE_PEDIDA})") for c in autorizacoes), autorizacoes
+
+    # **A PRIMEIRA autorização é a da origem, e é ela que a lei nomeia.** Uma
+    # rota pode legitimamente autorizar mais de um alvo — R16 autoriza origem e
+    # destino, e a segunda chamada é L-AG4 aplicada, não desperdício. O que não
+    # pode é a unidade que endereça o registro deixar de ser a do path.
+    assert autorizacoes[0].endswith(f",{_UNIDADE_PEDIDA})"), autorizacoes
+
+    # E todo alvo **adicional** tem de vir do corpo declarado da invocação: uma
+    # autorização a mais sobre um alvo que ninguém declarou é escopo alcançado
+    # por caminho não previsto.
+    declarados = {str(valor) for valor in (_INVOCACOES[chave(rota)].body or {}).values()}
+    for extra in autorizacoes[1:]:
+        alvo = extra.rsplit(",", 1)[-1].rstrip(")")
+        assert alvo in declarados, f"autorização sobre alvo não declarado: {extra}"
 
 
 def test_o_dominio_de_ca15_cobre_as_rotas_de_funcionario_existentes() -> None:

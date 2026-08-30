@@ -759,6 +759,23 @@ def _campos_escalares_do_corpo(chave_da_rota: ChaveDeRota) -> list[tuple[str, ..
     return _escalares(invocacao.body)
 
 
+def _e_alvo_de_autorizacao(nome: str) -> bool:
+    """Se um identificador nomeia uma **unidade** — e por isso é alvo de acesso.
+
+    Neste bounded context o alvo de autorização, além do tenant, é sempre uma
+    **unidade** (ADR 3.4.0007, ADR 3.4.0008). Por isso a espécie não depende de
+    **onde** o identificador chega: `unit_id` no path e `target_unit_id` no corpo
+    de R16 são os dois um alvo, e um valor bem-formado que o ator não tem
+    concedido é negado pelo **guard** nos dois casos — não pelo validador, que
+    não tem por que recusar um identificador válido.
+
+    A regra está travada por `test_os_alvos_de_autorizacao_sao_exatamente_os_de_hoje`:
+    um identificador de unidade novo, com outro nome, fica vermelho lá em vez de
+    entrar mudo na espécie errada.
+    """
+    return nome.endswith("unit_id")
+
+
 def _quem_parseia(chave_da_rota: ChaveDeRota, caminho: tuple[str, ...]) -> str:
     """Quem recusa um valor degenerado neste campo: `"staff"` ou `"framework"`.
 
@@ -807,6 +824,7 @@ def _com_valor_em(corpo: dict[str, Any], caminho: tuple[str, ...], valor: str) -
 @pytest.mark.parametrize(("chave_da_rota", "caminho", "valor"), _CASOS_ADVERSARIAIS)
 async def test_ca24_nenhum_campo_escalar_devolve_500(
     client: AsyncClient,
+    ambiente: Ambiente,
     chave_da_rota: ChaveDeRota,
     caminho: tuple[str, ...],
     valor: str,
@@ -822,7 +840,27 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
     assert invocacao.body is not None
     corpo = _com_valor_em(dict(invocacao.body), caminho, valor)
 
-    resposta = await _invocar(client, chave_da_rota, body=corpo)
+    # Mesma espécie do eixo de path: um identificador de **unidade** que chega
+    # pelo corpo (o `target_unit_id` de R16) é o segundo alvo de autorização, e
+    # um valor bem-formado não concedido é negado pelo guard, cru.
+    deve_escapar = (
+        _e_alvo_de_autorizacao(caminho[-1])
+        and valor not in _ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR
+        and valor not in _unidades_concedidas(ambiente)
+    )
+    try:
+        resposta = await _invocar(client, chave_da_rota, body=corpo)
+    except FakeAuthorizationRejected as exc:
+        assert exc is ambiente.guard.authorization_error, (
+            f"{chave_da_rota[1]}: a recusa do guard foi traduzida em outra exceção (L-AG2)"
+        )
+        return
+
+    if deve_escapar:
+        pytest.fail(
+            f"{chave_da_rota[1]}: destino não concedido {valor!r} devolveu "
+            f"{resposta.status_code} em vez de deixar a sentinela do guard subir crua."
+        )
 
     assert resposta.status_code < HTTPStatus.INTERNAL_SERVER_ERROR
     if (
@@ -830,6 +868,24 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
         and _quem_parseia(chave_da_rota, caminho) == "staff"
     ):
         assert resposta.json()["type"] == _CORPO_DE_STAFF
+
+
+def test_os_alvos_de_autorizacao_sao_exatamente_os_de_hoje() -> None:
+    """Declara quais identificadores são alvo de acesso, para que a lista não cresça muda.
+
+    `_e_alvo_de_autorizacao` decide qual asserção CA24 aplica; se um identificador
+    de unidade novo chegasse com outro nome, ele cairia na espécie errada em
+    silêncio — e a varredura mediria o validador onde deveria medir o guard.
+    """
+    de_path = {parametro for rota in _rotas() for parametro in _params_de_path_de_id(rota)}
+    de_corpo = {
+        campo.name
+        for modelo in _requests_do_modulo()
+        for campo in dependencies_module.identifier_fields(modelo)
+    }
+    alvos = {nome for nome in de_path | de_corpo if _e_alvo_de_autorizacao(nome)}
+
+    assert alvos == {"unit_id", "target_unit_id"}
 
 
 def test_a_varredura_de_ca24_alcanca_o_campo_aninhado_que_o_criterio_nomeia() -> None:
