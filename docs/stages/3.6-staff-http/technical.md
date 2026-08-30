@@ -1898,4 +1898,135 @@ deveriam nascer com uma trava do tipo *"lei quantificada sobre o domínio deriva
 por caso. Stage candidata: retrospectiva do Step 3, ou a primeira Stage de domínio
 do Step 4.
 
+### 2026-08-30 — [decision] auditoria independente — os seis achados e o que fechou cada um — Marcelo
+
+**Contexto:** uma auditoria independente aplicou ~25 mutações sobre a Stage já
+verde (2791 passed, cobertura 99,94%, arquivos da Stage a 100%). **Três
+sobreviveram**, todas sobre linhas com cobertura de linha **e de ramo** em 100%.
+Nenhuma era defeito vivo; as três eram buraco de suíte, e quatro dos seis achados
+são instâncias do mesmo conceito — *"lei universal, representante estreito"*
+(skill `stage-audit`).
+
+**Pergunta:** cada achado se sustenta contra os docs, e qual é a correção que
+fecha o **domínio quantificado** em vez de acrescentar mais um representante?
+
+**Decisão e prova, achado a achado.** Cada um fechou com a mutação que sobrevivia
+sendo **reaplicada** contra a suíte corrigida, e o teste nominal que reprovou está
+registrado. Cada mutação foi revertida e `git status --porcelain` conferido
+depois — pelo `replace` inverso em cinco das seis; a exceção está na entrada
+`[deviation]` abaixo.
+
+- **F1 (BLOCKER) — "autenticar antes de validar o corpo" travada em 1 rota de 9.**
+  §5.1 vale para **toda** rota com corpo ou query obrigatórios; havia um único
+  teste, escrito à mão, sobre `POST /api/v1/job-functions`. CA08 não alcança a lei
+  porque invoca as 16 rotas com a entrada **válida** da declaração — o 422 do
+  framework nunca compete com o 401. Fechado com `ROTAS_COM_ENTRADA`, derivado do
+  router (`body_field`; `dependant.query_params` obrigatórios), cardinalidade
+  **10** asserida, em duas metades: a guarda anti-vácuo prova que a entrada
+  degradada produz 422 com credencial válida, e a lei prova 401 com o corpo de
+  identity sem ela. *Mutação `actor: CurrentActor` → `request: Request` +
+  `guard.authenticate(request)` aplicada em `create_employee` **e** em
+  `remove_unavailability`: reprova as duas células nominais de
+  `test_a_autenticacao_roda_antes_da_validacao_da_entrada_em_toda_rota`, com CA08
+  seguindo verde nas 16.*
+
+- **F2 (MAJOR) — `EmptyShiftPreferenceError` nunca era produzida por HTTP.** CA19
+  cobra as três **faixas**, e o domínio quantificado de "a exceção atravessa o
+  fio" é o **mapa**: quinze das dezoito entradas não tinham caminho HTTP. Fechado
+  o eixo inteiro — `CENARIOS_POR_EXCECAO` com 14 cenários e2e (um por exceção
+  alcançável), status vindo de `STAFF_ERROR_STATUS` e trecho da mensagem
+  transcrito à mão, mais `INALCANCAVEIS_POR_HTTP` com as 4 sem caminho de
+  requisição; a totalidade `cenários ∪ inalcançáveis == mapa` reprova exceção nova
+  sem cenário. Custo medido: ~15 s, dentro do orçamento da suíte e2e. *Mutação
+  `if periodos is None` → `if not periodos` (`router.py`, `_to_shift_preference`)
+  reprova
+  `test_cada_excecao_alcancavel_atravessa_o_http_real[EmptyShiftPreferenceError]`,
+  com 200 e `"shift_preference": null` no corpo — a preferência declarada apagada
+  em silêncio.*
+
+- **F3 (MAJOR, latente) — a disjunção "tenant vazio **ou** ausente" com um só
+  representante, do lado do argumento.** É **reincidência** de `L-AG3`: `5d69846`
+  enumerou `ausente`/`vazio` no `actor_tenant_id` — o tenant que identity
+  **devolve** —, e o mesmo par no tenant que o chamador **pede** nunca tinha sido
+  enumerado. As duas implementações do port escrevem a mesma cláusula e ficavam
+  cobertas pelo mesmo conjunto incompleto. `_TENANT_NA_CHAMADA` ganha `""` e
+  `_TENANT_RESOLVIDO` carrega o alvo esperado por valor do eixo, com cardinalidade
+  **3** asserida nos dois arquivos. *Mutação `tenant_id if tenant_id is not None
+  else …` → `tenant_id or …`, aplicada em `composition_root.py` **e** em
+  `in_memory_access_guard.py`, reprova seis células:
+  `test_o_tenant_da_chamada_decide_o_que_chega_a_identity[*-tenant-vazio]`,
+  `test_o_tenant_da_chamada_decide_o_alvo_consultado[*-tenant-vazio]` e
+  `test_o_tenant_vazio_nomeado_nao_e_reescrito_para_o_do_ator[*]`.* Continua
+  latente porque nenhuma rota de staff nomeia tenant (ADR 0.0.0005 cláusula 2) — o
+  risco é o primeiro consumidor novo do port.
+
+- **F4 (MINOR) — o domínio de CA24 excluía elementos de lista, e o critério nomeia
+  um deles.** CA24 diz *"todos os campos escalares … o que inclui `weekly_hours` …
+  e os períodos de `shift_preference`"*, e `_escalares` devolvia `[]` para `list`
+  nos dois arquivos que compartilham o helper. Um passo de caminho passa a ser
+  `str | int`; `_elemento_de` desce por `list[str] | None` para que o elemento
+  continue classificado como de **staff**. Domínio de corpo cresce de **10** para
+  **13** pares (rota, caminho), com a cardinalidade asserida. Sem defeito vivo: os
+  13 valores adversariais em cada caminho novo respondem 422/404, nenhum 500.
+  *Remover a descida por lista reprova
+  `test_a_varredura_de_ca24_alcanca_os_dois_campos_que_o_criterio_nomeia` e
+  `test_os_elementos_de_lista_sao_do_lado_de_staff_no_dominio_de_ca24`, nos dois
+  arquivos.*
+
+- **F5 (MINOR) — `AccessRequirement.names_unit` declarado e nunca lido.** Escolhida
+  a **varredura estrutural** em vez de replumbar produção: a declaração é cobrada
+  contra a chamada ao guard nos dois sentidos (`True` obriga `unit_id=`, `False`
+  proíbe), e ler o campo num teste é o que o torna carga real. Três guardas em
+  volta — toda autorização nomeia um `AccessRequirement` declarado (cardinalidade
+  **17**: 16 rotas mais a segunda chamada de R16), os dois valores de `names_unit`
+  são exercitados e todo requisito declarado é usado, e um caso plantado por
+  sentido prova que a extração enxerga os dois. *Mutações: remover `unit_id=` de
+  `list_employees` e acrescentá-lo a `create_job_function` reprovam, as duas,
+  `test_o_names_unit_declarado_decide_se_a_rota_nomeia_unidade_ao_guard`.*
+
+- **F6 — declaração faltando.** `JobFunctionAlreadyExistsError` e
+  `EmployeeAlreadyExistsError` ganharam em `error_handlers.py` a linha de
+  declaração que `EmployeeInUseError` e `EmployeeRelocationError` já tinham: o id é
+  UUID gerado dentro do use case, nunca enviado pelo cliente, e produzi-las por
+  HTTP exigiria dois UUID4 iguais. Quem cobra a ausência agora é a totalidade de
+  F2, e não mais só o comentário.
+
+**Razão de o conjunto ter fechado assim:** em nenhum dos seis a correção foi
+acrescentar um representante. Em todos, o domínio quantificado foi **derivado por
+introspecção** e a sua **cardinalidade asserida na mesma prova** — que é a defesa
+contra a varredura que esvazia sem ninguém perceber, a lição da Task 09.
+
+### 2026-08-30 — [deviation] reversão de mutação por `git checkout-index` — Marcelo
+
+**O que se fez:** a reversão da mutação de F1 (`router.py`, duas rotas, quatro
+trechos com âncoras distintas) foi feita com `git checkout-index -f` em vez do
+`replace` inverso que a disciplina desta Stage exige. As outras cinco reversões
+seguiram a regra.
+
+**Por que é aceitável neste caso, e mesmo assim fica registrado:** o risco que a
+regra protege é descartar trabalho não commitado junto com a mutação. Aqui
+`router.py` estava **limpo** antes da mutação — a mudança de F2 nesse arquivo já
+estava commitada — e `git status --porcelain` foi conferido depois, mostrando
+apenas o arquivo de teste. O registro existe porque a regra é boa e a exceção não
+deve virar hábito: com quatro âncoras, o `replace` inverso teria sido mais
+trabalhoso e igualmente correto.
+
+### 2026-08-30 — [finding] F1 e F3 podem ter gêmeos em `identity` — Marcelo
+
+**O que se viu:** a auditoria **não mediu** se as duas leis têm gêmeos do outro
+lado da fronteira. Nenhuma mutação foi aplicada em `identity` para (a) a ordem
+`Depends`-antes-do-corpo nas rotas de identity e (b) a cláusula de resolução de
+tenant do lado de identity, que lê `ator.claims.tenant_id` direto (concept §5.3).
+
+**Por que não foi tratado aqui:** é BC alheio. Mexer nas suítes de identity a
+partir da Stage 3.6 seria expansão de escopo para fora do BC da Stage — mais larga
+que as três expansões de camada já registradas na entrada anterior, que ao menos
+ficaram dentro de `features/staff/`.
+
+**Direção:** aplicar as duas mutações contra a suíte de identity e, se
+sobreviverem, quantificar as leis sobre o domínio derivado das rotas de identity —
+a mesma forma que F1 e F3 tomaram aqui. O sinal de alerta a procurar é o mesmo: lei
+escrita com quantificador, teste com um representante. Stage candidata: a primeira
+do Step 5 que reabrir a borda HTTP de identity, ou a retrospectiva do Step 3.
+
 <!-- END: post-execution -->
