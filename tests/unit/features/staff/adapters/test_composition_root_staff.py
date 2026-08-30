@@ -36,6 +36,7 @@ import inspect
 import pathlib
 
 import pytest
+from fastapi import FastAPI
 
 from restaurant_hub.composition_root import (
     ApplicationDependencies,
@@ -356,6 +357,13 @@ def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
 # conjuntos de valores diferentes é o sinal de alerta mais forte da família "lei
 # universal, representante estreito" — foi assim que a Stage 3.4 vazou duas
 # mutações. Os dois arquivos são comparáveis linha a linha de propósito.
+# Cardinalidades declaradas — piso contra a varredura encolher em silencio.
+_TOTAL_DE_OVERRIDES_DE_STAFF = 17
+_TOTAL_DE_ROTAS_DE_STAFF = 16
+_TOTAL_DE_ROTAS_DE_IDENTITY = 10
+_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+
 _TENANT_NA_CHAMADA = [
     pytest.param("t1", id="tenant-nomeado"),
     pytest.param(None, id="tenant-omitido"),
@@ -774,30 +782,140 @@ def test_o_tradutor_repassa_o_ator_de_authenticate_sem_tocar_nele() -> None:
     assert translator.authenticate(request) == ("ator", request)
 
 
-def test_nenhuma_rota_de_staff_esta_registrada_na_app() -> None:
-    """A promessa "nenhuma rota nasce até o wiring" verificada, não afirmada.
+def _app_do_wiring() -> FastAPI:
+    """Monta a app do mesmo jeito que `create_app()` — routers, handlers, overrides."""
+    wiring = build_http_wiring(_dependencias())
+    app = FastAPI()
+    for registrar in wiring.register_error_handlers:
+        registrar(app)
+    app.dependency_overrides.update(wiring.dependency_overrides)
+    for router in wiring.routers:
+        app.include_router(router, prefix="/api/v1")
+    return app
 
-    **A asserção sobre a inexistência do pacote `adapters/in` saiu aqui**, e a
-    saída é a Stage 3.6 cumprindo o seu plano: a Task 02 cria
-    `adapters/in/http/schemas.py`, o que a tornaria falsa por construção. O que
-    ela media — "staff ainda não tem superfície HTTP" — continua medido pelas
-    **duas** asserções que ficam, e elas são mais fortes: o pacote existir não
-    é o mesmo que a app servir rota de staff.
 
-    As duas restantes só saem na Task 09, que é quando o wiring passa a carregar
-    dois routers. Até lá: `build_http_wiring` devolve o router **de identity**,
-    por identidade de objeto; e nenhuma rota registrada endereça recurso de
-    staff — que é o que pegaria uma rota de funcionário pendurada no router de
-    identity, cenário em que a primeira asserção continuaria verde.
+def _pares_montados(app: FastAPI) -> set[tuple[str, str]]:
+    """Os `(método, path)` que a app **publica**, lidos do esquema OpenAPI.
+
+    Ler do esquema, e não de `app.routes`, é medição e não preferência: nesta
+    versão do FastAPI um router incluído vira um `_IncludedRouter` opaco, sem
+    `.routes`, então varrer a lista de rotas devolve **zero** `APIRoute` e a
+    asserção passaria vacuamente. O esquema é o que o cliente enxerga, e é
+    estável entre versões — é a leitura certa para "a app registra as rotas".
+    """
+    esquema = app.openapi()
+    return {
+        (metodo.upper(), caminho)
+        for caminho, operacoes in esquema["paths"].items()
+        for metodo in operacoes
+    }
+
+
+def test_ca30_o_wiring_registra_os_dois_routers_e_os_dois_registradores() -> None:
+    """CA30 — e é aqui que CA21 termina a sua vida útil.
+
+    Até a Task 08 este arquivo guardava a promessa *"nenhuma rota de staff está
+    registrada"*. A Task 09 é a que a torna **falsa de propósito**: as 16 rotas
+    passam a existir na aplicação, que é o objetivo da Stage inteira. O que
+    substitui a promessa não é nada — é a asserção de que as duas superfícies
+    estão montadas, por identidade de objeto.
     """
     wiring = build_http_wiring(_dependencias())
-    identity_router = importlib.import_module(
-        "restaurant_hub.features.identity.adapters.in.http.router"
-    ).router
+    identity_router = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router").router
+    staff_router = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router").router
 
-    assert wiring.router is identity_router
+    assert wiring.routers == (identity_router, staff_router)
+    assert wiring.register_error_handlers == (
+        importlib.import_module(
+            f"{_PACOTE_HTTP_IDENTITY}.error_handlers"
+        ).register_identity_error_handlers,
+        importlib.import_module(
+            f"{_PACOTE_HTTP_STAFF}.error_handlers"
+        ).register_staff_error_handlers,
+    )
 
-    paths = [getattr(rota, "path", "") for rota in wiring.router.routes]
-    assert not [
-        path for path in paths if "employee" in path or "job-function" in path or "staff" in path
-    ], f"rota de staff registrada nesta Stage: {paths}"
+
+def test_ca30_o_mapa_de_overrides_cobre_todo_provedor_do_router_de_staff() -> None:
+    """A completude é **derivada**, e é o que a escrita explícita do wiring exige.
+
+    Os 17 overrides são escritos um a um no composition root — como os de
+    identity —, porque wiring é onde a ligação entre duas peças é declarada. O
+    preço de escrever à mão é esquecer um; esta asserção é o troco: os provedores
+    saem de `router.routes` por varredura, e um `_get_*` novo sem override
+    reprova aqui em vez de levantar `RuntimeError` no primeiro request.
+    """
+    wiring = build_http_wiring(_dependencias())
+    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
+    staff_dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
+
+    provedores = {
+        valor
+        for nome, valor in vars(staff_router_module).items()
+        if nome.startswith("_get_") and callable(valor)
+    }
+    provedores.add(staff_dependencies.get_access_guard)
+
+    sem_override = sorted(
+        getattr(p, "__name__", repr(p)) for p in provedores if p not in wiring.dependency_overrides
+    )
+
+    assert sem_override == [], f"provedor de staff sem override no wiring: {sem_override}"
+    assert len(provedores) == _TOTAL_DE_OVERRIDES_DE_STAFF
+
+
+def test_ca30_cada_override_de_staff_devolve_a_dependencia_montada() -> None:
+    """Existir a chave não basta: o valor tem de ser **o objeto do contêiner**.
+
+    Um override que devolvesse um use case novo faria a app decidir sobre um grafo
+    diferente do que o composition root montou — dois `Engine`, duas verdades. A
+    asserção é de identidade, e é a mesma disciplina de
+    `test_ca15_o_tradutor_embrulha_o_mesmo_identity_guard_das_rotas`.
+    """
+    deps = _dependencias()
+    wiring = build_http_wiring(deps)
+    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
+    staff_dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
+
+    assert wiring.dependency_overrides[staff_dependencies.get_access_guard]() is (
+        deps.staff_access_guard
+    )
+    for nome, provedor in vars(staff_router_module).items():
+        if not nome.startswith("_get_") or not callable(provedor):
+            continue
+        esperado = getattr(deps, f"staff_{nome.removeprefix('_get_')}")
+        assert wiring.dependency_overrides[provedor]() is esperado, nome
+
+
+def test_ca30_as_dezesseis_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None:
+    """As 16 rotas passam a responder — e as de identity continuam como estavam.
+
+    A varredura é sobre a **app real**, e não sobre o router isolado: é a app que
+    o cliente alcança, e é nela que um prefixo errado ou um router não incluído
+    apareceria. O inventário de identity é comparado antes e depois pelo conjunto
+    de `(método, path)`, que é o que CA30 chama de "nenhuma regressão de path".
+    """
+    montadas = _pares_montados(_app_do_wiring())
+    de_staff = {par for par in montadas if "/job-functions" in par[1] or "/units/" in par[1]}
+
+    assert len(de_staff) == _TOTAL_DE_ROTAS_DE_STAFF
+    assert len(montadas - de_staff) == _TOTAL_DE_ROTAS_DE_IDENTITY
+    assert all(path.startswith("/api/v1") for _, path in montadas)
+
+
+def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
+    """CA31 pela via estrutural: identity continua servindo exatamente o que servia.
+
+    O router de identity é o **mesmo objeto** que ele sempre foi — nada nesta
+    Stage o reescreve —, então a asserção mede o que poderia ter mudado sem
+    ninguém notar: o conjunto de rotas que a app monta a partir dele.
+    """
+    identity_router = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router").router
+    wiring = build_http_wiring(_dependencias())
+
+    assert wiring.routers[0] is identity_router
+    de_identity = {
+        par
+        for par in _pares_montados(_app_do_wiring())
+        if "/job-functions" not in par[1] and "/units/" not in par[1]
+    }
+    assert len(de_identity) == _TOTAL_DE_ROTAS_DE_IDENTITY

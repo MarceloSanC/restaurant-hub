@@ -178,6 +178,7 @@ from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import 
 )
 
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
 
 
 def _tenant_id_do_ator(actor: Actor) -> str | None:
@@ -394,13 +395,26 @@ class ApplicationDependencies:
 class HttpWiring:
     """O que `create_app()` registra, montado sem que ele conheça features.
 
-    São três peças, e as três são necessárias: o router; o registrador de handlers
-    de erro (que recebe o `app`, porque só o app registra exception handlers); e o
-    mapa de overrides, cujas chaves vivem dentro do módulo do router.
+    São três peças, e as três são necessárias: os routers; os registradores de
+    handlers de erro (que recebem o `app`, porque só o app registra exception
+    handlers); e o mapa de overrides, cujas chaves vivem dentro dos módulos de
+    router.
+
+    **Duas viraram coleção na Stage 3.6, e uma continua mapa único — a assimetria
+    é do domínio, não descuido.** Um bounded context traz o seu router e o seu
+    registrador de handlers, então esses dois são por-BC e se acumulam. Já as
+    chaves de `dependency_overrides` são as **funções** `_get_*` definidas dentro
+    de cada módulo de router: elas já são distintas por construção entre BCs, e um
+    mapa por BC só criaria a oportunidade de duas entradas para a mesma chave.
+
+    A forma escolhida — campos plurais — é equivalente em consequência a uma lista
+    de `HttpWiring`, e nenhuma das duas atravessa a fronteira do composition root
+    (concept §7 D5). A terceira forma possível, pendurar staff no router de
+    identity, é estruturalmente proibida: faria um BC importar o adapter do outro.
     """
 
-    router: APIRouter
-    register_error_handlers: Callable[[FastAPI], None]
+    routers: tuple[APIRouter, ...]
+    register_error_handlers: tuple[Callable[[FastAPI], None], ...]
     dependency_overrides: dict[Callable[..., Any], Callable[..., Any]]
 
 
@@ -585,9 +599,22 @@ def wire_dependencies(
 
 
 def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
-    """Carrega o adapter HTTP de identity e monta o que `create_app()` registra."""
+    """Carrega os adapters HTTP dos dois BCs e monta o que `create_app()` registra.
+
+    **É aqui que as 16 rotas de staff passam a existir na aplicação.** Até esta
+    Stage o BC era surdo-mudo: os use cases e o `staff_access_guard` estavam
+    montados e nada no boot os alcançava. O `importlib` não é contorno — o pacote
+    de entrada se chama `in`, que é palavra reservada, e `from ...adapters.in...`
+    é **SyntaxError**, não ImportError (LAYOUT §8).
+
+    `create_engine` não abre conexão, então registrar um segundo router não muda
+    o comportamento de boot: montar o grafo continua não exigindo banco no ar.
+    """
     router_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router")
     error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.error_handlers")
+    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
+    staff_dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
+    staff_error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")
 
     overrides: dict[Callable[..., Any], Callable[..., Any]] = {
         router_module._get_authenticate_user: lambda: deps.identity_authenticate_user,
@@ -602,8 +629,50 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
         router_module._get_guard: lambda: deps.identity_guard,
     }
 
+    # As 17 entradas de staff: os 16 use cases mais o guard. Escritas uma a uma,
+    # como as de identity, e não derivadas por convenção de nome: o wiring é o
+    # lugar onde a ligação entre duas peças é **declarada**, e uma convenção aqui
+    # trocaria um erro em tempo de boot por um `getattr` que acerta por acidente.
+    # A completude é cobrada por teste que enumera os `_get_*` do router.
+    overrides.update(
+        {
+            staff_dependencies_module.get_access_guard: lambda: deps.staff_access_guard,
+            staff_router_module._get_create_job_function: (lambda: deps.staff_create_job_function),
+            staff_router_module._get_list_job_functions: lambda: deps.staff_list_job_functions,
+            staff_router_module._get_rename_job_function: (lambda: deps.staff_rename_job_function),
+            staff_router_module._get_delete_job_function: (lambda: deps.staff_delete_job_function),
+            staff_router_module._get_create_employee: lambda: deps.staff_create_employee,
+            staff_router_module._get_list_employees: lambda: deps.staff_list_employees,
+            staff_router_module._get_rename_employee: lambda: deps.staff_rename_employee,
+            staff_router_module._get_delete_employee: lambda: deps.staff_delete_employee,
+            staff_router_module._get_assign_job_functions: (
+                lambda: deps.staff_assign_job_functions
+            ),
+            staff_router_module._get_change_workload_profile: (
+                lambda: deps.staff_change_workload_profile
+            ),
+            staff_router_module._get_declare_shift_preference: (
+                lambda: deps.staff_declare_shift_preference
+            ),
+            staff_router_module._get_register_unavailability: (
+                lambda: deps.staff_register_unavailability
+            ),
+            staff_router_module._get_remove_unavailability: (
+                lambda: deps.staff_remove_unavailability
+            ),
+            staff_router_module._get_deactivate_employee: (lambda: deps.staff_deactivate_employee),
+            staff_router_module._get_reactivate_employee: (lambda: deps.staff_reactivate_employee),
+            staff_router_module._get_copy_employee_to_unit: (
+                lambda: deps.staff_copy_employee_to_unit
+            ),
+        }
+    )
+
     return HttpWiring(
-        router=router_module.router,
-        register_error_handlers=error_handlers_module.register_identity_error_handlers,
+        routers=(router_module.router, staff_router_module.router),
+        register_error_handlers=(
+            error_handlers_module.register_identity_error_handlers,
+            staff_error_handlers_module.register_staff_error_handlers,
+        ),
         dependency_overrides=overrides,
     )

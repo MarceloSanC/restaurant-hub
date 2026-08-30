@@ -1513,4 +1513,38 @@ router sem a segunda chamada do guard. Detectado por inspeção antes do commit.
 Âncora de reversao tem de ser tao única quanto a de aplicação — e a conferência
 pos-mutação não é zelo, é o que separa medir de estragar.
 
+### 2026-08-29 — [decision] test_composition_root_staff.py (Task 09) — Marcelo
+
+**Contexto:** CA30 pede que as rotas fiquem montadas **na app**, e a primeira
+redação do teste varria `app.routes` atrás de `APIRoute`. Medido: nesta versão do
+FastAPI um router incluído vira um `_IncludedRouter` **opaco**, sem `.routes`, e
+a varredura devolve **zero** `APIRoute` — a asserção `all(...)` sobre o prefixo
+passava por vacuidade, e só a contagem denunciou.
+
+**Decisão:** ler os pares `(método, path)` do **esquema OpenAPI** da app.
+
+**Razão:** é o que o cliente enxerga, é estável entre versões do framework, e não
+depende da representação interna de roteamento — que acabou de mudar debaixo do
+teste. A alternativa (descer recursivamente em `_IncludedRouter`) acopla a suíte a
+um detalhe privado do FastAPI, e foi esse acoplamento que produziu o falso verde.
+
+**Registro do quase-erro, porque ele é o ponto:** a asserção vacuamente verde
+existiu por alguns minutos e teria passado no gate. O que a pegou foi a
+**cardinalidade declarada** (`_TOTAL_DE_ROTAS_DE_STAFF == 16`) — a mesma
+disciplina de piso que CA17 usa para as exceções. Varredura sem contagem esperada
+é varredura que não sabe quando está vazia.
+
+### 2026-08-29 — [finding] CA08 observável a partir da Task 09 — Marcelo
+
+**O que se viu:** com os dois registradores montados, uma rota de staff sem
+Bearer responde, na app **real**, `401` com o corpo constante de identity —
+`{"detail": "não autenticado", "type": "unauthorized"}`. É a propriedade que a
+Task 05 declarou impossível de medir no ambiente unitário (o fake levanta a sua
+própria sentinela, que não é `IdentityError` e não tem handler).
+
+**Direção:** a Task 11 é a dona de CA08/CA09 e deve travá-la sobre o domínio
+derivado de `router.routes`, com o ator ausente e os dois papéis sem permissão.
+Registrado aqui porque a **primeira evidência** apareceu nesta Task, e uma
+propriedade vista e não anotada é uma que ninguém procura depois.
+
 <!-- END: post-execution -->
