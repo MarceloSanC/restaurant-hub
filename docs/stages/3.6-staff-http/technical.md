@@ -1547,4 +1547,26 @@ derivado de `router.routes`, com o ator ausente e os dois papéis sem permissão
 Registrado aqui porque a **primeira evidência** apareceu nesta Task, e uma
 propriedade vista e não anotada é uma que ninguém procura depois.
 
+### 2026-08-29 — [decision] tests/e2e/features/staff/conftest.py (Task 10) — Marcelo
+
+**Contexto:** o cenário e2e precisa de restaurante, duas unidades e atores. Havia
+o atalho de semeá-los pelos repositórios, como a suíte de identity faz com o
+`platform_admin`.
+
+**Decisão:** provisionar tudo **pela API de identity**, e semear apenas o
+`platform_admin`.
+
+**Razão:** semear pouparia meia dúzia de chamadas e apagaria justamente a
+propriedade que esta Stage introduziu. O token que staff recebe precisa ser um
+token **emitido pela aplicação**, com as claims que ela de fato coloca nele —
+porque é da claim que o tenant sai (ADR 0.0.0005), e um usuário semeado com
+tenant escrito à mão provaria que o teste sabe montar o objeto, não que a cadeia
+funciona. O `platform_admin` continua semeado pela razão que a suíte de identity
+já documenta: **nenhuma rota o cria**, e a raiz de confiança nasce fora da API.
+
+**Consequência medida:** o `manager` é membro das **duas** unidades de propósito.
+Com um manager de uma unidade só, CA26 passaria por falta de visibilidade em vez
+de por isolamento — o registro é por unidade (ADR 3.4.0007), e é isso que o
+critério mede. Um cenário que confunde as duas causas mede a errada.
+
 <!-- END: post-execution -->
