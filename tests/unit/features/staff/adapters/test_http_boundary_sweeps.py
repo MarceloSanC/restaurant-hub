@@ -41,6 +41,7 @@ from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import BaseModel
 
+from restaurant_hub.features.staff.domain.exceptions.errors import InvalidIdentifierError
 from tests.fakes.features.staff.in_memory_access_guard import FakeAuthorizationRejected
 from tests.unit.features.staff.adapters.test_http_router_job_functions import Ambiente
 
@@ -66,6 +67,12 @@ IdentifierField = dependencies_module.IdentifierField
 # relaxa.
 _IDENTIFICADORES_INVALIDOS = ("", "   ", "\x00")
 _IDENTIFICADORES_INVALIDOS_EM_PATH = ("   ", "\x00")
+
+# Os valores do conjunto adversarial abaixo que o **validador de identificador**
+# recusa (ADR 3.6.0002 §2). Transcritos, e nao perguntados ao codigo sob teste:
+# perguntar faria a expectativa seguir o defeito. Ha teste que cruza esta
+# transcricao com o validador real, para que ela nao possa envelhecer em silencio.
+_ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR = frozenset({"", "\x00"})
 
 # Conjunto adversarial da Stage 3.3 mais os numéricos degenerados de CA24. O
 # critério é **ausência de 500**: qualquer um destes pode ser aceito ou recusado,
@@ -580,26 +587,23 @@ async def test_ca20_identificador_invalido_no_corpo_recebe_422_de_staff(
     assert resposta.json()["type"] == _CORPO_DE_STAFF
 
 
-def test_o_eixo_de_corpo_de_ca20_nao_esta_vazio_por_engano() -> None:
-    """Hoje é vazio — e a ausência tem de ser **declarada**, não descoberta.
+def test_o_eixo_de_corpo_de_ca20_nao_esta_vazio() -> None:
+    """O eixo tem de ter casos, e a exigência é **incondicional**.
 
-    Nenhuma das quatro rotas de catálogo carrega identificador no corpo: os dois
-    campos que carregam (`target_unit_id` e `job_function_ids`) pertencem a rotas
-    de funcionário, que nascem nas Tasks 06 e 08. Este teste existe para que o
-    dia em que elas nascerem e o eixo **continuar** vazio seja um dia em que
-    algo fica vermelho.
+    A primeira versão deste teste comparava `bool(_CASOS_DE_CORPO)` com
+    `bool(rotas_com_corpo_de_id)` — e os dois lados derivavam do **mesmo**
+    helper, então esvaziar o helper deixava os dois falsos e o teste passava.
+    Guarda que concorda consigo mesma não é guarda. Com R05 declarando
+    `job_function_ids`, o eixo é não-vazio e a exigência pode ser direta.
     """
     campos_existentes = {
         campo.name
         for modelo in _requests_do_modulo()
         for campo in dependencies_module.identifier_fields(modelo)
     }
-    rotas_com_corpo_de_id = {
-        chave_da_rota for chave_da_rota in _INVOCACOES if _campos_de_id_do_corpo(chave_da_rota)
-    }
 
     assert campos_existentes == {"target_unit_id", "job_function_ids"}
-    assert bool(_CASOS_DE_CORPO) == bool(rotas_com_corpo_de_id)
+    assert _CASOS_DE_CORPO, "o eixo de corpo de CA20 ficou vazio — a varredura não mede nada"
 
 
 def _requests_do_modulo() -> list[type[BaseModel]]:
@@ -717,23 +721,79 @@ async def test_ca24_nenhum_identificador_de_path_adversarial_devolve_500(
     de corpo constante — a mesma razão pela qual CA08/CA09 vivem no e2e, já
     declarada no plano.
 
-    **A asserção sobre a sentinela é estritamente mais forte que uma sobre
-    status:** ela exige **identidade de objeto**, que é L-AG2 — a exceção sobe
-    **crua**, sem tradução. Um adapter que a capturasse e relançasse uma exceção
-    nova passaria em `pytest.raises(TipoX)` e falha aqui.
+    **O que cada asserção mede — enunciado com honestidade, porque a primeira
+    redação deste docstring exagerava e foi refutada por medição.** A asserção
+    antiga (status < 500 para todos os parâmetros) era **insatisfazível** na
+    espécie `unit_id`: contra um router **correto** a sentinela escapa, não há
+    resposta nenhuma, e onze casos ficavam vermelhos sem defeito algum. A nova
+    exige que a sentinela **tenha escapado** e que seja **o mesmo objeto**, o que
+    pega as duas traduções que L-AG2 proíbe:
+
+    - **tradução em exceção** — capturar e relançar um erro novo do mesmo tipo:
+      morre na asserção de identidade;
+    - **tradução em resposta** — capturar e devolver `HTTPException(403)`: morre
+      no `pytest.fail` abaixo. *(Era esta que sobrevivia antes de o ramo existir:
+      sem exceção, o teste caía no ramo de status, e `403 < 500` aceitava
+      exatamente a tradução que o parágrafo acima diz proibir.)*
+
+    O que **nenhuma** das duas mede é a **forma HTTP** da recusa em produção — o
+    403 de corpo constante do handler de identity. Isso é CA09/CA11, na Task 11,
+    com a app real montada. Aqui a app mínima não tem esse handler, e dizer o
+    contrário seria prometer o que este ambiente não entrega.
     """
     for rota in _rotas():
         for parametro in _params_de_path_de_id(rota):
+            # A espécie do parâmetro decide qual asserção se aplica. `unit_id` é
+            # o **alvo de autorização**: um valor bem-formado que o ator não tem
+            # concedido passa pelo validador — ele é bem-formado — e é negado
+            # pelo **guard**, cru. Os demais entram num command, e a recusa, se
+            # houver, é HTTP.
+            deve_escapar = (
+                parametro == "unit_id"
+                and valor not in _ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR
+                and valor not in _unidades_concedidas(ambiente)
+            )
             try:
                 resposta = await _invocar(client, chave(rota), path={parametro: valor})
             except FakeAuthorizationRejected as exc:
                 assert exc is ambiente.guard.authorization_error, (
-                    f"{rota.path}: a recusa do guard foi traduzida no caminho (L-AG2)"
+                    f"{rota.path}: a recusa do guard foi traduzida em outra exceção (L-AG2)"
                 )
                 continue
+
+            if deve_escapar:
+                pytest.fail(
+                    f"{rota.path}: unidade não concedida {valor!r} devolveu "
+                    f"{resposta.status_code} em vez de deixar a sentinela do guard subir crua. "
+                    "Traduzir a recusa em resposta é a metade de L-AG2 que o status não pega."
+                )
             assert resposta.status_code < HTTPStatus.INTERNAL_SERVER_ERROR, (
                 f"{rota.path} devolveu {resposta.status_code} para {valor!r}"
             )
+
+
+def _unidades_concedidas(ambiente: Ambiente) -> set[str]:
+    """As unidades que o guard do ambiente concede — derivado, não transcrito."""
+    return {unidade for _, _, unidade in ambiente.guard.grants if unidade is not None}
+
+
+def test_a_transcricao_do_que_o_validador_recusa_bate_com_o_validador() -> None:
+    """Cruza a transcrição do ADR 3.6.0002 §2 com o validador real.
+
+    A classificação acima decide **qual** asserção CA24 aplica a cada valor, e por
+    isso não pode ser perguntada ao código sob teste — a expectativa seguiria o
+    defeito. Transcrever exige este cruzamento: se o validador mudar de opinião
+    sobre algum valor do conjunto adversarial, é aqui que fica vermelho, e não
+    numa célula de CA24 medindo silenciosamente a peça errada.
+    """
+    medido = set()
+    for valor in _VALORES_ADVERSARIAIS:
+        try:
+            dependencies_module.validate_identifier(valor, entity="teste")
+        except InvalidIdentifierError:
+            medido.add(valor)
+
+    assert medido == set(_ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR)
 
 
 def test_o_dominio_adversarial_de_ca24_nao_esta_vazio() -> None:

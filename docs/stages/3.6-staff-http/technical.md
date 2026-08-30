@@ -1339,11 +1339,36 @@ bem-formado, e a peca que recusaria e' outra — e e' negado pelo **guard**. Exi
 422 ali mede a peca errada: o validador nao tem por que recusar um identificador
 valido, e quem nega e' a autorizacao.
 
-**A assercao nova e' estritamente mais forte que a antiga.** Ela exige
-`exc is ambiente.guard.authorization_error` — **identidade de objeto**, que e'
-L-AG2: a excecao sobe **crua**, sem traducao. Um adapter que a capturasse e
-relancasse uma excecao nova passaria em `pytest.raises(TipoX)` e falha aqui. A
-antiga exigia apenas "algum status abaixo de 500".
+**Correcao de 2026-08-29, medida pelo Checkpoint C.** A primeira redacao desta
+entrada dizia que a assercao nova era *"estritamente mais forte que a antiga"*.
+**E' falso, e foi refutado por contra-teste.** O enunciado honesto e' outro, e
+tem tres partes:
+
+1. **A antiga era insatisfazivel na especie `unit_id`** — contra um router
+   **correto**, a sentinela escapa, nao ha resposta nenhuma, e onze casos ficavam
+   vermelhos sem defeito algum. Isso nao e' forca, e' falso positivo.
+2. **A nova pega traducao-em-excecao**: `exc is guard.authorization_error` exige
+   identidade de objeto, e um adapter que capturasse e relancasse um erro **novo
+   do mesmo tipo** falha aqui. *(Medido: a assercao de status tambem ficaria
+   vermelha nesse caso, porque a excecao continua escapando e nao ha resposta —
+   entao a identidade **nao discrimina** neste contra-teste.)*
+3. **A traducao-em-resposta era a fresta, e ficou aberta ate agora.** Capturar a
+   recusa e devolver `HTTPException(403)` sobrevivia: sem excecao, o teste caia
+   no ramo de status, e `403 < 500` aceitava exatamente a traducao que o
+   docstring dizia proibir. Medido pelo Checkpoint C: **447/447 e 1611/1611
+   verdes** com a traducao viva.
+
+**O que se fez a respeito, no mesmo commit desta correcao:** para a especie
+`unit_id` com valor bem-formado e unidade **nao concedida**, o teste passou a
+exigir que a sentinela **tenha** escapado (`pytest.fail` no ramo sem excecao).
+Com isso o conjunto-vermelho da nova deixa de ser subconjunto do da antiga: ela
+cobre as **duas** traducoes que L-AG2 proibe, e a antiga cobria uma so. Provado
+por mutacao — o CT2 aplicado ao router derruba **11** casos, contra 447/447
+verdes antes.
+
+**O que continua fora do alcance deste ambiente, e por isso nao e' prometido
+aqui:** a **forma HTTP** da recusa em producao — o 403 de corpo constante do
+handler de identity. Essa e' CA09/CA11, na Task 11, com a app real montada.
 
 **Precedente no proprio plano.** A Task 05 ja declara o mesmo limite para CA08 —
 *"o fake levanta a sua propria sentinela, que **nao** e' `IdentityError` e nao tem
