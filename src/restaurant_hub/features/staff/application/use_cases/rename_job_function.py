@@ -26,29 +26,41 @@ class RenameJobFunctionUseCase:
     def execute(self, command: RenameJobFunctionCommand) -> JobFunctionResult:
         """Renomeia a função.
 
-        A ordem é o contrato (concept §5.16): **existência primeiro**. Renomear
-        uma função inexistente para um nome já usado devolve
-        `JobFunctionNotFoundError`, não o conflito — do contrário a resposta
-        confirmaria que aquele nome existe no tenant a quem pediu por um id que
-        não é dele.
+        A ordem é o contrato (concept §5.16, com a errata de 2026-08-30):
+        **existência primeiro**, depois a **validação local do nome**, e só então
+        a sonda de unicidade. Renomear uma função inexistente para um nome já
+        usado devolve `JobFunctionNotFoundError`, não o conflito — do contrário a
+        resposta confirmaria que aquele nome existe no tenant a quem pediu por um
+        id que não é dele.
+
+        A transição vem **antes** de `find_by_name` pela regra que a nota de
+        §5.16 enuncia: *a checagem mais barata que possa falhar sozinha vem
+        primeiro*. Nome inválido é validação local, sem I/O, e nenhum nome
+        inválido pode estar gravado (o domínio o recusa na construção **e** na
+        reidratação — ADR 3.4.0003), logo `find_by_name` sobre ele nunca teria o
+        que encontrar. A troca não altera qual erro vence em nenhum cenário
+        construível; o que ela remove é a consulta inútil — e, com ela, o 500 que
+        o nome cru produzia no psycopg (ADR 3.6.0004).
 
         Raises:
             JobFunctionNotFoundError: id inexistente **no tenant** (id de outro
                 restaurante cai aqui — concept §5.4).
+            InvalidNameError: nome novo vazio ou com byte NUL (domínio, 3.1) —
+                não reembrulhado, e levantado **sem sondar unicidade**.
             JobFunctionNameAlreadyExistsError: nome já usado por **outra**
                 função do tenant.
-            InvalidNameError: nome novo vazio (domínio, 3.1) — não reembrulhado.
         """
         # (1) Existência no tenant.
         job_function = self._job_functions.find_by_id(command.tenant_id, command.job_function_id)
         if job_function is None:
             raise JobFunctionNotFoundError(command.job_function_id)
-        # (2) Conflito de nome, ignorando a própria função.
+        # (2) Transição: o domínio rejeita o nome inválido aqui, antes do port.
+        renomeada = job_function.rename(command.name)
+        # (3) Conflito de nome, ignorando a própria função.
         homonima = self._job_functions.find_by_name(command.tenant_id, command.name)
         if homonima is not None and homonima.id != job_function.id:
             raise JobFunctionNameAlreadyExistsError(command.name)
-        # (3) Transição do domínio e (4) escrita.
-        renomeada = job_function.rename(command.name)
+        # (4) Escrita.
         self._job_functions.update(renomeada)
         return JobFunctionResult(
             id=renomeada.id,
