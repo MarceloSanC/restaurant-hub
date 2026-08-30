@@ -615,6 +615,148 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 
 
 # ---------------------------------------------------------------------------
+# §5.1 — autenticar antes de validar o corpo, em **toda** rota com entrada
+# ---------------------------------------------------------------------------
+#
+# **CA08 não alcança esta lei, e a diferença é o corpo.** Ele invoca as 16 rotas
+# com a entrada **válida** da declaração, então o 422 do framework nunca compete
+# com o 401 — e um handler que autenticasse no próprio corpo passaria em CA08
+# inteiro. A lei de §5.1 é sobre a **corrida** entre os dois: sem credencial, a
+# falha é 401 mesmo com entrada que não casa o schema, senão um cliente sem
+# credencial nenhuma sonda a forma do payload de rotas protegidas.
+#
+# Estava travada **à mão em uma rota de nove** — `POST /job-functions`, em
+# `test_http_router_job_functions.py`. Medido: trocar `actor: CurrentActor` por
+# `request: Request` + `guard.authenticate(request)` na primeira linha de
+# `create_employee` sobrevivia à suíte inteira, e a app real passava a responder
+# 422 `validation_error` onde o contrato promete 401 `unauthorized`.
+#
+# O domínio é **derivado do router**, não listado: uma rota nova com corpo entra
+# sozinha. `include_inactive` fica de fora porque tem default — omiti-lo não
+# produz 422, e um caso que não degrada não mede a corrida.
+
+_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 10
+
+# O corpo que nenhum `*Request` aceita. Não é um campo com valor errado: é a
+# **ausência** dos campos obrigatórios, que é o 422 mais barato de produzir e o
+# único que não depende da forma de nenhum schema em particular.
+_CORPO_FORA_DE_QUALQUER_SCHEMA: Final = {"campo-que-nenhum-request-declara": "x"}
+
+# O corpo constante do handler compartilhado (`shared/infrastructure/http`).
+# Transcrito, como os de identity: é o contrato que o cliente recebe, e
+# perguntá-lo ao módulo sob teste faria a expectativa seguir o defeito.
+_CORPO_422: Final = {"detail": "requisição inválida", "type": "validation_error"}
+
+
+def _rota_de(chave_da_rota: ChaveDeRota) -> APIRoute:
+    """A `APIRoute` registrada para uma chave — a ponte da declaração ao framework."""
+    return next(rota for rota in _rotas() if chave(rota) == chave_da_rota)
+
+
+def _tem_corpo(rota: APIRoute) -> bool:
+    """Se a rota declara corpo — `body_field` é o que o FastAPI montou para ele."""
+    return rota.body_field is not None
+
+
+def _tem_query_obrigatoria(rota: APIRoute) -> bool:
+    """Se algum parâmetro de query da rota é obrigatório.
+
+    Derivado do `dependant`, e não da assinatura crua: é o framework quem separa
+    parâmetro de query de dependência resolvida por `Depends`, e as duas aparecem
+    lado a lado na assinatura do handler.
+    """
+    return any(parametro.field_info.is_required() for parametro in rota.dependant.query_params)
+
+
+ROTAS_COM_ENTRADA: Final = tuple(
+    sorted(chave(rota) for rota in _rotas() if _tem_corpo(rota) or _tem_query_obrigatoria(rota))
+)
+
+
+async def _invocar_com_entrada_degradada(
+    client: AsyncClient, chave_da_rota: ChaveDeRota, *, cabecalho: dict[str, str] | None = None
+) -> Response:
+    """Invoca a rota com a entrada **deliberadamente degradada**, e nada mais.
+
+    Corpo trocado pelo que nenhum schema aceita; query obrigatória **omitida**. É
+    a única forma de o 422 do framework existir para competir com o 401 — e é o
+    que separa esta varredura de CA08, que invoca com a entrada válida.
+    """
+    rota = _rota_de(chave_da_rota)
+    metodo, _ = chave_da_rota
+    return await client.request(
+        metodo,
+        _url(chave_da_rota, _RECURSOS_FICTICIOS, sobrescreve={}),
+        params={}
+        if _tem_query_obrigatoria(rota)
+        else ROTAS[chave_da_rota].query(_RECURSOS_FICTICIOS),
+        json=_CORPO_FORA_DE_QUALQUER_SCHEMA if _tem_corpo(rota) else None,
+        headers=cabecalho or {},
+    )
+
+
+def test_o_dominio_das_rotas_com_entrada_tem_a_cardinalidade_declarada() -> None:
+    """Nove rotas com corpo e uma com query obrigatória — **dez**, e a contagem é a prova.
+
+    Um `_tem_corpo` que parasse de encontrar `body_field` esvaziaria o
+    `parametrize` e deixaria a lei verde sobre conjunto nenhum. E travar a
+    contagem em dez é o que faz uma rota nova com corpo **reprovar** aqui até que
+    alguém confirme que ela entrou na varredura — o mesmo mecanismo da totalidade
+    de `ROTAS`.
+    """
+    assert len(ROTAS_COM_ENTRADA) == _TOTAL_DE_ROTAS_COM_ENTRADA, ROTAS_COM_ENTRADA
+    assert set(ROTAS_COM_ENTRADA) <= set(ROTAS)
+    assert ("POST", _EMPLOYEES) in ROTAS_COM_ENTRADA
+    assert ("DELETE", f"{_EMPLOYEES}/{{employee_id}}/unavailabilities") in ROTAS_COM_ENTRADA
+
+
+@pytest.mark.parametrize("chave_da_rota", ROTAS_COM_ENTRADA, ids=_id_da_rota)
+async def test_a_entrada_degradada_de_cada_rota_e_de_fato_recusada_pelo_schema(
+    client: AsyncClient, cenario: Cenario, chave_da_rota: ChaveDeRota
+) -> None:
+    """A guarda anti-vácuo da lei abaixo: a degradação **produz** o 422 concorrente.
+
+    Sem esta metade, um corpo que por acaso satisfizesse o schema faria o teste de
+    §5.1 provar apenas o que CA08 já prova — 401 numa requisição sem nada de
+    errado além da credencial. O que se cobra aqui é que o mesmo par
+    (URL, entrada) tenha **duas** respostas possíveis, e que a ordem entre elas
+    seja o que a lei decide.
+
+    O ator é um `manager` com as duas permissões: o 422 tem de vir da **forma**,
+    e não de uma recusa de acesso que chegaria antes.
+    """
+    resposta = await _invocar_com_entrada_degradada(
+        client, chave_da_rota, cabecalho=auth(cenario.manager)
+    )
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, resposta.text
+    assert resposta.json() == _CORPO_422, resposta.text
+
+
+@pytest.mark.parametrize("chave_da_rota", ROTAS_COM_ENTRADA, ids=_id_da_rota)
+async def test_a_autenticacao_roda_antes_da_validacao_da_entrada_em_toda_rota(
+    client: AsyncClient, chave_da_rota: ChaveDeRota
+) -> None:
+    """§5.1 sobre o domínio quantificado real — **toda** rota com corpo ou query.
+
+    A mesma requisição que o teste acima mostra ser um 422 legítimo responde
+    **401** quando falta a credencial: é a autenticação como `Depends`, que o
+    FastAPI resolve antes de validar o corpo contra o schema. Autenticar no corpo
+    do handler inverte a ordem, e o cliente sem credencial nenhuma passa a
+    distinguir payload aceito de payload recusado em rota protegida.
+
+    O corpo é o de identity, byte a byte, pela mesma razão de CA08: L-AG1 proíbe
+    traduzir, então `InvalidAccessTokenError` sobe crua do port e é o handler de
+    identity que responde.
+    """
+    resposta = await _invocar_com_entrada_degradada(client, chave_da_rota)
+
+    assert resposta.status_code == HTTPStatus.UNAUTHORIZED, resposta.text
+    assert resposta.json() == _CORPO_401, resposta.text
+    assert resposta.headers["WWW-Authenticate"] == "Bearer"
+
+
+# ---------------------------------------------------------------------------
 # CA09 e CA29 — os dois papéis sem permissão, 403 nas 16
 # ---------------------------------------------------------------------------
 
