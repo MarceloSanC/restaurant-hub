@@ -34,9 +34,12 @@ import datetime
 import importlib
 import inspect
 import pathlib
+from collections.abc import Callable
+from types import ModuleType
 
 import pytest
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 
 from restaurant_hub.composition_root import (
     ApplicationDependencies,
@@ -363,6 +366,27 @@ _TOTAL_DE_ROTAS_DE_STAFF = 16
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
 _PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PREFIXO_DA_API = "/api/v1"
+
+# O inventário de identity, **literal**, como o cliente o alcança. Transcrito e
+# não derivado do router: derivá-lo faria a expectativa acompanhar qualquer
+# mudança de path, e "não regrediu" passaria a significar "concorda consigo
+# mesmo". Uma contagem sozinha também não bastava — trocar `/users` por
+# `/usuarios` mantém o total em dez.
+_ROTAS_DE_IDENTITY: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("POST", "/api/v1/auth/login"),
+        ("POST", "/api/v1/auth/logout"),
+        ("POST", "/api/v1/auth/password"),
+        ("POST", "/api/v1/auth/password-reset-requests"),
+        ("POST", "/api/v1/auth/refresh"),
+        ("POST", "/api/v1/restaurants"),
+        ("POST", "/api/v1/restaurants/{restaurant_id}/owners"),
+        ("POST", "/api/v1/restaurants/{restaurant_id}/units"),
+        ("POST", "/api/v1/users"),
+        ("POST", "/api/v1/users/invitations"),
+    }
+)
 
 _TENANT_NA_CHAMADA = [
     pytest.param("t1", id="tenant-nomeado"),
@@ -811,6 +835,52 @@ def _pares_montados(app: FastAPI) -> set[tuple[str, str]]:
     }
 
 
+def _pares_do_router(modulo: str) -> set[tuple[str, str]]:
+    """Os `(método, path)` que um router **declara**, com o prefixo da aplicação.
+
+    **A partição staff/identity vem daqui, e não de uma heurística sobre o
+    texto do path.** A primeira versão separava as duas superfícies por
+    substring (`"/job-functions" in path or "/units/" in path`), e ela funcionava
+    por acidente: a rota de identity é `POST /restaurants/{id}/units`, sem barra
+    final, e por um caractere não caía no balde de staff. Um `/units/{id}/…` novo
+    em identity — ou um recurso de staff que não contivesse nenhuma das duas
+    palavras — jogaria rotas no lado errado, e a contagem denunciaria com uma
+    mensagem que não explica nada.
+
+    O router **é** o contrato de quem publica o quê: pedir a ele a lista é a
+    pergunta certa. E é o router isolado, não o incluído na app — só ele ainda
+    tem `APIRoute` de verdade (ver `_pares_montados`).
+    """
+    router = importlib.import_module(f"{modulo}.router").router
+    pares = {
+        (sorted(rota.methods - {"HEAD", "OPTIONS"})[0], f"{_PREFIXO_DA_API}{rota.path}")
+        for rota in router.routes
+        if isinstance(rota, APIRoute)
+    }
+    assert pares, f"o router de {modulo} não declarou rota nenhuma"
+    return pares
+
+
+def _provedores_de(modulo: ModuleType) -> set[Callable[..., object]]:
+    """As funções-chave de `dependency_overrides` **definidas** neste módulo.
+
+    "Chave de override" é, por convenção do projeto, uma função sem argumentos que
+    o router injeta por `Depends` e que o composition root substitui: `_get_*` nos
+    módulos de router, `get_*` em `dependencies.py`. As duas formas são varridas
+    porque as duas existem.
+
+    O filtro por `__module__` é o que separa provedor de **import**: `get_args` e
+    `get_origin`, importados de `typing`, casam o prefixo e não são chaves de nada.
+    """
+    return {
+        valor
+        for nome, valor in vars(modulo).items()
+        if nome.startswith(("_get_", "get_"))
+        and callable(valor)
+        and getattr(valor, "__module__", None) == modulo.__name__
+    }
+
+
 def test_ca30_o_wiring_registra_os_dois_routers_e_os_dois_registradores() -> None:
     """CA30 — e é aqui que CA21 termina a sua vida útil.
 
@@ -841,19 +911,28 @@ def test_ca30_o_mapa_de_overrides_cobre_todo_provedor_do_router_de_staff() -> No
     Os 17 overrides são escritos um a um no composition root — como os de
     identity —, porque wiring é onde a ligação entre duas peças é declarada. O
     preço de escrever à mão é esquecer um; esta asserção é o troco: os provedores
-    saem de `router.routes` por varredura, e um `_get_*` novo sem override
+    saem dos **dois** módulos por varredura, e um provedor novo sem override
     reprova aqui em vez de levantar `RuntimeError` no primeiro request.
+
+    **Os dois módulos, e não só o router.** A primeira versão varria
+    `vars(router)` atrás de `_get_*` e **acrescentava `get_access_guard` à mão**,
+    porque ele mora em `dependencies.py`. O acréscimo manual era o buraco: um
+    provedor novo nesse módulo — a chave de um `IdentityGateway`, quando o Step 4
+    o trouxer — escaparia da varredura, entraria sem override, e voltaria a ser
+    `RuntimeError` no primeiro request, que é exatamente o modo de falha que este
+    teste existe para tornar impossível.
+
+    **A varredura é filtrada por dono (`__module__`), e o filtro é necessário**:
+    `dependencies.py` importa `get_args` e `get_origin` de `typing`, e os dois
+    casam qualquer regra de nome que comece por `get_`. Sem o filtro, a
+    cardinalidade subiria para 19 e a lista de "sem override" nomearia peças da
+    biblioteca padrão.
     """
     wiring = build_http_wiring(_dependencias())
     staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
     staff_dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
 
-    provedores = {
-        valor
-        for nome, valor in vars(staff_router_module).items()
-        if nome.startswith("_get_") and callable(valor)
-    }
-    provedores.add(staff_dependencies.get_access_guard)
+    provedores = _provedores_de(staff_router_module) | _provedores_de(staff_dependencies)
 
     sem_override = sorted(
         getattr(p, "__name__", repr(p)) for p in provedores if p not in wiring.dependency_overrides
@@ -891,15 +970,21 @@ def test_ca30_as_dezesseis_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None
 
     A varredura é sobre a **app real**, e não sobre o router isolado: é a app que
     o cliente alcança, e é nela que um prefixo errado ou um router não incluído
-    apareceria. O inventário de identity é comparado antes e depois pelo conjunto
-    de `(método, path)`, que é o que CA30 chama de "nenhuma regressão de path".
+    apareceria. O que o router isolado entrega é a **partição**: quais pares são de
+    staff e quais de identity — ver `_pares_do_router`, e a heurística de substring
+    que ela substituiu.
+
+    A interseção é a asserção que importa: `de_staff` não é "o que sobrou de um
+    filtro de texto", é "o que o router de staff declara **e** a app publica". Se o
+    router não estivesse incluído, ou estivesse sob outro prefixo, a interseção
+    seria vazia e a contagem denunciaria.
     """
     montadas = _pares_montados(_app_do_wiring())
-    de_staff = {par for par in montadas if "/job-functions" in par[1] or "/units/" in par[1]}
+    de_staff = montadas & _pares_do_router(_PACOTE_HTTP_STAFF)
 
     assert len(de_staff) == _TOTAL_DE_ROTAS_DE_STAFF
-    assert len(montadas - de_staff) == _TOTAL_DE_ROTAS_DE_IDENTITY
-    assert all(path.startswith("/api/v1") for _, path in montadas)
+    assert montadas - de_staff == _ROTAS_DE_IDENTITY
+    assert all(path.startswith(_PREFIXO_DA_API) for _, path in montadas)
 
 
 def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
@@ -908,14 +993,22 @@ def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
     O router de identity é o **mesmo objeto** que ele sempre foi — nada nesta
     Stage o reescreve —, então a asserção mede o que poderia ter mudado sem
     ninguém notar: o conjunto de rotas que a app monta a partir dele.
+
+    **A comparação é com o conjunto literal, e a contagem sozinha não bastava.**
+    A primeira versão asseria só `len(de_identity) == 10`: trocar `POST /users` por
+    `POST /usuarios` — ou perder `/auth/logout` e ganhar outra rota no mesmo commit
+    — mantinha o total em dez e passava. O que "não regrediu" quer dizer é *estes
+    dez pares*, e é isso que `_ROTAS_DE_IDENTITY` escreve.
+
+    A expectativa é **transcrita**, não colhida do router de identity: colhê-la
+    dele faria os dois lados da igualdade virem da mesma fonte, e o teste passaria
+    a confirmar que o router concorda consigo mesmo.
     """
     identity_router = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router").router
     wiring = build_http_wiring(_dependencias())
 
     assert wiring.routers[0] is identity_router
-    de_identity = {
-        par
-        for par in _pares_montados(_app_do_wiring())
-        if "/job-functions" not in par[1] and "/units/" not in par[1]
-    }
+    de_identity = _pares_montados(_app_do_wiring()) - _pares_do_router(_PACOTE_HTTP_STAFF)
+
+    assert de_identity == _ROTAS_DE_IDENTITY
     assert len(de_identity) == _TOTAL_DE_ROTAS_DE_IDENTITY

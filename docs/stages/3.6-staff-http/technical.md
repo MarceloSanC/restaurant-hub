@@ -1645,4 +1645,101 @@ mantendo o escopo por caso nos eixos que escrevem. Não fazer agora: trocar isol
 por tempo antes de haver o segundo consumidor é otimizar contra um número que ainda
 vai mudar. Stage candidata: a primeira da 4.x que acrescentar e2e de acesso.
 
+### 2026-08-29 — [decision] test_composition_root_staff.py (higiene do Checkpoint C) — Marcelo
+
+**Contexto:** o Checkpoint C do bloco 09–10 levantou três varreduras deste arquivo
+que ficavam verdes por acidente. As três foram endurecidas juntas porque as três são
+o mesmo assunto — *como se sabe o que a app publica e o que o wiring conecta*.
+
+**Pergunta (a única que era fork):** a partição staff/identity valia o custo de sair
+do contrato dos routers, ou a heurística de substring devia ficar com a razão
+registrada?
+
+**Opções:**
+- A — manter `"/job-functions" in path or "/units/" in path` e registrar que a
+  falha seria ruidosa, não silenciosa.
+- B — derivar a partição de `router.routes` de cada BC, com o prefixo da app. ✅
+  recomendada
+
+**Decisão:** B, e as outras duas correções sem fork:
+
+1. **Partição pelo contrato** (`_pares_do_router`). A heurística funcionava por
+   **um caractere**: a rota de identity é `POST /restaurants/{id}/units`, sem barra
+   final, e por isso não casava `"/units/"`. Custo real da alternativa B: uma função
+   de seis linhas — desproporcional era continuar com a heurística.
+2. **Inventário de identity literal** (`_ROTAS_DE_IDENTITY`, dez pares transcritos).
+   `len(de_identity) == 10` deixava passar a troca de um path por outro. A
+   expectativa é transcrita e não colhida do router: colhê-la faria os dois lados
+   virem da mesma fonte.
+3. **Varredura de provedores nos dois módulos** (`_provedores_de`). A anterior
+   varria `vars(router)` por `_get_*` e **acrescentava `get_access_guard` à mão**,
+   porque ele mora em `dependencies.py`; um provedor novo naquele módulo escaparia
+   e voltaria a ser `RuntimeError` no primeiro request. O filtro por `__module__` é
+   necessário: `dependencies.py` importa `get_args` e `get_origin` de `typing`, e
+   os dois casam o prefixo.
+
+**Medido, plantando `get_identity_gateway()` em `dependencies.py` sem override:**
+a varredura nova reprova —
+`test_ca30_o_mapa_de_overrides_cobre_todo_provedor_do_router_de_staff`,
+*"provedor de staff sem override no wiring: ['get_identity_gateway']"*. A regra
+**antiga**, calculada sobre a mesma mutação, devolveu `total: 17` e
+`sem override: []`: ela não via o provedor novo. Mutação revertida; `git diff` de
+`src/` limpo.
+
+### 2026-08-29 — [finding] `PATCH /job-functions/{id}` com NUL no nome devolve 500 — Marcelo
+
+**O que se viu, medindo CA22 pela API real (Task 12, em curso):** das quatro rotas
+que aceitam nome — derivadas por introspecção, e são exatamente R01, R03, R05 e R07
+—, **R03 não responde 422**. A exceção escapa sem handler:
+
+```
+router.py:308: in rename_job_function
+rename_job_function.py:47: in execute
+    homonima = self._job_functions.find_by_name(command.tenant_id, command.name)
+sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+[parameters: {'tenant_id_1': '...', 'name_1': 'Ana\x00Souza'}]
+```
+
+`DataError` não é `IntegrityError` (o tradutor da 3.3 nunca é chamado), não é
+`StaffError` e não é `IdentityError` — nenhum handler o alcança, e o resultado é
+**500**. É a primeira linha da tabela do concept §6.3, que esta Stage declara
+fechada: *"Nome com byte NUL no corpo | sem esta Stage: 500 | nesta Stage: já
+rejeitado no domínio pela 3.4"*. A afirmação é **refutada por medição** para R03.
+
+**Por que só R03.** A ordem interna dos quatro use cases difere, e a diferença é
+exatamente esta:
+
+| Rota | Ordem | Quem vê o nome primeiro |
+|---|---|---|
+| R01 `create_job_function` | constrói a entidade (1) → `find_by_name` (2) | o **domínio** ⇒ 422 |
+| R03 `rename_job_function` | `find_by_id` (1) → **`find_by_name`** (2) → `rename` (3) | o **banco** ⇒ 500 |
+| R05 `create_employee` | constrói a entidade | o **domínio** ⇒ 422 |
+| R07 `rename_employee` | `find_by_id` → `employee.rename` | o **domínio** ⇒ 422 |
+
+A sonda de unicidade de R03 leva o nome cru ao Postgres **antes** de o domínio o
+ver. Nenhuma suíte mergeada o pega: os testes de use case usam o fake, que aceita o
+NUL, e a suíte de integração de `job_function_repository` nunca renomeia para um
+nome com NUL.
+
+**Consequência para esta Stage:** CA22 e a metade e2e de CA24 **não fecham** com o
+código como está. Os dois casos vermelhos são
+`test_ca22_nome_com_byte_nul_recebe_422_de_staff[PATCH-/job-functions/{job_function_id}]`
+e `test_ca24_nenhum_campo_escalar_do_corpo_devolve_500[PATCH-/job-functions/{job_function_id}-name]`;
+os outros 23 casos do módulo passam.
+
+**Escalado, não decidido** — a correção fica fora da lista de arquivos da Task 12
+(*"Arquivos a modificar: nenhum"*), e a escolha de **onde** ela mora é decisão de
+fronteira, não detalhe:
+
+- **A — reordenar `RenameJobFunctionUseCase`**: mover `job_function.rename(...)`
+  para antes da sonda de unicidade. Três linhas, na camada onde a ordem já é
+  contrato declarado (o docstring do use case chama a ordem de "o contrato"), e
+  vale para qualquer adapter de entrada. Toca uma Stage mergeada (3.2).
+- **B — validar nome na borda HTTP**, como se faz com identificador. Fica dentro da
+  camada-alvo desta Stage, mas duplica no adapter uma regra de domínio, e o
+  ADR 3.6.0002 limitou de propósito a validação de borda a **identificadores**.
+- **C — aceitar e adiar**: narrar CA22 para as rotas que hoje alcançam o domínio, e
+  abrir issue. Relaxa um critério de segurança que a Stage escreveu para não ser
+  relaxado.
+
 <!-- END: post-execution -->
