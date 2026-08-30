@@ -1556,4 +1556,55 @@ domínio acima dele — F1.
 commits. Já coberto pela issue [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34)
 (aberta pela auditoria da 3.1), estendida por comentário para incluir `-extra`.
 
+---
+
+### 2026-08-30 — [finding] a ordem do rename na Task 07 deste Technical ficou obsoleta — Stage 3.6 (executor)
+
+**Contexto:** a Task 07 deste arquivo (bloco **Detalhes técnicos**, linha 663)
+descreve em prosa a ordem de checagens do rename de função assim:
+
+> `RenameJobFunctionUseCase(job_functions)`. Ordem: (1) `find_by_id` ausente ⇒
+> `JobFunctionNotFoundError`; (2) `find_by_name` **ignorando a própria função**
+> ⇒ conflito; (3) `rename`; (4) `update`.
+
+Essa ordem **deixou de valer na Stage 3.6**. A ordem em vigor — a que
+`src/restaurant_hub/features/staff/application/use_cases/rename_job_function.py`
+executa hoje — é: (1) `find_by_id` ausente ⇒ `JobFunctionNotFoundError`;
+(2) **`rename` (transição de domínio)** ⇒ `InvalidNameError`, **sem tocar o
+port**; (3) `find_by_name` ignorando a própria função ⇒ conflito; (4) `update`.
+A troca está decidida em
+[`../../adr/3_6_0004-cheapest-local-check-first-in-rename-job-function.md`](../../adr/3_6_0004-cheapest-local-check-first-in-rename-job-function.md)
+(ADR 3.6.0004) e a fonte superior já está emendada: a linha
+`rename_job_function` da tabela de [`./concept.md`](./concept.md) §5.16 carrega
+a **errata datada de 2026-08-30**, com o antes/depois e a medição. O motivo é o
+princípio que a própria nota da tabela enuncia — *a checagem mais barata que
+possa falhar sozinha vem primeiro* —, e o sintoma que o expôs foi o nome com
+byte NUL chegando cru ao psycopg pela borda HTTP da 3.6 (`DataError` ⇒ **500**).
+
+**Por que a linha não foi corrigida:** o trecho está **congelado**. Este
+`technical.md` tem `status: done`, e `scripts/check_technical_postexec.py`
+(pre-commit e Passo 10 do runbook) só admite diff entre os marcadores
+`BEGIN/END: post-execution` — a linha 663 está na §5, muito antes deles.
+Editá-la exigiria burlar o gate que existe justamente para impedir que um plano
+de execução seja reescrito depois do fato. E a perda é pequena por hierarquia:
+**Concept > Technical**. O contrato de precedência mora na §5.16 do concept, que
+está **correta e datada**; o Technical é o plano de como executá-lo, é
+documento de época, e ler nele a ordem de 2026-08-08 é ler o que se planejou
+naquela data, não o que o código faz. As três fontes que alguém consulta para
+saber a ordem de hoje — o concept, o ADR e a docstring do use case — concordam
+entre si.
+
+**Direção sugerida:** se o freeze vier a ser estendido para permitir **errata
+datada em technical congelado** (mesmo formato da §5.16: bloco `⚠️ Errata`
+com *Onde / Dizia / Diz / Por quê*, sem reescrever a prosa original), **esta
+linha é a primeira candidata** — é um caso limpo, de uma linha, com ADR e
+errata de concept já escritos para citar. Enquanto isso não existir, esta
+entrada é o ponteiro: quem cair na linha 663 pelo `grep` acha a correção na §7
+do mesmo arquivo.
+
+**Stage candidata:** nenhuma — é **pós-Stage** (mudança na regra do gate
+`check_technical_postexec.py` + CONVENTIONS §3.4), a ser aberta como issue
+própria. Registrado aqui, e não só no ADR, porque finding que vive fora da §7
+não é varrido pelo pipeline.
+
 <!-- END: post-execution -->
