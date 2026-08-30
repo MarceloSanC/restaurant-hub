@@ -1742,4 +1742,160 @@ fronteira, não detalhe:
   abrir issue. Relaxa um critério de segurança que a Stage escreveu para não ser
   relaxado.
 
+### 2026-08-30 — [decision] rename_job_function.py (fork da Task 12) — Marcelo
+
+**Contexto:** o fork escalado na entrada anterior. Antes de decidir, o defeito foi
+**re-medido com o fake, sem banco**: renomear para `""`, `"   "` **ou**
+`"Ana\x00Souza"` dispara `job_functions.find_by_name` nos três casos, antes do
+`InvalidNameError` — conduta observada
+`['job_functions.find_by_id', 'job_functions.find_by_name']`. **Não é defeito de
+NUL nem de Postgres**: é desvio de ordem, e o NUL é só a espécie em que a consulta
+inútil vira 500 em vez de consulta inútil.
+
+**Pergunta:** onde mora a correção — e a ordem declarada em §5.16 da 3.2 pode ser
+emendada?
+
+**Opções:**
+- A — reordenar `RenameJobFunctionUseCase`: transição do domínio antes do
+  `find_by_name`. ✅ recomendada
+- B — validar nome na borda HTTP, como se faz com identificador.
+- C — estreitar CA22 para as rotas que hoje alcançam o domínio.
+
+**Decisão:** A, registrada em
+[ADR 3.6.0004](../../adr/3_6_0004-cheapest-local-check-first-in-rename-job-function.md).
+
+**Razão:** a **lei já estava escrita** e só um dos dois use cases a obedecia. A
+nota que fecha a tabela de §5.16 enuncia o princípio — *"a checagem mais barata
+que possa falhar sozinha vem primeiro"* — e justifica `create_job_function`
+exatamente assim. A **linha** da tabela, porém, declarava para o rename a ordem
+inversa: tabela e princípio discordavam, e **o princípio governa** (a linha é a
+aplicação; a nota é a razão que a produziu). A linha foi emendada por **errata
+datada** no concept da 3.2, apontando o ADR — não reescrita em silêncio —, e passa
+a ter a mesma forma de `rename_employee`, que já obedecia o princípio.
+
+**Por que a emenda não muda nada observável:** o par *(nome inválido, conflito de
+nome)* **não é construível** — nenhum nome gravado pode ser inválido, porque o
+domínio o recusa na construção **e na reidratação** (`__post_init__`,
+ADR 3.4.0003; *Regra 1* do mapper da 3.3), logo `find_by_name` sobre nome inválido
+nunca teria o que encontrar. O par duplo que a coluna da tabela declara é
+**NotFound + conflito**, e continua intacto: `find_by_id` permanece em (1).
+
+**B e C rejeitadas com fonte:** o ADR 3.4.0003 **já rejeitou** tratar este defeito
+na borda (sua *Alternative A*), e o ADR 3.6.0002 confina validação de borda a
+**identificadores** — B duplicaria regra de domínio no adapter. C é a
+*Alternative D* (não fazer nada) do mesmo 3.4.0003, rejeitada por violar um CA
+declarado.
+
+**Expansão de camada declarada:** a camada-alvo da Stage é `adapters/in/http`, e
+esta correção é `application` da 3.2 mais uma emenda ao concept da 3.2. O
+precedente é o ADR 3.4.0003, que fez o mesmo sobre o domínio da 3.1.
+
+**Medido:** com o fix, `test_staff_status_bands.py` passa de `2 failed, 23 passed`
+para **25 passed** — os dois vermelhos eram
+`test_ca22_...[PATCH-/job-functions/{job_function_id}]` e
+`test_ca24_...[PATCH-/job-functions/{job_function_id}-name]`.
+
+### 2026-08-30 — [decision] test_invalid_name_never_reaches_the_port.py (off-task) — Marcelo
+
+**Contexto:** o defeito acima é da família *"lei universal, representante
+estreito"* (skill `stage-audit`): a lei valia para todo use case que recebe nome,
+e o único teste que a travava — `test_criar_com_nome_vazio_nao_toca_o_port`, cuja
+docstring diz que a asserção sobre `calls` **é o ponto** — existia só para
+`create_job_function`. Corrigir o rename sem quantificar a lei deixaria o próximo
+desvio nascer do mesmo jeito.
+
+**Pergunta:** travar a lei sobre quais use cases?
+
+**Opções:**
+- A — acrescentar um teste espelho para `rename_job_function`. Fecha o caso de
+  hoje e reinstala o representante estreito, agora com dois representantes.
+- B — teste parametrizado sobre o produto `use case × nome inválido`, com o
+  domínio dos use cases **derivado** dos commands que carregam `name`. ✅
+  recomendada
+
+**Decisão:** B — `create_job_function`, `rename_job_function` e `rename_employee`
+× `""`, `"   "`, `"Ana\x00Souza"` (9 casos), com a conduta permitida **transcrita
+de §5.16** (não lida do código: expectativa derivada da implementação concorda com
+qualquer implementação).
+
+**`create_employee` é exceção documentada e NÃO entra.** §5.16 declara que ele
+resolve as funções (port) **antes** de construir a entidade, e a nota explica por
+quê: a falha real é referencial, e `JobFunctionNotFoundError` deve vencer o nome
+vazio. Asserir a lei sobre ele contradiria o concept. A exclusão está nomeada no
+próprio teste e travada por uma guarda de domínio: os commands com campo `name` são
+derivados por introspecção, e a asserção é `cobertos | {excetuado} == derivados` —
+um quinto command com nome fica **vermelho** até ser classificado.
+
+**Medido (o teste morde):** contra o código **antes** do fix, `3 failed, 7 passed`
+— exatamente as três parametrizações de `RenameJobFunctionCommand`, com
+`assert ['job_functions.find_by_id', 'job_functions.find_by_name'] == ['job_functions.find_by_id']`.
+Depois do fix, `10 passed`.
+
+### 2026-08-30 — [decision] test_http_boundary_sweeps.py (off-task, gêmeo latente) — Marcelo
+
+**Contexto:** ao escrever `_schema_do_corpo` da Task 12, a exclusão de `"return"`
+apareceu como necessária — o `response_model` de toda rota de escrita também é um
+`BaseModel`, e `EmployeeResponse` tem campo `name`. A versão **mergeada** do mesmo
+helper, em `test_http_boundary_sweeps.py`, varre `__annotations__` **sem** excluir
+`return`: para rota sem corpo ela devolve o modelo de **resposta**.
+
+**Pergunta:** corrigir agora, sendo hoje inofensivo, ou registrar como `[finding]`?
+
+**Opções:**
+- A — `[finding]` para a próxima Stage. O defeito é latente: os dois chamadores
+  filtram por `invocacao.body is None` antes de chamar, então nenhuma varredura
+  erra hoje.
+- B — corrigir e travar com teste direto. ✅ recomendada
+
+**Decisão:** B. *"Inofensivo por acidente do chamador"* é o estado em que um helper
+espera pelo terceiro chamador — e o terceiro chamador seria a rota que a Stage 4.x
+acrescentar. O teste novo
+(`test_o_schema_do_corpo_ignora_a_anotacao_de_retorno`) assere a **equivalência**
+entre "a invocação declara corpo" e "o helper acha schema de corpo", sobre as duas
+fontes independentes (`_INVOCACOES` declarado à mão pelas Tasks de rota × anotações
+do handler), com a contagem de rotas sem corpo asserida junto — equivalência sobre
+conjunto vazio é verdadeira.
+
+**Medido:** removendo as duas linhas `if nome == "return": continue`, o teste novo
+reprova — *"('DELETE', '/units/{unit_id}/employees/{employee_id}/unavailabilities')
+não tem corpo, mas o helper devolveu `EmployeeResponse` — provavelmente o
+`response_model`"*. Mutação revertida pelo `replace` inverso; `git status
+--porcelain` conferido.
+
+### 2026-08-30 — [finding] o technical da 3.2 ainda declara a ordem antiga — Marcelo
+
+**O que se viu:** a errata de 2026-08-30 corrigiu a linha de `rename_job_function`
+no **concept** da 3.2 (§5.16). O `technical.md` da 3.2 repete a mesma ordem em
+prosa — *"(1) `find_by_id` ausente ⇒ `JobFunctionNotFoundError`; (2) `find_by_name`
+**ignorando a própria função**…"*, na descrição da Task 07 —, e essa seção está
+**congelada** por `scripts/check_technical_postexec.py` (só a §7 é editável após
+`status: done`).
+
+**Por que não foi corrigido aqui:** a hierarquia de fontes é Concept > Technical, e
+o concept — a fonte superior — está correto e datado. Editar o technical fora da §7
+faria o gate de post-execution da 3.2 reprovar, e o mecanismo de errata para
+technical congelado não existe hoje.
+
+**Direção:** ou (a) uma entrada `[finding]` na §7 do technical da 3.2 apontando o
+ADR 3.6.0004 — o único lugar editável daquele doc —, ou (b) estender a disciplina
+de errata a technicals congelados, com o script reconhecendo um bloco de errata.
+Preferir (a): é barato, cabe no mecanismo que já existe, e não mexe no gate. Stage
+candidata: a primeira que reabrir a 3.2 por qualquer motivo.
+
+### 2026-08-30 — [finding] terceira expansão de camada para trás no BC staff — Marcelo
+
+**O que se viu:** três Stages seguidas do BC staff alcançaram para trás uma camada
+já mergeada — a 3.2 sobre o domínio da 3.1, a 3.4 sobre o domínio da 3.1
+(ADR 3.4.0003), e agora a 3.6 sobre a application da 3.2 (ADR 3.6.0004). As três
+foram declaradas, nenhuma foi silenciosa, e as três tiveram a mesma causa: uma
+propriedade que só é **observável** na camada de fora, escrita numa camada de
+dentro que não tinha como medi-la.
+
+**Direção:** não é sinal de indisciplina, é sinal de que a fronteira do gate está
+no lugar errado. Vale medir, ao fim do Step 3, se as Stages de camada interna
+deveriam nascer com uma trava do tipo *"lei quantificada sobre o domínio derivado"*
+— que é a forma que as três correções acabaram tomando — em vez de um representante
+por caso. Stage candidata: retrospectiva do Step 3, ou a primeira Stage de domínio
+do Step 4.
+
 <!-- END: post-execution -->
