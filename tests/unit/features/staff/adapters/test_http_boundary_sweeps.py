@@ -564,12 +564,51 @@ def _campos_de_id_do_corpo(chave_da_rota: ChaveDeRota) -> list[IdentifierField]:
 
 
 def _schema_do_corpo(chave_da_rota: ChaveDeRota) -> type[BaseModel] | None:
-    """O `*Request` que a rota recebe no corpo, derivado da assinatura do handler."""
+    """O `*Request` que a rota recebe no corpo, derivado da assinatura do handler.
+
+    **A anotação `return` é excluída, e a exclusão é carga.** O `response_model`
+    de toda rota de escrita também é um `BaseModel` — `EmployeeResponse` tem um
+    campo `name` —, então varrer `__annotations__` inteiro faz uma rota **sem
+    corpo** (`termination`, `rehire`, `DELETE .../unavailabilities`) devolver o
+    modelo de **resposta** como se fosse o de requisição. Hoje os dois chamadores
+    daqui já filtram por `invocacao.body is None` e o defeito não se realiza — mas
+    "inofensivo por acidente do chamador" é o estado em que um helper espera pelo
+    terceiro chamador. `test_o_schema_do_corpo_ignora_a_anotacao_de_retorno`
+    trava a exclusão diretamente, sem depender daquele filtro.
+    """
     rota = next(r for r in _rotas() if chave(r) == chave_da_rota)
-    for anotacao in getattr(rota.endpoint, "__annotations__", {}).values():
+    for nome, anotacao in getattr(rota.endpoint, "__annotations__", {}).items():
+        if nome == "return":
+            continue
         if isinstance(anotacao, type) and issubclass(anotacao, BaseModel):
             return anotacao
     return None
+
+
+def test_o_schema_do_corpo_ignora_a_anotacao_de_retorno() -> None:
+    """Rota sem corpo não tem schema de corpo — nem o de resposta, por engano.
+
+    A asserção é sobre a **equivalência** entre "a invocação declara corpo" e "o
+    helper acha schema de corpo": as duas fontes são independentes (`_INVOCACOES`
+    é declarado à mão pelas Tasks de rota; o helper deriva das anotações do
+    handler), e é a discordância entre elas que denuncia a varredura errada.
+
+    A contagem de rotas sem corpo é asserida junto porque uma equivalência sobre
+    conjunto vazio é verdadeira: se toda rota passasse a ter corpo, este teste
+    ficaria verde sem medir nada.
+    """
+    sem_corpo = [chave for chave in _INVOCACOES if _INVOCACOES[chave].body is None]
+
+    assert sem_corpo, "nenhuma rota sem corpo — a guarda não mede nada"
+    for chave_da_rota in sem_corpo:
+        assert _schema_do_corpo(chave_da_rota) is None, (
+            f"{chave_da_rota} não tem corpo, mas o helper devolveu "
+            f"{_schema_do_corpo(chave_da_rota)} — provavelmente o `response_model`"
+        )
+    for chave_da_rota in set(_INVOCACOES) - set(sem_corpo):
+        assert _schema_do_corpo(chave_da_rota) is not None, (
+            f"{chave_da_rota} declara corpo, mas o helper não achou o schema"
+        )
 
 
 _CASOS_DE_CORPO = [
