@@ -1218,7 +1218,7 @@ o alcance dela ao nível em que o dano que ela nomeia se realiza?
   exatamente o dano que a instrução nomeia: um `tenant_id` enviado no corpo
   passaria a receber 422 em vez de ser desarmado em silêncio, e a borda de staff
   divergiria da de identity na mesma classe de request.
-- C - `extra="forbid"` **so** nas duas variantes aninhadas da uniao de perfil de
+- C - `extra="forbid"` **só** nas duas variantes aninhadas da união de perfil de
   jornada, mantendo o `ignore` default nos nove `*Request` de topo. ✅ recomendada
 
 **Decisão:** C.
@@ -1228,8 +1228,8 @@ request - e o desarme dele continua intacto: verificado em runtime que
 `CreateEmployeeRequest(..., tenant_id="ATACANTE")` descarta o campo em silêncio,
 como os requests de identity. Já o `weekly_hours` dentro de
 `{"type": "on_demand"}` não e campo desconhecido a desarmar: e **o estado
-invalido** que a uniao discriminada existe para tornar irrepresentável, e
-Decision 1 lhe atribui 422 nominalmente. Ignora-lo entregaria ao cliente uma
+inválido** que a união discriminada existe para tornar irrepresentável, e
+Decision 1 lhe atribui 422 nominalmente. Ignorá-lo entregaria ao cliente uma
 jornada diferente da que ele pediu.
 
 **Registro no ADR:** a instrução foi estreitada para *"top-level request
@@ -1252,7 +1252,7 @@ verde" seria insatisfazível dentro do escopo declarado.
 
 **Opções:**
 - A - Mapa literal no módulo de varreduras, editado por cada Task de rota. Fiel a
-  letra do plano, mas poe cada Task para tocar arquivo fora da sua lista.
+  letra do plano, mas põe cada Task para tocar arquivo fora da sua lista.
 - B - Uma invocação **derivada** da rota (corpo montado por introspecção do
   schema). Elimina a declaração — e com ela a trava: a fixture existe justamente
   para que a Task **declare** como a rota é invocada, e um corpo gerado seria uma
@@ -1265,16 +1265,16 @@ verde" seria insatisfazível dentro do escopo declarado.
 **Razão:** é a mesma disciplina de "derivar o domínio do código" que a §1 do
 plano usa para `router.routes`, `StaffError.__subclasses__` e `model_fields`,
 aplicada ao arranjo dos testes. A propriedade que a fixture protege fica
-**identica** — a asserção de totalidade é preservada literalmente, e rota sem
+**idêntica** — a asserção de totalidade é preservada literalmente, e rota sem
 declaração continua reprovando —, mas a declaração passa a morar no arquivo da
 Task que escreveu a rota, que é onde o plano já diz que ela pertence
 conceitualmente ("obriga a Task que escreve uma rota nova a declarar como
-invoca-la"). Efeito colateral desejado: as Tasks 06, 07 e 08 deixam de precisar
+invocá-la"). Efeito colateral desejado: as Tasks 06, 07 e 08 deixam de precisar
 tocar o módulo de varreduras, e as suas listas de arquivos ficam corretas como
 escritas.
 
 **Mesma forma, mesma razão, para o wiring de use case.** `Ambiente` monta os
-`dependency_overrides` por reflexao sobre os provedores `_get_*` do router (a
+`dependency_overrides` por reflexão sobre os provedores `_get_*` do router (a
 anotação de retorno nomeia a classe do use case; os 16 construtores pedem apenas
 `employees`, `job_functions` e `id_generator`). Sem isso, cada Task de rota teria
 de editar o ambiente de teste pelo mesmo motivo — e pela mesma via.
@@ -1283,7 +1283,7 @@ de editar o ambiente de teste pelo mesmo motivo — e pela mesma via.
 
 **Contexto:** o eixo de **path** de CA20 exige enviar `"   "` e `"\x00"` num
 segmento de URL. Medido: `httpx` **recusa montar** a URL com o caractere cru
-(`InvalidURL: Invalid non-printable ASCII character ... at position 22`), entao o
+(`InvalidURL: Invalid non-printable ASCII character ... at position 22`), então o
 teste falharia no cliente antes de alcançar a rota.
 
 **Ajuste:** os parâmetros de path são percent-encoded (`urllib.parse.quote`) antes
@@ -1351,7 +1351,7 @@ tem três partes:
    identidade de objeto, e um adapter que capturasse e relancasse um erro **novo
    do mesmo tipo** falha aqui. *(Medido: a asserção de status também ficaria
    vermelha nesse caso, porque a exceção continua escapando e não ha resposta —
-   entao a identidade **não discrimina** neste contra-teste.)*
+   então a identidade **não discrimina** neste contra-teste.)*
 3. **A tradução-em-resposta era a fresta, e ficou aberta até agora.** Capturar a
    recusa e devolver `HTTPException(403)` sobrevivia: sem exceção, o teste caia
    no ramo de status, e `403 < 500` aceitava exatamente a tradução que o
@@ -1362,7 +1362,7 @@ tem três partes:
 `unit_id` com valor bem-formado e unidade **não concedida**, o teste passou a
 exigir que a sentinela **tenha** escapado (`pytest.fail` no ramo sem exceção).
 Com isso o conjunto-vermelho da nova deixa de ser subconjunto do da antiga: ela
-cobre as **duas** traduções que L-AG2 proibe, e a antiga cobria uma so. Provado
+cobre as **duas** traduções que L-AG2 proíbe, e a antiga cobria uma só. Provado
 por mutação — o CT2 aplicado ao router derruba **11** casos, contra 447/447
 verdes antes.
 
@@ -1397,14 +1397,14 @@ representante estreito"* no próprio instrumento que existe para mata-la.
 
 **O que NÃO se perdeu, e a verificação disso.** A transcrição do §4.1 continua
 **manual** (o campo `sucesso`, escrito por quem leu a tabela do concept) e não
-derivada de `rota.status_code` — derivar provaria so que o código concorda
+derivada de `rota.status_code` — derivar provaria só que o código concorda
 consigo mesmo. A totalidade continua sendo o que trava o inventário: uma rota
 plantada sem declaração reprova **quatro** testes, entre eles os dois de
 totalidade. Verificado por mutação real, com a saida no relatório da Task.
 
 **Precedente no plano:** a Task 07 já sanciona a edição analoga — *"a única edição
 de teste permitida é acrescentar a chave das cinco rotas novas ao
-`_INVOCACOES`"*. A permissao existia; faltava na Task 06. Com a mudança (i), as
+`_INVOCACOES`"*. A permissão existia; faltava na Task 06. Com a mudança (i), as
 Tasks 07 e 08 deixam de precisar dela: as suas declarações moram nos seus
 próprios módulos.
 
@@ -1412,11 +1412,11 @@ próprios módulos.
 
 **Contexto:** com R09 e R11, o eixo de corpo de CA24 passou a incluir campos que
 o **framework** parseia (`start`/`end` são `datetime`) e um campo escalar
-**aninhado** (`weekly_hours`, dentro da uniao de perfil de jornada). Dois
+**aninhado** (`weekly_hours`, dentro da união de perfil de jornada). Dois
 problemas apareceram de uma vez: 22 casos vermelhos exigindo corpo de staff onde
 a recusa é legitimamente de forma, e o campo que o próprio concept nomeia como
 *"por onde escapou o 500 do `decimal.InvalidOperation`"* ficando **fora** do
-domínio, porque a varredura so olhava o primeiro nível.
+domínio, porque a varredura só olhava o primeiro nível.
 
 **Pergunta:** a asserção sobre a **origem** do 422 vale para todo campo escalar?
 
@@ -1441,7 +1441,7 @@ corpo de staff, em teste dedicado no módulo de rota.
 
 **A classificação tem guarda própria.** `_quem_parseia` decide se a exigência do
 corpo se aplica; um bug que a fizesse devolver sempre `"framework"` desligaria
-essa metade de CA24 em silêncio. Ha teste exigindo que as **duas** espécies
+essa metade de CA24 em silêncio. Há teste exigindo que as **duas** espécies
 existam no domínio varrido, e outro exigindo que `("workload_profile",
 "weekly_hours")` esteja entre os caminhos — a lição do guarda tautologico do eixo
 de corpo, aplicada antes de o revisor precisar apontar.
@@ -1450,9 +1450,9 @@ de corpo, aplicada antes de o revisor precisar apontar.
 
 **Contexto:** o Checkpoint C do bloco 2 abriu três achados que pedem edição de
 `test_http_boundary_sweeps.py` (arquivo da Task 05), e a coordenação autorizou
-absorve-los aqui:
+absorvê-los aqui:
 
-- **F3** - CA21 estava travado **so** no eixo de path. Medido: mover a validação
+- **F3** - CA21 estava travado **só** no eixo de path. Medido: mover a validação
   dos ids do **corpo** para depois de `guard.authorize` em `create_employee`
   deixava a suíte inteira verde. O ADR 3.6.0002 §3 enuncia a ordem para *"path,
   query string, or body"*, e o corpo é onde o valor cru chega mais longe — cada
@@ -1460,7 +1460,7 @@ absorve-los aqui:
   CA21 passou a ser parametrizado também sobre `_CASOS_DE_CORPO`; a mutação agora
   derruba 3 casos.
 - **F4** - o guarda do eixo de corpo era tautologia (os dois lados derivavam do
-  mesmo helper, entao esvazia-lo deixava o teste verde). Passou a exigir
+  mesmo helper, então esvaziá-lo deixava o teste verde). Passou a exigir
   `_CASOS_DE_CORPO` sem condicional. *(Fechado no commit de F1.)*
 - **F5** - o eixo de **query** não existia nem como ausência declarada, embora
   CA24 o nomeie e R06/R12 tenham query desde a Task 06. Foi criado, com a mesma
@@ -1470,7 +1470,7 @@ absorve-los aqui:
 
 **Razão de estarem aqui e não numa Task própria:** os três são sobre eixos que
 esta Task é a primeira a povoar de verdade (corpo com id, query com parâmetro), e
-separa-los produziria um commit que so faz sentido lido junto deste.
+separá-los produziria um commit que só faz sentido lido junto deste.
 
 ### 2026-08-29 - [deviation] escopo da Task 08 - Marcelo
 
@@ -1480,7 +1480,7 @@ autoriza **dois** alvos, e o segundo chega pelo **corpo**. Duas premissas das
 varreduras foram escritas quando toda rota tinha exatamente um alvo, e ficaram
 vermelhas contra um router correto (12 casos):
 
-1. **CA24, eixo de corpo** — `target_unit_id` é alvo de autorização, entao um
+1. **CA24, eixo de corpo** — `target_unit_id` é alvo de autorização, então um
    valor bem-formado não concedido é negado pelo **guard**, cru, e não ha
    resposta HTTP. E' literalmente a mesma espécie que o eixo de path já trata
    para `unit_id`, e a correção é a mesma: a espécie do identificador decide a
@@ -1504,14 +1504,14 @@ declaração no corpo.
 duas vezes nesta Stage — a coordenação autorizou editar as varreduras para
 acomodar rotas novas (opção A) e para absorver F3/F5 na Task 07. Este é o mesmo
 arquivo, pela mesma razão (rota nova revela premissa da varredura), e parar de
-novo custaria uma terceira ida e volta sobre a mesma questao já respondida. Fica
+novo custaria uma terceira ida e volta sobre a mesma questão já respondida. Fica
 declarado como **decisão minha**, e não como autorização recebida.
 
-**Nota de metodo, aprendida na hora:** uma das reversoes de mutação usou como
-âncora uma linha que aparece em **12** rotas, e a reversao falhou deixando o
+**Nota de método, aprendida na hora:** uma das reversões de mutação usou como
+âncora uma linha que aparece em **12** rotas, e a reversão falhou deixando o
 router sem a segunda chamada do guard. Detectado por inspeção antes do commit.
-Âncora de reversao tem de ser tao única quanto a de aplicação — e a conferência
-pos-mutação não é zelo, é o que separa medir de estragar.
+Âncora de reversão tem de ser tão única quanto a de aplicação — e a conferência
+pós-mutação não é zelo, é o que separa medir de estragar.
 
 ### 2026-08-29 — [decision] test_composition_root_staff.py (Task 09) — Marcelo
 
