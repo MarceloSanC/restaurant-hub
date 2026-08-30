@@ -442,6 +442,169 @@ def test_ca14_nenhum_handler_le_o_unit_id_do_escopo_autorizado() -> None:
     assert leituras == [], f"handler lendo AuthorizedScope.unit_id: {leituras}"
 
 
+# ---------------------------------------------------------------------------
+# `AccessRequirement.names_unit` — a declaração cobrada contra a chamada
+# ---------------------------------------------------------------------------
+#
+# **O campo era declarado e nunca lido.** `grep -rn "names_unit" src/` devolvia
+# só a definição: cada rota decidia à mão se passava `unit_id=` ao guard, e a
+# promessa do docstring — *"concentrá-lo num valor por rota é o que impede que
+# duas rotas do mesmo recurso declarem requisitos diferentes sem que ninguém
+# note"* — valia só para a **permissão**. Uma rota de funcionário que esquecesse
+# o `unit_id=` autorizaria contra o tenant inteiro, e nenhuma varredura acusaria:
+# no ambiente unitário o fake concede pelo alvo pedido, e em produção o passo 4
+# do guard só reclamaria se a permissão não fosse tenant-wide.
+#
+# A varredura é o que torna `names_unit` **carga real** sem replumbar produção no
+# fim da Stage: quem lê o campo é este teste, e ler é o que impede a declaração e
+# a chamada de divergirem. Plugá-lo no router seria a outra saída, e mexeria nas
+# 17 chamadas ao guard por um ganho que esta asserção já entrega.
+
+_TOTAL_DE_AUTORIZACOES = 17
+
+
+def _requisitos_declarados() -> dict[str, object]:
+    """Os `AccessRequirement` de `dependencies.py`, por nome do símbolo.
+
+    Derivado do módulo, e não listado: um requisito novo entra na varredura sem
+    que ninguém precise lembrar deste arquivo.
+    """
+    return {
+        nome: valor
+        for nome, valor in vars(dependencies_module).items()
+        if isinstance(valor, dependencies_module.AccessRequirement)
+    }
+
+
+def _autorizacoes(handler: ast.FunctionDef) -> list[tuple[str, bool, int]]:
+    """Cada `<guard>.authorize(...)` do handler: requisito nomeado, se passa unidade, linha.
+
+    O requisito é lido do **segundo argumento posicional**, que por convenção do
+    router é `<REQUISITO>.permission`. Uma chamada que passasse a permissão como
+    string crua não seria classificável — e é justamente isso que o teste de
+    totalidade abaixo reprova, em vez de deixá-la sair da varredura em silêncio.
+    """
+    encontradas: list[tuple[str, bool, int]] = []
+    for no in ast.walk(handler):
+        if not isinstance(no, ast.Call):
+            continue
+        if not (isinstance(no.func, ast.Attribute) and no.func.attr == "authorize"):
+            continue
+        permissao = no.args[1] if len(no.args) > 1 else None
+        nome_do_requisito = (
+            permissao.value.id
+            if isinstance(permissao, ast.Attribute)
+            and permissao.attr == "permission"
+            and isinstance(permissao.value, ast.Name)
+            else ""
+        )
+        nomeia_unidade = any(argumento.arg == "unit_id" for argumento in no.keywords)
+        encontradas.append((nome_do_requisito, nomeia_unidade, no.lineno))
+    return encontradas
+
+
+def test_toda_autorizacao_do_router_nomeia_um_requisito_declarado() -> None:
+    """A pré-condição da varredura seguinte, e uma lei por si.
+
+    Sem ela, uma chamada `guard.authorize(actor, "manage_staff")` com a permissão
+    como string crua sairia do domínio sem sintoma — a varredura de `names_unit`
+    a ignoraria, e a lei ficaria verde sobre um conjunto menor. É a mesma
+    disciplina que a totalidade de `_INVOCACOES` aplica às rotas.
+
+    A cardinalidade é **17**, e não 16, e a diferença é R16: a cópia autoriza
+    **duas** vezes, com alvos distintos (L-AG4). Travar o número em 16 esconderia
+    exatamente a chamada que o ADR 3.4.0007 existe para exigir.
+    """
+    declarados = set(_requisitos_declarados())
+    chamadas = [
+        (handler.name, nome, linha)
+        for handler in _handlers_do_router()
+        for nome, _, linha in _autorizacoes(handler)
+    ]
+
+    assert declarados, "nenhum AccessRequirement em dependencies.py — a varredura não mede nada"
+    assert len(chamadas) == _TOTAL_DE_AUTORIZACOES, chamadas
+    fora = [caso for caso in chamadas if caso[1] not in declarados]
+    assert fora == [], f"autorização que não nomeia um AccessRequirement declarado: {fora}"
+
+
+def test_o_names_unit_declarado_decide_se_a_rota_nomeia_unidade_ao_guard() -> None:
+    """A declaração e a chamada têm de concordar, nos **dois** sentidos.
+
+    `names_unit=True` obriga a passar `unit_id=`; `names_unit=False` proíbe. Os
+    dois sentidos importam por razões diferentes: esquecer o `unit_id=` numa rota
+    de funcionário autorizaria contra o tenant inteiro; passá-lo numa rota de
+    catálogo pediria escopo sobre um recurso que não é da unidade, e o passo 4 do
+    guard dispensa a unidade **por permissão** (ADR 3.4.0008).
+
+    É esta asserção que faz `names_unit` deixar de ser campo decorativo: ele passa
+    a ter um leitor, e leitor é o que separa declaração de comentário.
+    """
+    requisitos = _requisitos_declarados()
+    divergencias = [
+        f"{handler.name}:{linha} declara names_unit="
+        f"{requisitos[nome].names_unit} e {'passa' if nomeia else 'não passa'} unit_id"
+        for handler in _handlers_do_router()
+        for nome, nomeia, linha in _autorizacoes(handler)
+        if nome in requisitos and requisitos[nome].names_unit != nomeia
+    ]
+
+    assert divergencias == [], divergencias
+
+
+def test_os_dois_valores_de_names_unit_sao_exercitados_pelo_router() -> None:
+    """A guarda contra a lei colapsada num lado só.
+
+    Se todas as 17 autorizações fossem `names_unit=True`, a asserção acima
+    estaria provando metade da regra e ninguém veria — é a forma "lei universal,
+    representante estreito" aplicada ao próprio instrumento. As duas espécies têm
+    de aparecer, e cada requisito declarado tem de ser usado por alguma rota:
+    requisito declarado e nunca chamado é a mesma dívida que `names_unit`
+    declarado e nunca lido.
+    """
+    requisitos = _requisitos_declarados()
+    usados = {
+        nome
+        for handler in _handlers_do_router()
+        for nome, _, _ in _autorizacoes(handler)
+        if nome in requisitos
+    }
+
+    assert usados == set(requisitos), (
+        f"requisito declarado e nunca chamado: {set(requisitos) - usados}"
+    )
+    assert {requisitos[nome].names_unit for nome in usados} == {True, False}
+
+
+def test_a_varredura_de_names_unit_reprova_os_dois_casos_plantados() -> None:
+    """Guarda que nunca viu um positivo não é guarda — e aqui os positivos são dois.
+
+    Um handler que declara o requisito tenant-wide e **passa** unidade, e outro
+    que declara o unit-scoped e **não passa**: os dois têm de ser vistos pela
+    extração, com o sentido certo. Sem este teste, um `_autorizacoes` que
+    devolvesse sempre `nomeia_unidade=True` deixaria metade da lei acima verde por
+    construção.
+    """
+    fonte = ast.parse(
+        "def catalogo(actor, guard):\n"
+        "    scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission, unit_id=u)\n"
+        "def funcionario(actor, guard):\n"
+        "    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission)\n"
+    )
+    handlers = [no for no in ast.walk(fonte) if isinstance(no, ast.FunctionDef)]
+    requisitos = _requisitos_declarados()
+
+    extraidas = [
+        (nome, nomeia) for handler in handlers for nome, nomeia, _ in _autorizacoes(handler)
+    ]
+
+    assert extraidas == [
+        ("MANAGE_JOB_FUNCTIONS_ACCESS", True),
+        ("MANAGE_STAFF_IN_UNIT_ACCESS", False),
+    ]
+    assert all(requisitos[nome].names_unit != nomeia for nome, nomeia in extraidas)
+
+
 def test_ca23_nenhum_modulo_do_adapter_constroi_day_period_diretamente() -> None:
     """`DayPeriod(...)` levanta `ValueError`, que vira 500; `from_string` vira 422.
 
