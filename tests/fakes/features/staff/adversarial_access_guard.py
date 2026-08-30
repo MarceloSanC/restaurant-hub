@@ -27,14 +27,23 @@ reprova. Nenhuma outra propriedade do sistema é medida com ele.
 
 **Os dois modos, e por que são dois** (ADR 3.6.0001 §Decision 5):
 
-- `MODO_UNIDADE_DIVERGENTE` — devolve uma unidade **diferente** da pedida. Mata a
-  mutação `unit_id=scope.unit_id` diretamente: o command carregaria o valor
-  adversarial.
-- `MODO_SEM_UNIDADE` — devolve `None`. Mata a variante `unit_id=scope.unit_id or
-  unit_id`, que sobreviveria ao primeiro modo em qualquer rota onde o escopo
-  divergente ainda fosse *truthy*, e reproduz o caso real do `owner` que faz
-  bypass de escopo de unidade (o escopo volta com `None` sobre uma permissão
-  unit-scoped — ver `AuthorizedScope.unit_id`).
+- `MODO_UNIDADE_DIVERGENTE` — devolve uma unidade **diferente** da pedida. É o
+  modo que carrega a refutação: mata `unit_id=scope.unit_id` **e** a variante
+  `unit_id=scope.unit_id or unit_id`, porque a unidade adversarial é *truthy* e
+  vence o `or`.
+- `MODO_SEM_UNIDADE` — devolve `None`. **Medido: ele não acrescenta nenhuma morte
+  única sobre as duas variantes acima** — a pura já morre no primeiro modo, e a
+  variante `or` **sobrevive** aqui, porque `None` é falsy e o `or` cai de volta no
+  path. A primeira redação deste docstring afirmava o contrário, e a medição do
+  Checkpoint C a refutou.
+
+  **O que justifica mantê-lo é realismo, não poder de refutação, e a distinção
+  importa.** `None` é a forma que a produção realmente devolve para o `owner`,
+  que faz bypass de escopo de unidade: o escopo volta sem unidade sobre uma
+  permissão que é unit-scoped (ver `AuthorizedScope.unit_id`). Exercitar a lei
+  contra essa forma é o que impede que ela fique provada apenas sobre uma forma
+  fabricada. Registrado assim — como razão de desenho, e não como mutação morta —
+  para que ninguém volte a ler poder de refutação onde a medição não achou.
 
 **`_conforms` no fim do arquivo não é enfeite.** `make typecheck` é
 `mypy src/ tests/fakes/`, então a linha põe a conformidade deste dublê com o

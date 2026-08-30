@@ -246,7 +246,7 @@ def test_o_dominio_de_ca15_cobre_as_rotas_de_funcionario_existentes() -> None:
     }
 
 
-def test_o_dubl_adversarial_contradiz_de_proposito_o_fake_sancionado() -> None:
+def test_o_duble_adversarial_contradiz_de_proposito_o_fake_sancionado() -> None:
     """A premissa deste arquivo, escrita como asserção.
 
     Se um dia o dublê passasse a **ecoar** a unidade pedida — por refactor
