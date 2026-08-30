@@ -45,7 +45,7 @@ critério de staff — exatamente o defeito que este módulo existe para não te
 import importlib
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
-from typing import Any, Final
+from typing import Any, Final, get_args, get_origin
 
 import pytest
 from fastapi.routing import APIRoute
@@ -69,6 +69,11 @@ router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")
 
 _DISCRIMINADOR_DE_STAFF: Final = "staff_error"
+
+# Um passo de caminho é o **nome** de um campo ou o **índice** de um elemento de
+# lista. O índice é o que permite corromper um período de `shift_preference` sem
+# desmontar a lista que o carrega.
+Caminho = tuple[str | int, ...]
 
 # As **três** faixas de §6.1 — transcritas do concept, e não colhidas do mapa. O
 # cruzamento com o mapa é o teste abaixo: se os dois lados saíssem da mesma fonte,
@@ -524,6 +529,13 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
 
 _TOTAL_DE_ENTRADAS_DO_MAPA: Final = 18
 
+# O tamanho do domínio de corpo de CA24 **depois** de a varredura descer por
+# lista. Eram dez caminhos; os três novos são um elemento de `job_function_ids`
+# em cada uma das duas rotas que o aceitam e o período de `shift_preference`.
+# A contagem é transcrita, e não derivada: é ela que faz um encolhimento do
+# domínio reprovar em vez de reduzir em silêncio o número de casos rodados.
+_TOTAL_DE_CAMPOS_ESCALARES: Final = 13
+
 
 def test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e() -> None:
     """A totalidade do eixo, e é ela que impede a próxima `EmptyShiftPreferenceError`.
@@ -620,27 +632,63 @@ def _modelos_em(anotacao: object) -> list[type[BaseModel]]:
     return encontrados
 
 
-def _anotacao_no_caminho(modelo: type[BaseModel], caminho: tuple[str, ...]) -> object:
-    """A anotação declarada para um caminho de campos, descendo pelos aninhados."""
-    nome, resto = caminho[0], caminho[1:]
-    campo = modelo.model_fields.get(nome)
-    if campo is None:
-        return None
+def _elemento_de(anotacao: object) -> object:
+    """O tipo do **elemento** de uma anotação de lista, inclusive sob `| None`.
+
+    `shift_preference` é `list[str] | None`: sem descer pela união, o elemento
+    ficaria sem anotação e `_quem_parseia` o classificaria como do framework —
+    exatamente ao contrário do que acontece, já que a lista chega intacta ao
+    router e é `DayPeriod.from_string` quem recusa.
+    """
+    if get_origin(anotacao) is list:
+        argumentos = get_args(anotacao)
+        return argumentos[0] if argumentos else None
+    for argumento in get_args(anotacao):
+        if (encontrado := _elemento_de(argumento)) is not None:
+            return encontrado
+    return None
+
+
+def _descendo(anotacao: object, resto: Caminho) -> object:
+    """A anotação alcançada por um resto de caminho — índice desce por lista."""
     if not resto:
-        return campo.annotation
-    for aninhado in _modelos_em(campo.annotation):
+        return anotacao
+    if isinstance(resto[0], int):
+        return _descendo(_elemento_de(anotacao), resto[1:])
+    for aninhado in _modelos_em(anotacao):
         if resto[0] in aninhado.model_fields:
             return _anotacao_no_caminho(aninhado, resto)
     return None
 
 
-def _escalares(valor: object, prefixo: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
-    """Caminhos até os valores **string** do corpo, descendo pelos aninhados.
+def _anotacao_no_caminho(modelo: type[BaseModel], caminho: Caminho) -> object:
+    """A anotação declarada para um caminho, descendo por aninhados e por listas."""
+    nome, resto = caminho[0], caminho[1:]
+    assert isinstance(nome, str), "o primeiro passo de um caminho é sempre um campo"
+    campo = modelo.model_fields.get(nome)
+    if campo is None:
+        return None
+    return _descendo(campo.annotation, resto)
 
-    Descer é exigência do critério: o concept nomeia `weekly_hours` como o campo
-    *"por onde escapou o 500 do `decimal.InvalidOperation`"*, e ele vive **dentro**
-    da união de perfil de jornada. Uma varredura de primeiro nível o deixaria de fora
-    exatamente no campo que motivou CA24.
+
+def _escalares(valor: object, prefixo: Caminho = ()) -> list[Caminho]:
+    """Caminhos até os valores **string** do corpo, descendo por aninhados e listas.
+
+    Descer por **dicionário** é exigência antiga do critério: o concept nomeia
+    `weekly_hours` como o campo *"por onde escapou o 500 do
+    `decimal.InvalidOperation`"*, e ele vive dentro da união de perfil de jornada.
+
+    Descer por **lista** é a correção de um domínio que excluía elementos justamente
+    onde o critério os nomeia. CA24 diz, na letra, *"todos os campos escalares de
+    todos os `*Request` … o que inclui `weekly_hours` … e os períodos de
+    `shift_preference`"* — e a versão anterior devolvia `[]` para `list`, deixando
+    de fora os períodos de `shift_preference` e os elementos de `job_function_ids`.
+    A assimetria que denunciava: `weekly_hours` tinha guarda dedicada, e o outro
+    campo que o mesmo parágrafo nomeia não tinha nenhuma.
+
+    O passo por lista é o **índice**, e não o nome do campo: é o que permite
+    corromper um elemento mantendo a forma da lista — corromper o campo inteiro
+    produziria um erro de forma do framework em vez do erro que se quer medir.
     """
     if isinstance(valor, str):
         return [prefixo]
@@ -650,19 +698,35 @@ def _escalares(valor: object, prefixo: tuple[str, ...] = ()) -> list[tuple[str, 
             for nome, aninhado in valor.items()
             for caminho in _escalares(aninhado, (*prefixo, str(nome)))
         ]
+    if isinstance(valor, list):
+        return [
+            caminho
+            for indice, item in enumerate(valor)
+            for caminho in _escalares(item, (*prefixo, indice))
+        ]
     return []
 
 
-def _com_valor_em(corpo: dict[str, Any], caminho: tuple[str, ...], valor: str) -> dict[str, Any]:
+def _substituindo(alvo: object, caminho: Caminho, valor: str) -> object:
+    """Copia `alvo` trocando **só** o que o caminho endereça — dicionário ou lista."""
+    passo, resto = caminho[0], caminho[1:]
+    if isinstance(passo, int):
+        assert isinstance(alvo, list), f"índice {passo} sobre {type(alvo).__name__}"
+        copia = list(alvo)
+        copia[passo] = valor if not resto else _substituindo(alvo[passo], resto, valor)
+        return copia
+    assert isinstance(alvo, dict), f"campo {passo!r} sobre {type(alvo).__name__}"
+    return {**alvo, passo: valor if not resto else _substituindo(alvo[passo], resto, valor)}
+
+
+def _com_valor_em(corpo: dict[str, Any], caminho: Caminho, valor: str) -> dict[str, Any]:
     """Copia o corpo trocando **só** o campo do caminho — o resto continua válido."""
-    if len(caminho) == 1:
-        return {**corpo, caminho[0]: valor}
-    aninhado = corpo[caminho[0]]
-    assert isinstance(aninhado, dict)
-    return {**corpo, caminho[0]: _com_valor_em(aninhado, caminho[1:], valor)}
+    resultado = _substituindo(corpo, caminho, valor)
+    assert isinstance(resultado, dict)
+    return resultado
 
 
-def _quem_parseia(chave_da_rota: ChaveDeRota, caminho: tuple[str, ...]) -> str:
+def _quem_parseia(chave_da_rota: ChaveDeRota, caminho: Caminho) -> str:
     """Quem recusa um valor degenerado neste campo: `"staff"` ou `"framework"`.
 
     Um campo declarado `str` chega **intacto** ao router, e é staff quem o converte e
@@ -677,7 +741,7 @@ def _quem_parseia(chave_da_rota: ChaveDeRota, caminho: tuple[str, ...]) -> str:
     return "staff" if _anotacao_no_caminho(modelo, caminho) is str else "framework"
 
 
-def _campos_escalares(chave_da_rota: ChaveDeRota) -> list[tuple[str, ...]]:
+def _campos_escalares(chave_da_rota: ChaveDeRota) -> list[Caminho]:
     corpo = ROTAS[chave_da_rota].body(_RECURSOS_DE_INTROSPECCAO)
     return [] if corpo is None else _escalares(corpo)
 
@@ -752,17 +816,45 @@ def test_os_dominios_derivados_de_ca22_e_ca24_nao_estao_vazios() -> None:
     assert _VALORES_ADVERSARIAIS, "o conjunto adversarial ficou vazio"
 
 
-def test_a_varredura_de_ca24_alcanca_o_campo_aninhado_que_o_criterio_nomeia() -> None:
-    """`weekly_hours` tem de estar no domínio, e é **aninhado**.
+def test_a_varredura_de_ca24_alcanca_os_dois_campos_que_o_criterio_nomeia() -> None:
+    """`weekly_hours` **e** os períodos de `shift_preference` — o parágrafo nomeia os dois.
 
-    O concept o nomeia como o campo por onde escapou o 500 do
-    `decimal.InvalidOperation`. Uma varredura de primeiro nível o deixaria de fora
-    justamente ali, e CA24 ficaria verde sobre o conjunto errado.
+    O primeiro é aninhado dentro da união de perfil de jornada; os segundos são
+    **elementos de lista**, e ficavam de fora porque `_escalares` devolvia `[]`
+    para `list`. A assimetria que denunciava o buraco: um dos dois campos que o
+    critério nomeia tinha guarda dedicada, e o outro não tinha nenhuma.
+
+    A contagem entra junto porque é ela que prova que o domínio **cresceu**: dez
+    caminhos antes de descer por lista, treze depois — os três novos são um
+    elemento de `job_function_ids` em cada uma das duas rotas que o aceitam, e o
+    período de `shift_preference`.
     """
     caminhos = {caminho for _, caminho in _CASOS_DE_CORPO}
 
     assert ("workload_profile", "weekly_hours") in caminhos
     assert ("name",) in caminhos
+    assert ("shift_preference", 0) in caminhos
+    assert ("job_function_ids", 0) in caminhos
+    assert len(_CASOS_DE_CORPO) == _TOTAL_DE_CAMPOS_ESCALARES, sorted(_CASOS_DE_CORPO)
+
+
+def test_os_elementos_de_lista_sao_do_lado_de_staff_no_dominio_de_ca24() -> None:
+    """Elemento de lista é `str` no schema, e por isso a recusa dele é de **staff**.
+
+    É a metade que faz a extensão valer alguma coisa. Se `_elemento_de` não
+    descesse pela união de `list[str] | None`, o período de `shift_preference`
+    entraria no domínio classificado como "framework", e a exigência do corpo de
+    staff — a defesa contra o 422 que não é desta borda — ficaria desligada
+    justamente nos caminhos recém-abertos.
+    """
+    novos = [
+        (chave_da_rota, caminho)
+        for chave_da_rota, caminho in _CASOS_DE_CORPO
+        if any(isinstance(passo, int) for passo in caminho)
+    ]
+
+    assert novos, "nenhum elemento de lista no domínio — a descida por lista sumiu"
+    assert {_quem_parseia(chave_da_rota, caminho) for chave_da_rota, caminho in novos} == {"staff"}
 
 
 def test_a_classificacao_de_quem_parseia_nao_colapsou_para_um_lado_so() -> None:
@@ -830,7 +922,7 @@ async def test_ca24_nenhum_campo_escalar_do_corpo_devolve_500(
     cabecalho: dict[str, str],
     recursos: Recursos,
     chave_da_rota: ChaveDeRota,
-    caminho: tuple[str, ...],
+    caminho: Caminho,
 ) -> None:
     """Aceitar ou recusar são as duas respostas legítimas; quebrar não é.
 
@@ -857,7 +949,10 @@ async def test_ca24_nenhum_campo_escalar_do_corpo_devolve_500(
             body=_com_valor_em(corpo, caminho, valor),
         )
 
-        onde = f"{chave_da_rota[0]} {chave_da_rota[1]} {'.'.join(caminho)}={valor!r}"
+        onde = (
+            f"{chave_da_rota[0]} {chave_da_rota[1]} "
+            f"{'.'.join(str(passo) for passo in caminho)}={valor!r}"
+        )
         assert resposta.status_code < HTTPStatus.INTERNAL_SERVER_ERROR, (
             f"{onde} devolveu {resposta.status_code}: {resposta.text}"
         )
