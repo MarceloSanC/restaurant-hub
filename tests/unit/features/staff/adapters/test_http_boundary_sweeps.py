@@ -843,14 +843,23 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
     # Mesma espécie do eixo de path: um identificador de **unidade** que chega
     # pelo corpo (o `target_unit_id` de R16) é o segundo alvo de autorização, e
     # um valor bem-formado não concedido é negado pelo guard, cru.
+    e_alvo = _e_alvo_de_autorizacao(caminho[-1])
     deve_escapar = (
-        _e_alvo_de_autorizacao(caminho[-1])
+        e_alvo
         and valor not in _ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR
         and valor not in _unidades_concedidas(ambiente)
     )
     try:
         resposta = await _invocar(client, chave_da_rota, body=corpo)
     except FakeAuthorizationRejected as exc:
+        # **O ramo é da espécie, não da rota.** A primeira versão capturava a
+        # sentinela para qualquer campo, e com isso um `authorize` disparado a
+        # partir de um campo que **não** é alvo — `name`, texto livre do cliente
+        # — passava em silêncio, quando é justamente o defeito a acusar.
+        assert e_alvo, (
+            f"{chave_da_rota[1]}: a sentinela do guard escapou de {'.'.join(caminho)}, "
+            "que não é identificador de unidade — a rota autorizou contra um campo arbitrário"
+        )
         assert exc is ambiente.guard.authorization_error, (
             f"{chave_da_rota[1]}: a recusa do guard foi traduzida em outra exceção (L-AG2)"
         )

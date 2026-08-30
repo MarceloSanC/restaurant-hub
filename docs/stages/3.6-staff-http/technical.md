@@ -1205,77 +1205,77 @@ create two behaviours for the same class of request across the API"*; o **mesmo
 ADR**, `## Decision` 1 - e o concept CA06, que o cita - exige que
 `{"type":"on_demand","weekly_hours":"40"}` receba **422**. Sem `forbid`, o
 Pydantic ignora o campo e a resposta e **200**: metade da `Decision` 1 e
-inalcancavel. Medido por mutacao no Checkpoint C - trocar `forbid` por `ignore`
+inalcançável. Medido por mutação no Checkpoint C - trocar `forbid` por `ignore`
 derruba CA06.
 
-**Pergunta:** aceitar a instrucao literal (e deixar CA06 sem trava) ou estreitar
-o alcance dela ao nivel em que o dano que ela nomeia se realiza?
+**Pergunta:** aceitar a instrução literal (e deixar CA06 sem trava) ou estreitar
+o alcance dela ao nível em que o dano que ela nomeia se realiza?
 
-**Opcoes:**
-- A - Seguir a instrucao literal: nenhum `extra="forbid"`, e CA06 vira criterio
-  sem teste possivel. Reprova o proprio ADR que a instrucao serve.
+**Opções:**
+- A - Seguir a instrução literal: nenhum `extra="forbid"`, e CA06 vira critério
+  sem teste possível. Reprova o próprio ADR que a instrução serve.
 - B - `extra="forbid"` em **todos** os schemas, de topo e aninhados. Realiza
-  exatamente o dano que a instrucao nomeia: um `tenant_id` enviado no corpo
-  passaria a receber 422 em vez de ser desarmado em silencio, e a borda de staff
+  exatamente o dano que a instrução nomeia: um `tenant_id` enviado no corpo
+  passaria a receber 422 em vez de ser desarmado em silêncio, e a borda de staff
   divergiria da de identity na mesma classe de request.
 - C - `extra="forbid"` **so** nas duas variantes aninhadas da uniao de perfil de
   jornada, mantendo o `ignore` default nos nove `*Request` de topo. ✅ recomendada
 
-**Decisao:** C.
+**Decisão:** C.
 
-**Razao:** o campo extra que a instrucao protege e o campo **desconhecido** do
+**Razão:** o campo extra que a instrução protege e o campo **desconhecido** do
 request - e o desarme dele continua intacto: verificado em runtime que
-`CreateEmployeeRequest(..., tenant_id="ATACANTE")` descarta o campo em silencio,
-como os requests de identity. Ja o `weekly_hours` dentro de
-`{"type": "on_demand"}` nao e campo desconhecido a desarmar: e **o estado
-invalido** que a uniao discriminada existe para tornar irrepresentavel, e
+`CreateEmployeeRequest(..., tenant_id="ATACANTE")` descarta o campo em silêncio,
+como os requests de identity. Já o `weekly_hours` dentro de
+`{"type": "on_demand"}` não e campo desconhecido a desarmar: e **o estado
+invalido** que a uniao discriminada existe para tornar irrepresentável, e
 Decision 1 lhe atribui 422 nominalmente. Ignora-lo entregaria ao cliente uma
 jornada diferente da que ele pediu.
 
-**Registro no ADR:** a instrucao foi estreitada para *"top-level request
+**Registro no ADR:** a instrução foi estreitada para *"top-level request
 models"* por **errata** no ADR 3.6.0003 (`## Errata`, 2026-08-29), com o alcance
 do `forbid` medido e declarado. Sem esse registro, quem lesse o ADR ao pe da
 letra removeria o `forbid` e derrubaria CA06 sem entender por que.
 
 ### 2026-08-29 - [decision] test_http_boundary_sweeps.py (Task 05) - Marcelo
 
-**Contexto:** o plano descreve `_INVOCACOES` como um mapa **dentro** do modulo de
+**Contexto:** o plano descreve `_INVOCACOES` como um mapa **dentro** do módulo de
 varreduras. Escrito assim, toda Task que acrescenta rota (06, 07, 08) teria de
-editar `test_http_boundary_sweeps.py` para declarar a invocacao da rota nova —
-arquivo que **nao esta** na lista de nenhuma delas. A Task 06 e' o caso agudo: ela
-acrescenta quatro rotas, o seu comando de verificacao roda as varreduras, e a
-assercao de totalidade (`set(_INVOCACOES) == {chave(r) for r in router.routes}`)
-ficaria vermelha sem a edicao — isto e', o gate "nao avancar sem verificacao
-verde" seria insatisfazivel dentro do escopo declarado.
+editar `test_http_boundary_sweeps.py` para declarar a invocação da rota nova —
+arquivo que **não esta** na lista de nenhuma delas. A Task 06 é o caso agudo: ela
+acrescenta quatro rotas, o seu comando de verificação roda as varreduras, e a
+asserção de totalidade (`set(_INVOCACOES) == {chave(r) for r in router.routes}`)
+ficaria vermelha sem a edição — isto é, o gate "não avancar sem verificação
+verde" seria insatisfazível dentro do escopo declarado.
 
-**Pergunta:** onde a declaracao de invocacao de cada rota deve morar?
+**Pergunta:** onde a declaração de invocação de cada rota deve morar?
 
-**Opcoes:**
-- A - Mapa literal no modulo de varreduras, editado por cada Task de rota. Fiel a
+**Opções:**
+- A - Mapa literal no módulo de varreduras, editado por cada Task de rota. Fiel a
   letra do plano, mas poe cada Task para tocar arquivo fora da sua lista.
-- B - Uma invocacao **derivada** da rota (corpo montado por introspeccao do
-  schema). Elimina a declaracao — e com ela a trava: a fixture existe justamente
-  para que a Task **declare** como a rota e' invocada, e um corpo gerado seria uma
-  segunda implementacao do schema, capaz de concordar com um router errado.
-- C - Cada modulo `test_http_router_*` exporta o seu proprio `INVOCACOES`, e o
-  modulo de varreduras os **colhe do pacote** por `pkgutil`. ✅ recomendada
+- B - Uma invocação **derivada** da rota (corpo montado por introspecção do
+  schema). Elimina a declaração — e com ela a trava: a fixture existe justamente
+  para que a Task **declare** como a rota é invocada, e um corpo gerado seria uma
+  segunda implementação do schema, capaz de concordar com um router errado.
+- C - Cada módulo `test_http_router_*` exporta o seu próprio `INVOCACOES`, e o
+  módulo de varreduras os **colhe do pacote** por `pkgutil`. ✅ recomendada
 
-**Decisao:** C.
+**Decisão:** C.
 
-**Razao:** e' a mesma disciplina de "derivar o dominio do codigo" que a §1 do
+**Razão:** é a mesma disciplina de "derivar o domínio do código" que a §1 do
 plano usa para `router.routes`, `StaffError.__subclasses__` e `model_fields`,
 aplicada ao arranjo dos testes. A propriedade que a fixture protege fica
-**identica** — a assercao de totalidade e' preservada literalmente, e rota sem
-declaracao continua reprovando —, mas a declaracao passa a morar no arquivo da
-Task que escreveu a rota, que e' onde o plano ja diz que ela pertence
+**identica** — a asserção de totalidade é preservada literalmente, e rota sem
+declaração continua reprovando —, mas a declaração passa a morar no arquivo da
+Task que escreveu a rota, que é onde o plano já diz que ela pertence
 conceitualmente ("obriga a Task que escreve uma rota nova a declarar como
 invoca-la"). Efeito colateral desejado: as Tasks 06, 07 e 08 deixam de precisar
-tocar o modulo de varreduras, e as suas listas de arquivos ficam corretas como
+tocar o módulo de varreduras, e as suas listas de arquivos ficam corretas como
 escritas.
 
-**Mesma forma, mesma razao, para o wiring de use case.** `Ambiente` monta os
+**Mesma forma, mesma razão, para o wiring de use case.** `Ambiente` monta os
 `dependency_overrides` por reflexao sobre os provedores `_get_*` do router (a
-anotacao de retorno nomeia a classe do use case; os 16 construtores pedem apenas
+anotação de retorno nomeia a classe do use case; os 16 construtores pedem apenas
 `employees`, `job_functions` e `id_generator`). Sem isso, cada Task de rota teria
 de editar o ambiente de teste pelo mesmo motivo — e pela mesma via.
 
@@ -1284,233 +1284,233 @@ de editar o ambiente de teste pelo mesmo motivo — e pela mesma via.
 **Contexto:** o eixo de **path** de CA20 exige enviar `"   "` e `"\x00"` num
 segmento de URL. Medido: `httpx` **recusa montar** a URL com o caractere cru
 (`InvalidURL: Invalid non-printable ASCII character ... at position 22`), entao o
-teste falharia no cliente antes de alcancar a rota.
+teste falharia no cliente antes de alcançar a rota.
 
-**Ajuste:** os parametros de path sao percent-encoded (`urllib.parse.quote`) antes
-de montar a URL. Nao e' contorno de teste: e' como o caso chega em producao — o
-concept nomeia literalmente `GET /units/%00/employees`, e um cliente HTTP nao tem
+**Ajuste:** os parâmetros de path são percent-encoded (`urllib.parse.quote`) antes
+de montar a URL. Não é contorno de teste: é como o caso chega em produção — o
+concept nomeia literalmente `GET /units/%00/employees`, e um cliente HTTP não tem
 outra forma de por um NUL num path. O Starlette decodifica antes de entregar o
-parametro ao handler, que e' exatamente o caminho que o validador fecha. Nenhum
-criterio muda; o que muda e' a forma de exercita-lo, e ela ficou **mais** fiel.
+parâmetro ao handler, que é exatamente o caminho que o validador fecha. Nenhum
+critério muda; o que muda é a forma de exercita-lo, e ela ficou **mais** fiel.
 
 ### 2026-08-29 - [deviation] test_http_router_job_functions.py (Task 05) - Marcelo
 
 **Contexto:** a app minima dos testes de rota registrava apenas
 `register_staff_error_handlers`. Com isso o 422 do `RequestValidationError` sai
-com o corpo **default** do FastAPI, que nao tem a chave `type` — e asserir
-`type == "staff_error"` passava por `KeyError` evitado, nao por diferenca de
+com o corpo **default** do FastAPI, que não tem a chave `type` — e asserir
+`type == "staff_error"` passava por `KeyError` evitado, não por diferença de
 origem.
 
-**Ajuste:** o ambiente passa a registrar tambem o `register_error_handlers` de
-`shared`, na mesma ordem que `create_app` usa (genericos primeiro, de feature
+**Ajuste:** o ambiente passa a registrar também o `register_error_handlers` de
+`shared`, na mesma ordem que `create_app` usa (genéricos primeiro, de feature
 depois). E' o que da ao ambiente as **duas** origens de 422 que a app real tem, e
 portanto o que torna o discriminador de corpo uma trava de verdade em vez de uma
-asserção sobre ausencia de chave.
+asserção sobre ausência de chave.
 
 ### 2026-08-29 - [decision] test_http_boundary_sweeps.py (Task 06) - Marcelo
 
-**Contexto:** com as quatro rotas de funcionario, o eixo de **path** de CA24
-passou a incluir `unit_id`, e onze casos ficaram vermelhos. A causa nao e' defeito
-do router: para um `unit_id` de **formato valido** que o ator nao tem concedido,
-o `InMemoryAccessGuard` levanta a sua propria sentinela, que nao e' `StaffError`
-nem `IdentityError` e nao tem handler na app minima dos testes unitarios.
+**Contexto:** com as quatro rotas de funcionário, o eixo de **path** de CA24
+passou a incluir `unit_id`, e onze casos ficaram vermelhos. A causa não é defeito
+do router: para um `unit_id` de **formato válido** que o ator não tem concedido,
+o `InMemoryAccessGuard` levanta a sua própria sentinela, que não é `StaffError`
+nem `IdentityError` e não tem handler na app minima dos testes unitários.
 
-**Pergunta:** o que CA24 deve exigir quando o identificador de path e' o **alvo de
-autorizacao**?
+**Pergunta:** o que CA24 deve exigir quando o identificador de path é o **alvo de
+autorização**?
 
-**Opcoes:**
-- A - Manter a exigencia de resposta HTTP com status < 500. Obrigaria a conceder
-  no fake toda unidade do conjunto adversarial, isto e', a montar o cenario para
-  que a assercao passe — e o que passaria a ser medido seria a montagem.
-- B - Tirar `unit_id` do eixo de CA24. Perde cobertura real: e' justamente o
-  parametro por onde o NUL produzia 500 **dentro de identity**.
-- C - Reconhecer os **dois** desfechos legitimos por especie de parametro, e
-  asserir a **identidade** do objeto levantado quando o desfecho e' a recusa do
+**Opções:**
+- A - Manter a exigência de resposta HTTP com status < 500. Obrigaria a conceder
+  no fake toda unidade do conjunto adversarial, isto é, a montar o cenário para
+  que a asserção passe — e o que passaria a ser medido seria a montagem.
+- B - Tirar `unit_id` do eixo de CA24. Perde cobertura real: é justamente o
+  parâmetro por onde o NUL produzia 500 **dentro de identity**.
+- C - Reconhecer os **dois** desfechos legítimos por espécie de parâmetro, e
+  asserir a **identidade** do objeto levantado quando o desfecho é a recusa do
   guard. ✅ recomendada
 
-**Decisao:** C.
+**Decisão:** C.
 
-**Razao — e a razao e' erro de categoria, nao afrouxamento.** Os parametros de
-path deste inventario sao de duas especies. `job_function_id` e `employee_id`
-entram num command e a resposta e' HTTP: ali a assercao continua sendo sobre o
-**status**, intacta. `unit_id` e' o **alvo de autorizacao**: um valor bem-formado
-que o ator nao tem concedido **passa** pelo validador de identificador — ele e'
-bem-formado, e a peca que recusaria e' outra — e e' negado pelo **guard**. Exigir
-422 ali mede a peca errada: o validador nao tem por que recusar um identificador
-valido, e quem nega e' a autorizacao.
+**Razão — e a razão é erro de categoria, não afrouxamento.** Os parâmetros de
+path deste inventário são de duas espécies. `job_function_id` e `employee_id`
+entram num command e a resposta é HTTP: ali a asserção continua sendo sobre o
+**status**, intacta. `unit_id` é o **alvo de autorização**: um valor bem-formado
+que o ator não tem concedido **passa** pelo validador de identificador — ele é
+bem-formado, e a peça que recusaria é outra — e é negado pelo **guard**. Exigir
+422 ali mede a peça errada: o validador não tem por que recusar um identificador
+válido, e quem nega é a autorização.
 
-**Correcao de 2026-08-29, medida pelo Checkpoint C.** A primeira redacao desta
-entrada dizia que a assercao nova era *"estritamente mais forte que a antiga"*.
-**E' falso, e foi refutado por contra-teste.** O enunciado honesto e' outro, e
-tem tres partes:
+**Correção de 2026-08-29, medida pelo Checkpoint C.** A primeira redação desta
+entrada dizia que a asserção nova era *"estritamente mais forte que a antiga"*.
+**E' falso, e foi refutado por contra-teste.** O enunciado honesto é outro, e
+tem três partes:
 
-1. **A antiga era insatisfazivel na especie `unit_id`** — contra um router
-   **correto**, a sentinela escapa, nao ha resposta nenhuma, e onze casos ficavam
-   vermelhos sem defeito algum. Isso nao e' forca, e' falso positivo.
-2. **A nova pega traducao-em-excecao**: `exc is guard.authorization_error` exige
+1. **A antiga era insatisfazível na espécie `unit_id`** — contra um router
+   **correto**, a sentinela escapa, não ha resposta nenhuma, e onze casos ficavam
+   vermelhos sem defeito algum. Isso não é forca, é falso positivo.
+2. **A nova pega tradução-em-exceção**: `exc is guard.authorization_error` exige
    identidade de objeto, e um adapter que capturasse e relancasse um erro **novo
-   do mesmo tipo** falha aqui. *(Medido: a assercao de status tambem ficaria
-   vermelha nesse caso, porque a excecao continua escapando e nao ha resposta —
-   entao a identidade **nao discrimina** neste contra-teste.)*
-3. **A traducao-em-resposta era a fresta, e ficou aberta ate agora.** Capturar a
-   recusa e devolver `HTTPException(403)` sobrevivia: sem excecao, o teste caia
-   no ramo de status, e `403 < 500` aceitava exatamente a traducao que o
+   do mesmo tipo** falha aqui. *(Medido: a asserção de status também ficaria
+   vermelha nesse caso, porque a exceção continua escapando e não ha resposta —
+   entao a identidade **não discrimina** neste contra-teste.)*
+3. **A tradução-em-resposta era a fresta, e ficou aberta até agora.** Capturar a
+   recusa e devolver `HTTPException(403)` sobrevivia: sem exceção, o teste caia
+   no ramo de status, e `403 < 500` aceitava exatamente a tradução que o
    docstring dizia proibir. Medido pelo Checkpoint C: **447/447 e 1611/1611
-   verdes** com a traducao viva.
+   verdes** com a tradução viva.
 
-**O que se fez a respeito, no mesmo commit desta correcao:** para a especie
-`unit_id` com valor bem-formado e unidade **nao concedida**, o teste passou a
-exigir que a sentinela **tenha** escapado (`pytest.fail` no ramo sem excecao).
+**O que se fez a respeito, no mesmo commit desta correção:** para a espécie
+`unit_id` com valor bem-formado e unidade **não concedida**, o teste passou a
+exigir que a sentinela **tenha** escapado (`pytest.fail` no ramo sem exceção).
 Com isso o conjunto-vermelho da nova deixa de ser subconjunto do da antiga: ela
-cobre as **duas** traducoes que L-AG2 proibe, e a antiga cobria uma so. Provado
-por mutacao — o CT2 aplicado ao router derruba **11** casos, contra 447/447
+cobre as **duas** traduções que L-AG2 proibe, e a antiga cobria uma so. Provado
+por mutação — o CT2 aplicado ao router derruba **11** casos, contra 447/447
 verdes antes.
 
-**O que continua fora do alcance deste ambiente, e por isso nao e' prometido
-aqui:** a **forma HTTP** da recusa em producao — o 403 de corpo constante do
-handler de identity. Essa e' CA09/CA11, na Task 11, com a app real montada.
+**O que continua fora do alcance deste ambiente, e por isso não é prometido
+aqui:** a **forma HTTP** da recusa em produção — o 403 de corpo constante do
+handler de identity. Essa é CA09/CA11, na Task 11, com a app real montada.
 
-**Precedente no proprio plano.** A Task 05 ja declara o mesmo limite para CA08 —
-*"o fake levanta a sua propria sentinela, que **nao** e' `IdentityError` e nao tem
+**Precedente no próprio plano.** A Task 05 já declara o mesmo limite para CA08 —
+*"o fake levanta a sua própria sentinela, que **não** é `IdentityError` e não tem
 handler. A propriedade depende do handler de identity registrado sobre a app, e
-por isso vive no e2e (Task 11)"*. Em producao a recusa e' 403 de corpo constante,
-e e' a Task 11 que a mede.
+por isso vive no e2e (Task 11)"*. Em produção a recusa é 403 de corpo constante,
+e é a Task 11 que a mede.
 
 ### 2026-08-29 - [deviation] escopo da Task 06 - Marcelo
 
 **Contexto:** a Task 06 declara `Arquivos a modificar: router.py`. Com as quatro
 rotas novas, `test_http_boundary_sweeps.py` e
 `test_http_router_job_functions.py` — **ambos da Task 05** — ficaram com 16
-falhas, e nenhuma delas e' defeito do router: cinco pela lista literal
+falhas, e nenhuma delas é defeito do router: cinco pela lista literal
 `_INVENTARIO_DE_ROTAS` ter quatro entradas contra oito rotas, e onze pelo erro de
-categoria de CA24 registrado na entrada acima. Sem toca-los, o gate "nao avancar
-sem verificacao verde" e' insatisfazivel dentro do escopo declarado — e o comando
-de verificacao da propria Task 06 roda o modulo de varreduras.
+categoria de CA24 registrado na entrada acima. Sem toca-los, o gate "não avancar
+sem verificação verde" é insatisfazível dentro do escopo declarado — e o comando
+de verificação da própria Task 06 roda o módulo de varreduras.
 
 **Ajuste, autorizado explicitamente antes de ser feito:** a Task 06 tocou os dois
-arquivos para (i) dobrar o status de sucesso do §4.1 **dentro** da declaracao
-`INVOCACOES` de cada modulo de rota, aposentando `_INVENTARIO_DE_ROTAS`, e (ii)
-aplicar a correcao do CA24. A alternativa — estender a lista literal a cada Task
+arquivos para (i) dobrar o status de sucesso do §4.1 **dentro** da declaração
+`INVOCACOES` de cada módulo de rota, aposentando `_INVENTARIO_DE_ROTAS`, e (ii)
+aplicar a correção do CA24. A alternativa — estender a lista literal a cada Task
 — foi recusada pelo eixo que esta Stage inteira defende: uma lista que cada Task
 futura precisa **lembrar** de estender reinstala a familia *"lei universal,
-representante estreito"* no proprio instrumento que existe para mata-la.
+representante estreito"* no próprio instrumento que existe para mata-la.
 
-**O que NAO se perdeu, e a verificacao disso.** A transcricao do §4.1 continua
-**manual** (o campo `sucesso`, escrito por quem leu a tabela do concept) e nao
-derivada de `rota.status_code` — derivar provaria so que o codigo concorda
-consigo mesmo. A totalidade continua sendo o que trava o inventario: uma rota
-plantada sem declaracao reprova **quatro** testes, entre eles os dois de
-totalidade. Verificado por mutacao real, com a saida no relatorio da Task.
+**O que NÃO se perdeu, e a verificação disso.** A transcrição do §4.1 continua
+**manual** (o campo `sucesso`, escrito por quem leu a tabela do concept) e não
+derivada de `rota.status_code` — derivar provaria so que o código concorda
+consigo mesmo. A totalidade continua sendo o que trava o inventário: uma rota
+plantada sem declaração reprova **quatro** testes, entre eles os dois de
+totalidade. Verificado por mutação real, com a saida no relatório da Task.
 
-**Precedente no plano:** a Task 07 ja sanciona a edicao analoga — *"a unica edicao
-de teste permitida e' acrescentar a chave das cinco rotas novas ao
-`_INVOCACOES`"*. A permissao existia; faltava na Task 06. Com a mudanca (i), as
-Tasks 07 e 08 deixam de precisar dela: as suas declaracoes moram nos seus
-proprios modulos.
+**Precedente no plano:** a Task 07 já sanciona a edição analoga — *"a única edição
+de teste permitida é acrescentar a chave das cinco rotas novas ao
+`_INVOCACOES`"*. A permissao existia; faltava na Task 06. Com a mudança (i), as
+Tasks 07 e 08 deixam de precisar dela: as suas declarações moram nos seus
+próprios módulos.
 
 ### 2026-08-29 - [decision] test_http_boundary_sweeps.py (Task 07) - Marcelo
 
 **Contexto:** com R09 e R11, o eixo de corpo de CA24 passou a incluir campos que
-o **framework** parseia (`start`/`end` sao `datetime`) e um campo escalar
+o **framework** parseia (`start`/`end` são `datetime`) e um campo escalar
 **aninhado** (`weekly_hours`, dentro da uniao de perfil de jornada). Dois
 problemas apareceram de uma vez: 22 casos vermelhos exigindo corpo de staff onde
-a recusa e' legitimamente de forma, e o campo que o proprio concept nomeia como
+a recusa é legitimamente de forma, e o campo que o próprio concept nomeia como
 *"por onde escapou o 500 do `decimal.InvalidOperation`"* ficando **fora** do
-dominio, porque a varredura so olhava o primeiro nivel.
+domínio, porque a varredura so olhava o primeiro nível.
 
-**Pergunta:** a assercao sobre a **origem** do 422 vale para todo campo escalar?
+**Pergunta:** a asserção sobre a **origem** do 422 vale para todo campo escalar?
 
-**Opcoes:**
-- A - Sim, e ajustar as invocacoes para que `start`/`end` nunca recebam lixo.
-  Tira do dominio justamente os valores que CA24 existe para varrer.
-- B - Nao, e largar a assercao de origem no eixo de corpo inteiro. Perde a trava
-  que distingue "o dominio recusou o conteudo" de "o framework recusou a forma" —
-  que e' a razao de o discriminador existir.
+**Opções:**
+- A - Sim, e ajustar as invocações para que `start`/`end` nunca recebam lixo.
+  Tira do domínio justamente os valores que CA24 existe para varrer.
+- B - Não, e largar a asserção de origem no eixo de corpo inteiro. Perde a trava
+  que distingue "o domínio recusou o conteudo" de "o framework recusou a forma" —
+  que é a razão de o discriminador existir.
 - C - Classificar por **quem parseia o campo**: `str` no schema chega intacto ao
-  router e a recusa e' de staff; `datetime`/`bool` sao parseados pelo framework
-  antes do handler, e ali `validation_error` e' a resposta correta. ✅ recomendada
+  router e a recusa é de staff; `datetime`/`bool` são parseados pelo framework
+  antes do handler, e ali `validation_error` é a resposta correta. ✅ recomendada
 
-**Decisao:** C, mais a descida ate o campo aninhado.
+**Decisão:** C, mais a descida até o campo aninhado.
 
-**Razao:** e' o **mesmo** erro de categoria que a entrada do CA24/path ja
+**Razão:** é o **mesmo** erro de categoria que a entrada do CA24/path já
 registrou para `unit_id`, na sua forma de corpo. Exigir corpo de staff num campo
-que staff nunca chega a ver seria exigir que ele assumisse uma recusa que nao e'
-dele; e o caso em que staff **e'** responsavel por um `datetime` — o valor
+que staff nunca chega a ver seria exigir que ele assumisse uma recusa que não é
+dele; e o caso em que staff **é** responsável por um `datetime` — o valor
 bem-formado com `Z`, que `UnavailabilityPeriod` recusa — continua exigido, com
-corpo de staff, em teste dedicado no modulo de rota.
+corpo de staff, em teste dedicado no módulo de rota.
 
-**A classificacao tem guarda propria.** `_quem_parseia` decide se a exigencia do
+**A classificação tem guarda própria.** `_quem_parseia` decide se a exigência do
 corpo se aplica; um bug que a fizesse devolver sempre `"framework"` desligaria
-essa metade de CA24 em silencio. Ha teste exigindo que as **duas** especies
-existam no dominio varrido, e outro exigindo que `("workload_profile",
-"weekly_hours")` esteja entre os caminhos — a licao do guarda tautologico do eixo
+essa metade de CA24 em silêncio. Ha teste exigindo que as **duas** espécies
+existam no domínio varrido, e outro exigindo que `("workload_profile",
+"weekly_hours")` esteja entre os caminhos — a lição do guarda tautologico do eixo
 de corpo, aplicada antes de o revisor precisar apontar.
 
 ### 2026-08-29 - [deviation] escopo da Task 07 - Marcelo
 
-**Contexto:** o Checkpoint C do bloco 2 abriu tres achados que pedem edicao de
-`test_http_boundary_sweeps.py` (arquivo da Task 05), e a coordenacao autorizou
+**Contexto:** o Checkpoint C do bloco 2 abriu três achados que pedem edição de
+`test_http_boundary_sweeps.py` (arquivo da Task 05), e a coordenação autorizou
 absorve-los aqui:
 
-- **F3** - CA21 estava travado **so** no eixo de path. Medido: mover a validacao
+- **F3** - CA21 estava travado **so** no eixo de path. Medido: mover a validação
   dos ids do **corpo** para depois de `guard.authorize` em `create_employee`
-  deixava a suite inteira verde. O ADR 3.6.0002 §3 enuncia a ordem para *"path,
-  query string, or body"*, e o corpo e' onde o valor cru chega mais longe — cada
+  deixava a suíte inteira verde. O ADR 3.6.0002 §3 enuncia a ordem para *"path,
+  query string, or body"*, e o corpo é onde o valor cru chega mais longe — cada
   elemento de `job_function_ids` vai para `find_all_by_ids` antes da entidade.
-  CA21 passou a ser parametrizado tambem sobre `_CASOS_DE_CORPO`; a mutacao agora
+  CA21 passou a ser parametrizado também sobre `_CASOS_DE_CORPO`; a mutação agora
   derruba 3 casos.
 - **F4** - o guarda do eixo de corpo era tautologia (os dois lados derivavam do
   mesmo helper, entao esvazia-lo deixava o teste verde). Passou a exigir
   `_CASOS_DE_CORPO` sem condicional. *(Fechado no commit de F1.)*
-- **F5** - o eixo de **query** nao existia nem como ausencia declarada, embora
+- **F5** - o eixo de **query** não existia nem como ausência declarada, embora
   CA24 o nomeie e R06/R12 tenham query desde a Task 06. Foi criado, com a mesma
-  distincao de responsabilidade da entrada acima; e a ausencia do eixo de query de
-  **CA20** — nenhum parametro de query e' identificador hoje — ficou **declarada**
+  distinção de responsabilidade da entrada acima; e a ausência do eixo de query de
+  **CA20** — nenhum parâmetro de query é identificador hoje — ficou **declarada**
   por teste que fica vermelho no dia em que um `*_id` chegar por query.
 
-**Razao de estarem aqui e nao numa Task propria:** os tres sao sobre eixos que
-esta Task e' a primeira a povoar de verdade (corpo com id, query com parametro), e
+**Razão de estarem aqui e não numa Task própria:** os três são sobre eixos que
+esta Task é a primeira a povoar de verdade (corpo com id, query com parâmetro), e
 separa-los produziria um commit que so faz sentido lido junto deste.
 
 ### 2026-08-29 - [deviation] escopo da Task 08 - Marcelo
 
-**Contexto — e este NAO teve autorizacao previa; esta registrado para ser
-revertido barato se a coordenacao discordar.** R16 e' a unica rota do BC que
+**Contexto — e este NÃO teve autorização previa; esta registrado para ser
+revertido barato se a coordenação discordar.** R16 é a única rota do BC que
 autoriza **dois** alvos, e o segundo chega pelo **corpo**. Duas premissas das
 varreduras foram escritas quando toda rota tinha exatamente um alvo, e ficaram
 vermelhas contra um router correto (12 casos):
 
-1. **CA24, eixo de corpo** — `target_unit_id` e' alvo de autorizacao, entao um
-   valor bem-formado nao concedido e' negado pelo **guard**, cru, e nao ha
-   resposta HTTP. E' literalmente a mesma especie que o eixo de path ja trata
-   para `unit_id`, e a correcao e' a mesma: a especie do identificador decide a
-   assercao, e a exigencia de que a sentinela **escape** fecha a
-   traducao-em-resposta tambem aqui.
-2. **CA15, alvos do guard** — o teste exigia que **toda** autorizacao nomeasse a
-   unidade do path. R16 autoriza origem **e** destino, e a segunda chamada e'
-   L-AG4 aplicada (o proprio CA16 a exige). A assercao passou a ser: a
-   **primeira** autorizacao e' a da origem — que e' o que a lei nomeia — e todo
-   alvo adicional tem de vir do corpo **declarado** da invocacao, de modo que uma
-   autorizacao sobre alvo nao declarado continue reprovando.
+1. **CA24, eixo de corpo** — `target_unit_id` é alvo de autorização, entao um
+   valor bem-formado não concedido é negado pelo **guard**, cru, e não ha
+   resposta HTTP. E' literalmente a mesma espécie que o eixo de path já trata
+   para `unit_id`, e a correção é a mesma: a espécie do identificador decide a
+   asserção, e a exigência de que a sentinela **escape** fecha a
+   tradução-em-resposta também aqui.
+2. **CA15, alvos do guard** — o teste exigia que **toda** autorização nomeasse a
+   unidade do path. R16 autoriza origem **e** destino, e a segunda chamada é
+   L-AG4 aplicada (o próprio CA16 a exige). A asserção passou a ser: a
+   **primeira** autorização é a da origem — que é o que a lei nomeia — e todo
+   alvo adicional tem de vir do corpo **declarado** da invocação, de modo que uma
+   autorização sobre alvo não declarado continue reprovando.
 
-**Por que nao e' afrouxamento:** nenhuma das duas remove exigencia; as duas
-trocam uma exigencia **impossivel para a rota correta** por outra que distingue o
-caso legitimo do defeito. E as duas ganharam guarda propria contra colapso
-silencioso — `test_os_alvos_de_autorizacao_sao_exatamente_os_de_hoje` declara
-quais identificadores sao alvo de acesso, e a assercao de alvo adicional cobra a
-declaracao no corpo.
+**Por que não é afrouxamento:** nenhuma das duas remove exigência; as duas
+trocam uma exigência **impossível para a rota correta** por outra que distingue o
+caso legítimo do defeito. E as duas ganharam guarda própria contra colapso
+silencioso — `test_os_alvos_de_autorização_são_exatamente_os_de_hoje` declara
+quais identificadores são alvo de acesso, e a asserção de alvo adicional cobra a
+declaração no corpo.
 
-**Por que segui sem perguntar, tendo parado antes:** a classe ja foi decidida
-duas vezes nesta Stage — a coordenacao autorizou editar as varreduras para
-acomodar rotas novas (opcao A) e para absorver F3/F5 na Task 07. Este e' o mesmo
-arquivo, pela mesma razao (rota nova revela premissa da varredura), e parar de
-novo custaria uma terceira ida e volta sobre a mesma questao ja respondida. Fica
-declarado como **decisao minha**, e nao como autorizacao recebida.
+**Por que segui sem perguntar, tendo parado antes:** a classe já foi decidida
+duas vezes nesta Stage — a coordenação autorizou editar as varreduras para
+acomodar rotas novas (opção A) e para absorver F3/F5 na Task 07. Este é o mesmo
+arquivo, pela mesma razão (rota nova revela premissa da varredura), e parar de
+novo custaria uma terceira ida e volta sobre a mesma questao já respondida. Fica
+declarado como **decisão minha**, e não como autorização recebida.
 
-**Nota de metodo, aprendida na hora:** uma das reversoes de mutacao usou como
-ancora uma linha que aparece em **12** rotas, e a reversao falhou deixando o
-router sem a segunda chamada do guard. Detectado por inspecao antes do commit.
-Ancora de reversao tem de ser tao unica quanto a de aplicacao — e a conferencia
-pos-mutacao nao e' zelo, e' o que separa medir de estragar.
+**Nota de metodo, aprendida na hora:** uma das reversoes de mutação usou como
+âncora uma linha que aparece em **12** rotas, e a reversao falhou deixando o
+router sem a segunda chamada do guard. Detectado por inspeção antes do commit.
+Âncora de reversao tem de ser tao única quanto a de aplicação — e a conferência
+pos-mutação não é zelo, é o que separa medir de estragar.
 
 <!-- END: post-execution -->

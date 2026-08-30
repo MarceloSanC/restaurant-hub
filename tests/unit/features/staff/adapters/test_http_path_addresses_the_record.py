@@ -58,7 +58,12 @@ from tests.fakes.features.staff.adversarial_access_guard import (
     AdversarialAccessGuard,
     ModoAdversarial,
 )
-from tests.unit.features.staff.adapters.test_http_boundary_sweeps import _INVOCACOES, chave
+from tests.unit.features.staff.adapters.test_http_boundary_sweeps import (
+    _INVOCACOES,
+    _e_alvo_de_autorizacao,
+    _schema_do_corpo,
+    chave,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -212,6 +217,28 @@ async def test_ca15_a_unidade_do_use_case_e_a_do_path(
     assert comando.unit_id != UNIDADE_ADVERSARIAL
 
 
+def _alvos_de_unidade_declarados(rota: APIRoute) -> set[str]:
+    """Valores do corpo que a rota declara como **identificador de unidade**.
+
+    Cruza duas fontes que já existem, em vez de aceitar o corpo inteiro: os
+    campos de identificador vêm de `identifier_fields` (introspecção dos
+    schemas), e a espécie "alvo de autorização" vem de `_e_alvo_de_autorizacao`
+    — a mesma regra que CA24 usa para decidir quem nega um valor bem-formado.
+    Um campo de texto livre como `name` não passa por nenhuma das duas.
+    """
+    invocacao = _INVOCACOES[chave(rota)]
+    if invocacao.body is None:
+        return set()
+    modelo = _schema_do_corpo(chave(rota))
+    if modelo is None:
+        return set()
+    return {
+        str(invocacao.body[campo.name])
+        for campo in dependencies_module.identifier_fields(modelo)
+        if _e_alvo_de_autorizacao(campo.name) and campo.name in invocacao.body
+    }
+
+
 @pytest.mark.parametrize("rota", _ROTAS)
 async def test_ca15_o_guard_e_consultado_com_a_unidade_do_path(rota: APIRoute) -> None:
     """A **mesma** variável alimenta o guard e o command.
@@ -236,13 +263,21 @@ async def test_ca15_o_guard_e_consultado_com_a_unidade_do_path(rota: APIRoute) -
     # pode é a unidade que endereça o registro deixar de ser a do path.
     assert autorizacoes[0].endswith(f",{_UNIDADE_PEDIDA})"), autorizacoes
 
-    # E todo alvo **adicional** tem de vir do corpo declarado da invocação: uma
-    # autorização a mais sobre um alvo que ninguém declarou é escopo alcançado
-    # por caminho não previsto.
-    declarados = {str(valor) for valor in (_INVOCACOES[chave(rota)].body or {}).values()}
+    # E todo alvo **adicional** tem de vir de um campo de corpo que seja
+    # **identificador de unidade declarado** — não de um valor qualquer do corpo.
+    #
+    # A primeira redação desta cláusula cruzava com `body.values()`, e era frouxa:
+    # medido, uma rota que fizesse `guard.authorize(..., unit_id=payload.name)`
+    # passava, porque `name` é texto livre do cliente e estava entre os valores
+    # do corpo. Autorizar contra um campo arbitrário é exatamente o caminho não
+    # previsto que esta asserção existe para fechar, e ela o aceitava.
+    declarados = _alvos_de_unidade_declarados(rota)
     for extra in autorizacoes[1:]:
         alvo = extra.rsplit(",", 1)[-1].rstrip(")")
-        assert alvo in declarados, f"autorização sobre alvo não declarado: {extra}"
+        assert alvo in declarados, (
+            f"autorização sobre alvo que não é identificador de unidade declarado: {extra}. "
+            f"Declarados: {sorted(declarados)}"
+        )
 
 
 def test_o_dominio_de_ca15_cobre_as_rotas_de_funcionario_existentes() -> None:
