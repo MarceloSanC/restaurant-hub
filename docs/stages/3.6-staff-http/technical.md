@@ -1569,4 +1569,80 @@ Com um manager de uma unidade só, CA26 passaria por falta de visibilidade em ve
 de por isolamento — o registro é por unidade (ADR 3.4.0007), e é isso que o
 critério mede. Um cenário que confunde as duas causas mede a errada.
 
+### 2026-08-29 — [decision] test_staff_authorization.py (Task 11) — Marcelo
+
+**Contexto:** CA36 pede que **nenhuma** das 16 rotas produza
+`TenantScopeRequiredError` para `{owner, manager, hr}`. Medido contra a app real:
+esse erro responde **403 com o corpo constante de identity** (concept §6.2), que é
+byte-idêntico ao 403 de `PermissionDeniedError` e ao de `UnitNotVisibleError` — por
+desenho, e é o oráculo que L-AG1/L-AG2 fecham. Não há, pela API, como distinguir a
+espécie do 403.
+
+**Pergunta:** como se assere "não produz `TenantScopeRequiredError`" num critério
+que é, por construção, invisível na resposta?
+
+**Opções:**
+- A — inspecionar a exceção por dentro (monkeypatch no tradutor, ou um spy no
+  `AuthorizeActionUseCase`), afirmando a espécie do erro.
+- B — asserir o **contrapositivo observável**: para os três papéis que detêm as
+  permissões de staff, nenhuma das 16 rotas responde 403 de espécie alguma. ✅
+  recomendada
+
+**Decisão:** B — e, com ela, CA10, CA11 (primeira metade) e CA36 passam a ser
+provados pela **mesma** parametrização de 48 casos,
+`test_ca10_ca11_ca36_papel_com_permissao_alcanca_a_rota`.
+
+**Razão:** a opção A mediria o interior de uma peça de identity a partir de um teste
+de staff, e é exatamente o acoplamento que o `Actor = object` do port existe para
+impedir; ela ainda ficaria verde se a rota respondesse 403 por outra razão. E o
+contrapositivo não é um enfraquecimento: CA10 já enuncia, literalmente, *"nenhuma
+resposta é 401/403"* para o `manager`, então a asserção de CA36 na linha do manager
+**é** a de CA10 — três parametrizações separadas repetiriam a mesma requisição três
+vezes e triplicariam o custo sem acrescentar nenhuma refutação. A asserção efetiva é
+mais forte que a do critério: exige o **status de sucesso declarado**, não apenas a
+ausência de 401/403, porque um 404 aqui significaria que a rota respondeu sem
+alcançar registro nenhum.
+
+**Medido:** removendo `Permission.MANAGE_STAFF` de `Role.HR`, 12 das 48 células
+reprovam (`...[<rota de REMP>-hr]`), junto com as 12 de CA12 — a mutação que a
+opção A teria deixado passar em CA36 se o spy só observasse a espécie do erro.
+
+### 2026-08-29 — [decision] test_staff_authorization.py (Task 11) — Marcelo
+
+**Contexto:** CA12 exige que `hr` e `manager` produzam status idêntico nas 16 rotas
+*"sobre o mesmo estado"*. Onze das dezesseis **escrevem**: invocar a mesma rota duas
+vezes sobre os mesmos registros faria o segundo ator encontrar o efeito do primeiro
+(apagar duas vezes é 204 e depois 404), e a igualdade reprovaria por causa da ordem,
+não do papel.
+
+**Pergunta:** "o mesmo estado" é o mesmo **registro** ou o mesmo **arranjo**?
+
+**Opções:**
+- A — invocar, truncar o banco, reprovisionar e invocar de novo com o outro ator.
+- B — montar dois conjuntos **isomorfos** — mesma unidade, mesmas formas, nomes
+  distintos por sufixo —, um por ator. ✅ recomendada
+
+**Decisão:** B.
+
+**Razão:** A custaria uma reprovisionamento completo (com argon2) por caso, e não
+compraria nada: o que o ADR 3.4.0006 §1 nega é divergência **por papel**, e ela é
+observável em qualquer par de estados isomorfos. A asserção é dupla de propósito —
+igualdade **mais** o status de sucesso declarado —, porque a igualdade sozinha ficaria
+verde se os dois papéis fossem negados juntos: dois 403 também são iguais.
+
+### 2026-08-29 — [finding] custo da matriz e2e — Marcelo
+
+**O que se viu:** `test_staff_authorization.py` são **162 casos** contra Postgres
+real e levam **2m55s**, porque cada célula reprovisiona o cenário inteiro pela API
+(restaurante, duas unidades e de dois a quatro atores, com argon2 de verdade em cada
+um). É o preço que o próprio plano da Task 11 antecipou ao dizer que *"só os produtos
+desta Task somam ~100 casos e2e"*, e o isolamento por caso é o que faz cada célula
+medir a rota, e não o resíduo da anterior.
+
+**Direção:** se a suíte crescer mais um eixo (o Step 4 acrescenta escala), vale medir
+um cenário de escopo `module` para os eixos **read-only** — CA08 já não toca o banco —
+mantendo o escopo por caso nos eixos que escrevem. Não fazer agora: trocar isolamento
+por tempo antes de haver o segundo consumidor é otimizar contra um número que ainda
+vai mudar. Stage candidata: a primeira da 4.x que acrescentar e2e de acesso.
+
 <!-- END: post-execution -->
