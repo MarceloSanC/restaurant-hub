@@ -274,6 +274,306 @@ async def test_ca19_periodo_inexistente_responde_422_e_nao_404(
 
 
 # ---------------------------------------------------------------------------
+# O eixo inteiro do mapa — toda exceção **alcançável** tem cenário HTTP
+# ---------------------------------------------------------------------------
+#
+# **CA19 cobra as três faixas; o domínio quantificado do mapa é o mapa.** Um
+# representante por faixa deixa quinze das dezoito entradas sem nenhuma travessia
+# pelo fio: o erro está classificado (CA18), a faixa está exercitada (CA19), e
+# ninguém verificou que a borda **produz** aquela exceção. Foi por essa fresta que
+# `EmptyShiftPreferenceError` passou a Stage inteira sem um só caminho HTTP — com
+# cobertura de linha e de ramo em 100% —, e com ela a mutação `if periodos is None`
+# → `if not periodos` no conversor do router, que apaga em silêncio a preferência
+# declarada como `[]` e responde 200 onde o contrato promete 422.
+#
+# O eixo é a **totalidade** do mapa menos as entradas declaradas inalcançáveis, e
+# a declaração é transcrita à mão abaixo: derivá-la do código faria a expectativa
+# seguir o defeito, e uma exceção que deixasse de ser produzida sairia do domínio
+# sozinha.
+
+
+async def _sem_funcao(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`JobFunctionNotFoundError` — a função endereçada não existe no tenant."""
+    return await _cenario_404(client, cabecalho, recursos)
+
+
+async def _sem_funcionario(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`EmployeeNotFoundError` — o registro endereçado não existe na unidade."""
+    return await client.patch(
+        f"{API}/units/{recursos.unidade}/employees/funcionário-que-nunca-existiu",
+        json={"name": "Beltrano"},
+        headers=cabecalho,
+    )
+
+
+async def _nome_de_funcao_repetido(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`JobFunctionNameAlreadyExistsError` — o nome já está gravado no tenant.
+
+    O nome é o que `_semear` criou, e a comparação é **verbatim** (workforce §3.2):
+    reenviá-lo idêntico é a única forma de colidir.
+    """
+    return await client.post(
+        f"{API}/job-functions",
+        json={"name": f"Função {recursos.sufixo}"},
+        headers=cabecalho,
+    )
+
+
+async def _funcao_em_uso(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`JobFunctionInUseError` — a FK `RESTRICT` da 3.3 recusa a remoção."""
+    return await _cenario_409(client, cabecalho, recursos)
+
+
+async def _identificador_em_branco(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`InvalidIdentifierError` — o destino da cópia chega só-whitespace.
+
+    O eixo escolhido é o **corpo**, e não o path: um segmento de path em branco é
+    interceptado pelo roteador antes do handler (§6.3), e mediria o Starlette.
+    """
+    return await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/copies",
+        json={"target_unit_id": "   "},
+        headers=cabecalho,
+    )
+
+
+async def _nome_com_byte_nul(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`InvalidNameError` — a rejeição é do domínio desde a 3.4, e a borda a alcança."""
+    return await client.patch(
+        f"{API}/job-functions/{recursos.job_function_id}",
+        json={"name": _NOME_COM_NUL},
+        headers=cabecalho,
+    )
+
+
+async def _carga_semanal_nao_numerica(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`InvalidWeeklyHoursError` — o 500 do `decimal.InvalidOperation`, traduzido."""
+    return await client.put(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/workload-profile",
+        json={"workload_profile": {"type": "fixed", "weekly_hours": "abc"}},
+        headers=cabecalho,
+    )
+
+
+async def _periodo_do_dia_desconhecido(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`InvalidDayPeriodError` — `DayPeriod.from_string` em vez do `ValueError` cru."""
+    return await _cenario_422(client, cabecalho, recursos)
+
+
+async def _preferencia_de_turno_vazia(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`EmptyShiftPreferenceError` — o eixo `[]`, que é **o achado desta correção**.
+
+    `null` limpa a preferência (CA03); `[]` é o cliente declarando "prefiro nada",
+    que o domínio recusa desde o ADR 3.1.0004 porque "sem preferência" já tem uma
+    representação. O conversor do router distingue os dois pela **ausência**
+    (`is None`), e não por truthiness: com `if not periodos`, a lista vazia
+    passaria por `null`, a preferência gravada seria apagada em silêncio e a
+    resposta seria 200 — a corrupção silenciosa que o ADR 2.3.0005 recusa.
+    """
+    return await client.put(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/shift-preference",
+        json={"shift_preference": []},
+        headers=cabecalho,
+    )
+
+
+async def _sem_nenhuma_funcao(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`EmptyJobFunctionsError` — a substituição que deixaria o registro sem função."""
+    return await client.put(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/job-functions",
+        json={"job_function_ids": []},
+        headers=cabecalho,
+    )
+
+
+async def _periodo_malformado(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`InvalidUnavailabilityPeriodError` — `start >= end`, recusado pelo value object."""
+    return await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/unavailabilities",
+        json={"start": "2029-03-10T12:00:00", "end": "2029-03-10T08:00:00"},
+        headers=cabecalho,
+    )
+
+
+async def _periodo_sobreposto(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`OverlappingUnavailabilityError` — sobreposição com o período que `_semear` gravou.
+
+    A semântica é semi-aberta `[início, fim)` (ADR 3.1.0001): adjacente **não**
+    conflita, então o período enviado começa dentro do semeado, e não no seu fim.
+    """
+    return await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/unavailabilities",
+        json={"start": "2026-05-04T10:00:00", "end": "2026-05-04T14:00:00"},
+        headers=cabecalho,
+    )
+
+
+async def _periodo_nunca_registrado(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`UnavailabilityNotFoundError` — remoção por igualdade de valor que não casa."""
+    return await client.delete(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/unavailabilities",
+        params=dict(_PERIODO_NUNCA_REGISTRADO),
+        headers=cabecalho,
+    )
+
+
+async def _copia_para_a_propria_unidade(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`SameUnitCopyError` — o cliente nomeou a origem como destino."""
+    return await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/copies",
+        json={"target_unit_id": recursos.unidade},
+        headers=cabecalho,
+    )
+
+
+# As entradas do mapa que **nenhuma requisição consegue produzir**, e a razão de
+# cada uma. Transcritas do comentário da entrada correspondente em
+# `error_handlers.py` — este é o outro lado daquela declaração, e é o que faz dela
+# uma afirmação verificada em vez de uma nota de rodapé:
+#
+# - `EmployeeInUseError` — sem produtor em v1; nasce com o Step 4 (alocação);
+# - `EmployeeRelocationError` — nenhuma rota permite enviar `unit_id` num update;
+# - as duas colisões de **id** — o id é UUID gerado dentro do use case, nunca
+#   enviado pelo cliente, e produzi-las exigiria dois UUID4 iguais.
+#
+# Escritas por **nome**, e não por classe, porque o nome é o que a declaração de
+# `error_handlers.py` carrega — e é a divergência entre os dois lados que este
+# módulo precisa poder acusar.
+INALCANCAVEIS_POR_HTTP: Final = frozenset(
+    {
+        "EmployeeInUseError",
+        "EmployeeRelocationError",
+        "JobFunctionAlreadyExistsError",
+        "EmployeeAlreadyExistsError",
+    }
+)
+
+CenarioDeExcecao = Callable[[AsyncClient, dict[str, str], Recursos], Awaitable[Response]]
+
+# Cenário por exceção, com o **trecho da mensagem transcrito à mão**. O status
+# sozinho não identifica a exceção — sete entradas compartilham o 422 —, e sem o
+# trecho um cenário que produzisse a exceção errada da mesma faixa passaria.
+CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
+    "JobFunctionNotFoundError": (_sem_funcao, "função de trabalho não encontrada"),
+    "EmployeeNotFoundError": (_sem_funcionario, "funcionário não encontrado"),
+    "JobFunctionNameAlreadyExistsError": (
+        _nome_de_funcao_repetido,
+        "nome de função de trabalho já usado no restaurante",
+    ),
+    "JobFunctionInUseError": (_funcao_em_uso, "função de trabalho em uso por algum funcionário"),
+    "InvalidIdentifierError": (_identificador_em_branco, "identificador de unidade"),
+    "InvalidNameError": (_nome_com_byte_nul, "nome de função não pode conter o byte NUL"),
+    "InvalidWeeklyHoursError": (
+        _carga_semanal_nao_numerica,
+        "carga semanal contratada inválida",
+    ),
+    "InvalidDayPeriodError": (_periodo_do_dia_desconhecido, "período do dia inválido"),
+    "EmptyShiftPreferenceError": (
+        _preferencia_de_turno_vazia,
+        "preferência de turno exige ao menos um período",
+    ),
+    "EmptyJobFunctionsError": (
+        _sem_nenhuma_funcao,
+        "funcionário exige ao menos uma função atribuída",
+    ),
+    "InvalidUnavailabilityPeriodError": (
+        _periodo_malformado,
+        "período de indisponibilidade inválido",
+    ),
+    "OverlappingUnavailabilityError": (
+        _periodo_sobreposto,
+        "períodos de indisponibilidade não podem se sobrepor",
+    ),
+    "UnavailabilityNotFoundError": (
+        _periodo_nunca_registrado,
+        "período de indisponibilidade não encontrado",
+    ),
+    "SameUnitCopyError": (
+        _copia_para_a_propria_unidade,
+        "cópia exige unidade destino diferente da origem",
+    ),
+}
+
+_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 18
+
+
+def test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e() -> None:
+    """A totalidade do eixo, e é ela que impede a próxima `EmptyShiftPreferenceError`.
+
+    O domínio quantificado de "a exceção atravessa o fio" é o **mapa**, e não as
+    três faixas: exceção nova sem cenário — ou exceção que deixasse de ser
+    produzida — reprova aqui, em vez de nascer coberta pela faixa de um irmão.
+
+    As duas metades são necessárias. A partição cobra que cada entrada esteja de
+    **um** dos dois lados; a cardinalidade cobra que o mapa não tenha encolhido —
+    um mapa esvaziado satisfaria a partição com os dois conjuntos vazios.
+    """
+    entradas = {classe.__name__ for classe in error_handlers_module.STAFF_ERROR_STATUS}
+
+    assert len(entradas) == _TOTAL_DE_ENTRADAS_DO_MAPA, sorted(entradas)
+    assert set(CENARIOS_POR_EXCECAO) | INALCANCAVEIS_POR_HTTP == entradas
+    assert set(CENARIOS_POR_EXCECAO) & INALCANCAVEIS_POR_HTTP == set()
+
+
+@pytest.mark.parametrize("nome_da_excecao", sorted(CENARIOS_POR_EXCECAO))
+async def test_cada_excecao_alcancavel_atravessa_o_http_real(
+    client: AsyncClient,
+    cabecalho: dict[str, str],
+    recursos: Recursos,
+    nome_da_excecao: str,
+) -> None:
+    """Uma requisição real por exceção, com o status **do mapa** e a mensagem dela.
+
+    O status esperado sai de `STAFF_ERROR_STATUS`, e a mensagem é transcrita: o
+    par é o que separa "alguma exceção de staff saiu" de "**esta** exceção saiu".
+    Sem o trecho da mensagem, um cenário que produzisse o irmão de faixa — dois
+    422 quaisquer — passaria, e o eixo voltaria a ser um representante por faixa
+    com mais casos.
+    """
+    cenario, trecho = CENARIOS_POR_EXCECAO[nome_da_excecao]
+    esperado = next(
+        status
+        for classe, status in error_handlers_module.STAFF_ERROR_STATUS.items()
+        if classe.__name__ == nome_da_excecao
+    )
+
+    resposta = await cenario(client, cabecalho, recursos)
+
+    assert resposta.status_code == esperado, resposta.text
+    corpo = resposta.json()
+    assert corpo["type"] == _DISCRIMINADOR_DE_STAFF, resposta.text
+    assert trecho in corpo["detail"], resposta.text
+
+
+# ---------------------------------------------------------------------------
 # O domínio derivado: schemas de corpo, campos escalares e parâmetros de query
 # ---------------------------------------------------------------------------
 

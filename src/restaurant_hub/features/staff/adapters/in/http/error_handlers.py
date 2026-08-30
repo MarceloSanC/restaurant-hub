@@ -91,6 +91,14 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
     # ADR 3.4.0002 §4, e é dela que sai o par `InUse`: o payload está correto,
     # e o que impede a operação é **outro registro**.
     JobFunctionNameAlreadyExistsError: HTTP_CONFLICT,
+    # Entradas por **totalidade**: as duas colisões de **id** são inalcançáveis
+    # por HTTP, e a razão é a mesma para as duas — o id é um UUID gerado dentro
+    # do use case, nunca enviado pelo cliente, e a colisão exigiria que dois
+    # UUID4 batessem. Nenhuma rota expõe uma entrada por onde produzi-las.
+    # Registrado aqui pela mesma razão que `EmployeeInUseError` e
+    # `EmployeeRelocationError` abaixo: para que ninguém gaste uma Task tentando
+    # produzi-las por e2e. Quem cobra a ausência é
+    # `test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e`.
     JobFunctionAlreadyExistsError: HTTP_CONFLICT,
     EmployeeAlreadyExistsError: HTTP_CONFLICT,
     JobFunctionInUseError: HTTP_CONFLICT,
