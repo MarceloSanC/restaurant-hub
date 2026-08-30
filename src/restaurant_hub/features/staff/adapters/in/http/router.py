@@ -40,15 +40,21 @@ que o mapa de `error_handlers` classifica com o corpo de staff, em vez de virar 
 caminho.
 """
 
+from datetime import datetime
 from typing import Annotated, Never
 
 from fastapi import APIRouter, Depends, Response, status
 
 from restaurant_hub.features.staff.application.dtos.commands import (
+    AssignJobFunctionsCommand,
+    ChangeWorkloadProfileCommand,
     CreateEmployeeCommand,
     CreateJobFunctionCommand,
+    DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
     DeleteJobFunctionCommand,
+    RegisterUnavailabilityCommand,
+    RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
 )
@@ -56,11 +62,20 @@ from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
     ListJobFunctionsQuery,
 )
+from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
+    AssignJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.change_workload_profile import (
+    ChangeWorkloadProfileUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.create_employee import (
     CreateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.declare_shift_preference import (
+    DeclareShiftPreferenceUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.delete_employee import (
     DeleteEmployeeUseCase,
@@ -73,6 +88,12 @@ from restaurant_hub.features.staff.application.use_cases.list_employees import (
 )
 from restaurant_hub.features.staff.application.use_cases.list_job_functions import (
     ListJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
+    RegisterUnavailabilityUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.remove_unavailability import (
+    RemoveUnavailabilityUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.rename_employee import (
     RenameEmployeeUseCase,
@@ -89,6 +110,9 @@ from restaurant_hub.features.staff.domain.value_objects.shift_preference import 
     DayPeriod,
     ShiftPreference,
 )
+from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
+    UnavailabilityPeriod,
+)
 
 from .dependencies import (
     MANAGE_JOB_FUNCTIONS_ACCESS,
@@ -98,10 +122,14 @@ from .dependencies import (
     validate_identifier,
 )
 from .schemas import (
+    AssignJobFunctionsRequest,
+    ChangeWorkloadProfileRequest,
     CreateEmployeeRequest,
     CreateJobFunctionRequest,
+    DeclareShiftPreferenceRequest,
     EmployeeResponse,
     JobFunctionResponse,
+    RegisterUnavailabilityRequest,
     RenameEmployeeRequest,
     RenameJobFunctionRequest,
     to_workload_profile,
@@ -151,6 +179,26 @@ def _get_rename_employee() -> RenameEmployeeUseCase:
 
 def _get_delete_employee() -> DeleteEmployeeUseCase:
     _nao_conectado("staff_delete_employee")
+
+
+def _get_assign_job_functions() -> AssignJobFunctionsUseCase:
+    _nao_conectado("staff_assign_job_functions")
+
+
+def _get_change_workload_profile() -> ChangeWorkloadProfileUseCase:
+    _nao_conectado("staff_change_workload_profile")
+
+
+def _get_declare_shift_preference() -> DeclareShiftPreferenceUseCase:
+    _nao_conectado("staff_declare_shift_preference")
+
+
+def _get_register_unavailability() -> RegisterUnavailabilityUseCase:
+    _nao_conectado("staff_register_unavailability")
+
+
+def _get_remove_unavailability() -> RemoveUnavailabilityUseCase:
+    _nao_conectado("staff_remove_unavailability")
 
 
 def _to_shift_preference(periodos: list[str] | None) -> ShiftPreference | None:
@@ -375,3 +423,169 @@ def delete_employee(
         )
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Perfil do funcionário — substituição (`PUT`) e acréscimo (`POST`)
+#
+# `PUT` onde a operação é **idempotente por substituição**: `assign_job_functions`
+# troca o conjunto inteiro (o command diz literalmente "não é acréscimo") e
+# `declare_shift_preference` com `null` **limpa**. `POST` onde há acréscimo de
+# item: `register_unavailability`.
+# ---------------------------------------------------------------------------
+
+
+@router.put(
+    "/units/{unit_id}/employees/{employee_id}/job-functions",
+    response_model=EmployeeResponse,
+)
+def assign_job_functions(  # noqa: PLR0913
+    # Ver `rename_employee`: a aridade é estrutural (dois ids de path, o corpo e
+    # as três dependências que o FastAPI resolve).
+    unit_id: str,
+    employee_id: str,
+    payload: AssignJobFunctionsRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[AssignJobFunctionsUseCase, Depends(_get_assign_job_functions)],
+) -> EmployeeResponse:
+    """**Substitui** o conjunto de funções do funcionário — não acrescenta."""
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    job_function_ids = _job_function_ids(payload.job_function_ids)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        AssignJobFunctionsCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+            job_function_ids=job_function_ids,
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.put(
+    "/units/{unit_id}/employees/{employee_id}/workload-profile",
+    response_model=EmployeeResponse,
+)
+def change_workload_profile(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    payload: ChangeWorkloadProfileRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[ChangeWorkloadProfileUseCase, Depends(_get_change_workload_profile)],
+) -> EmployeeResponse:
+    """Troca o perfil de jornada (fixa ou sob demanda)."""
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        ChangeWorkloadProfileCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+            workload_profile=to_workload_profile(payload.workload_profile),
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.put(
+    "/units/{unit_id}/employees/{employee_id}/shift-preference",
+    response_model=EmployeeResponse,
+)
+def declare_shift_preference(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    payload: DeclareShiftPreferenceRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[DeclareShiftPreferenceUseCase, Depends(_get_declare_shift_preference)],
+) -> EmployeeResponse:
+    """Declara ou **limpa** a preferência de turno.
+
+    `{"shift_preference": null}` limpa; corpo `{}` recebe 422, porque o campo não
+    tem default — com default, o cliente que esquecesse o campo apagaria um dado
+    sem pedir.
+    """
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        DeclareShiftPreferenceCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+            shift_preference=_to_shift_preference(payload.shift_preference),
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.post(
+    "/units/{unit_id}/employees/{employee_id}/unavailabilities",
+    response_model=EmployeeResponse,
+)
+def register_unavailability(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    payload: RegisterUnavailabilityRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[RegisterUnavailabilityUseCase, Depends(_get_register_unavailability)],
+) -> EmployeeResponse:
+    """Acrescenta um período de indisponibilidade — **200, não 201**.
+
+    O período não é recurso endereçável: não ganha URL própria, e um 201 sem
+    `Location` prometeria uma que não existe. A resposta é o funcionário
+    resultante, como em toda escrita.
+    """
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        RegisterUnavailabilityCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+            period=UnavailabilityPeriod(start=payload.start, end=payload.end),
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.delete(
+    "/units/{unit_id}/employees/{employee_id}/unavailabilities",
+    response_model=EmployeeResponse,
+)
+def remove_unavailability(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    start: datetime,
+    end: datetime,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[RemoveUnavailabilityUseCase, Depends(_get_remove_unavailability)],
+) -> EmployeeResponse:
+    """Remove um período **por igualdade de valor**, não por id.
+
+    `UnavailabilityPeriod` é value object e não tem identidade própria: quem o
+    remove reapresenta o valor. Daí os query params — eles expressam isso sem
+    exigir corpo num `DELETE`. Período inexistente responde **422**
+    (`UnavailabilityNotFoundError`), e não 404: o período é um valor **dentro**
+    do agregado, e o funcionário existe e foi encontrado.
+    """
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        RemoveUnavailabilityCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+            period=UnavailabilityPeriod(start=start, end=end),
+        )
+    )
+    return EmployeeResponse.from_result(result)

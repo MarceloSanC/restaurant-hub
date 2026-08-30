@@ -1408,4 +1408,68 @@ de teste permitida e' acrescentar a chave das cinco rotas novas ao
 Tasks 07 e 08 deixam de precisar dela: as suas declaracoes moram nos seus
 proprios modulos.
 
+### 2026-08-29 - [decision] test_http_boundary_sweeps.py (Task 07) - Marcelo
+
+**Contexto:** com R09 e R11, o eixo de corpo de CA24 passou a incluir campos que
+o **framework** parseia (`start`/`end` sao `datetime`) e um campo escalar
+**aninhado** (`weekly_hours`, dentro da uniao de perfil de jornada). Dois
+problemas apareceram de uma vez: 22 casos vermelhos exigindo corpo de staff onde
+a recusa e' legitimamente de forma, e o campo que o proprio concept nomeia como
+*"por onde escapou o 500 do `decimal.InvalidOperation`"* ficando **fora** do
+dominio, porque a varredura so olhava o primeiro nivel.
+
+**Pergunta:** a assercao sobre a **origem** do 422 vale para todo campo escalar?
+
+**Opcoes:**
+- A - Sim, e ajustar as invocacoes para que `start`/`end` nunca recebam lixo.
+  Tira do dominio justamente os valores que CA24 existe para varrer.
+- B - Nao, e largar a assercao de origem no eixo de corpo inteiro. Perde a trava
+  que distingue "o dominio recusou o conteudo" de "o framework recusou a forma" —
+  que e' a razao de o discriminador existir.
+- C - Classificar por **quem parseia o campo**: `str` no schema chega intacto ao
+  router e a recusa e' de staff; `datetime`/`bool` sao parseados pelo framework
+  antes do handler, e ali `validation_error` e' a resposta correta. ✅ recomendada
+
+**Decisao:** C, mais a descida ate o campo aninhado.
+
+**Razao:** e' o **mesmo** erro de categoria que a entrada do CA24/path ja
+registrou para `unit_id`, na sua forma de corpo. Exigir corpo de staff num campo
+que staff nunca chega a ver seria exigir que ele assumisse uma recusa que nao e'
+dele; e o caso em que staff **e'** responsavel por um `datetime` — o valor
+bem-formado com `Z`, que `UnavailabilityPeriod` recusa — continua exigido, com
+corpo de staff, em teste dedicado no modulo de rota.
+
+**A classificacao tem guarda propria.** `_quem_parseia` decide se a exigencia do
+corpo se aplica; um bug que a fizesse devolver sempre `"framework"` desligaria
+essa metade de CA24 em silencio. Ha teste exigindo que as **duas** especies
+existam no dominio varrido, e outro exigindo que `("workload_profile",
+"weekly_hours")` esteja entre os caminhos — a licao do guarda tautologico do eixo
+de corpo, aplicada antes de o revisor precisar apontar.
+
+### 2026-08-29 - [deviation] escopo da Task 07 - Marcelo
+
+**Contexto:** o Checkpoint C do bloco 2 abriu tres achados que pedem edicao de
+`test_http_boundary_sweeps.py` (arquivo da Task 05), e a coordenacao autorizou
+absorve-los aqui:
+
+- **F3** - CA21 estava travado **so** no eixo de path. Medido: mover a validacao
+  dos ids do **corpo** para depois de `guard.authorize` em `create_employee`
+  deixava a suite inteira verde. O ADR 3.6.0002 §3 enuncia a ordem para *"path,
+  query string, or body"*, e o corpo e' onde o valor cru chega mais longe — cada
+  elemento de `job_function_ids` vai para `find_all_by_ids` antes da entidade.
+  CA21 passou a ser parametrizado tambem sobre `_CASOS_DE_CORPO`; a mutacao agora
+  derruba 3 casos.
+- **F4** - o guarda do eixo de corpo era tautologia (os dois lados derivavam do
+  mesmo helper, entao esvazia-lo deixava o teste verde). Passou a exigir
+  `_CASOS_DE_CORPO` sem condicional. *(Fechado no commit de F1.)*
+- **F5** - o eixo de **query** nao existia nem como ausencia declarada, embora
+  CA24 o nomeie e R06/R12 tenham query desde a Task 06. Foi criado, com a mesma
+  distincao de responsabilidade da entrada acima; e a ausencia do eixo de query de
+  **CA20** — nenhum parametro de query e' identificador hoje — ficou **declarada**
+  por teste que fica vermelho no dia em que um `*_id` chegar por query.
+
+**Razao de estarem aqui e nao numa Task propria:** os tres sao sobre eixos que
+esta Task e' a primeira a povoar de verdade (corpo com id, query com parametro), e
+separa-los produziria um commit que so faz sentido lido junto deste.
+
 <!-- END: post-execution -->

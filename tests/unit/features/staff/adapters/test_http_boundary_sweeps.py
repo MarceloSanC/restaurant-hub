@@ -484,6 +484,28 @@ def test_ca05_a_varredura_de_import_ja_alcanca_o_router() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _params_de_query(rota: APIRoute) -> list[str]:
+    """Os parâmetros de query da rota — derivados do `dependant` do FastAPI.
+
+    Derivar do `dependant`, e não da assinatura crua, é o que separa parâmetro de
+    query de dependência resolvida por `Depends`: as duas aparecem lado a lado na
+    assinatura do handler e só o framework sabe distingui-las.
+    """
+    return [parametro.name for parametro in rota.dependant.query_params]
+
+
+def _params_de_query_de_id(rota: APIRoute) -> list[str]:
+    """Os parâmetros de query que são **identificador** (`*_id` / `*_ids`).
+
+    Hoje **nenhum** — `include_inactive` é booleano e `start`/`end` são
+    instantes. O eixo de query de CA20 é portanto vazio, e a ausência é
+    **declarada** e travada por `test_o_eixo_de_query_de_ca20_esta_vazio_...`,
+    em vez de descoberta: o dia em que um identificador chegar por query, aquele
+    teste fica vermelho e obriga a estender a varredura.
+    """
+    return [nome for nome in _params_de_query(rota) if nome.endswith(("_id", "_ids"))]
+
+
 def _params_de_path_de_id(rota: APIRoute) -> list[str]:
     """Parâmetros de path que são identificador — derivado do template da rota."""
     return [
@@ -643,58 +665,204 @@ async def test_ca21_a_validacao_roda_antes_de_autorizar(
     assert "authenticate" in ambiente.guard.calls, "a autenticação tem de ter rodado antes"
 
 
+@pytest.mark.parametrize(("chave_da_rota", "campo", "valor"), _CASOS_DE_CORPO)
+async def test_ca21_a_validacao_do_corpo_tambem_roda_antes_de_autorizar(
+    client: AsyncClient,
+    ambiente: Ambiente,
+    chave_da_rota: ChaveDeRota,
+    campo: IdentifierField,
+    valor: str,
+) -> None:
+    """A **mesma** lei, no eixo que faltava — e a falta era uma fresta medida.
+
+    O ADR 3.6.0002 §3 enuncia a ordem para *"path, query string, or body"*, e até
+    aqui só o eixo de path a travava: mover a validação dos ids do corpo para
+    **depois** de `guard.authorize` deixava a suíte inteira verde. E o corpo é
+    justamente onde o valor cru chega mais longe — cada elemento de
+    `job_function_ids` vai para `find_all_by_ids` **antes** da construção da
+    entidade, e `target_unit_id` vai para `units.find_by_id` **dentro de
+    identity**, que é onde o NUL vira 500.
+
+    A asserção é a mesma de sempre: **ausência** de `authorize(`, nunca status.
+    """
+    invocacao = _INVOCACOES[chave_da_rota]
+    assert invocacao.body is not None
+    corpo = dict(invocacao.body)
+    corpo[campo.name] = [valor] if campo.is_collection else valor
+
+    ambiente.guard.calls.clear()
+    await _invocar(client, chave_da_rota, body=corpo)
+
+    autorizacoes = [c for c in ambiente.guard.calls if c.startswith("authorize(")]
+    assert autorizacoes == [], (
+        f"o guard foi consultado antes de validar {campo.name}: {ambiente.guard.calls}"
+    )
+    assert "authenticate" in ambiente.guard.calls, "a autenticação tem de ter rodado antes"
+
+
 # ---------------------------------------------------------------------------
 # CA24 — nenhum campo escalar devolve 500
 # ---------------------------------------------------------------------------
 
 
-def _campos_escalares_do_corpo(chave_da_rota: ChaveDeRota) -> list[str]:
-    """Campos de corpo de valor escalar, derivados de `model_fields`."""
+def _modelos_em(anotacao: object) -> list[type[BaseModel]]:
+    """Os `BaseModel` alcançáveis de uma anotação, inclusive sob união e `Annotated`."""
+    if isinstance(anotacao, type) and issubclass(anotacao, BaseModel):
+        return [anotacao]
+    encontrados: list[type[BaseModel]] = []
+    for argumento in getattr(anotacao, "__args__", ()):
+        encontrados.extend(_modelos_em(argumento))
+    for metadado in getattr(anotacao, "__metadata__", ()):
+        encontrados.extend(_modelos_em(metadado))
+    return encontrados
+
+
+def _anotacao_no_caminho(modelo: type[BaseModel], caminho: tuple[str, ...]) -> object:
+    """A anotação declarada para um caminho de campos, descendo pelos aninhados."""
+    nome, resto = caminho[0], caminho[1:]
+    campo = modelo.model_fields.get(nome)
+    if campo is None:
+        return None
+    if not resto:
+        return campo.annotation
+    for aninhado in _modelos_em(campo.annotation):
+        if resto[0] in aninhado.model_fields:
+            return _anotacao_no_caminho(aninhado, resto)
+    return None
+
+
+def _escalares(valor: object, prefixo: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    """Caminhos até os valores **string** do corpo, descendo pelos aninhados.
+
+    Descer é exigência do critério, não zelo: o concept nomeia `weekly_hours`
+    entre os campos que CA24 tem de varrer — *"por onde escapou o 500 do
+    `decimal.InvalidOperation`"* —, e ele vive **dentro** da união de perfil de
+    jornada. Uma varredura de primeiro nível o deixaria de fora exatamente no
+    campo que motivou o critério.
+    """
+    if isinstance(valor, str):
+        return [prefixo]
+    if isinstance(valor, dict):
+        return [
+            caminho
+            for chave_do_campo, aninhado in valor.items()
+            for caminho in _escalares(aninhado, (*prefixo, str(chave_do_campo)))
+        ]
+    return []
+
+
+def _campos_escalares_do_corpo(chave_da_rota: ChaveDeRota) -> list[tuple[str, ...]]:
+    """Caminhos escalares do corpo da invocação, derivados do corpo declarado."""
     invocacao = _INVOCACOES[chave_da_rota]
     if invocacao.body is None:
         return []
+    return _escalares(invocacao.body)
+
+
+def _quem_parseia(chave_da_rota: ChaveDeRota, caminho: tuple[str, ...]) -> str:
+    """Quem recusa um valor degenerado neste campo: `"staff"` ou `"framework"`.
+
+    **A distinção é de responsabilidade, e ignorá-la faria o teste medir a peça
+    errada** — é a mesma correção que o eixo de path já carrega para `unit_id`.
+    Um campo declarado `str` no schema chega **intacto** ao router, e é staff quem
+    o converte e recusa: ali o 422 tem de trazer o corpo de staff. Um campo
+    declarado `datetime` (ou `bool`) é parseado pelo **framework** antes de o
+    handler rodar, e lixo nele é erro de **forma** — `validation_error` é a
+    resposta correta, e exigir corpo de staff seria exigir que staff assumisse
+    uma recusa que não é dele.
+
+    O caso em que staff **é** responsável por um `datetime` — o valor bem-formado
+    com `Z`, que `UnavailabilityPeriod` recusa — é coberto por teste dedicado em
+    `test_http_router_employee_profile.py`, com a exigência do corpo de staff.
+    """
     modelo = _schema_do_corpo(chave_da_rota)
     if modelo is None:
-        return []
-    return [
-        nome
-        for nome in modelo.model_fields
-        if nome in invocacao.body and isinstance(invocacao.body[nome], str)
-    ]
+        return "framework"
+    anotacao = _anotacao_no_caminho(modelo, caminho)
+    return "staff" if anotacao is str else "framework"
 
 
 _CASOS_ADVERSARIAIS = [
     pytest.param(
-        chave_da_rota, campo, valor, id=f"{chave_da_rota[0]}{chave_da_rota[1]}-{campo}-{indice}"
+        chave_da_rota,
+        caminho,
+        valor,
+        id=f"{chave_da_rota[0]}{chave_da_rota[1]}-{'.'.join(caminho)}-{indice}",
     )
     for chave_da_rota in sorted(_INVOCACOES)
-    for campo in _campos_escalares_do_corpo(chave_da_rota)
+    for caminho in _campos_escalares_do_corpo(chave_da_rota)
     for indice, valor in enumerate(_VALORES_ADVERSARIAIS)
 ]
 
 
-@pytest.mark.parametrize(("chave_da_rota", "campo", "valor"), _CASOS_ADVERSARIAIS)
+def _com_valor_em(corpo: dict[str, Any], caminho: tuple[str, ...], valor: str) -> dict[str, Any]:
+    """Copia o corpo trocando **só** o campo do caminho — o resto fica válido."""
+    if len(caminho) == 1:
+        return {**corpo, caminho[0]: valor}
+    aninhado = corpo[caminho[0]]
+    assert isinstance(aninhado, dict)
+    return {**corpo, caminho[0]: _com_valor_em(aninhado, caminho[1:], valor)}
+
+
+@pytest.mark.parametrize(("chave_da_rota", "caminho", "valor"), _CASOS_ADVERSARIAIS)
 async def test_ca24_nenhum_campo_escalar_devolve_500(
     client: AsyncClient,
     chave_da_rota: ChaveDeRota,
-    campo: str,
+    caminho: tuple[str, ...],
     valor: str,
 ) -> None:
     """Aceitar ou recusar são as duas respostas legítimas; quebrar não é.
 
-    E onde o valor é **recusado**, a asserção inclui o corpo: um 422 sem
-    discriminador de staff seria o framework recusando a forma, não o domínio
-    recusando o conteúdo — e a diferença é exatamente o que este critério mede.
+    E onde o valor é recusado, a asserção sobre a **origem** do 422 se aplica ao
+    que **staff** parseia — ver `_quem_parseia`. Num campo que o framework parseia
+    (`datetime`, `bool`), o `validation_error` é a resposta correta, e exigir
+    corpo de staff mediria a peça errada.
     """
     invocacao = _INVOCACOES[chave_da_rota]
     assert invocacao.body is not None
-    corpo = {**invocacao.body, campo: valor}
+    corpo = _com_valor_em(dict(invocacao.body), caminho, valor)
 
     resposta = await _invocar(client, chave_da_rota, body=corpo)
 
     assert resposta.status_code < HTTPStatus.INTERNAL_SERVER_ERROR
-    if resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
+    if (
+        resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+        and _quem_parseia(chave_da_rota, caminho) == "staff"
+    ):
         assert resposta.json()["type"] == _CORPO_DE_STAFF
+
+
+def test_a_varredura_de_ca24_alcanca_o_campo_aninhado_que_o_criterio_nomeia() -> None:
+    """`weekly_hours` tem de estar no domínio, e é **aninhado**.
+
+    O concept o nomeia como o campo *"por onde escapou o 500 do
+    `decimal.InvalidOperation`"*. Uma varredura de primeiro nível o deixaria de
+    fora justamente ali, e o critério ficaria verde sobre o conjunto errado.
+    """
+    caminhos = {
+        caminho
+        for chave_da_rota in _INVOCACOES
+        for caminho in _campos_escalares_do_corpo(chave_da_rota)
+    }
+
+    assert ("workload_profile", "weekly_hours") in caminhos
+    assert ("name",) in caminhos
+
+
+def test_a_classificacao_de_quem_parseia_nao_colapsou_para_um_lado_so() -> None:
+    """Guarda da distinção: se tudo virasse "framework", a exigência sumiria.
+
+    `_quem_parseia` decide se o 422 precisa trazer o corpo de staff. Um bug que a
+    fizesse devolver sempre `"framework"` desligaria essa metade de CA24 em
+    silêncio, e nenhum caso ficaria vermelho. As duas espécies têm de existir.
+    """
+    especies = {
+        _quem_parseia(chave_da_rota, caminho)
+        for chave_da_rota in _INVOCACOES
+        for caminho in _campos_escalares_do_corpo(chave_da_rota)
+    }
+
+    assert especies == {"staff", "framework"}
 
 
 @pytest.mark.parametrize("valor", _VALORES_ADVERSARIAIS)
@@ -796,7 +964,72 @@ def test_a_transcricao_do_que_o_validador_recusa_bate_com_o_validador() -> None:
     assert medido == set(_ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR)
 
 
+_CASOS_DE_QUERY = [
+    pytest.param(
+        chave_da_rota,
+        parametro,
+        valor,
+        id=f"{chave_da_rota[0]}{chave_da_rota[1]}-{parametro}-{indice}",
+    )
+    for rota in _rotas()
+    for chave_da_rota in [chave(rota)]
+    for parametro in _params_de_query(rota)
+    for indice, valor in enumerate(_VALORES_ADVERSARIAIS)
+]
+
+
+@pytest.mark.parametrize(("chave_da_rota", "parametro", "valor"), _CASOS_DE_QUERY)
+async def test_ca24_nenhum_parametro_de_query_devolve_500(
+    client: AsyncClient,
+    chave_da_rota: ChaveDeRota,
+    parametro: str,
+    valor: str,
+) -> None:
+    """O terceiro eixo de CA24, que o critério nomeia e que faltava.
+
+    O concept diz *"todos os campos escalares de todos os `*Request`, **mais os
+    parâmetros de query**"*, e desde que R06 ganhou `include_inactive` e R12
+    ganhou `start`/`end` o eixo existia sem ser varrido.
+
+    **A asserção é só sobre o 500, e a assimetria com o eixo de corpo é
+    deliberada.** Os parâmetros de query de hoje são `bool` e `datetime`: um
+    valor degenerado neles é erro de **forma**, recusado pelo framework com
+    `type: "validation_error"`, e isso é o comportamento correto. Exigir o corpo
+    de staff aqui mediria a peça errada — pela mesma razão que CA24 no eixo de
+    path distingue `unit_id` dos demais. O dia em que um **identificador** chegar
+    por query, o teste abaixo obriga a estender a varredura com a exigência mais
+    forte.
+    """
+    resposta = await _invocar(client, chave_da_rota, query={parametro: valor})
+
+    assert resposta.status_code < HTTPStatus.INTERNAL_SERVER_ERROR, (
+        f"{chave_da_rota[1]}?{parametro}={valor!r} devolveu {resposta.status_code}"
+    )
+
+
+def test_o_eixo_de_query_de_ca20_esta_vazio_e_a_ausencia_e_declarada() -> None:
+    """CA20 tem eixo de query, e hoje ele é **legitimamente** vazio.
+
+    Nenhum parâmetro de query de staff é identificador: `include_inactive` é
+    booleano, `start` e `end` são instantes. Declarar a ausência — em vez de
+    deixá-la implícita — é o que faz este teste ficar **vermelho** no dia em que
+    alguém acrescentar um `*_id` por query, obrigando a estender a varredura em
+    vez de deixar o eixo passar mudo.
+
+    A lição é a do guarda do eixo de corpo: ausência não declarada é
+    indistinguível de varredura quebrada.
+    """
+    de_id = {
+        (chave(rota), parametro) for rota in _rotas() for parametro in _params_de_query_de_id(rota)
+    }
+    existentes = {parametro for rota in _rotas() for parametro in _params_de_query(rota)}
+
+    assert existentes == {"include_inactive", "start", "end"}
+    assert de_id == set(), f"identificador chegando por query sem varredura: {sorted(de_id)}"
+
+
 def test_o_dominio_adversarial_de_ca24_nao_esta_vazio() -> None:
     """Sem casos, o critério passaria por vacuidade — e passaria para sempre."""
     assert _CASOS_ADVERSARIAIS
     assert _CASOS_DE_PATH
+    assert _CASOS_DE_QUERY
