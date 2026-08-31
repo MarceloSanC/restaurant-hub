@@ -141,30 +141,36 @@ def declaracoes(src_root: Path) -> dict[str, Path]:
     return declarados
 
 
-def usos(src_root: Path, exceto: Path) -> set[str]:
-    """Identificadores usados por `src/`, ignorando o módulo que declara.
+def usos_por_arquivo(src_root: Path) -> dict[Path, set[str]]:
+    """Identificadores usados por cada módulo de `src/`, numa passada só.
 
-    O módulo declarante é excluído porque toda declaração se auto-menciona: a
-    própria `class Pagination` põe `Pagination` na varredura, e contá-la faria
-    todo nome público parecer usado — o gate seria vacuamente verde.
+    O índice é por arquivo — e não um conjunto único — porque cada nome precisa
+    ser conferido contra `src/` **menos o módulo que o declara**: toda
+    declaração se auto-menciona, e a própria `class Pagination` põe
+    `Pagination` na varredura. Somar tudo faria todo nome público parecer usado,
+    e o gate seria vacuamente verde.
+
+    Uma passada, e não uma por nome: com a varredura repetida por símbolo, o
+    custo cresce com o produto de nomes por arquivos — e é justamente o pacote
+    `shared/`, que toda feature lê, quem cresce nos dois eixos.
     """
-    encontrados: set[str] = set()
-    for arquivo in src_root.rglob("*.py"):
-        if arquivo == exceto:
-            continue
+    indice: dict[Path, set[str]] = {}
+    for arquivo in sorted(src_root.rglob("*.py")):
         arvore = parse(arquivo)
         if arvore is not None:
-            encontrados |= identificadores(arvore)
-    return encontrados
+            indice[arquivo] = identificadores(arvore)
+    return indice
 
 
 def nomes_mortos(src_root: Path) -> list[str]:
     """Nomes públicos de `shared/` que nenhum outro módulo de `src/` usa."""
     declarados = declaracoes(src_root)
+    indice = usos_por_arquivo(src_root)
     mortos: list[str] = []
 
     for nome, arquivo in sorted(declarados.items()):
-        if nome in usos(src_root, exceto=arquivo):
+        usado_fora = any(nome in nomes for outro, nomes in indice.items() if outro != arquivo)
+        if usado_fora:
             continue
         rel = arquivo.relative_to(src_root.parent)
         mortos.append(

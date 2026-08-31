@@ -36,6 +36,7 @@ que a síntese não dá conta, e uma resposta 422 nesta suíte é reportada como
 """
 
 from collections.abc import AsyncIterator
+from functools import cache
 from http import HTTPStatus
 from typing import Any
 
@@ -168,8 +169,15 @@ def admin_gate(engine: Engine, app_gate: FastAPI) -> User:
     return admin
 
 
+@cache
 def _spec() -> dict[str, Any]:
-    """O schema OpenAPI da app real, sem banco no ar."""
+    """O schema OpenAPI da app real, sem banco no ar.
+
+    Cacheado porque a perna do 403 o consulta uma vez por rota, e montar a app
+    inteira a cada consulta seria um grafo de dependências novo por teste. A
+    URL é deliberadamente inválida: `create_engine` não abre conexão, e uma URL
+    que funcionasse convidaria alguém a usar esta função onde precisa de banco.
+    """
     return create_app(_settings("postgresql+psycopg://x:x@localhost:1/x")).openapi()
 
 
@@ -256,6 +264,33 @@ def test_ha_rota_nao_publica_a_cobrar() -> None:
         f"enumeração quebrou, e sem esta asserção o gate inteiro sumiria com o "
         f"relatório do pytest idêntico ao de antes"
     )
+
+
+def test_a_allowlist_de_rotas_publicas_nao_cresceu() -> None:
+    """Rota pública nova reprova aqui até ser deliberada.
+
+    É a metade que a asserção de entrada morta não cobra. Dispensar uma rota da
+    perna do 401 é decisão de segurança, e o caminho de menor resistência para
+    quem vê este gate vermelho é acrescentar a rota à allowlist — que é
+    literalmente como se abre um endpoint sem revisão. Com o conjunto fixado
+    aqui, a dispensa custa **duas** edições, e a segunda tem este docstring ao
+    lado.
+
+    As cinco de hoje são as de autenticação, e todas pela mesma razão de fundo:
+    quem as chama, por definição, ainda não tem — ou já não tem — credencial.
+
+    `_CORPOS_SOB_MEDIDA` **não** ganha asserção equivalente, de propósito: ela é
+    dado de teste, não dispensa. Um corpo mal escrito ali não afrouxa nada — a
+    asserção de 403 continua valendo, e um corpo que a validação recuse reprova
+    como 422.
+    """
+    assert set(ROTAS_PUBLICAS) == {
+        ("POST", f"{API}/auth/login"),
+        ("POST", f"{API}/auth/refresh"),
+        ("POST", f"{API}/auth/logout"),
+        ("POST", f"{API}/auth/password-reset-requests"),
+        ("POST", f"{API}/auth/password"),
+    }
 
 
 def test_a_allowlist_de_rotas_publicas_nao_tem_entrada_morta() -> None:
