@@ -52,7 +52,7 @@ src/restaurant_hub/
 │               └── postgres/       # Repositório SQLAlchemy, mappers
 │
 └── shared/                         # Código transversal — usado por múltiplas features
-    ├── domain/                     # Exceções base, value objects genéricos (Pagination)
+    ├── domain/                     # Exceções base do sistema (DomainError, NotFoundError)
     ├── application/                # Ports compartilhados (Clock, IdGenerator)
     └── infrastructure/             # Implementações de infraestrutura
         ├── config/                 # Settings (pydantic-settings)
@@ -142,12 +142,21 @@ adapters  →  application  →  domain
 - O port é consumido apenas por aquela feature
 
 **Coloque em `shared/`** quando:
-- É genuinamente reutilizado por 2+ features (ex: `Clock`, `IdGenerator`, `Pagination`)
+- É genuinamente reutilizado por 2+ features (ex: `Clock`, `IdGenerator`, `EmailSender`)
 - É infraestrutura cross-cutting (ex: configuração, logging, factory do FastAPI)
 - É uma abstração de domínio agnóstica (ex: `DomainError`, `NotFoundError`)
 
 **Regra prática:** em caso de dúvida, comece na feature. Mova para shared apenas quando
 a segunda feature precisar do mesmo código.
+
+**E "reutilizado" é medido, não previsto.** `Pagination` e `ApplicationError`
+entraram aqui pelo template e passaram seis Stages sem um único consumidor —
+`Pagination` levantando `ValueError` cru, que não é `DomainError` e, alcançado
+pelo HTTP, produziria 500. Os dois foram removidos na issue #45, e
+`scripts/check_dead_shared.py` (alvo `layout-check`) reprova o nome público de
+`shared/domain/` ou `shared/application/` que não tem uso em `src/`. Promoção
+para `shared/` sem consumidor não é abstração prematura só em teoria: é código
+que ninguém exercita, num pacote que todas as features leem.
 
 ---
 
