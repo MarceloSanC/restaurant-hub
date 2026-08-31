@@ -1,18 +1,18 @@
 ---
-title: ADR 0.0.0005 — Primary ports are the use case classes themselves; there is no ports/in/ directory
+title: ADR 0.0.0006 — Primary ports are the use case classes themselves; there is no ports/in/ directory
 description: Architecture Decision Record
 when-use: Reference before creating an application/ports/in/ directory, before writing a Protocol whose only implementation is one of our own use cases, or when reconciling the canonical Ports & Adapters vocabulary with this repository's layout
 keywords: [adr, hexagonal, ports, driving-ports, primary-ports, use-case, layout, protocol, dead-code]
 status: accepted
 created_at: 2026-08-31
 updated_at: 2026-08-31
-adr_id: "0.0.0005"
+adr_id: "0.0.0006"
 decision: The driving (primary) port of this project is the use case class itself, exposing execute(<Command>) -> <Result>; no application/ports/in/ directory is created, and docs/LAYOUT.md stops promising one.
 context_stage: 0.0-global
 bounded_context: transversal
 ---
 
-# ADR 0.0.0005 — Primary ports are the use case classes
+# ADR 0.0.0006 — Primary ports are the use case classes
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

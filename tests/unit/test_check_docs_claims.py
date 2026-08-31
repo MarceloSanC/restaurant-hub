@@ -11,7 +11,7 @@ compara documento com sistema de arquivos.
 `application/ports/in/` foi o caso: seis Stages de árvore afirmando um diretório
 que nunca existiu, mais duas seções inteiras (§5 e §8) escritas para explicar
 como contornar a keyword `in` num pacote que ninguém tinha. Ele saiu do
-documento na #45 (ADR 0.0.0005), e este gate é o que impede a terceira promessa.
+documento na #45 (ADR 0.0.0006), e este gate é o que impede a terceira promessa.
 
 **Os violadores são plantados num `LAYOUT.md` de mentira**, montado em
 `tmp_path` com uma árvore mínima — o script recebe `repo_root`, então dá para

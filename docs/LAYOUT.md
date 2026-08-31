@@ -173,7 +173,7 @@ entrada recebe a instância por injeção (`Depends`) e a chama.
 Um `Protocol` separado por use case seria uma interface com exatamente uma
 implementação, escrita por nós, para desacoplar código nosso de código nosso — e
 nenhum consumidor a usaria como ponto de variação. O que precisa ser abstrato é o que
-o use case **consome**, e isso são os ports de saída. Ver **ADR 0.0.0005**.
+o use case **consome**, e isso são os ports de saída. Ver **ADR 0.0.0006**.
 
 ### Ports Secundários / Driven (`ports/out/`)
 
