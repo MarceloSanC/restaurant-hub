@@ -140,12 +140,19 @@ lock-check:
 # docs-check — valida (1) que technical.md `done` só mudou dentro da §7
 # post-execution desde o gate da Fase 3B (CONVENTIONS §3.4), (2) que toda
 # Stage tem issue correspondente no backlog do GitHub (best-effort — pula
-# se `gh` não está autenticado) e (3) o bounded_context dos ADRs.
+# se `gh` não está autenticado), (3) o bounded_context dos ADRs e (4) que a
+# árvore de pastas do LAYOUT §2 descreve o repositório que existe.
+#
+# O (4) é o único que compara documento com sistema de arquivos, e é por isso
+# que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda
+# consultá-la antes de criar qualquer arquivo. Uma linha falsa ali é uma
+# instrução errada que nenhum compilador corrige (issue #45, Gate 5).
 # ---------------------------------------------------------------------------
 docs-check:
 	uv run python scripts/check_technical_postexec.py
 	uv run python scripts/check_stage_issue.py
 	uv run python scripts/check_adr_bounded_context.py
+	uv run python scripts/check_docs_claims.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes (sem cobertura — loop rápido local)
