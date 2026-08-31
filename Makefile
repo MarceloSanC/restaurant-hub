@@ -111,10 +111,18 @@ typecheck:
 	uv run mypy src/ tests/fakes/
 
 # ---------------------------------------------------------------------------
-# layout-check — valida regras de dependência (docs/LAYOUT.md §3)
+# layout-check — valida as regras de arquitetura que NÃO são arestas de import
+# (docs/LAYOUT.md §3, §6, §7 + issue #45).
+#
+# São dois scripts porque são duas perguntas. `check_layout.py` classifica cada
+# arquivo de src/ numa regra e a aplica; `check_dead_shared.py` procura o
+# oposto — o símbolo de `shared/` que NENHUM arquivo alcança. Código morto é a
+# única violação de arquitetura que se caracteriza pela **ausência** de import,
+# então nem o import-linter nem a varredura por camada podem enxergá-la.
 # ---------------------------------------------------------------------------
 layout-check:
 	uv run python scripts/check_layout.py
+	uv run python scripts/check_dead_shared.py
 
 # ---------------------------------------------------------------------------
 # import-check — valida contratos de import (.importlinter espelha LAYOUT §3)
