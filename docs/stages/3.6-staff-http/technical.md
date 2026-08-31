@@ -1882,6 +1882,19 @@ de errata a technicals congelados, com o script reconhecendo um bloco de errata.
 Preferir (a): é barato, cabe no mecanismo que já existe, e não mexe no gate. Stage
 candidata: a primeira que reabrir a 3.2 por qualquer motivo.
 
+> **Fechamento parcial — 2026-08-31.** A direção (a) **já foi executada nesta
+> mesma branch**, e não pela "primeira Stage que reabrir a 3.2": o commit
+> `7909c37`, imediatamente posterior ao commit que escreveu esta entrada,
+> acrescentou +51 linhas à §7 do `technical.md` da 3.2 — um `[finding]` datado
+> que transcreve a ordem antiga da Task 07, registra a ordem em vigor
+> (`find_by_id`, transição, `find_by_name`, `update`) e aponta o ADR 3.6.0004 e a
+> errata da §5.16 do concept. **Só a direção (b) segue aberta:** o freeze de
+> `scripts/check_technical_postexec.py` continua sem forma de errata para as
+> seções §1–§6 de um technical congelado, então a linha 663 daquele doc segue
+> declarando a ordem antiga e o único lugar onde a correção pode morar é a §7.
+> A nota existe porque, sem ela, quem lê esta entrada hoje conclui que **nada**
+> foi feito — e a direção deferida some junto com a metade que já foi cumprida.
+
 ### 2026-08-30 — [finding] terceira expansão de camada para trás no BC staff — Marcelo
 
 **O que se viu:** três Stages seguidas do BC staff alcançaram para trás uma camada
@@ -2199,5 +2212,86 @@ não existe: a exfiltração que o ADR 3.4.0007 fecha, com o sinal invertido.
 críticas desta Stage têm teste que morre quando a lei é quebrada — o enunciado de
 CA33, e nada além. **Não** medem as leis gêmeas em `identity`: isso segue como o
 `[finding]` de 2026-08-30 desta mesma §7.
+
+### 2026-08-31 — [deviation] quatro commits `[3.6/--]` sem entrada nesta §7 — Marcelo
+
+**O que se viu:** a Fase 4 desta Stage produziu **25** commits `[3.6/--]` — muito
+acima da frequência saudável de 0–2 que CONVENTIONS §4(a) declara, e o número em si
+já é o `[finding]` da entrada de 2026-08-30 sobre a fronteira do gate. A §7 registra
+a maioria deles (as entradas de 2026-08-29/30, e o lote de `ef1e375` e `5fd982c`),
+mas **quatro** ficaram sem nenhuma: `a783aeb`, `047fde1`, `9951acd` e `20d75c7`.
+
+**O rastro existe — só não está onde CONVENTIONS §3.4 o põe.** Os quatro têm corpo
+de commit longo, com a medição e a justificativa do off-task. O que falta é a
+entrada nesta seção, que é o lugar que a convenção nomeia para quem audita o plano
+sem percorrer o `git log`. Agregados aqui, cada um com o que mudou de fato:
+
+- **`a783aeb`** — renomeia as **quatro** constantes públicas de `dependencies.py`
+  para inglês (CONVENTIONS §1) e dá aos dois requisitos o sufixo `_ACCESS`. O
+  sufixo não é decoração: sem ele, `MANAGE_JOB_FUNCTIONS` importado na borda de
+  staff teria o **mesmo nome** que o membro `Permission.MANAGE_JOB_FUNCTIONS` de
+  identity — o símbolo que CA07 proíbe staff de importar —, e um leitor do router
+  concluiria a coisa errada sobre a fronteira entre os dois bounded contexts.
+  Nenhum comportamento muda. Feito antes das Tasks 05–08 porque elas importam
+  esses nomes nas 16 rotas, e o rename fica caro depois.
+- **`047fde1`** — reescreve o docstring do dublê adversarial, e é **correção
+  substantiva, não redação**: a razão do `MODO_SEM_UNIDADE` estava **invertida**. O
+  texto afirmava que o modo mata a variante `scope.unit_id or path`; medido por
+  mutação isolada por modo, essa variante **sobrevive** ao modo sem-unidade (`None`
+  é falsy e o `or` cai de volta no path) e morre no modo divergente. O que
+  justifica o segundo modo é **realismo** — `None` é a forma que a produção
+  devolve para o `owner` — e não poder de refutação. Um docstring que atribui
+  morte de mutação onde a medição não achou é pior que nenhum: convida a próxima
+  Stage a confiar numa cobertura que não existe.
+- **`9951acd`** — remove o byte NUL cru gravado neste `technical.md` pelo colapso
+  de escape de um heredoc, e normaliza o fim de linha na mesma passada. As duas
+  coisas são a **mesma** cadeia causal: com o NUL, o git tratava o arquivo como
+  **binário**, `grep` respondia *"Binary file matches"* em vez de linhas — quebrando
+  o idioma de verificação que o próprio concept §11 prescreve — e a normalização
+  de fim de linha era pulada, o que fez `2d3aa81` registrar 1310/1240 linhas para
+  um delta real de ~110, escondendo a mudança revisável do plano.
+- **`20d75c7`** — reacentua as 25 linhas de prosa que `a35c080` deixou para trás
+  dentro dos marcadores. Só acentuação: 25 linhas trocadas por 25, nenhuma fora dos
+  marcadores.
+
+**Por que ficam como `[deviation]` e não como `[finding]`:** os quatro são ajustes
+pequenos, já aplicados e já verdes, contra o plano original — a definição da tag. O
+que sobra para tratar adiante não é nenhum deles em particular, e sim a densidade de
+off-task, que já está registrada como `[finding]` em 2026-08-30.
+
+### 2026-08-31 — [finding] segunda instância de "definido mas não plugado" — Marcelo
+
+**O que se viu:** `identifier_fields` e `IdentifierField` vivem em
+`features/staff/adapters/in/http/dependencies.py:201-242`, e
+`grep -rn "identifier_fields(" src/` **excluída a definição devolve 0**. Os únicos
+consumidores são três módulos de teste
+(`test_http_boundary_sweeps.py`, `test_http_dependencies.py`,
+`test_http_path_addresses_the_record.py`). A produção valida identificador de corpo
+**à mão, rota a rota** — `validate_identifier(payload.target_unit_id, …)` em R16,
+`_job_function_ids(...)` em R05/R07.
+
+**É a segunda instância do mesmo padrão nesta Stage.** A primeira foi
+`AccessRequirement.names_unit`, registrada no comentário que abre a varredura de
+`test_http_boundary_sweeps.py` e fechada em `b9ea8ce` com a mesma saída: quem lê o
+campo é o teste, e ler é o que impede declaração e chamada de divergirem.
+
+**Por que é defensável, e por que mesmo assim fica registrado:** derivar o domínio
+por introspecção é o que faz um campo de identificador novo entrar na varredura de
+CA20 sem que ninguém lembre de estender um teste — é exatamente a disciplina que a
+§11 prescreve, e apagar a função esvaziaria o eixo de corpo de CA20 **em silêncio**.
+O que fica anotado é a forma: **infraestrutura de teste morando em `src/`**, sob
+`make check` e sob cobertura, mas sem chamador de produção. Uma instância é
+pragmatismo; duas na mesma Stage é padrão.
+
+**Direção:** ou (a) plugar as duas no router — `identifier_fields` passaria a
+alimentar a validação de corpo, e `names_unit` a decisão de passar `unit_id=` ao
+guard —, o que mexe nas 17 chamadas ao guard e nas rotas com corpo por um ganho que
+as varreduras já entregam; ou (b) manter as duas em `src/` e **declarar** a ausência
+de chamador no próprio docstring, para que ninguém as leia como plumbing esquecido
+nem as apague por parecerem código morto. (b) já foi aplicada nesta branch em
+`19a58cf`, e é a preferida enquanto forem duas. O gatilho para reabrir (a) é a
+terceira instância, ou a primeira divergência medida entre a validação à mão de duas
+rotas. Stage candidata: a primeira que acrescentar rota com corpo ao BC staff, ou a
+retrospectiva do Step 3.
 
 <!-- END: post-execution -->
