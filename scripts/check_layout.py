@@ -15,6 +15,7 @@ Verifica:
 5. `main.py` não importa feature nenhuma — o entrypoint só conhece a factory.
 6. Charter do composition root: só `@dataclass` e só as funções de wiring.
 7. Classe de `application/dtos/` não tem comportamento.
+8. Cada classe de `application/dtos/results.py` é construída em **um** sítio.
 9. `__init__.py` é marcador de pacote — docstring e nada mais.
 
 Cada feature também precisa dos diretórios obrigatórios (`domain/`,
@@ -183,6 +184,18 @@ DTO_METHOD_ALLOWLIST: dict[tuple[str, str], str] = {
 }
 
 # ---------------------------------------------------------------------------
+# Regra 8 — um sítio de construção por result (Gate 8 da issue #45)
+# ---------------------------------------------------------------------------
+
+RESULTS_ANCHOR = "/application/dtos/results.py"
+
+# A regra vale para **toda** classe declarada num `results.py`, e não só para as
+# que terminam em `Result`: `AuthorizedActor` é result de use case e não carrega
+# o sufixo, e uma regra por sufixo daria uma saída de uma palavra a quem
+# quisesse escapar dela.
+EXPECTED_CONSTRUCTION_SITES = 1
+
+# ---------------------------------------------------------------------------
 # Regra 9 — marcador de pacote não carrega código
 # ---------------------------------------------------------------------------
 
@@ -266,6 +279,7 @@ def coverage_anchors() -> dict[str, str]:
     }
     anchors[COMPOSITION_ROOT_ANCHOR] = "regra 6 — charter do composition root"
     anchors[DTOS_ANCHOR] = "regra 7 — DTO sem comportamento"
+    anchors[RESULTS_ANCHOR] = "regra 8 — um sítio de construção por result"
     anchors[PACKAGE_MARKER_ANCHOR] = "regra 9 — marcador de pacote"
     return anchors
 
@@ -406,6 +420,56 @@ def check_dto_behaviour(src_root: Path) -> list[str]:
     return violations
 
 
+def check_result_construction_sites(src_root: Path) -> list[str]:
+    """Regra 8 — cada classe de `results.py` é construída em exatamente um sítio.
+
+    O modo de falha é o campo novo. Com o result montado campo a campo em N
+    lugares, acrescentar um atributo exige N edições idênticas; esquecer uma
+    não é erro de tipo quando o campo tem default — é uma resposta a menos, num
+    dos N caminhos, servida com status 200.
+
+    Zero sítios também reprova: result que ninguém constrói é DTO morto, e a
+    forma de ele ficar assim é justamente a extração feita pela metade.
+    """
+    declaradas: dict[str, Path] = {}
+    for py_file in sorted(src_root.rglob("*.py")):
+        if RESULTS_ANCHOR not in posix(py_file):
+            continue
+        tree = parse(py_file)
+        if tree is None:
+            continue
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                declaradas[node.name] = py_file
+
+    sitios: dict[str, list[str]] = {nome: [] for nome in declaradas}
+    for py_file in sorted(src_root.rglob("*.py")):
+        tree = parse(py_file)
+        if tree is None:
+            continue
+        rel = py_file.relative_to(src_root.parent)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in sitios
+            ):
+                sitios[node.func.id].append(f"{rel}:{node.lineno}")
+
+    violations: list[str] = []
+    for nome, encontrados in sorted(sitios.items()):
+        if len(encontrados) == EXPECTED_CONSTRUCTION_SITES:
+            continue
+        onde = ", ".join(encontrados) if encontrados else "nenhum"
+        violations.append(
+            f"RESULT: '{nome}' é construído em {len(encontrados)} sítio(s) "
+            f"({onde}); o esperado é {EXPECTED_CONSTRUCTION_SITES}. Extraia um "
+            f"mapeador em {declaradas[nome].name} e chame-o."
+        )
+
+    return violations
+
+
 def check_package_markers(src_root: Path) -> list[str]:
     """Regra 9 — `__init__.py` carrega docstring e nada mais.
 
@@ -496,6 +560,7 @@ def main() -> int:
         *check_feature_structure(features_root),
         *check_composition_root_charter(src_root),
         *check_dto_behaviour(src_root),
+        *check_result_construction_sites(src_root),
         *check_package_markers(src_root),
     ]
 

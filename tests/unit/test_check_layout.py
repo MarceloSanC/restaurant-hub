@@ -324,6 +324,51 @@ def test_gate6_a_allowlist_de_dtos_nao_tem_entrada_morta() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Gate 8 (regra 8) — um sítio de construção por result
+# ---------------------------------------------------------------------------
+
+
+def test_gate8_cada_result_real_e_construido_em_um_sitio() -> None:
+    """Verde depois da extração dos mapeadores; era 11 sítios para `EmployeeResult`."""
+    assert check_layout.check_result_construction_sites(_SRC) == []
+
+
+def test_gate8_dois_sitios_reprovam(tmp_path: pathlib.Path) -> None:
+    """O caso que a issue mediu: o result montado campo a campo em vários lugares."""
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/pedidos/application/dtos/results.py": "class PedidoResult:\n    pass\n",
+            "features/pedidos/application/use_cases/criar.py": "x = PedidoResult()\n",
+            "features/pedidos/application/use_cases/listar.py": "y = PedidoResult()\n",
+        },
+    )
+
+    violacoes = check_layout.check_result_construction_sites(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "construído em 2 sítio(s)" in violacoes[0]
+
+
+def test_gate8_zero_sitios_tambem_reprova(tmp_path: pathlib.Path) -> None:
+    """Result que ninguém constrói é DTO morto — e é como uma extração pela metade termina.
+
+    Sem este caso, `EXPECTED_CONSTRUCTION_SITES` poderia virar `<= 1` sem que a
+    suíte notasse, e o gate passaria a aprovar o DTO órfão que o Gate 7 existe
+    para caçar do outro lado.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {"features/pedidos/application/dtos/results.py": "class PedidoResult:\n    pass\n"},
+    )
+
+    violacoes = check_layout.check_result_construction_sites(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "construído em 0 sítio(s)" in violacoes[0]
+
+
+# ---------------------------------------------------------------------------
 # Regras 5 e 9 — as duas que M1 obrigou a existir
 # ---------------------------------------------------------------------------
 
