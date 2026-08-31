@@ -2029,4 +2029,175 @@ a mesma forma que F1 e F3 tomaram aqui. O sinal de alerta a procurar é o mesmo:
 escrita com quantificador, teste com um representante. Stage candidata: a primeira
 do Step 5 que reabrir a borda HTTP de identity, ou a retrospectiva do Step 3.
 
+### 2026-08-31 — [decision] CA33 — as quatro provas por mutação, com a saída colada — Marcelo
+
+**Contexto:** CA33 exige *"prova por mutação das quatro leis mais críticas desta
+Stage, com a saída colada"*, e o checklist de §3 repete a exigência incluindo o
+registro de que a mutação (a) **sobrevive** ao fake sancionado. Até aqui as saídas
+existiam apenas em relatórios de sessão — fora do repositório, e portanto
+**inconferíveis por quem revisa o PR**. As quatro foram reexecutadas contra a
+árvore de `6202196`, com o Postgres real de pé.
+
+**Pergunta:** colar a saída onde? — e a resposta não é livre: o único lugar
+editável deste doc após `status: done` é esta §7.
+
+**Opções:**
+- A — deixar a saída no relatório da sessão de auditoria e citá-la aqui
+- B — colar a saída **literal** aqui, com o teste nominal que reprovou ✅ recomendada
+
+**Decisão:** B
+
+**Razão:** saída que vive fora do repositório não é evidência para quem lê o PR; é
+testemunho. CA33 fala em *"com a saída colada"*, e o revisor precisa poder conferir
+o par mutação→morte sem reexecutar nada.
+
+**Disciplina comum às quatro:** cada mutação foi aplicada por `replace` de âncora
+**única** (contagem `== 1` asserida antes da escrita; arquivo lido e reescrito em
+UTF-8 com `newline=""`, para não trocar o CRLF), **conferida no arquivo** depois de
+aplicada, e revertida pelo **`replace` inverso** — nunca `git checkout --` —, com
+`git status --porcelain` **vazio** conferido após cada reversão.
+
+#### (a) o router endereça pelo path e não lê `scope.unit_id` — CA15
+
+A lei tem **duas** mutações, e a segunda é a que carrega o contraste que CA33
+nomeia. A primeira é a forma literal do enunciado; a segunda é a forma que CA14 não
+enxerga, e é ela que isola o poder de refutação do dublê adversarial.
+
+**(a1) forma literal — `router.py:366`, rota R05:**
+`unit_id=UnitId(unidade)` → `unit_id=UnitId(scope.unit_id)`.
+
+Contra as suítes do **fake sancionado** (todo `tests/unit/features/staff/adapters`
+menos o arquivo do dublê adversarial):
+
+```
+FAILED tests/unit/features/staff/adapters/test_http_boundary_sweeps.py::test_ca14_nenhum_handler_le_o_unit_id_do_escopo_autorizado
+1 failed, 743 passed in 28.02s
+```
+
+Morreu — mas em **CA14**, a varredura **estrutural** por AST, que o concept declara
+ser *"defesa em profundidade, não a trava"*. Nenhum dos 743 testes de comportamento
+notou. A mensagem foi `Left contains one more item: 'create_employee:366'`.
+
+**(a2) forma que evade CA14 — mesma linha, `getattr(scope, "unit_id")`:** é o
+bypass que o próprio texto de CA14 nomeia.
+
+Contra as suítes do fake sancionado — **sobrevive inteira**, CA14 inclusive:
+
+```
+744 passed in 25.27s
+```
+
+Contra a suíte e2e, que roda o **tradutor de produção** (`_IdentityAccessGuard`)
+contra Postgres real — **sobrevive**:
+
+```
+233 passed in 372.33s (0:06:12)
+```
+
+Contra o **dublê adversarial** — morre:
+
+```
+FAILED tests/unit/features/staff/adapters/test_http_path_addresses_the_record.py::test_ca15_a_unidade_do_use_case_e_a_do_path[escopo-com-unidade-divergente-POST /units/{unit_id}/employees]
+FAILED tests/unit/features/staff/adapters/test_http_path_addresses_the_record.py::test_ca15_a_unidade_do_use_case_e_a_do_path[escopo-sem-unidade-POST /units/{unit_id}/employees]
+2 failed, 36 passed in 2.36s
+```
+
+```
+E       AssertionError: assert None == 'unit-DO-PATH'
+E        +  where None = CreateEmployeeCommand(tenant_id='rest-1', unit_id=None, ...).unit_id
+```
+
+**O que a medição fecha:** 977 testes de comportamento (744 unitários + 233 e2e)
+passam sobre um router que manda a escrita para a unidade do **escopo**. A única
+coisa que refuta a lei é o dublê que contradiz de propósito — exatamente a razão
+pela qual o concept manda fabricá-lo, e não uma preferência de estilo.
+
+#### (b) validação de identificador removida de **uma** rota — CA20
+
+`router.py`, rota R06 (`GET /units/{unit_id}/employees` — a que CA20 nomeia como
+`GET /units/%00/employees`): `unidade = validate_identifier(unit_id, entity=_UNIT)`
+→ `unidade = unit_id`.
+
+```
+FAILED tests/unit/features/staff/adapters/test_http_boundary_sweeps.py::test_ca20_identificador_invalido_em_path_recebe_422_de_staff[GET/units/{unit_id}/employees-unit_id-0]
+FAILED tests/unit/features/staff/adapters/test_http_boundary_sweeps.py::test_ca20_identificador_invalido_em_path_recebe_422_de_staff[GET/units/{unit_id}/employees-unit_id-1]
+FAILED tests/unit/features/staff/adapters/test_http_boundary_sweeps.py::test_ca21_a_validacao_roda_antes_de_autorizar[GET/units/{unit_id}/employees-unit_id-0]
+FAILED tests/unit/features/staff/adapters/test_http_boundary_sweeps.py::test_ca21_a_validacao_roda_antes_de_autorizar[GET/units/{unit_id}/employees-unit_id-1]
+4 failed, 778 passed in 28.92s
+```
+
+**Quatro mortes, e o par importa:** CA20 pega o status errado e **CA21** pega a
+**ordem** — o identificador não validado alcançou `authorize`, e o fake sancionado
+levantou `FakeAuthorizationRejected` em vez de a borda recusar antes. Só a rota
+mutada reprovou: a varredura é derivada de `router.routes`, então a mutação de
+**uma** rota mata exatamente as células daquela rota, nos **dois** valores do eixo
+de path (`"   "` e `"\x00"`).
+
+#### (c) duas entradas trocadas no mapa de status — CA18
+
+`error_handlers.py`: `JobFunctionNotFoundError: HTTP_NOT_FOUND` ↔
+`JobFunctionNameAlreadyExistsError: HTTP_CONFLICT`. As **duas faixas seguem
+exercitadas** depois da troca (`EmployeeNotFoundError` continua 404; os quatro
+`Conflict` restantes continuam 409) — que é a condição que CA18 enuncia entre
+parênteses: um teste só de faixas sobreviveria.
+
+```
+FAILED tests/unit/features/staff/adapters/test_http_error_handlers.py::test_ca18_status_de_cada_excecao[excecao0-404]
+FAILED tests/unit/features/staff/adapters/test_http_error_handlers.py::test_ca18_status_de_cada_excecao[excecao2-409]
+FAILED tests/unit/features/staff/adapters/test_http_error_handlers.py::test_o_discriminador_e_o_mesmo_nas_tres_faixas[excecao0-404]
+FAILED tests/unit/features/staff/adapters/test_http_error_handlers.py::test_o_discriminador_e_o_mesmo_nas_tres_faixas[excecao2-409]
+FAILED tests/unit/features/staff/adapters/test_http_router_employees.py::test_funcao_inexistente_no_tenant_recebe_erro_de_staff
+FAILED tests/unit/features/staff/adapters/test_http_router_job_functions.py::test_funcao_inexistente_recebe_404_com_o_corpo_de_staff
+FAILED tests/unit/features/staff/adapters/test_http_router_job_functions.py::test_nome_repetido_recebe_409_com_o_corpo_de_staff
+7 failed, 775 passed in 30.77s
+```
+
+Pelo HTTP real:
+
+```
+FAILED tests/e2e/features/staff/test_staff_status_bands.py::test_ca19_cada_faixa_e_alcancavel_pelo_http_real[404]
+1 failed, 43 passed in 67.03s (0:01:07)
+```
+
+**Uma observação que a medição acrescenta ao enunciado de CA18:** CA19 — o teste
+*de faixa* — também reprovou, mas **por acidente do representante**: o cenário que
+ele usa para a faixa 404 é justamente `JobFunctionNotFound`, uma das duas classes
+trocadas. Uma troca entre duas classes que não fossem representantes de faixa o
+deixaria verde. Quem mata a troca **por construção**, e não por sorte de fixture, é
+a parametrização par a par de CA18 — que é exatamente o que o critério afirma.
+
+#### (d) origem↔destino invertidas em R16 — CA34
+
+`router.py`, `CopyEmployeeToUnitCommand`: `unit_id=UnitId(unidade)` /
+`target_unit_id=UnitId(destino)` → `unit_id=UnitId(destino)` /
+`target_unit_id=UnitId(unidade)`.
+
+```
+FAILED tests/unit/features/staff/adapters/test_http_path_addresses_the_record.py::test_ca15_a_unidade_do_use_case_e_a_do_path[escopo-com-unidade-divergente-POST /units/{unit_id}/employees/{employee_id}/copies]
+FAILED tests/unit/features/staff/adapters/test_http_path_addresses_the_record.py::test_ca15_a_unidade_do_use_case_e_a_do_path[escopo-sem-unidade-POST /units/{unit_id}/employees/{employee_id}/copies]
+FAILED tests/unit/features/staff/adapters/test_http_router_lifecycle_and_copy.py::test_ca16_a_copia_chama_o_guard_duas_vezes_com_alvos_distintos
+FAILED tests/unit/features/staff/adapters/test_http_router_lifecycle_and_copy.py::test_ca34_o_command_carrega_a_origem_no_path_e_o_destino_no_corpo
+4 failed, 778 passed in 29.81s
+```
+
+Pelo HTTP real, contra Postgres:
+
+```
+E       assert 404 == <HTTPStatus.CREATED: 201>
+FAILED tests/e2e/features/staff/test_staff_flow.py::test_ca34_a_copia_cai_na_unidade_de_destino_e_o_original_fica
+1 failed, 5 passed in 11.03s
+```
+
+**Três leis distintas morrem juntas, e nenhuma é redundante:** CA34 pega **onde a
+cópia caiu**, CA16 pega que a **primeira** autorização deixou de ser a da origem, e
+CA15 pega que a unidade que endereça o registro deixou de ser a do path — a mesma
+inversão vista dos três ângulos que o concept separa de propósito. O e2e devolve
+404 porque a leitura passa a acontecer na unidade de destino, onde o funcionário
+não existe: a exfiltração que o ADR 3.4.0007 fecha, com o sinal invertido.
+
+**O que as quatro juntas medem, e o que não medem.** Medem que as quatro leis mais
+críticas desta Stage têm teste que morre quando a lei é quebrada — o enunciado de
+CA33, e nada além. **Não** medem as leis gêmeas em `identity`: isso segue como o
+`[finding]` de 2026-08-30 desta mesma §7.
+
 <!-- END: post-execution -->
