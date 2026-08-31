@@ -188,3 +188,26 @@ also_copy = [
     ".importlinter",
     ".env.example",
 ]
+# `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
+# conveniência.
+#
+# O mutmut reescreve cada arquivo mutado trocando `def wire_dependencies(...)`
+# por um despachante mais **uma cópia por mutante** —
+# `x_wire_dependencies__mutmut_1`, `__mutmut_2`, … Dentro de `mutants/`, o
+# `composition_root.py` tem então centenas de funções de módulo, e o Gate 1
+# (charter: só `@dataclass` e as duas funções de wiring) reprova — corretamente,
+# sobre um arquivo que a **ferramenta** escreveu. O mesmo vale para o Gate 8:
+# `AuthorizedActor` aparece construído uma vez por cópia de `authorize_action`.
+#
+# Excluí-lo não enfraquece nada, e é a única leitura correta da pergunta que a
+# mutação faz. Ele é um gate **estrutural sobre o texto do fonte**: mudar um
+# `>=` para `>` dentro de `authorize_action` não altera se o charter vale, então
+# ele não teria como matar mutante nenhum. Mantê-lo faria toda a corrida morrer
+# na coleta de estatísticas — que foi o que aconteceu, medido — sem chegar a
+# executar um mutante sequer.
+#
+# Os demais gates da #45 continuam na corrida: `check_dead_shared` e
+# `test_status_map` leem arquivos que o mutmut não toca.
+pytest_add_cli_args_test_selection = [
+    "--ignore=tests/unit/test_check_layout.py",
+]
