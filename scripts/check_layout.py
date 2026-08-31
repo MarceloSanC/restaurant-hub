@@ -14,6 +14,7 @@ Verifica:
 4. `restaurant_hub/shared/` não importa de `restaurant_hub.features` (acoplamento inverso).
 5. `main.py` não importa feature nenhuma — o entrypoint só conhece a factory.
 6. Charter do composition root: só `@dataclass` e só as funções de wiring.
+7. Classe de `application/dtos/` não tem comportamento.
 9. `__init__.py` é marcador de pacote — docstring e nada mais.
 
 Cada feature também precisa dos diretórios obrigatórios (`domain/`,
@@ -162,6 +163,26 @@ COMPOSITION_ROOT_CLASS_ALLOWLIST: dict[str, str] = {
 COMPOSITION_ROOT_RAISE_ALLOWLIST: dict[str, str] = dict(COMPOSITION_ROOT_CLASS_ALLOWLIST)
 
 # ---------------------------------------------------------------------------
+# Regra 7 — DTO não tem comportamento (Gate 6 da issue #45)
+# ---------------------------------------------------------------------------
+
+DTOS_ANCHOR = "/application/dtos/"
+
+# Métodos tolerados em classe de `application/dtos/`, com o ADR que os põe lá.
+# A chave é o par (classe, método), e não só o nome do método, para que um
+# `is_active` numa classe nova não entre de carona no perdão deste.
+DTO_METHOD_ALLOWLIST: dict[tuple[str, str], str] = {
+    ("Session", "is_active"): (
+        "ADR 2.2.0001 — a sessão de refresh é o registro que torna o logout real; "
+        "a convenção half-open do intervalo mora com o dado que ela descreve"
+    ),
+    ("PasswordSetupToken", "is_usable"): (
+        "ADR 2.5.0002 — token de setup é mecanismo separado do de sessão, e a "
+        "mesma convenção half-open precisa ser explícita nos dois"
+    ),
+}
+
+# ---------------------------------------------------------------------------
 # Regra 9 — marcador de pacote não carrega código
 # ---------------------------------------------------------------------------
 
@@ -244,6 +265,7 @@ def coverage_anchors() -> dict[str, str]:
         for layer_pattern, _ in FORBIDDEN_IMPORTS
     }
     anchors[COMPOSITION_ROOT_ANCHOR] = "regra 6 — charter do composition root"
+    anchors[DTOS_ANCHOR] = "regra 7 — DTO sem comportamento"
     anchors[PACKAGE_MARKER_ANCHOR] = "regra 9 — marcador de pacote"
     return anchors
 
@@ -347,6 +369,43 @@ def check_composition_root_charter(src_root: Path) -> list[str]:
     return violations
 
 
+def check_dto_behaviour(src_root: Path) -> list[str]:
+    """Regra 7 — classe de `application/dtos/` não tem método fora de dunders.
+
+    DTO com comportamento é a porta pela qual a regra de negócio sai do domínio
+    sem cruzar nenhuma fronteira de import: o método viaja **dentro** do dado,
+    então nenhum contrato de import o vê. `Session.is_active` é o caso tolerado,
+    e a allowlist é o que impede que o próximo passe pelo mesmo argumento.
+    """
+    violations: list[str] = []
+
+    for py_file in sorted(src_root.rglob("*.py")):
+        if DTOS_ANCHOR not in posix(py_file):
+            continue
+        tree = parse(py_file)
+        if tree is None:
+            continue
+        rel = py_file.relative_to(src_root.parent)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for membro in node.body:
+                if not isinstance(membro, ast.FunctionDef | ast.AsyncFunctionDef):
+                    continue
+                if is_dunder(membro.name):
+                    continue
+                if (node.name, membro.name) in DTO_METHOD_ALLOWLIST:
+                    continue
+                violations.append(
+                    f"DTO: {rel}:{membro.lineno} — '{node.name}.{membro.name}' é "
+                    f"comportamento num DTO. O lugar da regra é a entidade de "
+                    f"domínio ou o use case (LAYOUT §7)."
+                )
+
+    return violations
+
+
 def check_package_markers(src_root: Path) -> list[str]:
     """Regra 9 — `__init__.py` carrega docstring e nada mais.
 
@@ -436,6 +495,7 @@ def main() -> int:
         *check_layer_imports(src_root),
         *check_feature_structure(features_root),
         *check_composition_root_charter(src_root),
+        *check_dto_behaviour(src_root),
         *check_package_markers(src_root),
     ]
 

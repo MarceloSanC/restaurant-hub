@@ -243,6 +243,87 @@ def test_gate1_a_allowlist_do_charter_nao_tem_entrada_morta() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Gate 6 (regra 7) — DTO não tem comportamento
+# ---------------------------------------------------------------------------
+
+
+def test_gate6_os_dtos_reais_nao_tem_comportamento_fora_da_allowlist() -> None:
+    assert check_layout.check_dto_behaviour(_SRC) == []
+
+
+def test_gate6_um_metodo_plantado_num_dto_reprova(tmp_path: pathlib.Path) -> None:
+    """Violador plantado, e com um dunder ao lado para provar o filtro.
+
+    `__post_init__` é o método legítimo mais comum num DTO `frozen`; se o
+    detector o acusasse, a regra seria inaplicável e a saída seria afrouxá-la.
+    O teste cobra as duas coisas de uma vez: acusa `total_devido`, ignora
+    `__post_init__`.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/pedidos/application/dtos/results.py": (
+                "class PedidoResult:\n"
+                "    def __post_init__(self) -> None:\n"
+                "        pass\n"
+                "\n"
+                "    def total_devido(self) -> int:\n"
+                "        return 0\n"
+            )
+        },
+    )
+
+    violacoes = check_layout.check_dto_behaviour(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "PedidoResult.total_devido" in violacoes[0]
+
+
+def test_gate6_a_allowlist_de_dtos_nao_cresceu() -> None:
+    """Os dois métodos que a auditoria encontrou, e nenhum a mais."""
+    assert set(check_layout.DTO_METHOD_ALLOWLIST) == {
+        ("Session", "is_active"),
+        ("PasswordSetupToken", "is_usable"),
+    }
+
+
+def test_gate6_cada_entrada_da_allowlist_de_dtos_cita_o_seu_adr() -> None:
+    sem_ponteiro = sorted(
+        f"{classe}.{metodo}"
+        for (classe, metodo), motivo in check_layout.DTO_METHOD_ALLOWLIST.items()
+        if "ADR" not in motivo
+    )
+
+    assert sem_ponteiro == []
+
+
+def test_gate6_a_allowlist_de_dtos_nao_tem_entrada_morta() -> None:
+    """O par (classe, método) perdoado precisa existir em `application/dtos/`.
+
+    A chave é o par justamente para isto: um `is_active` numa classe nova não
+    herda o perdão deste, e um `Session.is_active` renomeado deixa a entrada
+    órfã — que é o momento em que ela deve sair, não ficar.
+    """
+    reais: set[tuple[str, str]] = set()
+    for arquivo in _SRC.rglob("*.py"):
+        if check_layout.DTOS_ANCHOR not in check_layout.posix(arquivo):
+            continue
+        arvore = ast.parse(arquivo.read_text(encoding="utf-8"))
+        for no in ast.walk(arvore):
+            if not isinstance(no, ast.ClassDef):
+                continue
+            reais.update(
+                (no.name, membro.name)
+                for membro in no.body
+                if isinstance(membro, ast.FunctionDef | ast.AsyncFunctionDef)
+            )
+
+    orfas = sorted(set(check_layout.DTO_METHOD_ALLOWLIST) - reais)
+
+    assert orfas == [], f"allowlist perdoa método que não existe mais: {orfas}"
+
+
+# ---------------------------------------------------------------------------
 # Regras 5 e 9 — as duas que M1 obrigou a existir
 # ---------------------------------------------------------------------------
 
