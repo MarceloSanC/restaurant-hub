@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de
 keywords: [concept, staff-http, fastapi, router, schemas, rbac, error-handler, e2e]
 status: done
 created_at: 2026-08-18
-updated_at: 2026-08-18
+updated_at: 2026-08-31
 stage_id: 3.6-staff-http
 stage_title: API de equipe (borda HTTP)
 step_id: 3
@@ -960,10 +960,10 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
 
 ### Rotas e contrato
 
-- [ ] **CA01** — As 16 rotas de §4.1 existem sob `/api/v1`, com o método e o
+- [x] **CA01** — As 16 rotas de §4.1 existem sob `/api/v1`, com o método e o
       status de sucesso da tabela, e cada uma chama **exatamente um** use case.
       Teste parametrizado sobre R01…R16.
-- [ ] **CA02** — **Nenhum campo de request influencia o tenant efetivo.** Duas
+- [x] **CA02** — **Nenhum campo de request influencia o tenant efetivo.** Duas
       metades, porque a primeira sozinha é representante estreito: (a) o teste
       varre `model_fields` de **todos** os `*Request` do módulo (derivados por
       introspecção) e falha se aparecer `tenant_id` **ou qualquer alias plausível**
@@ -971,9 +971,9 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       provando que o `tenant_id` de **todo** command/query construído vem de
       `AuthorizedScope.tenant_id`, e de nenhuma outra origem. Sem (b), um campo
       `restaurant_id` no corpo consumido pelo router passaria pela lista negra.
-- [ ] **CA03** — `PUT /shift-preference` com `{"shift_preference": null}` limpa a
+- [x] **CA03** — `PUT /shift-preference` com `{"shift_preference": null}` limpa a
       preferência; corpo `{}` recebe 422 (campo obrigatório, sem default).
-- [ ] **CA04** — `weekly_hours` sobrevive ao round-trip HTTP em **valor e
+- [x] **CA04** — `weekly_hours` sobrevive ao round-trip HTTP em **valor e
       escala** (`"22.50"` volta `"22.50"`); `start`/`end` voltam sem offset e um
       envio com `Z` recebe 422 (`InvalidUnavailabilityPeriodError`), não é
       convertido em silêncio; e os **dois** campos derivados de `frozenset` —
@@ -983,39 +983,39 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       determinística **dentro de um processo** (o `PYTHONHASHSEED` é sorteado por
       processo), então "duas execuções produzem o mesmo corpo" é verdade com ou
       sem `sorted()` e não mata a mutação. Medido no Checkpoint A.
-- [ ] **CA05** — `router.py` e `schemas.py` de staff **não importam nenhum
+- [x] **CA05** — `router.py` e `schemas.py` de staff **não importam nenhum
       símbolo** de `staff.domain.entities`, e nenhum use case recebe um schema
       Pydantic. Verificado por varredura de **imports** (decidível), não de
       anotações.
-- [ ] **CA06** — O perfil de jornada é união discriminada no fio:
+- [x] **CA06** — O perfil de jornada é união discriminada no fio:
       `{"type":"on_demand","weekly_hours":"40"}` e `{"type":"fixed"}` recebem 422;
       os dois payloads válidos criam o VO correspondente.
 
 ### Acesso — o eixo de segurança
 
-- [ ] **CA07** — Nenhum módulo em `features/staff/` importa `features.identity`
+- [x] **CA07** — Nenhum módulo em `features/staff/` importa `features.identity`
       nem nomeia `Role`/`Permission`; `lint-imports` verde e o contrato
       `bc-independence` continua **sem nenhum `ignore_imports`** (o teste da 3.4
       que lê o `.importlinter` continua passando).
-- [ ] **CA08** — Toda rota de staff **sem** Bearer recebe 401 com corpo constante
+- [x] **CA08** — Toda rota de staff **sem** Bearer recebe 401 com corpo constante
       e header `WWW-Authenticate: Bearer`. Teste **enumera as rotas do router**
       (derivadas de `router.routes`), não uma amostra — R01…R16.
-- [ ] **CA09** — `employee` e `platform_admin` recebem **403** nas **16** rotas,
+- [x] **CA09** — `employee` e `platform_admin` recebem **403** nas **16** rotas,
       com o corpo constante de identity. Teste parametrizado sobre o produto
       `{employee, platform_admin} × R01…R16` — 32 casos, não dois.
-- [ ] **CA10** — `manager` **alcança** as 16 rotas na sua própria unidade e no
+- [x] **CA10** — `manager` **alcança** as 16 rotas na sua própria unidade e no
       catálogo do seu tenant: teste parametrizado sobre R01…R16 com ator
       `manager` real, exigindo que **nenhuma** resposta seja 401/403. *(Era o
       critério que a F1 reprovava; com o ADR 0.0.0005 ele passa a ser o teste de
       não-regressão do alcance.)*
-- [ ] **CA11** — `owner` alcança as 16 rotas, inclusive as de unidade da qual
+- [x] **CA11** — `owner` alcança as 16 rotas, inclusive as de unidade da qual
       **não é membro** (bypass por papel), e o efeito recai sobre a unidade do
       **path** — não sobre nenhuma outra. Parametrizado sobre REMP.
-- [ ] **CA12** — `hr` e `manager` produzem resultado **idêntico** em todas as 16
+- [x] **CA12** — `hr` e `manager` produzem resultado **idêntico** em todas as 16
       rotas, sobre o mesmo estado: teste parametrizado sobre R01…R16 que assere a
       igualdade de status entre os dois papéis. *(Trava a decisão `hr ≡ manager`
       do ADR 3.4.0006 §1 como propriedade, não como comentário.)*
-- [ ] **CA13** — Isolamento entre unidades, nos **dois** endereços possíveis e
+- [x] **CA13** — Isolamento entre unidades, nos **dois** endereços possíveis e
       com os **dois** status corretos — que são diferentes, e confundi-los faz
       metade da parametrização reprovar:
       - **404** quando o ator endereça pela **própria** unidade A o
@@ -1024,18 +1024,18 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       - **403** quando o ator endereça pela unidade **B**, da qual não é membro
         (o guard nega no eixo de visibilidade), e o mesmo 403 responde à unidade
         **inexistente** — indistinguíveis, por desenho.
-- [ ] **CA14** — **Nenhum handler de rota lê `AuthorizedScope.unit_id`.**
+- [x] **CA14** — **Nenhum handler de rota lê `AuthorizedScope.unit_id`.**
       Verificado estruturalmente (varredura por AST do módulo do router: nenhum
       acesso ao atributo `unit_id` sobre o objeto devolvido pelo guard). É
       **defesa em profundidade, não a trava**: `getattr(scope, "unit_id")`,
       `astuple(scope)` ou `asdict(scope)["unit_id"]` a contornam. A trava é CA15.
-- [ ] **CA15** — Para **toda** rota de REMP, a unidade que chega ao use case é a
+- [x] **CA15** — Para **toda** rota de REMP, a unidade que chega ao use case é a
       do **path**, e o teste usa um dublê **adversarial** do port — um que
       devolve `AuthorizedScope` com `unit_id` **diferente** do pedido (e outro
       com `None`). *(Ver a nota abaixo: o fake sancionado e o tradutor de
       produção **ecoam** a unidade pedida, então nenhum dos dois é capaz de
       refutar este critério.)*
-- [ ] **CA16** — R16 chama o guard **duas vezes**, com alvos distintos (unidade
+- [x] **CA16** — R16 chama o guard **duas vezes**, com alvos distintos (unidade
       de origem e unidade destino), e as três recusas do destino — outro tenant,
       inexistente, não visível — produzem **o mesmo** status e **o mesmo** corpo,
       sem gravar nada. Inclui o caso "a **origem** não é visível", que mata a
@@ -1043,17 +1043,17 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
 
 ### Erros
 
-- [ ] **CA17** — O mapa `STAFF_ERROR_STATUS` é **total**: o teste enumera
+- [x] **CA17** — O mapa `STAFF_ERROR_STATUS` é **total**: o teste enumera
       recursivamente as subclasses concretas de `StaffError` (excluída a raiz) e
       exige entrada **própria** para cada uma. Classe nova sem entrada **reprova**.
-- [ ] **CA18** — O mapa é verificado **par a par** (classe → status), em teste
+- [x] **CA18** — O mapa é verificado **par a par** (classe → status), em teste
       parametrizado sobre as **18** entradas de §6.1. *(Trocar duas entradas
       dentro de faixas já exercitadas sobreviveria a um teste só de faixas.)*
-- [ ] **CA19** — Cada uma das três faixas de §6.1 é exercitada por ao menos um
+- [x] **CA19** — Cada uma das três faixas de §6.1 é exercitada por ao menos um
       teste que chega pelo **HTTP real**, não por chamada direta ao handler; e
       `UnavailabilityNotFoundError` responde **422**, com teste que falha se
       alguém a fizer herdar de `NotFoundError`.
-- [ ] **CA20** — Identificador inválido recebe **422**, sobre o domínio enumerado
+- [x] **CA20** — Identificador inválido recebe **422**, sobre o domínio enumerado
       por eixo — e os eixos têm **valores diferentes**, porque o roteador
       intercepta um deles:
       - **path** (rotas de RID, derivadas de `router.routes`): produto
@@ -1068,7 +1068,7 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
         × {"", "   ", "\x00"}`, com os campos **derivados por introspecção** dos
         schemas (`*_id`/`*_ids`), não listados à mão — para que campo novo entre
         na varredura sem ninguém lembrar.
-- [ ] **CA21** — A validação de identificador roda **antes de autorizar**, e a
+- [x] **CA21** — A validação de identificador roda **antes de autorizar**, e a
       prova é a **ausência de chamada**: com o dublê do port que registra
       chamadas (`InMemoryAccessGuard.calls`), uma requisição com identificador
       inválido não produz **nenhuma entrada `authorize(`** em `calls`. *(A
@@ -1077,14 +1077,14 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       identificador nenhum. Exigir `calls == []` obrigaria a validar antes de
       autenticar, e aí uma requisição sem Bearer com id inválido receberia 422 em
       vez de 401 — a sondagem que §5.1 existe para impedir.)*
-- [ ] **CA22** — Nome contendo `\x00` recebe **422** pelo HTTP real em **todas**
+- [x] **CA22** — Nome contendo `\x00` recebe **422** pelo HTTP real em **todas**
       as rotas que aceitam nome — R01, R03, R05 e R07 —, não só nas duas de
       criação. *(A rejeição já é do domínio desde a 3.4; aqui prova-se que a
       borda a alcança e a classifica em cada caminho que a produz.)*
-- [ ] **CA23** — Período do dia desconhecido recebe 422, não 500, em R05 e R10; e
+- [x] **CA23** — Período do dia desconhecido recebe 422, não 500, em R05 e R10; e
       **nenhum** módulo do adapter chama `DayPeriod(...)` diretamente (varredura
       de AST — §5.15).
-- [ ] **CA24** — **Nenhum campo escalar de request devolve 500** para o conjunto
+- [x] **CA24** — **Nenhum campo escalar de request devolve 500** para o conjunto
       adversarial da 3.3 (aspas, acento, emoji com ZWJ, `\n`, 1000 caracteres,
       `\x00`) mais os valores numéricos degenerados (`"abc"`, `""`, `"40,5"`,
       `"NaN"`, `"Infinity"`, `"-1"`, `"0"`). **O domínio é enumerado por
@@ -1097,33 +1097,33 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
 
 ### Fluxo e isolamento (DoD do roadmap e da issue #43)
 
-- [ ] **CA25** — e2e feliz pelo entrypoint real, com ator **`manager`** (não
+- [x] **CA25** — e2e feliz pelo entrypoint real, com ator **`manager`** (não
       `owner`): autentica, cria função customizada, cria funcionário com jornada
       fixa e preferência, registra indisponibilidade e lista a unidade — tudo
       pela API, contra Postgres real.
-- [ ] **CA26** — Funcionário criado na unidade A **não aparece** em
+- [x] **CA26** — Funcionário criado na unidade A **não aparece** em
       `GET /units/B/employees`, mesmo para ator que enxerga as duas unidades.
-- [ ] **CA27** — Desligado some da listagem default e reaparece com
+- [x] **CA27** — Desligado some da listagem default e reaparece com
       `include_inactive=true`; a recontratação o devolve à listagem default.
-- [ ] **CA28** — A ordem da listagem é a de `L-ORD` e é estável entre execuções.
-- [ ] **CA29** — Acesso negado coberto pelo e2e real: um ator `employee`
+- [x] **CA28** — A ordem da listagem é a de `L-ORD` e é estável entre execuções.
+- [x] **CA29** — Acesso negado coberto pelo e2e real: um ator `employee`
       autenticado recebe 403 ao tentar criar função e ao tentar listar
       funcionários — pela API, não por unit test.
 
 ### Wiring e gates
 
-- [ ] **CA30** — `create_app()` registra **os dois** routers e **os dois**
+- [x] **CA30** — `create_app()` registra **os dois** routers e **os dois**
       registradores de handlers; as rotas de identity continuam respondendo
       exatamente como antes (nenhuma regressão de path, status ou corpo), e o
       mapa de overrides tem as 17 entradas de staff.
-- [ ] **CA31** — Nenhuma suíte já mergeada regride: as suítes de contrato e a de
+- [x] **CA31** — Nenhuma suíte já mergeada regride: as suítes de contrato e a de
       conduta continuam verdes **sem alteração da regex `_ORDER_BY`**
       (consequência do ADR 3.4.0004). *(É o critério que o ADR 3.4.0004
       `## Consequences` cita — ver a errata de §7 D6.)*
-- [ ] **CA32** — `make check` verde (inclui `lint-imports`, `layout-check`,
+- [x] **CA32** — `make check` verde (inclui `lint-imports`, `layout-check`,
       `docs-check`, mypy strict) e cobertura ≥ 90% em **cada** arquivo
       novo/tocado da Stage.
-- [ ] **CA33** — **Prova por mutação** das quatro leis mais críticas desta Stage,
+- [x] **CA33** — **Prova por mutação** das quatro leis mais críticas desta Stage,
       com a saída colada no relatório: (a) trocar o `unit_id` do path por
       `scope.unit_id` derruba CA15 — *e o critério só é verdadeiro com o dublê
       adversarial; com o fake sancionado a mutação sobrevive, porque ele ecoa*;
@@ -1132,7 +1132,7 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       mesma faixa derruba CA18; (d) inverter origem e destino em R16 derruba
       CA34. Mutação que não derruba nenhum teste é cobertura insuficiente
       **comprovada**, não estilo.
-- [ ] **CA34** — **A cópia cai na unidade certa.** Cópia bem-sucedida de A para B
+- [x] **CA34** — **A cópia cai na unidade certa.** Cópia bem-sucedida de A para B
       por ator que enxerga as duas: o clone aparece em `GET /units/B/employees`,
       **não** em A; o original permanece em A, inalterado; e o `id` do clone
       difere do original. *(Critério acrescentado no Checkpoint A: a inversão
@@ -1140,7 +1140,7 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
       sobrevive a CA11, CA13, CA16 e CA25, porque nenhum deles exercita uma cópia
       que dá certo e olha **onde** ela caiu. O use case nomeia a inversão como
       reabertura da exfiltração que o ADR 3.4.0007 fecha.)*
-- [ ] **CA36** — **Nenhuma das 16 rotas produz `TenantScopeRequiredError`**, para
+- [x] **CA36** — **Nenhuma das 16 rotas produz `TenantScopeRequiredError`**, para
       **nenhum** dos papéis que detêm permissão de staff (`owner`, `manager`,
       `hr`): teste parametrizado sobre `{owner, manager, hr} × R01…R16` que falha
       se qualquer resposta trouxer o 403 daquele erro. **E a lei do tenant
