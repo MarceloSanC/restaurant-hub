@@ -30,11 +30,16 @@ um dos dois obrigados cumpre não é lei. O segundo é o CA21: a Stage promete q
 
 import ast
 import contextlib
+import datetime
 import importlib
 import inspect
 import pathlib
+from collections.abc import Callable
+from types import ModuleType
 
 import pytest
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
 
 from restaurant_hub.composition_root import (
     ApplicationDependencies,
@@ -42,7 +47,9 @@ from restaurant_hub.composition_root import (
     build_http_wiring,
     wire_dependencies,
 )
+from restaurant_hub.features.identity.application.dtos.identifiers import SessionId
 from restaurant_hub.features.identity.application.dtos.results import AuthorizedActor
+from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
 from restaurant_hub.features.identity.application.errors import (
     InvalidAccessTokenError,
     PermissionDeniedError,
@@ -317,6 +324,121 @@ def _authorized_actor(
     )
 
 
+def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
+    """`AuthenticatedActor` **real** de identity, e não um stub com um `.claims`.
+
+    É o objeto que `IdentityGuard.authenticate` devolve em produção, e é dele que
+    o tradutor lê o tenant quando a chamada o omite (ADR 0.0.0005, cláusula 3).
+    Um stub anônimo com os mesmos atributos testaria a forma que **este arquivo**
+    imaginou: `claims` renomeado do outro lado da fronteira sairia da suíte em
+    silêncio e reapareceria como 403 universal em runtime — que é precisamente o
+    defeito que a resolução do tenant existe para fechar.
+
+    O módulo mora sob o pacote `in`, keyword Python, então chega por `importlib`
+    (LAYOUT §8) — o mesmo caminho que o composition root usa.
+    """
+    dependencies = importlib.import_module(
+        "restaurant_hub.features.identity.adapters.in.http.dependencies"
+    )
+    actor: object = dependencies.AuthenticatedActor(
+        claims=AccessTokenClaims(
+            subject=UserId("user-1"),
+            role=Role.MANAGER,
+            tenant_id=RestaurantId(tenant_id) if tenant_id is not None else None,
+            session_id=SessionId("session-1"),
+            expires_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        )
+    )
+    return actor
+
+
+# **O eixo do tenant na chamada — nomeado x omitido** (ADR 0.0.0005).
+#
+# Mesmo `parametrize`, na mesma forma, que o de
+# `tests/unit/features/staff/application/test_access_guard_laws.py`: a lei do
+# tenant resolvido vale para as **duas** implementações do port, e cobrá-las com
+# conjuntos de valores diferentes é o sinal de alerta mais forte da família "lei
+# universal, representante estreito" — foi assim que a Stage 3.4 vazou duas
+# mutações. Os dois arquivos são comparáveis linha a linha de propósito.
+# Cardinalidades declaradas — piso contra a varredura encolher em silencio.
+_TOTAL_DE_OVERRIDES_DE_STAFF = 17
+_TOTAL_DE_ROTAS_DE_STAFF = 16
+_TOTAL_DE_ROTAS_DE_IDENTITY = 10
+_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PREFIXO_DA_API = "/api/v1"
+
+# O inventário de identity, **literal**, como o cliente o alcança. Transcrito e
+# não derivado do router: derivá-lo faria a expectativa acompanhar qualquer
+# mudança de path, e "não regrediu" passaria a significar "concorda consigo
+# mesmo". Uma contagem sozinha também não bastava — trocar `/users` por
+# `/usuarios` mantém o total em dez.
+_ROTAS_DE_IDENTITY: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("POST", "/api/v1/auth/login"),
+        ("POST", "/api/v1/auth/logout"),
+        ("POST", "/api/v1/auth/password"),
+        ("POST", "/api/v1/auth/password-reset-requests"),
+        ("POST", "/api/v1/auth/refresh"),
+        ("POST", "/api/v1/restaurants"),
+        ("POST", "/api/v1/restaurants/{restaurant_id}/owners"),
+        ("POST", "/api/v1/restaurants/{restaurant_id}/units"),
+        ("POST", "/api/v1/users"),
+        ("POST", "/api/v1/users/invitations"),
+    }
+)
+
+# **O eixo do tenant na chamada — nomeado x omitido x vazio** (ADR 0.0.0005).
+#
+# O terceiro valor é `""`, e a sua ausência era **reincidência de L-AG3**. A
+# cláusula que este tradutor escreve é uma disjunção declarada no comentário da
+# própria linha: *"só a **ausência** carrega significado; um `tenant_id=""`
+# explícito é o chamador nomeando um tenant vazio, e segue para a decisão de
+# acesso como qualquer outro alvo — que o negará. Trocar por truthiness aqui
+# reescreveria o pedido em silêncio (ADR 2.3.0005)"*.
+#
+# Com só dois valores no eixo, `tenant_id if tenant_id is not None else …` →
+# `tenant_id or …` sobrevivia aos 2791 testes, aqui e na suíte do fake — as duas
+# implementações escrevem a mesma cláusula, e as duas ficavam cobertas pelo mesmo
+# conjunto **incompleto**. Medido com spy: o chamador pede `tenant_id=""` e
+# identity recebe `"rest-do-ator"`; um alvo que a decisão negaria vira o tenant do
+# próprio ator, concedido.
+#
+# `5d69846` já tinha enumerado `ausente`/`vazio` para esta mesma disjunção, mas
+# no `actor_tenant_id` — o tenant que identity **devolve**. O par no **argumento
+# de entrada**, o tenant que o chamador **pede**, nunca tinha sido enumerado.
+_TENANT_NA_CHAMADA = [
+    pytest.param("t1", id="tenant-nomeado"),
+    pytest.param(None, id="tenant-omitido"),
+    pytest.param("", id="tenant-vazio"),
+]
+
+# O mesmo eixo com o **tenant que tem de chegar ao `IdentityGuard`** para cada
+# valor. Nomeado e vazio seguem como estão; só a ausência é substituída pelo
+# tenant do ator. É a metade do contrato que só o caminho de sucesso observa.
+_TENANT_RESOLVIDO = [
+    pytest.param("t1", "t1", id="tenant-nomeado"),
+    pytest.param(None, "t1", id="tenant-omitido"),
+    pytest.param("", "", id="tenant-vazio"),
+]
+
+_VALORES_DO_EIXO_DO_TENANT = 3
+
+
+def test_o_eixo_do_tenant_na_chamada_tem_os_tres_valores_do_contrato() -> None:
+    """A cardinalidade do eixo, asserida junto das leis que rodam sobre ele.
+
+    Um `parametrize` que perdesse o `""` continuaria verde com dois terços dos
+    casos, e a disjunção *"nomeado, omitido **ou** vazio"* voltaria a ter dois
+    representantes de três — exatamente a forma do achado que esta correção
+    fecha. A suíte do fake carrega a asserção gêmea, para que os dois lados do
+    port não possam divergir em silêncio.
+    """
+    assert len(_TENANT_NA_CHAMADA) == _VALORES_DO_EIXO_DO_TENANT
+    assert len(_TENANT_RESOLVIDO) == _VALORES_DO_EIXO_DO_TENANT
+    assert [caso.id for caso in _TENANT_NA_CHAMADA] == [caso.id for caso in _TENANT_RESOLVIDO]
+
+
 # **A segunda dimensão de L-AG3 — e ela não é simetria decorativa.**
 #
 # Com as leis escritas só sobre `manage_staff`, a recusa fica travada **por
@@ -454,6 +576,118 @@ def test_l_ag2_o_tradutor_nao_traduz_a_excecao_de_autorizacao(
     assert excinfo.value is spy.authorization_error
 
 
+@pytest.mark.parametrize(("tenant_na_chamada", "tenant_alvo"), _TENANT_RESOLVIDO)
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_o_tenant_da_chamada_decide_o_que_chega_a_identity(
+    # A aridade é a do produto cartesiano: as duas coordenadas do alvo e as duas
+    # do eixo do tenant. Agrupá-las esconderia que o segundo valor do eixo é o
+    # **esperado**, que é o que dá conteúdo à lei.
+    permission: str,
+    unit: str | None,
+    tenant_na_chamada: str | None,
+    tenant_alvo: str,
+) -> None:
+    """ADR 0.0.0005 na implementação de produção — e a asserção é sobre o **pedido**.
+
+    Sem esta resolução as 16 rotas de staff são inalcançáveis por **todos** os
+    papéis: o inventário não carrega tenant (cláusula 2), então o tradutor
+    delegaria `tenant_id=None` e o passo 3 de `AuthorizeActionUseCase` recusaria
+    com `TenantScopeRequiredError`. O que se assere aqui é o que **chegou** ao
+    `IdentityGuard` — `spy.received["tenant_id"]` —, e não só o escopo devolvido:
+    o escopo sai do `actor_tenant_id` que identity devolve e carregaria `"t1"`
+    mesmo se a resolução tivesse sido esquecida, então uma asserção só sobre ele
+    ficaria verde com a mutação viva.
+
+    **O caso `""` é o que refuta a truthiness, e é o único dos três que a
+    refuta.** Com `tenant_id or _tenant_id_do_ator(actor)` o chamador que nomeia
+    o tenant vazio faz identity receber `"t1"`: o pedido é reescrito em silêncio,
+    e um alvo que a decisão de acesso negaria vira o tenant do próprio ator. Os
+    outros dois valores do eixo sobrevivem à mutação — foi por isso que ela passou
+    a Stage inteira.
+
+    **A asserção é contra o valor esperado, escrito por extenso**, e não contra o
+    resultado do eixo vizinho: comparar nomeado com omitido passaria se os dois
+    estivessem errados do mesmo jeito.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=unit))
+    translator = _IdentityAccessGuard(spy)
+
+    scope = translator.authorize(
+        _ator_autenticado(tenant_id="t1"),
+        permission,
+        tenant_id=tenant_na_chamada,
+        unit_id=unit,
+    )
+
+    assert spy.received["tenant_id"] == tenant_alvo
+    assert scope == AuthorizedScope(
+        tenant_id=StaffTenantId("t1"),
+        unit_id=StaffUnitId(unit) if unit is not None else None,
+    )
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_omitir_o_tenant_produz_o_mesmo_resultado_que_nomear_o_do_ator(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """A equivalência literal do critério, do lado do tradutor."""
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=unit))
+    translator = _IdentityAccessGuard(spy)
+    ator = _ator_autenticado(tenant_id="t1")
+
+    nomeado = translator.authorize(ator, permission, tenant_id="t1", unit_id=unit)
+    omitido = translator.authorize(ator, permission, tenant_id=None, unit_id=unit)
+
+    assert nomeado == omitido
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_o_tenant_nomeado_pelo_chamador_nao_e_sobrescrito_pelo_do_ator(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """Só a **ausência** carrega significado — o resto do contrato não mudou.
+
+    Uma resolução escrita como "sempre use o tenant do ator" satisfaria os dois
+    testes acima e apagaria em silêncio o alvo que o chamador nomeou. Quem
+    nomeia `t9` está declarando `t9`, e é `t9` que a decisão de acesso — passo 3,
+    contra o usuário carregado do banco — tem de receber para poder negá-lo.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor(scope_unit_id=unit))
+    translator = _IdentityAccessGuard(spy)
+
+    translator.authorize(
+        _ator_autenticado(tenant_id="t1"),
+        permission,
+        tenant_id="t9",
+        unit_id=unit,
+    )
+
+    assert spy.received["tenant_id"] == "t9"
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_ator_sem_claims_com_tenant_omitido_falha_fechado(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """A leitura malsucedida **nega**, nunca alarga.
+
+    `Actor = object`: o port aceita qualquer objeto, e um ator que não seja o
+    `AuthenticatedActor` de identity não tem `claims` para ler. O tradutor
+    resolve `None` e delega `None` — que é "não declarei tenant" —, e a decisão
+    de acesso recusa. O que este teste trava é que a leitura ausente **não** vira
+    curinga: nada é inventado no lugar do tenant.
+    """
+    spy = _SpyIdentityGuard(_authorized_actor())
+    translator = _IdentityAccessGuard(spy)
+
+    translator.authorize(object(), permission, tenant_id=None, unit_id=unit)
+
+    assert spy.received["tenant_id"] is None
+
+
 # Os dois valores que L-AG3 nomeia — *"`tenant_id` vazio **ou** ausente"* —, e
 # são casos **distintos** na implementação, não sinônimos:
 #
@@ -474,6 +708,7 @@ _ATOR_SEM_TENANT = [
 ]
 
 
+@pytest.mark.parametrize("tenant_na_chamada", _TENANT_NA_CHAMADA)
 @pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
 @pytest.mark.parametrize(("permission", "unit"), _ALVOS)
 def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
@@ -481,6 +716,7 @@ def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
     unit: str | None,
     actor_tenant_id: str | None,
     role: Role,
+    tenant_na_chamada: str | None,
 ) -> None:
     """L-AG3 imposta no tradutor, e não delegada à matriz de papéis.
 
@@ -490,14 +726,27 @@ def test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor(
     observaria. Por isso o cenário montado é o pior caso: identity **autorizou**
     e devolveu um ator sem tenant — e vale para as **duas** permissões, porque
     L-AG3 é propriedade do guard e não de uma capacidade.
+
+    **O eixo do tenant omitido usa o mesmo dublê, e a escolha é o que separa o
+    teste do teatro.** Montar este caso com um `platform_admin` real produziria
+    verde pela **permissão** — `role.py` dá a ele só `MANAGE_PLATFORM`, negado no
+    passo 2, antes de a execução chegar à guarda desta lei —, e a mutação
+    "remover a checagem de tenant" sobreviveria com a suíte parecendo cobri-la.
+    O spy é o que faz o cenário ser o que a lei descreve.
     """
     spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
     translator = _IdentityAccessGuard(spy)
 
     with pytest.raises(PermissionDeniedError):
-        translator.authorize(object(), permission, tenant_id="t1", unit_id=unit)
+        translator.authorize(
+            _ator_autenticado(tenant_id=actor_tenant_id),
+            permission,
+            tenant_id=tenant_na_chamada,
+            unit_id=unit,
+        )
 
 
+@pytest.mark.parametrize("tenant_na_chamada", _TENANT_NA_CHAMADA)
 @pytest.mark.parametrize(("actor_tenant_id", "role"), _ATOR_SEM_TENANT)
 @pytest.mark.parametrize(("permission", "unit"), _ALVOS)
 def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
@@ -505,19 +754,31 @@ def test_l_ag3_o_tradutor_nunca_coage_tenant_ausente_para_string_vazia(
     unit: str | None,
     actor_tenant_id: str | None,
     role: Role,
+    tenant_na_chamada: str | None,
 ) -> None:
     """A mutação que L-AG3 existe para matar, escrita como asserção.
 
     `StaffTenantId(actor_tenant_id or "")` compila, passa mypy strict e devolve
     um escopo de tenant vazio — consultas que atravessariam todos os tenants.
     A exigência aqui é dupla: **nada** é devolvido, e o que sobe é negação.
+
+    O eixo `nomeado x omitido` entra porque a resolução do ADR 0.0.0005 abre um
+    segundo caminho até a mesma coerção: `tenant_id or actor_tenant or ""`
+    passaria no eixo nomeado e reabriria o tenant vazio no omitido.
     """
     spy = _SpyIdentityGuard(_authorized_actor(actor_tenant_id=actor_tenant_id, role=role))
     translator = _IdentityAccessGuard(spy)
 
     scopes = []
     with contextlib.suppress(PermissionDeniedError):
-        scopes.append(translator.authorize(object(), permission, tenant_id="t1", unit_id=unit))
+        scopes.append(
+            translator.authorize(
+                _ator_autenticado(tenant_id=actor_tenant_id),
+                permission,
+                tenant_id=tenant_na_chamada,
+                unit_id=unit,
+            )
+        )
 
     assert scopes == []
 
@@ -601,25 +862,209 @@ def test_o_tradutor_repassa_o_ator_de_authenticate_sem_tocar_nele() -> None:
     assert translator.authenticate(request) == ("ator", request)
 
 
-def test_ca21_nenhuma_rota_de_staff_nasceu_nesta_stage() -> None:
-    """CA21 — a promessa "nenhuma rota nasce aqui" verificada, não afirmada.
-
-    Três asserções, e as três são necessárias: o pacote de adapters de entrada de
-    staff **não existe**; `build_http_wiring` devolve o router **de identity**,
-    por identidade de objeto; e nenhuma rota registrada endereça recurso de
-    staff — que é o que pegaria uma rota de funcionário pendurada no router de
-    identity, cenário em que as duas primeiras asserções continuariam verdes.
-    """
-    assert not (_SRC / "features" / "staff" / "adapters" / "in").exists()
-
+def _app_do_wiring() -> FastAPI:
+    """Monta a app do mesmo jeito que `create_app()` — routers, handlers, overrides."""
     wiring = build_http_wiring(_dependencias())
-    identity_router = importlib.import_module(
-        "restaurant_hub.features.identity.adapters.in.http.router"
-    ).router
+    app = FastAPI()
+    for registrar in wiring.register_error_handlers:
+        registrar(app)
+    app.dependency_overrides.update(wiring.dependency_overrides)
+    for router in wiring.routers:
+        app.include_router(router, prefix="/api/v1")
+    return app
 
-    assert wiring.router is identity_router
 
-    paths = [getattr(rota, "path", "") for rota in wiring.router.routes]
-    assert not [
-        path for path in paths if "employee" in path or "job-function" in path or "staff" in path
-    ], f"rota de staff registrada nesta Stage: {paths}"
+def _pares_montados(app: FastAPI) -> set[tuple[str, str]]:
+    """Os `(método, path)` que a app **publica**, lidos do esquema OpenAPI.
+
+    Ler do esquema, e não de `app.routes`, é medição e não preferência: nesta
+    versão do FastAPI um router incluído vira um `_IncludedRouter` opaco, sem
+    `.routes`, então varrer a lista de rotas devolve **zero** `APIRoute` e a
+    asserção passaria vacuamente. O esquema é o que o cliente enxerga, e é
+    estável entre versões — é a leitura certa para "a app registra as rotas".
+    """
+    esquema = app.openapi()
+    return {
+        (metodo.upper(), caminho)
+        for caminho, operacoes in esquema["paths"].items()
+        for metodo in operacoes
+    }
+
+
+def _pares_do_router(modulo: str) -> set[tuple[str, str]]:
+    """Os `(método, path)` que um router **declara**, com o prefixo da aplicação.
+
+    **A partição staff/identity vem daqui, e não de uma heurística sobre o
+    texto do path.** A primeira versão separava as duas superfícies por
+    substring (`"/job-functions" in path or "/units/" in path`), e ela funcionava
+    por acidente: a rota de identity é `POST /restaurants/{id}/units`, sem barra
+    final, e por um caractere não caía no balde de staff. Um `/units/{id}/…` novo
+    em identity — ou um recurso de staff que não contivesse nenhuma das duas
+    palavras — jogaria rotas no lado errado, e a contagem denunciaria com uma
+    mensagem que não explica nada.
+
+    O router **é** o contrato de quem publica o quê: pedir a ele a lista é a
+    pergunta certa. E é o router isolado, não o incluído na app — só ele ainda
+    tem `APIRoute` de verdade (ver `_pares_montados`).
+    """
+    router = importlib.import_module(f"{modulo}.router").router
+    pares = {
+        (sorted(rota.methods - {"HEAD", "OPTIONS"})[0], f"{_PREFIXO_DA_API}{rota.path}")
+        for rota in router.routes
+        if isinstance(rota, APIRoute)
+    }
+    assert pares, f"o router de {modulo} não declarou rota nenhuma"
+    return pares
+
+
+def _provedores_de(modulo: ModuleType) -> set[Callable[..., object]]:
+    """As funções-chave de `dependency_overrides` **definidas** neste módulo.
+
+    "Chave de override" é, por convenção do projeto, uma função sem argumentos que
+    o router injeta por `Depends` e que o composition root substitui: `_get_*` nos
+    módulos de router, `get_*` em `dependencies.py`. As duas formas são varridas
+    porque as duas existem.
+
+    O filtro por `__module__` é o que separa provedor de **import**: `get_args` e
+    `get_origin`, importados de `typing`, casam o prefixo e não são chaves de nada.
+    """
+    return {
+        valor
+        for nome, valor in vars(modulo).items()
+        if nome.startswith(("_get_", "get_"))
+        and callable(valor)
+        and getattr(valor, "__module__", None) == modulo.__name__
+    }
+
+
+def test_ca30_o_wiring_registra_os_dois_routers_e_os_dois_registradores() -> None:
+    """CA30 — e é aqui que CA21 termina a sua vida útil.
+
+    Até a Task 08 este arquivo guardava a promessa *"nenhuma rota de staff está
+    registrada"*. A Task 09 é a que a torna **falsa de propósito**: as 16 rotas
+    passam a existir na aplicação, que é o objetivo da Stage inteira. O que
+    substitui a promessa não é nada — é a asserção de que as duas superfícies
+    estão montadas, por identidade de objeto.
+    """
+    wiring = build_http_wiring(_dependencias())
+    identity_router = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router").router
+    staff_router = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router").router
+
+    assert wiring.routers == (identity_router, staff_router)
+    assert wiring.register_error_handlers == (
+        importlib.import_module(
+            f"{_PACOTE_HTTP_IDENTITY}.error_handlers"
+        ).register_identity_error_handlers,
+        importlib.import_module(
+            f"{_PACOTE_HTTP_STAFF}.error_handlers"
+        ).register_staff_error_handlers,
+    )
+
+
+def test_ca30_o_mapa_de_overrides_cobre_todo_provedor_do_router_de_staff() -> None:
+    """A completude é **derivada**, e é o que a escrita explícita do wiring exige.
+
+    Os 17 overrides são escritos um a um no composition root — como os de
+    identity —, porque wiring é onde a ligação entre duas peças é declarada. O
+    preço de escrever à mão é esquecer um; esta asserção é o troco: os provedores
+    saem dos **dois** módulos por varredura, e um provedor novo sem override
+    reprova aqui em vez de levantar `RuntimeError` no primeiro request.
+
+    **Os dois módulos, e não só o router.** A primeira versão varria
+    `vars(router)` atrás de `_get_*` e **acrescentava `get_access_guard` à mão**,
+    porque ele mora em `dependencies.py`. O acréscimo manual era o buraco: um
+    provedor novo nesse módulo — a chave de um `IdentityGateway`, quando o Step 4
+    o trouxer — escaparia da varredura, entraria sem override, e voltaria a ser
+    `RuntimeError` no primeiro request, que é exatamente o modo de falha que este
+    teste existe para tornar impossível.
+
+    **A varredura é filtrada por dono (`__module__`), e o filtro é necessário**:
+    `dependencies.py` importa `get_args` e `get_origin` de `typing`, e os dois
+    casam qualquer regra de nome que comece por `get_`. Sem o filtro, a
+    cardinalidade subiria para 19 e a lista de "sem override" nomearia peças da
+    biblioteca padrão.
+    """
+    wiring = build_http_wiring(_dependencias())
+    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
+    staff_dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
+
+    provedores = _provedores_de(staff_router_module) | _provedores_de(staff_dependencies)
+
+    sem_override = sorted(
+        getattr(p, "__name__", repr(p)) for p in provedores if p not in wiring.dependency_overrides
+    )
+
+    assert sem_override == [], f"provedor de staff sem override no wiring: {sem_override}"
+    assert len(provedores) == _TOTAL_DE_OVERRIDES_DE_STAFF
+
+
+def test_ca30_cada_override_de_staff_devolve_a_dependencia_montada() -> None:
+    """Existir a chave não basta: o valor tem de ser **o objeto do contêiner**.
+
+    Um override que devolvesse um use case novo faria a app decidir sobre um grafo
+    diferente do que o composition root montou — dois `Engine`, duas verdades. A
+    asserção é de identidade, e é a mesma disciplina de
+    `test_ca15_o_tradutor_embrulha_o_mesmo_identity_guard_das_rotas`.
+    """
+    deps = _dependencias()
+    wiring = build_http_wiring(deps)
+    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
+    staff_dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
+
+    assert wiring.dependency_overrides[staff_dependencies.get_access_guard]() is (
+        deps.staff_access_guard
+    )
+    for nome, provedor in vars(staff_router_module).items():
+        if not nome.startswith("_get_") or not callable(provedor):
+            continue
+        esperado = getattr(deps, f"staff_{nome.removeprefix('_get_')}")
+        assert wiring.dependency_overrides[provedor]() is esperado, nome
+
+
+def test_ca30_as_dezesseis_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None:
+    """As 16 rotas passam a responder — e as de identity continuam como estavam.
+
+    A varredura é sobre a **app real**, e não sobre o router isolado: é a app que
+    o cliente alcança, e é nela que um prefixo errado ou um router não incluído
+    apareceria. O que o router isolado entrega é a **partição**: quais pares são de
+    staff e quais de identity — ver `_pares_do_router`, e a heurística de substring
+    que ela substituiu.
+
+    A interseção é a asserção que importa: `de_staff` não é "o que sobrou de um
+    filtro de texto", é "o que o router de staff declara **e** a app publica". Se o
+    router não estivesse incluído, ou estivesse sob outro prefixo, a interseção
+    seria vazia e a contagem denunciaria.
+    """
+    montadas = _pares_montados(_app_do_wiring())
+    de_staff = montadas & _pares_do_router(_PACOTE_HTTP_STAFF)
+
+    assert len(de_staff) == _TOTAL_DE_ROTAS_DE_STAFF
+    assert montadas - de_staff == _ROTAS_DE_IDENTITY
+    assert all(path.startswith(_PREFIXO_DA_API) for _, path in montadas)
+
+
+def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
+    """CA31 pela via estrutural: identity continua servindo exatamente o que servia.
+
+    O router de identity é o **mesmo objeto** que ele sempre foi — nada nesta
+    Stage o reescreve —, então a asserção mede o que poderia ter mudado sem
+    ninguém notar: o conjunto de rotas que a app monta a partir dele.
+
+    **A comparação é com o conjunto literal, e a contagem sozinha não bastava.**
+    A primeira versão asseria só `len(de_identity) == 10`: trocar `POST /users` por
+    `POST /usuarios` — ou perder `/auth/logout` e ganhar outra rota no mesmo commit
+    — mantinha o total em dez e passava. O que "não regrediu" quer dizer é *estes
+    dez pares*, e é isso que `_ROTAS_DE_IDENTITY` escreve.
+
+    A expectativa é **transcrita**, não colhida do router de identity: colhê-la
+    dele faria os dois lados da igualdade virem da mesma fonte, e o teste passaria
+    a confirmar que o router concorda consigo mesmo.
+    """
+    identity_router = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router").router
+    wiring = build_http_wiring(_dependencias())
+
+    assert wiring.routers[0] is identity_router
+    de_identity = _pares_montados(_app_do_wiring()) - _pares_do_router(_PACOTE_HTTP_STAFF)
+
+    assert de_identity == _ROTAS_DE_IDENTITY
+    assert len(de_identity) == _TOTAL_DE_ROTAS_DE_IDENTITY

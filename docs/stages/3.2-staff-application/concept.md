@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de
 keywords: [concept, staff-application, use-cases, port-out, dto, funcionario, funcao, indisponibilidade, copia-unidade, fakes, ciclo-de-vida]
 status: done
 created_at: 2026-08-08
-updated_at: 2026-08-09
+updated_at: 2026-08-30
 stage_id: 3.2-staff-application
 stage_title: Use cases de equipe
 step_id: 3
@@ -624,7 +624,7 @@ em que o primeiro `test_l_ord_*` foi escrito.
     | Use case | Ordem | Par duplo construível |
     |---|---|---|
     | `create_job_function` | (1) construir a entidade (nome não-vazio); (2) `find_by_name` → conflito; (3) `add` | **não** — um nome inválido nunca está gravado. O que se testa é que nome vazio **não toca o port** (nem `find_by_name`, nem `add`). O id já saiu do gerador nesse ponto e é descartado — desperdiçar um uuid4 num payload inválido não tem custo, e a alternativa (duplicar a validação de nome na application) violaria §5.15 |
-    | `rename_job_function` | (1) carregar → `JobFunctionNotFoundError`; (2) `find_by_name` (ignorando a própria) → conflito; (3) transição; (4) `update` | **sim** — renomear função **inexistente** para um nome **já usado**: vence `NotFound` |
+    | `rename_job_function` **(errata 2026-08-30)** | (1) carregar → `JobFunctionNotFoundError`; (2) transição → `InvalidNameError`; (3) `find_by_name` (ignorando a própria) → conflito; (4) `update` | **sim** — renomear função **inexistente** para um nome **já usado**: vence `NotFound` |
     | `delete_job_function` | (1) existência da função; (2) referências; (3) `delete` | **sim** — função do tenant A, **referenciada**, apagada com `tenant_id` do B: vence `NotFound` (§5.4 — o erro não pode confirmar que ela existe *nem* que está em uso) |
     | `create_employee` | (1) resolver o conjunto de funções → ausência; (2) construir o `Employee` (nome, conjunto não-vazio, ids); (3) `add` | **sim** — nome vazio **e** função inexistente: vence `JobFunctionNotFoundError` |
     | `rename_employee` | (1) carregar → `EmployeeNotFoundError`; (2) transição → `InvalidNameError`; (3) `update` | **sim** — funcionário inexistente **e** nome vazio: vence `EmployeeNotFoundError` |
@@ -646,6 +646,37 @@ em que o primeiro `test_l_ord_*` foi escrito.
     > (`InvalidNameError`) num pedido cuja falha real é referencial, escondendo a
     > causa que o gerente precisa ler. Daí `JobFunctionNotFoundError` vencer o
     > nome vazio, e não o contrário.
+
+    > ⚠️ **Errata (2026-08-30) — a linha de `rename_job_function` foi emendada;
+    > a nota acima é que governa.** Ver
+    > [ADR 3.6.0004](../../adr/3_6_0004-cheapest-local-check-first-in-rename-job-function.md).
+    >
+    > | Onde | Dizia | Diz | Por quê |
+    > |---|---|---|---|
+    > | linha `rename_job_function` | *"(2) `find_by_name` → conflito; (3) transição"* | *"(2) transição → `InvalidNameError`; (3) `find_by_name` → conflito"* | a linha **contradizia a nota que fecha a própria tabela**: pelo princípio *"a checagem mais barata que possa falhar sozinha vem primeiro"*, a validação local do nome (sem I/O, falha sozinha) precede a sonda de unicidade — exatamente o argumento que a nota usa para justificar `create_job_function` |
+    >
+    > **Medido, não argumentado.** Com o fake, sem banco, renomear para `""`,
+    > `"   "` ou `"Ana\x00Souza"` disparava `job_functions.find_by_name` nos três
+    > casos antes do `InvalidNameError` (conduta observada:
+    > `['job_functions.find_by_id', 'job_functions.find_by_name']`). Pelo HTTP
+    > real da 3.6, o NUL levava o nome cru ao psycopg e a rota devolvia **500** —
+    > `DataError` não é `IntegrityError` nem `StaffError`, e nenhum handler o
+    > alcança.
+    >
+    > **O que a emenda NÃO muda.** A coluna *"par duplo construível = sim"* desta
+    > linha é sobre **NotFound + conflito**, e continua intacta: `find_by_id`
+    > permanece em (1). O par *(nome inválido, conflito de nome)* **não é
+    > construível** — nenhum nome gravado pode ser inválido, porque o domínio o
+    > recusa na construção **e na reidratação** (`__post_init__`, ADR 3.4.0003;
+    > *Regra 1* do mapper da 3.3), logo `find_by_name` sobre nome inválido nunca
+    > teria o que encontrar. Nenhum cenário alcançável troca de erro vencedor; o
+    > que a emenda remove é a consulta inútil.
+    >
+    > A linha passa a ter a **mesma forma** de `rename_employee`, que já obedecia
+    > o princípio. A lei ficou travada sobre o domínio inteiro
+    > (`tests/unit/features/staff/application/test_invalid_name_never_reaches_the_port.py`),
+    > e não mais sobre `create_job_function` como único representante — que é como
+    > o desvio sobreviveu às Stages 3.2, 3.3 e 3.4 com a suíte verde.
 
 17. **Escrita do agregado inteiro.** Toda edição é read-modify-write do
     `Employee` completo, sem controle de concorrência nesta Stage — duas edições

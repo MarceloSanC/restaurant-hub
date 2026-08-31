@@ -82,6 +82,14 @@ def _register_feature_routers(app: FastAPI, deps: ApplicationDependencies) -> No
     """Registra o que o composition root montou, sem conhecer a feature."""
     wiring = build_http_wiring(deps)
 
-    wiring.register_error_handlers(app)
+    # **Itera as coleções, e continua sem conhecer feature nenhuma.** O que mudou
+    # na Stage 3.6 foi a cardinalidade — dois bounded contexts com superfície
+    # HTTP em vez de um —, e não o que este módulo sabe: ele registra o que o
+    # composition root montou, na ordem em que veio.
+    for registrar in wiring.register_error_handlers:
+        registrar(app)
+
     app.dependency_overrides.update(wiring.dependency_overrides)
-    app.include_router(wiring.router, prefix=API_PREFIX)
+
+    for router in wiring.routers:
+        app.include_router(router, prefix=API_PREFIX)

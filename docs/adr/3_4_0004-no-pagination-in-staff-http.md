@@ -5,7 +5,7 @@ when-use: Reference before adding LIMIT/OFFSET or a cursor parameter to a staff 
 keywords: [adr, pagination, cursor, ordering, l-ord, collation, listing, staff, scope]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-08-12
+updated_at: 2026-08-18
 adr_id: 3.4.0004
 decision: The staff HTTP Stage (3.6) exposes both listings unpaginated, because paginating would retroact the port signatures of Stages 3.2 and 3.3; L-ORD remains the prepared cursor, and the one-line antidote for the ORDER BY regex is escalated together with the pagination that will need it
 context_stage: 3.4-staff-access-scope
@@ -165,3 +165,23 @@ record is the point.
   `d878060`, em `docs/stages/3.4-staff-http/concept.md` §11 (CA32, CA35)
 - `docs/roadmap.md` — bloco Stage 3.6
 - `src/restaurant_hub/features/staff/application/dtos/queries.py`
+
+## Errata
+
+**2026-08-18 — ponteiro de critério corrigido; decisão inalterada.** Achado na
+Fase 3A da Stage 3.6, na varredura dos ADRs pré-corte pedida pelo `[finding]` de
+2026-08-18 da §7 do `technical.md` da Stage 3.4. É **errata de ponteiro**: a
+propriedade afirmada — *a suíte de conduta continua verde sem edição, e a ausência
+de edição é a evidência de que nenhum comportamento de ordenação mudou* — é
+exatamente a mesma; muda o endereço do critério que a trava.
+
+| Onde | Dizia | Diz | Medição |
+|---|---|---|---|
+| `## Consequences` → Positive | *"which is itself an acceptance criterion of **this Stage (CA35)**"* | *"…an acceptance criterion of **Stage 3.6 (CA31)**"* | `CA35` é da numeração do concept **pré-corte** (commit `d878060`, `docs/stages/3.4-staff-http/concept.md` §11), que a renumeração do corte tornou inalcançável; o critério equivalente é o **CA31** de `docs/stages/3.6-staff-http/concept.md` §11 — *"nenhuma suíte já mergeada regride … sem alteração da regex `_ORDER_BY`"*. "This Stage" também virou ambíguo com o corte, e passa a nomear a 3.6 |
+
+**O que NÃO precisou de errata, e por quê.** As duas citações de `## References`
+(*"no commit `d878060`, … §11 (CA32, CA35)"*) **continuam corretas**: elas
+carregam a âncora — commit **e** arquivo daquele commit —, então apontam para um
+alvo imutável mesmo depois da renumeração. É a diferença que fez uma citação
+sobreviver e a outra não, e é a razão de o concept da 3.6 declarar, no aviso do
+topo, que a sua numeração de critérios não é renumerada.

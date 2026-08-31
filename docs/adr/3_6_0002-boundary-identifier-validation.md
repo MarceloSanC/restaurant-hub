@@ -1,0 +1,198 @@
+---
+title: ADR 3.6.0002 — Every identifier arriving in a request — path, query or body — is validated at the HTTP boundary before authorization, raising the staff domain error rather than a framework validation error
+description: Architecture Decision Record
+when-use: Reference when adding a route or a request field that carries an identifier, when a malformed identifier produces a 500, or before constraining a path parameter with Pydantic
+keywords: [adr, http, validation, identifier, nul-byte, 500, boundary, staff, fastapi]
+status: accepted
+created_at: 2026-08-18
+updated_at: 2026-08-18
+adr_id: 3.6.0002
+decision: A single adapter-level validator rejects empty, whitespace-only or NUL-containing identifiers arriving from path, query or body, raising staff's InvalidIdentifierError (422) after authentication and before any authorization call or use case
+context_stage: 3.6-staff-http
+bounded_context: staff
+---
+
+# ADR 3.6.0002 — Boundary validation of request identifiers
+
+## Status
+
+`accepted`
+
+## Context
+
+Staff identifiers (`TenantId`, `UnitId`, `EmployeeId`, `JobFunctionId`) are
+`NewType` aliases with **no runtime validation**, by explicit decision of Stage
+3.1: `identifiers.py` states that *"este módulo não tem lógica de runtime"* and
+that non-emptiness is enforced **in the entities, not here**.
+
+That enforcement never runs for an identifier that arrives in a URL. An id in a
+path or query is not constructed into an entity — it goes straight to a
+`find_by_id`. Stage 3.4 closed the analogous hole for **names** by rejecting the
+NUL byte in the domain (ADR 3.4.0003), and recorded explicitly that the fix does
+**not** reach identifiers, for exactly this reason.
+
+The consequence is measurable and is not merely cosmetic:
+
+- `GET /units/%00/employees` carries `unit_id="\x00"` into the guard. The guard
+  delegates to `AuthorizeActionUseCase`, whose step 5 calls
+  `units.find_by_id(unit_id)` — **in identity**, on the Postgres adapter. psycopg
+  refuses NUL client-side with a `DataError`, which is **not** an
+  `IntegrityError`, so Stage 3.3's per-operation integrity translator is never
+  invoked. Nothing maps it, and the request answers **500**.
+- An empty or whitespace-only identifier is the "false isolation bucket" that
+  `InvalidIdentifierError` was named for: it produces a real query against a
+  meaningless key instead of a refusal.
+
+So the first component to see an unvalidated staff identifier is not staff at
+all — it is identity's repository, one bounded context away. Any validation
+placed *after* the authorization call is therefore too late by construction, and
+the ordering is part of the decision, not an implementation detail.
+
+**The body is part of the surface, and an earlier draft of this ADR missed it.**
+Three identifiers reach the routes through the request **body**, not the URL:
+`CopyEmployeeRequest.target_unit_id` — which is the copy route's *second*
+authorization target, so it lands in identity's `units.find_by_id` exactly like a
+path unit — and each element of `job_function_ids` on
+`CreateEmployeeRequest`/`AssignJobFunctionsRequest`, which go to
+`JobFunctionRepository.find_all_by_ids` **before** the entity is constructed.
+`Employee.__post_init__` validates `id`, `tenant_id`, `unit_id`, `name` and the
+non-emptiness of the set — **not the elements**. Scoping this decision to
+path and query would leave `{"job_function_ids": ["\x00"]}` producing the very
+500 the decision exists to remove, and would leave the inherited finding half
+closed while reading as closed.
+
+**A measured correction to the motivation.** Of the three rejected inputs, only
+the **NUL byte** produces a 500 today: empty and whitespace-only identifiers
+serialise fine, match no row, and end as 404 (job function, employee) or 403
+(unit, via the `UnitNotFoundError → UnitNotVisibleError` conversion). They are
+still rejected — a blank identifier is the false-isolation bucket
+`InvalidIdentifierError` is named for, and a query on a meaningless key is noise
+that hides a client defect — but the reason is hygiene, not crash prevention.
+
+## Decision
+
+1. **One validator, in the staff HTTP adapter**
+   (`features/staff/adapters/in/http/dependencies.py`), applied to **every**
+   identifier arriving in the request — **path, query string, or body**.
+2. It rejects three inputs — **empty**, **whitespace-only**, and **containing the
+   NUL byte** — raising staff's existing domain error
+   `InvalidIdentifierError`, which the Stage's status map classifies as **422**.
+3. **The order is: authenticate → validate → authorize.** Authentication first,
+   because a request with no credential must get 401 rather than a 422 that lets
+   an unauthenticated client probe the payload shape (concept §5.1).
+   Validation before authorization, because that is what keeps an unvalidated
+   value out of identity's `find_by_id`.
+4. **The ordering is pinned by absence, not by status.** A 422 in the response is
+   consistent with both orderings; what distinguishes them is whether the guard
+   was asked to authorize at all. The criterion asserts that the port double
+   recorded **no `authorize(...)` call** (concept CA21) — deliberately not
+   `calls == []`, since the same double also records `authenticate`, which clause
+   3 requires to run first and which never touches an identifier.
+5. **Coverage is enumerated per axis, and the axes do not carry the same values.**
+   (concept CA20)
+   - **path** — every route carrying an id, derived from the router's own route
+     table, against whitespace-only and NUL. **Empty is excluded here, by
+     measurement:** an empty path segment does not match `[^/]+`, so Starlette
+     answers 404/405 and the handler never runs. Demanding 422 there would put an
+     unsatisfiable cell in a security matrix, and an unsatisfiable criterion is a
+     criterion someone eventually relaxes.
+   - **query** — all three values.
+   - **body** — all three values, over the id-bearing fields of every request
+     schema, **derived by introspection** (`*_id` / `*_ids`) rather than listed,
+     so a field added later enters the sweep without anyone remembering it.
+6. The rejected set is **exactly** those three. Nothing else is normalised,
+   trimmed or rewritten: ADR 2.3.0005 forbids silent normalisation, and Stage 3.3
+   measured that the rest of the adversarial set round-trips verbatim.
+
+## Alternatives considered
+
+### Alternative A — constrain the path parameter with Pydantic / FastAPI
+- **Description:** declare `Path(min_length=1, pattern=...)` (or a `constr`) on
+  every identifier parameter.
+- **Pros:** declarative, visible in the OpenAPI schema, no custom code.
+- **Cons:** the failure becomes a `RequestValidationError`, which the **shared**
+  handler renders with a different body shape. The API would then answer 422 in
+  two distinguishable formats for the same class of defect, depending on which
+  layer noticed. It also contradicts the rule this repository already applies at
+  its other HTTP boundary — identity's `router.py` states that text-to-value-object
+  conversion happens in the router *"para que a falha seja erro de domínio … em
+  vez de virar um `RequestValidationError` do FastAPI, que seguiria outro caminho
+  e outro formato de corpo"*.
+- **Why rejected:** it buys declarativeness by splitting the 422 band, and it
+  diverges from a convention already merged in the sibling BC. A pattern that
+  also excluded NUL would be a regex nobody reads, guarding a rule nobody could
+  name.
+
+### Alternative B — validate inside the `NewType` aliases
+- **Description:** turn `EmployeeId` and friends into validating value objects.
+- **Pros:** the guarantee would hold everywhere, not just at HTTP.
+- **Cons:** `NewType` has no runtime hook, so this means replacing them with
+  classes — a change to Stage 3.1's domain vocabulary that ripples through every
+  DTO, port signature, mapper and test in the BC, and through identity's own
+  identifiers for the `unit_id` that crosses the boundary.
+- **Why rejected:** disproportionate. Stage 3.1 made the "no runtime logic here"
+  choice deliberately and recorded it; reversing it to close a boundary hole is
+  the tail wagging the dog.
+
+### Alternative C — validate in each handler
+- **Description:** two or three lines at the top of each of the fourteen routes
+  that carry an identifier.
+- **Pros:** the check is visible where the value is used.
+- **Cons:** the same rule written fourteen times; the fifteenth route forgets it,
+  and the omission is invisible in a diff. It is the same argument that
+  ADR 3.4.0002 used against per-route `try/except`.
+- **Why rejected:** strictly dominated by one validator plus an enumerated sweep.
+
+### Alternative D — do nothing and let the 500 stand
+- 500 is the correct answer for a transient infrastructure failure (concept
+  §5.10), and the wrong answer for a client sending a malformed id: it hides a
+  client error as a server error, pollutes error budgets, and — because the error
+  surfaces inside *identity's* repository — points diagnosis at the wrong bounded
+  context. Not acceptable.
+
+## Consequences
+
+### Positive
+- A whole class of 500s disappears from the staff surface, and the disappearance
+  is measured route by route rather than argued.
+- The 422 band keeps a single body shape across the BC.
+- The rule has one home, so the fifteenth route inherits it.
+
+### Negative
+- The validator is adapter code that looks like domain validation, and a reader
+  may reasonably ask why it is not in the domain. The answer — `NewType` has no
+  runtime hook and an id never passes through an entity — has to live in the
+  module docstring, or it will be "cleaned up" by a future refactor.
+- OpenAPI will not advertise the constraint, since it is not expressed as a
+  parameter schema. Accepted: the constraint is about rejecting bytes no client
+  legitimately sends, not about documenting a format.
+
+### Neutral / trade-offs accepted
+- Identity's own routes keep the hole for their identifiers. This ADR governs the
+  staff adapter only; the identity-side gap is escalated as a `[finding]` in the
+  concept §10, not silently inherited.
+
+## Implementation notes
+
+- The validator must be applied to **query and body** identifiers too, not just
+  path segments — `remove_unavailability` takes its period from the query string,
+  the copy route takes its second authorization target from the body, and
+  `job_function_ids` reaches a repository lookup before any entity is built.
+- Prefer a form that the route signature makes visible (a shared dependency or an
+  explicit conversion at the top of the handler) over something a middleware does
+  invisibly: a route that forgets it must be **visible**, which is the same
+  argument ADR 2.4.0003 makes for `Depends` over middleware.
+- Do not fold the tenant into this validator. The tenant never arrives from the
+  request; it comes from the authorized scope (concept §5.3).
+
+## References
+- `src/restaurant_hub/features/staff/domain/value_objects/identifiers.py` —
+  module docstring ("no runtime logic")
+- `src/restaurant_hub/features/identity/application/use_cases/authorize_action.py`
+  — step 5, `units.find_by_id`
+- `src/restaurant_hub/features/identity/adapters/in/http/router.py` — module
+  docstring (conversion in the router, not in the schema)
+- `docs/stages/3.6-staff-http/concept.md` §5.14, §6.3, §7 D2, CA20, CA21
+- `docs/roadmap.md` — block Stage 3.6, inherited `[finding]`
+- ADR 3.4.0003 (NUL in domain names — and its stated limit), ADR 2.3.0005,
+  ADR 2.4.0003, ADR 3.4.0002

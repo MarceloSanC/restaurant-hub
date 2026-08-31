@@ -225,3 +225,19 @@ Escolher o texto novo seria decidir onde a propriedade passa a ser provada, e
 isso é mudança de conteúdo de um ADR `accepted`, não errata. Fica registrado como
 `[finding]` na §7 do `technical.md` desta Stage, para a auditoria dispor com a
 3.6 em mãos.
+
+---
+
+**2026-08-18 (segunda entrada) — o intervalo `CA10–CA12` do `## Trade-offs` fica
+resolvido, agora que a Stage 3.6 existe.** A entrada anterior escalou este item de
+propósito: com a 3.4 em mãos não havia para onde apontar, porque os testes por
+papel e por rota tinham migrado para uma Stage que ainda não tinha concept. Ela
+agora tem, e o ponteiro passa a ter destino — continua sendo **errata de
+ponteiro**, não mudança de conteúdo: a frase afirma que um erro de digitação no
+nome da permissão é pego por testes por papel e por rota, e essa afirmação segue
+idêntica; só o endereço dos testes muda.
+
+| Onde | Dizia | Diz | Medição |
+|---|---|---|---|
+| `## Trade-offs` | *"It is caught by the per-role, per-route tests of concept **CA10–CA12**"* | *"...of Stage 3.6's concept **CA09–CA12**"* | `docs/stages/3.6-staff-http/concept.md` §11: CA09 (papéis sem permissão recebem 403 nas 16 rotas), CA10 (`manager` alcança as 16), CA11 (`owner` alcança as 16), CA12 (`hr` ≡ `manager` nas 16) — os quatro são parametrizados sobre o produto papel × rota, que é o que "per-role, per-route" nomeia |
+| `## References` | `concept.md` §7 D1, `CA12–CA15` | `CA12–CA15` **da 3.4** — correto como está | conferido: no `concept.md` da 3.4, CA12–CA15 são os critérios do port `AccessGuard`; o intervalo é desta Stage e não migrou |
