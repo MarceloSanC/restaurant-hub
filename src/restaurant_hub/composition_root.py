@@ -199,6 +199,15 @@ def _tenant_id_do_ator(actor: Actor) -> str | None:
     "não declarei tenant" até o passo 3 de `AuthorizeActionUseCase`, que **nega**
     um ator escopado que não nomeia o tenant alvo. Nenhuma leitura malsucedida
     alarga o alcance de ninguém.
+
+    **Há um terceiro caso, e ele não devolve `None`:** `claims.tenant_id == ""`
+    devolve `""`, porque o atributo **existe** e o `getattr` não cai no default.
+    A distinção é deliberada, não descuido — colapsar vazio e ausente no mesmo
+    valor aqui é o primeiro passo do caminho que L-AG3 fecha
+    (`StaffTenantId(actor_tenant_id or "")`, o balde de falso isolamento). Quem
+    nega o tenant vazio é `_IdentityAccessGuard`, um passo adiante, e o nega
+    **por ser vazio** e não por ser ausente. Os dois casos estão parametrizados
+    lado a lado em `_ATOR_SEM_TENANT` (ids `ausente` e `vazio`).
     """
     claims = getattr(actor, "claims", None)
     tenant_id: str | None = getattr(claims, "tenant_id", None)

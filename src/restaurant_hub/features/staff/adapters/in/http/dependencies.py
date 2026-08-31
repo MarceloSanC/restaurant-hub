@@ -221,6 +221,16 @@ def identifier_fields(model: type[BaseModel]) -> tuple[IdentifierField, ...]:
     listá-lo: um campo de identificador acrescentado a um request entra na
     varredura de CA20 sem que ninguém precise lembrar de estender um teste.
 
+    **Não tem chamador de produção, e a ausência é declarada.**
+    `grep -rn "identifier_fields(" src/` devolve **só** esta definição: as rotas
+    validam o identificador de corpo à mão, uma a uma, e quem consome esta
+    função são as varreduras estruturais. É a mesma forma que
+    `AccessRequirement.names_unit` tem — declaração cujo leitor é o teste —, e
+    fica dita aqui para que ninguém a leia como plumbing esquecido nem a apague
+    por parecer código morto: apagá-la esvazia o domínio de CA20 no eixo do
+    corpo. Plugá-la no router é a outra saída, e vale a medição do dia em que a
+    validação à mão divergir entre duas rotas.
+
     **Alcance declarado:** os campos de **primeiro nível** do modelo. Hoje nenhum
     modelo aninhado dos requests de staff carrega identificador — o único
     aninhado é a união do perfil de jornada —, e se um passar a carregar, esta
