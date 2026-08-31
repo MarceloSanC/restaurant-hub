@@ -58,6 +58,17 @@ dev = [
     # Stage 1.2 existe para consertar.
     "pyyaml>=6.0",
 ]
+# Extra SEPARADA do `dev` de propósito (M2 da issue #45). Uma corrida de
+# mutação gera um processo pytest por mutante — centenas deles —, e esse volume
+# é problema conhecido nesta máquina. Fora do `dev`, ninguém a instala sem
+# querer, `make check` não a alcança, e o pre-commit tampouco: quem a usa é o
+# job noturno do `audit-gate.yml`, que roda no runner.
+#
+# mutmut 3.x **não roda em Windows nativo** (ele mesmo recusa e aponta para o
+# WSL). No host, a corrida é feita em contêiner Linux; no CI, é nativa.
+mutation = [
+    "mutmut>=3.0",
+]
 
 [tool.hatch.build.targets.wheel]
 # Apenas o pacote src/restaurant_hub é empacotado; scripts/ e tests/ ficam fora
@@ -126,3 +137,36 @@ branch = true
 fail_under = 90
 show_missing = true
 skip_covered = false
+
+# ---------------------------------------------------------------------------
+# Mutmut — teste de mutação nos módulos que DECIDEM ACESSO (M2 da issue #45)
+# ---------------------------------------------------------------------------
+# Escopado em quatro arquivos, e não no repositório. O critério de entrada é
+# único e estreito: **o módulo participa da decisão de quem pode o quê**.
+#
+#   - `authorize_action.py`  — os quatro passos do guard (ADR 2.2.0002)
+#   - `user.py`              — a visibilidade de unidade, o eixo B do acesso
+#   - `composition_root.py`  — só por causa do `_IdentityAccessGuard`, que impõe
+#                              a lei L-AG3 (isolamento de tenant) num `raise`
+#   - `dependencies.py`      — a borda que extrai o Bearer e delega ao use case
+#
+# **Por que mutação aqui e cobertura em todo o resto.** Cobertura mede que a
+# linha executou; mutação mede que alguém teria notado se ela mudasse. Nesses
+# quatro arquivos a diferença é a que importa: `if not actor_tenant_id` virando
+# `if actor_tenant_id is None` mantém 100% de cobertura, passa mypy strict e
+# reabre o balde de tenant vazio. Um caso desses já foi medido sobrevivendo à
+# suíte (ver `test_composition_root_staff.py`, comentário de `_ALVOS`) — a
+# mutação não é hipótese aqui, é histórico.
+#
+# `also_copy` inclui o que a suíte precisa mas o mutmut não copia sozinho: os
+# fakes vivem fora de `tests/`, e as migrations montam o schema que os testes de
+# integração exigem.
+[tool.mutmut]
+source_paths = ["src/restaurant_hub"]
+only_mutate = [
+    "src/restaurant_hub/features/identity/application/use_cases/authorize_action.py",
+    "src/restaurant_hub/features/identity/domain/entities/user.py",
+    "src/restaurant_hub/composition_root.py",
+    "src/restaurant_hub/features/identity/adapters/in/http/dependencies.py",
+]
+also_copy = ["migrations/", "scripts/", ".env.example"]

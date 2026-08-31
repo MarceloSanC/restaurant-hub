@@ -44,6 +44,16 @@ htmlcov/
 coverage.xml
 
 # ---------------------------------------------------------------------------
+# mutmut (M2 da issue #45)
+# ---------------------------------------------------------------------------
+# `mutants/` é a cópia mutada da árvore que o mutmut monta a cada corrida, e
+# `.mutmut-cache` guarda o veredito de cada mutante. Os dois são artefato de
+# execução: o job noturno do audit-gate.yml os sobe como artifact, que é onde
+# o baseline de uma noite fica comparável com o da seguinte.
+mutants/
+.mutmut-cache
+
+# ---------------------------------------------------------------------------
 # uv
 # ---------------------------------------------------------------------------
 # uv.lock É versionado por padrão neste template (projetos derivados são
