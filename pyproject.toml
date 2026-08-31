@@ -158,9 +158,20 @@ skip_covered = false
 # suíte (ver `test_composition_root_staff.py`, comentário de `_ALVOS`) — a
 # mutação não é hipótese aqui, é histórico.
 #
-# `also_copy` inclui o que a suíte precisa mas o mutmut não copia sozinho: os
-# fakes vivem fora de `tests/`, e as migrations montam o schema que os testes de
-# integração exigem.
+# **`also_copy` é o que faz a corrida medir alguma coisa.** O mutmut executa a
+# suíte a partir de uma cópia da árvore em `mutants/`, e copia por default só o
+# código e `tests/`. Esta suíte, porém, lê o **repositório** de dentro dos
+# testes — é o idioma mecânico deste projeto: `test_ci_workflow.py` lê
+# `.github/workflows/ci.yml`, `test_bc_independence.py` lê `.importlinter`, os
+# testes de contrato de staff leem `docs/stages/…/concept.md`, e os gates da #45
+# leem `scripts/` e `docs/LAYOUT.md`.
+#
+# Sem esses arquivos, o primeiro teste que os procura levanta `FileNotFoundError`
+# e a corrida morre antes de matar um mutante sequer — medido na primeira
+# execução desta configuração. E o modo de falha silencioso seria pior: com um
+# teste que falhasse por arquivo ausente **sem** derrubar a corrida, todo mutante
+# apareceria como morto, pelo mesmo motivo, e a mutação reportaria uma suíte
+# perfeita sem ter testado nada.
 [tool.mutmut]
 source_paths = ["src/restaurant_hub"]
 only_mutate = [
@@ -169,4 +180,11 @@ only_mutate = [
     "src/restaurant_hub/composition_root.py",
     "src/restaurant_hub/features/identity/adapters/in/http/dependencies.py",
 ]
-also_copy = ["migrations/", "scripts/", ".env.example"]
+also_copy = [
+    "docs/",
+    "migrations/",
+    "scripts/",
+    ".github/",
+    ".importlinter",
+    ".env.example",
+]
