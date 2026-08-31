@@ -8,7 +8,10 @@ estado legítimo do domínio (ADR 3.1.0004), não a ausência de um pedido.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import DeclareShiftPreferenceCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -34,14 +37,4 @@ class DeclareShiftPreferenceUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         declared = employee.declare_shift_preference(command.shift_preference)
         self._employees.update(declared)
-        return EmployeeResult(
-            id=declared.id,
-            tenant_id=declared.tenant_id,
-            unit_id=declared.unit_id,
-            name=declared.name,
-            workload_profile=declared.workload_profile,
-            shift_preference=declared.shift_preference,
-            job_function_ids=declared.job_function_ids,
-            unavailabilities=declared.unavailabilities,
-            active=declared.active,
-        )
+        return to_employee_result(declared)

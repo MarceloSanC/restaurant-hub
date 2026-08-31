@@ -15,7 +15,10 @@ revelaria algo sobre o catálogo de funções do tenant.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import AssignJobFunctionsCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     JobFunctionNotFoundError,
@@ -58,14 +61,4 @@ class AssignJobFunctionsUseCase:
         # (3) Transição e (4) escrita.
         assigned = employee.assign_job_functions(command.job_function_ids)
         self._employees.update(assigned)
-        return EmployeeResult(
-            id=assigned.id,
-            tenant_id=assigned.tenant_id,
-            unit_id=assigned.unit_id,
-            name=assigned.name,
-            workload_profile=assigned.workload_profile,
-            shift_preference=assigned.shift_preference,
-            job_function_ids=assigned.job_function_ids,
-            unavailabilities=assigned.unavailabilities,
-            active=assigned.active,
-        )
+        return to_employee_result(assigned)

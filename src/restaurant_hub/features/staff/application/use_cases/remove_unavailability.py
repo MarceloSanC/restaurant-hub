@@ -8,7 +8,10 @@ recurso — o funcionário — existe e foi encontrado.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import RemoveUnavailabilityCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -36,14 +39,4 @@ class RemoveUnavailabilityUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         updated = employee.remove_unavailability(command.period)
         self._employees.update(updated)
-        return EmployeeResult(
-            id=updated.id,
-            tenant_id=updated.tenant_id,
-            unit_id=updated.unit_id,
-            name=updated.name,
-            workload_profile=updated.workload_profile,
-            shift_preference=updated.shift_preference,
-            job_function_ids=updated.job_function_ids,
-            unavailabilities=updated.unavailabilities,
-            active=updated.active,
-        )
+        return to_employee_result(updated)
