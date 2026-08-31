@@ -35,14 +35,13 @@ src/restaurant_hub/
 │       ├── domain/                 # Núcleo — zero dependências externas
 │       │   ├── entities/           # Objetos com identidade
 │       │   ├── value_objects/      # Objetos imutáveis sem identidade
-│       │   ├── services/           # Serviços de domínio (lógica que não cabe em entidade)
+│       │   ├── services/           # Serviços de domínio (lógica que não cabe em entidade) [planejado]
 │       │   └── exceptions/         # Exceções de domínio
 │       │
 │       ├── application/            # Orquestração — depende apenas de domain + ports
-│       │   ├── use_cases/          # Um arquivo por use case (create_order.py, cancel_order.py)
+│       │   ├── use_cases/          # Um arquivo por use case (create_order.py, cancel_order.py) — são os ports primários
 │       │   ├── dtos/               # Objetos de transferência (commands, queries, results)
 │       │   └── ports/              # Interfaces (Protocols Python)
-│       │       ├── in/             # Ports primários / driving (atenção: 'in' é keyword Python)
 │       │       └── out/            # Ports secundários / driven
 │       │
 │       └── adapters/               # Implementações concretas dos ports
@@ -164,12 +163,17 @@ que ninguém exercita, num pacote que todas as features leem.
 
 Ports são interfaces Python (`Protocol`) que definem contratos entre camadas.
 
-### Ports Primários / Driving (`ports/in/`)
+### Ports Primários / Driving — são as classes de use case
 
-São acionados por atores externos (HTTP, CLI, mensageria). Definem o que a aplicação
-**aceita** como entrada. O adapter `in` (ex: router FastAPI) chama o use case via este port.
+São acionados por atores externos (HTTP, CLI, mensageria) e definem o que a aplicação
+**aceita** como entrada. **Não há `ports/in/`**: o port primário deste projeto é a
+própria classe de use case, com o seu `execute(<Command>) -> <Result>`. O adapter de
+entrada recebe a instância por injeção (`Depends`) e a chama.
 
-Exemplo: `Create<Entity>Port` — contrato que o controller HTTP usa para chamar o use case.
+Um `Protocol` separado por use case seria uma interface com exatamente uma
+implementação, escrita por nós, para desacoplar código nosso de código nosso — e
+nenhum consumidor a usaria como ponto de variação. O que precisa ser abstrato é o que
+o use case **consome**, e isso são os ports de saída. Ver **ADR 0.0.0005**.
 
 ### Ports Secundários / Driven (`ports/out/`)
 
@@ -177,38 +181,6 @@ São implementados por adapters externos. Definem o que a aplicação **precisa*
 externo. O use case depende da interface, não da implementação concreta.
 
 Exemplo: `<Entity>Repository` — contrato que o use case usa para persistir uma entidade.
-
-### Nota sobre o diretório `in`
-
-`in` é uma palavra reservada do Python e **não pode ser usado diretamente em imports**:
-
-```python
-# ERRO — 'in' é keyword Python
-from restaurant_hub.features.<feature>.application.ports.in.<port_module> import <PortClass>
-```
-
-**Workarounds disponíveis:**
-
-```python
-# Opção 1 — importlib (mais explícito)
-import importlib
-port_module = importlib.import_module(
-    "restaurant_hub.features.<feature>.application.ports.in.<port_module>"
-)
-PortClass = port_module.<PortClass>
-
-# Opção 2 — injete o use case diretamente via FastAPI Depends (recomendado)
-# O router recebe o use case já instanciado pelo composition_root,
-# sem nunca precisar importar o módulo 'in' diretamente.
-
-# Opção 3 — alias no __init__.py do pacote pai (ports/__init__.py)
-# Re-exporte o Protocol de lá:
-# from restaurant_hub.features.<feature>.application.ports.in.<port_module> import <PortClass>
-# Isso funciona porque __init__.py não usa a palavra 'in' como identificador Python.
-```
-
-A abordagem recomendada é a **Opção 2**: o composition_root instancia o use case e o injeta
-via `Depends`, eliminando a necessidade de importar o módulo `in` fora do próprio pacote.
 
 ---
 
