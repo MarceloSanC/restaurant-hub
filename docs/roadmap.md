@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-08-18
-last_reviewed_at: 2026-08-18
+updated_at: 2026-08-30
+last_reviewed_at: 2026-08-30
 ---
 
 # Roadmap — restaurant-hub
@@ -118,7 +118,7 @@ graph LR
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
 | `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
-| `3.6-staff-http` | API de equipe | adapters/in/http | draft | `3.4-staff-access-scope` |
+| `3.6-staff-http` | API de equipe | adapters/in/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) | draft | `3.6-staff-http` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.5-employee-login-link` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | draft | `4.1-scheduling-domain` |
@@ -1004,6 +1004,139 @@ skills_hint: [fastapi-thin-adapter, composition-root]
 >   gerou a `## Errata` do ADR 3.4.0001 —, e reconciliar os ponteiros antes de
 >   consumi-los na Fase 3A.
 
+> **Nota (2026-08-30): reconciliação pós-execução da Stage 3.6.** O bloco e a nota
+> de insumos acima foram conferidos contra o executado — **continuam fiéis**, e os
+> três eixos que o bloco precisava corrigir já estavam medidos antes da execução,
+> na §1 do [`concept.md`](./stages/3.6-staff-http/concept.md) ("Reconciliação do
+> bloco 3.6 do roadmap"): `arquivos_a_modificar` incompleto (entram o docstring do
+> port `access_guard.py` e o fake `in_memory_access_guard.py`, porque a lei do
+> tenant resolvido vale para as **duas** implementações), `contratos_introduzidos`
+> incompleto (entram o **validador de identificador de borda** e o **conversor de
+> `weekly_hours`**, que definem o status de classes inteiras de entrada que antes
+> terminavam em 500) e o `definition_of_done` de dois itens, que continua correto e
+> continua sendo o DoD — a §11 do concept o detalha em critérios parametrizados
+> sobre domínio enumerado, sem substituí-lo. O que segue é o que **só a execução**
+> podia dizer.
+>
+> - **O que a Stage entregou.** As **16 rotas** de staff sob `/api/v1` — quatro de
+>   catálogo de função de trabalho e doze de funcionário —, servidas pela mesma app
+>   que já servia as **10 de identity**: o esquema OpenAPI publica **26 operações**.
+>   Cada rota declara a permissão exigida e o alvo e delega a decisão ao port
+>   `AccessGuard` da 3.4 por `Depends`, nunca por middleware; o registro é
+>   endereçado pelo **path**, e o router **nunca lê** `AuthorizedScope.unit_id`
+>   (ADR 3.6.0001 — era o finding mais perigoso herdado da 3.4). O mapa
+>   `STAFF_ERROR_STATUS` é **total** sobre as exceções do BC e resolvido por MRO
+>   (ADR 3.4.0002), e todo identificador que chega por **path, query ou corpo** é
+>   recusado na borda quando vazio, só-whitespace ou com byte NUL — **depois de
+>   autenticar e antes de qualquer chamada de autorização** (ADR 3.6.0002).
+>   **12 Tasks**, uma por commit, mais **30 commits** de concept/technical/ADR,
+>   correção de Checkpoint e fechamento de auditoria.
+> - **File-scope real: 10 arquivos de `src/`** — os quatro do adapter novo
+>   (`router.py`, `schemas.py`, `dependencies.py`, `error_handlers.py`) e dois
+>   `__init__.py`, mais `composition_root.py` (`HttpWiring` em coleções e 17
+>   overrides), `shared/infrastructure/http/app.py` (os dois routers e os dois
+>   registradores), o docstring do port `access_guard.py` e
+>   `rename_job_function.py`. **Fora de `src/` o bloco não previa dois docs
+>   estruturais** que a Stage tocou: `docs/LAYOUT.md` (a regra do tenant nas Regras
+>   de Ouro) e `docs/overview.md` §10 (as fontes primárias do ADR 0.0.0005) — os
+>   dois pela mesma decisão. **Nenhuma migration**, como o bloco previa.
+> - **Cinco ADRs `accepted`, todos com `context_stage: 3.6-staff-http`.** Quatro de
+>   Stage: **3.6.0001** (o path endereça o registro, e o escopo autorizado nunca é
+>   lido), **3.6.0002** (validação de identificador na borda), **3.6.0003** (a
+>   representação no fio preserva as garantias do domínio — união discriminada,
+>   `weekly_hours` como string, datetimes ingênuos, conjuntos ordenados na saída) e
+>   **3.6.0004** (a checagem local mais barata primeiro, no rename de função). E um
+>   **global**, nascido aqui:
+>   **[ADR 0.0.0005](./adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md)**,
+>   `bounded_context: transversal` — **o tenant que decide acesso vem do token**, e
+>   um tenant na requisição é declaração *confirmada contra* ele, nunca a fonte. Ele
+>   fecha o fork F1, e o fork existia porque, medido contra o código real,
+>   **nenhuma das 16 rotas era alcançável por nenhum papel**: o router de staff não
+>   tinha como nomear o tenant que `AuthorizeActionUseCase` exige. O inventário de
+>   rotas segue sem tenant no path — agora **por regra, não por omissão**, e nenhuma
+>   assinatura de port mudou.
+> - **Expansão de camada declarada, e é a terceira para trás no BC staff.** A
+>   camada-alvo é `adapters/in/http`, mas o ADR 3.6.0004 emendou a **`application`
+>   da 3.2**: `RenameJobFunctionUseCase` passou a fazer a transição de domínio
+>   **antes** de sondar a unicidade do nome, com **errata datada** na linha
+>   `rename_job_function` da tabela §5.16 do
+>   [`concept.md` da 3.2](./stages/3.2-staff-application/concept.md) — emendada,
+>   não reescrita em silêncio. O sintoma apareceu pela API real (nome com byte NUL
+>   em `PATCH /job-functions/{id}` chegava cru ao psycopg: `DataError`, que não é
+>   `IntegrityError` nem `StaffError` e não tem handler ⇒ **500**), e a re-medição
+>   com o fake provou que **não era defeito de NUL**, e sim desvio de ordem — `""` e
+>   `"   "` também tocavam o port. A lei já estava escrita na nota que fecha aquela
+>   tabela (*"a checagem mais barata que possa falhar sozinha vem primeiro"*) e só
+>   um dos dois use cases a obedecia. Com **3.2→3.1, 3.4→3.1 e agora 3.6→3.2**, são
+>   três Stages seguidas alcançando para trás — todas declaradas, nenhuma silenciosa,
+>   e todas pela mesma causa: propriedade só **observável** na camada de fora,
+>   escrita numa camada de dentro que não tinha como medi-la. A §7 do
+>   `technical.md` registra isso como `[finding]` para a retrospectiva do Step 3.
+> - **A auditoria independente aplicou ~25 mutações e três sobreviveram** — as três
+>   sobre linhas com **100% de cobertura de linha e de ramo**, e nenhuma era defeito
+>   vivo: as três eram buraco de suíte. (a) A lei *autenticar antes de validar a
+>   entrada* vale para toda rota com corpo ou query obrigatórios e estava travada em
+>   **1 rota de 9**, por um teste escrito à mão. (b) `EmptyShiftPreferenceError`
+>   **não tinha caminho HTTP** — quinze das dezoito entradas do mapa não tinham —, e
+>   apagar em silêncio a preferência declarada devolvia 200. (c) A disjunção *tenant
+>   vazio ou ausente* no **argumento de entrada** do guard, **reincidência de
+>   `L-AG3`**: a 3.4 enumerou o par no tenant que identity devolve, e nunca no que o
+>   chamador pede. As três foram fechadas quantificando a lei sobre o domínio
+>   **derivado por introspecção**, com a **cardinalidade asserida na mesma prova**, e
+>   **as três morrem** sob a mutação que antes sobrevivia — verificado, mutação a
+>   mutação. Outros três achados menores fecharam junto (elementos de lista fora do
+>   domínio de CA24, `AccessRequirement.names_unit` declarado e nunca lido, duas
+>   declarações faltando no handler).
+> - **Números finais:** `make check` verde, **2895 testes**, cobertura **99,94%**,
+>   arquivos da Stage a **100%**.
+> - **Findings escalados — onde já havia issue, o número foi apontado.** O tradutor
+>   do `AccessGuard` no composition root (concept §10) já tem casa: issue
+>   [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47), e não foi
+>   duplicado. O resíduo de `workforce.md` §4 × ADR 3.4.0006 é da **mesma varredura**
+>   da issue [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37), cujo
+>   escopo hoje diz `3_1_*`/`3_2_*` e precisa admitir `3_4_*`. Os demais seguem só
+>   com Stage candidata:
+>   - **O `technical.md` da 3.2 ainda declara a ordem antiga do rename** (Task 07,
+>     em prosa), e a seção está **congelada** por
+>     `scripts/check_technical_postexec.py`. A direção (a) **já foi executada nesta
+>     Stage** — há `[finding]` datado na §7 daquele technical, o único trecho
+>     editável, apontando o ADR 3.6.0004. O que fica aberto é (b): **o freeze não
+>     tem forma de errata**. Não é Stage — é mudança na regra do script +
+>     `CONVENTIONS` §3.4, a abrir como **issue própria**; sem issue hoje.
+>   - **Os buracos de F1 e F3 podem ter gêmeos em `identity`, e isso NÃO foi
+>     medido.** Nenhuma mutação foi aplicada lá para (a) a ordem
+>     `Depends`-antes-do-corpo nas rotas de identity nem (b) a cláusula que lê
+>     `ator.claims.tenant_id` direto. Não tratado aqui por ser **BC alheio** —
+>     expansão mais larga que as três de camada acima, que ao menos ficaram dentro
+>     de `features/staff/`. Stage candidata: a primeira do Step 5 que reabrir a
+>     borda HTTP de identity, ou a retrospectiva do Step 3.
+>   - **Dois resíduos em `identity/adapters/in/http` que o ADR 0.0.0005 nomeia e não
+>     corrige:** o docstring de `create_unit` justifica o `restaurant_id` do path
+>     pelo **efeito de autorização**, que é o argumento fraco — o mesmo com que o
+>     ADR rejeita a alternativa análoga em staff —, e a resolução do tenant em
+>     `POST /users` e `POST /users/invitations` vive no router sem que nenhum doc de
+>     identity o declare. Uma frase apontando o ADR em cada docstring resolve. Stage
+>     candidata: a próxima que toque `features/identity/adapters/in/http`.
+>   - **A terceira expansão de camada para trás** (bullet acima) — retrospectiva do
+>     Step 3, ou a primeira Stage de domínio do Step 4.
+>   - **Custo da matriz e2e:** `test_staff_authorization.py` são **162 casos** contra
+>     Postgres real, em **2m55s**, porque cada célula reprovisiona o cenário inteiro
+>     pela API. Se a suíte ganhar mais um eixo, medir um cenário de escopo `module`
+>     para os eixos read-only, mantendo isolamento por caso onde há escrita. Stage
+>     candidata: a primeira da 4.x que acrescentar e2e de acesso.
+>   - **Herdados que continuam abertos** (concept §10): paginação das listagens, com
+>     o antídoto de uma linha da regex `_ORDER_BY` (ADR 3.4.0004); leitura de
+>     funcionário por id e sinal de cópia repetida na borda (ADR 3.4.0005), os dois
+>     no eixo de cliente/UX — primeira Stage de frontend do Step 3; byte NUL em
+>     nomes de `identity` (`Restaurant`/`Unit`/`User`), que lá também vira 500; e
+>     `CONVENTIONS` §Idioma × a suíte inteira em PT, que a 3.4 já concluiu **não ser
+>     escopo de Stage** — vira issue de documentação, ainda não aberta.
+> - **O Step 3 não fecha aqui.** Os 16 use cases e o `AccessGuard` deixaram de
+>   nascer sem consumidor — o BC passou a ser exercitável pelo entrypoint real,
+>   que é o critério do DoD —, mas a **3.5** (vínculo de login do funcionário) segue
+>   `draft` e depende desta Stage, e o Step só é `done` com a contraparte de
+>   frontend (regra do §Escopo deste roadmap).
+
 #### Stage 3.5 — `3.5-employee-login-link`
 
 **Descrição humana:** fatia vertical "criar login para este funcionário": use case em staff consumindo contrato de identity (criar usuário employee + convite/senha provisória) e vinculando `user_id` ao funcionário.
@@ -1578,9 +1711,9 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-07-29 | Stage 3.1-staff-domain concluída (`done`); bloco corrigido (nota datada — `.importlinter` modificado com contratos de pureza `staff.domain` e independência identity × staff, `identifiers.py`, placeholders application/adapters, `DayPeriod` co-locado, hierarquia `StaffError` + 8 subclasses; ADRs 3.1.0001–0006); Step 3 → `in_progress` (primeiro código do BC staff) | Execução da Stage 3.1 — issue #32 |
 | 2026-08-09 | Stage 3.2-staff-application concluída (`done`); bloco corrigido (nota datada — **quatro** eixos: camada-alvo expandida para o domínio da 3.1, file-scope real, DTOs/erros/use cases/fakes nos contratos introduzidos, `IdGenerator` e `DomainError`/`NotFoundError` nos consumidos). Decisões do sponsor mudaram o ciclo de vida das duas entidades da 3.1 (ADR 3.2.0005 supersede o 3.1.0003; ADR 3.2.0006), e o **ADR 3.2.0007** nasceu na execução, quando a auditoria de testes provou que a interação entre editar e desligar nunca fora especificada | Execução da Stage 3.2 — issue #35 |
 | 2026-08-11 | Stage 3.3-staff-persistence concluída (`done`); bloco corrigido (nota datada — **cinco** eixos: migration `0003` e não `0002`, file-scope real incluindo `migrations/env.py`/`tests/conftest.py`/fakes/ports e a **promoção** das suítes de lei para `tests/contract/`, `L-ORD` nos contratos introduzidos, `complexidade_estimada` `S`→`M`, oito `non_goals`). ADRs 3.3.0001–3.3.0007. A auditoria de testes independente encontrou **5 mutações sobreviventes em arquivos com 100% de cobertura de linha e branch** — entre elas o escopo por `employee_id` dos `DELETE` de filha, cuja ausência destruiria dado **cross-tenant** em silêncio; todas fechadas por teste com prova de mutação | Execução da Stage 3.3 — issue #38 |
-
 | 2026-08-12 | Stage 3.4 **cortada em duas** na Fase 3A (issue #40): `3.4-staff-access-scope` (fundação de acesso e escopo, 6 Tasks, sem rota) e **`3.6-staff-http`** (a borda HTTP, 8 Tasks). Motivo: com as três decisões do sponsor sobre os forks F1/F2/F3 e os achados do Checkpoint A, o plano mediu **14 Tasks** — o alarme de CONVENTIONS §6 —, e **7 delas não estavam no bloco original**. A fronteira separa emendar Stage fechada de escrever superfície nova, e faz os dois buracos de acesso fecharem antes de existir rota que os exponha. `3.5` passou a depender de `3.6`; a numeração fora de ordem é legal (número é identidade, ordem é `depends_on`). 8 ADRs (3.4.0001–3.4.0008), cinco governando a 3.4 e três a 3.6. Expansão de camada-alvo para `features/identity` autorizada pelo sponsor | Fase 3A da Stage 3.4 — issue #40 |
 | 2026-08-18 | Stage 3.4-staff-access-scope concluída (`done`); bloco **confirmado sem correção estrutural** (primeira do Step 3) e acrescido de nota datada de reconciliação pós-execução: file-scope real de 22 arquivos de `src/`, as fixtures de fechamento do CA20 são **três** e não duas (sem regressão do concept — o DoD fala da categoria; decisão e medições na §7), errata no ADR 3.4.0001 e quatro `[finding]` novos. A Stage fecha o **furo de acesso intra-tenant**: a unidade entrou no endereço do funcionário até a assinatura do port (ADR 3.4.0007), provado nos dois parâmetros da suíte de contrato com um corpo de teste só. A auditoria de testes independente encontrou **2 mutações sobreviventes** em arquivos com 100% de cobertura — as duas da mesma família, lei universal travada num representante estreito —, ambas fechadas com prova de mutação. Nenhuma rota e nenhuma migration | Execução da Stage 3.4 — issue #40 |
+| 2026-08-30 | Stage 3.6-staff-http concluída (`done`); bloco **confirmado sem correção estrutural** (as três desatualizações já tinham sido medidas na §1 do concept, antes da execução) e acrescido de nota datada de reconciliação pós-execução: as **16 rotas** de staff sob `/api/v1` ao lado das **10 de identity** (26 operações no OpenAPI), file-scope real de 10 arquivos de `src/` mais `LAYOUT.md` e `overview.md` §10, e nenhuma migration. **Cinco ADRs** — 3.6.0001–3.6.0004 e o **global 0.0.0005** (`bounded_context: transversal`), nascido aqui: o tenant que decide acesso vem do token, sem o qual **nenhuma das 16 rotas era alcançável por nenhum papel**. **Terceira expansão de camada para trás no BC staff** (3.6 → `application` da 3.2, ADR 3.6.0004, com errata na §5.16 do concept da 3.2), registrada como `[finding]` para a retrospectiva do Step 3. A auditoria independente aplicou **~25 mutações** e **3 sobreviveram**, todas em linhas com 100% de cobertura de linha e ramo — autenticar-antes-de-validar travada em 1 rota de 9, `EmptyShiftPreferenceError` sem caminho HTTP e a reincidência de `L-AG3` no tenant vazio do argumento —, as três fechadas por lei quantificada sobre domínio derivado, com prova de mutação. O Step 3 segue `in_progress` (falta a 3.5 e o frontend) | Execução da Stage 3.6 — issue #43 |
 
 ## Próxima revisão de roadmap
 
