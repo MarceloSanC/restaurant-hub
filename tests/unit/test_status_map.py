@@ -209,18 +209,29 @@ def test_ha_pelo_menos_um_bc_com_borda_http() -> None:
     )
 
 
-@pytest.mark.parametrize("bc", _SEM_BORDA_HTTP)
-def test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http(bc: str) -> None:
+def test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http() -> None:
     """A ausência é verificada, não presumida.
 
     Um BC pode legitimamente não ter mapa de status — enquanto não registrar
     rota nenhuma. O que não pode é ter `adapters/in/` **e** escapar da
     exaustividade: seria o mapa faltando exatamente onde ele passa a importar.
+
+    **Não é parametrizado, e a escolha é sobre o relatório.** `_SEM_BORDA_HTTP`
+    era `("staff",)` até a Stage 3.6 e hoje é vazio — os dois BCs têm borda. Com
+    `parametrize`, um conjunto vazio vira uma linha `SKIPPED` no relatório, e
+    neste repositório teste pulado é o sintoma que se aprendeu a investigar (o
+    "verde por não ter olhado" da Stage 1.2). Aqui não há nada pulado: a
+    afirmação é sobre um conjunto que hoje está vazio, e quem garante que o
+    **outro** lado não esvaziou é `test_ha_pelo_menos_um_bc_com_borda_http`.
     """
-    assert not (_FEATURES / bc / "adapters" / "in").exists(), (
-        f"{bc} tem adapters/in/ e não tem {_MODULO_DE_HANDLERS}.py — as rotas "
-        f"dele respondem pelo handler genérico, que converte tudo o que não é "
-        f"NotFoundError em 422"
+    com_borda_sem_mapa = sorted(
+        bc for bc in _SEM_BORDA_HTTP if (_FEATURES / bc / "adapters" / "in").exists()
+    )
+
+    assert com_borda_sem_mapa == [], (
+        f"BCs com adapters/in/ e sem {_MODULO_DE_HANDLERS}.py: "
+        f"{com_borda_sem_mapa}. As rotas deles respondem pelo handler genérico, "
+        f"que converte tudo o que não é NotFoundError em 422"
     )
 
 

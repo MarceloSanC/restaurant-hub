@@ -123,6 +123,17 @@ _VALOR_POR_TIPO: dict[str, Any] = {
     "object": {},
 }
 
+# Formatos do JSON Schema em que `"x"` não passa pela validação. Um `format`
+# desconhecido cai no valor do tipo — e, se a rota o recusar, o teste diz para
+# escrever o corpo à mão em vez de aceitar o 422.
+_VALOR_POR_FORMATO: dict[str, Any] = {
+    "date-time": "2026-01-01T08:00:00",
+    "date": "2026-01-01",
+    "time": "08:00:00",
+    "uuid": "00000000-0000-4000-8000-000000000000",
+    "email": "sintetizado@x.com",
+}
+
 # Substituto de parâmetro de caminho. Qualquer valor serve: a recusa acontece
 # antes de o alvo ser procurado, e é essa ordem que o Gate 2 verifica.
 _PARAMETRO = "x"
@@ -210,12 +221,63 @@ def _resolver(schema: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
     return dict(alvo)
 
 
+def _valor(schema: dict[str, Any], spec: dict[str, Any]) -> Any:  # noqa: ANN401
+    """Um valor que o schema aceita — recursivo, e só até onde precisa ir.
+
+    A meta é **passar pela validação do Pydantic** para alcançar o
+    `guard.authorize`, nunca produzir um pedido plausível: a rota não pode
+    chegar a executar. Por isso `weekly_hours` sai como `"x"` — o schema o
+    declara `string`, e a conversão para o value object do domínio acontece
+    **depois** da autorização.
+
+    Os quatro ramos abaixo são exatamente os que a Stage 3.6 exigiu, e cada um
+    foi acrescentado por uma rota que respondia 422:
+
+    - `const` — o discriminador de união (`type: "fixed"`) não é uma string
+      qualquer; um `"x"` ali reprova na validação;
+    - `oneOf`/`anyOf` — a união discriminada de `workload_profile` e o
+      `list | None` de `shift_preference`. Escolhe-se a primeira variante que
+      não seja `null`, porque `null` satisfaz o schema sem exercitar nada;
+    - objeto aninhado — a variante escolhida é ela própria um schema com
+      campos obrigatórios;
+    - `format` — `date-time` precisa parsear como `datetime`.
+    """
+    schema = _resolver(schema, spec)
+
+    if "const" in schema:
+        return schema["const"]
+
+    for chave in ("oneOf", "anyOf", "allOf"):
+        variantes = [
+            variante
+            for variante in schema.get(chave, [])
+            if _resolver(variante, spec).get("type") != "null"
+        ]
+        if variantes:
+            return _valor(variantes[0], spec)
+
+    formato = schema.get("format")
+    if formato in _VALOR_POR_FORMATO:
+        return _VALOR_POR_FORMATO[formato]
+
+    tipo = schema.get("type")
+    if tipo == "object" or "properties" in schema:
+        propriedades = schema.get("properties", {})
+        return {
+            nome: _valor(propriedades.get(nome, {}), spec) for nome in schema.get("required", [])
+        }
+
+    return _VALOR_POR_TIPO.get(tipo or "", "x")
+
+
 def _corpo(metodo: str, caminho: str, spec: dict[str, Any]) -> dict[str, Any]:
     """Um corpo que a rota **aceita**, sintetizado do schema dela.
 
     Sintetizar — em vez de escrever um por rota — é o que faz a perna do 403
-    acompanhar rota nova sem edição. Só os campos obrigatórios entram: um campo
-    opcional a mais só aumentaria a chance de a síntese errar o formato.
+    acompanhar rota nova sem edição, e a Stage 3.6 é a prova: as suas nove rotas
+    de staff entraram nesta suíte sem uma linha de edição aqui. Só os campos
+    obrigatórios entram: um campo opcional a mais só aumentaria a chance de a
+    síntese errar o formato.
     """
     sob_medida = _CORPOS_SOB_MEDIDA.get((metodo, caminho))
     if sob_medida is not None:
@@ -227,11 +289,27 @@ def _corpo(metodo: str, caminho: str, spec: dict[str, Any]) -> dict[str, Any]:
     if not conteudo:
         return {}
 
-    schema = _resolver(conteudo.get("schema", {}), spec)
-    propriedades = schema.get("properties", {})
+    sintetizado = _valor(conteudo.get("schema", {}), spec)
+    return sintetizado if isinstance(sintetizado, dict) else {}
+
+
+def _query(metodo: str, caminho: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """Os parâmetros de **query** obrigatórios da rota, sintetizados.
+
+    Sem isto, toda rota que exige filtro na query escaparia da perna do 403: o
+    FastAPI valida os parâmetros junto com o corpo, antes do handler, então a
+    ausência deles responde 422 e a execução nunca alcança o `guard.authorize`.
+
+    `DELETE /units/{unit_id}/employees/{employee_id}/unavailabilities` é o caso
+    que expôs isso — ela endereça o período a remover por `?start=&end=`, e não
+    por corpo. Foi a Stage 3.6 que a trouxe, e o gate a acusou na primeira
+    corrida contra o código dela.
+    """
+    operacao = spec["paths"][caminho][metodo.lower()]
     return {
-        nome: _VALOR_POR_TIPO.get(_resolver(propriedades.get(nome, {}), spec).get("type", ""), "x")
-        for nome in schema.get("required", [])
+        parametro["name"]: _valor(parametro.get("schema", {}), spec)
+        for parametro in operacao.get("parameters", [])
+        if parametro.get("in") == "query" and parametro.get("required", False)
     }
 
 
@@ -345,7 +423,8 @@ def test_nenhuma_rota_esta_escondida_do_schema(database_url: str) -> None:
     wiring = build_http_wiring(wire_dependencies(_settings(database_url)))
     escondidas = sorted(
         getattr(rota, "path", "?")
-        for rota in wiring.router.routes
+        for router in wiring.routers
+        for rota in router.routes
         if not getattr(rota, "include_in_schema", True)
     )
 
@@ -477,9 +556,10 @@ async def test_rota_nao_publica_recusa_papel_sem_permissao(
     """
     metodo, caminho = rota
     corpo = _corpo(metodo, caminho, _spec())
+    query = _query(metodo, caminho, _spec())
 
     resposta = await client_gate.request(
-        metodo, _url(caminho), json=corpo, headers=token_sem_permissao
+        metodo, _url(caminho), json=corpo, params=query, headers=token_sem_permissao
     )
 
     assert resposta.status_code != HTTPStatus.UNPROCESSABLE_ENTITY, (
