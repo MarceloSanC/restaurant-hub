@@ -68,12 +68,14 @@ from tests.fakes.shared.recording_email_sender import (
 
 pytestmark = pytest.mark.unit
 
-router_module = importlib.import_module("restaurant_hub.features.identity.adapters.in.http.router")
+router_module = importlib.import_module(
+    "restaurant_hub.features.identity.adapters.inbound.http.router"
+)
 dependencies_module = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.in.http.dependencies"
+    "restaurant_hub.features.identity.adapters.inbound.http.dependencies"
 )
 error_handlers_module = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.in.http.error_handlers"
+    "restaurant_hub.features.identity.adapters.inbound.http.error_handlers"
 )
 
 _NOW = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)

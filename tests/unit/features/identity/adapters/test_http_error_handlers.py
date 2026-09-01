@@ -16,9 +16,12 @@ from restaurant_hub.features.identity.domain.exceptions.errors import IdentityEr
 
 pytestmark = pytest.mark.unit
 
-# `in` é keyword Python: import estático é SyntaxError (LAYOUT §8).
+# Alcançado por `importlib` desde a época em que o pacote se chamava `in`
+# (keyword Python). Depois do rename para `inbound/` na #45 o import estático
+# funciona; a forma dinâmica ficou e é inofensiva — trocá-la em todo o pacote
+# de testes das Stages 2.4 e 3.6 é churn alheio a esta issue.
 handlers = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.in.http.error_handlers"
+    "restaurant_hub.features.identity.adapters.inbound.http.error_handlers"
 )
 
 # Piso de contagem: 8 concretas no domínio + 19 na aplicação. É tripwire contra a

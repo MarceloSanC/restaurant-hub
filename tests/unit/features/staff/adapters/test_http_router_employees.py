@@ -33,7 +33,7 @@ from tests.unit.features.staff.adapters.test_http_router_job_functions import (
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 
 _PERFIL_SOB_DEMANDA = {"type": "on_demand"}

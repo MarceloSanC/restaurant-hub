@@ -64,7 +64,7 @@ from tests.e2e.features.staff.test_staff_authorization import (
 
 pytestmark = pytest.mark.e2e
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")
 

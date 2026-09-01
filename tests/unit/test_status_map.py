@@ -64,7 +64,7 @@ _TOTAIS_MINIMOS = {"identity": 28, "staff": 18}
 # o universo inteiro.
 _MODULOS_DE_ERRO = ("domain.exceptions.errors", "application.errors")
 
-_PACOTE_HTTP = "adapters.in.http"
+_PACOTE_HTTP = "adapters.inbound.http"
 _MODULO_DE_HANDLERS = "error_handlers"
 
 
@@ -80,7 +80,7 @@ def _bounded_contexts_na_pasta() -> tuple[str, ...]:
 
 
 def _caminho_dos_handlers(bc: str) -> pathlib.Path:
-    return _FEATURES / bc / "adapters" / "in" / "http" / f"{_MODULO_DE_HANDLERS}.py"
+    return _FEATURES / bc / "adapters" / "inbound" / "http" / f"{_MODULO_DE_HANDLERS}.py"
 
 
 def _tem_borda_http(bc: str) -> bool:
@@ -141,7 +141,11 @@ def _subclasses_concretas(bc: str) -> set[type[Exception]]:
 
 
 def _modulo_de_handlers(bc: str) -> types.ModuleType:
-    """`adapters/in/http/error_handlers.py` do BC — por `importlib` (keyword `in`)."""
+    """`adapters/inbound/http/error_handlers.py` do BC.
+
+    Por `importlib` porque o caminho é **calculado** a partir do bounded
+    context: é o que faz este arquivo valer para o BC seguinte sem edição.
+    """
     return importlib.import_module(
         f"restaurant_hub.features.{bc}.{_PACOTE_HTTP}.{_MODULO_DE_HANDLERS}"
     )
@@ -198,13 +202,13 @@ def test_ha_pelo_menos_um_bc_com_borda_http() -> None:
     """A guarda contra a parametrização vazia — o falso-verde deste arquivo.
 
     `parametrize` sobre lista vazia produz zero testes e reporta sucesso. Se a
-    descoberta quebrasse (caminho errado, pasta renomeada, `adapters/in/`
+    descoberta quebrasse (caminho errado, pasta renomeada, `adapters/inbound/`
     virando `adapters/inbound/`), toda a exaustividade sumiria em silêncio, e o
     relatório do pytest diria exatamente o mesmo de antes.
     """
     assert _COM_BORDA_HTTP, (
         f"nenhum BC de {_BOUNDED_CONTEXTS} tem "
-        f"adapters/in/http/{_MODULO_DE_HANDLERS}.py — a descoberta quebrou, e "
+        f"adapters/inbound/http/{_MODULO_DE_HANDLERS}.py — a descoberta quebrou, e "
         f"sem esta asserção as demais teriam sumido sem sintoma"
     )
 
@@ -213,7 +217,7 @@ def test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http() -> None:
     """A ausência é verificada, não presumida.
 
     Um BC pode legitimamente não ter mapa de status — enquanto não registrar
-    rota nenhuma. O que não pode é ter `adapters/in/` **e** escapar da
+    rota nenhuma. O que não pode é ter `adapters/inbound/` **e** escapar da
     exaustividade: seria o mapa faltando exatamente onde ele passa a importar.
 
     **Não é parametrizado, e a escolha é sobre o relatório.** `_SEM_BORDA_HTTP`
@@ -225,11 +229,11 @@ def test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http() -> None:
     **outro** lado não esvaziou é `test_ha_pelo_menos_um_bc_com_borda_http`.
     """
     com_borda_sem_mapa = sorted(
-        bc for bc in _SEM_BORDA_HTTP if (_FEATURES / bc / "adapters" / "in").exists()
+        bc for bc in _SEM_BORDA_HTTP if (_FEATURES / bc / "adapters" / "inbound").exists()
     )
 
     assert com_borda_sem_mapa == [], (
-        f"BCs com adapters/in/ e sem {_MODULO_DE_HANDLERS}.py: "
+        f"BCs com adapters/inbound/ e sem {_MODULO_DE_HANDLERS}.py: "
         f"{com_borda_sem_mapa}. As rotas deles respondem pelo handler genérico, "
         f"que converte tudo o que não é NotFoundError em 422"
     )

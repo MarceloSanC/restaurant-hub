@@ -21,7 +21,7 @@ tinha. O gate é o que impede a terceira.
 
 **`<feature>` é template, e a claim correspondente é existencial.** A §2 desenha
 UMA feature genérica; ela não afirma que todo bounded context tem toda pasta.
-`staff` legitimamente não tinha `adapters/in/` até a Stage 3.6, e cobrar a
+`staff` legitimamente não tinha `adapters/inbound/` até a Stage 3.6, e cobrar a
 existência em **todas** as features transformaria o gate num gerador de pastas
 vazias — o oposto do que ele existe para fazer. A claim é: *pelo menos uma*
 feature tem este caminho. Um caminho que não existe em feature nenhuma é uma

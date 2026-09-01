@@ -67,7 +67,7 @@ from tests.unit.features.staff.adapters.test_http_boundary_sweeps import (
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
 error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")

@@ -57,7 +57,7 @@ from tests.e2e.features.staff.conftest import (
 
 pytestmark = pytest.mark.e2e
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 
 # A cardinalidade declarada do inventário (concept §4.1). Ela é o piso que
@@ -76,7 +76,7 @@ _TOTAL_COM_EMPLOYEE_ID: Final = 10
 _CASOS_DE_CA09: Final = 32
 _CASOS_DE_CA36: Final = 48
 
-# Os corpos constantes de identity (`identity/adapters/in/http/error_handlers.py`).
+# Os corpos constantes de identity (`identity/adapters/inbound/http/error_handlers.py`).
 # **Transcritos, e não importados**: o critério é sobre o contrato que o cliente
 # recebe, e perguntá-lo ao módulo sob teste faria a expectativa seguir o defeito.
 _CORPO_401: Final = {"detail": "não autenticado", "type": "unauthorized"}

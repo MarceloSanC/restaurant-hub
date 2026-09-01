@@ -76,7 +76,7 @@ _ARVORE = """src/restaurant_hub/
     └── <feature>/                  # Placeholder
         ├── domain/                 # Núcleo
         └── adapters/               # Implementações
-            └── in/                 # Adapters primários"""
+            └── inbound/            # Adapters primários"""
 
 
 def test_gate5_a_arvore_real_do_layout_confere_com_o_repositorio() -> None:
@@ -93,7 +93,7 @@ def test_gate5_a_arvore_real_do_layout_confere_com_o_repositorio() -> None:
 def test_gate5_um_caminho_desenhado_que_nao_existe_reprova(tmp_path: pathlib.Path) -> None:
     """Violador plantado: a promessa de `ports/in/`, reconstruída.
 
-    `features/identity/adapters/in` existe; `features/identity/domain` não. A
+    `features/identity/adapters/inbound` existe; `features/identity/domain` não. A
     árvore afirma os dois, e só o segundo deve reprovar — é o que distingue o
     detector de uma função que devolve tudo.
     """
@@ -102,7 +102,7 @@ def test_gate5_um_caminho_desenhado_que_nao_existe_reprova(tmp_path: pathlib.Pat
         _ARVORE,
         caminhos=(
             "src/restaurant_hub/main.py",
-            "src/restaurant_hub/features/identity/adapters/in",
+            "src/restaurant_hub/features/identity/adapters/inbound",
         ),
     )
 
@@ -116,7 +116,7 @@ def test_gate5_uma_feature_basta_para_o_caminho_com_placeholder(tmp_path: pathli
     """A claim de `<feature>` é existencial, e a distinção é deliberada.
 
     A §2 desenha UMA feature genérica; ela não afirma que todo bounded context
-    tem toda pasta. `staff` legitimamente não teve `adapters/in/` até a Stage
+    tem toda pasta. `staff` legitimamente não teve `adapters/inbound/` até a Stage
     3.6, e cobrar a existência em todas as features faria o gate exigir pastas
     vazias — o oposto do que ele existe para produzir.
     """
@@ -126,7 +126,7 @@ def test_gate5_uma_feature_basta_para_o_caminho_com_placeholder(tmp_path: pathli
         caminhos=(
             "src/restaurant_hub/main.py",
             "src/restaurant_hub/features/identity/domain",
-            "src/restaurant_hub/features/identity/adapters/in",
+            "src/restaurant_hub/features/identity/adapters/inbound",
             "src/restaurant_hub/features/staff/domain",
         ),
     )
@@ -150,7 +150,7 @@ def test_gate5_a_anotacao_de_planejado_absolve_o_caminho_ausente(tmp_path: pathl
         arvore,
         caminhos=(
             "src/restaurant_hub/main.py",
-            "src/restaurant_hub/features/identity/adapters/in",
+            "src/restaurant_hub/features/identity/adapters/inbound",
         ),
     )
 
@@ -178,7 +178,7 @@ def test_gate5_a_anotacao_de_planejado_sobre_caminho_existente_reprova(
         caminhos=(
             "src/restaurant_hub/main.py",
             "src/restaurant_hub/features/identity/domain",
-            "src/restaurant_hub/features/identity/adapters/in",
+            "src/restaurant_hub/features/identity/adapters/inbound",
         ),
     )
 

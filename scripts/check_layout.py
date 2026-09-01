@@ -10,7 +10,7 @@ Verifica:
 2. Módulos de `application/` não importam de `adapters/` ou `infrastructure/`
    (libs de framework idem).
 3. Adapters de uma feature não importam adapters de outras features nem de uma
-   subcamada irmã da mesma feature (in não importa out, out não importa in).
+   subcamada irmã da mesma feature (inbound não importa out, out não importa inbound).
 4. `restaurant_hub/shared/` não importa de `restaurant_hub.features` (acoplamento inverso).
 5. `main.py` não importa feature nenhuma — o entrypoint só conhece a factory.
 6. Charter do composition root: só `@dataclass` e só as funções de wiring.
@@ -32,7 +32,7 @@ Uma auditoria de 2026-08-29 encontrou oito violações de Clean Architecture com
 `lint-imports` em 9 kept / 0 broken e este script em exit 0. A causa-raiz não
 foi uma regra errada: foi um arquivo que **nenhuma regra olhava**.
 `composition_root.py` não casava com nenhuma âncora de `FORBIDDEN_IMPORTS`
-(todas ancoradas em `/domain/`, `/application/`, `/adapters/in/`,
+(todas ancoradas em `/domain/`, `/application/`, `/adapters/inbound/`,
 `/adapters/out/`, `/restaurant_hub/shared/`) e não era `source_module` de
 contrato nenhum do `.importlinter` — e era o único arquivo do repositório a
 carregar uma decisão de isolamento de tenant. Seis Stages construíram em cima
@@ -91,18 +91,18 @@ FORBIDDEN_IMPORTS: list[tuple[str, list[str]]] = [
             "sqlalchemy",
         ],
     ),
-    # adapters/in não pode importar adapters/out (mesma feature) nem adapters de outras features
+    # adapters/inbound não pode importar adapters/out (mesma feature) nem adapters de outra
     (
-        "/adapters/in/",
+        "/adapters/inbound/",
         [
             "restaurant_hub.features.*.adapters.out",
         ],
     ),
-    # adapters/out não pode importar adapters/in (mesma feature) nem adapters de outras features
+    # adapters/out não pode importar adapters/inbound (mesma feature) nem adapters de outra
     (
         "/adapters/out/",
         [
-            "restaurant_hub.features.*.adapters.in",
+            "restaurant_hub.features.*.adapters.inbound",
         ],
     ),
     # shared não pode importar de features (ancorado pelo prefixo do pacote)

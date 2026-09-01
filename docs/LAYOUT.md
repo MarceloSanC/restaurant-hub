@@ -45,7 +45,7 @@ src/restaurant_hub/
 │       │       └── out/            # Ports secundários / driven
 │       │
 │       └── adapters/               # Implementações concretas dos ports
-│           ├── in/                 # Adapters primários (HTTP, CLI, workers)
+│           ├── inbound/            # Adapters primários (HTTP, CLI, workers)
 │           │   └── http/           # Router FastAPI, schemas Pydantic de request/response
 │           └── out/                # Adapters secundários (banco, email, APIs externas)
 │               └── postgres/       # Repositório SQLAlchemy, mappers
@@ -230,21 +230,3 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
 
----
-
-## 8. Nota sobre `in` como Nome de Diretório
-
-O diretório `in/` existe para seguir a nomenclatura canônica de Ports & Adapters
-(ports primários = "in", ports secundários = "out"). Ele é válido como diretório no sistema
-de arquivos, mas **não pode ser referenciado diretamente em imports Python** porque `in`
-é uma palavra reservada da linguagem.
-
-Estratégia adotada neste projeto:
-
-1. O diretório `in/` **existe** e contém os arquivos de port/adapter primários.
-2. **Imports diretos** de `ports/in/` são evitados no código de produção usando injeção
-   de dependência via `composition_root.py` + FastAPI `Depends`.
-3. Quando um import direto for absolutamente necessário, use `importlib.import_module()`.
-4. Docstrings nos arquivos dentro de `in/` incluem um aviso sobre a keyword.
-
-Isso permite manter a estrutura semântica correta sem sacrificar a compatibilidade Python.

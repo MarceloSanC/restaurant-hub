@@ -14,8 +14,11 @@ from pydantic import BaseModel, SecretStr
 
 pytestmark = pytest.mark.unit
 
-# `in` é keyword Python: import estático deste caminho é SyntaxError (LAYOUT §8).
-schemas = importlib.import_module("restaurant_hub.features.identity.adapters.in.http.schemas")
+# Alcançado por `importlib` desde a época em que o pacote se chamava `in`
+# (keyword Python). Depois do rename para `inbound/` na #45 o import estático
+# funciona; a forma dinâmica ficou e é inofensiva — trocá-la em todo o pacote
+# de testes das Stages 2.4 e 3.6 é churn alheio a esta issue.
+schemas = importlib.import_module("restaurant_hub.features.identity.adapters.inbound.http.schemas")
 
 # Nomes que jamais podem sair numa resposta. `fingerprint` está aqui junto com
 # senha e hash porque, embora não seja utilizável como credencial, é o índice que

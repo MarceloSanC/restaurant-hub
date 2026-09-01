@@ -5,7 +5,7 @@ sozinhas.** Nenhum `parametrize` deste arquivo lista schema, campo ou módulo à
 mão: os requests saem de uma varredura do módulo por `__name__`, os campos saem
 de `model_fields` — recursivamente, para alcançar também os aninhados —, e os
 módulos da varredura de import saem do **pacote**. Consequência operacional: um
-schema acrescentado na Task 05, ou um módulo novo em `adapters/in/http/`, entra
+schema acrescentado na Task 05, ou um módulo novo em `adapters/inbound/http/`, entra
 nestas travas sem que ninguém precise lembrar deste arquivo.
 """
 
@@ -45,9 +45,9 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 
 pytestmark = pytest.mark.unit
 
-# O pacote é alcançado por `importlib` porque `in` é keyword Python (LAYOUT §8) —
+# O pacote é alcançado por `importlib`, forma herdada do antigo nome `in` —
 # o mesmo caminho que o `composition_root` usa.
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 
 schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
 

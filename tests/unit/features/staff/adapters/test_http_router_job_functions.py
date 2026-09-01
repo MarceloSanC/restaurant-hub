@@ -58,7 +58,7 @@ from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 
 router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")

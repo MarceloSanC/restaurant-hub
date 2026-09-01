@@ -23,8 +23,13 @@ from restaurant_hub.shared.domain.exceptions.base import NotFoundError
 
 pytestmark = pytest.mark.unit
 
-# `in` é keyword Python: import estático é SyntaxError (LAYOUT §8).
-handlers = importlib.import_module("restaurant_hub.features.staff.adapters.in.http.error_handlers")
+# Alcançado por `importlib` desde a época em que o pacote se chamava `in`
+# (keyword Python). Depois do rename para `inbound/` na #45 o import estático
+# funciona; a forma dinâmica ficou e é inofensiva — trocá-la em todo o pacote
+# de testes das Stages 2.4 e 3.6 é churn alheio a esta issue.
+handlers = importlib.import_module(
+    "restaurant_hub.features.staff.adapters.inbound.http.error_handlers"
+)
 
 # Piso de contagem: 9 concretas no domínio + 9 na aplicação (concept §6.1). É
 # tripwire contra a enumeração encolher em silêncio — `__subclasses__` só enxerga

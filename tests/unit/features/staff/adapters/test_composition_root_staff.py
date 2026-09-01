@@ -267,7 +267,8 @@ class _SpyIdentityGuard:
     """`IdentityGuard` de mentira, para exercitar o tradutor sem banco.
 
     Não é fake de port — é dublê do objeto **embrulhado**, que o composition
-    root guarda como `Any` por necessidade (o pacote `in` é keyword Python).
+    root guarda como `Any` (por necessidade até a #45, quando o pacote se
+    chamava `in`; por decisão adiada para a #47 desde então).
     Guarda o que recebeu, para que as asserções de tradução sejam sobre o valor
     que atravessou, e não sobre o que o teste imaginou ter passado.
     """
@@ -334,11 +335,12 @@ def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
     silêncio e reapareceria como 403 universal em runtime — que é precisamente o
     defeito que a resolução do tenant existe para fechar.
 
-    O módulo mora sob o pacote `in`, keyword Python, então chega por `importlib`
-    (LAYOUT §8) — o mesmo caminho que o composition root usa.
+    O módulo chega por `importlib` — a forma herdada de quando o pacote se
+    chamava `in` (keyword Python). Desde o rename da #45 o import estático
+    também funciona.
     """
     dependencies = importlib.import_module(
-        "restaurant_hub.features.identity.adapters.in.http.dependencies"
+        "restaurant_hub.features.identity.adapters.inbound.http.dependencies"
     )
     actor: object = dependencies.AuthenticatedActor(
         claims=AccessTokenClaims(
@@ -364,8 +366,8 @@ def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
 _TOTAL_DE_OVERRIDES_DE_STAFF = 17
 _TOTAL_DE_ROTAS_DE_STAFF = 16
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
-_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.inbound.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 _PREFIXO_DA_API = "/api/v1"
 
 # O inventário de identity, **literal**, como o cliente o alcança. Transcrito e
@@ -493,8 +495,8 @@ def test_o_spy_tem_a_mesma_assinatura_do_identity_guard_real(method: str) -> Non
     Há teste de que o **tradutor** casa com o `AccessGuard`; não havia nenhum de
     que o `_SpyIdentityGuard` casa com o `IdentityGuard` **real**. É a metade que
     importa para os sete testes de comportamento acima: eles exercitam o tradutor
-    contra o dublê, e o objeto embrulhado em produção chega como `Any` (o pacote
-    `in` é keyword Python), então **nada** no repositório compara os dois. Um
+    contra o dublê, e o objeto embrulhado em produção chega como `Any`, então
+    **nada** no repositório compara os dois. Um
     parâmetro renomeado ou promovido a posicional em `IdentityGuard.authorize`
     passaria por toda a suíte e só apareceria como `TypeError` no primeiro
     request da Stage 3.6.
@@ -505,7 +507,7 @@ def test_o_spy_tem_a_mesma_assinatura_do_identity_guard_real(method: str) -> Non
     vocabulário do outro BC para provar uma propriedade de forma.
     """
     identity_guard = importlib.import_module(
-        "restaurant_hub.features.identity.adapters.in.http.dependencies"
+        "restaurant_hub.features.identity.adapters.inbound.http.dependencies"
     ).IdentityGuard
 
     def forma(alvo: object) -> list[tuple[str, object, object]]:

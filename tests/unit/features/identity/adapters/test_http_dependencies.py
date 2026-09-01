@@ -48,7 +48,7 @@ from tests.fakes.shared.fake_clock import FakeClock
 pytestmark = pytest.mark.unit
 
 dependencies = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.in.http.dependencies"
+    "restaurant_hub.features.identity.adapters.inbound.http.dependencies"
 )
 
 _NOW = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
