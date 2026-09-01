@@ -155,13 +155,35 @@ COMPOSITION_ROOT_CLASS_ALLOWLIST: dict[str, str] = {
     ),
 }
 
+# Funções de módulo toleradas fora do charter — mesma exigência de justificativa.
+#
+# `_tenant_id_do_ator` é **a mesma unidade de dívida** que `_IdentityAccessGuard`:
+# existe só para ele, é chamada só por ele, e sai junto na #47. Duas entradas,
+# uma dívida.
+#
+# **Ela chegou pela Stage 3.6, e isso é o registro honesto de uma ordem que não
+# se cumpriu.** A #45 argumenta que "gate escrito antes do código previne;
+# escrito depois, documenta", e por isso pedia que estes detectores entrassem
+# antes da 3.6. A 3.6 mergeou primeiro. O resultado é exatamente o previsto: o
+# gate **encontrou** a função em vez de tê-la impedido. O tratamento é torná-la
+# contável, não corrigi-la — mexer na borda de acesso de staff é escopo da #47.
+COMPOSITION_ROOT_FUNCTION_ALLOWLIST: dict[str, str] = {
+    "_tenant_id_do_ator": (
+        "issue #47 — helper exclusivo do `_IdentityAccessGuard` (ADR 0.0.0005, "
+        "cláusula 3); sai daqui junto com ele"
+    ),
+}
+
 # O `raise` é o sintoma mais direto de decisão dentro do wiring: quem monta
 # grafo não recusa pedido. Hoje há exatamente um — o `PermissionDeniedError` da
-# lei L-AG3 do tradutor — e ele é tolerado pela mesma issue, na mesma unidade
-# sintática. Derivar esta allowlist da de classes é deliberado: são a mesma
-# dívida, e duas listas independentes permitiriam tirar a classe da primeira
-# deixando o `raise` perdoado pela segunda.
-COMPOSITION_ROOT_RAISE_ALLOWLIST: dict[str, str] = dict(COMPOSITION_ROOT_CLASS_ALLOWLIST)
+# lei L-AG3 do tradutor — e ele é tolerado pelas mesmas issues, nas mesmas
+# unidades sintáticas. Derivar esta allowlist das outras duas é deliberado: são a
+# mesma dívida, e listas independentes permitiriam tirar a classe de uma delas
+# deixando o `raise` perdoado pela outra.
+COMPOSITION_ROOT_RAISE_ALLOWLIST: dict[str, str] = {
+    **COMPOSITION_ROOT_CLASS_ALLOWLIST,
+    **COMPOSITION_ROOT_FUNCTION_ALLOWLIST,
+}
 
 # ---------------------------------------------------------------------------
 # Regra 7 — DTO não tem comportamento (Gate 6 da issue #45)
@@ -363,6 +385,7 @@ def check_composition_root_charter(src_root: Path) -> list[str]:
             elif (
                 isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
                 and node.name not in COMPOSITION_ROOT_FUNCTIONS
+                and node.name not in COMPOSITION_ROOT_FUNCTION_ALLOWLIST
             ):
                 violations.append(
                     f"CHARTER: {rel}:{node.lineno} — função '{node.name}' fora do "

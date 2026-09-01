@@ -211,17 +211,56 @@ def test_gate1_a_allowlist_do_charter_nao_cresceu() -> None:
     assert set(check_layout.COMPOSITION_ROOT_CLASS_ALLOWLIST) == {"_IdentityAccessGuard"}
 
 
-def test_gate1_cada_entrada_da_allowlist_do_charter_cita_a_issue_que_a_remove() -> None:
+def test_gate1_a_allowlist_de_funcoes_do_charter_nao_cresceu() -> None:
+    """A segunda metade do charter, e a que a Stage 3.6 estreou.
+
+    `_tenant_id_do_ator` entrou no `composition_root.py` **depois** que este gate
+    foi escrito e **antes** de ele mergear. É a demonstração literal do argumento
+    da issue — "gate escrito antes do código previne; escrito depois, documenta"
+    — pelo lado errado: ele encontrou a função em vez de tê-la impedido. Fixar o
+    conjunto é o que impede a terceira.
+    """
+    assert set(check_layout.COMPOSITION_ROOT_FUNCTION_ALLOWLIST) == {"_tenant_id_do_ator"}
+
+
+def test_gate1_a_allowlist_de_funcoes_nao_tem_entrada_morta() -> None:
+    """A função perdoada precisa existir — e sair da lista quando a #47 a mover."""
+    arvore = ast.parse((_SRC / "composition_root.py").read_text(encoding="utf-8"))
+    declaradas = {
+        no.name for no in arvore.body if isinstance(no, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+    orfas = sorted(set(check_layout.COMPOSITION_ROOT_FUNCTION_ALLOWLIST) - declaradas)
+
+    assert orfas == [], f"allowlist perdoa função que não existe mais: {orfas}"
+
+
+def test_gate1_a_allowlist_de_raise_cobre_as_duas_unidades_da_mesma_divida() -> None:
+    """As três allowlists do charter descrevem **uma** dívida, e derivam disso.
+
+    `_IdentityAccessGuard` e o seu helper saem juntos na #47. Se a allowlist de
+    `raise` fosse escrita à parte, tirar a classe de uma delas deixaria o `raise`
+    perdoado pela outra — e a dívida contaria como paga com metade dela de pé.
+    """
+    assert set(check_layout.COMPOSITION_ROOT_RAISE_ALLOWLIST) == (
+        set(check_layout.COMPOSITION_ROOT_CLASS_ALLOWLIST)
+        | set(check_layout.COMPOSITION_ROOT_FUNCTION_ALLOWLIST)
+    )
+
+
+def test_gate1_cada_entrada_das_allowlists_do_charter_cita_a_issue_que_a_remove() -> None:
     """Justificativa é requisito, não cortesia.
 
     Allowlist sem ponteiro vira permanente por esquecimento: ninguém sabe dizer
     se a entrada ainda vale, e a resposta segura é sempre deixá-la. Com a issue
-    citada, a pergunta tem endereço.
+    citada, a pergunta tem endereço. Vale para as **duas** listas — a de classes
+    e a de funções —, porque as duas perdoam pelo mesmo motivo.
     """
+    entradas = {
+        **check_layout.COMPOSITION_ROOT_CLASS_ALLOWLIST,
+        **check_layout.COMPOSITION_ROOT_FUNCTION_ALLOWLIST,
+    }
     sem_ponteiro = sorted(
-        nome
-        for nome, motivo in check_layout.COMPOSITION_ROOT_CLASS_ALLOWLIST.items()
-        if "#" not in motivo and "ADR" not in motivo
+        nome for nome, motivo in entradas.items() if "#" not in motivo and "ADR" not in motivo
     )
 
     assert sem_ponteiro == []
