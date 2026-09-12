@@ -9,13 +9,13 @@ Dois grupos importam mais que o resto:
   2.1, não de uma segunda tabela.
 """
 
-import importlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from starlette.datastructures import Headers
 from starlette.requests import Request
 
+from restaurant_hub.features.identity.adapters.inbound.http import dependencies
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SessionId,
@@ -46,10 +46,6 @@ from tests.fakes.features.identity.in_memory_user_repository import InMemoryUser
 from tests.fakes.shared.fake_clock import FakeClock
 
 pytestmark = pytest.mark.unit
-
-dependencies = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.inbound.http.dependencies"
-)
 
 _NOW = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
 _TENANT = RestaurantId("rest-1")

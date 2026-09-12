@@ -7,7 +7,6 @@ distingue os casos que precisam ser indistinguíveis.
 """
 
 import dataclasses
-import importlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -15,6 +14,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from restaurant_hub.features.identity.adapters.inbound.http import (
+    error_handlers as identity_error_handlers,
+)
+from restaurant_hub.features.identity.adapters.inbound.http import router as router_module
+from restaurant_hub.features.identity.adapters.inbound.http import schemas
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SetupTokenId,
@@ -52,15 +56,6 @@ from tests.fakes.features.identity.in_memory_user_repository import InMemoryUser
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
-
-# Alcançado por `importlib` desde a época em que o pacote se chamava `in`
-# (keyword Python). Depois do rename para `inbound/` na #45 o import estático
-# funciona; a forma dinâmica ficou e é inofensiva — trocá-la em todo o pacote
-# de testes das Stages 2.4 e 3.6 é churn alheio a esta issue.
-_PACOTE = "restaurant_hub.features.identity.adapters.inbound.http"
-schemas = importlib.import_module(f"{_PACOTE}.schemas")
-router_module = importlib.import_module(f"{_PACOTE}.router")
-identity_error_handlers = importlib.import_module(f"{_PACOTE}.error_handlers")
 
 _AGORA = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
 _VALOR = "setup-1"

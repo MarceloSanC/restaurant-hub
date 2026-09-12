@@ -33,7 +33,6 @@ coletor que as varreduras usam. Se uma rota futura ler o escopo em vez do path, 
 a **própria** Task que a escreveu que fica vermelha.
 """
 
-import importlib
 import typing
 import urllib.parse
 from functools import partial
@@ -45,6 +44,11 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies as dependencies_module
+from restaurant_hub.features.staff.adapters.inbound.http import (
+    error_handlers as error_handlers_module,
+)
+from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
 from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
@@ -67,10 +71,6 @@ from tests.unit.features.staff.adapters.test_http_boundary_sweeps import (
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
-error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")
 
 # A unidade que o cliente **pede**. Diferente da que o dublê devolve, e diferente
 # da que as outras suítes usam, para que uma confusão de fixture não passe por

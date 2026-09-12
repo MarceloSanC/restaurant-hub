@@ -9,7 +9,6 @@ Os repositórios são fakes; o que se testa aqui é **a rota**, não a persistê
 O caminho com Postgres real é a Task 12.
 """
 
-import importlib
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
@@ -18,6 +17,13 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from restaurant_hub.features.identity.adapters.inbound.http import (
+    dependencies as dependencies_module,
+)
+from restaurant_hub.features.identity.adapters.inbound.http import (
+    error_handlers as error_handlers_module,
+)
+from restaurant_hub.features.identity.adapters.inbound.http import router as router_module
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SessionId,
@@ -67,16 +73,6 @@ from tests.fakes.shared.recording_email_sender import (
 )
 
 pytestmark = pytest.mark.unit
-
-router_module = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.inbound.http.router"
-)
-dependencies_module = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.inbound.http.dependencies"
-)
-error_handlers_module = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.inbound.http.error_handlers"
-)
 
 _NOW = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
 _TENANT = RestaurantId("rest-1")

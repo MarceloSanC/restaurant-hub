@@ -41,18 +41,17 @@ from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import BaseModel
 
+from restaurant_hub.features.staff.adapters.inbound import http as pacote
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies as dependencies_module
+from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
+from restaurant_hub.features.staff.adapters.inbound.http import schemas as schemas_module
 from restaurant_hub.features.staff.domain.exceptions.errors import InvalidIdentifierError
 from tests.fakes.features.staff.in_memory_access_guard import FakeAuthorizationRejected
 from tests.unit.features.staff.adapters.test_http_router_job_functions import Ambiente
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 _PACOTE_TESTES_ADAPTER = "tests.unit.features.staff.adapters"
-
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
-schemas_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
 
 _CORPO_DE_STAFF = "staff_error"
 
@@ -68,9 +67,9 @@ Caminho = tuple[str | int, ...]
 # encolhimento do domínio reprovar em vez de reduzir em silêncio os casos rodados.
 _TOTAL_DE_CAMPOS_ESCALARES = 13
 
-# Alias local do tipo devolvido por `identifier_fields` — o módulo chega por
-# `importlib` (forma herdada do antigo pacote `in`), então o nome não entra
-# no espaço de nomes deste módulo como import.
+# Alias local do tipo devolvido por `identifier_fields`: o módulo entra como
+# objeto (`dependencies_module`), então o nome não está no espaço de nomes
+# deste arquivo por si só.
 IdentifierField = dependencies_module.IdentifierField
 
 # Os três valores que o ADR 3.6.0002 §2 rejeita. O eixo de **path** usa só dois:
@@ -627,7 +626,7 @@ def test_ca23_nenhum_modulo_do_adapter_constroi_day_period_diretamente() -> None
 
 
 def _modulos_do_pacote_http() -> list[pathlib.Path]:
-    pacote = importlib.import_module(_PACOTE_HTTP_STAFF)
+
     raiz = pathlib.Path(next(iter(pacote.__path__)))
     encontrados = sorted(raiz.glob("*.py"))
     assert encontrados, "a varredura precisa de módulos para ter o que negar"

@@ -9,25 +9,16 @@ adversarial da 3.3 é congelado aqui, do lado do **aceite**.
 """
 
 import dataclasses
-import importlib
 import inspect
 import typing
 
 import pytest
 from pydantic import BaseModel
 
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies, schemas
 from restaurant_hub.features.staff.domain.exceptions.errors import InvalidIdentifierError
 
 pytestmark = pytest.mark.unit
-
-# Alcançado por `importlib` desde a época em que o pacote se chamava `in`
-# (keyword Python). Depois do rename para `inbound/` na #45 o import estático
-# funciona; a forma dinâmica ficou e é inofensiva — trocá-la em todo o pacote
-# de testes das Stages 2.4 e 3.6 é churn alheio a esta issue.
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
-
-dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
-schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
 
 
 # ---------------------------------------------------------------------------

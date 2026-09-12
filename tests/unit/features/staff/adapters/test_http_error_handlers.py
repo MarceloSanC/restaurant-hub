@@ -11,25 +11,16 @@ exercitada sobrevive às duas. A verificação par a par é o que mata essa muta
 e está provada por mutação real no relatório da Stage.
 """
 
-import importlib
-
 import pytest
 from fastapi import FastAPI
 
+from restaurant_hub.features.staff.adapters.inbound.http import error_handlers as handlers
 from restaurant_hub.features.staff.application import errors as application_errors
 from restaurant_hub.features.staff.domain.exceptions import errors as domain_errors
 from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
 from restaurant_hub.shared.domain.exceptions.base import NotFoundError
 
 pytestmark = pytest.mark.unit
-
-# Alcançado por `importlib` desde a época em que o pacote se chamava `in`
-# (keyword Python). Depois do rename para `inbound/` na #45 o import estático
-# funciona; a forma dinâmica ficou e é inofensiva — trocá-la em todo o pacote
-# de testes das Stages 2.4 e 3.6 é churn alheio a esta issue.
-handlers = importlib.import_module(
-    "restaurant_hub.features.staff.adapters.inbound.http.error_handlers"
-)
 
 # Piso de contagem: 9 concretas no domínio + 9 na aplicação (concept §6.1). É
 # tripwire contra a enumeração encolher em silêncio — `__subclasses__` só enxerga

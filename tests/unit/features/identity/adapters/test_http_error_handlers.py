@@ -6,23 +6,14 @@ ele, um erro adicionado numa Stage futura cairia no default 422 em silêncio —
 deixa de ser observável pela API sem que nenhum teste fique vermelho.
 """
 
-import importlib
-
 import pytest
 
+from restaurant_hub.features.identity.adapters.inbound.http import error_handlers as handlers
 from restaurant_hub.features.identity.application import errors as application_errors
 from restaurant_hub.features.identity.domain.exceptions import errors as domain_errors
 from restaurant_hub.features.identity.domain.exceptions.errors import IdentityError
 
 pytestmark = pytest.mark.unit
-
-# Alcançado por `importlib` desde a época em que o pacote se chamava `in`
-# (keyword Python). Depois do rename para `inbound/` na #45 o import estático
-# funciona; a forma dinâmica ficou e é inofensiva — trocá-la em todo o pacote
-# de testes das Stages 2.4 e 3.6 é churn alheio a esta issue.
-handlers = importlib.import_module(
-    "restaurant_hub.features.identity.adapters.inbound.http.error_handlers"
-)
 
 # Piso de contagem: 8 concretas no domínio + 19 na aplicação. É tripwire contra a
 # enumeração encolher em silêncio — `__subclasses__` só enxerga o que foi

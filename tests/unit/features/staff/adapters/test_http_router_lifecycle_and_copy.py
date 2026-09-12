@@ -7,13 +7,13 @@ convenção: inverter os dois responde 201 e sobrevive a todo critério que só 
 status.
 """
 
-import importlib
 from collections.abc import Iterator
 from http import HTTPStatus
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from restaurant_hub.features.staff.adapters.inbound.http import schemas
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
@@ -31,8 +31,6 @@ from tests.unit.features.staff.adapters.test_http_router_job_functions import (
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 
 _SUFIXO = "/units/{unit_id}/employees/{employee_id}"
 _DESTINO = "unit-2"
@@ -141,7 +139,7 @@ async def test_as_transicoes_sao_sub_recursos_post_e_nao_edicao_de_campo() -> No
     atributo. A ausência de `active` entre os campos que qualquer request aceita
     é o que impede essa leitura de voltar pela porta dos fundos.
     """
-    schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
+
     campos = {
         nome
         for atributo, objeto in vars(schemas).items()

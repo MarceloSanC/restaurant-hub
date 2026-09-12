@@ -35,7 +35,6 @@ respondem o **mesmo status** nas 16 rotas, sobre estados isomorfos. Um mapa de
 papéis editado para dar a `hr` alcance diferente reprova aqui.
 """
 
-import importlib
 import urllib.parse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -46,6 +45,7 @@ import pytest
 from fastapi.routing import APIRoute
 from httpx import AsyncClient, Response
 
+from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
 from tests.e2e.features.staff.conftest import (
     ADMIN_EMAIL,
     API,
@@ -57,8 +57,6 @@ from tests.e2e.features.staff.conftest import (
 
 pytestmark = pytest.mark.e2e
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 
 # A cardinalidade declarada do inventário (concept §4.1). Ela é o piso que
 # transforma "toda rota satisfaz P" numa afirmação com conteúdo: sem ela, um

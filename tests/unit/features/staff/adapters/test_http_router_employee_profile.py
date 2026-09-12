@@ -10,7 +10,6 @@ trava de CA15, sem que nenhum arquivo daquelas Tasks mude: é o mecanismo que a
 Task 05 montou e que esta Task é a primeira a exercitar de verdade.
 """
 
-import importlib
 from collections.abc import Iterator
 from http import HTTPStatus
 
@@ -33,8 +32,6 @@ from tests.unit.features.staff.adapters.test_http_router_job_functions import (
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 
 _PERFIL_FIXO = {"type": "fixed", "weekly_hours": "40.0"}
 _INICIO = "2026-03-01T08:00:00"
