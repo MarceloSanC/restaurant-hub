@@ -178,7 +178,7 @@ only_mutate = [
     "src/restaurant_hub/features/identity/application/use_cases/authorize_action.py",
     "src/restaurant_hub/features/identity/domain/entities/user.py",
     "src/restaurant_hub/composition_root.py",
-    "src/restaurant_hub/features/identity/adapters/in/http/dependencies.py",
+    "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
 ]
 also_copy = [
     "docs/",
