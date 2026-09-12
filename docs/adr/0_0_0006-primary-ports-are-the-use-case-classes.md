@@ -75,9 +75,12 @@ the old subsection.
 is — `Protocol` per external need, implemented by adapters and by fakes. The
 asymmetry is the decision: outbound needs abstraction, inbound does not.
 
-**`adapters/in/` stays.** It is a real, occupied directory (identity's HTTP
-boundary lives there), and the keyword workaround it needs is genuine. Only the
-`ports/in/` half of the keyword discussion goes away with this ADR.
+**`adapters/in/` is a different case, and it was renamed rather than removed.**
+It is a real, occupied directory (both bounded contexts' HTTP boundaries live
+there), so the keyword problem there was genuine — and the same issue resolved
+it by renaming the directory to `adapters/inbound/`, which restores static
+imports. This ADR settles only the `ports/in/` half: the directory that had no
+content to rename.
 
 ## Alternatives considered
 
@@ -105,8 +108,9 @@ boundary lives there), and the keyword workaround it needs is genuine. Only the
 - **Cons:** solves the *spelling* of a directory whose *content* is the actual
   question. Every argument in A survives the rename.
 - **Why rejected:** renaming does not make 26 single-implementation Protocols
-  worth writing. (The parallel rename of `adapters/in/` → `adapters/inbound/` is a
-  separate matter, and it is about a directory that has real content.)
+  worth writing. (The rename of `adapters/in/` → `adapters/inbound/`, done in
+  the same issue, is a separate matter: that directory has real content, so
+  there the rename buys static imports for code that exists.)
 
 ### Alternative C — leave the line in the tree, annotated as planned
 - **Pros:** zero edits; the new `[planejado]` annotation of
@@ -123,8 +127,9 @@ boundary lives there), and the keyword workaround it needs is genuine. Only the
 ### Positive
 - LAYOUT §2 stops asserting a path that does not exist, which is what
   `scripts/check_docs_claims.py` (Gate 5) now enforces mechanically.
-- The keyword-workaround material shrinks to the single case where it is real
-  (`adapters/in/`).
+- The keyword-workaround material disappears from LAYOUT altogether: the
+  `ports/in/` half is retracted here, and the `adapters/in/` half was resolved
+  by the rename to `adapters/inbound/` in the same issue.
 - The rule is now stated where the question is asked: someone about to write a
   one-implementation `Protocol` for a use case finds the answer in §5.
 
@@ -157,5 +162,5 @@ boundary lives there), and the keyword workaround it needs is genuine. Only the
 - `scripts/check_layout.py` rule 9 — package markers carry no code, which closes
   the `__init__.py` re-export workaround of the old §5
 - Issue #45 — architecture gates invisible to import contracts
-- `src/restaurant_hub/features/identity/adapters/in/http/router.py` — the driving
+- `src/restaurant_hub/features/identity/adapters/inbound/http/router.py` — the driving
   adapters, each calling its use case class directly

@@ -112,19 +112,19 @@ graph LR
 | `2.1-identity-domain` | Domínio de tenancy e acesso | domain | done | `1.2-ci` |
 | `2.2-identity-application` | Use cases de tenancy e acesso | application | done | `2.1-identity-domain` |
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | done | `2.2-identity-application` |
-| `2.4-identity-http` | API de tenancy, usuários e auth | adapters/in/http | done | `2.3-identity-persistence` |
+| `2.4-identity-http` | API de tenancy, usuários e auth | adapters/inbound/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
 | `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
-| `3.6-staff-http` | API de equipe | adapters/in/http | done | `3.4-staff-access-scope` |
+| `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) | draft | `3.6-staff-http` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.5-employee-login-link` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | draft | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
 | `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
-| `4.5-scheduling-http` | API do editor e consulta de escala | adapters/in/http | draft | `4.4-scheduling-persistence` |
+| `4.5-scheduling-http` | API do editor e consulta de escala | adapters/inbound/http | draft | `4.4-scheduling-persistence` |
 | `4.6-schedule-notifications` | Notificação de publicação por e-mail | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `4.7-schedule-image` | Imagem/tabela da escala sob demanda | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `5.1-autofill-domain` | Algoritmo de auto-preenchimento | domain | draft | `4.7-schedule-image` |
@@ -137,7 +137,7 @@ graph LR
 | `7.3-controlid-adapter` | Adapter Control iD | adapters/out/controlid | draft | `7.2-timeclock-domain` |
 | `7.4-timeclock-delivery` | Relatório previsto × realizado | vertical (timeclock) | draft | `7.3-controlid-adapter` |
 | `8.1-hub-read-models` | Read models do hub | application | draft | `7.4-timeclock-delivery`, `5.2-autofill-delivery` |
-| `8.2-hub-http` | API dos painéis + Unidade Geral | adapters/in/http | draft | `8.1-hub-read-models` |
+| `8.2-hub-http` | API dos painéis + Unidade Geral | adapters/inbound/http | draft | `8.1-hub-read-models` |
 
 **Legenda de status (Stage):** `draft`, `in_progress`, `review`, `done`, `archived`.
 
@@ -163,7 +163,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
 | [#46](https://github.com/MarceloSanC/restaurant-hub/issues/46) | Fronteira transacional nos use cases que escrevem em mais de um repositório | shared | application + adapters/out | open | — |
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
-| [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/in/http | open | #45 |
+| [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#49](https://github.com/MarceloSanC/restaurant-hub/issues/49) | Consumir o `AccessGuard` na camada application, não só na borda HTTP | staff | application | open | #43 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
@@ -1289,9 +1289,9 @@ skills_hint: [repository-pattern, composition-root]
 ```yaml
 stage_id: 4.5-scheduling-http
 bounded_context: scheduling
-camada_alvo: adapters/in/http
+camada_alvo: adapters/inbound/http
 arquivos_a_criar:
-  - features/scheduling/adapters/in/http/{router,schemas}.py
+  - features/scheduling/adapters/inbound/http/{router,schemas}.py
   - tests/e2e/features/scheduling/
 arquivos_a_modificar:
   - composition_root.py, app factory
@@ -1591,7 +1591,7 @@ bounded_context: timeclock
 camada_alvo: vertical (timeclock)
 arquivos_a_criar:
   - features/timeclock/application/use_cases/{sync_time_records,get_reconciliation_report}.py
-  - features/timeclock/adapters/in/http/router.py
+  - features/timeclock/adapters/inbound/http/router.py
   - tests (fakes + e2e)
 arquivos_a_modificar:
   - composition_root.py, app factory
@@ -1649,9 +1649,9 @@ skills_hint: [pytest-with-fakes, hex-arch-python]
 ```yaml
 stage_id: 8.2-hub-http
 bounded_context: hub
-camada_alvo: adapters/in/http
+camada_alvo: adapters/inbound/http
 arquivos_a_criar:
-  - features/hub/adapters/in/http/{router,schemas}.py
+  - features/hub/adapters/inbound/http/{router,schemas}.py
   - tests/e2e/features/hub/
 arquivos_a_modificar:
   - composition_root.py, app factory

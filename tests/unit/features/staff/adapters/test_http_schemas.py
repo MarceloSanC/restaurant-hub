@@ -45,8 +45,10 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 
 pytestmark = pytest.mark.unit
 
-# O pacote é alcançado por `importlib`, forma herdada do antigo nome `in` —
-# o mesmo caminho que o `composition_root` usa.
+# O pacote é alcançado por `importlib`, forma herdada do antigo nome `in`. O
+# `composition_root` já o importa estaticamente desde o rename da #45; aqui a
+# forma dinâmica ficou porque `_PACOTE_HTTP_STAFF` também alimenta as duas
+# varreduras de pacote deste arquivo, onde o caminho é calculado.
 _PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 
 schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")

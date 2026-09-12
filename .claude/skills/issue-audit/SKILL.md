@@ -222,10 +222,10 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
   mapper puro; padrão async/threading consistente entre métodos; carga
   de recurso externo via `importlib.resources`, não `Path(__file__)`.
   (repository-pattern)
-- **`adapters/in/http`:** router fino, sem regra de negócio; pydantic só
+- **`adapters/inbound/http`:** router fino, sem regra de negócio; pydantic só
   na fronteira; **mapeamento erro→status bidirecional** (cada erro
   declarado tem `except`; cada `except` aparece no contrato). (fastapi-thin-adapter)
-- **`adapters/in/scheduler`:** gated por flag (default `False`);
+- **`adapters/inbound/scheduler`:** gated por flag (default `False`);
   `start`/`shutdown` idempotentes; cron validado cedo; warning quando
   lista vazia; erro do job capturado dentro do runner.
 - **`composition_root`:** wiring no único arquivo permitido; adapter

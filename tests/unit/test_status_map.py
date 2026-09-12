@@ -202,8 +202,9 @@ def test_ha_pelo_menos_um_bc_com_borda_http() -> None:
     """A guarda contra a parametrização vazia — o falso-verde deste arquivo.
 
     `parametrize` sobre lista vazia produz zero testes e reporta sucesso. Se a
-    descoberta quebrasse (caminho errado, pasta renomeada, `adapters/inbound/`
-    virando `adapters/inbound/`), toda a exaustividade sumiria em silêncio, e o
+    descoberta quebrasse (caminho errado, pasta renomeada — foi `adapters/in/`
+    virando `adapters/inbound/` na própria #45), toda a exaustividade sumiria
+    em silêncio, e o
     relatório do pytest diria exatamente o mesmo de antes.
     """
     assert _COM_BORDA_HTTP, (
