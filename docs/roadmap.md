@@ -165,6 +165,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#49](https://github.com/MarceloSanC/restaurant-hub/issues/49) | Consumir o `AccessGuard` na camada application, não só na borda HTTP | staff | application | open | #43 |
+| [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
