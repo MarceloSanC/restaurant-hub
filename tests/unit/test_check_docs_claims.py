@@ -227,3 +227,33 @@ def test_gate5_bloco_de_arvore_ausente_falha_fechado(tmp_path: pathlib.Path) -> 
 
     assert len(problemas) == 1, problemas
     assert problemas[0].startswith("FATAL:")
+
+
+# O conjunto de caminhos anotados `[planejado]` no LAYOUT real, hoje. Uma
+# anotação nova entra aqui com a justificativa ao lado — e só então no doc.
+#
+# - `domain/services/`: slot hexagonal real sem ocupante (nenhum serviço de
+#   domínio existe nos dois BCs); intenção adiada, não retirada (ADR 0.0.0006
+#   §Implementation notes).
+_PLANEJADOS_DO_LAYOUT_REAL = frozenset({"src/restaurant_hub/features/<feature>/domain/services"})
+
+
+def test_gate5_o_conjunto_de_planejados_do_layout_real_nao_cresceu() -> None:
+    """A asserção de não-crescimento que a válvula não tinha.
+
+    O script cobra `[planejado]` nos dois sentidos **por linha** — ausente sem
+    anotação reprova, anotado que já existe reprova. Nada, porém, fixava o
+    **conjunto**: anotar mais dez caminhos silenciaria o gate sem que teste
+    algum reclamasse, e é exatamente o modo de falha que o docstring de
+    `test_gate5_a_anotacao_de_planejado_sobre_caminho_existente_reprova`
+    descreve ("metade da árvore marcada como futura"). Aqui ele é cobrado.
+    """
+    bloco = check_docs_claims.bloco_da_arvore(_REPO_ROOT / "docs" / "LAYOUT.md")
+    assert bloco is not None
+
+    planejados = {claim.caminho for claim in check_docs_claims.claims(bloco) if claim.planejado}
+
+    assert planejados == set(_PLANEJADOS_DO_LAYOUT_REAL), (
+        f"só no LAYOUT: {sorted(planejados - _PLANEJADOS_DO_LAYOUT_REAL)}; "
+        f"só nesta lista: {sorted(_PLANEJADOS_DO_LAYOUT_REAL - planejados)}"
+    )

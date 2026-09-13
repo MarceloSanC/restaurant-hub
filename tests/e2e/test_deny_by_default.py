@@ -274,7 +274,7 @@ def _corpo(metodo: str, caminho: str, spec: dict[str, Any]) -> dict[str, Any]:
     """Um corpo que a rota **aceita**, sintetizado do schema dela.
 
     Sintetizar — em vez de escrever um por rota — é o que faz a perna do 403
-    acompanhar rota nova sem edição, e a Stage 3.6 é a prova: as suas nove rotas
+    acompanhar rota nova sem edição, e a Stage 3.6 é a prova: as suas dezesseis rotas
     de staff entraram nesta suíte sem uma linha de edição aqui. Só os campos
     obrigatórios entram: um campo opcional a mais só aumentaria a chance de a
     síntese errar o formato.

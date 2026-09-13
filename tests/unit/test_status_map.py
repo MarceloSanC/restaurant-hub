@@ -257,6 +257,41 @@ def test_a_varredura_de_erros_do_bc_nao_encolheu(bc: str) -> None:
     assert len(_subclasses_concretas(bc)) >= _TOTAIS_MINIMOS[bc]
 
 
+@pytest.mark.parametrize("bc", _BOUNDED_CONTEXTS)
+def test_toda_excecao_definida_nos_modulos_de_erro_do_bc_herda_da_raiz(bc: str) -> None:
+    """O universo da exaustividade é "toda exceção do BC", não "toda subclasse da raiz".
+
+    `_subclasses_concretas` desce da raiz (`IdentityError`, `StaffError`). Um erro
+    futuro em `application/errors.py` que herdasse direto de `DomainError` — sem
+    passar pela raiz — ficaria **fora** desse universo, e cairia no 422 do handler
+    genérico com a exaustividade verde. Este teste fecha o quantificador do Gate 3
+    pelo outro lado: toda classe de exceção **definida** nos módulos de erro do BC
+    é subclasse da raiz dele, e portanto entra na varredura.
+
+    Hoje cada BC prova isso no seu próprio `test_errors.py`, por varredura de
+    módulo — a forma que não se estende ao terceiro BC. Aqui é por bounded
+    context, com a mesma enumeração de pasta das outras asserções.
+    """
+    raiz = _raiz_de_erro(bc)
+    fora: list[str] = []
+    for sufixo in _MODULOS_DE_ERRO:
+        modulo = importlib.import_module(f"restaurant_hub.features.{bc}.{sufixo}")
+        fora.extend(
+            f"{sufixo}.{nome}"
+            for nome, valor in vars(modulo).items()
+            if isinstance(valor, type)
+            and issubclass(valor, Exception)
+            and valor.__module__ == modulo.__name__
+            and valor is not raiz
+            and not issubclass(valor, raiz)
+        )
+
+    assert fora == [], (
+        f"{bc}: exceções definidas fora da hierarquia de {raiz.__name__}: {fora}. "
+        f"Elas não entram na varredura de exaustividade e cairiam no 422 genérico."
+    )
+
+
 @pytest.mark.parametrize("bc", _COM_BORDA_HTTP)
 def test_o_mapa_do_bc_e_total_sobre_a_raiz_de_erro(bc: str) -> None:
     """Gate 3 — toda subclasse concreta tem entrada **própria**, não herdada.

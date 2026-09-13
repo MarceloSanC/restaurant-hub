@@ -194,6 +194,14 @@ Exemplo: `<Entity>Repository` — contrato que o use case usa para persistir uma
 4. Injeta tudo nos use cases
 5. Expõe os use cases montados para o restante da aplicação
 
+**O charter, como regra mecânica (issue #45, `check_layout.py` regra 6).** O
+módulo só pode conter classes `@dataclass` (os contêineres), as duas funções de
+wiring — `wire_dependencies` e `build_http_wiring` — e **nenhum `raise`**: quem
+monta o grafo não recusa pedido. O que hoje foge disso (`_IdentityAccessGuard`
+e o seu helper `_tenant_id_do_ator`) está em allowlist **contável** no script,
+cada entrada citando a issue que a remove (#47); entrada nova reprova até ser
+justificada, e entrada que já não corresponde a nada em `src/` reprova também.
+
 **Por que isso importa:**
 - Mantém o domínio e a application totalmente desacoplados de implementações concretas
 - Facilita trocar uma implementação (ex: Postgres → DynamoDB) sem tocar em nenhuma regra de negócio

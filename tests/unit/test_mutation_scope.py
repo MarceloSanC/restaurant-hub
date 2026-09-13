@@ -110,4 +110,13 @@ def test_o_gate_estrutural_do_check_layout_fica_fora_da_corrida() -> None:
     selecao = _config_do_mutmut()["pytest_add_cli_args_test_selection"]
     assert isinstance(selecao, list)
 
-    assert "--ignore=tests/unit/test_check_layout.py" in selecao
+    # Conjunto exato, não pertinência: um segundo `--ignore` entraria calado e a
+    # corrida mediria menos suíte com o mesmo "N/N" — a mesma classe do caminho
+    # morto em `only_mutate` que este arquivo existe para tornar barulhento.
+    assert selecao == ["--ignore=tests/unit/test_check_layout.py"]
+
+    ignorado = selecao[0].removeprefix("--ignore=")
+    assert (_REPO_ROOT / ignorado).is_file(), (
+        f"o --ignore aponta para {ignorado}, que não existe: a exclusão está morta "
+        f"e a corrida voltaria a morrer na coleta de estatísticas"
+    )
