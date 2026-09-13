@@ -296,6 +296,12 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
    em vez do tipo do contrato.
 6. **Caça ao não-previsto:** arquivos/funções fora do `## Escopo`/
    `## Referências`. Refactor legítimo ou escopo escapando?
+   Se é coeso com o `## Por quê` mas fora do `## O quê` e já está
+   executado e verde, o tratamento não é só "issue separada": **editar o
+   corpo da issue** (seção "Escopo ampliado na execução", com o porquê e
+   os hashes) para que o card volte a ser a fonte da verdade do que a
+   branch fechou — e registrar que refactor desse porte abre issue própria
+   antes do commit.
 7. **Grupo de issues — fronteira entre cards:** o trabalho de uma issue
    vazou para a branch/PR de outra? Há `Refs #`/`Closes #` apontando
    para o card errado? Dependência declarada (B depende de A) foi
@@ -418,6 +424,12 @@ Confundir presença com ausência, ou execução com asserção; ou cobrir
 - **Tratamento:** para "global/qualquer/todos", exigir teste pela app
   real (`create_app()`/boot). Para invariante negativa, `Grep` ativo
   com **0 matches**. Para coverage alto, ler 2-3 asserts (D-bis #5).
+- **Sub-caso — válvula sem contagem:** um detector cobra cada entrada de
+  uma allowlist/anotação/exclusão **nos dois sentidos** (presente/ausente,
+  viva/morta) e ainda assim pode ser silenciado pelo **crescimento do
+  conjunto** — anotar dez caminhos como `[planejado]`, acrescentar um
+  segundo `--ignore`. Pergunta: "qual asserção fixa o **conjunto**, não só
+  cada entrada?" Sem ela, a válvula é allowlist sem não-crescimento.
 
 ### Evidência de árvore suja
 Saída colada como prova do estado de **outra** árvore (a base, o "antes"),
@@ -496,7 +508,10 @@ finding falso + investigação na branch errada.
 
 | Caso | Conceito | Onde aconteceu |
 |---|---|---|
-| _(preencher conforme o projeto encontrar falsos verdes)_ | | |
+| `[planejado]` do LAYOUT §2 e `--ignore` do mutmut cobrados por entrada, nunca pelo conjunto | Verificação assimétrica (válvula sem contagem) | #45, PR #50 — F1/F2 |
+| Rename `adapters/in → inbound` + import hygiene entregues fora do `## O quê` | Caça ao não-previsto → escopo ampliado na execução | #45, PR #50 — F6 |
+| 629 `ERROR` em integration/e2e: container Postgres da worktree morreu **durante** o `test-gate` (`Exited (255)`) | Falso vermelho ambiental | #45, PR #50 — F11 |
+| `only_mutate` com caminho morto após rename: mutmut filtra por `fnmatch` e **exclui o módulo em silêncio**, reportando "N/N" sobre 3 de 4 arquivos | Gate inerte ou míope | #45, PR #50 — `02ac4e5` |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
 pegou algo): **primeiro perguntar qual conceito existente cobre**.
