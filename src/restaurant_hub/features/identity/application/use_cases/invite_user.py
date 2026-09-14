@@ -57,6 +57,10 @@ from restaurant_hub.features.identity.application.ports.out.unit_repository impo
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
+from restaurant_hub.features.identity.application.use_cases._invitation import (
+    invitation_message,
+    setup_link,
+)
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions.errors import (
     PlatformAdminMembershipError,
@@ -70,13 +74,8 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
     UnitMembership,
 )
 from restaurant_hub.shared.application.ports.out.clock import Clock
-from restaurant_hub.shared.application.ports.out.email_sender import (
-    EmailMessage,
-    EmailSender,
-)
+from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
-
-_ASSUNTO = "Convite para o Restaurant Hub"
 
 
 class InviteUserUseCase:
@@ -202,19 +201,11 @@ class InviteUserUseCase:
     def _enviar_convite(self, destinatario: str, valor_do_token: str) -> None:
         """Compõe e envia a mensagem.
 
-        A composição vive aqui, e não num `EmailComposer` intermediário, porque
-        quem sabe o que a mensagem diz é quem tem a intenção — e o corpo tem três
-        linhas, que o non-goal do roadmap manda manter simples (concept §7 D5).
+        Desde a Stage 3.5 a composição vive em `_invitation.py`, a única casa do
+        formato do link e do texto do convite — a mesma mensagem que o
+        `SendInvitationUseCase` manda quando quem provisiona é o gateway de staff.
+        Assunto, corpo e link são byte-idênticos aos da 2.5 (CA16 da 3.5).
         """
-        link = f"{self._base_url.rstrip('/')}/definir-senha?token={valor_do_token}"
         self._email_sender.send(
-            EmailMessage(
-                to=destinatario,
-                subject=_ASSUNTO,
-                body_text=(
-                    "Você foi convidado para o Restaurant Hub.\n\n"
-                    f"Defina a sua senha por este link:\n{link}\n\n"
-                    "Se você não esperava este convite, ignore esta mensagem."
-                ),
-            )
+            invitation_message(destinatario, setup_link(self._base_url, valor_do_token))
         )

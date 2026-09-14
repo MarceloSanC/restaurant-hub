@@ -30,6 +30,9 @@ from restaurant_hub.features.identity.application.dtos.commands import (
     CreateRestaurantCommand,
     CreateUnitCommand,
     CreateUserCommand,
+    ProvisionAccountCommand,
+    RevokeAllSessionsCommand,
+    SendInvitationCommand,
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
@@ -38,6 +41,7 @@ from restaurant_hub.features.identity.application.dtos.identifiers import (
 from restaurant_hub.features.identity.application.dtos.results import (
     AuthenticationResult,
     AuthorizedActor,
+    ProvisionedAccountResult,
     RestaurantResult,
     UnitResult,
     UserResult,
@@ -59,6 +63,7 @@ _RESULT_CLASSES = (
     UserResult,
     AuthenticationResult,
     AuthorizedActor,
+    ProvisionedAccountResult,
 )
 
 # Prefixo dos módulos de entidade — o que um result nunca pode carregar.
@@ -75,7 +80,10 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # DTOs novos. Um DTO fora da varredura é pior que um número errado: `frozen` some
 # sem ninguém notar, e `PasswordSetupToken` é justamente o registro que carrega
 # `consumed_at`, isto é, a prova de uso único.
-_TOTAL_DE_DTOS = 21
+#
+# 21 até a 2.5; a Stage 3.5 acrescenta `ProvisionAccountCommand`,
+# `SendInvitationCommand`, `RevokeAllSessionsCommand` e `ProvisionedAccountResult`.
+_TOTAL_DE_DTOS = 25
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -118,6 +126,40 @@ def test_commands_carregam_os_campos_declarados() -> None:
     assert authorize.unit_id == "unit-1"
 
 
+def test_commands_da_3_5_carregam_os_campos_declarados() -> None:
+    """Os três commands do vínculo de login (Stage 3.5)."""
+    provision = ProvisionAccountCommand(
+        email=Email("func@x.com"),
+        role=Role.EMPLOYEE,
+        tenant_id=RestaurantId("rest-1"),
+        unit_ids=(UnitId("unit-1"),),
+        handed_over=True,
+    )
+    assert provision.handed_over is True
+    assert provision.unit_ids == ("unit-1",)
+
+    send = SendInvitationCommand(
+        email=Email("func@x.com"), setup_link="https://x/definir-senha?token=t"
+    )
+    assert send.setup_link.endswith("token=t")
+    # `repr=False`: o link é credencial bearer viva.
+    assert "token=t" not in repr(send)
+
+    assert RevokeAllSessionsCommand(user_id=UserId("user-1")).user_id == "user-1"
+
+
+def test_provision_account_command_nao_tem_default_para_o_canal() -> None:
+    """`handed_over` sem default: quem provisiona **decide** o prazo do link.
+
+    Um default (`False`) faria o canal `link` herdar silenciosamente o prazo de
+    e-mail quando alguém esquecesse o argumento — e o link em mãos expiraria
+    antes de a pessoa começar.
+    """
+    campos = {campo.name: campo for campo in dataclasses.fields(ProvisionAccountCommand)}
+    assert campos["handed_over"].default is dataclasses.MISSING
+    assert campos["unit_ids"].default is dataclasses.MISSING
+
+
 def test_results_carregam_os_campos_declarados() -> None:
     """Construção de cada result com todos os campos preenchidos."""
     now = datetime(2026, 7, 18, 12, 0, tzinfo=UTC)
@@ -156,6 +198,14 @@ def test_results_carregam_os_campos_declarados() -> None:
         scope_unit_id=UnitId("unit-1"),
     )
     assert actor.scope_unit_id == "unit-1"
+
+    provisioned = ProvisionedAccountResult(
+        user=user_result, setup_link="https://x/definir-senha?token=setup-1"
+    )
+    assert provisioned.user is user_result
+    assert provisioned.setup_link.endswith("token=setup-1")
+    # O carve-out da 3.5 é contido pelo `repr=False`: o link não sai em traceback.
+    assert "setup-1" not in repr(provisioned)
 
 
 def test_authorized_actor_separa_tenant_do_ator_do_tenant_alvo() -> None:
@@ -261,8 +311,13 @@ def test_nenhum_result_expoe_senha_hash_ou_entidade() -> None:
         _assert_sem_segredo_nem_entidade(result_class, result_class.__name__)
 
 
-def test_modulo_de_results_declara_os_cinco_esperados() -> None:
+def test_modulo_de_results_declara_exatamente_os_esperados() -> None:
     """Guarda a lista: result novo entra conscientemente na checagem de segredo.
+
+    Cinco até a 2.5; a 3.5 acrescenta `ProvisionedAccountResult` — cujo
+    `setup_link: str` passa na varredura de nome/tipo-folha abaixo por desenho:
+    o que o contém é o `repr=False`, asserido em `test_results_carregam_os_campos_declarados`
+    e nos testes do use case, não esta varredura.
 
     O filtro por `__module__` é necessário — `vars(results)` também enxerga os VOs
     de domínio importados (`Email` é dataclass), que não são results.

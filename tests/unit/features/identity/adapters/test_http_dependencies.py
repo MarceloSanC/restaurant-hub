@@ -298,6 +298,21 @@ def test_conjunto_de_permissoes_exigidas_por_papel_alvo(
     assert dependencies.required_permissions_for_role(papel_alvo) == esperado
 
 
+def test_criar_login_de_employee_exige_so_manage_users() -> None:
+    """Pino de R17 (Stage 3.5, concept §5.3): a rota de staff exige `manage_staff`
+    **e** `manage_users` — a segunda é exatamente o que este mapa cobra para o
+    papel `employee`, e a rota a cobra por `authorize`, não por este helper.
+
+    Se uma Stage futura fizer `employee` exigir mais que `manage_users`, a rota
+    R17 continua cobrando só `manage_users` e um `manager` passaria a criar logins
+    com menos do que a rota `/users/invitations` exigiria — este teste é quem
+    avisa que as duas portas divergiram.
+    """
+    assert dependencies.required_permissions_for_role(Role.EMPLOYEE) == frozenset(
+        {Permission.MANAGE_USERS}
+    ), "R17 (concept 3.5 §5.3) assume que criar um `employee` exige só `manage_users`"
+
+
 # Matriz congelada de **decisão de acesso** — quem pode criar quem, medida antes
 # da Stage 3.4. Ao contrário do conjunto exigido acima (que é derivado e cresce),
 # esta matriz **não pode mudar**: ela é o comportamento observável da regra.

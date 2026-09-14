@@ -161,6 +161,59 @@ class SetPasswordWithTokenCommand:
 
 
 @dataclass(frozen=True)
+class ProvisionAccountCommand:
+    """Provisionamento de uma conta pendente, sem envio (Stage 3.5).
+
+    É `InviteUserCommand` mais a decisão que o convite não precisava tomar: por
+    onde o link vai. Quem chama é a fachada de identity a serviço do gateway de
+    staff, e o e-mail/`role` já chegam como VO — a conversão de primitivo é da
+    fachada, como a do adapter HTTP é dos outros commands.
+
+    Attributes:
+        email: e-mail de login da conta; unicidade global.
+        role: papel fixo de acesso.
+        tenant_id: restaurante da conta; `None` apenas para `platform_admin`.
+        unit_ids: unidades a que a conta fica vinculada.
+        handed_over: `True` quando o link vai ser entregue em mãos (canal
+            `link`) — o token ganha o prazo de `handover_ttl`, mais longo que o
+            do e-mail. Sem default: quem provisiona decide o canal.
+    """
+
+    email: Email
+    role: Role
+    tenant_id: RestaurantId | None
+    unit_ids: Sequence[UnitId]
+    handed_over: bool
+
+
+@dataclass(frozen=True)
+class SendInvitationCommand:
+    """Envio do convite para um link já emitido (Stage 3.5).
+
+    Attributes:
+        email: destinatário — o mesmo e-mail que é login da conta.
+        setup_link: o link completo, com o valor do token. `repr=False` pelo
+            mesmo motivo de `RefreshSessionCommand.refresh_token`: é credencial
+            bearer viva nos locals do frame que levanta a falha do sender.
+    """
+
+    email: Email
+    setup_link: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class RevokeAllSessionsCommand:
+    """Revogação de **todas** as sessões de um usuário (Stage 3.5, ADR 3.5.0003).
+
+    Diferente de `RevokeSessionCommand`, a autoridade não é a posse de um token:
+    é a identidade do alvo, e quem a exerce é o consumidor (o desligamento em
+    staff), já autorizado antes de chegar aqui.
+    """
+
+    user_id: UserId
+
+
+@dataclass(frozen=True)
 class RequestPasswordResetCommand:
     """Pedido público de redefinição de senha.
 
