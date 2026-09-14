@@ -1,0 +1,351 @@
+"""Testes da fachada de identity — Stage 3.5, CA18 (ADR 3.5.0001).
+
+Três coisas são contrato e cada uma tem o seu bloco:
+
+1. **Conversão** — primitivo entra, VO chega ao use case (asserido sobre o
+   command capturado por um espião **e** sobre o estado dos fakes com os use
+   cases reais, para que o espião não seja a única testemunha).
+2. **Transparência a exceções** — o que o use case levanta sobe **na mesma
+   instância**; a fachada não captura, não traduz, não embrulha.
+3. **Re-exportação** — `facade.EmailAlreadyRegisteredError` **é** a classe de
+   `errors.py`, e `facade.InvalidEmailError` **é** a de `domain/exceptions`, para
+   que o consumidor importe um módulo só e capture o mesmo tipo que o use case
+   levanta.
+"""
+
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from restaurant_hub.features.identity.application import errors as erros_de_application
+from restaurant_hub.features.identity.application import facade as modulo_facade
+from restaurant_hub.features.identity.application.dtos.commands import (
+    ProvisionAccountCommand,
+    RevokeAllSessionsCommand,
+    SendInvitationCommand,
+)
+from restaurant_hub.features.identity.application.dtos.results import (
+    ProvisionedAccountResult,
+    UserResult,
+)
+from restaurant_hub.features.identity.application.facade import (
+    IdentityFacade,
+    ProvisionedAccount,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_account import (
+    ProvisionAccountUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.revoke_all_sessions import (
+    RevokeAllSessionsUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.send_invitation import (
+    SendInvitationUseCase,
+)
+from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
+from restaurant_hub.features.identity.domain.entities.unit import Unit
+from restaurant_hub.features.identity.domain.exceptions import errors as erros_de_dominio
+from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidEmailError,
+    InvalidRoleError,
+)
+from restaurant_hub.features.identity.domain.value_objects.email import Email
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    RestaurantId,
+    UnitId,
+    UserId,
+)
+from restaurant_hub.features.identity.domain.value_objects.role import Role
+from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
+from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
+from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
+    InMemoryPasswordSetupTokenRepository,
+)
+from tests.fakes.features.identity.in_memory_restaurant_repository import (
+    InMemoryRestaurantRepository,
+)
+from tests.fakes.features.identity.in_memory_session_repository import (
+    InMemorySessionRepository,
+)
+from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
+from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
+from tests.fakes.shared.fake_clock import FakeClock
+from tests.fakes.shared.fake_id_generator import FakeIdGenerator
+from tests.fakes.shared.recording_email_sender import (
+    EmailSenderFailure,
+    RecordingEmailSender,
+)
+
+pytestmark = pytest.mark.unit
+
+_AGORA = datetime(2026, 9, 14, 12, 0, tzinfo=UTC)
+_BASE_URL = "https://app.exemplo.com"
+
+
+# ---------------------------------------------------------------------------
+# Espiões — capturam o command e devolvem/levantam o que o teste mandar
+# ---------------------------------------------------------------------------
+
+
+class _EspiaoDeProvisionamento(ProvisionAccountUseCase):
+    """Não chama `super().__init__`: não tem grafo, só memória do que recebeu."""
+
+    def __init__(self, *, levanta: Exception | None = None) -> None:
+        self.commands: list[ProvisionAccountCommand] = []
+        self._levanta = levanta
+
+    def execute(self, command: ProvisionAccountCommand) -> ProvisionedAccountResult:
+        self.commands.append(command)
+        if self._levanta is not None:
+            raise self._levanta
+        return ProvisionedAccountResult(
+            user=UserResult(
+                id=UserId("user-99"),
+                email=command.email,
+                role=command.role,
+                tenant_id=command.tenant_id,
+                unit_ids=tuple(command.unit_ids),
+            ),
+            setup_link=f"{_BASE_URL}/definir-senha?token=setup-99",
+        )
+
+
+class _EspiaoDeEnvio(SendInvitationUseCase):
+    def __init__(self, *, levanta: Exception | None = None) -> None:
+        self.commands: list[SendInvitationCommand] = []
+        self._levanta = levanta
+
+    def execute(self, command: SendInvitationCommand) -> None:
+        self.commands.append(command)
+        if self._levanta is not None:
+            raise self._levanta
+
+
+class _EspiaoDeRevogacao(RevokeAllSessionsUseCase):
+    def __init__(self, *, levanta: Exception | None = None) -> None:
+        self.commands: list[RevokeAllSessionsCommand] = []
+        self._levanta = levanta
+
+    def execute(self, command: RevokeAllSessionsCommand) -> None:
+        self.commands.append(command)
+        if self._levanta is not None:
+            raise self._levanta
+
+
+def _fachada_espia(
+    *,
+    provision: _EspiaoDeProvisionamento | None = None,
+    send: _EspiaoDeEnvio | None = None,
+    revoke: _EspiaoDeRevogacao | None = None,
+) -> tuple[IdentityFacade, _EspiaoDeProvisionamento, _EspiaoDeEnvio, _EspiaoDeRevogacao]:
+    provision = provision or _EspiaoDeProvisionamento()
+    send = send or _EspiaoDeEnvio()
+    revoke = revoke or _EspiaoDeRevogacao()
+    return IdentityFacade(provision, send, revoke), provision, send, revoke
+
+
+def _provisionar(  # noqa: PLR0913 — os cinco argumentos nomeados da fachada, com defaults
+    fachada: IdentityFacade,
+    *,
+    email: str = "Maria@Cantina.com",
+    role: str = "employee",
+    tenant_id: str = "rest-a",
+    unit_ids: Sequence[str] = ("unit-a1",),
+    handed_over: bool = False,
+) -> ProvisionedAccount:
+    return fachada.provision_account(
+        email=email,
+        role=role,
+        tenant_id=tenant_id,
+        unit_ids=unit_ids,
+        handed_over=handed_over,
+    )
+
+
+class TestConversaoDePrimitivos:
+    def test_provision_converte_cada_primitivo_no_vo_correspondente(self) -> None:
+        """CA18 — o consumidor manda `str`; o use case recebe VO."""
+        fachada, espiao, _, _ = _fachada_espia()
+
+        _provisionar(fachada, unit_ids=["unit-a1", "unit-a2"])
+
+        (command,) = espiao.commands
+        assert command.email == Email("maria@cantina.com")  # normalizado pelo VO
+        assert command.role is Role.EMPLOYEE
+        assert command.tenant_id == RestaurantId("rest-a")
+        assert command.unit_ids == (UnitId("unit-a1"), UnitId("unit-a2"))
+        assert isinstance(command.unit_ids, tuple)
+
+    @pytest.mark.parametrize("handed_over", [True, False])
+    def test_handed_over_e_repassado_sem_inversao(self, handed_over: bool) -> None:
+        fachada, espiao, _, _ = _fachada_espia()
+
+        _provisionar(fachada, handed_over=handed_over)
+
+        assert espiao.commands[0].handed_over is handed_over
+
+    def test_provision_devolve_primitivos_do_result(self) -> None:
+        fachada, _, _, _ = _fachada_espia()
+
+        conta = _provisionar(fachada)
+
+        assert conta == ProvisionedAccount(
+            user_id="user-99", setup_link=f"{_BASE_URL}/definir-senha?token=setup-99"
+        )
+        assert isinstance(conta.user_id, str)
+        # `repr=False`: o link não sai em traceback do consumidor.
+        assert "setup-99" not in repr(conta)
+
+    def test_send_invitation_converte_o_email_e_repassa_o_link_intacto(self) -> None:
+        fachada, _, espiao, _ = _fachada_espia()
+        link = f"{_BASE_URL}/definir-senha?token=setup-7"
+
+        fachada.send_invitation(email="  Joao@Cantina.com ", setup_link=link)
+
+        (command,) = espiao.commands
+        assert command.email == Email("joao@cantina.com")
+        assert command.setup_link == link
+
+    def test_revoke_all_sessions_converte_o_user_id(self) -> None:
+        fachada, _, _, espiao = _fachada_espia()
+
+        fachada.revoke_all_sessions("user-42")
+
+        assert espiao.commands == [RevokeAllSessionsCommand(user_id=UserId("user-42"))]
+
+    def test_cada_operacao_chama_so_o_seu_use_case(self) -> None:
+        fachada, provision, send, revoke = _fachada_espia()
+
+        _provisionar(fachada)
+
+        assert len(provision.commands) == 1
+        assert send.commands == []
+        assert revoke.commands == []
+
+
+class TestTransparenciaAExcecoes:
+    """A fachada não captura, não traduz, não embrulha — a **mesma instância** sobe."""
+
+    def test_excecao_do_provisionamento_sobe_na_mesma_instancia(self) -> None:
+        falha = erros_de_application.EmailAlreadyRegisteredError("maria@cantina.com")
+        fachada, _, _, _ = _fachada_espia(provision=_EspiaoDeProvisionamento(levanta=falha))
+
+        with pytest.raises(erros_de_application.EmailAlreadyRegisteredError) as excinfo:
+            _provisionar(fachada)
+
+        assert excinfo.value is falha
+
+    def test_excecao_do_envio_sobe_na_mesma_instancia(self) -> None:
+        falha = EmailSenderFailure("smtp fora")
+        fachada, _, _, _ = _fachada_espia(send=_EspiaoDeEnvio(levanta=falha))
+
+        with pytest.raises(EmailSenderFailure) as excinfo:
+            fachada.send_invitation(email="a@b.com", setup_link="https://x/definir-senha?token=t")
+
+        assert excinfo.value is falha
+
+    def test_excecao_da_revogacao_sobe_na_mesma_instancia(self) -> None:
+        falha = RuntimeError("banco fora")
+        fachada, _, _, _ = _fachada_espia(revoke=_EspiaoDeRevogacao(levanta=falha))
+
+        with pytest.raises(RuntimeError) as excinfo:
+            fachada.revoke_all_sessions("user-1")
+
+        assert excinfo.value is falha
+
+    def test_email_invalido_levanta_antes_de_chegar_ao_use_case(self) -> None:
+        """A conversão é da fachada — e o erro é o de domínio, sem tradução."""
+        fachada, espiao, _, _ = _fachada_espia()
+
+        with pytest.raises(InvalidEmailError):
+            _provisionar(fachada, email="sem-arroba")
+
+        assert espiao.commands == []
+
+    def test_email_com_byte_nul_e_recusado_pela_fachada(self) -> None:
+        """D8 da 3.5 — o VO barra o NUL, então o gateway de staff traduz para 422."""
+        fachada, espiao, _, _ = _fachada_espia()
+
+        with pytest.raises(InvalidEmailError):
+            _provisionar(fachada, email="maria\x00@cantina.com")
+
+        assert espiao.commands == []
+
+    def test_papel_desconhecido_levanta_invalid_role_error(self) -> None:
+        fachada, espiao, _, _ = _fachada_espia()
+
+        with pytest.raises(InvalidRoleError):
+            _provisionar(fachada, role="ceo")
+
+        assert espiao.commands == []
+
+
+class TestReexportacao:
+    def test_reexporta_as_mesmas_classes_de_excecao(self) -> None:
+        """Identidade de classe, não igualdade de nome: o `except` do consumidor
+        tem de casar o objeto que o use case levanta."""
+        assert (
+            modulo_facade.EmailAlreadyRegisteredError
+            is erros_de_application.EmailAlreadyRegisteredError
+        )
+        assert modulo_facade.InvalidEmailError is erros_de_dominio.InvalidEmailError
+
+    def test_all_declara_exatamente_a_superficie_publica(self) -> None:
+        assert set(modulo_facade.__all__) == {
+            "EmailAlreadyRegisteredError",
+            "IdentityFacade",
+            "InvalidEmailError",
+            "ProvisionedAccount",
+        }
+
+
+class TestSobreOsUseCasesReais:
+    """O espião não é a única testemunha: o grafo real de fakes confirma a conversão."""
+
+    def _fachada_real(self) -> tuple[IdentityFacade, InMemoryUserRepository, RecordingEmailSender]:
+        users = InMemoryUserRepository()
+        restaurants = InMemoryRestaurantRepository()
+        units = InMemoryUnitRepository()
+        restaurants.add(Restaurant(id=RestaurantId("rest-a"), name="Cantina A"))
+        units.add(Unit(id=UnitId("unit-a1"), restaurant_id=RestaurantId("rest-a"), name="Centro"))
+        sender = RecordingEmailSender()
+        clock = FakeClock(_AGORA)
+        fachada = IdentityFacade(
+            ProvisionAccountUseCase(
+                users=users,
+                restaurants=restaurants,
+                units=units,
+                hasher=FakePasswordHasher(),
+                tokens=InMemoryPasswordSetupTokenRepository(),
+                token_issuer=FakeSetupTokenIssuer(),
+                id_generator=FakeIdGenerator(),
+                clock=clock,
+                invitation_ttl=timedelta(hours=72),
+                handover_ttl=timedelta(hours=168),
+                base_url=_BASE_URL,
+            ),
+            SendInvitationUseCase(sender),
+            RevokeAllSessionsUseCase(InMemorySessionRepository(), clock),
+        )
+        return fachada, users, sender
+
+    def test_provisiona_e_envia_pelo_grafo_real(self) -> None:
+        fachada, users, sender = self._fachada_real()
+
+        conta = _provisionar(fachada)
+        fachada.send_invitation(email="maria@cantina.com", setup_link=conta.setup_link)
+
+        usuario = users.users[UserId(conta.user_id)]
+        assert usuario.email == Email("maria@cantina.com")
+        assert usuario.role is Role.EMPLOYEE
+        assert usuario.tenant_id == RestaurantId("rest-a")
+        assert [m.unit_id for m in users.memberships] == [UnitId("unit-a1")]
+        assert conta.setup_link.startswith(f"{_BASE_URL}/definir-senha?token=")
+        assert conta.setup_link in sender.sent[0].body_text
+
+    def test_email_repetido_sobe_como_a_excecao_reexportada(self) -> None:
+        fachada, _, _ = self._fachada_real()
+        _provisionar(fachada)
+
+        with pytest.raises(modulo_facade.EmailAlreadyRegisteredError):
+            _provisionar(fachada)
