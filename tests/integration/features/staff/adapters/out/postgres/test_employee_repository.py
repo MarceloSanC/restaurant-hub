@@ -55,6 +55,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -341,6 +342,22 @@ def test_l_e2_update_grava_o_agregado_inteiro(
     assert gravado.job_function_ids == frozenset({_F2, _F3})
     assert gravado.unavailabilities == (_periodo(12), _periodo(14))
     assert gravado.active is False
+
+
+def test_user_id_faz_round_trip_pelo_add_e_pelo_update(
+    repositorio: PostgresEmployeeRepository, funcoes: PostgresJobFunctionRepository
+) -> None:
+    """Stage 3.5 (CA19): sem login ⇒ `None`; vinculado ⇒ o mesmo id, verbatim."""
+    repositorio.add(_funcionario())
+    sem_login = repositorio.find_by_id(_A, _U1, _E1)
+    assert sem_login is not None
+    assert sem_login.user_id is None
+
+    repositorio.update(sem_login.link_login(UserId("login-1")))
+
+    vinculado = repositorio.find_by_id(_A, _U1, _E1)
+    assert vinculado is not None
+    assert vinculado.user_id == UserId("login-1")
 
 
 def test_update_escreve_as_filhas_por_diferenca_e_o_resultado_e_o_conjunto_pedido(

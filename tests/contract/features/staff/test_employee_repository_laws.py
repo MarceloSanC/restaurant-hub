@@ -42,6 +42,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -286,10 +287,15 @@ def test_l_e2_update_de_inexistente_no_tenant_nao_grava_nada(repos: Repositorios
 
 
 def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: RepositoriosDeStaff) -> None:
-    """Nome, perfil, preferência, conjunto, indisponibilidades **e estado**."""
+    """Nome, perfil, preferência, conjunto, indisponibilidades, estado **e login**.
+
+    `user_id` entrou na Stage 3.5 e é gravado pelo `update` como qualquer campo
+    do agregado — nas **duas** implementações (CA19).
+    """
     _com_funcionario_gravado(repos)
     editado = _funcionario(name="Joana", job_function_ids=frozenset({_F2}), active=False)
     editado = editado.change_workload_profile(OnDemand()).add_unavailability(_PERIODO)
+    editado = editado.reactivate().link_login(UserId("login-1")).deactivate()
     repos.employees.update(editado)
     gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
@@ -299,7 +305,30 @@ def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: Repositori
         gravado.job_function_ids,
         gravado.unavailabilities,
         gravado.active,
-    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False)
+        gravado.user_id,
+    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False, UserId("login-1"))
+
+
+def test_l_e2_update_de_outro_campo_preserva_o_login_gravado(repos: RepositoriosDeStaff) -> None:
+    """O agregado é gravado inteiro — e inteiro inclui o vínculo (Stage 3.5).
+
+    É a metade "nenhum outro campo mudou" para `user_id`: renomear um registro
+    vinculado, pela entidade **relida**, não apaga o login. (O caso em que a
+    entidade em mãos está desatualizada é "última escrita vence" — ADR 3.3.0006,
+    declarado no concept 3.5 §6.4, e não é o que se testa aqui.)
+    """
+    _com_funcionario_gravado(repos)
+    gravado = repos.employees.find_by_id(_A, _U1, _E1)
+    assert gravado is not None
+    repos.employees.update(gravado.link_login(UserId("login-1")))
+
+    vinculado = repos.employees.find_by_id(_A, _U1, _E1)
+    assert vinculado is not None
+    repos.employees.update(vinculado.rename("Joana"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.name, relido.user_id) == ("Joana", UserId("login-1"))
 
 
 # --- L-E3: localização imutável ----------------------------------------------

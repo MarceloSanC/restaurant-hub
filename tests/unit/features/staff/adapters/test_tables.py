@@ -20,7 +20,7 @@ de quebrar por edição descuidada e caras de descobrir em produção**:
 import re
 
 import pytest
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Numeric, Table, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Numeric, Table, Text, UniqueConstraint
 
 from restaurant_hub.features.staff.adapters.out.postgres.tables import (
     WORKLOAD_KIND_FIXED,
@@ -443,3 +443,43 @@ def test_preferencia_de_turno_e_um_conjunto_por_funcionario() -> None:
         "employee_id",
         "period",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — `employees.user_id` (ADR 3.5.0004)
+# ---------------------------------------------------------------------------
+
+
+def test_employees_tem_oito_colunas_e_user_id_e_a_ultima() -> None:
+    """Contagem transcrita: um campo a mais que a 3.3 — e só ele."""
+    assert [c.name for c in employees.columns] == [
+        "id",
+        "tenant_id",
+        "unit_id",
+        "name",
+        "workload_kind",
+        "weekly_hours",
+        "active",
+        "user_id",
+    ]
+
+
+def test_user_id_e_text_anulavel_sem_fk_sem_unique_e_sem_indice() -> None:
+    """As quatro ausências são decisão (ADR 3.5.0004 §3), e cada uma é asserida.
+
+    FK: ADR 3.3.0002. UNIQUE: workforce §3.7. Índice: ADR 3.3.0005. Anulável:
+    workforce §3.8. Um `UniqueConstraint("user_id")` acrescentado "por
+    segurança" reprova aqui — congelaria o contrário do que o doc de domínio
+    admite.
+    """
+    coluna = employees.c.user_id
+    assert isinstance(coluna.type, Text)
+    assert coluna.nullable is True
+    assert set(coluna.foreign_keys) == set()
+    colunas_unicas = {
+        tuple(c.name for c in constraint.columns)
+        for constraint in employees.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert ("user_id",) not in colunas_unicas
+    assert all("user_id" not in [c.name for c in indice.columns] for indice in employees.indexes)

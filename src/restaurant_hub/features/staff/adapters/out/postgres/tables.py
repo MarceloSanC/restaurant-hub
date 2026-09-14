@@ -144,6 +144,14 @@ employees = Table(
     # colunas.
     Column("weekly_hours", Numeric, nullable=True),
     Column("active", Boolean, nullable=False),
+    # O login em identity vinculado ao registro (Stage 3.5, ADR 3.5.0004).
+    # Opaco e **sem FK** para `users` — nenhuma FK atravessa BC (ADR 3.3.0002),
+    # como `tenant_id` e `unit_id` acima. Anulável: login é opcional e explícito
+    # por registro (workforce §3.8). **Sem UNIQUE**: `workforce.md` §3.7 admite
+    # vários registros apontando para o mesmo `User` por vínculos explícitos.
+    # **Sem índice**: nenhum acesso por `user_id` nesta Stage; índice acompanha
+    # acesso medido (ADR 3.3.0005) e entra com `find_by_user_id` no Step 4.
+    Column("user_id", Text, nullable=True),
     # Colisão de id é **global** (L-E1), pelo mesmo motivo de `job_functions`.
     PrimaryKeyConstraint("id", name="pk_employees"),
     # Âncora obrigatória da FK composta de `employee_job_functions`.
