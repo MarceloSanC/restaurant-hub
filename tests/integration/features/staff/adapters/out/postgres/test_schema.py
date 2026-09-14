@@ -232,9 +232,11 @@ def test_tipos_de_coluna_de_employees(engine: Engine) -> None:
 def test_user_id_nao_tem_fk_unique_nem_indice_no_banco(engine: Engine) -> None:
     """As três ausências do ADR 3.5.0004 §3, medidas no catálogo do Postgres.
 
-    A migration `0004` **sobe e desce**: o `engine` recria o schema por
-    `downgrade base` + `upgrade head` a cada sessão, então uma `0004` cujo
-    `downgrade` não removesse a coluna já teria reprovado antes deste teste.
+    Este teste olha só o estado `head`. O `downgrade` da `0004` **não** é
+    provado pelo `downgrade base` da fixture (a `0003` derruba `employees`
+    inteira, o que mascararia uma `0004.downgrade` vazia); quem o prova é
+    `tests/integration/test_migration.py::test_downgrade_da_0004_remove_so_a_coluna_user_id`,
+    descendo até `0003` e olhando o catálogo.
     """
     with engine.connect() as conexao:
         constraints_sobre_user_id = conexao.execute(

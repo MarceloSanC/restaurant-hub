@@ -100,7 +100,7 @@ def test_l_ig1_o_link_redime_o_proprio_login_e_nenhum_outro(
     assert not gateway.token_redeems(segundo.user_id, primeiro.setup_link)
 
 
-def test_l_ig1_o_canal_decide_o_prazo_do_segredo(gateway: GatewaySobContrato) -> None:
+def test_d9_o_canal_atravessa_o_port_e_decide_o_prazo(gateway: GatewaySobContrato) -> None:
     """`delivery` atravessa o port porque identity precisa dele para o TTL (D9)."""
     em_maos = _provisionar(gateway, _EMAIL, delivery=LoginDelivery.LINK)
     por_email = _provisionar(gateway, _OUTRO_EMAIL, delivery=LoginDelivery.EMAIL)
@@ -165,6 +165,12 @@ def test_l_ig2_qualquer_outra_falha_sobe_crua(gateway: GatewaySobContrato, arran
             delivery=LoginDelivery.LINK,
         )
     assert type(excecao.value) is cenario.tipo_esperado
+    # "Crua" é mais que "do mesmo tipo": um gateway que fizesse
+    # `except X as e: raise X(*e.args)` preservaria o tipo e perderia a instância
+    # e o traceback — e, como o re-raise acontece dentro de um `except`, deixaria
+    # `__context__` preenchido. Propagação sem toque não tem causa nem contexto.
+    assert excecao.value.__cause__ is None
+    assert excecao.value.__context__ is None
 
 
 def test_l_ig2_a_falha_do_envio_sobe_crua_e_e_a_mesma_instancia(
@@ -180,7 +186,7 @@ def test_l_ig2_a_falha_do_envio_sobe_crua_e_e_a_mesma_instancia(
     assert gateway.enviados_para(_EMAIL) == []
 
 
-def test_l_ig2_o_envio_bem_sucedido_entrega_o_link_ao_email(
+def test_o_envio_bem_sucedido_entrega_o_link_ao_email(
     gateway: GatewaySobContrato,
 ) -> None:
     login = _provisionar(gateway, _EMAIL, delivery=LoginDelivery.EMAIL)
