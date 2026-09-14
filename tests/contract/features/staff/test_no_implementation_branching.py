@@ -29,7 +29,11 @@ from restaurant_hub.features.staff.adapters.out.postgres.employee_repository imp
 from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
     PostgresJobFunctionRepository,
 )
-from tests.contract.features.staff.conftest import IMPLEMENTACOES, RepositoriosDeStaff
+from tests.contract.features.staff.conftest import (
+    IMPLEMENTACOES,
+    IMPLEMENTACOES_DO_GATEWAY,
+    RepositoriosDeStaff,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -45,10 +49,18 @@ _PASTA = Path(__file__).parent
 # `test_a_lista_de_modulos_de_lei_cobre_a_pasta_inteira` cobra a pasta contra a
 # lista, mesmo antídoto de `test_composition_root_staff.py` para a lista de use
 # cases.
-_MODULOS_DE_LEI = (
-    "test_job_function_repository_laws.py",
-    "test_employee_repository_laws.py",
-)
+#
+# **Módulo → nome da fixture de implementações.** Desde a Stage 3.5 a pasta tem
+# uma suíte de lei que não é de repositório: as leis do `IdentityGateway`, cuja
+# fixture se chama `gateway`. Os guardas "todo teste recebe a fixture" e "nenhum
+# corpo inspeciona o tipo por trás dela" leem o nome daqui — generalização do
+# guarda pelo seu próprio princípio (nenhuma ramificação por implementação), não
+# afrouxamento: os três módulos ficam sob as mesmas quatro asserções.
+_MODULOS_DE_LEI: dict[str, str] = {
+    "test_job_function_repository_laws.py": "repos",
+    "test_employee_repository_laws.py": "repos",
+    "test_identity_gateway_laws.py": "gateway",
+}
 
 # O padrão que nomeia uma suíte de lei promovida. É a fonte da verdade contra a
 # qual `_MODULOS_DE_LEI` é conferida.
@@ -59,10 +71,11 @@ _PADRAO_DE_MODULO_DE_LEI = "test_*laws*.py"
 # a fixture crua (o `engine`), que é a porta dos fundos para o mesmo efeito.
 _NOMES_PROIBIDOS = frozenset({"request", "param", "getfixturevalue"})
 
-# Os ids dos parâmetros da fixture. Comparação **exata**: uma docstring que
-# contenha a palavra não é uma ramificação, e confundir as duas coisas é o
-# falso positivo que motivou usar AST em vez de grep.
-_LITERAIS_PROIBIDOS = frozenset({"fake", "postgres"})
+# Os ids dos parâmetros das fixtures — das duas (`repos`: fake/postgres;
+# `gateway`: fake/real). Comparação **exata**: uma docstring que contenha a
+# palavra não é uma ramificação, e confundir as duas coisas é o falso positivo
+# que motivou usar AST em vez de grep.
+_LITERAIS_PROIBIDOS = frozenset({"fake", "postgres", "real"})
 
 
 # `async def` é `ast.AsyncFunctionDef`, uma classe **distinta** de
@@ -162,12 +175,14 @@ def test_nenhum_corpo_menciona_o_id_de_uma_implementacao(modulo: str) -> None:
 def test_nenhum_corpo_inspeciona_o_tipo_de_um_repositorio(modulo: str) -> None:
     """Nada de `isinstance(repos.…, PostgresX)` — a via oblíqua para o mesmo fim.
 
-    A regra é escopada ao que envolve `repos` de propósito: a suíte **usa**
+    A regra é escopada ao que envolve a fixture de implementações do módulo
+    (`repos` ou `gateway`) de propósito: a suíte **usa**
     `type(excecao.value) is EmployeeNotFoundError` para asserir o tipo **exato**
     de uma exceção, que é asserção legítima e nada tem a ver com implementação
     de port. Proibir toda introspecção de tipo aqui tornaria o teste um
     obstáculo à precisão que ele deveria proteger.
     """
+    fixture = _MODULOS_DE_LEI[modulo]
     violacoes: list[tuple[str, str]] = []
     for funcao in _funcoes(modulo):
         for no in _nos(funcao):
@@ -175,18 +190,20 @@ def test_nenhum_corpo_inspeciona_o_tipo_de_um_repositorio(modulo: str) -> None:
                 continue
             if no.func.id not in {"isinstance", "type"} or not no.args:
                 continue
-            alcanca_repos = any(
-                isinstance(interno, ast.Name) and interno.id == "repos"
+            alcanca_fixture = any(
+                isinstance(interno, ast.Name) and interno.id == fixture
                 for interno in ast.walk(no.args[0])
             )
-            if alcanca_repos:
+            if alcanca_fixture:
                 violacoes.append((funcao.name, no.func.id))
-    assert violacoes == [], f"{modulo}: corpo inspeciona o tipo do repositório: {violacoes}"
+    assert violacoes == [], (
+        f"{modulo}: corpo inspeciona o tipo por trás de `{fixture}`: {violacoes}"
+    )
 
 
 @pytest.mark.parametrize("modulo", _MODULOS_DE_LEI)
 def test_todo_teste_de_lei_recebe_a_fixture(modulo: str) -> None:
-    """Metade estrutural de CA1: quem não recebe `repos` roda **uma** vez só.
+    """Metade estrutural de CA1: quem não recebe a fixture roda **uma** vez só.
 
     Sem esta asserção, um teste que esquecesse o parâmetro continuaria verde e
     silenciosamente deixaria de valer para as duas implementações — a suíte
@@ -195,13 +212,14 @@ def test_todo_teste_de_lei_recebe_a_fixture(modulo: str) -> None:
     recebe a fixture sem usá-la exatamente para que "cada teste roda duas vezes"
     valha **literalmente** no `--collect-only`.
     """
+    fixture = _MODULOS_DE_LEI[modulo]
     sem_fixture = [
         funcao.name
         for funcao in _funcoes(modulo)
         if funcao.name.startswith("test_")
-        and "repos" not in {argumento.arg for argumento in funcao.args.args}
+        and fixture not in {argumento.arg for argumento in funcao.args.args}
     ]
-    assert sem_fixture == [], f"{modulo}: teste de lei sem a fixture `repos`: {sem_fixture}"
+    assert sem_fixture == [], f"{modulo}: teste de lei sem a fixture `{fixture}`: {sem_fixture}"
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +250,13 @@ def test_a_suite_de_contrato_roda_sobre_as_duas_implementacoes() -> None:
     que desaparece é a **ausência** de uma variante, e ausência não falha.
     """
     assert set(IMPLEMENTACOES) == {"fake", "postgres"}
+
+
+def test_a_suite_do_gateway_roda_sobre_o_fake() -> None:
+    """O contrato do gateway nasce sobre o fake (Task 04 da 3.5); a Task 09
+    acrescenta `"real"` e troca esta asserção pela exata — o mesmo par de
+    guardas que o par de repositórios tem acima e abaixo."""
+    assert "fake" in IMPLEMENTACOES_DO_GATEWAY
 
 
 @pytest.mark.parametrize("repos", ["postgres"], indirect=True)

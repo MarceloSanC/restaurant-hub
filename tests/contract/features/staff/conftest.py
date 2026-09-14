@@ -35,6 +35,7 @@ que exigisse `calls` do adapter real estaria inventando requisito, e é o mesmo
 critério da CA16 de identity.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import pytest
@@ -49,10 +50,25 @@ from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    IdentityGateway,
+    LoginDelivery,
+)
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from restaurant_hub.features.staff.domain.value_objects.identifiers import (
+    TenantId,
+    UnitId,
+    UserId,
+)
 from tests.conftest import truncar_tudo
+from tests.fakes.features.staff.in_memory_identity_gateway import (
+    FakeTenantUnknown,
+    FakeUnitOfAnotherTenant,
+    FakeUnitUnknown,
+    InMemoryIdentityGateway,
+)
 from tests.fakes.features.staff.in_memory_staff_store import staff_repositories
 
 # As implementações sobre as quais a suíte inteira roda. **Constante nomeada, e
@@ -128,3 +144,144 @@ def repos(request: pytest.FixtureRequest) -> RepositoriosDeStaff:
     # impede um parâmetro novo em `IMPLEMENTACOES` de produzir uma suíte que roda
     # contra nada e reporta verde.
     raise AssertionError(f"implementação desconhecida no contrato de staff: {request.param!r}")
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — o contrato do `IdentityGateway` (concept 3.5 §4, L-IG1…L-IG4)
+# ---------------------------------------------------------------------------
+#
+# Mesma disciplina do par de repositórios, com uma diferença que a forma do
+# holder carrega: as leis do gateway falam de efeitos que **só o outro lado da
+# fronteira enxerga** (o papel do `User` criado, a membership, o token que redime
+# o login) e de cenários que cada implementação produz **do seu jeito** (e-mail já
+# usado; unidade inexistente; envio que falha). Um corpo de teste que soubesse
+# como cada lado produz o cenário estaria ramificando por implementação — e é
+# isso que `test_no_implementation_branching.py` proíbe. Por isso o holder leva,
+# além do gateway, **funções de observação e de arranjo**: o corpo chama
+# `holder.email_ja_usado(...)` e assere o efeito; quem sabe se isso significa
+# "acrescentar ao set do fake" ou "semear um User no repositório de identity" é
+# este arquivo, que é onde a ramificação **deve** existir.
+#
+# `IMPLEMENTACOES_DO_GATEWAY` é constante própria: `IMPLEMENTACOES` (acima) fixa
+# as implementações do par de repositórios e é asserida exata pelo módulo de
+# CA2; misturar as duas listas faria uma asserção sobre repositórios reprovar
+# por causa do gateway. A Task 09 da Stage 3.5 acrescenta `"real"` aqui.
+IMPLEMENTACOES_DO_GATEWAY = ("fake",)
+
+
+@dataclass(frozen=True)
+class CenarioCru:
+    """Um cenário de L-IG2 "sobe cru": qual argumento, com que valor, e o tipo que sobe.
+
+    O corpo do teste recebe **o tipo esperado** em vez da instância porque, do
+    lado real, a instância é criada por identity no ato — ninguém a tem antes.
+    O que as duas implementações têm em comum é o **tipo** que atravessa. E
+    recebe o **nome do argumento** (`"tenant_id"` ou `"unit_id"`) para não ter
+    de decidir, por si, que argumento carrega o valor — decidir seria ramificar.
+    """
+
+    argumento: str
+    valor: str
+    tipo_esperado: type[Exception]
+
+
+@dataclass(frozen=True)
+class GatewaySobContrato:
+    """O gateway de uma implementação mais o que o contrato precisa ver e arranjar.
+
+    Attributes:
+        gateway: a implementação sob contrato (fake ou real).
+        tenant_id: um restaurante que **existe** deste lado.
+        unit_id: uma unidade **desse** restaurante que existe deste lado.
+        login_role_of: o papel do login criado — o fake responde `"employee"`
+            por definição (L-IG1 diz que o papel é do port); o real lê o `User`.
+        token_redeems: se `setup_link` redime **aquele** `user_id`.
+        entregue_em_maos: se o login foi provisionado para entrega em mãos —
+            observável no real pelo prazo do token (concept D9), no fake pelo
+            ledger.
+        foi_revogado: se `revoke_login_sessions` alcançou o login.
+        enviados_para: os links enviados para um e-mail, na ordem.
+        email_ja_usado: **arranjo** — faz o e-mail passar a estar em uso.
+        email_invalido: **arranjo** — devolve um e-mail que este lado recusa.
+        unidade_inexistente / unidade_de_outro_tenant / tenant_inexistente:
+            **arranjo** — devolvem o valor que produz a falha crua e o tipo que
+            sobe deste lado.
+        envio_falha: **arranjo** — faz o próximo envio levantar a instância dada.
+    """
+
+    gateway: IdentityGateway
+    tenant_id: TenantId
+    unit_id: UnitId
+    login_role_of: Callable[[UserId], str | None]
+    token_redeems: Callable[[UserId, str], bool]
+    entregue_em_maos: Callable[[UserId], bool]
+    foi_revogado: Callable[[UserId], bool]
+    enviados_para: Callable[[str], list[str]]
+    email_ja_usado: Callable[[str], None]
+    email_invalido: Callable[[], str]
+    unidade_inexistente: Callable[[], CenarioCru]
+    unidade_de_outro_tenant: Callable[[], CenarioCru]
+    tenant_inexistente: Callable[[], CenarioCru]
+    envio_falha: Callable[[Exception], None]
+
+
+def _gateway_fake() -> GatewaySobContrato:
+    fake = InMemoryIdentityGateway()
+    tenant = TenantId("tenant-contrato")
+    unidade = UnitId("unidade-contrato")
+
+    def unidade_inexistente() -> CenarioCru:
+        fantasma = UnitId("unidade-fantasma")
+        fake.raw_errors_by_unit[fantasma] = FakeUnitUnknown()
+        return CenarioCru(argumento="unit_id", valor=fantasma, tipo_esperado=FakeUnitUnknown)
+
+    def unidade_de_outro_tenant() -> CenarioCru:
+        alheia = UnitId("unidade-alheia")
+        fake.raw_errors_by_unit[alheia] = FakeUnitOfAnotherTenant()
+        return CenarioCru(argumento="unit_id", valor=alheia, tipo_esperado=FakeUnitOfAnotherTenant)
+
+    def tenant_inexistente() -> CenarioCru:
+        fantasma = TenantId("tenant-fantasma")
+        fake.raw_errors_by_tenant[fantasma] = FakeTenantUnknown()
+        return CenarioCru(argumento="tenant_id", valor=fantasma, tipo_esperado=FakeTenantUnknown)
+
+    def email_invalido() -> str:
+        fake.invalid_emails.add("nao-e-email")
+        return "nao-e-email"
+
+    def envio_falha(excecao: Exception) -> None:
+        fake.fail_send_with = excecao
+
+    return GatewaySobContrato(
+        gateway=fake,
+        tenant_id=tenant,
+        unit_id=unidade,
+        login_role_of=lambda user_id: "employee" if user_id in fake.logins else None,
+        token_redeems=lambda user_id, link: (
+            user_id in fake.logins and fake.logins[user_id].setup_link == link
+        ),
+        entregue_em_maos=lambda user_id: fake.logins[user_id].delivery is LoginDelivery.LINK,
+        foi_revogado=lambda user_id: user_id in fake.revoked,
+        enviados_para=lambda email: [link for (para, link) in fake.sent if para == email],
+        email_ja_usado=fake.used_emails.add,
+        email_invalido=email_invalido,
+        unidade_inexistente=unidade_inexistente,
+        unidade_de_outro_tenant=unidade_de_outro_tenant,
+        tenant_inexistente=tenant_inexistente,
+        envio_falha=envio_falha,
+    )
+
+
+@pytest.fixture(params=IMPLEMENTACOES_DO_GATEWAY)
+def gateway(request: pytest.FixtureRequest) -> GatewaySobContrato:
+    """Parametriza a suíte de leis do gateway sobre as implementações do port.
+
+    Só o fake até a Task 09 da Stage 3.5, que acrescenta o
+    `LocalIdentityGateway` sobre a fachada de identity — montada sobre os fakes
+    de identity, sem banco: o contrato é sobre a **tradução**, não sobre a
+    persistência.
+    """
+    if request.param == "fake":
+        return _gateway_fake()
+
+    raise AssertionError(f"implementação desconhecida no contrato do gateway: {request.param!r}")
