@@ -28,7 +28,8 @@ _NOT_FOUND_ERRORS = (
     errors.EmployeeNotFoundError,
 )
 
-# Todo o resto: conflito, uso, relocalização e cópia — nenhum é ausência.
+# Todo o resto: conflito, uso, relocalização, cópia e — desde a 3.5 — as três
+# recusas de login da camada de aplicação. Nenhum é ausência.
 _NON_NOT_FOUND_ERRORS = (
     errors.JobFunctionNameAlreadyExistsError,
     errors.JobFunctionAlreadyExistsError,
@@ -37,6 +38,9 @@ _NON_NOT_FOUND_ERRORS = (
     errors.EmployeeInUseError,
     errors.EmployeeRelocationError,
     errors.SameUnitCopyError,
+    errors.LoginEmailAlreadyInUseError,
+    errors.InvalidLoginEmailError,
+    errors.EmployeeHasLoginError,
 )
 
 
@@ -56,7 +60,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_nove_excecoes_esperadas() -> None:
+def test_modulo_declara_as_doze_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -75,6 +79,11 @@ def test_modulo_declara_as_nove_excecoes_esperadas() -> None:
         # Localização imutável (L-E3) e destino da cópia igual à origem.
         "EmployeeRelocationError",
         "SameUnitCopyError",
+        # Stage 3.5 — o vocabulário de staff para as duas traduções do gateway
+        # (L-IG2) e a guarda nova da remoção (ADR 3.5.0003 §1b).
+        "LoginEmailAlreadyInUseError",
+        "InvalidLoginEmailError",
+        "EmployeeHasLoginError",
     }
 
 
@@ -162,6 +171,26 @@ def test_mensagens_identificam_o_recurso_ou_a_regra_violada() -> None:
     assert "f-1" in str(errors.JobFunctionInUseError("f-1"))
     assert "e-1" in str(errors.EmployeeInUseError("e-1"))
     assert "u-1" in str(errors.SameUnitCopyError("u-1"))
+    assert "'ana@x.com'" in str(errors.LoginEmailAlreadyInUseError("ana@x.com"))
+    assert "'nao-e-email'" in str(errors.InvalidLoginEmailError("nao-e-email"))
+    assert "e-1" in str(errors.EmployeeHasLoginError("e-1"))
+
+
+def test_email_em_uso_cita_so_o_email_enviado() -> None:
+    """A mensagem não diz **de quem** é o e-mail nem em que tenant (concept 3.5 §6.1).
+
+    É o oráculo de existência global de conta que a 2.5 §13 registrou: a
+    resposta 409 já confirma que o e-mail existe em algum tenant, e a mensagem
+    não pode acrescentar nada a isso.
+    """
+    assert str(errors.LoginEmailAlreadyInUseError("ana@x.com")) == (
+        "e-mail já usado como login: 'ana@x.com'"
+    )
+
+
+def test_remocao_de_vinculado_aponta_o_caminho() -> None:
+    """A guarda diz o que fazer: desligar (ADR 3.5.0003 §1b)."""
+    assert "desligue-o" in str(errors.EmployeeHasLoginError("e-1"))
 
 
 def test_erro_de_relocalizacao_cita_as_duas_unidades_e_nao_o_tenant() -> None:

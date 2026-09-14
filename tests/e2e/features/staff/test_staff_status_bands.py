@@ -467,7 +467,11 @@ async def _copia_para_a_propria_unidade(
 # - `EmployeeInUseError` — sem produtor em v1; nasce com o Step 4 (alocação);
 # - `EmployeeRelocationError` — nenhuma rota permite enviar `unit_id` num update;
 # - as duas colisões de **id** — o id é UUID gerado dentro do use case, nunca
-#   enviado pelo cliente, e produzi-las exigiria dois UUID4 iguais.
+#   enviado pelo cliente, e produzi-las exigiria dois UUID4 iguais;
+# - **as cinco recusas de login da Stage 3.5 (2026-09-13, Task 01)** — nasceram
+#   com a entrada no mapa e **sem produtor**: R17 e a guarda de R15 só existem a
+#   partir da Task 11 daquela Stage, que as move para `CENARIOS_POR_EXCECAO`.
+#   Até lá, "inalcançável" é literalmente verdade.
 #
 # Escritas por **nome**, e não por classe, porque o nome é o que a declaração de
 # `error_handlers.py` carrega — e é a divergência entre os dois lados que este
@@ -478,6 +482,11 @@ INALCANCAVEIS_POR_HTTP: Final = frozenset(
         "EmployeeRelocationError",
         "JobFunctionAlreadyExistsError",
         "EmployeeAlreadyExistsError",
+        "EmployeeAlreadyHasLoginError",
+        "TerminatedEmployeeLoginError",
+        "LoginEmailAlreadyInUseError",
+        "InvalidLoginEmailError",
+        "EmployeeHasLoginError",
     }
 )
 
@@ -527,7 +536,7 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
     ),
 }
 
-_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 18
+_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 23
 
 # O tamanho do domínio de corpo de CA24 **depois** de a varredura descer por
 # lista. Eram dez caminhos; os três novos são um elemento de `job_function_ids`

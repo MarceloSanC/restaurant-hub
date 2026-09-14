@@ -48,16 +48,20 @@ from fastapi.responses import JSONResponse
 
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
+    EmployeeHasLoginError,
     EmployeeInUseError,
     EmployeeNotFoundError,
     EmployeeRelocationError,
+    InvalidLoginEmailError,
     JobFunctionAlreadyExistsError,
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
+    LoginEmailAlreadyInUseError,
     SameUnitCopyError,
 )
 from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmployeeAlreadyHasLoginError,
     EmptyJobFunctionsError,
     EmptyShiftPreferenceError,
     InvalidDayPeriodError,
@@ -67,6 +71,7 @@ from restaurant_hub.features.staff.domain.exceptions.errors import (
     InvalidWeeklyHoursError,
     OverlappingUnavailabilityError,
     StaffError,
+    TerminatedEmployeeLoginError,
     UnavailabilityNotFoundError,
 )
 
@@ -106,6 +111,18 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
     # mesmo assim tem entrada própria: totalidade é sobre a hierarquia, não sobre
     # o que é alcançável hoje. Não escrever e2e esperando produzi-la.
     EmployeeInUseError: HTTP_CONFLICT,
+    # 409 — as quatro recusas de **login** da Stage 3.5 (concept §6.1), todas
+    # conflito com estado já gravado: o registro **já** tem login; o registro
+    # está **desligado** (criar login é conceder acesso, e desligar cortou);
+    # o e-mail já é login de alguém (tradução de `EmailAlreadyRegisteredError`
+    # pelo gateway, L-IG2); o registro tem login e a **remoção** é recusada —
+    # irmã de `EmployeeInUseError` (ADR 3.5.0003 §1b). Nascem na Task 01 da
+    # Stage, antes de qualquer produtor: até a Task 11 são inalcançáveis por
+    # HTTP, e `test_staff_status_bands.py` as declara assim.
+    EmployeeAlreadyHasLoginError: HTTP_CONFLICT,
+    TerminatedEmployeeLoginError: HTTP_CONFLICT,
+    LoginEmailAlreadyInUseError: HTTP_CONFLICT,
+    EmployeeHasLoginError: HTTP_CONFLICT,
     # 422 — invariante violada **pelo conteúdo enviado**.
     InvalidNameError: HTTP_UNPROCESSABLE,
     InvalidIdentifierError: HTTP_UNPROCESSABLE,
@@ -128,6 +145,10 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
     # 422 e **não** 409: nada está em conflito — o cliente nomeou a origem como
     # destino.
     SameUnitCopyError: HTTP_UNPROCESSABLE,
+    # 422 — o que chegou como e-mail de login não é e-mail (tradução de
+    # `InvalidEmailError` de identity pelo gateway, L-IG2; inclui o byte NUL,
+    # que o VO `Email` passa a recusar na Stage 3.5, D8).
+    InvalidLoginEmailError: HTTP_UNPROCESSABLE,
 }
 
 

@@ -4,6 +4,7 @@ import pytest
 
 from restaurant_hub.features.staff.domain.exceptions import errors as staff_errors
 from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmployeeAlreadyHasLoginError,
     EmptyJobFunctionsError,
     EmptyShiftPreferenceError,
     InvalidDayPeriodError,
@@ -13,9 +14,10 @@ from restaurant_hub.features.staff.domain.exceptions.errors import (
     InvalidWeeklyHoursError,
     OverlappingUnavailabilityError,
     StaffError,
+    TerminatedEmployeeLoginError,
     UnavailabilityNotFoundError,
 )
-from restaurant_hub.shared.domain.exceptions.base import DomainError
+from restaurant_hub.shared.domain.exceptions.base import DomainError, NotFoundError
 
 pytestmark = pytest.mark.unit
 
@@ -38,6 +40,8 @@ def test_staff_error_e_um_domain_error() -> None:
         InvalidUnavailabilityPeriodError,
         OverlappingUnavailabilityError,
         UnavailabilityNotFoundError,
+        EmployeeAlreadyHasLoginError,
+        TerminatedEmployeeLoginError,
     ],
 )
 def test_toda_excecao_do_bc_herda_de_staff_error(exc_type: type[StaffError]) -> None:
@@ -116,3 +120,30 @@ def test_sobreposicao_explica_a_invariante() -> None:
 def test_remocao_inexistente_explica_o_erro() -> None:
     with pytest.raises(UnavailabilityNotFoundError, match="não encontrado no registro"):
         raise UnavailabilityNotFoundError()
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — as duas guardas de login do domínio (concept 3.5 §6.1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("exc_type", [EmployeeAlreadyHasLoginError, TerminatedEmployeeLoginError])
+def test_as_guardas_de_login_sao_conflito_e_nao_ausencia(exc_type: type[StaffError]) -> None:
+    """409 na borda, e por isso **fora** de `NotFoundError`.
+
+    As duas falam de um registro que **foi** encontrado e cujo estado gravado
+    (já vinculado; desligado) recusa a transição — o oposto de ausência. Herdar
+    `NotFoundError` por descuido as levaria ao 404 pela MRO (ADR 3.4.0002).
+    """
+    assert issubclass(exc_type, StaffError)
+    assert not issubclass(exc_type, NotFoundError)
+
+
+def test_ja_vinculado_cita_o_registro() -> None:
+    with pytest.raises(EmployeeAlreadyHasLoginError, match="já tem login vinculado: 'e-1'"):
+        raise EmployeeAlreadyHasLoginError("e-1")
+
+
+def test_desligado_cita_o_registro_e_a_regra() -> None:
+    with pytest.raises(TerminatedEmployeeLoginError, match="desligado não pode receber login"):
+        raise TerminatedEmployeeLoginError("e-1")

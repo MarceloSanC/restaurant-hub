@@ -106,3 +106,30 @@ class UnavailabilityNotFoundError(StaffError):
 
     def __init__(self) -> None:
         super().__init__("período de indisponibilidade não encontrado no registro")
+
+
+class EmployeeAlreadyHasLoginError(StaffError):
+    """Registro que **já** tem login recebendo um segundo (ADR 3.5.0004 §2).
+
+    O vínculo é definido **uma vez** por registro (concept 3.5 §5.5): não há
+    "trocar o login" — desvincular/relinkar é finding para Stage própria. É
+    conflito com estado **já gravado**, e por isso 409 na borda; herda só de
+    `StaffError` para que a MRO não a leve a 404.
+    """
+
+    def __init__(self, employee_id: str) -> None:
+        super().__init__(f"funcionário já tem login vinculado: {employee_id!r}")
+
+
+class TerminatedEmployeeLoginError(StaffError):
+    """Registro **desligado** recebendo login (ADR 3.5.0004 §2, alternativa D).
+
+    Criar login é **conceder acesso**, não editar um campo — e desligar corta
+    acesso (kickoff #4; ADR 3.5.0003). Um desligado que **já** tinha login o
+    mantém como história; o que não existe é login **novo** para quem saiu. A
+    precedência com `EmployeeAlreadyHasLoginError` é do domínio: vinculado vence
+    desligado (concept 3.5 CA01).
+    """
+
+    def __init__(self, employee_id: str) -> None:
+        super().__init__(f"funcionário desligado não pode receber login: {employee_id!r}")
