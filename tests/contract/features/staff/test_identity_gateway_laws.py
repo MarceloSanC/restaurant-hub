@@ -79,6 +79,23 @@ def test_l_ig1_o_login_criado_e_de_funcionario(gateway: GatewaySobContrato) -> N
     assert gateway.login_role_of(login.user_id) == "employee"
 
 
+def test_l_ig1_o_login_e_escopado_ao_tenant_e_a_unidade_do_registro(
+    gateway: GatewaySobContrato,
+) -> None:
+    """A metade de escopo de L-IG1: dentro do tenant e membro de **exatamente** a unidade.
+
+    Do lado real, o `User` criado tem `tenant_id` e uma única membership — a da
+    unidade passada. Um gateway que passasse `unit_ids=()` ou a unidade errada
+    passaria em todos os outros testes de L-IG1 e morreria aqui.
+    """
+    login = _provisionar(gateway)
+
+    assert gateway.login_scope_of(login.user_id) == (
+        str(gateway.tenant_id),
+        (str(gateway.unit_id),),
+    )
+
+
 def test_l_ig1_cada_provisionamento_e_um_login_novo(gateway: GatewaySobContrato) -> None:
     """Dois pedidos, dois `user_id` — nunca um pré-existente (L-IG1)."""
     primeiro = _provisionar(gateway, _EMAIL)

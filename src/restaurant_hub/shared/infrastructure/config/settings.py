@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     invitation_token_ttl_hours: int = 72
     password_reset_token_ttl_minutes: int = 30
 
+    # Stage 3.5 — o prazo do link de definição de senha **entregue em mãos**
+    # (canal `link` de R17: impresso, QR, mensagem). Mais longo que o do convite
+    # por e-mail porque o link não chega em minutos — o gestor imprime hoje e a
+    # pessoa começa segunda. É a alternativa escolhida à reemissão do link
+    # (ADR 3.5.0002): o prazo do canal absorve a demora, e o link perdido é
+    # recuperado pelo pedido público de redefinição de senha, como qualquer
+    # convite. Em horas, como o do convite, porque é o mesmo tipo de coisa.
+    handover_link_ttl_hours: int = 168
+
     # ---------------------------------------------------------------------------
     # Logging
     # ---------------------------------------------------------------------------

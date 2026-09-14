@@ -15,6 +15,9 @@ REFRESH_TOKEN_TTL_DO_AMBIENTE = 30
 # RFC 7518 §3.2: a chave HMAC deve ter ao menos o tamanho do digest — 32 bytes
 # para SHA-256. O PyJWT avisa abaixo disso.
 TAMANHO_MINIMO_DE_CHAVE_HS256 = 32
+# Stage 3.5 — o link entregue em mãos vive uma semana; o convite por e-mail, 72h.
+HANDOVER_LINK_TTL_PADRAO = 168
+HANDOVER_LINK_TTL_DO_AMBIENTE = 24
 
 
 def _isolate_ambient_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -31,6 +34,8 @@ def _isolate_ambient_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "JWT_ALGORITHM",
         "ACCESS_TOKEN_TTL_MINUTES",
         "REFRESH_TOKEN_TTL_DAYS",
+        "INVITATION_TOKEN_TTL_HOURS",
+        "HANDOVER_LINK_TTL_HOURS",
     ):
         monkeypatch.delenv(field, raising=False)
 
@@ -97,6 +102,29 @@ def test_configuracao_de_token_vem_do_ambiente(monkeypatch: pytest.MonkeyPatch) 
     assert settings.jwt_algorithm == "HS512"
     assert settings.access_token_ttl_minutes == ACCESS_TOKEN_TTL_DO_AMBIENTE
     assert settings.refresh_token_ttl_days == REFRESH_TOKEN_TTL_DO_AMBIENTE
+
+
+def test_prazo_do_link_em_maos_tem_default_maior_que_o_do_convite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stage 3.5 — `handover_link_ttl_hours` existe, tem default e é mais longo.
+
+    O link em mãos não chega em minutos como um e-mail: o gestor imprime hoje e
+    a pessoa começa segunda. A relação "maior que o convite" é a razão de o
+    campo existir (ADR 3.5.0002, alternativa à reemissão); se um dia os dois
+    empatarem, o campo virou redundante e este teste é quem avisa.
+    """
+    _isolate_ambient_env(monkeypatch)
+    settings = Settings(_env_file=None)
+
+    assert settings.handover_link_ttl_hours == HANDOVER_LINK_TTL_PADRAO
+    assert settings.handover_link_ttl_hours > settings.invitation_token_ttl_hours
+
+
+def test_prazo_do_link_em_maos_vem_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HANDOVER_LINK_TTL_HOURS", str(HANDOVER_LINK_TTL_DO_AMBIENTE))
+    settings = Settings(_env_file=None)
+    assert settings.handover_link_ttl_hours == HANDOVER_LINK_TTL_DO_AMBIENTE
 
 
 def test_get_settings_e_singleton_cacheado() -> None:

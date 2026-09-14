@@ -55,6 +55,7 @@ from restaurant_hub.features.identity.application.errors import (
     PermissionDeniedError,
     UnitNotVisibleError,
 )
+from restaurant_hub.features.identity.application.facade import IdentityFacade
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UserId,
@@ -64,6 +65,9 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
+from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway import (
+    LocalIdentityGateway,
+)
 from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
     PostgresEmployeeRepository,
 )
@@ -73,6 +77,9 @@ from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository
 from restaurant_hub.features.staff.application.ports.out.access_guard import (
     AccessGuard,
     AuthorizedScope,
+)
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    IdentityGateway,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId as StaffTenantId,
@@ -239,21 +246,86 @@ def test_so_o_composition_root_importa_os_adapters_de_staff() -> None:
     )
 
 
-def test_um_import_proibido_plantado_reprova() -> None:
-    """Teste negativo: o detector detecta.
+@pytest.mark.parametrize(
+    "codigo_violador",
+    [
+        pytest.param(
+            "from restaurant_hub.features.staff.adapters.out.postgres.employee_repository "
+            "import PostgresEmployeeRepository",
+            id="repositorio-postgres",
+        ),
+        pytest.param(
+            "from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway "
+            "import LocalIdentityGateway",
+            id="gateway-de-identity",
+        ),
+    ],
+)
+def test_um_import_proibido_plantado_reprova(codigo_violador: str) -> None:
+    """Teste negativo: o detector detecta — e alcança o pacote novo da Stage 3.5.
 
     Um guarda que nunca viu um caso positivo não é um guarda — é uma função que
-    devolve conjunto vazio.
+    devolve conjunto vazio. O segundo caso existe porque `adapters/out/identity/`
+    nasceu depois do detector: a cobertura da varredura sobre ele é o que se
+    verifica, não o resultado dela.
     """
-    codigo_violador = (
-        "from restaurant_hub.features.staff.adapters.out.postgres.employee_repository "
-        "import PostgresEmployeeRepository"
-    )
     arvore = ast.parse(codigo_violador)
 
     alvos = [no.module for no in ast.walk(arvore) if isinstance(no, ast.ImportFrom) and no.module]
 
     assert any(_MODULO_DE_ADAPTERS in alvo for alvo in alvos)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — o gateway de identity (CA07 wiring, CA32)
+# ---------------------------------------------------------------------------
+
+
+def test_ca07_o_gateway_de_identity_e_o_local_sobre_a_fachada_das_rotas() -> None:
+    """Identidade de objeto, não `isinstance`: um grafo, não dois.
+
+    A fachada por baixo do gateway tem de usar **os mesmos** repositórios,
+    `sender` e `clock` que servem as rotas de identity. Uma segunda
+    `PostgresUserRepository` satisfaria qualquer teste de tipo e faria o login do
+    funcionário nascer num pool diferente do que a rota `/auth/login` consulta —
+    sem ganho nenhum e com um `Engine` a mais (ADR 3.5.0001 §Implementation
+    notes; mesmo raciocínio de CA15 para o `IdentityGuard`).
+    """
+    deps = _dependencias()
+
+    assert isinstance(deps.staff_identity_gateway, LocalIdentityGateway)
+    fachada = deps.staff_identity_gateway._facade
+    assert isinstance(fachada, IdentityFacade)
+
+    provisao = fachada._provision_account
+    convite = deps.identity_invite_user
+    assert provisao._users is convite._users
+    assert provisao._restaurants is convite._restaurants
+    assert provisao._units is convite._units
+    assert provisao._hasher is convite._hasher
+    assert provisao._tokens is convite._tokens
+    assert provisao._token_issuer is convite._token_issuer
+    assert provisao._clock is convite._clock
+    assert fachada._send_invitation._email_sender is convite._email_sender
+    assert fachada._revoke_all_sessions._sessions is deps.identity_revoke_session._sessions
+    assert fachada._revoke_all_sessions._clock is deps.identity_revoke_session._clock
+
+
+def test_ca07_o_gateway_nasce_sem_consumidor_nesta_task_e_e_o_unico_novo_no_conteiner() -> None:
+    """O contêiner ganhou exatamente um campo de staff na Task 09 — o port consumido.
+
+    Como `staff_access_guard` na 3.4: o campo é anotado com o **port**, não com
+    a classe, e nasce sem consumidor até a Task 10 (precedente 3.3/3.4). Este
+    teste trava a contagem para que um segundo campo entre por decisão.
+    """
+    campos_de_staff = {
+        nome for nome in ApplicationDependencies.__dataclass_fields__ if nome.startswith("staff_")
+    }
+
+    assert campos_de_staff == {*_USE_CASES_DE_STAFF, "staff_access_guard", "staff_identity_gateway"}
+    assert ApplicationDependencies.__dataclass_fields__["staff_identity_gateway"].type is (
+        IdentityGateway
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -252,11 +252,11 @@ def test_a_suite_de_contrato_roda_sobre_as_duas_implementacoes() -> None:
     assert set(IMPLEMENTACOES) == {"fake", "postgres"}
 
 
-def test_a_suite_do_gateway_roda_sobre_o_fake() -> None:
-    """O contrato do gateway nasce sobre o fake (Task 04 da 3.5); a Task 09
-    acrescenta `"real"` e troca esta asserção pela exata — o mesmo par de
-    guardas que o par de repositórios tem acima e abaixo."""
-    assert "fake" in IMPLEMENTACOES_DO_GATEWAY
+def test_a_suite_do_gateway_roda_sobre_o_fake_e_sobre_o_real() -> None:
+    """Exata, como a do par de repositórios: as leis do gateway valem para o fake
+    **e** para o `LocalIdentityGateway` sobre a fachada — uma implementação só
+    seria lei não verificada (ADR 2.3.0003)."""
+    assert set(IMPLEMENTACOES_DO_GATEWAY) == {"fake", "real"}
 
 
 @pytest.mark.parametrize("repos", ["postgres"], indirect=True)
