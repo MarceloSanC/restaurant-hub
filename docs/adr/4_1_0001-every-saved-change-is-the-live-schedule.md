@@ -136,7 +136,7 @@ the fork into four Stage concepts.
 ### Positive
 - One state to understand: what is saved is what everybody sees. Matches the overview literally.
 - The live schedule is never invalid (`block` refuses the mutation); the Step 5 rule "proposal is
-  born without block violations" (`roadmap.md` 1380) reuses the same semantics.
+  born without block violations" (`roadmap.md` 1407) reuses the same semantics.
 - No silent overwrite between editors; the fix is one column, one check and one refusal status.
 
 ### Negative

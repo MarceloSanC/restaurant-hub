@@ -74,7 +74,7 @@ o **tempo** (§3.9); e as **fronteiras** com `staff`, `identity`, `timeclock` e 
 **Fora do escopo deste subdomínio** (fronteiras negativas ratificadas):
 
 - **Auto-preenchimento e justiça distributiva** — Step 5, subdomínio próprio do mesmo BC
-  (`roadmap.md` 1197, 1249, 1685; ADR 0.0.0003 254–255). Este doc só fixa o que o Step 5
+  (`roadmap.md` 1224, 1276, 1712; ADR 0.0.0003 254–255). Este doc só fixa o que o Step 5
   **reutiliza** (§3.10.5).
 - **Ponto / previsto × realizado** — Step 7 (BC `timeclock`); só o que a escala vigente
   **expõe** (§3.10.3). **Métricas do hub** — Step 8; só as **grandezas** nomeadas (§3.10.4).
@@ -91,13 +91,13 @@ o **tempo** (§3.9); e as **fronteiras** com `staff`, `identity`, `timeclock` e 
 Termos ratificados pelo glossário (`overview.md` §9, linhas 129–140 — fontes setoriais de §10,
 válidas para **nome**, não para regra), pelo roadmap (Step 4), pelo `workforce.md` e pelas
 decisões do sponsor de 2026-09-13. A **glosa EN** é o identificador que o roadmap 4.1/4.2 já
-nomeia (`roadmap.md` 1186–1191, 1212–1217); onde não nomeia, a glosa é **proposta deste gate**
+nomeia (`roadmap.md` 1213–1218, 1239–1244); onde não nomeia, a glosa é **proposta deste gate**
 (†), como a glosa fixa `DayPeriod` de staff (`shift_preference.py` 18–24).
 
 | Termo PT (código EN) | Definição | Âncora |
 |---|---|---|
 | **Escala** (`Schedule`) | Quadro de quem trabalha em quais dias/turnos, de **uma unidade**, para **uma semana**. | `overview.md` 129; unidade: derivação (§3.1) |
-| **Período da escala** (`SchedulePeriod`) | Os 7 dias operacionais que uma escala cobre, a partir do **dia de início configurado**. Quinzena/mês são evolução. | `overview.md` 40, 129; `roadmap.md` 1179; sponsor 2026-09-13 (F2 — ADR 4.1.0002) |
+| **Período da escala** (`SchedulePeriod`) | Os 7 dias operacionais que uma escala cobre, a partir do **dia de início configurado**. Quinzena/mês são evolução. | `overview.md` 40, 129; `roadmap.md` 1206; sponsor 2026-09-13 (F2 — ADR 4.1.0002) |
 | **Dia de início da semana** (`week start day` †) | Dia da semana, configurável por restaurante, em que começam o período da escala e a semana de apuração; fim = início + 6. | sponsor 2026-09-13 (F2) |
 | **Horário de corte** (`day cutoff` †) | Hora do relógio, configurável por restaurante, em que começa o dia operacional; **default 05:00**. | sponsor 2026-09-13 (F2); racional do default: CLT art. 73 § 2º |
 | **Dia operacional** (`operational day` †) | Janela de 24h a partir do horário de corte. Uma faixa pertence ao dia operacional em que **começa** — "sexta 18h–sábado 02h" é **um dia só** (sexta). Teto diário, semana de apuração e descanso entre jornadas usam o dia operacional, não o civil. | sponsor 2026-09-13 (F2) |
@@ -106,25 +106,25 @@ nomeia (`roadmap.md` 1186–1191, 1212–1217); onde não nomeia, a glosa é **p
 | **Faixas de funcionamento** | As faixas **habilitadas por dia** na escala — a expressão do overview ao descrever o calendário. Não é horário comercial da unidade (conceito inexistente no produto). | `overview.md` 45 ⇔ 40 ("habilitam-se faixas de horário livres") |
 | **Intervalo declarado** (`break` †) | Minutos de intervalo dentro da faixa, declarados pelo editor; **default 0**. | sponsor 2026-09-13 (F3 — ADR 4.1.0002); CLT art. 71 § 2º |
 | **Horas de uma alocação** (`hours(a)` †) | `duração nominal − intervalo declarado`. Regra **única** para políticas e hub. | sponsor 2026-09-13 (F3); `overview.md` 45 |
-| **Demanda / vaga** (`ShiftDemand`, `DemandQuantity`) | Necessidade de **N** pessoas de **uma função** numa **faixa** de **um dia**; N ≥ 0. Uma **vaga** é uma unidade da demanda. | `overview.md` 133; `roadmap.md` 1179 |
+| **Demanda / vaga** (`ShiftDemand`, `DemandQuantity`) | Necessidade de **N** pessoas de **uma função** numa **faixa** de **um dia**; N ≥ 0. Uma **vaga** é uma unidade da demanda. | `overview.md` 133; `roadmap.md` 1206 |
 | **Função** (`job_function_id`) | Papel de trabalho customizável por restaurante. **Conceito de staff**, consumido aqui **por id**. | `overview.md` 132; `workforce.md` §3.2 |
-| **Alocação** (`Assignment`) | Ato de designar um **funcionário** (registro de staff, por id) para **uma vaga**. | `roadmap.md` 1179, 1186 |
+| **Alocação** (`Assignment`) | Ato de designar um **funcionário** (registro de staff, por id) para **uma vaga**. | `roadmap.md` 1206, 1213 |
 | **Exceção de função** (`function_exception` †) | Marca **da alocação** gravada quando o editor aceita conscientemente alocar um registro numa demanda de função que ele **não detém** ("como um extra na escala"); visível na escala; **não altera o cadastro** em staff. | sponsor 2026-09-14 (F9 — ADR 4.1.0003 (f)) |
 | **Reconciliação na leitura** (`reconcile on read` †) | Toda leitura de scheduling consulta o **estado atual** do registro em staff (via `StaffReadPort`); um registro **inativo** (desligado) não aparece em tela alguma — nem as suas alocações passadas — até a página de histórico de funcionários (evolução). Nada é escrito em scheduling no desligamento. | sponsor 2026-09-14 (F7 — ADR 4.1.0006) |
 | **Conta para a carga** (`counts_toward_workload` †) | Classificação booleana **da alocação**, declarada pelo editor, **default "conta"**; "não conta" marca o período extra (sem dinheiro). Só a política de carga a lê. | sponsor 2026-09-13 (F4 (d) — ADR 4.1.0003); kickoff #11 |
-| **Cobertura** (`coverage` †) | Alocados ÷ demandados; `< 100%` = **vaga descoberta** (estado legítimo). | `overview.md` 45; `roadmap.md` 1367, 1407 |
+| **Cobertura** (`coverage` †) | Alocados ÷ demandados; `< 100%` = **vaga descoberta** (estado legítimo). | `overview.md` 45; `roadmap.md` 1394, 1434 |
 | **Escala vigente / publicar** (`publish`) | **Toda alteração salva é a escala vigente** — a que o funcionário, a imagem, o ponto e o hub veem. Sem rascunho no servidor, sem versão publicada separada. | `overview.md` 43, 136 (literal); sponsor 2026-09-13 (F1 — ADR 4.1.0001) |
 | **Versão da escala** (`schedule version` †) | Contador que toda mutação incrementa; serve ao **controle otimista**. **Não** é foto imutável. | sponsor 2026-09-13 (F8 — ADR 4.1.0001) |
-| **Trilha de auditoria** (`audit log` †) | **Quem alterou o quê e quando** — toda mutação gera entrada. É o **histórico** da escala. | `overview.md` 38; `roadmap.md` 1257, 1274 |
-| **Política de validação** (`ValidationPolicy`) | Estratégia **plugável** de domínio que devolve **violações**; **parametrizável por restaurante**. | `overview.md` 42, 114; `roadmap.md` 1205, 1217 |
-| **Configuração de validação** (`ValidationConfig`) | Por **restaurante (tenant)**: políticas habilitadas, parâmetros e **modo** de cada uma. | `roadmap.md` 1217, 1223, 1257 |
-| **Violação** (`Violation`) | Resultado de uma política: política, sujeito (registro/alocação) e **modo**. | `roadmap.md` 1205, 1217 |
-| **Modo `block` / `warn`** | `block`: **recusa a mutação** que a criaria. `warn`: aviso, salvo mediante **aceite consciente** no ato de salvar. | `overview.md` 42; `roadmap.md` 1205, 1221; forma sob F1: ADR 4.1.0001 |
+| **Trilha de auditoria** (`audit log` †) | **Quem alterou o quê e quando** — toda mutação gera entrada. É o **histórico** da escala. | `overview.md` 38; `roadmap.md` 1284, 1301 |
+| **Política de validação** (`ValidationPolicy`) | Estratégia **plugável** de domínio que devolve **violações**; **parametrizável por restaurante**. | `overview.md` 42, 114; `roadmap.md` 1232, 1244 |
+| **Configuração de validação** (`ValidationConfig`) | Por **restaurante (tenant)**: políticas habilitadas, parâmetros e **modo** de cada uma. | `roadmap.md` 1244, 1250, 1284 |
+| **Violação** (`Violation`) | Resultado de uma política: política, sujeito (registro/alocação) e **modo**. | `roadmap.md` 1232, 1244 |
+| **Modo `block` / `warn`** | `block`: **recusa a mutação** que a criaria. `warn`: aviso, salvo mediante **aceite consciente** no ato de salvar. | `overview.md` 42; `roadmap.md` 1232, 1248; forma sob F1: ADR 4.1.0001 |
 | **Aceite consciente** (`acknowledge` †) | Ato **auditado** do editor que aceita um `warn` ao salvar. | `overview.md` 42, 38 |
-| **Avaliação ao vivo** (`evaluate`) | Reavaliação das políticas **a cada mudança**, devolvendo violações para a UI. | `overview.md` 42; `roadmap.md` 1205, 1231 |
-| **Calendário** (`get_calendar`) | Visão dia/semana/mês com mini-cards sobre as faixas habilitadas. **Read model de scheduling**, exibido na aba escala do hub. | `overview.md` 45; `roadmap.md` 1231, 1238, 1283 |
-| **"Minha escala"** (`get_my_schedule`) | A escala vigente vista pelo funcionário logado: **só as próprias alocações**. | `overview.md` 43, 92; `roadmap.md` 1283 |
-| **Escala anterior** (`list_past_schedules`) | Escala de período encerrado, **visualizável como referência**. | `overview.md` 46; `roadmap.md` 1173, 1238 |
+| **Avaliação ao vivo** (`evaluate`) | Reavaliação das políticas **a cada mudança**, devolvendo violações para a UI. | `overview.md` 42; `roadmap.md` 1232, 1258 |
+| **Calendário** (`get_calendar`) | Visão dia/semana/mês com mini-cards sobre as faixas habilitadas. **Read model de scheduling**, exibido na aba escala do hub. | `overview.md` 45; `roadmap.md` 1258, 1265, 1310 |
+| **"Minha escala"** (`get_my_schedule`) | A escala vigente vista pelo funcionário logado: **só as próprias alocações**. | `overview.md` 43, 92; `roadmap.md` 1310 |
+| **Escala anterior** (`list_past_schedules`) | Escala de período encerrado, **visualizável como referência**. | `overview.md` 46; `roadmap.md` 1178, 1265 |
 | **Extra** | Pessoa sob demanda acionada para cobrir turno; na escala, uma **alocação de registro sob demanda**. | `overview.md` 135 |
 | **Tenant / unidade** | Restaurante cliente, isolado; unidades pertencem ao tenant e **não se enxergam**. | `overview.md` 37, 140 |
 
@@ -152,11 +152,11 @@ unidade** para **uma semana** cujo dia de início é configurável (`overview.md
 - **Isolamento de tenant**: row-level `tenant_id` num único Postgres (ROADMAP-3, `roadmap.md`
   1693) — invariante herdado da fundação.
 - **Identidade**: `(tenant, unidade, período)`. O roadmap lista `Schedule`, `ShiftDemand` e
-  `Assignment` como entidades da 4.1 (`roadmap.md` 1191) sem nomear a raiz; que `Schedule` seja
+  `Assignment` como entidades da 4.1 (`roadmap.md` 1218) sem nomear a raiz; que `Schedule` seja
   a **raiz do agregado** é proposta do gate (†), a confirmar na 4.1.
 - **Ciclo**: criada para um período → editada (demanda, alocações) — e **cada edição salva já é
   a escala vigente** (§3.5). Não há estado de rascunho.
-- **Escala anterior como referência** (`overview.md` 46; `roadmap.md` 1173). Visualizar ≠
+- **Escala anterior como referência** (`overview.md` 46; `roadmap.md` 1178). Visualizar ≠
   copiar: copiar como ponto de partida é evolução (§5).
 
 **Invariantes:**
@@ -165,7 +165,7 @@ unidade** para **uma semana** cujo dia de início é configurável (`overview.md
 - **As escalas de uma mesma unidade não se sobrepõem no tempo** — derivação de "quadro de quem
   trabalha em quais dias" (`overview.md` 129): dois quadros para o mesmo dia tornariam a alocação
   ambígua. Proposta do gate (§6); com períodos alinhados ao dia de início, decorre da forma.
-- Toda alocação está **dentro do período** da escala (`roadmap.md` 1179).
+- Toda alocação está **dentro do período** da escala (`roadmap.md` 1206).
 
 > **Lacuna para o concept da Stage 4.3:** o que acontece com escalas existentes quando o
 > restaurante **muda o dia de início** (ou o horário de corte — §3.2): só períodos futuros? e um
@@ -208,7 +208,7 @@ concreta **pertence a scheduling**; staff só conhece os **períodos nomeados** 
   ratificado é o Step 5.
 
 > **Lacuna de escopo do roadmap (registrada; a mestra decide a Stage dona):** nenhum bloco 4.x
-> (`roadmap.md` 1177–1355) lista o mapa período nomeado → faixas, embora `workforce.md` §3.5 o
+> (`roadmap.md` 1204–1382) lista o mapa período nomeado → faixas, embora `workforce.md` §3.5 o
 > delegue ao "scheduling (Step 4)". Proposta: dona = a que primeiro o consumir (5.1).
 
 **Invariantes:**
@@ -227,18 +227,18 @@ concreta **pertence a scheduling**; staff só conhece os **períodos nomeados** 
 ### 3.3 Demanda por função × faixa
 
 **Regra canônica:** a **demanda** é a necessidade de **N pessoas de uma função numa faixa de um
-dia** (`overview.md` 133; `roadmap.md` 1179), definida **por função**; funções são 100%
+dia** (`overview.md` 133; `roadmap.md` 1206), definida **por função**; funções são 100%
 customizáveis (`overview.md` 40, 132). A "parametrização de função" do overview §3 é **definição
 da demanda** e pertence a scheduling (`workforce.md` §3.2).
 
-- **Quantidade ≥ 0** (`roadmap.md` 1179). Demanda `0` = "faixa habilitada sem demanda dessa
+- **Quantidade ≥ 0** (`roadmap.md` 1206). Demanda `0` = "faixa habilitada sem demanda dessa
   função" — estado válido.
-- **Função referenciada por id** (string opaca), nunca por import (`roadmap.md` 1193;
+- **Função referenciada por id** (string opaca), nunca por import (`roadmap.md` 1220;
   `.importlinter` 219–228; §3.10). Função é escopo do **tenant** (`workforce.md` §3.2): qualquer
   função pode ser demandada em qualquer unidade. Habilitação por unidade é a issue #41, não
-  decidida (`roadmap.md` 761; ADR 3.4.0008 88–92).
+  decidida (`roadmap.md` 766; ADR 3.4.0008 88–92).
 - **Cobertura** = `alocados ÷ N`. Cobertura **< 100% é estado legítimo** da escala vigente
-  ("vagas não preenchíveis", "vagas descobertas" — `roadmap.md` 1367, 1407; `overview.md` 45).
+  ("vagas não preenchíveis", "vagas descobertas" — `roadmap.md` 1394, 1434; `overview.md` 45).
 - **Remoção de função referenciada por demanda.** A guarda de staff conta **só referências de
   funcionário** (`workforce.md` §3.2); uma demanda **não** a protege hoje. O mecanismo decidido
   para a guarda de funcionário — port de consulta reverso em staff, implementado no composition
@@ -276,7 +276,7 @@ nunca por import (§3.10).
    (§3.6.7) — decisão do sponsor, 2026-09-14 (F9 — ADR 4.1.0003 (f)): aviso, aceite consciente e
    alocação gravada como **exceção de função**, sem tocar o cadastro. O auto-fill (Step 5) nunca
    cria exceção.
-4. **Dentro do período** da escala (`roadmap.md` 1179).
+4. **Dentro do período** da escala (`roadmap.md` 1206).
 5. **Não sobre indisponibilidade** — bloqueio não parametrizável (§3.6.6).
 
 **Classificação "conta para a carga contratada"** — decisão do sponsor, 2026-09-13 (F4 (d) —
@@ -349,19 +349,19 @@ publicar"; "publicar: salvar a escala tornando-a visível") ficam **literais**:
 
 - **Não há rascunho no servidor** nem "versão publicada" separada. Cada mutação persistida
   (demanda, alocação, aceite) é a escala que o funcionário consulta (`overview.md` 43), a imagem
-  renderiza (`roadmap.md` 1332, 1349), o ponto concilia (1526, 1541, 1596) e o hub lê (1629).
+  renderiza (`roadmap.md` 1359, 1376), o ponto concilia (1526, 1541, 1596) e o hub lê (1629).
 - **`block` recusa a própria mutação** — a escala vigente nunca fica inválida; não se "passa
   por" um estado inválido ao rearranjar.
 - **`warn` é apresentado e aceito no ato de salvar** — o aceite consciente (`overview.md` 42) é
   parte da mutação. O fluxo "editar → avaliar → aceitar warn → publicar" do roadmap (1231, 1247,
   1298) lê-se como: avaliar ao vivo, e salvar **com** o aceite dos avisos que a mudança introduz.
-- **Quem/quando** de cada mutação (`roadmap.md` 1179): o ator autenticado e o instante absoluto
+- **Quem/quando** de cada mutação (`roadmap.md` 1206): o ator autenticado e o instante absoluto
   do `Clock` compartilhado ("timestamp atual com timezone (UTC recomendado)" —
   `shared/application/ports/out/clock.py` 17). Staff não tem `Clock` nem carimbos (ADR 3.2.0006
   153–155): o Step 4 é o **primeiro** lugar com auditoria — o que a 4.4 decidir vira precedente.
 - **O histórico é a trilha de auditoria** — "trilha de auditoria das alterações" (`overview.md`
   38); "histórico e auditoria" (`overview.md` 91); "histórico de edições — quem alterou o quê e
-  quando"; "toda mutação de escala gera entrada de auditoria" (`roadmap.md` 1257, 1274). O aceite
+  quando"; "toda mutação de escala gera entrada de auditoria" (`roadmap.md` 1284, 1301). O aceite
   de `warn` altera o que a escala reporta — entra na trilha (derivação de `overview.md` 38 + 42).
   O **desligamento não é mutação da escala** (reconciliação na leitura, §3.4) — não gera entrada.
 
@@ -381,7 +381,7 @@ foi atualizada, se foi, aparece mensagem se deseja atualizar e perder o trabalho
 
 **Invariantes:**
 - A escala vigente **nunca contém violação `block`** (mesma semântica que o Step 5 reutiliza —
-  `roadmap.md` 1380).
+  `roadmap.md` 1407).
 - Toda violação `warn` presente na escala vigente foi **aceita conscientemente** por um ator, e o
   aceite está na trilha.
 - Toda mutação gera entrada de auditoria com quem/quando e incrementa a versão da escala.
@@ -411,15 +411,15 @@ auto-fill publica direto, respeitando `block`, ou o Step 5 cria a sua noção de
 
 **Regra canônica:** validações **parametrizáveis por restaurante**, em **modo bloquear ou
 avisar**, com **avisos ao vivo**; "o editor corrige ou aceita conscientemente" (`overview.md`
-42). São **estratégias plugáveis de domínio** (`overview.md` 114; `roadmap.md` 1205), cada uma com
+42). São **estratégias plugáveis de domínio** (`overview.md` 114; `roadmap.md` 1232), cada uma com
 modo `block`/`warn`, orquestradas por um **avaliador** que "aplica só políticas habilitadas na
-config do restaurante e distingue block × warn" (`roadmap.md` 1205, 1221).
+config do restaurante e distingue block × warn" (`roadmap.md` 1232, 1248).
 
 - **CLT não é hard-coded** (`overview.md` 110): cada fonte legal sustenta o **default** e os
   **limites** de um parâmetro; a **CCT** pode alterar o valor (CF art. 7º XIII — "facultada a
   compensação de horários e a redução da jornada, mediante acordo ou convenção coletiva"; CLT
   art. 611-A, I–III). O produto **não embute CCT alguma**.
-- **Configuração por tenant**, persistida (`roadmap.md` 1223, 1257): por política — habilitada?,
+- **Configuração por tenant**, persistida (`roadmap.md` 1250, 1284): por política — habilitada?,
   modo, parâmetros.
 - **Sujeito de toda política é o registro de funcionário (por unidade)** — derivação de
   "unidades não compartilham funcionários (não se enxergam)" (`overview.md` 37) e do piloto com
@@ -432,13 +432,13 @@ config do restaurante e distingue block × warn" (`roadmap.md` 1205, 1221).
   alocação da escala anterior × primeira desta): o avaliador recebe as **alocações vizinhas**
   do registro — derivação necessária da fórmula.
 - **`block` × `warn`**: `block` recusa a mutação; `warn` é salvo com aceite (§3.5). O Step 5
-  reutiliza `block` (`roadmap.md` 1380).
+  reutiliza `block` (`roadmap.md` 1407).
 - **Conjunto v1, defaults e modos — decisão do sponsor, 2026-09-13**
   ([ADR 4.1.0003](../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md)): *"Confirmar
   a tabela (Recomendada)"*. O sponsor a tratou como **uma** decisão; o ADR enumera as
   sub-decisões (a)–(e) só para rastreabilidade. As políticas que as fontes sustentam mas o
   roadmap 4.2 não lista (§3.6.8) ficam como **evolução** — o que também resolve o "etc." de
-  `overview.md` 42 × a lista fechada de `roadmap.md` 1205/1212 (ex-HALT H4: escopo, não
+  `overview.md` 42 × a lista fechada de `roadmap.md` 1232/1212 (ex-HALT H4: escopo, não
   contradição; o roadmap recebe nota no fechamento). A sétima linha — **função não detida** —
   entrou em 2026-09-14 (F9, ADR 4.1.0003 (f)).
 
@@ -543,7 +543,7 @@ config do restaurante e distingue block × warn" (`roadmap.md` 1205, 1221).
   `⇔ |desvio| > tolerância` (direção **ambos**).
 - **Insumo:** a carga semanal contratada — **uma** carga, horas/semana, `> 0`, fracionária
   (`workforce.md` §3.3(a); ADR 3.1.0001 (ii)), lida **por dados** via `StaffReadPort`
-  (`roadmap.md` 1219). Sob demanda **não tem carga** — a política **não se aplica**.
+  (`roadmap.md` 1246). Sob demanda **não tem carga** — a política **não se aplica**.
 - **Distinta do teto de horas** (ADR 3.1.0001 57–61; `workforce.md` §3.3(a), §6). A carga
   **nunca** é validada contra 44h como piso: cargas menores existem (CLT art. 58-A — tempo
   parcial até 30h, ou 26h + 6h).
@@ -628,7 +628,7 @@ computados na duração do trabalho."* Quem não declara intervalo tem a hora no
 tem o número da lei.
 
 - **Uma** definição, consumida por **todas** as políticas que somam (§3.6.3–§3.6.5) e pelo hub
-  ("horas contratadas × escaladas × cumpridas" — `overview.md` 45; `roadmap.md` 1610).
+  ("horas contratadas × escaladas × cumpridas" — `overview.md` 45; `roadmap.md` 1637).
 - **Dia de uma alocação** = dia operacional do **início** da faixa (§3.2).
 - **Sobreposição e descanso são geométricos** — instantes, nunca horas contadas. A contagem é
   **sem dinheiro** (`overview.md` 56).
@@ -641,19 +641,19 @@ tem o número da lei.
 
 **Calendário dia/semana/mês.** `overview.md` 45 o descreve como "visão principal" do **Hub (aba
 escala)**, "com mini-cards de funcionários sobre as faixas de funcionamento" (= faixas
-habilitadas, §2); `roadmap.md` 1231, 1238 e 1283 o colocam como **use case e endpoint de
+habilitadas, §2); `roadmap.md` 1258, 1265 e 1283 o colocam como **use case e endpoint de
 scheduling** (`get_calendar`); o Step 8 o lê via `SchedulingReadPort` sobre "dados publicados por
-scheduling" (`roadmap.md` 1610, 1624–1631). Leitura reconciliada (§6): **o calendário é read
+scheduling" (`roadmap.md` 1637, 1651–1658). Leitura reconciliada (§6): **o calendário é read
 model de scheduling**; o hub é **consumidor** (`overview.md` 114). O nome dos mini-cards vem de
 staff (ADR 3.1.0002 30–31). Sob F1 o calendário mostra sempre a escala vigente; sob F7, **sem
 registros inativos** — toda leitura reconcilia com staff (§3.4; ADR 4.1.0006).
 
-**Escalas anteriores.** `overview.md` 46; `roadmap.md` 1173; `list_past_schedules` (1238). É
+**Escalas anteriores.** `overview.md` 46; `roadmap.md` 1178; `list_past_schedules` (1238). É
 **leitura**; copiar é evolução (§5). Alocações de registros hoje inativos **não aparecem** (limite
 declarado de F7 — §3.4) até a página de histórico de funcionários.
 
 **"Minha escala".** "Funcionário com login consulta a própria escala" (`overview.md` 43, 92);
-"RBAC: funcionário só vê a própria" (`roadmap.md` 1283); `get_my_schedule` (1238):
+"RBAC: funcionário só vê a própria" (`roadmap.md` 1310); `get_my_schedule` (1238):
 
 - O funcionário vê a escala **vigente** e **apenas as próprias alocações** — leitura decidida
   pela mestra sobre os docs (âncora: "funcionário só vê a própria"). A **visão da unidade
@@ -678,7 +678,7 @@ declarado de F7 — §3.4) até a página de histórico de funcionários.
 
 **E-mail (Stage 4.6).** "E-mail opcional a cada atualização (opção 'sempre notificar alterações
 na escala')" (`overview.md` 43); "opção **por restaurante** … → publicação dispara e-mail aos
-funcionários afetados com e-mail cadastrado (reuso do EmailSender de 2.5)" (`roadmap.md` 1307,
+funcionários afetados com e-mail cadastrado (reuso do EmailSender de 2.5)" (`roadmap.md` 1334,
 1322).
 
 - **Opção por restaurante (tenant)** — ratificado; por unidade/funcionário é evolução (§5).
@@ -689,9 +689,9 @@ funcionários afetados com e-mail cadastrado (reuso do EmailSender de 2.5)" (`ro
 - **Port**: `EmailSender.send(EmailMessage(to, subject, body_text))` em
   `shared/application/ports/out/` — "The second consumer is named, not imagined. Stage 4.6"
   (ADR 2.5.0001 69; 110). Resend; ConsoleSender em dev (kickoff #7; ASSUM-3). Outros canais:
-  fora (`roadmap.md` 1324).
+  fora (`roadmap.md` 1351).
 - O e-mail é **efeito** da publicação, não parte do agregado ("hook de notificação" em
-  `publish_schedule`, `roadmap.md` 1317). O roadmap não diz o que acontece quando o envio falha.
+  `publish_schedule`, `roadmap.md` 1344). O roadmap não diz o que acontece quando o envio falha.
 
 > **Lacuna para o concept da Stage 4.6:** (a) **agrupamento/debounce** — sob F1 cada alteração
 > salva é uma publicação; sem agrupador, um ajuste de duas mutações gera dois e-mails; (b)
@@ -699,7 +699,7 @@ funcionários afetados com e-mail cadastrado (reuso do EmailSender de 2.5)" (`ro
 > a **falha de envio** desfaz ou não a mutação; (d) conteúdo do e-mail e onde a flag persiste.
 
 **Imagem/tabela (Stage 4.7).** "Imagem/tabela gerada **sob demanda** (botão gerar/imprimir) para
-divulgação manual" (`overview.md` 43); da **escala vigente** do período (`roadmap.md` 1332,
+divulgação manual" (`overview.md` 43); da **escala vigente** do período (`roadmap.md` 1359,
 1349); port `ScheduleRenderer` (1339–1345); **formato e biblioteca em ADR na 4.7** (1686); envio
 automático é non-goal (1351); sem registros inativos (§3.4). Sob a CLT art. 67 p.u., a escala
 vigente/impressa é o "quadro sujeito à fiscalização" (premissa, ver H3).
@@ -750,7 +750,7 @@ de auditoria são instantes absolutos (UTC).
 Scheduling **consome** staff e identity e **é consumido** por timeclock e hub. BCs se comunicam
 **por ports**, com identificadores como **strings opacas** — nunca por import direto
 (`identifiers.py` 5–7; `.importlinter` 219–228 — contrato `bc-independence`; ADR 3.3.0002
-31–35). `EmployeeId`/`JobFunctionId` "de staff" no roadmap 4.1 (`roadmap.md` 1193) lê-se como
+31–35). `EmployeeId`/`JobFunctionId` "de staff" no roadmap 4.1 (`roadmap.md` 1220) lê-se como
 **emitidos por staff**; scheduling declara os seus — importar os de staff é violação medida
 (ADR 3.4.0001 106–113). O contrato `bc-independence` hoje lista só `identity` e `staff`
 (`.importlinter` 226–228); incluir `scheduling` é tarefa do `technical.md` da 4.1.
@@ -775,7 +775,7 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
 | Leitura por id / listagem | endereço `(tenant, unidade[, id])`; sem busca tenant-wide | `staff/application/ports/out/employee_repository.py`; ADR 3.4.0007 | tudo o que o `StaffReadPort` pede é por unidade |
 
 - **Ports**: dados de staff via port-out **`StaffReadPort`** (4.3), adapter local (4.4)
-  (`roadmap.md` 1231, 1239, 1245, 1265). DTO **próprio de scheduling** (o `EmployeeResult` de
+  (`roadmap.md` 1258, 1266, 1272, 1292). DTO **próprio de scheduling** (o `EmployeeResult` de
   staff carrega VOs de staff) — lacuna 4.3. Onde o adapter mora (`adapters/out/staff/` do roadmap
   × tradutor no composition root, ADR 3.4.0001 101–118) é do `technical.md` da 4.4 — a 3.5
   (`draft`) enfrenta a mesma forma antes.
@@ -805,7 +805,7 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
 #### 3.10.3 Timeclock (Step 7) — o que a escala vigente expõe
 
 - O Step 7 consome "dados de alocação da escala (por DTO, sem import de entidade de scheduling)"
-  via "port de leitura de scheduling" (`roadmap.md` 1541, 1596); concilia previsto × realizado
+  via "port de leitura de scheduling" (`roadmap.md` 1568, 1623); concilia previsto × realizado
   por alocação (1526; `overview.md` 44, 137).
 - A escala é o **previsto**; o ponto é **outra obrigação legal** — CLT art. 74, § 2º ("permitida
   a pré-assinalação do período de repouso") e § 4º ("registro de ponto por exceção à jornada
@@ -819,7 +819,7 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
 
 #### 3.10.4 Hub (Step 8) — grandezas que a escala produz
 
-Via `SchedulingReadPort` (`roadmap.md` 1624–1631), por unidade e "Unidade Geral" (`overview.md`
+Via `SchedulingReadPort` (`roadmap.md` 1651–1658), por unidade e "Unidade Geral" (`overview.md`
 45). Este doc **nomeia**; cálculo e read model são da 8.1: **cobertura da demanda**
 (`alocados ÷ demandados`); **horas escaladas** por registro (`Σ horas(a)`, §3.6.9 — o mesmo
 número das políticas); **horas contratadas** (carga de staff) e **cumpridas** (Step 7); **uso de
@@ -832,7 +832,7 @@ Step 8).
 
 #### 3.10.5 Auto-preenchimento (Step 5) — o que reutiliza
 
-Entidades da 4.1 e políticas da 4.2 ("proposta nasce sem violações block", `roadmap.md` 1380); a
+Entidades da 4.1 e políticas da 4.2 ("proposta nasce sem violações block", `roadmap.md` 1407); a
 **preferência de turno** e o **mapa período → faixas** são insumos do Step 5 (ADR 3.1.0004
 109–112). O auto-fill casa **só por função** — nunca cria exceção de função (§3.6.7). A tensão
 "rascunho de edição" × F1 está em §3.5.
@@ -903,7 +903,7 @@ Registradas para que o modelo v1 não as bloqueie; **nenhuma entra sem revisão 
   visualizar).
 - **Visão da unidade inteira para o funcionário** — v1 é só as próprias alocações (§3.7).
 - **Flag de notificação por unidade/funcionário; canais além de e-mail; envio automático da
-  imagem** (`roadmap.md` 1324, 1351). **Troca de turno pelo funcionário** (`overview.md` 57).
+  imagem** (`roadmap.md` 1351, 1378). **Troca de turno pelo funcionário** (`overview.md` 57).
 - **Feriados por unidade** (nacionais por lei federal; locais até 4 — Decreto 10.854/2021 art.
   153 p.u.; CLT art. 70) — nenhuma política v1 depende; lista não pesquisada; dona = a Stage que
   introduzir feriado como conceito.
@@ -990,9 +990,9 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 - **Semântica semi-aberta `[início, fim)`** — ADR 3.1.0001 52–54, 93–94. §3.2.
 - **"Faixas de funcionamento" = faixas habilitadas por dia** — `overview.md` 45 ⇔ 40. §2.
 - **`0 ≤ intervalo < duração nominal`** — derivação da regra de contagem. §3.2.
-- **Demanda ≥ 0; cobertura < 100% legítima** — `roadmap.md` 1179, 1367, 1407. §3.3.
+- **Demanda ≥ 0; cobertura < 100% legítima** — `roadmap.md` 1206, 1394, 1434. §3.3.
 - **Elegibilidade**: ativo + mesma unidade + dentro do período + função detida ou exceção
-  aceita (F9) — `workforce.md` §3.1; `overview.md` 37; ADR 3.4.0007; `roadmap.md` 1179. §3.4.
+  aceita (F9) — `workforce.md` §3.1; `overview.md` 37; ADR 3.4.0007; `roadmap.md` 1206. §3.4.
 - **A demanda coberta por um registro inativo lê-se como descoberta** — limite (1) declarado de
   F7 (reconciliação na leitura). §3.4.
 - **Alocação × indisponibilidade é `block` fixo** — `workforce.md` §2, §3.6; ADR 3.1.0004
@@ -1007,15 +1007,15 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 - **Avaliador recebe alocações vizinhas** — derivação da fórmula. §3.6.0.
 - **Regra única de contagem** — `overview.md` 45; qual regra: F3. §3.6.9.
 - **Aceite de `warn` é auditado; a escala vigente nunca contém `block`** — `overview.md` 38, 42;
-  `roadmap.md` 1380. §3.5.
+  `roadmap.md` 1407. §3.5.
 - **Auditoria em instante absoluto (UTC); faixas em wall-clock** — `clock.py` 17; ADR 3.1.0005.
   **Fuso = chave IANA**; Brasil sem DST (Decreto 9.772/2019). §3.9.
-- **Calendário é read model de scheduling; hub consome** — `roadmap.md` 1231–1283, 1624–1631;
+- **Calendário é read model de scheduling; hub consome** — `roadmap.md` 1258–1310, 1651–1658;
   `overview.md` 114. §3.7.
 - **"Minha escala" = vigente, só as próprias alocações, todos os registros do ator** —
-  `roadmap.md` 1283; `overview.md` 43, 92; `workforce.md` §3.1. Visão da unidade = evolução;
+  `roadmap.md` 1310; `overview.md` 43, 92; `workforce.md` §3.1. Visão da unidade = evolução;
   imagem = divulgação manual (assimetria assumida). §3.7.
-- **Flag de notificação por restaurante; destinatário = e-mail de login** — `roadmap.md` 1307;
+- **Flag de notificação por restaurante; destinatário = e-mail de login** — `roadmap.md` 1334;
   ADR 3.1.0002 32–35. §3.8.
 - **"Uso de extras" = alocações de sob demanda** — `overview.md` 135; "não conta" de jornada fixa
   é grandeza separada (Step 8). §3.10.4.
