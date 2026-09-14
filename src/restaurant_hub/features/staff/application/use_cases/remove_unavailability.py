@@ -13,6 +13,7 @@ from restaurant_hub.features.staff.application.errors import EmployeeNotFoundErr
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class RemoveUnavailabilityUseCase:
@@ -36,14 +37,4 @@ class RemoveUnavailabilityUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         updated = employee.remove_unavailability(command.period)
         self._employees.update(updated)
-        return EmployeeResult(
-            id=updated.id,
-            tenant_id=updated.tenant_id,
-            unit_id=updated.unit_id,
-            name=updated.name,
-            workload_profile=updated.workload_profile,
-            shift_preference=updated.shift_preference,
-            job_function_ids=updated.job_function_ids,
-            unavailabilities=updated.unavailabilities,
-            active=updated.active,
-        )
+        return employee_result(updated)

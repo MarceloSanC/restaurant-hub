@@ -26,6 +26,7 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.value_objects.identifiers import EmployeeId
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
@@ -78,14 +79,4 @@ class CreateEmployeeUseCase:
         )
         # (3) Escrita.
         self._employees.add(employee)
-        return EmployeeResult(
-            id=employee.id,
-            tenant_id=employee.tenant_id,
-            unit_id=employee.unit_id,
-            name=employee.name,
-            workload_profile=employee.workload_profile,
-            shift_preference=employee.shift_preference,
-            job_function_ids=employee.job_function_ids,
-            unavailabilities=employee.unavailabilities,
-            active=employee.active,
-        )
+        return employee_result(employee)

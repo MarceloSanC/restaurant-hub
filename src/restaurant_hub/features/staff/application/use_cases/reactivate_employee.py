@@ -13,6 +13,7 @@ from restaurant_hub.features.staff.application.errors import EmployeeNotFoundErr
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class ReactivateEmployeeUseCase:
@@ -36,14 +37,4 @@ class ReactivateEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         reactivated = employee.reactivate()
         self._employees.update(reactivated)
-        return EmployeeResult(
-            id=reactivated.id,
-            tenant_id=reactivated.tenant_id,
-            unit_id=reactivated.unit_id,
-            name=reactivated.name,
-            workload_profile=reactivated.workload_profile,
-            shift_preference=reactivated.shift_preference,
-            job_function_ids=reactivated.job_function_ids,
-            unavailabilities=reactivated.unavailabilities,
-            active=reactivated.active,
-        )
+        return employee_result(reactivated)

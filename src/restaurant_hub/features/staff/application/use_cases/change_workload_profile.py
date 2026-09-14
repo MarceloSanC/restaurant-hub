@@ -12,6 +12,7 @@ from restaurant_hub.features.staff.application.errors import EmployeeNotFoundErr
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class ChangeWorkloadProfileUseCase:
@@ -33,14 +34,4 @@ class ChangeWorkloadProfileUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         changed = employee.change_workload_profile(command.workload_profile)
         self._employees.update(changed)
-        return EmployeeResult(
-            id=changed.id,
-            tenant_id=changed.tenant_id,
-            unit_id=changed.unit_id,
-            name=changed.name,
-            workload_profile=changed.workload_profile,
-            shift_preference=changed.shift_preference,
-            job_function_ids=changed.job_function_ids,
-            unavailabilities=changed.unavailabilities,
-            active=changed.active,
-        )
+        return employee_result(changed)

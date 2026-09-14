@@ -13,6 +13,7 @@ from restaurant_hub.features.staff.application.errors import EmployeeNotFoundErr
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class DeclareShiftPreferenceUseCase:
@@ -34,14 +35,4 @@ class DeclareShiftPreferenceUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         declared = employee.declare_shift_preference(command.shift_preference)
         self._employees.update(declared)
-        return EmployeeResult(
-            id=declared.id,
-            tenant_id=declared.tenant_id,
-            unit_id=declared.unit_id,
-            name=declared.name,
-            workload_profile=declared.workload_profile,
-            shift_preference=declared.shift_preference,
-            job_function_ids=declared.job_function_ids,
-            unavailabilities=declared.unavailabilities,
-            active=declared.active,
-        )
+        return employee_result(declared)

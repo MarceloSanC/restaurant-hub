@@ -145,7 +145,10 @@ def test_ca18_a_lista_deste_teste_cobre_a_pasta_de_use_cases_inteira() -> None:
     derivar ajuda em vez de esconder.
     """
     pasta = _SRC / "features" / "staff" / "application" / "use_cases"
-    na_pasta = {arquivo.stem for arquivo in pasta.glob("*.py") if arquivo.stem != "__init__"}
+    # Módulos `_`-prefixados são auxiliares da camada, não use cases — a mesma
+    # convenção de `test_application_guards.py`. O primeiro é `_results.py`
+    # (Stage 3.5), o mapper único de `EmployeeResult`.
+    na_pasta = {arquivo.stem for arquivo in pasta.glob("*.py") if not arquivo.stem.startswith("_")}
     na_lista = {nome.removeprefix("staff_") for nome in _USE_CASES_DE_STAFF}
 
     assert na_pasta == na_lista, (

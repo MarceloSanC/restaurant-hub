@@ -33,6 +33,7 @@ from restaurant_hub.features.staff.application.errors import (
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.value_objects.identifiers import EmployeeId
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
@@ -81,14 +82,4 @@ class CopyEmployeeToUnitUseCase:
         )
         # (4) Escrita — a L-E4 revalida as funções aqui.
         self._employees.add(copy)
-        return EmployeeResult(
-            id=copy.id,
-            tenant_id=copy.tenant_id,
-            unit_id=copy.unit_id,
-            name=copy.name,
-            workload_profile=copy.workload_profile,
-            shift_preference=copy.shift_preference,
-            job_function_ids=copy.job_function_ids,
-            unavailabilities=copy.unavailabilities,
-            active=copy.active,
-        )
+        return employee_result(copy)

@@ -8,11 +8,13 @@ alvo correto das asserções "nenhum outro campo mudou" do concept §11. As
 entidades da 3.1 não servem para isso: `Employee.__eq__` e `JobFunction.__eq__`
 comparam **só por id**, então `assert entidade == entidade` é vacuoso.
 
-**Nenhum campo de vínculo de login.** Hoje isso é vacuamente verdadeiro (o
-campo não existe no modelo da 3.1); fica declarado como **restrição para a
-3.5**, que acrescenta `user_id` ao registro: a cópia entre unidades não o
-carrega (workforce §3.7; concept §5.10), e o result é onde a ausência é
-verificável por teste.
+**O vínculo de login entrou na Stage 3.5** (`EmployeeResult.user_id`), e com
+ele a restrição que a 3.2 deixou declarada passou a ter conteúdo: a cópia entre
+unidades **não o carrega** (workforce §3.7; ADR 3.2.0003; ADR 3.5.0004 §5), e o
+result é onde isso é verificável por teste. **Há um único sítio de construção
+de `EmployeeResult`** — `use_cases/_results.py` —, para que um campo novo
+apareça em **toda** resposta de funcionário sem depender de ninguém lembrar de
+11 lugares (concept 3.5 D6; Gate 8 da issue #45).
 """
 
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import ShiftPreference
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
@@ -60,6 +63,11 @@ class EmployeeResult:
             da 3.4.
         unavailabilities: períodos do registro, sem sobreposição.
         active: estado do ciclo de vida (ADR 3.2.0006).
+        user_id: o login em identity vinculado ao registro, ou `None` (Stage
+            3.5). Default `None` — espelha `Employee.user_id` e é **seguro**
+            porque nenhum use case constrói este DTO diretamente: todos passam
+            por `employee_result`, que copia o campo da entidade (CA06). A
+            cópia devolve `None` **por construção** (§5.2).
     """
 
     id: EmployeeId
@@ -71,3 +79,4 @@ class EmployeeResult:
     job_function_ids: frozenset[JobFunctionId]
     unavailabilities: tuple[UnavailabilityPeriod, ...]
     active: bool
+    user_id: UserId | None = None

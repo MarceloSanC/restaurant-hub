@@ -26,6 +26,7 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class AssignJobFunctionsUseCase:
@@ -58,14 +59,4 @@ class AssignJobFunctionsUseCase:
         # (3) Transição e (4) escrita.
         assigned = employee.assign_job_functions(command.job_function_ids)
         self._employees.update(assigned)
-        return EmployeeResult(
-            id=assigned.id,
-            tenant_id=assigned.tenant_id,
-            unit_id=assigned.unit_id,
-            name=assigned.name,
-            workload_profile=assigned.workload_profile,
-            shift_preference=assigned.shift_preference,
-            job_function_ids=assigned.job_function_ids,
-            unavailabilities=assigned.unavailabilities,
-            active=assigned.active,
-        )
+        return employee_result(assigned)

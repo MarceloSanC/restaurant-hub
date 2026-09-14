@@ -18,6 +18,7 @@ from restaurant_hub.features.staff.application.errors import EmployeeNotFoundErr
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class DeactivateEmployeeUseCase:
@@ -39,14 +40,4 @@ class DeactivateEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         deactivated = employee.deactivate()
         self._employees.update(deactivated)
-        return EmployeeResult(
-            id=deactivated.id,
-            tenant_id=deactivated.tenant_id,
-            unit_id=deactivated.unit_id,
-            name=deactivated.name,
-            workload_profile=deactivated.workload_profile,
-            shift_preference=deactivated.shift_preference,
-            job_function_ids=deactivated.job_function_ids,
-            unavailabilities=deactivated.unavailabilities,
-            active=deactivated.active,
-        )
+        return employee_result(deactivated)

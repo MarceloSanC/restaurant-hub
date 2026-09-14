@@ -7,14 +7,17 @@ asserções "nenhum outro campo mudou" das Tasks 10 a 13. As entidades da 3.1 n�
 serviriam: elas comparam só por id.
 """
 
+import ast
 import dataclasses
 import inspect
+import pathlib
 import typing
 from datetime import datetime
 from decimal import Decimal
 
 import pytest
 
+from restaurant_hub.features.staff.application import use_cases as pacote_use_cases
 from restaurant_hub.features.staff.application.dtos import commands, queries, results
 from restaurant_hub.features.staff.application.dtos.commands import (
     AssignJobFunctionsCommand,
@@ -47,6 +50,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -285,20 +289,73 @@ def test_result_de_funcionario_tem_o_estado_de_ciclo_de_vida() -> None:
     assert "active" in nomes
 
 
-def test_nenhum_result_carrega_vinculo_de_login() -> None:
-    """Guarda para a 3.5 (concept §11/Cópia).
+# --- vínculo de login (Stage 3.5) --------------------------------------------
+#
+# O guarda vacuoso da 3.2 (`test_nenhum_result_carrega_vinculo_de_login`) cumpriu
+# o papel: falhou quando o campo chegou, e foi **substituído** por estes três. A
+# decisão que ele protegia — a cópia não carrega o vínculo — agora é testada com
+# conteúdo em `test_copy_employee_to_unit.py` (CA04).
 
-    Hoje a asserção é vacuamente verdadeira — o campo não existe no modelo da
-    3.1. Ela está aqui para **falhar** quando a 3.5 acrescentar `user_id` ao
-    registro sem revisitar a decisão de que a cópia não o carrega
-    (workforce §3.7).
+_PASTA_DE_USE_CASES = pathlib.Path(pacote_use_cases.__file__).parent
+_MODULO_DO_MAPPER = "_results"
+# Contagem **transcrita** dos módulos que consomem `employee_result`: os 11 use
+# cases que devolvem funcionário (a Task 10 da 3.5 acrescenta o 12º). Sem ela a
+# varredura por AST abaixo passaria sobre uma pasta vazia.
+_TOTAL_DE_CONSUMIDORES_DO_MAPPER = 11
+
+
+def test_employee_result_carrega_o_vinculo_de_login() -> None:
+    """`user_id` existe, é `UserId | None` e nasce `None` (concept 3.5 §4)."""
+    campos = {campo.name: campo for campo in dataclasses.fields(EmployeeResult)}
+    assert "user_id" in campos
+    assert campos["user_id"].default is None
+    assert _RESULTADO_BASE.user_id is None
+    assert JobFunctionResult.__dataclass_fields__.keys() == {"id", "tenant_id", "name"}
+
+
+def test_user_id_divergente_torna_os_results_diferentes() -> None:
+    """Igualdade por valor alcança o campo novo — é a asserção de CA13/CA04."""
+    com_login = dataclasses.replace(_RESULTADO_BASE, user_id=UserId("login-1"))
+    assert com_login != _RESULTADO_BASE
+    assert dataclasses.replace(com_login, user_id=None) == _RESULTADO_BASE
+
+
+def _chamadas_a_employee_result(arvore: ast.AST) -> list[int]:
+    return [
+        no.lineno
+        for no in ast.walk(arvore)
+        if isinstance(no, ast.Call)
+        and isinstance(no.func, ast.Name)
+        and no.func.id == "EmployeeResult"
+    ]
+
+
+def test_ca06_nenhum_use_case_constroi_employee_result_diretamente() -> None:
+    """O único sítio é `_results.employee_result` (concept 3.5 D6, CA06).
+
+    Varredura por AST, não por grep de texto: um `EmployeeResult(` dentro de
+    docstring não conta, e um `from ... import EmployeeResult as R; R(...)` seria
+    pego por mypy antes de chegar aqui. O que se procura é a **chamada**.
     """
-    proibidos = ("user_id", "login", "credential", "account_id", "password")
-    for result in (EmployeeResult, JobFunctionResult):
-        for campo in dataclasses.fields(result):
-            assert not any(proibido in campo.name for proibido in proibidos), (
-                f"{result.__name__}.{campo.name} parece vínculo de login"
-            )
+    culpados: dict[str, list[int]] = {}
+    consumidores: list[str] = []
+    for arquivo in sorted(_PASTA_DE_USE_CASES.glob("*.py")):
+        if arquivo.stem in ("__init__", _MODULO_DO_MAPPER):
+            continue
+        arvore = ast.parse(arquivo.read_text(encoding="utf-8"))
+        linhas = _chamadas_a_employee_result(arvore)
+        if linhas:
+            culpados[arquivo.stem] = linhas
+        if any(
+            isinstance(no, ast.ImportFrom)
+            and (no.module or "").endswith(_MODULO_DO_MAPPER)
+            and any(alias.name == "employee_result" for alias in no.names)
+            for no in ast.walk(arvore)
+        ):
+            consumidores.append(arquivo.stem)
+
+    assert culpados == {}, f"EmployeeResult construído fora do mapper: {culpados}"
+    assert len(consumidores) == _TOTAL_DE_CONSUMIDORES_DO_MAPPER, sorted(consumidores)
 
 
 def _tipos_folha(anotacao: object) -> set[object]:

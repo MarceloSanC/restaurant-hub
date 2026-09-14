@@ -14,6 +14,7 @@ from restaurant_hub.features.staff.application.errors import EmployeeNotFoundErr
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class RenameEmployeeUseCase:
@@ -37,14 +38,4 @@ class RenameEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         renamed = employee.rename(command.name)
         self._employees.update(renamed)
-        return EmployeeResult(
-            id=renamed.id,
-            tenant_id=renamed.tenant_id,
-            unit_id=renamed.unit_id,
-            name=renamed.name,
-            workload_profile=renamed.workload_profile,
-            shift_preference=renamed.shift_preference,
-            job_function_ids=renamed.job_function_ids,
-            unavailabilities=renamed.unavailabilities,
-            active=renamed.active,
-        )
+        return employee_result(renamed)

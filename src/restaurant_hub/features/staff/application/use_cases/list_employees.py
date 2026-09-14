@@ -15,6 +15,7 @@ from restaurant_hub.features.staff.application.dtos.results import EmployeeResul
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class ListEmployeesUseCase:
@@ -26,17 +27,7 @@ class ListEmployeesUseCase:
     def execute(self, query: ListEmployeesQuery) -> tuple[EmployeeResult, ...]:
         """Devolve os registros da unidade pedida — nenhum de outra, nenhum de outro tenant."""
         return tuple(
-            EmployeeResult(
-                id=employee.id,
-                tenant_id=employee.tenant_id,
-                unit_id=employee.unit_id,
-                name=employee.name,
-                workload_profile=employee.workload_profile,
-                shift_preference=employee.shift_preference,
-                job_function_ids=employee.job_function_ids,
-                unavailabilities=employee.unavailabilities,
-                active=employee.active,
-            )
+            employee_result(employee)
             for employee in self._employees.list_by_unit(
                 query.tenant_id, query.unit_id, include_inactive=query.include_inactive
             )
