@@ -28,8 +28,10 @@ Três propriedades definem a fachada:
    como valor (`"employee"`, L-IG1), e o pino em `test_http_dependencies.py`
    trava que `employee` exige exatamente `manage_users`.
 
-A fachada é montada **uma vez**, no `composition_root`, sobre os mesmos três use
-cases que servem as rotas de identity — um grafo, não dois.
+A fachada é montada **uma vez**, no `composition_root`, sobre os **mesmos
+repositórios, `EmailSender` e `Clock`** que servem as rotas de identity — um
+grafo, não dois. Os três use cases por baixo dela nascem nesta Stage e têm a
+fachada como único consumidor (ADR 3.5.0001 §Consequences).
 """
 
 from collections.abc import Sequence

@@ -13,6 +13,7 @@ Três coisas são contrato e cada uma tem o seu bloco:
    levanta.
 """
 
+import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
@@ -195,6 +196,17 @@ class TestConversaoDePrimitivos:
         assert isinstance(conta.user_id, str)
         # `repr=False`: o link não sai em traceback do consumidor.
         assert "setup-99" not in repr(conta)
+
+    def test_provisioned_account_e_frozen(self) -> None:
+        """O DTO da fachada fica fora da varredura de `dtos/*` — o pino é aqui.
+
+        Achado do Checkpoint C (bloco 3): `frozen=False` sobrevivia à suíte, porque
+        `==` independe de `frozen` e a varredura de imutabilidade só olha os
+        módulos internos de DTO.
+        """
+        assert ProvisionedAccount.__dataclass_params__.frozen  # type: ignore[attr-defined]
+        campos = {campo.name: campo for campo in dataclasses.fields(ProvisionedAccount)}
+        assert campos["setup_link"].repr is False
 
     def test_send_invitation_converte_o_email_e_repassa_o_link_intacto(self) -> None:
         fachada, _, espiao, _ = _fachada_espia()

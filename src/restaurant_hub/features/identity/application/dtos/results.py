@@ -57,9 +57,11 @@ class ProvisionedAccountResult:
     carve-out da regra 1 da 2.5 está no ADR 3.5.0002 §Status. Existe porque quem
     provisiona (o gateway de staff) ainda vai decidir o canal: e-mail ou em mãos.
 
-    `repr=False` em `setup_link` pelo mesmo motivo de `AuthenticationResult`
-    não imprimir o refresh token: o result atravessa a fachada e o gateway e
-    fica nos locals de qualquer frame que falhe depois dele.
+    `repr=False` em `setup_link` pelo mesmo motivo de
+    `RefreshSessionCommand.refresh_token`: o result atravessa a fachada e o
+    gateway e fica nos locals de qualquer frame que falhe depois dele.
+    (`AuthenticationResult.refresh_token` **não** tem `repr=False` — finding
+    herdado da 2.2, registrado na Stage 3.5; fora da lista fechada de §5.13.)
     """
 
     user: UserResult
