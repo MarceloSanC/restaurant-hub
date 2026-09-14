@@ -19,7 +19,7 @@ KDF à toa.
 from collections.abc import Sequence
 
 from restaurant_hub.features.identity.application.dtos.commands import CreateUserCommand
-from restaurant_hub.features.identity.application.dtos.results import UserResult
+from restaurant_hub.features.identity.application.dtos.results import UserResult, to_user_result
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     RestaurantNotFoundError,
@@ -109,13 +109,7 @@ class CreateUserUseCase:
         password_hash = self._hasher.hash(command.plain_password)
         self._users.add(user, password_hash, memberships)
 
-        return UserResult(
-            id=user.id,
-            email=user.email,
-            role=user.role,
-            tenant_id=user.tenant_id,
-            unit_ids=tuple(membership.unit_id for membership in memberships),
-        )
+        return to_user_result(user, memberships)
 
     def _link_units(
         self,

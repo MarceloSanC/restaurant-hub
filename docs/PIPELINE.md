@@ -285,7 +285,7 @@ fragmentados, que não comunicam valor de negócio.
 Stage é válida se, e só se, satisfaz todos:
 
 1. Tem **um foco coeso**: ou (a) uma **camada-alvo principal** do
-   hexagonal (`domain`, `application`, `adapters/in/http`,
+   hexagonal (`domain`, `application`, `adapters/inbound/http`,
    `adapters/out/<tech>`, `shared/infrastructure`, `bootstrap`) — típico
    de Stages de fundação (BC novo, ports compartilhados, integração
    transversal coesa como bootstrap de logging ou configuração de DI),
@@ -939,7 +939,7 @@ categoria de doc.
 | Skill | Quando carregar | Conteúdo principal | Nasce |
 |---|---|---|---|
 | `hex-arch-python` | Toda Stage (global) | Direção de imports, separação de camadas, Protocols como ports | accepted |
-| `fastapi-thin-adapter` | Stage cuja `camada_alvo` é `adapters/in/http/` | Router fino, schemas Pydantic só no adapter, mapeamento de exceções | draft |
+| `fastapi-thin-adapter` | Stage cuja `camada_alvo` é `adapters/inbound/http/` | Router fino, schemas Pydantic só no adapter, mapeamento de exceções | draft |
 | `repository-pattern` | Stage cuja `camada_alvo` é `adapters/out/<persistence>/` | Implementação de port out, mappers, transações | draft |
 | `pytest-with-fakes` | Stage cuja `camada_alvo` é `domain` ou `application` | Fake in-memory de port out, contract tests | draft |
 | `import-linter-rules` | Stage `1.1-bootstrap` e quando regras mudam | Como ler/atualizar contratos | accepted |
@@ -979,7 +979,7 @@ contexto atual.>
 
 | Campo | Tipo | Valores |
 |---|---|---|
-| `camada_alvo` | lista YAML | `domain`, `application`, `adapters/in/http`, `adapters/out`, `adapters/out/<persistence>`, `shared/application`, `shared/infrastructure`, `bootstrap`, `multi` (cobre ≥ 2 camadas), `any` (wildcard) |
+| `camada_alvo` | lista YAML | `domain`, `application`, `adapters/inbound/http`, `adapters/out`, `adapters/out/<persistence>`, `shared/application`, `shared/infrastructure`, `bootstrap`, `multi` (cobre ≥ 2 camadas), `any` (wildcard) |
 | `stage_kind` | string | `vertical-slice` (≥ 2 camadas em 1 BC), `mono-layer` (1 camada), `any` |
 | `bounded_context` | string | nome do BC (`payments`, `inventory`, …) ou `any` |
 | `fase` | lista YAML | `1`, `2`, `3A`, `3B`, `4` ou `any` |

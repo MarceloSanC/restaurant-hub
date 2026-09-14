@@ -18,7 +18,10 @@ reembrulhados nem reimplementados).
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import CreateJobFunctionCommand
-from restaurant_hub.features.staff.application.dtos.results import JobFunctionResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    JobFunctionResult,
+    to_job_function_result,
+)
 from restaurant_hub.features.staff.application.errors import JobFunctionNameAlreadyExistsError
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
@@ -56,8 +59,4 @@ class CreateJobFunctionUseCase:
             raise JobFunctionNameAlreadyExistsError(command.name)
         # (3) Escrita.
         self._job_functions.add(job_function)
-        return JobFunctionResult(
-            id=job_function.id,
-            tenant_id=job_function.tenant_id,
-            name=job_function.name,
-        )
+        return to_job_function_result(job_function)

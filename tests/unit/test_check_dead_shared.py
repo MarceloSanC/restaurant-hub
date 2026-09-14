@@ -1,0 +1,236 @@
+"""O detector de código morto em `shared/`, contra violadores plantados.
+
+Gate 7 da issue #45. O sujeito é `scripts/check_dead_shared.py`; o mesmo
+raciocínio de localização de `test_check_layout.py` vale aqui — a regra é do
+repositório, não de um bounded context.
+
+**A propriedade que distingue este detector de um `grep`.** `Pagination` era
+citado em prosa em `docs/LAYOUT.md`, em dois `concept.md` e em três ADRs, e
+usado em zero módulos. Um detector textual teria contado cada citação como uso e
+declarado o símbolo vivo por seis Stages — que é precisamente o tempo que ele
+durou. Por isso a varredura é `ast` e ignora docstring, e por isso há um teste
+plantado só para essa diferença: sem ele, trocar a implementação por `in texto`
+deixaria a suíte verde.
+
+**A lista explícita dos nomes de hoje, mais a asserção de que ela cobre a
+varredura.** Derivar a lista da varredura a faria concordar com qualquer
+resultado, inclusive com o de um detector quebrado que devolvesse conjunto
+vazio. Escrita à mão, ela envelhece — então a segunda asserção a cobra contra o
+que existe em `src/`. É o par do
+`tests/unit/features/staff/adapters/test_composition_root_staff.py`.
+"""
+
+import importlib.util
+import pathlib
+import types
+
+import pytest
+
+pytestmark = pytest.mark.unit
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_SRC = _REPO_ROOT / "src" / "restaurant_hub"
+_SCRIPT = _REPO_ROOT / "scripts" / "check_dead_shared.py"
+
+# O que `shared/domain/` e `shared/application/` expõem hoje. Cada um tem
+# consumidor real, e é isso que a asserção seguinte cobra:
+#
+# - `DomainError`/`NotFoundError` — raízes da hierarquia de erro dos dois BCs;
+# - `Clock`/`IdGenerator` — ports consumidos por use case de identity e staff;
+# - `EmailSender`/`EmailMessage` — port promovido na 2.5 com o segundo
+#   consumidor já nomeado (Stage 4.6), o critério do ADR 2.5.0001.
+_NOMES_PUBLICOS_DE_SHARED = frozenset(
+    {
+        "Clock",
+        "DomainError",
+        "EmailMessage",
+        "EmailSender",
+        "IdGenerator",
+        "NotFoundError",
+    }
+)
+
+
+def _carregar_script() -> types.ModuleType:
+    """Importa `scripts/check_dead_shared.py` sem mexer no `sys.path`."""
+    spec = importlib.util.spec_from_file_location("check_dead_shared", _SCRIPT)
+    assert spec is not None and spec.loader is not None
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+check_dead_shared = _carregar_script()
+
+
+def _src_falso(tmp_path: pathlib.Path, arquivos: dict[str, str]) -> pathlib.Path:
+    """Monta uma árvore mínima de `src/restaurant_hub/` em disco temporário."""
+    raiz = tmp_path / "src" / "restaurant_hub"
+    for caminho, conteudo in arquivos.items():
+        destino = raiz / caminho
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(conteudo, encoding="utf-8")
+    return raiz
+
+
+def test_gate7_nenhum_nome_publico_de_shared_esta_sem_uso() -> None:
+    """O critério de pronto, medido contra o `src/` real.
+
+    Antes da remoção, `Pagination` e `ApplicationError` apareciam aqui — o
+    primeiro levantando `ValueError` cru, que não é `DomainError` e produziria
+    500 no dia em que o HTTP o alcançasse.
+    """
+    mortos = check_dead_shared.nomes_mortos(_SRC)
+
+    assert mortos == [], "\n".join(mortos)
+
+
+def test_gate7_a_lista_deste_teste_cobre_o_que_shared_declara() -> None:
+    """Fecha o buraco da lista escrita à mão: ela pode envelhecer.
+
+    A lista existe para que um detector quebrado — um que devolvesse conjunto
+    vazio — não passe despercebido; derivá-la da varredura a faria concordar com
+    qualquer resultado. O preço é envelhecer, e esta asserção é o que o cobra:
+    um nome público novo em `shared/` reprova aqui até ser declarado, o que
+    obriga quem o promoveu a nomear o segundo consumidor.
+    """
+    declarados = set(check_dead_shared.declaracoes(_SRC))
+
+    assert declarados == set(_NOMES_PUBLICOS_DE_SHARED), (
+        f"só na varredura: {sorted(declarados - _NOMES_PUBLICOS_DE_SHARED)}; "
+        f"só na lista: {sorted(_NOMES_PUBLICOS_DE_SHARED - declarados)}"
+    )
+
+
+def test_gate7_um_value_object_sem_consumidor_reprova(tmp_path: pathlib.Path) -> None:
+    """Violador plantado: `Pagination`, reconstruído como era.
+
+    Guarda que nunca viu um positivo não é guarda. Este é o caso exato que a
+    auditoria encontrou vivo — um value object em `shared/domain/`, promovido
+    pelo template, sem um único módulo que o nomeie.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/value_objects/pagination.py": ("class Pagination:\n    page: int = 1\n"),
+            "features/pedidos/application/use_cases/listar.py": "VALOR = 1\n",
+        },
+    )
+
+    mortos = check_dead_shared.nomes_mortos(raiz)
+
+    assert len(mortos) == 1, mortos
+    assert "Pagination" in mortos[0]
+
+
+def test_gate7_citacao_em_docstring_nao_conta_como_uso(tmp_path: pathlib.Path) -> None:
+    """A diferença entre este detector e um `grep`, como asserção.
+
+    `Pagination` era citado em prosa no `LAYOUT.md`, em dois `concept.md` e em
+    três ADRs. Um detector textual teria lido cada menção como uso e declarado o
+    símbolo vivo — exatamente o que aconteceu por seis Stages, sem detector
+    nenhum. Sem este teste, trocar a varredura `ast` por `nome in texto`
+    deixaria a suíte verde e o gate inútil.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/value_objects/pagination.py": "class Pagination:\n    pass\n",
+            "features/pedidos/application/use_cases/listar.py": (
+                '"""Listagem — no futuro paginada com `Pagination` (shared)."""\n'
+            ),
+        },
+    )
+
+    mortos = check_dead_shared.nomes_mortos(raiz)
+
+    assert len(mortos) == 1, mortos
+    assert "Pagination" in mortos[0]
+
+
+def test_gate7_um_uso_real_absolve(tmp_path: pathlib.Path) -> None:
+    """A outra direção: o detector não acusa quem tem consumidor.
+
+    Sem este caso, uma varredura que devolvesse **tudo** como morto passaria nos
+    três testes acima. Falso positivo num gate é pior que falso negativo: ele
+    treina quem o vê a afrouxar a regra.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/value_objects/pagination.py": "class Pagination:\n    pass\n",
+            "features/pedidos/application/use_cases/listar.py": (
+                "from restaurant_hub.shared.domain.value_objects.pagination import Pagination\n"
+                "\n"
+                "def listar(p: Pagination) -> None: ...\n"
+            ),
+        },
+    )
+
+    assert check_dead_shared.nomes_mortos(raiz) == []
+
+
+def test_gate7_a_auto_mencao_do_modulo_declarante_nao_absolve(tmp_path: pathlib.Path) -> None:
+    """A armadilha que faria o gate ser vacuamente verde.
+
+    Toda declaração se auto-menciona: `class Pagination` põe `Pagination` na
+    varredura, e um `__post_init__` que a nomeie no `repr` põe outra vez. Contar
+    o módulo declarante faria **todo** nome público parecer usado, e o script
+    passaria a devolver lista vazia para sempre — verde por não ter olhado.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/value_objects/pagination.py": (
+                "class Pagination:\n"
+                "    def __repr__(self) -> str:\n"
+                "        return f'{Pagination.__name__}()'\n"
+            ),
+            "features/pedidos/application/use_cases/listar.py": "VALOR = 1\n",
+        },
+    )
+
+    mortos = check_dead_shared.nomes_mortos(raiz)
+
+    assert len(mortos) == 1, mortos
+    assert "Pagination" in mortos[0]
+
+
+def test_gate7_nome_privado_nao_e_superficie_publica(tmp_path: pathlib.Path) -> None:
+    """`_helper` de módulo é detalhe interno, e cobrá-lo seria ruído.
+
+    A regra é sobre o que `shared/` **oferece** às features. Um privado sem uso
+    é dívida do arquivo que o contém — visível a quem o abre, e fora do modo de
+    falha que este gate fecha.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/value_objects/pagination.py": (
+                "def _normalizar(p: int) -> int:\n    return p\n"
+            ),
+            "features/pedidos/application/use_cases/listar.py": "VALOR = 1\n",
+        },
+    )
+
+    assert check_dead_shared.nomes_mortos(raiz) == []
+
+
+def test_gate7_shared_infrastructure_fica_de_fora(tmp_path: pathlib.Path) -> None:
+    """A fronteira do gate, declarada como asserção e não só em prosa.
+
+    `SystemClock`, `Uuid4Generator` e `ConsoleSender` são alcançados por
+    injeção, e hoje só o `composition_root` os nomeia. Incluí-los produziria
+    falso positivo previsível no dia em que a configuração passar a escolher o
+    adapter por string — e um gate que grita sem motivo é um gate que alguém
+    desliga.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/infrastructure/clock/system_clock.py": "class SystemClock:\n    pass\n",
+            "features/pedidos/application/use_cases/listar.py": "VALOR = 1\n",
+        },
+    )
+
+    assert check_dead_shared.nomes_mortos(raiz) == []

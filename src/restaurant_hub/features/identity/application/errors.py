@@ -1,8 +1,11 @@
 """Erros da camada de aplicação do BC identity.
 
 Todos herdam de `IdentityError` (domínio, Stage 2.1) e, por consequência, de
-`DomainError` — **nunca** de `ApplicationError`, que não tem handler HTTP
-registrado e viraria 500 (ADR 2.2.0003). O pior caso não-ajustado é 422; a Stage
+`DomainError`, que é a única raiz com handler HTTP registrado (ADR 2.2.0003).
+A alternativa que o ADR recusa — uma hierarquia de aplicação paralela, fora
+de `DomainError` — deixou de ser representável na #45, quando o
+`ApplicationError` do template foi removido por não ter subclasse nem `raise`
+em seis Stages. O pior caso não-ajustado é 422; a Stage
 2.4 refina para 401/403/404 registrando handlers, sem tocar nesta camada.
 
 Os três erros de "não encontrado" herdam também de `NotFoundError`, **nesta

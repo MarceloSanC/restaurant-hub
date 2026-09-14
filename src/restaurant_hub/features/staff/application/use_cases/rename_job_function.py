@@ -7,7 +7,10 @@ com booleano, renomear uma função para o próprio nome falharia.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import RenameJobFunctionCommand
-from restaurant_hub.features.staff.application.dtos.results import JobFunctionResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    JobFunctionResult,
+    to_job_function_result,
+)
 from restaurant_hub.features.staff.application.errors import (
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
@@ -62,8 +65,4 @@ class RenameJobFunctionUseCase:
             raise JobFunctionNameAlreadyExistsError(command.name)
         # (4) Escrita.
         self._job_functions.update(renomeada)
-        return JobFunctionResult(
-            id=renomeada.id,
-            tenant_id=renomeada.tenant_id,
-            name=renomeada.name,
-        )
+        return to_job_function_result(renomeada)

@@ -257,7 +257,7 @@ def test_a_varredura_alcanca_os_adapters_novos_da_stage() -> None:
     modulos_novos = (
         "restaurant_hub.features.identity.adapters.out.security.argon2_hasher",
         "restaurant_hub.features.identity.adapters.out.security.jwt_issuer",
-        "restaurant_hub.features.identity.adapters.in.http.router",
+        "restaurant_hub.features.identity.adapters.inbound.http.router",
         # Stage 2.5 — os dois adapters novos de identity...
         "restaurant_hub.features.identity.adapters.out.security.setup_token_issuer",
         "restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository",

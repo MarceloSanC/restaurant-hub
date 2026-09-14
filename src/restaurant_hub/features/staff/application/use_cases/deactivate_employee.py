@@ -13,7 +13,10 @@ injetado (ADR 3.2.0006). Se o produto pedir "desde quando", é campo aditivo.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import DeactivateEmployeeCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -39,14 +42,4 @@ class DeactivateEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         deactivated = employee.deactivate()
         self._employees.update(deactivated)
-        return EmployeeResult(
-            id=deactivated.id,
-            tenant_id=deactivated.tenant_id,
-            unit_id=deactivated.unit_id,
-            name=deactivated.name,
-            workload_profile=deactivated.workload_profile,
-            shift_preference=deactivated.shift_preference,
-            job_function_ids=deactivated.job_function_ids,
-            unavailabilities=deactivated.unavailabilities,
-            active=deactivated.active,
-        )
+        return to_employee_result(deactivated)

@@ -21,10 +21,12 @@ composition root importa `features.identity.adapters`, e
 `shared-independence` do import-linter, e é a **exceção declarada em LAYOUT §6**.
 A supressão lá é a mais estreita possível: só este par.
 
-**Sobre o `importlib` do adapter de entrada** (Stage 2.4): o pacote se chama `in`,
-que é palavra reservada do Python — `from ...adapters.in.http...` é **SyntaxError**,
-não ImportError. Não há como importá-lo estaticamente, e o `importlib` é a única
-forma suportada (LAYOUT §8), não um contorno do gate.
+**Sobre os imports do adapter de entrada** (issue #45): até aqui eles passavam por
+`importlib`, porque o pacote se chamava `in` — palavra reservada do Python, e
+`from ...adapters.in.http...` é **SyntaxError**, não ImportError. O diretório
+passou a se chamar `inbound/`, e com isso os imports voltaram a ser estáticos.
+Não é cosmético: enquanto eram dinâmicos, **nenhuma** dessas arestas aparecia no
+grafo do import-linter — o contorno da keyword era, ele próprio, um ponto cego.
 
 **Por que o composition root entrega também o mapa de `dependency_overrides`:** as
 chaves desse dicionário são os provedores `_get_*` definidos dentro de `router.py`.
@@ -33,7 +35,6 @@ supressão estreita acima deixaria de bastar. Entregando o mapa pronto, `app.py`
 continua sem conhecer feature nenhuma.
 """
 
-import importlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
@@ -41,6 +42,13 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI
 
+from restaurant_hub.features.identity.adapters.inbound.http import (
+    dependencies as dependencies_module,
+)
+from restaurant_hub.features.identity.adapters.inbound.http import (
+    error_handlers as error_handlers_module,
+)
+from restaurant_hub.features.identity.adapters.inbound.http import router as router_module
 from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
     PostgresPasswordSetupTokenRepository,
 )
@@ -103,6 +111,15 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     UnitId as IdentityUnitId,
 )
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
+from restaurant_hub.features.staff.adapters.inbound.http import (
+    dependencies as staff_dependencies_module,
+)
+from restaurant_hub.features.staff.adapters.inbound.http import (
+    error_handlers as staff_error_handlers_module,
+)
+from restaurant_hub.features.staff.adapters.inbound.http import (
+    router as staff_router_module,
+)
 from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
     PostgresEmployeeRepository,
 )
@@ -177,18 +194,14 @@ from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import 
     Uuid4Generator,
 )
 
-_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
-
 
 def _tenant_id_do_ator(actor: Actor) -> str | None:
     """Lê o tenant do ator autenticado — a cláusula 3 do ADR 0.0.0005 aplicada.
 
     **Este módulo é a camada confiável, e a leitura acontece aqui por medição,
     não por conveniência.** O ator é o `AuthenticatedActor` de identity, cujo
-    módulo vive sob o pacote `in` — keyword Python, inalcançável por import
-    estático (LAYOUT §8) —, e o port o declara `Actor = object` justamente para
-    que staff **não** leia atributo de ator. `actor.claims.tenant_id` é erro de
+    módulo é o adapter de entrada de identity, e o port declara `Actor = object`
+    justamente para que staff **não** leia atributo de ator. `actor.claims.tenant_id` é erro de
     tipo em `strict` sobre `object`; o caminho já usado neste módulo para o mesmo
     problema (o campo `identity_guard: Any` do contêiner) é a leitura por
     **variável intermediária anotada**, sem `cast` de conveniência e sem mudar a
@@ -219,10 +232,8 @@ class _IdentityAccessGuard:
 
     **Por que ela mora aqui, e não em `features/staff/adapters/out/identity/`**
     (ADR 3.4.0001 §3 e alternativa A, medida e revertida no Checkpoint A): o
-    objeto embrulhado vive sob o pacote `in`, que é keyword Python. Um adapter
-    dentro de staff não conseguiria sequer **anotá-lo** — guardaria o mesmo `Any`
-    que este módulo guarda, e essa aresta seria invisível ao import-linter de
-    qualquer forma. O que ele importaria de verdade são `Permission`,
+    objeto embrulhado é o `IdentityGuard`. O que um adapter dentro de staff
+    importaria de verdade são `Permission`,
     `RestaurantId` e `UnitId` de identity: **três** pares de `ignore_imports` em
     `bc-independence`, não um. Aqui são **zero**, e há teste que lê o
     `.importlinter` para provar que continuam zero
@@ -252,20 +263,27 @@ class _IdentityAccessGuard:
     def __init__(self, identity_guard: Any) -> None:  # noqa: ANN401
         """Recebe o `IdentityGuard` já construído.
 
-        `Any` — e o `noqa` — pela mesma razão medida que o campo
-        `identity_guard` do contêiner: o tipo real vive sob o pacote `in`, que é
-        keyword Python, e não existe import estático capaz de nomeá-lo
-        (LAYOUT §8). Trocar por `object` só moveria o problema para o corpo dos
-        dois métodos, onde todo acesso viraria erro de tipo e a saída seria um
-        `cast` — a mesma perda de informação, com mais cerimônia.
+        **O `Any` deixou de ser obrigatório na #45 e continua aqui de
+        propósito.** Até o rename de `adapters/in/` para `adapters/inbound/`, o
+        tipo real era inalcançável por import estático — `in` é keyword Python — e
+        `Any` era a única anotação possível. Hoje `IdentityGuard` é importável, e
+        anotá-lo seria correto.
+
+        Não é feito aqui porque tipar este construtor é trabalho da **#47**, que
+        move a classe inteira para `features/staff/adapters/out/identity/`:
+        anotá-la agora produziria um diff em código de decisão de acesso dentro
+        de um PR de ferramentas, e a #45 tem como não-objetivo declarado não
+        mexer nessa borda. O que mudou é o **motivo** — de impossível para
+        adiado —, e isso está escrito aqui em vez de continuar afirmando uma
+        restrição que já não existe.
         """
         self._guard = identity_guard
 
     def authenticate(self, request: object) -> Actor:
         """L-AG1 — repassa e não captura."""
         # A variável intermediária existe para o type-checker, não para o
-        # runtime: `_guard` é `Any` (o pacote `in` é inalcançável estaticamente)
-        # e `strict` reprova devolver `Any` de função anotada. Nenhuma conversão
+        # runtime: `_guard` é `Any` (ver o construtor) e `strict` reprova
+        # devolver `Any` de função anotada. Nenhuma conversão
         # acontece aqui — é o mesmo objeto que identity devolveu.
         actor: Actor = self._guard.authenticate(request)
         return actor
@@ -353,9 +371,9 @@ class ApplicationDependencies:
     identity_request_password_reset: RequestPasswordResetUseCase
     identity_set_password_with_token: SetPasswordWithTokenUseCase
     identity_authorize_action: AuthorizeActionUseCase
-    # `Any` porque o tipo real (`IdentityGuard`) vive num pacote que só pode ser
-    # carregado por `importlib` — anotá-lo exigiria o import estático que a
-    # keyword `in` torna sintaticamente impossível.
+    # `Any` herdado da época em que o pacote de entrada se chamava `in` e o tipo
+    # real era inalcançável por import estático. Depois do rename da #45 ele é
+    # importável; tipar o campo sai junto com a #47, que move o consumidor.
     identity_guard: Any
 
     # --- staff (Stage 3.3) ---------------------------------------------------
@@ -493,7 +511,6 @@ def wire_dependencies(
 
     authorize_action = AuthorizeActionUseCase(users=users, units=units)
 
-    dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.dependencies")
     guard = dependencies_module.IdentityGuard(
         token_issuer=token_issuer,
         authorize_action=authorize_action,
@@ -612,19 +629,13 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
 
     **É aqui que as 16 rotas de staff passam a existir na aplicação.** Até esta
     Stage o BC era surdo-mudo: os use cases e o `staff_access_guard` estavam
-    montados e nada no boot os alcançava. O `importlib` não é contorno — o pacote
-    de entrada se chama `in`, que é palavra reservada, e `from ...adapters.in...`
-    é **SyntaxError**, não ImportError (LAYOUT §8).
+    montados e nada no boot os alcançava. Os seis módulos de borda entram por
+    import **estático** desde a #45; até então vinham por `importlib`, porque o
+    pacote se chamava `in`.
 
     `create_engine` não abre conexão, então registrar um segundo router não muda
     o comportamento de boot: montar o grafo continua não exigindo banco no ar.
     """
-    router_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router")
-    error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.error_handlers")
-    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-    staff_dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
-    staff_error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")
-
     overrides: dict[Callable[..., Any], Callable[..., Any]] = {
         router_module._get_authenticate_user: lambda: deps.identity_authenticate_user,
         router_module._get_refresh_session: lambda: deps.identity_refresh_session,

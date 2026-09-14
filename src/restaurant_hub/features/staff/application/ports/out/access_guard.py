@@ -48,7 +48,7 @@ obedece — lei que só a implementação de produção cumpre não é lei, é d
 
 **Onde este port mora, e por quê** (ADR 3.4.0001 §4). Ele fica em
 `application/ports/out/`, e **não** dentro do adapter HTTP. O único consumidor
-previsto é o router da Stage 3.6, o que argumentaria por `adapters/in/http/`. A
+previsto é o router da Stage 3.6, o que argumentaria por `adapters/inbound/http/`. A
 colocação **antecipa a Stage 3.5**, cujo `IdentityGateway` é consumido por **use
 case** e cuja pasta o roadmap já nomeia. A justificativa é o critério de
 escalabilidade progressiva do projeto, **não** LAYOUT §5 — que descreve port de

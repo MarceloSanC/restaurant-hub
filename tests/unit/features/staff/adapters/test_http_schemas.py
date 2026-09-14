@@ -5,14 +5,13 @@ sozinhas.** Nenhum `parametrize` deste arquivo lista schema, campo ou módulo à
 mão: os requests saem de uma varredura do módulo por `__name__`, os campos saem
 de `model_fields` — recursivamente, para alcançar também os aninhados —, e os
 módulos da varredura de import saem do **pacote**. Consequência operacional: um
-schema acrescentado na Task 05, ou um módulo novo em `adapters/in/http/`, entra
+schema acrescentado na Task 05, ou um módulo novo em `adapters/inbound/http/`, entra
 nestas travas sem que ninguém precise lembrar deste arquivo.
 """
 
 import ast
 import datetime
 import decimal
-import importlib
 import pathlib
 import pkgutil
 
@@ -20,6 +19,8 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from pydantic import TypeAdapter as PydanticTypeAdapter
 
+from restaurant_hub.features.staff.adapters.inbound import http as pacote
+from restaurant_hub.features.staff.adapters.inbound.http import schemas
 from restaurant_hub.features.staff.application.dtos.results import (
     EmployeeResult,
     JobFunctionResult,
@@ -44,12 +45,6 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 )
 
 pytestmark = pytest.mark.unit
-
-# O pacote é alcançado por `importlib` porque `in` é keyword Python (LAYOUT §8) —
-# o mesmo caminho que o `composition_root` usa.
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
-
-schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
 
 _PERFIL_FIXO = {"type": "fixed", "weekly_hours": "40.0"}
 _PERFIL_SOB_DEMANDA = {"type": "on_demand"}
@@ -393,7 +388,7 @@ def test_a_preferencia_de_turno_aceita_null_explicito_para_limpar() -> None:
 
 def _modulos_do_pacote_http() -> list[pathlib.Path]:
     """Os `.py` que o pacote **contém** — derivado, portanto cresce com as Tasks."""
-    pacote = importlib.import_module(_PACOTE_HTTP_STAFF)
+
     raiz = pathlib.Path(next(iter(pacote.__path__)))
     encontrados = sorted(raiz.glob("*.py"))
     assert encontrados, "a varredura precisa de módulos para ter o que negar"
@@ -430,7 +425,7 @@ def test_ca05_a_varredura_de_import_cobre_o_pacote_inteiro_e_nao_uma_amostra() -
     errado, por subpacote —, CA05 continuaria verde sobre o que restou. A
     comparação é contra o que o `pkgutil` enumera, que é uma segunda fonte.
     """
-    pacote = importlib.import_module(_PACOTE_HTTP_STAFF)
+
     pelo_pkgutil = {info.name for info in pkgutil.iter_modules(list(pacote.__path__))}
     pelo_glob = {arquivo.stem for arquivo in _modulos_do_pacote_http()} - {"__init__"}
 

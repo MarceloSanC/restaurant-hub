@@ -25,7 +25,10 @@ entidades e VOs da 3.1 são `frozen`, então não há objeto mutável a comparti
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import CopyEmployeeToUnitCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     SameUnitCopyError,
@@ -81,14 +84,4 @@ class CopyEmployeeToUnitUseCase:
         )
         # (4) Escrita — a L-E4 revalida as funções aqui.
         self._employees.add(copy)
-        return EmployeeResult(
-            id=copy.id,
-            tenant_id=copy.tenant_id,
-            unit_id=copy.unit_id,
-            name=copy.name,
-            workload_profile=copy.workload_profile,
-            shift_preference=copy.shift_preference,
-            job_function_ids=copy.job_function_ids,
-            unavailabilities=copy.unavailabilities,
-            active=copy.active,
-        )
+        return to_employee_result(copy)

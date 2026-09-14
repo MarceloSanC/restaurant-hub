@@ -22,7 +22,10 @@ from restaurant_hub.features.identity.application.dtos.commands import (
     AuthenticateUserCommand,
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import SessionId
-from restaurant_hub.features.identity.application.dtos.results import AuthenticationResult
+from restaurant_hub.features.identity.application.dtos.results import (
+    AuthenticationResult,
+    to_authentication_result,
+)
 from restaurant_hub.features.identity.application.dtos.session import Session
 from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
 from restaurant_hub.features.identity.application.errors import InvalidCredentialsError
@@ -114,9 +117,9 @@ class AuthenticateUserUseCase:
             )
         )
 
-        return AuthenticationResult(
+        return to_authentication_result(
             access_token=access_token,
-            refresh_token=issued_refresh.value,
+            issued_refresh=issued_refresh,
             access_token_expires_at=access_token_expires_at,
             refresh_token_expires_at=refresh_token_expires_at,
             user_id=user.id,

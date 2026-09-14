@@ -9,7 +9,10 @@ Nome de funcionário **não é único** (homônimos são legítimos — concept 
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import RenameEmployeeCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -37,14 +40,4 @@ class RenameEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         renamed = employee.rename(command.name)
         self._employees.update(renamed)
-        return EmployeeResult(
-            id=renamed.id,
-            tenant_id=renamed.tenant_id,
-            unit_id=renamed.unit_id,
-            name=renamed.name,
-            workload_profile=renamed.workload_profile,
-            shift_preference=renamed.shift_preference,
-            job_function_ids=renamed.job_function_ids,
-            unavailabilities=renamed.unavailabilities,
-            active=renamed.active,
-        )
+        return to_employee_result(renamed)

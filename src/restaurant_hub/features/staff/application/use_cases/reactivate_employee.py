@@ -8,7 +8,10 @@ nunca foram apagadas.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import ReactivateEmployeeCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -36,14 +39,4 @@ class ReactivateEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         reactivated = employee.reactivate()
         self._employees.update(reactivated)
-        return EmployeeResult(
-            id=reactivated.id,
-            tenant_id=reactivated.tenant_id,
-            unit_id=reactivated.unit_id,
-            name=reactivated.name,
-            workload_profile=reactivated.workload_profile,
-            shift_preference=reactivated.shift_preference,
-            job_function_ids=reactivated.job_function_ids,
-            unavailabilities=reactivated.unavailabilities,
-            active=reactivated.active,
-        )
+        return to_employee_result(reactivated)

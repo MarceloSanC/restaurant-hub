@@ -26,7 +26,6 @@ rota precisa editar o módulo de varreduras — a alternativa seria justamente e
 e ela faria cada Task tocar um arquivo fora da sua lista.
 """
 
-import importlib
 import inspect
 import typing
 from collections.abc import Iterator
@@ -37,6 +36,11 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies as dependencies_module
+from restaurant_hub.features.staff.adapters.inbound.http import (
+    error_handlers as error_handlers_module,
+)
+from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -58,11 +62,6 @@ from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
-
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
-error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")
 
 _TENANT = "rest-1"
 _UNIDADE = "unit-1"

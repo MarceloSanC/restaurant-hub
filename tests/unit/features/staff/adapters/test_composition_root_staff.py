@@ -47,6 +47,14 @@ from restaurant_hub.composition_root import (
     build_http_wiring,
     wire_dependencies,
 )
+from restaurant_hub.features.identity.adapters.inbound.http import dependencies
+from restaurant_hub.features.identity.adapters.inbound.http.dependencies import (
+    IdentityGuard as identity_guard,
+)
+from restaurant_hub.features.identity.adapters.inbound.http.error_handlers import (
+    register_identity_error_handlers,
+)
+from restaurant_hub.features.identity.adapters.inbound.http.router import router as identity_router
 from restaurant_hub.features.identity.application.dtos.identifiers import SessionId
 from restaurant_hub.features.identity.application.dtos.results import AuthorizedActor
 from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
@@ -64,6 +72,12 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies as staff_dependencies
+from restaurant_hub.features.staff.adapters.inbound.http import router as staff_router_module
+from restaurant_hub.features.staff.adapters.inbound.http.error_handlers import (
+    register_staff_error_handlers,
+)
+from restaurant_hub.features.staff.adapters.inbound.http.router import router as staff_router
 from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
     PostgresEmployeeRepository,
 )
@@ -267,7 +281,8 @@ class _SpyIdentityGuard:
     """`IdentityGuard` de mentira, para exercitar o tradutor sem banco.
 
     Não é fake de port — é dublê do objeto **embrulhado**, que o composition
-    root guarda como `Any` por necessidade (o pacote `in` é keyword Python).
+    root guarda como `Any` (por necessidade até a #45, quando o pacote se
+    chamava `in`; por decisão adiada para a #47 desde então).
     Guarda o que recebeu, para que as asserções de tradução sejam sobre o valor
     que atravessou, e não sobre o que o teste imaginou ter passado.
     """
@@ -334,12 +349,8 @@ def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
     silêncio e reapareceria como 403 universal em runtime — que é precisamente o
     defeito que a resolução do tenant existe para fechar.
 
-    O módulo mora sob o pacote `in`, keyword Python, então chega por `importlib`
-    (LAYOUT §8) — o mesmo caminho que o composition root usa.
     """
-    dependencies = importlib.import_module(
-        "restaurant_hub.features.identity.adapters.in.http.dependencies"
-    )
+
     actor: object = dependencies.AuthenticatedActor(
         claims=AccessTokenClaims(
             subject=UserId("user-1"),
@@ -364,8 +375,8 @@ def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
 _TOTAL_DE_OVERRIDES_DE_STAFF = 17
 _TOTAL_DE_ROTAS_DE_STAFF = 16
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
-_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
+_PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.inbound.http"
+_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
 _PREFIXO_DA_API = "/api/v1"
 
 # O inventário de identity, **literal**, como o cliente o alcança. Transcrito e
@@ -493,8 +504,8 @@ def test_o_spy_tem_a_mesma_assinatura_do_identity_guard_real(method: str) -> Non
     Há teste de que o **tradutor** casa com o `AccessGuard`; não havia nenhum de
     que o `_SpyIdentityGuard` casa com o `IdentityGuard` **real**. É a metade que
     importa para os sete testes de comportamento acima: eles exercitam o tradutor
-    contra o dublê, e o objeto embrulhado em produção chega como `Any` (o pacote
-    `in` é keyword Python), então **nada** no repositório compara os dois. Um
+    contra o dublê, e o objeto embrulhado em produção chega como `Any`, então
+    **nada** no repositório compara os dois. Um
     parâmetro renomeado ou promovido a posicional em `IdentityGuard.authorize`
     passaria por toda a suíte e só apareceria como `TypeError` no primeiro
     request da Stage 3.6.
@@ -504,9 +515,6 @@ def test_o_spy_tem_a_mesma_assinatura_do_identity_guard_real(method: str) -> Non
     exigir os tipos de identity aqui obrigaria o arquivo a reencenar o
     vocabulário do outro BC para provar uma propriedade de forma.
     """
-    identity_guard = importlib.import_module(
-        "restaurant_hub.features.identity.adapters.in.http.dependencies"
-    ).IdentityGuard
 
     def forma(alvo: object) -> list[tuple[str, object, object]]:
         return [
@@ -947,17 +955,12 @@ def test_ca30_o_wiring_registra_os_dois_routers_e_os_dois_registradores() -> Non
     estão montadas, por identidade de objeto.
     """
     wiring = build_http_wiring(_dependencias())
-    identity_router = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router").router
-    staff_router = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router").router
 
     assert wiring.routers == (identity_router, staff_router)
+
     assert wiring.register_error_handlers == (
-        importlib.import_module(
-            f"{_PACOTE_HTTP_IDENTITY}.error_handlers"
-        ).register_identity_error_handlers,
-        importlib.import_module(
-            f"{_PACOTE_HTTP_STAFF}.error_handlers"
-        ).register_staff_error_handlers,
+        register_identity_error_handlers,
+        register_staff_error_handlers,
     )
 
 
@@ -985,8 +988,6 @@ def test_ca30_o_mapa_de_overrides_cobre_todo_provedor_do_router_de_staff() -> No
     biblioteca padrão.
     """
     wiring = build_http_wiring(_dependencias())
-    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-    staff_dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
 
     provedores = _provedores_de(staff_router_module) | _provedores_de(staff_dependencies)
 
@@ -1008,8 +1009,6 @@ def test_ca30_cada_override_de_staff_devolve_a_dependencia_montada() -> None:
     """
     deps = _dependencias()
     wiring = build_http_wiring(deps)
-    staff_router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-    staff_dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
 
     assert wiring.dependency_overrides[staff_dependencies.get_access_guard]() is (
         deps.staff_access_guard
@@ -1060,7 +1059,7 @@ def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
     dele faria os dois lados da igualdade virem da mesma fonte, e o teste passaria
     a confirmar que o router concorda consigo mesmo.
     """
-    identity_router = importlib.import_module(f"{_PACOTE_HTTP_IDENTITY}.router").router
+
     wiring = build_http_wiring(_dependencias())
 
     assert wiring.routers[0] is identity_router
