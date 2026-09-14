@@ -43,6 +43,7 @@ from restaurant_hub.features.staff.application.dtos.results import (
     EmployeeResult,
     JobFunctionResult,
 )
+from restaurant_hub.features.staff.application.use_cases._results import employee_result
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -305,12 +306,42 @@ _TOTAL_DE_CONSUMIDORES_DO_MAPPER = 11
 
 
 def test_employee_result_carrega_o_vinculo_de_login() -> None:
-    """`user_id` existe, é `UserId | None` e nasce `None` (concept 3.5 §4)."""
+    """`user_id` existe, é anotado `UserId | None` e nasce `None` (concept 3.5 §4)."""
     campos = {campo.name: campo for campo in dataclasses.fields(EmployeeResult)}
     assert "user_id" in campos
+    assert campos["user_id"].type == UserId | None
     assert campos["user_id"].default is None
     assert _RESULTADO_BASE.user_id is None
     assert JobFunctionResult.__dataclass_fields__.keys() == {"id", "tenant_id", "name"}
+
+
+def test_o_mapper_copia_todos_os_campos_inclusive_o_login() -> None:
+    """A propriedade nuclear de D6, travada como **lei sobre todos os campos**.
+
+    Achado 1 do Checkpoint C do bloco 1: sem este teste, `employee_result`
+    omitindo `user_id` sobrevivia à suíte inteira — o default `None` mascarava a
+    omissão, que é exatamente o modo de falha que o mapper existe para eliminar.
+    A asserção itera `dataclasses.fields(EmployeeResult)`: um campo novo que o
+    mapper esqueça reprova aqui sem que ninguém precise lembrar de estendê-lo.
+    """
+    vinculado = Employee(
+        id=_FUNCIONARIO,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        name="Maria",
+        workload_profile=_FIXA,
+        shift_preference=_PREFERENCIA,
+        job_function_ids=frozenset({_FUNCAO}),
+        unavailabilities=(_PERIODO,),
+        active=False,
+        user_id=UserId("login-1"),
+    )
+
+    resultado = employee_result(vinculado)
+
+    for campo in dataclasses.fields(EmployeeResult):
+        assert getattr(resultado, campo.name) == getattr(vinculado, campo.name), campo.name
+    assert resultado.user_id == UserId("login-1")
 
 
 def test_user_id_divergente_torna_os_results_diferentes() -> None:
@@ -321,12 +352,22 @@ def test_user_id_divergente_torna_os_results_diferentes() -> None:
 
 
 def _chamadas_a_employee_result(arvore: ast.AST) -> list[int]:
+    """Toda `Call` cujo alvo se chama `EmployeeResult` — por nome **ou** por atributo.
+
+    `results.EmployeeResult(...)` é `ast.Attribute`; só olhar `ast.Name` deixaria
+    essa forma passar (achado 2 do Checkpoint C do bloco 1). Um alias
+    (`import EmployeeResult as R; R(...)`) continua fora do alcance — e não é
+    pego por mypy, que aceita alias como Python legítimo; o que o barra é a
+    convenção de import direto por nome do repo e o grep de CA06 no gate.
+    """
     return [
         no.lineno
         for no in ast.walk(arvore)
         if isinstance(no, ast.Call)
-        and isinstance(no.func, ast.Name)
-        and no.func.id == "EmployeeResult"
+        and (
+            (isinstance(no.func, ast.Name) and no.func.id == "EmployeeResult")
+            or (isinstance(no.func, ast.Attribute) and no.func.attr == "EmployeeResult")
+        )
     ]
 
 
@@ -334,8 +375,8 @@ def test_ca06_nenhum_use_case_constroi_employee_result_diretamente() -> None:
     """O único sítio é `_results.employee_result` (concept 3.5 D6, CA06).
 
     Varredura por AST, não por grep de texto: um `EmployeeResult(` dentro de
-    docstring não conta, e um `from ... import EmployeeResult as R; R(...)` seria
-    pego por mypy antes de chegar aqui. O que se procura é a **chamada**.
+    docstring não conta. O que se procura é a **chamada**, por nome ou por
+    atributo; o alias de import é o limite declarado (ver o helper).
     """
     culpados: dict[str, list[int]] = {}
     consumidores: list[str] = []
