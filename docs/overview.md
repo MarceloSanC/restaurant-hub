@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, restaurantes, escala, saas, hub, multi-tenant]
 status: done
 created_at: 2026-07-10
-updated_at: 2026-07-23
+updated_at: 2026-09-13
 project_name: restaurant-hub
 stakeholders:
   - Sponsor / Desenvolvedor / Admin da plataforma: Marcelo (Whaka)
@@ -88,7 +88,7 @@ Escala em planilha/papel. O piloto já opera com **Control ID** (ponto por recon
 |---|---|---|
 | Sponsor / Desenvolvedor / Admin da plataforma | Marcelo (Whaka) | Plataforma modular, escalável e vendável a múltiplos restaurantes |
 | Dono do restaurante piloto | a definir | Escala sem esforço manual; visão da operação; dá feedback de produto |
-| Gerente / RH (usuários primários) | restaurante piloto | Montar/ajustar escala rápido, com validações, histórico e auditoria |
+| Gerente / RH (usuários primários) | restaurante piloto | Montar/ajustar escala rápido, com validações, histórico e auditoria. *(Nota 2026-09-13: RH **consulta** a escala — leitura nas unidades de que é membro; montar/ajustar é do gerente e do dono — [ADR 3.4.0006](adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md) + [ADR 4.1.0004](adr/4_1_0004-hr-reads-schedules-in-member-units.md).)* |
 | Funcionários | restaurante piloto | Consultar a própria escala (login ou imagem divulgada) |
 
 ## 6. Restrições
@@ -151,3 +151,18 @@ Termos escolhidos por pesquisa de mercado (jul/2026) priorizando o vocabulário 
   - BRASIL. **Decreto-Lei nº 5.452, de 1º de maio de 1943** (Consolidação das Leis do Trabalho), arts. 443, *caput* e § 3º, e 452-A, com redação dada pela **Lei nº 13.467, de 13 de julho de 2017** (Reforma Trabalhista). Texto consolidado. Brasília: Presidência da República. Disponível em: https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm. Acesso em: 23 jul. 2026.
   - BRASIL. **Lei nº 13.467, de 13 de julho de 2017**. Altera a Consolidação das Leis do Trabalho (CLT). Disponível em: https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2017/lei/l13467.htm. Acesso em: 23 jul. 2026.
   - (Nota: a MP nº 808/2017, que alterava temporariamente o art. 452-A e criava os arts. 452-B a 452-H, teve vigência encerrada em 23/04/2018 — Ato Declaratório CN nº 22/2018 — e não integra o direito vigente.)
+- Legislação trabalhista — jornada, descansos e negociação coletiva (fonte primária — sustentam o **default e os limites** das validações configuráveis da Stage 4.2 e os conceitos da 4.1, nunca comportamento fixo — §6; consumidas por `docs/domain/scheduling/shift-scheduling.md` e pelos ADRs 4.1.0002/4.1.0003, que as citam por inteiro; verificadas no Planalto por download direto em 2026-09-13). **Registradas aqui como ponteiro, não como cópia** — a lista canônica de cada fonte vive no §7 do doc de domínio e no `## References` dos ADRs:
+  - BRASIL. **Constituição da República Federativa do Brasil de 1988**, art. 7º, XIII e XV. Disponível em: https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm. Acesso em: 13 set. 2026.
+  - BRASIL. **Decreto-Lei nº 5.452, de 1º de maio de 1943** (CLT), arts. 58, 58-A, 59, 59-A, 61, 66, 67, 68, 70, 71, 73, 74, 611-A e 611-B (redações vigentes conforme notas do consolidado: Lei nº 13.467/2017, Lei nº 13.874/2019, MP nº 2.164-41/2001, Decreto-Lei nº 9.666/1946, Decreto-Lei nº 229/1967; redações da MP nº 808/2017 e da MP nº 905/2019 com vigência encerrada). Disponível em: https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm. Acesso em: 13 set. 2026.
+  - BRASIL. **Lei nº 605, de 5 de janeiro de 1949** (repouso semanal remunerado e feriados), art. 1º. Disponível em: https://www.planalto.gov.br/ccivil_03/leis/l0605.htm. Acesso em: 13 set. 2026.
+  - BRASIL. **Lei nº 10.101, de 19 de dezembro de 2000**, art. 6º, *caput* e parágrafo único, com redação da **Lei nº 11.603, de 5 de dezembro de 2007**. Disponível em: https://www.planalto.gov.br/ccivil_03/leis/l10101.htm. Acesso em: 13 set. 2026.
+  - BRASIL. **Decreto nº 10.854, de 10 de novembro de 2021**, arts. 153, 154, 158 § 4º e 187, I (revoga o Decreto nº 27.048/1949, citado só como evidência histórica). Disponível em: https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/decreto/D10854.htm. Acesso em: 13 set. 2026.
+  - BRASIL. Ministério do Trabalho e Previdência. **Portaria MTP nº 671, de 8 de novembro de 2021**, Anexo IV. DOU 11/11/2021, Seção 1, p. 217 — **texto não verificado** (a URL do DOU devolve 404; compilada em gov.br restrita); não sustenta regra.
+  - BRASIL. Tribunal Superior do Trabalho. **OJ nº 355 da SBDI-1**, **Súmula nº 110** e **Súmula nº 444**, textos confirmados em acórdãos do backend oficial (TST-RR-1009-03.2014.5.12.0016; TST-RR-29800-32.2009.5.17.0011) via https://jurisprudencia-backend2.tst.jus.br/rest/documentos/. Acesso em: 13 set. 2026. (A Súmula 444 é anterior à Lei nº 13.467/2017 e diverge do art. 59-A vigente — citada com essa ressalva.)
+- Calendário e fuso horário (fonte primária — método; sustentam o dia de início configurável, o dia operacional e a chave IANA do fuso da unidade — ADRs 4.1.0002 e 4.1.0005; verificadas em 2026-09-13):
+  - PYTHON SOFTWARE FOUNDATION. **datetime — Basic date and time types** (`date.isoweekday()`, `date.isocalendar()`). Disponível em: https://docs.python.org/3/library/datetime.html. Acesso em: 13 set. 2026.
+  - PYTHON SOFTWARE FOUNDATION. **zoneinfo — IANA time zone support**. Disponível em: https://docs.python.org/3/library/zoneinfo.html. Acesso em: 13 set. 2026.
+  - GANSSLE, Paul. **PEP 615 – Support for the IANA Time Zone Database in the Standard Library** (2020; Final; Python 3.9). Disponível em: https://peps.python.org/pep-0615/. Acesso em: 13 set. 2026.
+  - BELOPOLSKY, Alexander; PETERS, Tim. **PEP 495 – Local Time Disambiguation** (2015; Final; Python 3.6). Disponível em: https://peps.python.org/pep-0495/. Acesso em: 13 set. 2026.
+  - IANA. **Time Zone Database** (tzdata 2026d, 2026-09-11). Disponível em: https://www.iana.org/time-zones. Acesso em: 13 set. 2026.
+  - BRASIL. **Decreto nº 9.772, de 25 de abril de 2019** (encerra a hora de verão no território nacional) — sustenta a premissa "America/Sao_Paulo sem DST" registrada sem fonte no ADR 3.1.0005. Disponível em: https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2019/decreto/D9772.htm. Acesso em: 13 set. 2026.
