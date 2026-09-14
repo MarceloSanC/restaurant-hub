@@ -21,6 +21,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
 )
 from restaurant_hub.features.staff.application.dtos.queries import ListEmployeesQuery
 from restaurant_hub.features.staff.application.errors import (
+    EmployeeHasLoginError,
     EmployeeInUseError,
     EmployeeNotFoundError,
 )
@@ -41,11 +42,13 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
     UnavailabilityPeriod,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 
 pytestmark = pytest.mark.unit
@@ -120,7 +123,7 @@ def test_remover_desligado_tambem_funciona() -> None:
     """Apagar é ortogonal a desligar: o desligado é removível como qualquer um."""
     fakes = _fakes()
     _grava(fakes)
-    DeactivateEmployeeUseCase(fakes.employees).execute(
+    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
         DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
     _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
@@ -223,3 +226,62 @@ def test_ca11_remocao_com_unidade_alheia_nao_alcanca_o_registro() -> None:
 
     assert fakes.store.calls[antes:] == ["employees.find_by_id"]
     assert fakes.employees.find_by_id(_A, _U1, _E1) is not None
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — R15 recusa registro com login (ADR 3.5.0003 §1b, Q7 do concept)
+# ---------------------------------------------------------------------------
+
+
+def _vincula(fakes: StaffFakes, *, depois_desliga: bool) -> None:
+    """Vincula pelo caminho real — e, se pedido, desliga **depois** (a ordem legítima).
+
+    Desligado não recebe login (`TerminatedEmployeeLoginError`); um registro
+    vinculado e desligado só existe por vínculo seguido de desligamento, que é
+    justamente o estado em que R15 continua recusando.
+    """
+    registro = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert registro is not None
+    vinculado = registro.link_login(UserId("login-1"))
+    fakes.employees.update(vinculado.deactivate() if depois_desliga else vinculado)
+
+
+@pytest.mark.parametrize("active", [True, False], ids=["ativo", "desligado"])
+def test_remover_vinculado_e_recusado_antes_de_qualquer_delete(active: bool) -> None:
+    """Vale para ativo **e** desligado: o vínculo permanece no desligamento."""
+    fakes = _fakes()
+    _grava(fakes)
+    _vincula(fakes, depois_desliga=not active)
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(EmployeeHasLoginError) as excinfo:
+        _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+
+    assert type(excinfo.value) is EmployeeHasLoginError
+    assert "desligue-o" in str(excinfo.value)
+    assert "employees.delete" not in fakes.store.calls[antes:]
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"]
+    relido = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == UserId("login-1")
+    assert relido.active is active
+
+
+def test_remover_sem_login_continua_removendo() -> None:
+    """A suíte da 3.2 acima é a prova de não-regressão; este é o contraste direto."""
+    fakes = _fakes()
+    _grava(fakes)
+
+    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+
+    assert fakes.employees.find_by_id(_A, _U1, _E1) is None
+
+
+def test_inexistente_precede_a_guarda_de_login() -> None:
+    """404 antes de 409: o endereço vem primeiro (concept §6 precedência)."""
+    fakes = _fakes()
+
+    with pytest.raises(EmployeeNotFoundError):
+        _apagar(fakes).execute(
+            DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("nao-existe"))
+        )

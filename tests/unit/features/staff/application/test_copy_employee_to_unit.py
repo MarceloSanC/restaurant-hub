@@ -59,6 +59,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
     UnavailabilityPeriod,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
@@ -210,7 +211,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
             ),
         )
     )
-    DeactivateEmployeeUseCase(fakes.employees).execute(
+    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
         DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=copia_id)
     )
 
@@ -229,7 +230,7 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
     RenameEmployeeUseCase(fakes.employees).execute(
         RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
     )
-    DeactivateEmployeeUseCase(fakes.employees).execute(
+    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
         DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 

@@ -53,6 +53,7 @@ from tests.fakes.features.staff.in_memory_access_guard import (
     FakeCredentialRejected,
     InMemoryAccessGuard,
 )
+from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
@@ -178,6 +179,10 @@ def overrides_de_use_case(fakes: StaffFakes) -> dict[object, object]:
         "employees": fakes.employees,
         "job_functions": fakes.job_functions,
         "id_generator": FakeIdGenerator(),
+        # Stage 3.5 — `deactivate_employee` e `create_login_for_employee` pedem o
+        # gateway; o fake basta para as rotas que não o exercitam, e o módulo de
+        # R17 substitui por instância própria quando precisa observá-lo.
+        "gateway": InMemoryIdentityGateway(),
     }
 
     construidos: dict[object, object] = {}

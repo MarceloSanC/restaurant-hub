@@ -23,6 +23,7 @@ import pytest
 from restaurant_hub.features.staff.application import use_cases as pacote_use_cases
 from restaurant_hub.features.staff.application.dtos import commands, queries
 from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeLoginResult,
     EmployeeResult,
     JobFunctionResult,
 )
@@ -31,7 +32,8 @@ from restaurant_hub.features.staff.domain.entities.job_function import JobFuncti
 
 pytestmark = pytest.mark.unit
 
-_USE_CASES_ESPERADOS = 16
+# 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17).
+_USE_CASES_ESPERADOS = 17
 
 
 def _modulos_de_use_case() -> list[str]:
@@ -55,7 +57,7 @@ def _classes_de_use_case() -> list[type]:
     return encontradas
 
 
-def test_o_pacote_tem_os_dezesseis_use_cases_da_stage() -> None:
+def test_o_pacote_tem_exatamente_os_use_cases_declarados() -> None:
     """Um arquivo por use case (LAYOUT §7), e a contagem do concept §4.
 
     A lista literal é o ponto: use case novo ou removido força revisão
@@ -67,6 +69,7 @@ def test_o_pacote_tem_os_dezesseis_use_cases_da_stage() -> None:
         "copy_employee_to_unit",
         "create_employee",
         "create_job_function",
+        "create_login_for_employee",
         "deactivate_employee",
         "declare_shift_preference",
         "delete_employee",
@@ -172,7 +175,9 @@ def test_todo_use_case_devolve_result_ou_none(use_case: type) -> None:
     # declarada dos dois use cases de listagem — achata para
     # `{JobFunctionResult, Ellipsis}`. É parte da sintaxe da tupla homogênea,
     # não um tipo que trafega.
-    permitidos = {EmployeeResult, JobFunctionResult, type(None), Ellipsis}
+    # `EmployeeLoginResult` (3.5) embrulha um `EmployeeResult` e o link — é result,
+    # não entidade; a varredura de entidade em `test_dtos.py` o cobre campo a campo.
+    permitidos = {EmployeeResult, EmployeeLoginResult, JobFunctionResult, type(None), Ellipsis}
     assert _tipos_folha(retorno) <= permitidos, f"{use_case.__name__} devolve {retorno!r}"
 
 

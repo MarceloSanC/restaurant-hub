@@ -145,6 +145,9 @@ from restaurant_hub.features.staff.application.use_cases.create_employee import 
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.create_login_for_employee import (
+    CreateLoginForEmployeeUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
     DeactivateEmployeeUseCase,
 )
@@ -400,6 +403,9 @@ class ApplicationDependencies:
     staff_deactivate_employee: DeactivateEmployeeUseCase
     staff_reactivate_employee: ReactivateEmployeeUseCase
     staff_copy_employee_to_unit: CopyEmployeeToUnitUseCase
+    # Stage 3.5 — o 17º use case de staff (R17). Consome `staff_identity_gateway`,
+    # como `staff_deactivate_employee` passou a consumir (R13).
+    staff_create_login_for_employee: CreateLoginForEmployeeUseCase
 
     # --- staff (Stage 3.4) ---------------------------------------------------
     #
@@ -421,8 +427,8 @@ class ApplicationDependencies:
     # **consumido**. A implementação é `LocalIdentityGateway` sobre a
     # `IdentityFacade` — a única aresta entre os dois BCs (ADR 3.5.0001), montada
     # aqui sobre os **mesmos** repositórios, `sender` e `clock` das rotas de
-    # identity, não um segundo grafo. Nasce **sem consumidor** nesta Task (o
-    # precedente é a 3.3/3.4): os use cases da Task 10 o recebem por injeção.
+    # identity, não um segundo grafo. Consumido por `staff_create_login_for_employee`
+    # (R17) e `staff_deactivate_employee` (R13) — a **mesma** instância nos dois.
     staff_identity_gateway: IdentityGateway
 
 
@@ -652,10 +658,15 @@ def wire_dependencies(
         staff_declare_shift_preference=DeclareShiftPreferenceUseCase(employees=staff_employees),
         staff_register_unavailability=RegisterUnavailabilityUseCase(employees=staff_employees),
         staff_remove_unavailability=RemoveUnavailabilityUseCase(employees=staff_employees),
-        staff_deactivate_employee=DeactivateEmployeeUseCase(employees=staff_employees),
+        staff_deactivate_employee=DeactivateEmployeeUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway
+        ),
         staff_reactivate_employee=ReactivateEmployeeUseCase(employees=staff_employees),
         staff_copy_employee_to_unit=CopyEmployeeToUnitUseCase(
             employees=staff_employees, id_generator=id_generator
+        ),
+        staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway
         ),
         staff_access_guard=staff_access_guard,
         staff_identity_gateway=staff_identity_gateway,

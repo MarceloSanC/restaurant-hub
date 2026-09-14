@@ -17,7 +17,7 @@ apareça em **toda** resposta de funcionário sem depender de ninguém lembrar d
 11 lugares (concept 3.5 D6; Gate 8 da issue #45).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
@@ -80,3 +80,22 @@ class EmployeeResult:
     unavailabilities: tuple[UnavailabilityPeriod, ...]
     active: bool
     user_id: UserId | None = None
+
+
+@dataclass(frozen=True)
+class EmployeeLoginResult:
+    """O registro depois de vinculado **e**, só no canal `link`, o segredo (R17).
+
+    Attributes:
+        employee: o estado resultante do registro — com `user_id` preenchido —,
+            pelo mesmo mapper de toda resposta de funcionário (CA06).
+        setup_link: o link de definição de senha quando `delivery=LINK`; `None`
+            quando foi por e-mail. `repr=False` porque é credencial bearer viva
+            (ADR 3.5.0002 §3): sem isso qualquer traceback com `--showlocals`, ou
+            log de debug do result, imprimiria o segredo. Sem default: o use case
+            decide **explicitamente** `None` ou o link — um default `None`
+            deixaria o canal `link` sair sem o segredo por omissão silenciosa.
+    """
+
+    employee: EmployeeResult
+    setup_link: str | None = field(repr=False)

@@ -25,6 +25,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     CopyEmployeeToUnitCommand,
     CreateEmployeeCommand,
     CreateJobFunctionCommand,
+    CreateLoginForEmployeeCommand,
     DeactivateEmployeeCommand,
     DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
@@ -40,9 +41,11 @@ from restaurant_hub.features.staff.application.dtos.queries import (
     ListJobFunctionsQuery,
 )
 from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeLoginResult,
     EmployeeResult,
     JobFunctionResult,
 )
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.application.use_cases._results import employee_result
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
@@ -130,14 +133,24 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
     CopyEmployeeToUnitCommand(
         tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, target_unit_id=UnitId("u2")
     ),
+    CreateLoginForEmployeeCommand(
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        email="maria@cantina.com",
+        delivery=LoginDelivery.LINK,
+    ),
     ListJobFunctionsQuery(tenant_id=_TENANT),
     ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE),
     JobFunctionResult(id=_FUNCAO, tenant_id=_TENANT, name="Cozinheiro"),
     _RESULTADO_BASE,
+    EmployeeLoginResult(employee=_RESULTADO_BASE, setup_link="https://x/definir-senha?token=t"),
 )
 
 
-_DTOS_ESPERADOS = 14 + 2 + 2  # commands + queries + results (concept §4)
+# 14 + 2 + 2 até a 3.4; a Stage 3.5 acrescenta `CreateLoginForEmployeeCommand` e
+# `EmployeeLoginResult` (concept 3.5 §4).
+_DTOS_ESPERADOS = 15 + 2 + 3  # commands + queries + results (concept §4)
 
 
 def _dtos_declarados() -> set[type]:
@@ -172,10 +185,10 @@ def test_a_lista_de_dtos_cobre_todos_os_declarados_nos_tres_modulos() -> None:
     assert {type(dto) for dto in _TODOS_OS_DTOS} == _dtos_declarados()
 
 
-def test_a_stage_declara_catorze_commands_duas_queries_e_dois_results() -> None:
+def test_a_stage_declara_exatamente_os_dtos_do_concept() -> None:
     """Guarda a contagem do concept §4: DTO novo ou removido força revisão."""
     assert len(_TODOS_OS_DTOS) == _DTOS_ESPERADOS
-    # Nenhum DTO repetido na lista: 18 entradas de 18 tipos distintos.
+    # Nenhum DTO repetido na lista: N entradas de N tipos distintos.
     assert len({type(dto) for dto in _TODOS_OS_DTOS}) == _DTOS_ESPERADOS
 
 
@@ -300,9 +313,9 @@ def test_result_de_funcionario_tem_o_estado_de_ciclo_de_vida() -> None:
 _PASTA_DE_USE_CASES = pathlib.Path(pacote_use_cases.__file__).parent
 _MODULO_DO_MAPPER = "_results"
 # Contagem **transcrita** dos módulos que consomem `employee_result`: os 11 use
-# cases que devolvem funcionário (a Task 10 da 3.5 acrescenta o 12º). Sem ela a
-# varredura por AST abaixo passaria sobre uma pasta vazia.
-_TOTAL_DE_CONSUMIDORES_DO_MAPPER = 11
+# cases que devolvem funcionário mais `create_login_for_employee` (3.5). Sem ela
+# a varredura por AST abaixo passaria sobre uma pasta vazia.
+_TOTAL_DE_CONSUMIDORES_DO_MAPPER = 12
 
 
 def test_employee_result_carrega_o_vinculo_de_login() -> None:
@@ -463,12 +476,14 @@ _COMMANDS_DE_REGISTRO_EXISTENTE = (
     ReactivateEmployeeCommand,
     DeleteEmployeeCommand,
     CopyEmployeeToUnitCommand,
+    CreateLoginForEmployeeCommand,
 )
-# Contagem do ADR 3.4.0007 §3, na mesma forma do `_DTOS_ESPERADOS` da §4.
-_COMMANDS_DE_REGISTRO_EXISTENTE_ESPERADOS = 10
+# Contagem do ADR 3.4.0007 §3, na mesma forma do `_DTOS_ESPERADOS` da §4 — dez
+# até a 3.4; o 11º é o command de R17 (3.5), que também endereça o registro.
+_COMMANDS_DE_REGISTRO_EXISTENTE_ESPERADOS = 11
 
 
-def test_sao_dez_os_commands_que_atuam_sobre_registro_existente() -> None:
+def test_todo_command_de_registro_existente_esta_na_lista() -> None:
     """Guarda a contagem do ADR 3.4.0007 §3, como `_DTOS_ESPERADOS` guarda a §4.
 
     Um 11º command de registro existente que nascesse sem `unit_id` escaparia da
@@ -521,6 +536,8 @@ def test_construir_sem_a_unidade_e_type_error(command_class: type) -> None:
         "shift_preference": _PREFERENCIA,
         "period": _PERIODO,
         "target_unit_id": UnitId("u2"),
+        "email": "maria@cantina.com",
+        "delivery": LoginDelivery.LINK,
     }
     nomes = {campo.name for campo in dataclasses.fields(command_class)} - {"unit_id"}
 
@@ -549,3 +566,95 @@ def test_copiar_distingue_a_unidade_de_origem_da_de_destino() -> None:
     assert comando.unit_id == origem
     assert comando.target_unit_id == destino
     assert comando.unit_id != comando.target_unit_id
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — o segredo no result (CA05)
+# ---------------------------------------------------------------------------
+
+_PASTA_DE_STAFF = pathlib.Path(pacote_use_cases.__file__).parents[2]
+
+
+def test_employee_login_result_nao_imprime_o_link() -> None:
+    """`repr=False` e sem default: o canal decide **explicitamente** `None` ou o link."""
+    campos = {campo.name: campo for campo in dataclasses.fields(EmployeeLoginResult)}
+    assert campos["setup_link"].repr is False
+    assert campos["setup_link"].default is dataclasses.MISSING
+
+    com_link = EmployeeLoginResult(
+        employee=_RESULTADO_BASE, setup_link="https://x/definir-senha?token=s3gr3d0"
+    )
+    assert "s3gr3d0" not in repr(com_link)
+    assert "definir-senha" not in repr(com_link)
+    assert com_link.setup_link is not None
+
+
+def test_create_login_command_nao_tem_default_para_o_canal() -> None:
+    """Sem default: quem pede decide o canal — e o canal decide o prazo do link."""
+    campos = {campo.name: campo for campo in dataclasses.fields(CreateLoginForEmployeeCommand)}
+    assert campos["delivery"].default is dataclasses.MISSING
+    assert campos["email"].default is dataclasses.MISSING
+
+
+def _nomes_alcancados(no: ast.AST) -> set[str]:
+    return {interno.id for interno in ast.walk(no) if isinstance(interno, ast.Name)} | {
+        interno.attr for interno in ast.walk(no) if isinstance(interno, ast.Attribute)
+    }
+
+
+def test_ca05_nenhuma_excecao_de_staff_recebe_o_setup_link() -> None:
+    """Varredura por AST de `features/staff/`: nenhum `raise` alcança `setup_link`.
+
+    A exceção é o caminho pelo qual um segredo vira corpo de resposta ou linha de
+    log sem que ninguém o tenha escrito de propósito: `LoginEmailAlreadyInUseError(email)`
+    carrega o e-mail **porque** o e-mail é diagnóstico legítimo; um
+    `SomethingError(setup_link)` faria o mesmo com o segredo. A varredura olha o
+    que cada `raise` **alcança** — argumentos e o que eles derivam —, e reprova
+    tanto `raise X(setup_link)` quanto `raise X(provisioned.setup_link)` e
+    `link = provisioned.setup_link; raise X(link)` (pelo nome `link` derivado, o
+    teste abaixo o cobre por caso plantado).
+    """
+    culpados: dict[str, list[int]] = {}
+    for arquivo in sorted(_PASTA_DE_STAFF.rglob("*.py")):
+        arvore = ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
+        for funcao in ast.walk(arvore):
+            if not isinstance(funcao, ast.FunctionDef):
+                continue
+            derivados = {"setup_link"}
+            for no in ast.walk(funcao):
+                if isinstance(no, ast.Assign) and _nomes_alcancados(no.value) & derivados:
+                    derivados |= {alvo.id for alvo in no.targets if isinstance(alvo, ast.Name)}
+            for no in ast.walk(funcao):
+                if (
+                    isinstance(no, ast.Raise)
+                    and no.exc is not None
+                    and _nomes_alcancados(no.exc) & derivados
+                ):
+                    culpados.setdefault(str(arquivo.relative_to(_PASTA_DE_STAFF)), []).append(
+                        no.lineno
+                    )
+
+    assert culpados == {}, f"`raise` alcançando o setup_link em staff: {culpados}"
+
+
+def test_o_detector_de_ca05_reprova_os_tres_casos_plantados() -> None:
+    """Guarda que nunca viu positivo não é guarda: direto, por atributo e por derivado."""
+    plantados = (
+        "def f(setup_link):\n    raise ValueError(setup_link)\n",
+        "def f(p):\n    raise ValueError(p.setup_link)\n",
+        "def f(p):\n    link = p.setup_link\n    raise ValueError(link)\n",
+    )
+    for codigo in plantados:
+        funcao = ast.parse(codigo).body[0]
+        assert isinstance(funcao, ast.FunctionDef)
+        derivados = {"setup_link"}
+        for no in ast.walk(funcao):
+            if isinstance(no, ast.Assign) and _nomes_alcancados(no.value) & derivados:
+                derivados |= {alvo.id for alvo in no.targets if isinstance(alvo, ast.Name)}
+        alcancou = any(
+            isinstance(no, ast.Raise)
+            and no.exc is not None
+            and bool(_nomes_alcancados(no.exc) & derivados)
+            for no in ast.walk(funcao)
+        )
+        assert alcancou, codigo

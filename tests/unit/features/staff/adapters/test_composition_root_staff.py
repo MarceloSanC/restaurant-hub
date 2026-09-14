@@ -117,9 +117,11 @@ _USE_CASES_DE_STAFF = (
     "staff_deactivate_employee",
     "staff_reactivate_employee",
     "staff_copy_employee_to_unit",
+    "staff_create_login_for_employee",
 )
 
-_TOTAL_DE_USE_CASES = 16
+# 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17).
+_TOTAL_DE_USE_CASES = 17
 
 
 def _dependencias() -> ApplicationDependencies:
@@ -127,7 +129,7 @@ def _dependencias() -> ApplicationDependencies:
     return wire_dependencies(Settings(_env_file=None))
 
 
-def test_ca18_os_dezesseis_use_cases_de_staff_estao_no_conteiner() -> None:
+def test_ca18_todos_os_use_cases_de_staff_estao_no_conteiner() -> None:
     """A contagem é asserção, não decoração.
 
     O número 16 vem do plano e da pasta `use_cases/`. Sem asserir a contagem, um
@@ -311,12 +313,12 @@ def test_ca07_o_gateway_de_identity_e_o_local_sobre_a_fachada_das_rotas() -> Non
     assert fachada._revoke_all_sessions._clock is deps.identity_revoke_session._clock
 
 
-def test_ca07_o_gateway_nasce_sem_consumidor_nesta_task_e_e_o_unico_novo_no_conteiner() -> None:
-    """O contêiner ganhou exatamente um campo de staff na Task 09 — o port consumido.
+def test_o_conteiner_de_staff_tem_exatamente_os_campos_declarados() -> None:
+    """Os 17 use cases mais os dois ports consumidos — nenhum campo entra de carona.
 
-    Como `staff_access_guard` na 3.4: o campo é anotado com o **port**, não com
-    a classe, e nasce sem consumidor até a Task 10 (precedente 3.3/3.4). Este
-    teste trava a contagem para que um segundo campo entre por decisão.
+    Como `staff_access_guard` na 3.4, `staff_identity_gateway` é anotado com o
+    **port**, não com a classe. Este teste trava o conjunto para que um campo
+    novo entre por decisão.
     """
     campos_de_staff = {
         nome for nome in ApplicationDependencies.__dataclass_fields__ if nome.startswith("staff_")
@@ -1143,3 +1145,36 @@ def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
 
     assert de_identity == _ROTAS_DE_IDENTITY
     assert len(de_identity) == _TOTAL_DE_ROTAS_DE_IDENTITY
+
+
+def test_ca07_deactivate_e_create_login_recebem_a_mesma_instancia_do_gateway() -> None:
+    """Um gateway, uma fachada, um grafo — identidade de objeto nos dois consumidores."""
+    deps = _dependencias()
+
+    assert deps.staff_deactivate_employee._gateway is deps.staff_identity_gateway
+    assert deps.staff_create_login_for_employee._gateway is deps.staff_identity_gateway
+    assert (
+        deps.staff_create_login_for_employee._employees is deps.staff_deactivate_employee._employees
+    )
+
+
+@pytest.mark.parametrize(
+    ("campo", "recebe_gateway"),
+    [
+        pytest.param("staff_create_login_for_employee", True, id="create-login"),
+        pytest.param("staff_deactivate_employee", True, id="deactivate"),
+        pytest.param("staff_delete_employee", False, id="delete"),
+        pytest.param("staff_reactivate_employee", False, id="reactivate"),
+    ],
+)
+def test_so_r13_e_r17_recebem_o_gateway(campo: str, recebe_gateway: bool) -> None:
+    """ADR 3.5.0003: R15 recusa sem falar com identity; R14 não altera o vínculo.
+
+    A assinatura do construtor é a evidência: um `gateway` que aparecesse em
+    `DeleteEmployeeUseCase` seria o começo de "apagar revoga", a alternativa E
+    rejeitada no ADR.
+    """
+    deps = _dependencias()
+    parametros = inspect.signature(type(getattr(deps, campo)).__init__).parameters
+
+    assert ("gateway" in parametros) is recebe_gateway
