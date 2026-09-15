@@ -737,6 +737,9 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
             ),
             staff_router_module._get_deactivate_employee: (lambda: deps.staff_deactivate_employee),
             staff_router_module._get_reactivate_employee: (lambda: deps.staff_reactivate_employee),
+            staff_router_module._get_create_login_for_employee: (
+                lambda: deps.staff_create_login_for_employee
+            ),
             staff_router_module._get_copy_employee_to_unit: (
                 lambda: deps.staff_copy_employee_to_unit
             ),

@@ -101,6 +101,8 @@ _VALORES_ADVERSARIAIS: Final = (
     "Infinity",
     "-1",
     "0",
+    # Stage 3.5 (D8): e-mail bem-formado para a regex com NUL no meio — era 500.
+    "nul\x00@dentro.com",
 )
 
 _NOME_COM_NUL: Final = "Ana\x00Souza"
@@ -459,6 +461,63 @@ async def _copia_para_a_propria_unidade(
     )
 
 
+async def _login_de(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos, *, email: str
+) -> Response:
+    """R17 pelo canal `link` — nenhum e-mail sai nos cenários de faixa."""
+    return await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/login",
+        json={"email": email, "delivery": "link"},
+        headers=cabecalho,
+    )
+
+
+async def _segundo_login(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`EmployeeAlreadyHasLoginError` — o registro já aponta para uma conta."""
+    primeiro = await _login_de(client, cabecalho, recursos, email="primeiro@cantina.com")
+    assert primeiro.status_code == HTTPStatus.CREATED, primeiro.text
+    return await _login_de(client, cabecalho, recursos, email="segundo@cantina.com")
+
+
+async def _login_em_desligado(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`TerminatedEmployeeLoginError` — desligado não recebe login (precede identity)."""
+    desligado = await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/termination",
+        headers=cabecalho,
+    )
+    assert desligado.status_code == HTTPStatus.OK, desligado.text
+    return await _login_de(client, cabecalho, recursos, email="desligado@cantina.com")
+
+
+async def _login_com_email_do_gerente(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`LoginEmailAlreadyInUseError` — o e-mail do `manager` já é login (traduzido, L-IG2)."""
+    return await _login_de(client, cabecalho, recursos, email="gerente@cantina.com")
+
+
+async def _login_com_email_sem_arroba(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`InvalidLoginEmailError` — identity recusou o e-mail; staff traduz (L-IG2)."""
+    return await _login_de(client, cabecalho, recursos, email="sem-arroba")
+
+
+async def _remocao_de_vinculado(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`EmployeeHasLoginError` — R15 recusa registro com login (ADR 3.5.0003 §1b)."""
+    vinculado = await _login_de(client, cabecalho, recursos, email="vinculado@cantina.com")
+    assert vinculado.status_code == HTTPStatus.CREATED, vinculado.text
+    return await client.delete(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}", headers=cabecalho
+    )
+
+
 # As entradas do mapa que **nenhuma requisição consegue produzir**, e a razão de
 # cada uma. Transcritas do comentário da entrada correspondente em
 # `error_handlers.py` — este é o outro lado daquela declaração, e é o que faz dela
@@ -467,11 +526,11 @@ async def _copia_para_a_propria_unidade(
 # - `EmployeeInUseError` — sem produtor em v1; nasce com o Step 4 (alocação);
 # - `EmployeeRelocationError` — nenhuma rota permite enviar `unit_id` num update;
 # - as duas colisões de **id** — o id é UUID gerado dentro do use case, nunca
-#   enviado pelo cliente, e produzi-las exigiria dois UUID4 iguais;
-# - **as cinco recusas de login da Stage 3.5 (2026-09-13, Task 01)** — nasceram
-#   com a entrada no mapa e **sem produtor**: R17 e a guarda de R15 só existem a
-#   partir da Task 11 daquela Stage, que as move para `CENARIOS_POR_EXCECAO`.
-#   Até lá, "inalcançável" é literalmente verdade.
+#   enviado pelo cliente, e produzi-las exigiria dois UUID4 iguais.
+#
+# As cinco recusas de login da Stage 3.5 estiveram aqui entre a Task 01 (entrada
+# no mapa, sem produtor) e a Task 11 (R17 e a guarda de R15), que as moveu para
+# `CENARIOS_POR_EXCECAO` com o cenário mínimo de cada uma.
 #
 # Escritas por **nome**, e não por classe, porque o nome é o que a declaração de
 # `error_handlers.py` carrega — e é a divergência entre os dois lados que este
@@ -482,11 +541,6 @@ INALCANCAVEIS_POR_HTTP: Final = frozenset(
         "EmployeeRelocationError",
         "JobFunctionAlreadyExistsError",
         "EmployeeAlreadyExistsError",
-        "EmployeeAlreadyHasLoginError",
-        "TerminatedEmployeeLoginError",
-        "LoginEmailAlreadyInUseError",
-        "InvalidLoginEmailError",
-        "EmployeeHasLoginError",
     }
 )
 
@@ -534,6 +588,21 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
         _copia_para_a_propria_unidade,
         "cópia exige unidade destino diferente da origem",
     ),
+    # Stage 3.5 — as cinco recusas de login, pelo HTTP real (CA20).
+    "EmployeeAlreadyHasLoginError": (_segundo_login, "já tem login vinculado"),
+    "TerminatedEmployeeLoginError": (
+        _login_em_desligado,
+        "funcionário desligado não pode receber login",
+    ),
+    "LoginEmailAlreadyInUseError": (
+        _login_com_email_do_gerente,
+        "e-mail já usado como login: 'gerente@cantina.com'",
+    ),
+    "InvalidLoginEmailError": (_login_com_email_sem_arroba, "e-mail de login inválido"),
+    "EmployeeHasLoginError": (
+        _remocao_de_vinculado,
+        "funcionário com login não pode ser removido; desligue-o",
+    ),
 }
 
 _TOTAL_DE_ENTRADAS_DO_MAPA: Final = 23
@@ -543,7 +612,8 @@ _TOTAL_DE_ENTRADAS_DO_MAPA: Final = 23
 # em cada uma das duas rotas que o aceitam e o período de `shift_preference`.
 # A contagem é transcrita, e não derivada: é ela que faz um encolhimento do
 # domínio reprovar em vez de reduzir em silêncio o número de casos rodados.
-_TOTAL_DE_CAMPOS_ESCALARES: Final = 13
+# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17.
+_TOTAL_DE_CAMPOS_ESCALARES: Final = 15
 
 
 def test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e() -> None:

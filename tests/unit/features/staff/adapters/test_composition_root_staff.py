@@ -438,8 +438,10 @@ def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
 # universal, representante estreito" — foi assim que a Stage 3.4 vazou duas
 # mutações. Os dois arquivos são comparáveis linha a linha de propósito.
 # Cardinalidades declaradas — piso contra a varredura encolher em silencio.
-_TOTAL_DE_OVERRIDES_DE_STAFF = 17
-_TOTAL_DE_ROTAS_DE_STAFF = 16
+# 17 overrides (16 `_get_*` + `get_access_guard`) e 16 rotas até a 3.6; a Stage
+# 3.5 acrescenta o provedor e a rota de R17.
+_TOTAL_DE_OVERRIDES_DE_STAFF = 18
+_TOTAL_DE_ROTAS_DE_STAFF = 17
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.in.http"
 _PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
@@ -1098,8 +1100,8 @@ def test_ca30_cada_override_de_staff_devolve_a_dependencia_montada() -> None:
         assert wiring.dependency_overrides[provedor]() is esperado, nome
 
 
-def test_ca30_as_dezesseis_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None:
-    """As 16 rotas passam a responder — e as de identity continuam como estavam.
+def test_ca30_todas_as_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None:
+    """As 17 rotas passam a responder — e as de identity continuam como estavam.
 
     A varredura é sobre a **app real**, e não sobre o router isolado: é a app que
     o cliente alcança, e é nela que um prefixo errado ou um router não incluído

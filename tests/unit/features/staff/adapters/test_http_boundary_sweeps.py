@@ -66,7 +66,8 @@ Caminho = tuple[str | int, ...]
 # `job_function_ids` em cada uma das duas rotas que o aceitam e o período de
 # `shift_preference`. A contagem é transcrita, e não derivada: é ela que faz um
 # encolhimento do domínio reprovar em vez de reduzir em silêncio os casos rodados.
-_TOTAL_DE_CAMPOS_ESCALARES = 13
+# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17.
+_TOTAL_DE_CAMPOS_ESCALARES = 15
 
 # Alias local do tipo devolvido por `identifier_fields` — o módulo chega por
 # `importlib` (o pacote `in` é keyword), então o nome não existe como import.
@@ -84,7 +85,9 @@ _IDENTIFICADORES_INVALIDOS_EM_PATH = ("   ", "\x00")
 # recusa (ADR 3.6.0002 §2). Transcritos, e nao perguntados ao codigo sob teste:
 # perguntar faria a expectativa seguir o defeito. Ha teste que cruza esta
 # transcricao com o validador real, para que ela nao possa envelhecer em silencio.
-_ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR = frozenset({"", "\x00"})
+# O e-mail com NUL (3.5) tambem cai aqui: o validador recusa **qualquer** string
+# com o byte, e o eixo de path o exercita como identificador.
+_ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR = frozenset({"", "\x00", "nul\x00@dentro.com"})
 
 # Conjunto adversarial da Stage 3.3 mais os numéricos degenerados de CA24. O
 # critério é **ausência de 500**: qualquer um destes pode ser aceito ou recusado,
@@ -103,6 +106,10 @@ _VALORES_ADVERSARIAIS = (
     "Infinity",
     "-1",
     "0",
+    # Stage 3.5 (D8): um e-mail **bem-formado para a regex** com NUL no meio. Era
+    # 500 em identity; aqui só se prova "sem 500" — o 422 é do VO `Email` (Task
+    # 06) e do e2e (Task 12).
+    "nul\x00@dentro.com",
 )
 
 
@@ -458,9 +465,12 @@ def test_ca14_nenhum_handler_le_o_unit_id_do_escopo_autorizado() -> None:
 # A varredura é o que torna `names_unit` **carga real** sem replumbar produção no
 # fim da Stage: quem lê o campo é este teste, e ler é o que impede a declaração e
 # a chamada de divergirem. Plugá-lo no router seria a outra saída, e mexeria nas
-# 17 chamadas ao guard por um ganho que esta asserção já entrega.
-
-_TOTAL_DE_AUTORIZACOES = 17
+# 19 chamadas ao guard por um ganho que esta asserção já entrega.
+#
+# 17 até a 3.6 (16 rotas + a segunda autorização de R16); a Stage 3.5 acrescenta
+# R17, que autoriza **duas** vezes sobre o mesmo alvo (`manage_staff` e
+# `manage_users`, concept 3.5 §5.3) — 19.
+_TOTAL_DE_AUTORIZACOES = 19
 
 
 def _requisitos_declarados() -> dict[str, object]:
@@ -511,9 +521,11 @@ def test_toda_autorizacao_do_router_nomeia_um_requisito_declarado() -> None:
     a ignoraria, e a lei ficaria verde sobre um conjunto menor. É a mesma
     disciplina que a totalidade de `_INVOCACOES` aplica às rotas.
 
-    A cardinalidade é **17**, e não 16, e a diferença é R16: a cópia autoriza
-    **duas** vezes, com alvos distintos (L-AG4). Travar o número em 16 esconderia
-    exatamente a chamada que o ADR 3.4.0007 existe para exigir.
+    A cardinalidade é **19**: 17 rotas, mais a segunda chamada de R16 (a cópia
+    autoriza **dois alvos**, L-AG4) e a segunda de R17 (o login autoriza **duas
+    permissões** sobre o mesmo alvo, concept 3.5 §5.3). Travar o número em 17
+    esconderia exatamente as chamadas que o ADR 3.4.0007 e o §5.3 existem para
+    exigir.
     """
     declarados = set(_requisitos_declarados())
     chamadas = [
@@ -1418,3 +1430,49 @@ def test_o_dominio_adversarial_de_ca24_nao_esta_vazio() -> None:
     assert _CASOS_ADVERSARIAIS
     assert _CASOS_DE_PATH
     assert _CASOS_DE_QUERY
+
+
+# ---------------------------------------------------------------------------
+# CA13 (Stage 3.5) — toda resposta de funcionário carrega `user_id`
+# ---------------------------------------------------------------------------
+
+# Rotas cujo `response_model` **é** ou **embute** `EmployeeResponse`: as 11 de
+# funcionário da 3.6 (uma delas como `list[...]`) mais R17, cujo
+# `EmployeeLoginResponse` embrulha o registro. Transcrita, como as outras
+# contagens: uma rota nova de funcionário que respondesse com outro schema
+# reprovaria aqui até que alguém decidisse que ela não devolve o registro.
+_TOTAL_DE_ROTAS_QUE_DEVOLVEM_FUNCIONARIO = 12
+
+
+def _devolve_funcionario(modelo: object) -> bool:
+    """Se a anotação de resposta é, contém ou embute `EmployeeResponse`."""
+    schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
+    if modelo is schemas.EmployeeResponse:
+        return True
+    if get_origin(modelo) is not None:
+        return any(_devolve_funcionario(arg) for arg in get_args(modelo))
+    if isinstance(modelo, type) and issubclass(modelo, BaseModel):
+        return any(_devolve_funcionario(campo.annotation) for campo in modelo.model_fields.values())
+    return False
+
+
+def test_ca13_toda_resposta_de_funcionario_carrega_o_user_id() -> None:
+    """Derivado de `router.routes`: o campo entra em toda rota que devolve o registro.
+
+    A trava é sobre o **schema** (`EmployeeResponse.user_id`) e sobre a
+    **cardinalidade** das rotas que o devolvem — inclusive por embrulho
+    (`EmployeeLoginResponse.employee`). O e2e (Task 12) prova o valor no fio.
+    """
+    schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
+    campo = schemas.EmployeeResponse.model_fields["user_id"]
+    assert campo.annotation == str | None
+    assert campo.is_required(), "user_id sem default: `from_result` sempre o preenche"
+
+    rotas_de_funcionario = [rota for rota in _rotas() if _devolve_funcionario(rota.response_model)]
+    assert len(rotas_de_funcionario) == _TOTAL_DE_ROTAS_QUE_DEVOLVEM_FUNCIONARIO, sorted(
+        rota.path for rota in rotas_de_funcionario
+    )
+    assert any(rota.path.endswith("/login") for rota in rotas_de_funcionario)
+    assert schemas.EmployeeLoginResponse.model_fields["employee"].annotation is (
+        schemas.EmployeeResponse
+    )

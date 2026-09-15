@@ -51,6 +51,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     CopyEmployeeToUnitCommand,
     CreateEmployeeCommand,
     CreateJobFunctionCommand,
+    CreateLoginForEmployeeCommand,
     DeactivateEmployeeCommand,
     DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
@@ -65,6 +66,7 @@ from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
     ListJobFunctionsQuery,
 )
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
     AssignJobFunctionsUseCase,
 )
@@ -79,6 +81,9 @@ from restaurant_hub.features.staff.application.use_cases.create_employee import 
 )
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.create_login_for_employee import (
+    CreateLoginForEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
     DeactivateEmployeeUseCase,
@@ -129,6 +134,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from .dependencies import (
     MANAGE_JOB_FUNCTIONS_ACCESS,
     MANAGE_STAFF_IN_UNIT_ACCESS,
+    MANAGE_USERS_IN_UNIT_ACCESS,
     CurrentActor,
     StaffAccessGuard,
     validate_identifier,
@@ -139,7 +145,9 @@ from .schemas import (
     CopyEmployeeRequest,
     CreateEmployeeRequest,
     CreateJobFunctionRequest,
+    CreateLoginRequest,
     DeclareShiftPreferenceRequest,
+    EmployeeLoginResponse,
     EmployeeResponse,
     JobFunctionResponse,
     RegisterUnavailabilityRequest,
@@ -224,6 +232,10 @@ def _get_reactivate_employee() -> ReactivateEmployeeUseCase:
 
 def _get_copy_employee_to_unit() -> CopyEmployeeToUnitUseCase:
     _nao_conectado("staff_copy_employee_to_unit")
+
+
+def _get_create_login_for_employee() -> CreateLoginForEmployeeUseCase:
+    _nao_conectado("staff_create_login_for_employee")
 
 
 def _to_shift_preference(periodos: list[str] | None) -> ShiftPreference | None:
@@ -727,3 +739,53 @@ def copy_employee_to_unit(  # noqa: PLR0913
         )
     )
     return EmployeeResponse.from_result(result)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — R17: o login do funcionário
+# ---------------------------------------------------------------------------
+#
+# A única rota de staff que exige **duas** permissões, e as duas sobre o mesmo
+# alvo — a unidade do path (concept 3.5 §5.3). `manage_staff` porque altera o
+# registro do funcionário; `manage_users` porque cria uma conta em identity, e
+# esta rota é um segundo caminho de entrada para "criar conta" que não passa por
+# `/users/invitations` (finding da 2.4). A ordem das duas é contrato: a de staff
+# primeiro, e a de identity **não acontece** quando a primeira nega — CA10 assere
+# a sequência e a ausência com o dublê que registra chamadas.
+#
+# O `email` **não** passa por `validate_identifier` (concept §5.7): não é
+# identificador de staff, é vocabulário de identity, que o valida atrás do
+# gateway; a recusa volta traduzida (L-IG2) e o mapa de status a classifica.
+#
+# A rota **não** loga nem repete o `setup_link`: ele sai uma vez, no corpo, só no
+# canal `link` — e `EmployeeLoginResponse` é o único schema que o carrega.
+
+
+@router.post(
+    "/units/{unit_id}/employees/{employee_id}/login",
+    response_model=EmployeeLoginResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_login_for_employee(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    payload: CreateLoginRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[CreateLoginForEmployeeUseCase, Depends(_get_create_login_for_employee)],
+) -> EmployeeLoginResponse:
+    """Cria a conta pendente em identity e a vincula ao registro — 201 (R17)."""
+    unidade = validate_identifier(unit_id, entity=_UNIT)
+    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    guard.authorize(actor, MANAGE_USERS_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    result = use_case.execute(
+        CreateLoginForEmployeeCommand(
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unidade),
+            employee_id=EmployeeId(funcionario),
+            email=payload.email,
+            delivery=LoginDelivery(payload.delivery),
+        )
+    )
+    return EmployeeLoginResponse.from_result(result)

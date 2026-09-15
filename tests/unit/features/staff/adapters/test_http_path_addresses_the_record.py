@@ -45,7 +45,10 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeLoginResult,
+    EmployeeResult,
+)
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     TenantId,
@@ -124,6 +127,10 @@ def _resultado_para(anotacao: object) -> object:
         return None
     if typing.get_origin(anotacao) is tuple:
         return (_RESULTADO_DE_FUNCIONARIO,)
+    if anotacao is EmployeeLoginResult:
+        # R17 (3.5) embrulha o registro; o link é `None` porque o canal declarado
+        # em `INVOCACOES` é irrelevante para a lei — o que se mede é a unidade.
+        return EmployeeLoginResult(employee=_RESULTADO_DE_FUNCIONARIO, setup_link=None)
     return _RESULTADO_DE_FUNCIONARIO
 
 
@@ -215,6 +222,12 @@ async def test_ca15_a_unidade_do_use_case_e_a_do_path(
 
     assert comando.unit_id == _UNIDADE_PEDIDA
     assert comando.unit_id != UNIDADE_ADVERSARIAL
+    # O efeito também: a resposta devolve o registro da unidade do path — direto
+    # ou embrulhado (R17, 3.5).
+    if resposta.content:  # R15 responde 204 sem corpo
+        corpo = resposta.json()
+        registro = corpo.get("employee", corpo) if isinstance(corpo, dict) else corpo[0]
+        assert registro["unit_id"] == _UNIDADE_PEDIDA
 
 
 def _alvos_de_unidade_declarados(rota: APIRoute) -> set[str]:
@@ -271,12 +284,17 @@ async def test_ca15_o_guard_e_consultado_com_a_unidade_do_path(rota: APIRoute) -
     # passava, porque `name` é texto livre do cliente e estava entre os valores
     # do corpo. Autorizar contra um campo arbitrário é exatamente o caminho não
     # previsto que esta asserção existe para fechar, e ela o aceitava.
-    declarados = _alvos_de_unidade_declarados(rota)
+    #
+    # **Ou** é a própria unidade do path (Stage 3.5): R17 autoriza duas
+    # **permissões** sobre o **mesmo** alvo — a segunda chamada repete a unidade
+    # do path, não introduz alvo novo. Aceitar exatamente `_UNIDADE_PEDIDA` é o
+    # que distingue "segunda permissão sobre o mesmo alvo" de "segundo alvo".
+    declarados = _alvos_de_unidade_declarados(rota) | {_UNIDADE_PEDIDA}
     for extra in autorizacoes[1:]:
         alvo = extra.rsplit(",", 1)[-1].rstrip(")")
         assert alvo in declarados, (
-            f"autorização sobre alvo que não é identificador de unidade declarado: {extra}. "
-            f"Declarados: {sorted(declarados)}"
+            f"autorização sobre alvo que não é identificador de unidade declarado nem a "
+            f"unidade do path: {extra}. Declarados: {sorted(declarados)}"
         )
 
 

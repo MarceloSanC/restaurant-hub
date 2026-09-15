@@ -64,17 +64,18 @@ router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 # transforma "toda rota satisfaz P" numa afirmação com conteúdo: sem ela, um
 # `_rotas()` que devolvesse a lista vazia deixaria todo `parametrize` deste
 # módulo sem um único caso, e a suíte ficaria verde por não medir nada.
-_TOTAL_DE_ROTAS: Final = 16
+# 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`).
+_TOTAL_DE_ROTAS: Final = 17
 
 # As três partições do inventário e os dois produtos que os critérios nomeiam.
 # São **números transcritos do concept**, não derivados do código: derivá-los faria
 # a expectativa acompanhar qualquer encolhimento do domínio, que é precisamente o
 # modo de falha que estas contagens existem para pegar.
 _TOTAL_DE_RJF: Final = 4
-_TOTAL_DE_REMP: Final = 12
-_TOTAL_COM_EMPLOYEE_ID: Final = 10
-_CASOS_DE_CA09: Final = 32
-_CASOS_DE_CA36: Final = 48
+_TOTAL_DE_REMP: Final = 13
+_TOTAL_COM_EMPLOYEE_ID: Final = 11
+_CASOS_DE_CA09: Final = 34
+_CASOS_DE_CA36: Final = 51
 
 # Os corpos constantes de identity (`identity/adapters/in/http/error_handlers.py`).
 # **Transcritos, e não importados**: o critério é sobre o contrato que o cliente
@@ -170,6 +171,16 @@ async def _efeito_removido_da_unidade_do_path(
         params={"include_inactive": "true"},
     )
     assert recursos.employee_id not in {item["id"] for item in restante.json()}
+
+
+async def _efeito_login_no_registro_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R17 (3.5) embrulha o registro: o `unit_id` está em `employee`, e o vínculo também."""
+    corpo = resposta.json()
+    assert corpo["employee"]["unit_id"] == recursos.unidade
+    assert corpo["employee"]["id"] == recursos.employee_id
+    assert corpo["employee"]["user_id"] is not None
 
 
 async def _efeito_copia_lida_da_unidade_do_path(
@@ -341,6 +352,17 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         body=lambda r: {"target_unit_id": r.unidade_destino},
         sucesso=HTTPStatus.CREATED,
         efeito=_efeito_copia_lida_da_unidade_do_path,
+    ),
+    # Stage 3.5 — R17. O e-mail leva o **sufixo** do cenário: a unicidade é global
+    # em identity, e duas células que semeiem recursos lado a lado (CA11, CA12)
+    # colidiriam num e-mail fixo. Canal `link` para que nenhum e-mail saia no
+    # cenário da matriz — o canal `email` é do e2e de fluxo (Task 12).
+    ("POST", f"{_EMPLOYEES}/{{employee_id}}/login"): Rota(
+        path=_do_funcionario,
+        query=_sem_query,
+        body=lambda r: {"email": f"login-{r.sufixo}@cantina.com", "delivery": "link"},
+        sucesso=HTTPStatus.CREATED,
+        efeito=_efeito_login_no_registro_da_unidade_do_path,
     ),
 }
 
@@ -635,7 +657,8 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # sozinha. `include_inactive` fica de fora porque tem default — omiti-lo não
 # produz 422, e um caso que não degrada não mede a corrida.
 
-_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 10
+# Dez até a 3.6; R17 (3.5) tem corpo — onze.
+_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 11
 
 # O corpo que nenhum `*Request` aceita. Não é um campo com valor errado: é a
 # **ausência** dos campos obrigatórios, que é o 422 mais barato de produzir e o
@@ -696,7 +719,7 @@ async def _invocar_com_entrada_degradada(
 
 
 def test_o_dominio_das_rotas_com_entrada_tem_a_cardinalidade_declarada() -> None:
-    """Nove rotas com corpo e uma com query obrigatória — **dez**, e a contagem é a prova.
+    """Dez rotas com corpo e uma com query obrigatória — **onze**, e a contagem é a prova.
 
     Um `_tem_corpo` que parasse de encontrar `body_field` esvaziaria o
     `parametrize` e deixaria a lei verde sobre conjunto nenhum. E travar a
