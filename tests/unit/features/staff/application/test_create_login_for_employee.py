@@ -43,11 +43,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
-from tests.fakes.features.staff.in_memory_staff_store import (
-    InMemoryStaffStore,
-    StaffFakes,
-    staff_repositories,
-)
+from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 
 pytestmark = pytest.mark.unit
 
@@ -62,24 +58,6 @@ _PERIODO = UnavailabilityPeriod(
     start=datetime(2026, 9, 14, 8, 0),
     end=datetime(2026, 9, 14, 12, 0),
 )
-
-
-class _GatewayQueRegistraNoStore(InMemoryIdentityGateway):
-    """O fake do gateway, com as chamadas espelhadas no ledger do store.
-
-    Os dois ledgers separados não respondem "o vínculo foi gravado **antes** do
-    envio?" — a ordem entre `employees.update` e `send_login_invitation` só é
-    observável num ledger único. Espelhar é o que torna a asserção de CA30
-    literal, em vez de inferida.
-    """
-
-    def __init__(self, store: InMemoryStaffStore) -> None:
-        super().__init__()
-        self._store = store
-
-    def record(self, call: str) -> None:
-        super().record(call)
-        self._store.record(f"gateway.{call}")
 
 
 def _fakes(*, active: bool = True, user_id: UserId | None = None) -> StaffFakes:
@@ -102,8 +80,15 @@ def _fakes(*, active: bool = True, user_id: UserId | None = None) -> StaffFakes:
     return fakes
 
 
-def _gateway(fakes: StaffFakes) -> _GatewayQueRegistraNoStore:
-    return _GatewayQueRegistraNoStore(fakes.store)
+def _gateway(fakes: StaffFakes) -> InMemoryIdentityGateway:
+    """O fake do gateway com as chamadas **espelhadas** no ledger do store.
+
+    Os dois ledgers separados não respondem "o vínculo foi gravado **antes** do
+    envio?" — a ordem entre `employees.update` e `send_login_invitation` só é
+    observável num ledger único. Espelhar é o que torna a asserção de CA30
+    literal, em vez de inferida.
+    """
+    return InMemoryIdentityGateway(mirror=lambda call: fakes.store.record(f"gateway.{call}"))
 
 
 def _comando(

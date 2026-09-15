@@ -23,6 +23,7 @@ tenant, depois unidade. Os testes de use case não dependem da ordem entre as
 duas primeiras; a suíte de contrato depende de cada uma existir.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from restaurant_hub.features.staff.application.errors import (
@@ -81,6 +82,12 @@ class InMemoryIdentityGateway:
         raw_errors_by_unit: unidade ⇒ exceção **crua** a levantar (L-IG2).
         fail_send_with: se definido, `send_login_invitation` levanta **esta
             instância** (L-IG2, metade do envio).
+        mirror: se definido, cada chamada registrada em `calls` é espelhada
+            também aqui — tipicamente `store.record` de `InMemoryStaffStore`, com
+            um prefixo. É o que permite asserir a **ordem** entre uma chamada ao
+            gateway e uma ao repositório num ledger só (ex.: "revogar antes de
+            gravar", "gravar antes de enviar"): dois ledgers separados não têm
+            posição relativa.
     """
 
     logins: dict[UserId, ProvisionedLoginRecord] = field(default_factory=dict)
@@ -92,11 +99,14 @@ class InMemoryIdentityGateway:
     raw_errors_by_tenant: dict[TenantId, Exception] = field(default_factory=dict)
     raw_errors_by_unit: dict[UnitId, Exception] = field(default_factory=dict)
     fail_send_with: Exception | None = None
+    mirror: Callable[[str], None] | None = None
     _sequence: int = 0
 
     def record(self, call: str) -> None:
-        """Registra uma chamada recebida."""
+        """Registra uma chamada recebida — e a espelha, se houver espelho."""
         self.calls.append(call)
+        if self.mirror is not None:
+            self.mirror(call)
 
     def provision_employee_login(
         self,

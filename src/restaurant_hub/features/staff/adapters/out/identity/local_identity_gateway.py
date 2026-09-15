@@ -47,7 +47,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 
 # L-IG1 — o papel do login de funcionário é do port, fixado como valor. Um
 # literal, e não `Role.EMPLOYEE.value`: staff não conhece o enum (CA12).
-_PAPEL_DE_FUNCIONARIO = "employee"
+_EMPLOYEE_ROLE = "employee"
 
 
 class LocalIdentityGateway:
@@ -72,9 +72,9 @@ class LocalIdentityGateway:
             Exception: qualquer outra falha de identity sobe crua (L-IG2).
         """
         try:
-            conta = self._facade.provision_account(
+            account = self._facade.provision_account(
                 email=email,
-                role=_PAPEL_DE_FUNCIONARIO,
+                role=_EMPLOYEE_ROLE,
                 tenant_id=str(tenant_id),
                 unit_ids=(str(unit_id),),
                 handed_over=delivery is LoginDelivery.LINK,
@@ -83,7 +83,7 @@ class LocalIdentityGateway:
             raise LoginEmailAlreadyInUseError(email) from exc
         except InvalidEmailError as exc:
             raise InvalidLoginEmailError(email) from exc
-        return ProvisionedLogin(user_id=UserId(conta.user_id), setup_link=conta.setup_link)
+        return ProvisionedLogin(user_id=UserId(account.user_id), setup_link=account.setup_link)
 
     def send_login_invitation(self, *, email: str, setup_link: str) -> None:
         """Envia o convite; a falha do envio sobe crua e na mesma instância (L-IG2)."""

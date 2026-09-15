@@ -602,6 +602,34 @@ def _nomes_alcancados(no: ast.AST) -> set[str]:
     }
 
 
+def _raises_que_alcancam_setup_link(funcao: ast.FunctionDef | ast.AsyncFunctionDef) -> list[int]:
+    """Linhas dos `raise` da função cuja exceção alcança `setup_link` ou um derivado dele.
+
+    "Derivado" segue atribuições simples **e anotadas** (`link = p.setup_link`,
+    `link: str = p.setup_link`); `async def` conta como função — a borda HTTP
+    pode ser assíncrona. Fatorado para que o teste negativo abaixo exercite **o
+    detector**, e não uma cópia dele (achado do Checkpoint C, bloco 4).
+    """
+    derivados = {"setup_link"}
+    for no in ast.walk(funcao):
+        if isinstance(no, ast.Assign) and _nomes_alcancados(no.value) & derivados:
+            derivados |= {alvo.id for alvo in no.targets if isinstance(alvo, ast.Name)}
+        elif (
+            isinstance(no, ast.AnnAssign)
+            and no.value is not None
+            and isinstance(no.target, ast.Name)
+            and _nomes_alcancados(no.value) & derivados
+        ):
+            derivados.add(no.target.id)
+    return [
+        no.lineno
+        for no in ast.walk(funcao)
+        if isinstance(no, ast.Raise)
+        and no.exc is not None
+        and _nomes_alcancados(no.exc) & derivados
+    ]
+
+
 def test_ca05_nenhuma_excecao_de_staff_recebe_o_setup_link() -> None:
     """Varredura por AST de `features/staff/`: nenhum `raise` alcança `setup_link`.
 
@@ -618,43 +646,42 @@ def test_ca05_nenhuma_excecao_de_staff_recebe_o_setup_link() -> None:
     for arquivo in sorted(_PASTA_DE_STAFF.rglob("*.py")):
         arvore = ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
         for funcao in ast.walk(arvore):
-            if not isinstance(funcao, ast.FunctionDef):
+            if not isinstance(funcao, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
-            derivados = {"setup_link"}
-            for no in ast.walk(funcao):
-                if isinstance(no, ast.Assign) and _nomes_alcancados(no.value) & derivados:
-                    derivados |= {alvo.id for alvo in no.targets if isinstance(alvo, ast.Name)}
-            for no in ast.walk(funcao):
-                if (
-                    isinstance(no, ast.Raise)
-                    and no.exc is not None
-                    and _nomes_alcancados(no.exc) & derivados
-                ):
-                    culpados.setdefault(str(arquivo.relative_to(_PASTA_DE_STAFF)), []).append(
-                        no.lineno
-                    )
+            linhas = _raises_que_alcancam_setup_link(funcao)
+            if linhas:
+                culpados.setdefault(str(arquivo.relative_to(_PASTA_DE_STAFF)), []).extend(linhas)
 
     assert culpados == {}, f"`raise` alcançando o setup_link em staff: {culpados}"
 
 
-def test_o_detector_de_ca05_reprova_os_tres_casos_plantados() -> None:
-    """Guarda que nunca viu positivo não é guarda: direto, por atributo e por derivado."""
-    plantados = (
-        "def f(setup_link):\n    raise ValueError(setup_link)\n",
-        "def f(p):\n    raise ValueError(p.setup_link)\n",
-        "def f(p):\n    link = p.setup_link\n    raise ValueError(link)\n",
-    )
-    for codigo in plantados:
-        funcao = ast.parse(codigo).body[0]
-        assert isinstance(funcao, ast.FunctionDef)
-        derivados = {"setup_link"}
-        for no in ast.walk(funcao):
-            if isinstance(no, ast.Assign) and _nomes_alcancados(no.value) & derivados:
-                derivados |= {alvo.id for alvo in no.targets if isinstance(alvo, ast.Name)}
-        alcancou = any(
-            isinstance(no, ast.Raise)
-            and no.exc is not None
-            and bool(_nomes_alcancados(no.exc) & derivados)
-            for no in ast.walk(funcao)
-        )
-        assert alcancou, codigo
+@pytest.mark.parametrize(
+    "codigo",
+    [
+        pytest.param("def f(setup_link):\n    raise ValueError(setup_link)\n", id="direto"),
+        pytest.param("def f(p):\n    raise ValueError(p.setup_link)\n", id="atributo"),
+        pytest.param(
+            "def f(p):\n    link = p.setup_link\n    raise ValueError(link)\n", id="derivado"
+        ),
+        pytest.param(
+            "def f(p):\n    link: str = p.setup_link\n    raise ValueError(link)\n",
+            id="derivado-anotado",
+        ),
+        pytest.param(
+            "async def f(p):\n    raise ValueError(p.setup_link)\n", id="funcao-assincrona"
+        ),
+    ],
+)
+def test_o_detector_de_ca05_reprova_os_casos_plantados(codigo: str) -> None:
+    """Guarda que nunca viu positivo não é guarda — e é **o** detector que se exercita."""
+    funcao = ast.parse(codigo).body[0]
+    assert isinstance(funcao, ast.FunctionDef | ast.AsyncFunctionDef)
+
+    assert _raises_que_alcancam_setup_link(funcao), codigo
+
+
+def test_o_detector_de_ca05_aceita_o_raise_que_nao_toca_o_segredo() -> None:
+    funcao = ast.parse("def f(p):\n    raise ValueError(p.email)\n").body[0]
+    assert isinstance(funcao, ast.FunctionDef)
+
+    assert _raises_que_alcancam_setup_link(funcao) == []

@@ -324,12 +324,14 @@ def _fakes_com_login() -> StaffFakes:
 def test_desligar_vinculado_revoga_as_sessoes_antes_de_gravar() -> None:
     """A ordem é o contrato: `revoke_login_sessions` **antes** de `employees.update`.
 
-    Os dois ledgers são lidos pela posição relativa: a revogação é a última
-    chamada ao gateway antes de o store registrar o `update`. Gravar primeiro
-    deixaria um desligado com sessão viva quando identity estivesse fora.
+    Provada num **ledger único**: as chamadas ao gateway são espelhadas em
+    `store.calls` (achado do Checkpoint C, bloco 4 — dois ledgers separados não
+    têm posição relativa, e a versão anterior deste teste afirmava a ordem sem
+    medi-la). Gravar primeiro deixaria um desligado com sessão viva quando
+    identity estivesse fora; o teste de falha abaixo é a outra metade da prova.
     """
     fakes = _fakes_com_login()
-    gateway = InMemoryIdentityGateway()
+    gateway = InMemoryIdentityGateway(mirror=lambda call: fakes.store.record(f"gateway.{call}"))
     antes = len(fakes.store.calls)
 
     resultado = _desligar(fakes, gateway).execute(
@@ -337,8 +339,11 @@ def test_desligar_vinculado_revoga_as_sessoes_antes_de_gravar() -> None:
     )
 
     assert gateway.revoked == [UserId("login-1")]
-    assert gateway.calls == ["revoke_login_sessions('login-1')"]
-    assert fakes.store.calls[antes:] == ["employees.find_by_id", "employees.update"]
+    assert fakes.store.calls[antes:] == [
+        "employees.find_by_id",
+        "gateway.revoke_login_sessions('login-1')",
+        "employees.update",
+    ]
     assert resultado.active is False
     # Desligar não é desvincular: o `user_id` permanece (ADR 3.5.0003 §2).
     assert resultado.user_id == UserId("login-1")

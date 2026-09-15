@@ -113,7 +113,7 @@ class IdentityFacade:
             RestaurantNotFoundError, UnitNotFoundError, CrossTenantError,
             PlatformAdminMembershipError: como no use case — sem tradução.
         """
-        resultado = self._provision_account.execute(
+        result = self._provision_account.execute(
             ProvisionAccountCommand(
                 email=Email(email),
                 role=Role.from_string(role),
@@ -122,7 +122,7 @@ class IdentityFacade:
                 handed_over=handed_over,
             )
         )
-        return ProvisionedAccount(user_id=resultado.user.id, setup_link=resultado.setup_link)
+        return ProvisionedAccount(user_id=result.user.id, setup_link=result.setup_link)
 
     def send_invitation(self, *, email: str, setup_link: str) -> None:
         """Envia o convite com o link já emitido; a falha do sender sobe."""
