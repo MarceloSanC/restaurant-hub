@@ -968,7 +968,7 @@ afirmativa.
   salva é a escala vigente (sem rascunho no servidor, sem versão publicada imutável); `block`
   recusa a mutação; `warn` aceito ao salvar; controle otimista por versão com
   recarregar-ou-cancelar, sem sobrescrita no servidor. Resolve overview 43/136 × roadmap
-  1231/1298 (ex-HALT T1) a favor do overview literal; roadmap 5.2 (1420, 1437) vira lacuna de
+  1259/1326 (ex-HALT T1) a favor do overview literal; roadmap 5.2 (1420, 1437) vira lacuna de
   escopo para o gate do Step 5. §3.5.
 - **F2 — Período, dia de início, dia operacional e corte** + **F3 — Contagem de horas** →
   [ADR 4.1.0002](../../adr/4_1_0002-weekly-period-operational-day-and-allocation-hours.md): semana

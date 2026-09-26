@@ -5,7 +5,7 @@ when-use: Reference before adding or reading a timezone anywhere in the system, 
 keywords: [adr, scheduling, identity, unit, timezone, iana, zoneinfo, wall-clock, port, cross-bc, dst, configuration, domain-gate]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-13
+updated_at: 2026-09-26
 adr_id: 4.1.0005
 decision: The unit's timezone is owned by identity as Unit.timezone — an IANA time-zone key validated by the standard library, default America/Sao_Paulo — and scheduling (later timeclock and hub) reads it through a port; which Stage adds the column is a roadmap scope gap (candidates 4.4 or a standalone identity issue), recorded here and not decided.
 context_stage: 4.1-scheduling-domain
@@ -56,8 +56,9 @@ Sponsor: *"Unit em identity + port (Recomendada)"*.
    time-zone key** (`Area/Location`, e.g. `America/Sao_Paulo`), validated by the standard library
    (`zoneinfo`), with **default `America/Sao_Paulo`**. It is unit configuration, not scheduling
    domain data.
-2. **Scheduling reads it through a port** (its own port, implemented in the composition root —
-   the pattern of [ADR 3.4.0001](./3_4_0001-staff-owned-access-guard-port.md)); timeclock (Step
+2. **Scheduling reads it through a port** (its own port, with the adapter **outside scheduling**
+   — the pattern of [ADR 3.4.0001](./3_4_0001-staff-owned-access-guard-port.md); where the
+   adapter lives is a decision of the 4.4 `technical.md`, see issue #47); timeclock (Step
    7) and hub (Step 8) read it from the same owner the same way. No BC other than identity
    stores it.
 3. **Wall-clock stays wall-clock.** Time ranges and allocations are local times of the unit
@@ -130,7 +131,8 @@ timezone from; every consumer would invent its own.
 ## Implementation notes
 
 - Column + migration in identity (Stage to be named in the roadmap); field on the unit DTO;
-  a read port in scheduling (4.3) with its adapter in the composition root (4.4). Theory:
+  a read port in scheduling (4.3) with its adapter outside scheduling (4.4 `technical.md` names
+  the place — composition root today, `adapters/out/` if issue #47 moves it). Theory:
   [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.9, §3.10.2.
 
 ## References
