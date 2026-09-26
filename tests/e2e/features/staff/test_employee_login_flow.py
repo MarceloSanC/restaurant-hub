@@ -268,23 +268,60 @@ async def test_ca23_canal_link_devolve_o_link_e_nao_envia_email(
 # ---------------------------------------------------------------------------
 
 
-async def test_ca14_o_valor_do_token_nao_aparece_em_staff_nem_em_log(
+@pytest.mark.parametrize("canal", ["email", "link"])
+async def test_ca14_o_valor_do_token_nao_aparece_em_staff_nem_em_log(  # noqa: PLR0913 — as fixtures do cenário mais o eixo do canal
     client: AsyncClient,
     cenario: Cenario,
     caixa_de_entrada: RecordingEmailSender,
     engine: Engine,
     caplog: pytest.LogCaptureFixture,
+    canal: str,
 ) -> None:
+    """Nos **dois** canais, como o CA exige — e o canal `email` é o que importa mais.
+
+    Achado do Checkpoint C do bloco 5: só o canal `link` era exercitado, e é o
+    canal `email` que percorre `send_login_invitation` → `SendInvitationUseCase` →
+    `EmailSender` (código que o outro nunca executa) e onde a regra 1 da 2.5 tem
+    de valer **inalterada** (ADR 3.5.0002 §Status).
+    """
     caplog.set_level(logging.DEBUG)
     cabecalho = auth(cenario.manager)
     employee_id = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Ana")
 
     corpo = await _criar_login(
-        client, cabecalho, cenario.unidade_a, employee_id, email="ana@cantina.com", delivery="link"
+        client,
+        cabecalho,
+        cenario.unidade_a,
+        employee_id,
+        email=f"ana-{canal}@cantina.com",
+        delivery=canal,
     )
-    valor = _token_de(corpo["setup_link"])
+    if canal == "link":
+        valor = _token_de(corpo["setup_link"])
+    else:
+        # No canal e-mail o valor existe **só** no corpo da mensagem — e a resposta
+        # da API não pode repeti-lo.
+        valor = _token_de(_link_do_ultimo_email(caixa_de_entrada))
+        assert corpo["setup_link"] is None
+        assert valor not in str(corpo)
 
     assert not _valor_aparece_em_alguma_tabela_de_staff(engine, valor)
+
+    # **A app não loga nada hoje, e a ausência de log é medida, não suposta.**
+    # `configure_logging` não está plugado no boot (finding #6, herdado da 2.5) e
+    # nenhum módulo de `src/` chama `getLogger` — então "o token não está no log"
+    # seria verdade por vacuidade. Esta sentinela é o que impede a vacuidade de
+    # passar por prova: no dia em que a app começar a logar, ela falha e obriga a
+    # reconferir o token nos registros novos, em vez de o teste seguir verde sem
+    # medir nada. Filtra por `restaurant_hub` porque `httpx`/`sqlalchemy` podem
+    # aparecer conforme a configuração de captura, e o que se guarda é o nosso log.
+    de_producao = [
+        registro for registro in caplog.records if registro.name.startswith("restaurant_hub")
+    ]
+    assert de_producao == [], (
+        f"a app passou a logar {[r.name for r in de_producao]} — confira se o valor do "
+        "token aparece nesses registros e troque esta sentinela pela asserção de conteúdo"
+    )
     assert valor not in caplog.text
     # Em identity só o fingerprint é gravado — e ele não é o valor.
     _, fingerprint = _token_de_setup_do_usuario(engine, corpo["employee"]["user_id"])
@@ -332,6 +369,8 @@ async def test_ca24_desligar_corta_o_refresh_mas_a_conta_continua_logando(
     )
     assert recontratado.status_code == HTTPStatus.OK
     assert recontratado.json()["user_id"] == corpo["employee"]["user_id"]
+    # E o login continua funcionando depois da recontratação — R14 não mexeu na conta.
+    assert (await _login(client, "bia@cantina.com"))["access_token"]
 
 
 @pytest.mark.parametrize("desligado_antes", [False, True], ids=["ativo", "desligado"])
@@ -436,6 +475,7 @@ async def test_ca25_desligado_e_409_terminated(
     )
 
     assert recusado.status_code == HTTPStatus.CONFLICT, recusado.text
+    assert recusado.json()["type"] == "staff_error"
     assert "funcionário desligado não pode receber login" in recusado.json()["detail"]
 
 
@@ -539,10 +579,30 @@ async def test_ca13_o_vinculo_aparece_na_listagem_e_nas_escritas(
     user_id = corpo["employee"]["user_id"]
     base = f"{API}/units/{cenario.unidade_a}/employees/{employee_id}"
 
+    funcoes = await client.get(f"{API}/job-functions", headers=cabecalho)
+    funcao_id = funcoes.json()[0]["id"]
+    periodo = {"start": "2027-03-10T08:00:00", "end": "2027-03-10T12:00:00"}
+
+    # As **oito** escritas sobre o registro existente que devolvem o funcionário
+    # (R07 a R14). O Checkpoint C do bloco 5 mediu que só quatro eram asseridas por
+    # valor; a propriedade é estrutural (mapper único, CA06), mas "estrutural" não
+    # é o que CA13 promete.
     escritas = [
         await client.patch(base, json={"name": "Lia Souza"}, headers=cabecalho),
         await client.put(
+            f"{base}/job-functions", json={"job_function_ids": [funcao_id]}, headers=cabecalho
+        ),
+        await client.put(
+            f"{base}/workload-profile",
+            json={"workload_profile": {"type": "fixed", "weekly_hours": "40.00"}},
+            headers=cabecalho,
+        ),
+        await client.put(
             f"{base}/shift-preference", json={"shift_preference": ["night"]}, headers=cabecalho
+        ),
+        await client.post(f"{base}/unavailabilities", json=periodo, headers=cabecalho),
+        await client.request(
+            "DELETE", f"{base}/unavailabilities", params=periodo, headers=cabecalho
         ),
         await client.post(f"{base}/termination", headers=cabecalho),
         await client.post(f"{base}/rehire", headers=cabecalho),

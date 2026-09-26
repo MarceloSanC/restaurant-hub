@@ -53,6 +53,21 @@ class FakeUnitOfAnotherTenant(Exception):
     """Sentinela de L-IG2 — unidade que "pertence a outro tenant"."""
 
 
+class FakeEmailAlreadyUsed(Exception):
+    """Sentinela de L-IG2 — o que "identity" levanta para e-mail já registrado.
+
+    Existe para que o fake **traduza preservando a causa** (`raise ... from exc`),
+    como o gateway real: sem ela, a exceção de staff sairia sem `__cause__` e a
+    lei "a tradução não apaga quem recusou" não poderia ser cobrada dos dois
+    lados. Foi o buraco que a auditoria de testes mediu — um `from None` no
+    gateway real passava na suíte inteira.
+    """
+
+
+class FakeEmailInvalid(Exception):
+    """Sentinela de L-IG2 — o que "identity" levanta para e-mail malformado."""
+
+
 @dataclass(frozen=True)
 class ProvisionedLoginRecord:
     """Uma linha do ledger: o que o fake "criou" para um login."""
@@ -121,9 +136,9 @@ class InMemoryIdentityGateway:
             f"provision_employee_login({email!r}, {tenant_id!r}, {unit_id!r}, {delivery.value!r})"
         )
         if email in self.invalid_emails:
-            raise InvalidLoginEmailError(email)
+            raise InvalidLoginEmailError(email) from FakeEmailInvalid(email)
         if email in self.used_emails:
-            raise LoginEmailAlreadyInUseError(email)
+            raise LoginEmailAlreadyInUseError(email) from FakeEmailAlreadyUsed(email)
         if tenant_id in self.raw_errors_by_tenant:
             raise self.raw_errors_by_tenant[tenant_id]
         if unit_id in self.raw_errors_by_unit:

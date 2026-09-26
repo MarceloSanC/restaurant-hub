@@ -248,6 +248,21 @@ class TestCasosDeErro:
 
         assert len(cenario.tokens.tokens) == 1
 
+    def test_email_ocupado_levanta_antes_de_consultar_o_restaurante(self) -> None:
+        """O primeiro par da ordem verbatim: unicidade global **antes** do tenant.
+
+        Com tenant fantasma **e** e-mail ocupado, o que sobe é
+        `EmailAlreadyRegisteredError` — se a consulta ao restaurante viesse
+        primeiro, subiria `RestaurantNotFoundError`, e sondar um e-mail qualquer
+        ensinaria que aquele tenant não existe. A auditoria de testes mediu que só
+        o par `platform_admin`↔unidades tinha teste de ordem.
+        """
+        cenario = Cenario()
+        cenario.use_case.execute(_comando("ocupado@x.com"))
+
+        with pytest.raises(EmailAlreadyRegisteredError):
+            cenario.use_case.execute(_comando("ocupado@x.com", tenant="rest-fantasma"))
+
     def test_platform_admin_com_unidade_levanta_antes_de_consultar_unidades(self) -> None:
         """A ordem é contrato (2.5, replicado): `UnitNotFoundError` aqui revelaria quais existem."""
         cenario = Cenario()

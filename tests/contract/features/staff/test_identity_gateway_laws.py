@@ -34,6 +34,7 @@ from restaurant_hub.features.staff.application.ports.out.identity_gateway import
     LoginDelivery,
     ProvisionedLogin,
 )
+from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
     UnitId,
@@ -131,6 +132,24 @@ def test_d9_o_canal_atravessa_o_port_e_decide_o_prazo(gateway: GatewaySobContrat
 # ---------------------------------------------------------------------------
 
 
+def _assert_traduzida_sem_apagar_a_causa(excecao: Exception) -> None:
+    """A tradução **encadeia** (`raise ... from exc`) — a lei que o `from None` viola.
+
+    Achado da auditoria de testes: trocar `from exc` por `from None` nas duas
+    traduções do gateway passava em 1773 testes. O status e a mensagem são os
+    mesmos; o que se perde é o traceback que mostra **quem** recusou do outro lado
+    da fronteira — e é ele que separa "identity disse não" de "staff inventou um
+    erro". A causa não pode ser de staff: se fosse, a tradução teria embrulhado a
+    si mesma em vez de preservar a origem.
+    """
+    causa = excecao.__cause__
+    assert causa is not None, (
+        "a tradução perdeu a causa: use `raise ... from exc` (L-IG2), senão o "
+        "traceback deixa de mostrar quem recusou do outro lado da fronteira"
+    )
+    assert not isinstance(causa, StaffError), f"a causa é um erro de staff: {causa!r}"
+
+
 def test_l_ig2_email_ja_usado_vira_o_erro_de_staff(gateway: GatewaySobContrato) -> None:
     gateway.email_ja_usado(_EMAIL)
 
@@ -138,6 +157,7 @@ def test_l_ig2_email_ja_usado_vira_o_erro_de_staff(gateway: GatewaySobContrato) 
         _provisionar(gateway, _EMAIL)
     assert type(excecao.value) is LoginEmailAlreadyInUseError
     assert _EMAIL in str(excecao.value)
+    _assert_traduzida_sem_apagar_a_causa(excecao.value)
 
 
 def test_l_ig2_o_email_do_login_recem_criado_passa_a_estar_em_uso(
@@ -151,11 +171,22 @@ def test_l_ig2_o_email_do_login_recem_criado_passa_a_estar_em_uso(
 
 
 def test_l_ig2_email_malformado_vira_o_erro_de_staff(gateway: GatewaySobContrato) -> None:
-    invalido = gateway.email_invalido()
+    """Todos os e-mails que **este lado** recusa, e não um representante.
 
-    with pytest.raises(InvalidLoginEmailError) as excecao:
-        _provisionar(gateway, invalido)
-    assert type(excecao.value) is InvalidLoginEmailError
+    O conjunto inclui o byte NUL desde a Stage 3.5: o VO de identity o recusa
+    antes da regex (D8), e é a única forma de provar, **sem banco**, que o NUL
+    atravessa VO → fachada → gateway e volta como erro de staff. Com um valor só
+    (`"nao-e-email"`), remover a checagem de NUL do VO não derrubava teste nenhum
+    de staff — medido pela auditoria de testes.
+    """
+    invalidos = gateway.emails_invalidos()
+    assert invalidos, "nenhum e-mail inválido arranjado — a lei ficaria vácua"
+
+    for invalido in invalidos:
+        with pytest.raises(InvalidLoginEmailError) as excecao:
+            _provisionar(gateway, invalido)
+        assert type(excecao.value) is InvalidLoginEmailError, invalido
+        _assert_traduzida_sem_apagar_a_causa(excecao.value)
 
 
 @pytest.mark.parametrize(

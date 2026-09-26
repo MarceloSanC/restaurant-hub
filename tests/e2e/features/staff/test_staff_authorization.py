@@ -8,8 +8,9 @@ assuntos quebrou.
 
 ## O domínio é derivado do router, e a cardinalidade é asserida junto
 
-Toda lei aqui é universal sobre as 16 rotas, e o produto cartesiano é **explícito**
-— `{employee, platform_admin} x R01…R16` são 32 casos, não dois. As chaves saem de
+Toda lei aqui é universal sobre as 17 rotas (16 da 3.6 + R17 da 3.5), e o produto
+cartesiano é **explícito** — `{employee, platform_admin} x R01…R17` são 34 casos,
+não dois. As chaves saem de
 `router.routes`; a declaração `ROTAS` diz como invocar cada uma contra recursos
 **vivos**, e `test_a_declaracao_de_rotas_e_total_sobre_o_router` reprova a rota que
 entrar sem declaração — a mesma disciplina do `_INVOCACOES` das varreduras
@@ -31,7 +32,7 @@ declarou desde a Task 05.
 
 O ADR 3.4.0006 §1 decidiu que `hr` e `manager` detêm as mesmas duas permissões de
 staff, com o mesmo alcance. CA12 trava a decisão como propriedade: os dois papéis
-respondem o **mesmo status** nas 16 rotas, sobre estados isomorfos. Um mapa de
+respondem o **mesmo status** nas 17 rotas, sobre estados isomorfos. Um mapa de
 papéis editado para dar a `hr` alcance diferente reprova aqui.
 """
 
@@ -617,7 +618,7 @@ _RECURSOS_FICTICIOS: Final = Recursos(
 async def test_ca08_toda_rota_sem_bearer_recebe_401(
     client: AsyncClient, chave_da_rota: ChaveDeRota
 ) -> None:
-    """CA08 — 401 com corpo constante e `WWW-Authenticate: Bearer`, nas **16**.
+    """CA08 — 401 com corpo constante e `WWW-Authenticate: Bearer`, nas **17**.
 
     O domínio é `router.routes`, não uma amostra: "nenhuma rota de staff é
     pública" (§5.1) é uma lei universal, e uma lei universal travada em duas rotas
@@ -640,7 +641,7 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # §5.1 — autenticar antes de validar o corpo, em **toda** rota com entrada
 # ---------------------------------------------------------------------------
 #
-# **CA08 não alcança esta lei, e a diferença é o corpo.** Ele invoca as 16 rotas
+# **CA08 não alcança esta lei, e a diferença é o corpo.** Ele invoca as 17 rotas
 # com a entrada **válida** da declaração, então o 422 do framework nunca compete
 # com o 401 — e um handler que autenticasse no próprio corpo passaria em CA08
 # inteiro. A lei de §5.1 é sobre a **corrida** entre os dois: sem credencial, a
@@ -798,7 +799,7 @@ async def test_ca09_papel_sem_permissao_recebe_403_na_rota(  # noqa: PLR0913
     papel: str,
     chave_da_rota: ChaveDeRota,
 ) -> None:
-    """CA09 — produto `{employee, platform_admin} x R01…R16`: **32 casos**.
+    """CA09 — produto `{employee, platform_admin} x R01…R17`: **34 casos**.
 
     **Os recursos existem**, e é isso que separa 403 de 404: se o funcionário e a
     função não estivessem semeados, metade destas rotas poderia responder 404 por
@@ -857,7 +858,7 @@ async def test_ca10_ca11_ca36_papel_com_permissao_alcanca_a_rota(  # noqa: PLR09
     papel: str,
     chave_da_rota: ChaveDeRota,
 ) -> None:
-    """Produto `{owner, manager, hr} x R01…R16` — **48 casos**, e três critérios.
+    """Produto `{owner, manager, hr} x R01…R17` — **51 casos**, e três critérios.
 
     - **CA10** é a linha do `manager`: nenhuma das 16 responde 401 ou 403. Era o
       critério que a fork F1 reprovava; desde o ADR 0.0.0005 é o teste de
@@ -869,7 +870,7 @@ async def test_ca10_ca11_ca36_papel_com_permissao_alcanca_a_rota(  # noqa: PLR09
     - **CA36**: `TenantScopeRequiredError` responde **403**, com o mesmo corpo
       constante de qualquer outra recusa. Não há como distingui-lo pela resposta —
       e não deve haver. O que se assere é o contrapositivo: para os três papéis que
-      detêm permissão, **nenhuma** das 16 rotas produz 403 de espécie alguma. Se o
+      detêm permissão, **nenhuma** das 17 rotas produz 403 de espécie alguma. Se o
       tradutor deixasse de resolver o tenant (ADR 0.0.0005 cláusula 3), as 48
       células ficariam vermelhas de uma vez.
 

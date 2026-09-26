@@ -309,7 +309,7 @@ class _IdentityAccessGuard:
         linhas abaixo não fazem.
 
         **`tenant_id` ausente significa "o tenant do próprio ator", e é aqui que
-        ele é resolvido** (ADR 0.0.0005, cláusula 3). Sem isto as 16 rotas de
+        ele é resolvido** (ADR 0.0.0005, cláusula 3). Sem isto as rotas de
         staff são inalcançáveis por **todos** os papéis: o inventário de rotas
         não carrega tenant (cláusula 2), então nada o nomeia, e o passo 3 de
         `AuthorizeActionUseCase` recusa com `TenantScopeRequiredError` qualquer
@@ -676,7 +676,7 @@ def wire_dependencies(
 def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
     """Carrega os adapters HTTP dos dois BCs e monta o que `create_app()` registra.
 
-    **É aqui que as 16 rotas de staff passam a existir na aplicação.** Até esta
+    **É aqui que as 17 rotas de staff passam a existir na aplicação.** Até esta
     Stage o BC era surdo-mudo: os use cases e o `staff_access_guard` estavam
     montados e nada no boot os alcançava. O `importlib` não é contorno — o pacote
     de entrada se chama `in`, que é palavra reservada, e `from ...adapters.in...`

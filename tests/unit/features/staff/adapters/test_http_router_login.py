@@ -168,7 +168,7 @@ async def test_r17_canal_email_envia_e_nao_devolve_o_link(
 async def test_r17_o_email_e_repassado_verbatim_e_o_canal_como_enum(
     client: AsyncClient, ambiente: AmbienteComGateway
 ) -> None:
-    """Sem `validate_identifier` no e-mail (concept §5.7): vai como chegou."""
+    """O e-mail chega ao gateway **como veio**, e o canal como enum."""
     _com_funcionario(ambiente)
 
     await client.post(_URL, json={"email": "  Maria@Cantina.com ", "delivery": "email"})
@@ -178,6 +178,75 @@ async def test_r17_o_email_e_repassado_verbatim_e_o_canal_como_enum(
     assert ambiente.gateway.logins[user_id].delivery.value == "email"
     assert ambiente.gateway.logins[user_id].tenant_id == _TENANT
     assert ambiente.gateway.logins[user_id].unit_id == _UNIDADE
+
+
+async def test_r17_o_email_nao_passa_pelo_validador_de_identificador(
+    client: AsyncClient, ambiente: AmbienteComGateway
+) -> None:
+    """Concept §5.7 — e o valor escolhido é o que **discrimina** a propriedade.
+
+    Achado do Checkpoint C do bloco 5: com `"  Maria@Cantina.com "` o teste não
+    distinguia "não passa pelo validador" de "passa e o validador aceita" — o
+    validador devolve verbatim tudo o que não é vazio, whitespace-only ou NUL
+    (ADR 3.6.0002 §2). A mutação `email=validate_identifier(payload.email, ...)`
+    sobrevivia a 1525 testes.
+
+    O byte NUL é exatamente o valor em que as duas leituras divergem: o validador
+    o **recusa** (422 de staff, sem tocar em identity), e quem valida o e-mail é
+    identity, atrás do gateway. Aqui o fake aceita — então 201 prova que o
+    validador não foi chamado sobre o e-mail. Quem recusa o NUL em produção é o VO
+    `Email` (Task 06), e o 422 desse caminho é o e2e CA31.
+    """
+    _com_funcionario(ambiente)
+    com_nul = "nul\x00@dentro.com"
+
+    resposta = await client.post(_URL, json={"email": com_nul, "delivery": "link"})
+
+    assert resposta.status_code == HTTPStatus.CREATED, resposta.text
+    (user_id,) = ambiente.gateway.logins
+    assert ambiente.gateway.logins[user_id].email == com_nul
+    assert ambiente.autorizacoes(), "as autorizações rodaram — o 201 não veio por atalho"
+
+
+# ---------------------------------------------------------------------------
+# R15 pelo adapter — remover registro vinculado é 409 (ADR 3.5.0003 §1b)
+# ---------------------------------------------------------------------------
+
+
+async def test_r15_remover_registro_vinculado_e_409_com_corpo_de_staff(
+    client: AsyncClient, ambiente: AmbienteComGateway
+) -> None:
+    """A recusa de R15 chegava ao fio só no e2e; aqui ela tem o caminho do adapter.
+
+    O que se mede além do status: o corpo é o de staff (o mapa classificou
+    `EmployeeHasLoginError`), a mensagem manda desligar, e o registro **continua
+    lá** com o vínculo — remover não é desvincular.
+    """
+    _com_funcionario(ambiente, user_id=UserId("login-9"))
+
+    resposta = await client.delete(f"/api/v1/units/{_UNIDADE}/employees/emp-1")
+
+    assert resposta.status_code == HTTPStatus.CONFLICT, resposta.text
+    assert resposta.json()["type"] == "staff_error"
+    assert "desligue-o" in resposta.json()["detail"]
+    assert _relido(ambiente).user_id == UserId("login-9")
+
+
+async def test_r15_remover_registro_sem_login_continua_204(
+    client: AsyncClient, ambiente: AmbienteComGateway
+) -> None:
+    """O contraste que impede a guarda de virar "R15 recusa sempre"."""
+    _com_funcionario(ambiente)
+
+    resposta = await client.delete(f"/api/v1/units/{_UNIDADE}/employees/emp-1")
+
+    assert resposta.status_code == HTTPStatus.NO_CONTENT, resposta.text
+    assert (
+        ambiente.fakes.employees.find_by_id(
+            TenantId(_TENANT), UnitId(_UNIDADE), EmployeeId("emp-1")
+        )
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------

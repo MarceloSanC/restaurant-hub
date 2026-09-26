@@ -255,7 +255,8 @@ class GatewaySobContrato:
         foi_revogado: se `revoke_login_sessions` alcançou o login.
         enviados_para: os links enviados para um e-mail, na ordem.
         email_ja_usado: **arranjo** — faz o e-mail passar a estar em uso.
-        email_invalido: **arranjo** — devolve um e-mail que este lado recusa.
+        emails_invalidos: **arranjo** — devolve **todos** os e-mails que este
+            lado recusa (inclusive o do byte NUL, D8), não um representante.
         unidade_inexistente / unidade_de_outro_tenant / tenant_inexistente:
             **arranjo** — devolvem o valor que produz a falha crua e o tipo que
             sobe deste lado.
@@ -272,7 +273,7 @@ class GatewaySobContrato:
     foi_revogado: Callable[[UserId], bool]
     enviados_para: Callable[[str], list[str]]
     email_ja_usado: Callable[[str], None]
-    email_invalido: Callable[[], str]
+    emails_invalidos: Callable[[], tuple[str, ...]]
     unidade_inexistente: Callable[[], CenarioCru]
     unidade_de_outro_tenant: Callable[[], CenarioCru]
     tenant_inexistente: Callable[[], CenarioCru]
@@ -299,9 +300,10 @@ def _gateway_fake() -> GatewaySobContrato:
         fake.raw_errors_by_tenant[fantasma] = FakeTenantUnknown()
         return CenarioCru(argumento="tenant_id", valor=fantasma, tipo_esperado=FakeTenantUnknown)
 
-    def email_invalido() -> str:
-        fake.invalid_emails.add("nao-e-email")
-        return "nao-e-email"
+    def emails_invalidos() -> tuple[str, ...]:
+        recusados = ("nao-e-email", "nul\x00@dentro.com")
+        fake.invalid_emails.update(recusados)
+        return recusados
 
     def envio_falha(excecao: Exception) -> None:
         fake.fail_send_with = excecao
@@ -323,7 +325,7 @@ def _gateway_fake() -> GatewaySobContrato:
         foi_revogado=lambda user_id: user_id in fake.revoked,
         enviados_para=lambda email: [link for (para, link) in fake.sent if para == email],
         email_ja_usado=fake.used_emails.add,
-        email_invalido=email_invalido,
+        emails_invalidos=emails_invalidos,
         unidade_inexistente=unidade_inexistente,
         unidade_de_outro_tenant=unidade_de_outro_tenant,
         tenant_inexistente=tenant_inexistente,
@@ -494,7 +496,9 @@ def _gateway_real() -> GatewaySobContrato:
             _link_do_corpo(m.body_text) for m in sender.enviadas if m.to == email
         ],
         email_ja_usado=email_ja_usado,
-        email_invalido=lambda: "nao-e-email",
+        # Os dois que o VO `Email` de identity recusa: o malformado pela regex e
+        # o do byte NUL, que a regex aceitaria (Task 06 da 3.5, D8).
+        emails_invalidos=lambda: ("nao-e-email", "nul\x00@dentro.com"),
         unidade_inexistente=unidade_inexistente,
         unidade_de_outro_tenant=unidade_de_outro_tenant,
         tenant_inexistente=tenant_inexistente,
