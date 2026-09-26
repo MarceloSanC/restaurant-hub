@@ -628,6 +628,12 @@ async def test_ca31_email_com_byte_nul_e_422_de_staff(
 
     Agora o VO recusa, o gateway traduz para `InvalidLoginEmailError` (L-IG2) e o
     mapa de staff classifica como 422 — pelo HTTP real, contra Postgres.
+
+    **Quem julga é identity, não staff**, e é por isso que o teste unitário
+    `test_http_router_login.py::test_r17_o_email_nao_passa_pelo_validador_de_identificador`
+    manda o **mesmo** valor e espera **201**: lá o fake do gateway aceita, o que
+    prova que a borda de staff não opinou sobre o e-mail (concept §5.7). Os dois
+    resultados não se contradizem — medem peças diferentes do mesmo caminho.
     """
     cabecalho = auth(cenario.manager)
     employee_id = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Nul")

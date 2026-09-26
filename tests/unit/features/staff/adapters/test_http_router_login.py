@@ -194,8 +194,14 @@ async def test_r17_o_email_nao_passa_pelo_validador_de_identificador(
     O byte NUL é exatamente o valor em que as duas leituras divergem: o validador
     o **recusa** (422 de staff, sem tocar em identity), e quem valida o e-mail é
     identity, atrás do gateway. Aqui o fake aceita — então 201 prova que o
-    validador não foi chamado sobre o e-mail. Quem recusa o NUL em produção é o VO
-    `Email` (Task 06), e o 422 desse caminho é o e2e CA31.
+    validador não foi chamado sobre o e-mail.
+
+    **Divisão de trabalho com o e2e, para que os dois não pareçam contraditórios:**
+    este teste mede que *a borda de staff não julga* o e-mail (fake aceitando ⇒
+    201); `test_employee_login_flow.py::test_ca31_email_com_byte_nul_e_422_de_staff`
+    mede que *o VO `Email` de identity julga* e que a recusa chega traduzida como
+    422. Mesmo valor, peças diferentes — "consertar" um deles para casar com o
+    outro apagaria uma das duas propriedades.
     """
     _com_funcionario(ambiente)
     com_nul = "nul\x00@dentro.com"
