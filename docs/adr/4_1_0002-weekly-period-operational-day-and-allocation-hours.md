@@ -5,7 +5,7 @@ when-use: Reference before modeling SchedulePeriod or TimeRange, before deciding
 keywords: [adr, scheduling, schedule-period, week-start, operational-day, cutoff, time-range, midnight, break, hours, nominal, clt, domain-gate]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-13
+updated_at: 2026-09-26
 adr_id: 4.1.0002
 decision: The v1 schedule period is a week whose start day is configurable per restaurant (end = start + 6); a day is an operational day — a 24h window starting at a per-restaurant cutoff time (default 05:00) — and a time range/allocation belongs to the operational day in which it starts; the hours of an allocation are its nominal duration minus a break declared on the time range (minutes, default 0), a single function consumed by every policy and by the hub; night-hour fiction and an intra-shift-break policy are deferred as evolution.
 context_stage: 4.1-scheduling-domain
@@ -156,7 +156,7 @@ without knowing which day an allocation belongs to and how many hours it counts.
 
 - Lands in Stage 4.1 (`SchedulePeriod`, `TimeRange` with `break`, the `hours()` function), with
   the tenant settings (start day, cutoff) persisted in 4.4 next to the validation config. Theory:
-  [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.1, §3.2, §3.6.9.
+  [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.1, §3.2, §3.6.10.
 
 ## References
 

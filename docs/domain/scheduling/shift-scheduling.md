@@ -247,8 +247,8 @@ da demanda** e pertence a scheduling (`workforce.md` §3.2).
   sponsor, 2026-09-26).
 - **Remoção de função referenciada por demanda.** A guarda de staff conta **só referências de
   funcionário** (`workforce.md` §3.2); uma demanda **não** a protege hoje. O mecanismo decidido
-  para a guarda de funcionário — port de consulta reverso em staff, implementado no composition
-  root sobre uma query de scheduling (ADR 4.1.0006) — **generaliza** para a função demandada
+  para a guarda de funcionário — port de consulta reverso em staff, implementado fora de staff
+  sobre uma query de scheduling (ADR 4.1.0006) — **generaliza** para a função demandada
   (`JobFunctionInUseError`); em que Stage staff passa a consultá-lo é lacuna (§6).
 
 **Invariantes:** `N ≥ 0`; uma demanda referencia exatamente **uma função** do tenant e **uma
@@ -452,7 +452,7 @@ config do restaurante e distingue block × warn" (`roadmap.md` 1233, 1249).
   a tabela (Recomendada)"*. O sponsor a tratou como **uma** decisão; o ADR enumera as
   sub-decisões (a)–(e) só para rastreabilidade. As políticas que as fontes sustentam mas o
   roadmap 4.2 não lista (§3.6.9) ficam como **evolução** — o que também resolve o "etc." de
-  `overview.md` 42 × a lista fechada de `roadmap.md` 1232/1239 (ex-HALT H4: escopo, não
+  `overview.md` 42 × a lista fechada de `roadmap.md` 1233/1240 (ex-HALT H4: escopo, não
   contradição; o roadmap recebe nota no fechamento). A sétima linha — **função não detida** — entrou
   em 2026-09-14 (F9, ADR 4.1.0003 (f)) e a oitava — **sobre-cobertura da demanda** — em
   2026-09-26 (F10, ADR 4.1.0003 (g)).
@@ -874,7 +874,8 @@ Step 8).
 
 Entidades da 4.1 e políticas da 4.2 ("proposta nasce sem violações block", `roadmap.md` 1408); a
 **preferência de turno** e o **mapa período → faixas** são insumos do Step 5 (ADR 3.1.0004
-109–112). O auto-fill casa **só por função** — nunca cria exceção de função (§3.6.7). A tensão
+109–112). O auto-fill casa **só por função** — nunca cria exceção de função (§3.6.7) — e
+preenche até `N`: **não sobre-cobre** (§3.6.8). A tensão
 "rascunho de edição" × F1 está em §3.5.
 
 ---
@@ -953,7 +954,7 @@ Registradas para que o modelo v1 não as bloqueie; **nenhuma entra sem revisão 
 
 ---
 
-## 6. Registro das decisões do gate (2026-09-13 e 2026-09-14)
+## 6. Registro das decisões do gate (2026-09-13, 2026-09-14 e 2026-09-26)
 
 ### Com alternativa real — decididas pelo sponsor (ADRs 4.1.0001–4.1.0006)
 
@@ -1027,6 +1028,9 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 ### Derivações ancoradas (sem alternativa real — decididas pelos docs)
 
 - **Escala por unidade** — `overview.md` 37, 45; `workforce.md` §3.1. §3.1.
+- **Default do dia de início da semana: segunda-feira** — ISO 8601 via `date.isoweekday()` e
+  Decreto 10.854/2021 art. 158 § 4º (§7); ambas sustentam **default**, não obrigação, e o dia
+  segue configurável (F2). §3.1.
 - **Escalas da mesma unidade não se sobrepõem** — derivação de `overview.md` 129; **proposta do
   gate**; com F2 decorre da forma. §3.1.
 - **`Schedule` como raiz do agregado** — proposta do gate (†). §3.1.
@@ -1085,6 +1089,8 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 | **4.1 (technical)** | incluir `scheduling` em `bc-independence` (§3.10) |
 | **4.2** | forma da `Violation`, ordem de avaliação, onde vive a indisponibilidade (§3.6.0) |
 | **4.2** | exceção de função × mudança posterior do cadastro; forma da marca na `Violation`/aceite (§3.6.7) |
+| **4.2** | sobre-cobertura: contagem por demanda × por `(dia, faixa, função)`; reduzir `N` reabre a violação aceita? (§3.6.8) |
+| **4.3/4.5** | unidade de salvamento — uma operação por requisição × lote de edições (§3.5) |
 | **4.2/4.3** | identidade da violação para fins de aceite (§3.5) |
 | **4.3** | protocolo do aceite de `warn` na mutação (§3.5) |
 | **4.3** | mudança do dia de início / corte com escalas existentes (§3.1) |
@@ -1176,7 +1182,8 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 - Decisões de kickoff (memória do projeto, 2026-07-16/19; `workforce.md` §7): #5, #7, #9, #10,
   #11, #13.
 - Decisões do sponsor de 2026-09-13 (F1–F6, F8, corte 05:00) e de 2026-09-14 (F7, remoção
-  definitiva, F9) — registro literal em `gate-decisions.md` da sessão do gate; a pesquisa de
+  definitiva, F9) e de 2026-09-26 (sobre-cobertura) — registro literal em `gate-decisions.md` da
+  sessão do gate (e citado verbatim nos ADRs 4.1.0001–4.1.0006, que são a fonte durável); a pesquisa de
   arquitetura de F7 em `f7-architecture-research.md` (fontes primárias citadas no ADR 4.1.0006);
   citadas nos ADRs 4.1.0001–4.1.0006 e em §6.
 

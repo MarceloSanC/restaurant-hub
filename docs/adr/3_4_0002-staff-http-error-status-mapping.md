@@ -14,7 +14,7 @@ bounded_context: staff
 
 # ADR 3.4.0002 — Staff HTTP error status mapping
 
-> ⚠️ **Errata (2026-09-14):** §Decision 5 — "`EmployeeInUseError` has no producer in v1 (Step 4 introduces it via the 3.3 foreign key)" is superseded in its mechanism: there is no foreign key between bounded contexts; Step 4 produces the error through a **reverse query port** declared in staff and implemented in the composition root over a scheduling query (the 409 mapping itself is unchanged) — ver [ADR 4.1.0006](./4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md)
+> ⚠️ **Errata (2026-09-14):** §Decision 5 — "`EmployeeInUseError` has no producer in v1 (Step 4 introduces it via the 3.3 foreign key)" is superseded in its mechanism: there is no foreign key between bounded contexts; Step 4 produces the error through a **reverse query port** declared in staff and implemented outside staff over a scheduling query (the 409 mapping itself is unchanged) — ver [ADR 4.1.0006](./4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md)
 
 ## Status
 

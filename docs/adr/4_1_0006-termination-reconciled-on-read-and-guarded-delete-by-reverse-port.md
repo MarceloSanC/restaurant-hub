@@ -5,7 +5,7 @@ when-use: Reference before making staff write anything into scheduling on termin
 keywords: [adr, scheduling, staff, termination, deactivate, reconcile-on-read, read-model, staff-read-port, employee-in-use, guarded-delete, reverse-port, composition-root, no-foreign-key, domain-event, outbox, cross-bc, domain-gate]
 status: accepted
 created_at: 2026-09-14
-updated_at: 2026-09-14
+updated_at: 2026-09-26
 adr_id: 4.1.0006
 decision: When staff terminates an employee record (active=False) nothing is written into scheduling — no domain event, no dispatcher, no outbox, no port hook; every scheduling read consults the record's current state through StaffReadPort and omits an inactive record entirely (including its past allocations) until a future employee-history page exists; definitive removal keeps the L-E5 guard (EmployeeInUseError) through a reverse query port declared in staff and implemented outside staff (location decided by the 4.4 technical) over a scheduling query, with no foreign key between bounded contexts, generalisable to demanded job functions.
 context_stage: 4.1-scheduling-domain
@@ -219,7 +219,8 @@ before Stage 4.3 designs `StaffReadPort` and Stage 4.4 designs the schema.
   on it (batch lookup per schedule/calendar). Stage 4.4: no FK; a scheduling query
   `has_allocations_for(tenant, unit, employee)` (and later `has_demands_for(tenant, function)`).
   Staff: a reverse query port (declared expansion, one method), consulted by `delete`; the
-  translator lives in `composition_root.py`, like `AccessGuard`. The Stage that wires it is a
+  translator lives **outside staff** — `composition_root.py` today, `adapters/out/` if issue #47
+  moves it — and **where** is a decision of the 4.4 `technical.md`. The Stage that wires it is a
   concept gap (4.3/4.4).
 - Theory: [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.3, §3.4, §3.7,
   §3.10.1, §6; [`workforce.md`](../domain/staff/workforce.md) §3.1 (dated note 2026-09-14).

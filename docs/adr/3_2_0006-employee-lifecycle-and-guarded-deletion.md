@@ -14,7 +14,7 @@ bounded_context: staff
 
 # ADR 3.2.0006 — Employee lifecycle: termination state plus guarded definitive removal
 
-> ⚠️ **Errata (2026-09-14):** Implementation notes — "Step 4: when allocations reference the employee, the FK becomes the hard half of the `delete` guard" is superseded: there is no foreign key between bounded contexts; the `delete` guard (L-E5, `EmployeeInUseError`) is a **reverse query port** declared in staff and implemented in the composition root over a scheduling query, and termination is reconciled on read by scheduling — ver [ADR 4.1.0006](./4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md)
+> ⚠️ **Errata (2026-09-14):** Implementation notes — "Step 4: when allocations reference the employee, the FK becomes the hard half of the `delete` guard" is superseded: there is no foreign key between bounded contexts; the `delete` guard (L-E5, `EmployeeInUseError`) is a **reverse query port** declared in staff and implemented outside staff over a scheduling query, and termination is reconciled on read by scheduling — ver [ADR 4.1.0006](./4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md)
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 

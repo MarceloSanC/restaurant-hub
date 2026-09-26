@@ -1179,7 +1179,7 @@ skills_hint: [hex-arch-python, composition-root]
 - **Depende de:** Step 3.
 - **Tamanho estimado:** M–L (7 Stages; cada uma ≤ M)
 
-> **Nota (2026-09-14): gate de domínio do Step 4 cumprido (issue #52).**
+> **Nota (2026-09-14, revista em 2026-09-26): gate de domínio do Step 4 cumprido (issue #52).**
 > `docs/domain/scheduling/shift-scheduling.md` está `accepted` (ratificado pelo sponsor) com os
 > ADRs 4.1.0001–4.1.0006. Os concepts 4.x consomem sem re-derivar: **salvar = publicar literal**
 > (sem rascunho no servidor; `block` recusa a mutação; concorrência otimista por versão — 4.1.0001);
