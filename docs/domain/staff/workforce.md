@@ -334,6 +334,28 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
   [ADR 2.5.0002](../../adr/2_5_0002-dedicated-single-use-setup-token.md); referenciada, não
   duplicada.
 
+> **Nota (2026-09-26): reconciliação pós-execução da Stage 3.5.** O que a Stage fixou onde as
+> regras acima ainda falavam por antecipação:
+>
+> - **O caminho (b) não é "senha provisória com troca obrigatória": é o mesmo link de
+>   definição de senha do convite, entregue em mãos** (impresso, QR, mensagem) com prazo
+>   próprio e mais longo (`handover_link_ttl_hours`, 168h contra 72h do e-mail) — o gestor
+>   nunca conhece nem transporta a senha da pessoa
+>   ([ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md)).
+>   Link perdido é recuperado pelo pedido público de redefinição de senha, como qualquer convite.
+> - **"Via port `IdentityGateway`" passou a ter forma:** identity expõe uma **fachada** in-process
+>   e o gateway de staff a consome — a única aresta entre os dois bounded contexts, nomeada no
+>   contrato de import ([ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md)).
+>   Criar o login exige **`manage_staff` e `manage_users`** sobre a unidade do registro.
+> - **Desligar corta o acesso; remover recusa o vinculado.** O desligamento revoga as sessões
+>   vivas do login **antes** de gravar; a conta continua existindo e continua podendo autenticar
+>   (o que ela alcança é decisão da autorização). Um registro com login **não é removido** —
+>   desliga-se primeiro; não há "desvincular" em v1
+>   ([ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md)).
+> - **O `user_id` é coluna anulável e opaca** em `employees`, sem FK, `UNIQUE` ou índice; a
+>   cópia entre unidades **não o carrega** (§3.7)
+>   ([ADR 3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md)).
+
 ---
 
 ## 4. Particularidades por caso de uso — visão RBAC

@@ -818,4 +818,17 @@ apenas um representante estreito da categoria sendo exercitado. A mesma classe
 reapareceu duas vezes nesta Stage — no `except`, e depois em `unusable_hash()`, onde
 o teste travava a lista de senhas conhecidas em vez da origem da entropia.
 
+### 2026-09-26 — [finding] regra 1 do concept ganhou um carve-out declarado na Stage 3.5 — Claude (autônomo)
+**Contexto:** a regra 1 do concept da 2.5 ("o valor do token existe entre a emissão e o corpo
+do e-mail, e em nenhum outro lugar") passou a ter **uma** exceção nomeada: o
+`ProvisionedAccountResult` de `ProvisionAccountUseCase` (identity) carrega o `setup_link`
+(`repr=False`) para que o gateway de staff possa entregá-lo **em mãos** pela rota R17 no canal
+`link` — ao gestor que acabou de provar `manage_staff` e `manage_users` sobre a unidade. O
+convite por e-mail da 2.5 (`InviteUserUseCase`) e o reset **não mudaram**; a composição do link
+e da mensagem passou a viver em `use_cases/_invitation.py`, byte-idêntica.
+**Razão:** decisão do sponsor (concept 3.5 §13 Q1) e
+[ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) §Status;
+o carve-out é do tamanho de um result, com a contenção (`repr=False`, nenhuma exceção o carrega,
+só o canal `link` o expõe) asserida por teste na 3.5 (CA05, CA14).
+
 <!-- END: post-execution -->

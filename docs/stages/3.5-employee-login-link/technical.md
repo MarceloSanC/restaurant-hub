@@ -1031,4 +1031,178 @@ T06 (Email NUL) ─► T07 (tijolos identity) ─► T08 (fachada) ────�
   Stage candidata.
 - `[deviation]` — ajuste pequeno vs. o plano original.
 
+### 2026-09-13 — [decision] gate por Task — Marcelo (via AskUserQuestion)
+**Contexto:** o PROMPT prevê pausa para revisão humana a cada Task; com 12 Tasks e
+Checkpoints C por bloco, a pausa por Task duplicaria a revisão.
+**Pergunta:** pausar a cada Task ou commitar e seguir?
+**Opções:**
+- A — Pausar a cada Task para revisão humana
+- B — Commitar e seguir; revisar nos Checkpoints C ✅ recomendada
+**Decisão:** B
+**Razão:** os Checkpoints C (5 blocos, revisor independente) já revisam o código real;
+parar só em pergunta material (nenhuma surgiu na Fase 4).
+
+### 2026-09-13 — [deviation] sete Tasks com mais de cinco arquivos (o technical declarava cinco) — Claude (autônomo)
+**Contexto:** T01, T03, T05, T07, T09, T10 e T11 modificaram mais de cinco arquivos cada.
+**Razão:** as totalidades derivadas (§1 deste technical: mapa de erros, pasta de use cases,
+`router.routes`, `INVOCACOES`, catálogo `ROTAS`, contagens de DTOs) ditam o corte — cada Task
+tem de carregar a sua entrada em todas as varreduras para `make check` ficar verde por commit.
+Nenhuma Task foi dividida; a exceção está declarada em cada cabeçalho de Task.
+
+### 2026-09-13 — [deviation] Task 04 — forma do fake e do holder diverge da letra de CA02 — Claude (autônomo)
+**Contexto:** CA02 e o technical nomeavam `raw_error: Exception | None`, `login_role_of` do fake
+devolvendo `None` e um ledger `tuple[str, TenantId, UnitId]`.
+**Razão:** o fake ganhou `raw_errors_by_tenant`/`raw_errors_by_unit` (permite o `CenarioCru`
+parametrizar por argumento sem ramificar o corpo do teste), o ledger virou
+`ProvisionedLoginRecord` com `delivery` e `setup_link` (é o que `entregue_em_maos` e
+`token_redeems` observam) e `login_role_of` devolve `"employee"` para id conhecido — tautologia
+até a Task 09, quando o lado real passou a refutá-la; a Task 09 acrescentou ainda
+`login_scope_of` (tenant + membership exata), que CA08 dizia "só no real". O concept está `done`;
+a redação de CA02 fica reconciliada por esta entrada, não por edição.
+
+### 2026-09-14 — [deviation] Checkpoint C do bloco 2 relançado e range corrigido — Claude (autônomo)
+**Contexto:** a sessão foi interrompida durante o primeiro revisor do bloco 2 (T04–T05); o
+relançamento usou `git diff 4d0a670..3db91fb`, que contém só a T05 (a T04, `0a4318a`, precede o
+fix `4d0a670`); o revisor a revisou por `git show` e apontou o range acumulado correto.
+**Razão:** Checkpoint C nunca é opcional; o achado major do bloco (downgrade da migration
+`0004` não provado até a `0003` — a `0003` derruba `employees` inteira e mascarava um
+`downgrade` vazio) virou `2503b9a`, com a mutação `downgrade: pass` reprovando.
+
+### 2026-09-14 — [deviation] Tasks 06 e 07 — evidência de `make check` colhida na árvore combinada — Claude (autônomo)
+**Contexto:** T06 (VO `Email`) e T07 (identity application) foram implementadas em sequência sem
+`make check` entre elas, porque o Postgres estava ocupado pelo revisor do bloco 2.
+**Razão:** a T06 é subconjunto sem totalidade (dois arquivos de domínio; 715 unit verdes +
+ruff/mypy isolados); o `make check` combinado (3011 passed, 99,94%) cobre as duas; commits
+separados (`994d779`, `acf4b87`).
+
+### 2026-09-14 — [deviation] Task 09 — `.env.example` fora da lista, e a prova do import plantado — Claude (autônomo)
+**Contexto:** `Settings.handover_link_ttl_hours` pede a linha `HANDOVER_LINK_TTL_HOURS=168` em
+`.env.example` (companheiro natural do campo); o technical pedia registrar aqui a prova de CA07.
+**Razão:** import plantado de `restaurant_hub.features.identity.application.use_cases.provision_account`
+no gateway ⇒ `uv run lint-imports`: *"bounded contexts identity e staff sao independentes — BROKEN;
+Contracts: 8 kept, 1 broken"* **e** `test_bc_independence.py`: *"1 failed, 9 passed"*
+(`test_ca12_so_o_gateway_importa_identity_e_importa_so_a_fachada`, razão "além da fachada").
+Revertido no mesmo passo. O revisor do bloco 4 repetiu a prova com o mesmo resultado.
+
+### 2026-09-14 — [deviation] Task 10-fix — o fake do gateway ganhou `mirror` (arquivo fora das listas) — Claude (autônomo)
+**Contexto:** o Checkpoint C do bloco 4 mostrou que `test_desligar_vinculado_revoga_as_sessoes_antes_de_gravar`
+afirmava a ordem revogar→gravar lendo dois ledgers separados — a mutação "revogar depois" passava
+nele (morria só no teste irmão de falha).
+**Razão:** `InMemoryIdentityGateway.mirror: Callable[[str], None] | None` espelha cada chamada em
+`store.calls`; a ordem passa a ser a sequência literal
+`find_by_id → gateway.revoke_login_sessions → update`, e a mutação reprova em dois testes
+(`3ca462a`). O mesmo espelho substituiu a subclasse local de `test_create_login_for_employee.py`.
+
+### 2026-09-14 — [deviation] Task 11 — o `Ambiente` da 3.6 concede `manage_users`; primeiro `make check` invalidado por contenção — Claude (autônomo)
+**Contexto:** as varreduras de borda invocam toda rota com o ator do `Ambiente`; sem
+`manage_users`, R17 escapava com a sentinela do guard num campo que não é alvo de autorização
+(falha correta da varredura, causa errada). O primeiro `make check` da T11 registrou 5
+`ERROR at setup` em e2e porque rodei os e2e da T12 em paralelo contra o mesmo Postgres.
+**Razão:** o ator do ambiente detém as três permissões, como `manager`/`hr` em produção; a recusa
+por permissão é cenário de `test_http_router_login.py`, que a retira de propósito. O `make check`
+foi refeito sem concorrência — evidência no relatório final; a lição foi para a memória do
+projeto (Postgres compartilhado: um consumidor por vez).
+
+### 2026-09-14 — [finding] `AuthenticationResult.refresh_token` sem `repr=False` — Claude (autônomo)
+**Contexto:** achado do Checkpoint C do bloco 3 ao conferir a docstring de
+`ProvisionedAccountResult`: o result do login (2.2) imprime o refresh token no `repr`, ao
+contrário dos commands de sessão e do `setup_link` desta Stage.
+**Direção:** `field(repr=False)` em `AuthenticationResult.refresh_token`, com teste de `repr` —
+fora da lista fechada de §5.13 desta Stage. **Stage candidata:** a próxima que tocar identity
+(6.2 hardening, ou antes se abrir issue).
+
+### 2026-09-14 — [finding] guarda de ramificação não pega `__class__.__name__` — Claude (autônomo)
+**Contexto:** `test_no_implementation_branching.py` proíbe `isinstance`/`type()`/literais de
+implementação nos corpos das leis, mas `gateway.gateway.__class__.__name__ == "..."` passa
+(pré-existente; vale igualmente para `repos.employees.__class__`).
+**Direção:** acrescentar `__class__` aos nomes proibidos do guarda. **Stage candidata:** a próxima
+que tocar a suíte de contrato de staff (Step 4, `find_by_user_id`).
+
+### 2026-09-14 — [finding] `foi_revogado` do lado real observa a chamada ao port, não estado — Claude (autônomo)
+**Contexto:** no contrato do gateway, o lado real prova L-IG4 por um spy sobre
+`InMemorySessionRepository.revoke_all_for_user` (o login recém-provisionado não tem sessão; a
+revogação é no-op observável por ninguém).
+**Direção:** função de arranjo `sessao_viva(user_id)` no holder e asserção `revoked_at is not None`
+nos dois lados. **Stage candidata:** a mesma do finding anterior.
+
+### 2026-09-14 — [deviation] Task 11 — o 12º arquivo modificado, nomeado — Claude (autônomo)
+**Contexto:** o plano da Task 11 lista 11 arquivos a modificar + 1 a criar; o commit `ae4f79b`
+modifica **12** + 1. O 12º é `tests/unit/features/staff/adapters/test_http_router_job_functions.py`.
+**Razão:** o `Ambiente` daquele módulo é o harness de **todas** as varreduras de borda (elas o
+importam), e R17 exige `manage_users` além de `manage_staff` — sem a concessão, a rota nova escapava
+com a sentinela do guard num campo que não é alvo de autorização, e a varredura adversarial
+reprovava pela causa errada. A reflexão de `overrides_de_use_case` também passou a conhecer
+`gateway`. Apontado pelo Checkpoint C do bloco 5.
+
+### 2026-09-26 — [deviation] auditoria e Checkpoint C do bloco 5 acharam lacunas de **prova**, não de comportamento — Claude (autônomo)
+**Contexto:** a auditoria de testes independente encontrou **uma mutação sobrevivente** (`from exc`
+→ `from None` nas duas traduções do gateway passava em 1773 testes) e cinco lacunas; o Checkpoint C
+do bloco 5 reprovou com dois majors da mesma natureza — `test_r17_o_email_e_repassado_verbatim…`
+usava um valor (`"  Maria@Cantina.com "`) que o validador de identificador também devolveria
+verbatim, de modo que a mutação `email=validate_identifier(...)` sobrevivia a 1525 testes; e CA14
+rodava **só** no canal `link`, quando o CA nomeia os dois.
+**Razão:** corrigido em `50b1010` e `61f99d6`: o fake passa a traduzir preservando a causa (as leis
+cobram `__cause__`), o conjunto de e-mails inválidos do contrato ganhou o do byte NUL (a cadeia
+VO → fachada → gateway passa a ser provada sem banco), o teste de §5.7 passou a usar o NUL com o
+fake aceitando (201 só é possível se o validador não foi chamado), CA14 foi parametrizado nos dois
+canais, R15 em registro vinculado ganhou caminho de adapter, CA15 ganhou o par
+unicidade↔restaurante e CA13 passou de quatro para oito escritas no e2e. **Um achado do revisor foi
+refutado por medição:** ele afirmou que o `caplog` de CA14 capturava registros; a sentinela que ele
+mesmo sugeriu mostrou o contrário (`assert caplog.records` reprovou) — a asserção de ausência era
+**vácua**, porque nenhum módulo de `src/` chama `getLogger` e `configure_logging` não está plugado
+(finding #6, herdado da 2.5). O teste passa a travar o fato medido: nenhum registro de
+`restaurant_hub`, com mensagem que manda reconferir o token quando a app começar a logar.
+
+### 2026-09-26 — [deviation] `CA28(c)` teve a contagem subestimada por `-x` — Claude (autônomo)
+**Contexto:** as oito mutações de CA28 foram rodadas com `pytest -x`, que para na primeira falha;
+o resumo colado dizia "1 failed" para cada uma.
+**Razão:** a mutação (c) — remover a segunda autorização de R17 — derruba **quatro** testes, e dois
+deles são varreduras de totalidade (`test_toda_autorizacao_do_router_nomeia_um_requisito_declarado`,
+19→18, e `test_os_dois_valores_de_names_unit_sao_exercitados_pelo_router`), o que é justamente a
+evidência de que a trava não depende só do módulo de R17. Medido pelo revisor do bloco 5 e
+reconferido sem `-x`; é a contagem sem `-x` que vai ao relatório final.
+
+### 2026-09-26 — [finding] varredura derivada de `validate_identifier` por rota — Claude (autônomo)
+**Contexto:** hoje "o e-mail não passa pelo validador" (§5.7) é travado por comportamento, numa
+rota. O revisor do bloco 5 propôs a forma estrutural que fecha as **duas** direções para as 17
+rotas: por handler, o conjunto de nomes passados a `validate_identifier` == os identificadores que
+a rota declara (`_params_de_path_de_id` ∪ `identifier_fields(schema)`).
+**Direção:** entra em `test_http_boundary_sweeps.py`, com a infra de AST que já existe
+(`_handlers_do_router`). **Obstáculo medido:** `job_function_ids` é validado no helper de módulo
+`_job_function_ids`, não no handler — a varredura precisa resolver um nível de chamada a helper
+local, ou reportaria R05 e R09 como falso vermelho. **Stage candidata:** a próxima que tocar os
+sweeps de staff (Step 4, ou a issue que herdar os gates da #45).
+
+### 2026-09-26 — [decision] sincronizar com `develop` por merge, não por rebase — Marcelo (via AskUserQuestion)
+**Contexto:** o `develop` avançou 27 commits (PR #50, issue #45) durante a execução: renomeou
+`adapters/in/` → `adapters/inbound/`, criou o mapper único de result em `dtos/results.py`
+(regra 8 do `check_layout` — o mesmo problema que a Task 03 resolveu em `use_cases/_results.py`,
+em outro lugar) e trouxe gates novos (`test_import_hygiene`, `test_status_map`,
+`test_deny_by_default`). Medido: `git rebase origin/develop` conflita já no 1º dos 19 commits e
+conflitaria em 8 a 10 deles; `git merge origin/develop` conflita em 18 arquivos, **uma vez**.
+**Pergunta:** rebase (Etapa 4 do GIT-WORKFLOW manda sempre rebasear) ou merge + um commit de
+adaptação?
+**Opções:**
+- A — Merge de `develop` + 1 commit de adaptação ✅ recomendada
+- B — Rebase commit a commit, adaptando cada um
+- C — Rebase resolvendo só o textual + adaptação num commit final
+**Decisão:** A
+**Razão:** o trabalho de adaptação é o mesmo nos três; o que muda é a forma da história e o
+tempo. Com o merge, os 19 commits da Stage seguem verdes na própria linhagem e a adaptação fica
+legível num commit só (`58f6694`); com o rebase, os commits intermediários passariam a
+referenciar `adapters.in` e `_results.py`, que não existem na base nova. **Divergência
+declarada da Etapa 4 do GIT-WORKFLOW** — a regra existe para resolver cedo o conflito
+recorrente do `roadmap.md`, e aqui ele foi resolvido cedo do mesmo jeito (o fechamento
+documental veio **depois** do merge, sobre a árvore já sincronizada).
+
+### 2026-09-26 — [deviation] o gate `deny_by_default` da #45 aprendeu a sintetizar `enum` — Claude (autônomo)
+**Contexto:** `tests/e2e/test_deny_by_default.py` sintetiza o corpo de cada rota a partir do
+schema OpenAPI para alcançar o `guard.authorize`; o `delivery` de R17 é `Literal["email","link"]`
+e o sintetizador não tinha ramo para `enum`, então a rota respondia 422 e o gate reportava
+*"escreva o corpo em `_CORPOS_SOB_MEDIDA`"*.
+**Razão:** ensinar o sintetizador (um ramo de três linhas, irmão do `const`) mantém a promessa
+do gate — "acompanha rota nova sem edição" — para toda rota futura com vocabulário fechado;
+escrever o corpo sob medida resolveria só R17 e deixaria a próxima repetir o diagnóstico. É
+edição em arquivo de outra issue, registrada aqui por isso.
+
 <!-- END: post-execution -->

@@ -5,7 +5,7 @@ when-use: Reference before letting any staff module import from features.identit
 keywords: [adr, bounded-context, independence, port, adapter, authorization, import-linter, composition-root, staff, identity]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-08-18
+updated_at: 2026-09-26
 adr_id: 3.4.0001
 decision: The staff HTTP adapter depends on an AccessGuard Protocol owned by staff (opaque string identifiers, permission named as str, four published laws), whose implementation is assembled in composition_root.py — the module that already imports both bounded contexts — so bc-independence stays absolute with zero ignore_imports
 context_stage: 3.4-staff-access-scope
@@ -241,3 +241,17 @@ idêntica; só o endereço dos testes muda.
 |---|---|---|---|
 | `## Trade-offs` | *"It is caught by the per-role, per-route tests of concept **CA10–CA12**"* | *"...of Stage 3.6's concept **CA09–CA12**"* | `docs/stages/3.6-staff-http/concept.md` §11: CA09 (papéis sem permissão recebem 403 nas 16 rotas), CA10 (`manager` alcança as 16), CA11 (`owner` alcança as 16), CA12 (`hr` ≡ `manager` nas 16) — os quatro são parametrizados sobre o produto papel × rota, que é o que "per-role, per-route" nomeia |
 | `## References` | `concept.md` §7 D1, `CA12–CA15` | `CA12–CA15` **da 3.4** — correto como está | conferido: no `concept.md` da 3.4, CA12–CA15 são os critérios do port `AccessGuard`; o intervalo é desta Stage e não migrou |
+
+## Supersessão parcial
+
+**2026-09-26 — a cláusula "zero `ignore_imports`" de `## Decision` §3 foi superada por
+[ADR 3.5.0001](./3_5_0001-cross-bc-facade-and-gateway-edge.md).** A frase *"`bc-independence`
+keeps **zero** `ignore_imports` — a property pinned by a test that reads `.importlinter` and
+fails if the list ever appears (concept CA13)"* deixou de valer na Stage 3.5: o contrato passou a
+carregar **um** par nomeado (`restaurant_hub.features.staff.adapters.out.identity.* ->
+restaurant_hub.features.identity.application.facade`, com `unmatched_ignore_imports_alerting =
+error`), e o teste passou a asserir a **lista exata** em vez da ausência. Tudo o mais desta
+decisão continua em vigor — o port `AccessGuard` de staff, as quatro leis, a colocação do port em
+`application/ports/out/` e a montagem do tradutor de autorização no `composition_root` (que o
+ADR 3.5.0001 §5 reafirma). Nota *append-only*; o corpo acima não foi editado (CONVENTIONS §5,
+terceira forma).

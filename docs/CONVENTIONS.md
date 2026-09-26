@@ -647,12 +647,22 @@ Docs vivem no git, então o histórico é o versionamento. Mas:
 - **O *corpo da decisão* de um ADR `accepted` não é editado destrutivamente.**
   O corpo (Context / Decision / Alternatives / Consequences) é registro
   histórico — preserva o "porquê decidimos X no tempo T". Reescrevê-lo apaga
-  história e é **proibido**. Há **duas** formas **não-destrutivas** de manter
-  um ADR honesto sem reescrever o corpo:
+  história e é **proibido**. Há **três** formas **não-destrutivas** de manter
+  um ADR honesto sem reescrever o corpo — e uma **terceira** para o caso
+  intermediário (introduzida na Stage 3.5, ADR 3.5.0001 §Status):
   - **A decisão mudou** → criar **novo ADR** com `superseded_by` apontando
     para o antigo; o antigo passa a `superseded`.
+  - **A decisão se mantém no todo, mas uma cláusula de uma seção foi
+    substituída por ADR posterior** (supersessão **parcial**) → o ADR novo
+    declara em `## Status` o que supera; o ADR antigo permanece `accepted` e
+    ganha uma seção **`## Supersessão parcial`** *append-only*, com nota datada
+    (`**YYYY-MM-DD — <cláusula> superada por ADR X.Y.ZZZZ.**`) que **cita** a
+    cláusula e aponta o ADR novo, **sem editar o corpo**. Bumpa `updated_at`.
+    Não é errata (errata corrige ponteiro/fato sem mudar conteúdo de decisão) e
+    não é `superseded` (o resto da decisão continua valendo).
   - **A decisão se mantém, mas uma premissa/fato declarado se revelou
-    incorreto** → adicionar um **banner de errata** *append-only* no topo do
+    incorreto** (sem mudança de conteúdo de decisão) → adicionar um **banner de
+    errata** *append-only* no topo do
     ADR (logo após o título), no formato
     `> ⚠️ **Errata (YYYY-MM-DD):** <fato corrigido> — ver <auditoria/ADR>`,
     **sem editar o corpo**. A errata **não** muda `status` (a decisão continua

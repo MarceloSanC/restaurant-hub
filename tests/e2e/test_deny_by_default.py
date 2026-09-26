@@ -230,11 +230,15 @@ def _valor(schema: dict[str, Any], spec: dict[str, Any]) -> Any:  # noqa: ANN401
     declara `string`, e a conversão para o value object do domínio acontece
     **depois** da autorização.
 
-    Os quatro ramos abaixo são exatamente os que a Stage 3.6 exigiu, e cada um
-    foi acrescentado por uma rota que respondia 422:
+    Os ramos abaixo são exatamente os que uma rota exigiu ao responder 422 — os
+    quatro primeiros na Stage 3.6, o do `enum` na 3.5:
 
     - `const` — o discriminador de união (`type: "fixed"`) não é uma string
       qualquer; um `"x"` ali reprova na validação;
+    - `enum` — vocabulário fechado (`Literal["email", "link"]` do `delivery` de
+      `POST /units/{unit_id}/employees/{employee_id}/login`). É o mesmo caso do
+      `const` com mais de um valor permitido: qualquer string fora da lista
+      reprova antes do guard;
     - `oneOf`/`anyOf` — a união discriminada de `workload_profile` e o
       `list | None` de `shift_preference`. Escolhe-se a primeira variante que
       não seja `null`, porque `null` satisfaz o schema sem exercitar nada;
@@ -246,6 +250,9 @@ def _valor(schema: dict[str, Any], spec: dict[str, Any]) -> Any:  # noqa: ANN401
 
     if "const" in schema:
         return schema["const"]
+
+    if schema.get("enum"):
+        return schema["enum"][0]
 
     for chave in ("oneOf", "anyOf", "allOf"):
         variantes = [
