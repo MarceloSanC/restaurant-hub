@@ -62,7 +62,7 @@ references:
 
 O subdomínio **shift-scheduling** cobre a teoria da **escala manual publicável** de uma unidade
 de restaurante — o quadro que hoje vive em planilha e que o Step 4 aposenta (`roadmap.md`
-linha 1173): a **escala** de uma unidade para uma **semana** de início configurável (§3.1); o
+linha 1178): a **escala** de uma unidade para uma **semana** de início configurável (§3.1); o
 **dia operacional** e as **faixas/turnos** com intervalo declarado (§3.2); a **demanda por função
 × faixa** (§3.3); a **alocação** com a classificação "conta para a carga" (§3.4); a **escala
 vigente** — toda alteração salva é a escala que o funcionário vê — com auditoria e versão para
@@ -145,12 +145,14 @@ unidade** para **uma semana** cujo dia de início é configurável (`overview.md
 - **Período = semana com dia de início configurável** — decisão do sponsor, 2026-09-13
   ([ADR 4.1.0002](../../adr/4_1_0002-weekly-period-operational-day-and-allocation-hours.md)):
   *"incio e fim da semana sao configuraveis"*. O período é a sequência de **7 dias operacionais**
-  (§3.2) a partir do dia de início configurado por restaurante (fim = início + 6). O overview
+  (§3.2) a partir do dia de início configurado por restaurante (fim = início + 6); **default:
+  segunda-feira** (derivação ancorada — ISO 8601 via `isoweekday()` e Decreto 10.854/2021
+  art. 158 § 4º, §7). O overview
   ("período configurável, default semanal" — 40, 129) fica honrado: na v1 configura-se o **dia de
   início**; quinzena/mês são **evolução** que a forma "intervalo contíguo de dias operacionais"
   não bloqueia (§5).
 - **Isolamento de tenant**: row-level `tenant_id` num único Postgres (ROADMAP-3, `roadmap.md`
-  1693) — invariante herdado da fundação.
+  1720) — invariante herdado da fundação.
 - **Identidade**: `(tenant, unidade, período)`. O roadmap lista `Schedule`, `ShiftDemand` e
   `Assignment` como entidades da 4.1 (`roadmap.md` 1218) sem nomear a raiz; que `Schedule` seja
   a **raiz do agregado** é proposta do gate (†), a confirmar na 4.1.
@@ -256,14 +258,14 @@ faixa** de **um dia** do período.
 ### 3.4 Alocação
 
 **Regra canônica:** a **alocação** designa um **funcionário** para **uma vaga** (`roadmap.md`
-1179, 1186). Quem pode ser alocado é definido pelos dados de staff, lidos por id e por dados —
+1206, 1213). Quem pode ser alocado é definido pelos dados de staff, lidos por id e por dados —
 nunca por import (§3.10).
 
 **Elegibilidade:**
 
 1. **Registro ativo da unidade da escala.** Só **ativos** aparecem no seletor — e em qualquer
    outra leitura (reconciliação na leitura, abaixo); o desligado some (`workforce.md` §3.1;
-   ADR 3.2.0006 38–39); recontratação explícita é o único caminho de volta (ADR 3.2.0007
+   ADR 3.2.0006 40–41); recontratação explícita é o único caminho de volta (ADR 3.2.0007
    122–124).
 2. **Mesma unidade.** "Unidades não compartilham funcionários" (`overview.md` 37); o endereço do
    funcionário é `(tenant, unidade, id)` e o lookup **exige** a unidade como lei do port
@@ -317,11 +319,13 @@ realiza-se assim:
   mitigável por consulta em lote ao `StaffReadPort` (lacuna 4.3/4.4).
 - **Remoção definitiva — guarda L-E5 mantida** (`EmployeeInUseError`; "o Step 4 (alocação) é
   quem os preenche" — `docs/stages/3.2-staff-application/concept.md` 301–308; ADR 3.2.0006
-  175–176): apagar só passa se **nenhuma** alocação — nem histórica — referenciar o registro.
+  177–178): apagar só passa se **nenhuma** alocação — nem histórica — referenciar o registro.
   Mecanismo: **port de consulta reverso em staff** ("este registro é referenciado?"),
-  implementado no **composition root** sobre uma query de scheduling
+  implementado **fora de staff** por um adapter/tradutor sobre uma query de scheduling
   (`has_allocations_for(tenant, unidade, registro)`) — a forma do `AccessGuard`
-  (ADR 3.4.0001); **sem foreign key** entre BCs (cumpre o Alt C do ADR 3.3.0002); generaliza
+  (ADR 3.4.0001, conforme revista pela issue #47: a localização exata do tradutor é do
+  `technical.md` da 4.4, não deste doc); **sem foreign key** entre BCs (cumpre o Alt C do
+  ADR 3.3.0002); generaliza
   para a função demandada (§3.3). Os ADRs 3.2.0006 e 3.4.0002, que assumiam uma FK, ganham
   errata **neste PR**.
 - **Pesquisa de arquitetura (2026-09-13)**, pedida pelo sponsor para F7: as alternativas A
@@ -349,16 +353,16 @@ publicar"; "publicar: salvar a escala tornando-a visível") ficam **literais**:
 
 - **Não há rascunho no servidor** nem "versão publicada" separada. Cada mutação persistida
   (demanda, alocação, aceite) é a escala que o funcionário consulta (`overview.md` 43), a imagem
-  renderiza (`roadmap.md` 1359, 1376), o ponto concilia (1526, 1541, 1596) e o hub lê (1629).
+  renderiza (`roadmap.md` 1359, 1376), o ponto concilia (1553, 1568, 1623) e o hub lê (1656).
 - **`block` recusa a própria mutação** — a escala vigente nunca fica inválida; não se "passa
   por" um estado inválido ao rearranjar.
 - **`warn` é apresentado e aceito no ato de salvar** — o aceite consciente (`overview.md` 42) é
-  parte da mutação. O fluxo "editar → avaliar → aceitar warn → publicar" do roadmap (1231, 1247,
-  1298) lê-se como: avaliar ao vivo, e salvar **com** o aceite dos avisos que a mudança introduz.
+  parte da mutação. O fluxo "editar → avaliar → aceitar warn → publicar" do roadmap (1258, 1274,
+  1325) lê-se como: avaliar ao vivo, e salvar **com** o aceite dos avisos que a mudança introduz.
 - **Quem/quando** de cada mutação (`roadmap.md` 1206): o ator autenticado e o instante absoluto
   do `Clock` compartilhado ("timestamp atual com timezone (UTC recomendado)" —
   `shared/application/ports/out/clock.py` 17). Staff não tem `Clock` nem carimbos (ADR 3.2.0006
-  153–155): o Step 4 é o **primeiro** lugar com auditoria — o que a 4.4 decidir vira precedente.
+  155–157): o Step 4 é o **primeiro** lugar com auditoria — o que a 4.4 decidir vira precedente.
 - **O histórico é a trilha de auditoria** — "trilha de auditoria das alterações" (`overview.md`
   38); "histórico e auditoria" (`overview.md` 91); "histórico de edições — quem alterou o quê e
   quando"; "toda mutação de escala gera entrada de auditoria" (`roadmap.md` 1284, 1301). O aceite
@@ -375,7 +379,7 @@ foi atualizada, se foi, aparece mensagem se deseja atualizar e perder o trabalho
 - O cliente oferece **"atualizar"** (descartar o que está na tela e recarregar) ou **"cancelar"**
   (manter o que está na tela, **sem salvar**). **Sobrescrever o trabalho alheio não é oferecido
   pelo servidor.**
-- Fecha a lacuna do roadmap (811–815: controle otimista "sem Stage candidata") e supera, para a
+- Fecha a lacuna do roadmap (816–820: controle otimista "sem Stage candidata") e supera, para a
   escala, o "last write wins" de staff (ADR 3.3.0006 91–98). Stages: **4.4** (versão + checagem)
   e **4.5** (status/corpo da recusa).
 
@@ -387,8 +391,15 @@ foi atualizada, se foi, aparece mensagem se deseja atualizar e perder o trabalho
 - Toda mutação gera entrada de auditoria com quem/quando e incrementa a versão da escala.
 - Nenhuma mutação é aplicada sobre uma versão que o editor não viu.
 
+> **Lacuna para o concept da Stage 4.3/4.5 — unidade de salvamento:** uma **operação por
+> requisição** (alocar, desalocar, mudar demanda) ou um **lote de edições** salvo de uma vez? A
+> resposta F8 do sponsor ("ao clicar em publicar", "perder o trabalho", "printar a tela")
+> pressupõe edições acumuladas no cliente e um clique; este doc descreve a mutação como unidade.
+> A escolha afeta onde vive o aceite de `warn`, o incremento da versão, o agrupamento do e-mail
+> (4.6) e a granularidade da auditoria (4.4). A teoria vale para as duas formas.
+
 **Tensões registradas (não resolvidas aqui):** (a) **roadmap 5.2** — "grava alocações como
-rascunho de edição" (1392) e o non-goal "aplicar+publicar num passo só" (1409) pressupõem um
+rascunho de edição" (1419) e o non-goal "aplicar+publicar num passo só" (1436) pressupõem um
 rascunho que não existe: **lacuna de escopo do roadmap para o gate do Step 5** (o "aplicar" do
 auto-fill publica direto, respeitando `block`, ou o Step 5 cria a sua noção de proposta); (b)
 **e-mail por mutação** — sem agrupador, cada alteração salva dispararia um e-mail (§3.8).
@@ -438,7 +449,7 @@ config do restaurante e distingue block × warn" (`roadmap.md` 1232, 1248).
   a tabela (Recomendada)"*. O sponsor a tratou como **uma** decisão; o ADR enumera as
   sub-decisões (a)–(e) só para rastreabilidade. As políticas que as fontes sustentam mas o
   roadmap 4.2 não lista (§3.6.8) ficam como **evolução** — o que também resolve o "etc." de
-  `overview.md` 42 × a lista fechada de `roadmap.md` 1232/1212 (ex-HALT H4: escopo, não
+  `overview.md` 42 × a lista fechada de `roadmap.md` 1232/1239 (ex-HALT H4: escopo, não
   contradição; o roadmap recebe nota no fechamento). A sétima linha — **função não detida** —
   entrou em 2026-09-14 (F9, ADR 4.1.0003 (f)).
 
@@ -613,7 +624,7 @@ alguma entrar, continua valendo `overview.md` §6: habilitável e com modo confi
 > **HALT H3 — premissa não verificada em fonte primária (registrado; nada a escalar):** que
 > restaurantes constam do Anexo IV da **Portaria MTP 671/2021** (permissão permanente para
 > domingos/feriados — Decreto 10.854/2021, art. 154 § 4º) e que restaurante é "comércio em geral"
-> para a Lei 10.101 art. 6º. O texto da Portaria não foi obtido (URL do DOU devolve HTTP 404;
+> para a Lei 10.101 art. 6º. O texto da Portaria não foi obtido (URL do DOU devolve HTTP 404/403;
 > compilada em gov.br "Conteúdo Restrito"); a única evidência é **histórica** (Decreto
 > 27.048/1949, item "Hotéis e similares (restaurantes…)", **revogado** pelo Decreto 10.854/2021
 > art. 187, I). Nenhuma política v1 depende disso; o produto não valida permissão administrativa.
@@ -641,19 +652,19 @@ tem o número da lei.
 
 **Calendário dia/semana/mês.** `overview.md` 45 o descreve como "visão principal" do **Hub (aba
 escala)**, "com mini-cards de funcionários sobre as faixas de funcionamento" (= faixas
-habilitadas, §2); `roadmap.md` 1258, 1265 e 1283 o colocam como **use case e endpoint de
+habilitadas, §2); `roadmap.md` 1258, 1265 e 1310 o colocam como **use case e endpoint de
 scheduling** (`get_calendar`); o Step 8 o lê via `SchedulingReadPort` sobre "dados publicados por
 scheduling" (`roadmap.md` 1637, 1651–1658). Leitura reconciliada (§6): **o calendário é read
 model de scheduling**; o hub é **consumidor** (`overview.md` 114). O nome dos mini-cards vem de
 staff (ADR 3.1.0002 30–31). Sob F1 o calendário mostra sempre a escala vigente; sob F7, **sem
 registros inativos** — toda leitura reconcilia com staff (§3.4; ADR 4.1.0006).
 
-**Escalas anteriores.** `overview.md` 46; `roadmap.md` 1178; `list_past_schedules` (1238). É
+**Escalas anteriores.** `overview.md` 46; `roadmap.md` 1178; `list_past_schedules` (1265). É
 **leitura**; copiar é evolução (§5). Alocações de registros hoje inativos **não aparecem** (limite
 declarado de F7 — §3.4) até a página de histórico de funcionários.
 
 **"Minha escala".** "Funcionário com login consulta a própria escala" (`overview.md` 43, 92);
-"RBAC: funcionário só vê a própria" (`roadmap.md` 1310); `get_my_schedule` (1238):
+"RBAC: funcionário só vê a própria" (`roadmap.md` 1310); `get_my_schedule` (1265):
 
 - O funcionário vê a escala **vigente** e **apenas as próprias alocações** — leitura decidida
   pela mestra sobre os docs (âncora: "funcionário só vê a própria"). A **visão da unidade
@@ -679,7 +690,7 @@ declarado de F7 — §3.4) até a página de histórico de funcionários.
 **E-mail (Stage 4.6).** "E-mail opcional a cada atualização (opção 'sempre notificar alterações
 na escala')" (`overview.md` 43); "opção **por restaurante** … → publicação dispara e-mail aos
 funcionários afetados com e-mail cadastrado (reuso do EmailSender de 2.5)" (`roadmap.md` 1334,
-1322).
+1349).
 
 - **Opção por restaurante (tenant)** — ratificado; por unidade/funcionário é evolução (§5).
 - **Só registros ativos** são "afetados" (reconciliação na leitura — §3.4).
@@ -700,8 +711,8 @@ funcionários afetados com e-mail cadastrado (reuso do EmailSender de 2.5)" (`ro
 
 **Imagem/tabela (Stage 4.7).** "Imagem/tabela gerada **sob demanda** (botão gerar/imprimir) para
 divulgação manual" (`overview.md` 43); da **escala vigente** do período (`roadmap.md` 1359,
-1349); port `ScheduleRenderer` (1339–1345); **formato e biblioteca em ADR na 4.7** (1686); envio
-automático é non-goal (1351); sem registros inativos (§3.4). Sob a CLT art. 67 p.u., a escala
+1376); port `ScheduleRenderer` (1366–1372); **formato e biblioteca em ADR na 4.7** (1713); envio
+automático é non-goal (1378); sem registros inativos (§3.4). Sob a CLT art. 67 p.u., a escala
 vigente/impressa é o "quadro sujeito à fiscalização" (premissa, ver H3).
 
 ### 3.9 Tempo: fuso da unidade, wall-clock, instantes de auditoria
@@ -757,7 +768,7 @@ Scheduling **consome** staff e identity e **é consumido** por timeclock e hub. 
 
 #### 3.10.1 Staff — dados consumidos (por id e por dados, sem import)
 
-Nível de conceito: o que scheduling lê, onde staff o define (HEAD `0bc68b1`) e o que faz com ele.
+Nível de conceito: o que scheduling lê, onde staff o define (`origin/develop` `95fba00`, base deste PR) e o que faz com ele.
 A forma exata (tipos, DTO do port) é do concept da 4.3.
 
 | Conceito de staff | Natureza | Onde staff o define | Uso em scheduling |
@@ -780,9 +791,10 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
   × tradutor no composition root, ADR 3.4.0001 101–118) é do `technical.md` da 4.4 — a 3.5
   (`draft`) enfrenta a mesma forma antes.
 - **Desligamento**: reconciliado na leitura — **nenhum crossing de escrita** staff → scheduling
-  (ADR 4.1.0006). **Remoção definitiva**: port de consulta reverso **em staff**, implementado no
-  composition root sobre uma query de scheduling (`has_allocations_for`) — o único crossing
-  scheduling ← staff, na forma do ADR 3.4.0001; generaliza para função demandada (§3.3, §3.4).
+  (ADR 4.1.0006). **Remoção definitiva**: port de consulta reverso **em staff**, implementado
+  fora de staff (adapter/tradutor — localização é do `technical.md` da 4.4, ver #47) sobre uma
+  query de scheduling (`has_allocations_for`) — o único crossing scheduling ← staff, na forma do
+  ADR 3.4.0001; generaliza para função demandada (§3.3, §3.4).
 - **Reconciliação de órfãos** cross-BC (unidade apagada) é operação do Step 6, não constraint
   (`docs/stages/3.3-staff-persistence/concept.md` 691–696).
 
@@ -806,7 +818,7 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
 
 - O Step 7 consome "dados de alocação da escala (por DTO, sem import de entidade de scheduling)"
   via "port de leitura de scheduling" (`roadmap.md` 1568, 1623); concilia previsto × realizado
-  por alocação (1526; `overview.md` 44, 137).
+  por alocação (1553; `overview.md` 44, 137).
 - A escala é o **previsto**; o ponto é **outra obrigação legal** — CLT art. 74, § 2º ("permitida
   a pré-assinalação do período de repouso") e § 4º ("registro de ponto por exceção à jornada
   regular") mostram o previsto como **insumo** do ponto.
@@ -927,7 +939,7 @@ afirmativa.
   salva é a escala vigente (sem rascunho no servidor, sem versão publicada imutável); `block`
   recusa a mutação; `warn` aceito ao salvar; controle otimista por versão com
   recarregar-ou-cancelar, sem sobrescrita no servidor. Resolve overview 43/136 × roadmap
-  1231/1298 (ex-HALT T1) a favor do overview literal; roadmap 5.2 (1392, 1409) vira lacuna de
+  1231/1298 (ex-HALT T1) a favor do overview literal; roadmap 5.2 (1419, 1436) vira lacuna de
   escopo para o gate do Step 5. §3.5.
 - **F2 — Período, dia de início, dia operacional e corte** + **F3 — Contagem de horas** →
   [ADR 4.1.0002](../../adr/4_1_0002-weekly-period-operational-day-and-allocation-hours.md): semana
@@ -955,7 +967,7 @@ afirmativa.
   **reconciliação na leitura** — staff marca `active=False`, nenhuma escrita em scheduling, toda
   leitura consulta o estado atual e omite o inativo (nem alocações passadas) até a página de
   histórico de funcionários; guarda L-E5 mantida por **port de consulta reverso** em staff
-  (composition root; sem FK). A pesquisa de arquitetura pedida pelo sponsor recomendou o evento
+  (tradutor fora de staff, localização do technical da 4.4; sem FK). A pesquisa de arquitetura pedida pelo sponsor recomendou o evento
   in-process pós-commit; o sponsor escolheu a reconciliação na leitura pela simplicidade ("como um
   refresh F5") e as alternativas A/B/C/E ficaram registradas como descartadas. Absorve o ex-HALT
   H1; os cinco limites declarados estão em §3.4. Erratas nos ADRs 3.2.0006 e 3.4.0002 e nota no
@@ -969,10 +981,10 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 
 | HALT | Natureza | Disposição |
 |---|---|---|
-| H1 — guarda cross-BC: FK (ADR 3.2.0006, 3.4.0002) × sem FK (ADR 3.3.0002) | fork real | → F7 decidida (ADR 4.1.0006): sem FK; port de consulta reverso no composition root; desligamento reconciliado na leitura. Erratas nos ADRs 3.2.0006 e 3.4.0002 **neste PR**; ADR 3.3.0002 Alt C cumprido. |
+| H1 — guarda cross-BC: FK (ADR 3.2.0006, 3.4.0002) × sem FK (ADR 3.3.0002) | fork real | → F7 decidida (ADR 4.1.0006): sem FK; port de consulta reverso em staff, tradutor fora de staff; desligamento reconciliado na leitura. Erratas nos ADRs 3.2.0006 e 3.4.0002 **neste PR**; ADR 3.3.0002 Alt C cumprido. |
 | H2 — fuso por unidade sem dono no código | fork real | → F6 (ADR 4.1.0005). Stage da coluna: lacuna de escopo do roadmap. |
 | H3 — Portaria MTP 671 / "comércio em geral" não verificados | premissa sem fonte | registrado (§3.6.8); não load-bearing; vira pergunta só se "domingo a cada N" entrar. |
-| H4 — lista de políticas: overview "etc." × roadmap 4.2 fechado em quatro | escopo, não contradição | → dentro de F4 (ADR 4.1.0003): sete na v1 (as quatro + indisponibilidade + carga + função não detida); DSR/intrajornada/12x36 evolução. Roadmap 4.2 recebe nota no fechamento. |
+| H4 — lista de políticas: overview "etc." × roadmap 4.2 fechado em quatro | escopo, não contradição | → dentro de F4 (ADR 4.1.0003): sete na v1 (as quatro do bloco 4.2 — com o teto contado em dia e em semana — + alocação × indisponibilidade + função não detida); DSR/intrajornada/12x36 evolução. Roadmap 4.2 recebe nota no fechamento. |
 | H5 — CCT pode reduzir as 11h? | regra sem fonte | registrado (§3.6.2); parâmetro livre + default 11h; escalar só se o sponsor quiser piso. |
 | T1 — "salvar = publicar" (overview) × rascunho/aceitar-depois-publicar (roadmap) | contradição overview × roadmap | → F1 decidida a favor do overview literal (ADR 4.1.0001); roadmap 5.2 → gate do Step 5. |
 | T2 — overview §5 "Gerente / RH montam escala" × ADR 3.4.0006 | fonte superior anterior × decisão posterior | → F5 (ADR 4.1.0004); nota no overview §5 e errata no ADR 3.4.0006 **neste PR**. |
@@ -1013,8 +1025,10 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 - **Calendário é read model de scheduling; hub consome** — `roadmap.md` 1258–1310, 1651–1658;
   `overview.md` 114. §3.7.
 - **"Minha escala" = vigente, só as próprias alocações, todos os registros do ator** —
-  `roadmap.md` 1310; `overview.md` 43, 92; `workforce.md` §3.1. Visão da unidade = evolução;
-  imagem = divulgação manual (assimetria assumida). §3.7.
+  `roadmap.md` 1310 ("funcionário só vê a própria"); `overview.md` 43, 92; `workforce.md` §3.1.
+  A alternativa (visão da unidade inteira) existe, mas o roadmap já a exclui — por isso é
+  derivação, não fork; fica em §5 como evolução; imagem = divulgação manual (assimetria
+  assumida). §3.7.
 - **Flag de notificação por restaurante; destinatário = e-mail de login** — `roadmap.md` 1334;
   ADR 3.1.0002 32–35. §3.8.
 - **"Uso de extras" = alocações de sob demanda** — `overview.md` 135; "não conta" de jornada fixa
@@ -1049,9 +1063,9 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 | **4.4 / 4.5** | versão da escala + checagem otimista (4.4); status/corpo da recusa (4.5) (§3.5) |
 | **4.4 / 4.5** | representação persistida dos dois regimes de tempo; forma na borda HTTP (§3.9) |
 | **4.4 (technical)** | localização do adapter cross-BC (§3.10.1) |
-| **4.5** | nomes das permissões; salvar × editar; config tenant-wide; promoção do `AccessGuard` (§4) |
+| **4.5** | nomes das permissões; salvar × editar; config tenant-wide; promoção do `AccessGuard` (§4); atualizar o comentário de `role.py` 50–52 ("nenhuma permissão sobre a escala", superado pela errata do ADR 3.4.0006) junto com o mapa de papéis |
 | **4.6** | agrupamento/debounce; "afetados"; falha de envio; conteúdo; onde a flag persiste (§3.8) |
-| **4.7** | formato e biblioteca da imagem — delegado pelo roadmap 1686 (§3.8) |
+| **4.7** | formato e biblioteca da imagem — delegado pelo roadmap 1713 (§3.8) |
 | **7.2 / 8.1** | contratos de leitura; "o que valia naquele dia" via auditoria (§3.10.3); grandezas "não conta" e "exceção de função" (§3.10.4) |
 | **sem Stage (roadmap)** | gates dos Steps 7/8: registros inativos invisíveis até a página de histórico de funcionários (limite (2) de F7, §3.4) |
 | **sem Stage (roadmap)** | mapa período nomeado → faixas (proposta: 5.1) (§3.2) |
@@ -1067,8 +1081,8 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 
 - [`overview.md`](../../overview.md) — §3 (37–46, 56–57, 69), §5 (91–92), §6 (101, 109–110),
   §7 (114), §9 (129–140), §10 (150–153; bloco do Step 4 acrescentado neste PR).
-- [`roadmap.md`](../../roadmap.md) — Step 4 (1170–1355); Step 5 (1361–1409); Step 7 (1498–1541);
-  Step 8 (1610–1631); tabela de Stages (123); ROADMAP-1/3/6 (1691–1696); 1685–1686; 811–815.
+- [`roadmap.md`](../../roadmap.md) — Step 4 (1175–1382); Step 5 (1388–1436); Step 7 (1525–1568);
+  Step 8 (1637–1658); tabela de Stages (123); ROADMAP-1/3/6 (1718–1723); 1712–1713; 816–820.
 - [`workforce.md`](../staff/workforce.md) — §1, §2, §3.1–§3.6, §3.8, §4, §6, §7. Citado por seção
   porque ganha notas datadas neste PR.
 - ADRs do gate: [4.1.0001](../../adr/4_1_0001-every-saved-change-is-the-live-schedule.md) (F1+F8) ·
@@ -1096,7 +1110,7 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
   função (48–50, 69–73, 83).
 - [ADR 3.2.0003](../../adr/3_2_0003-copy-employee-full-duplication.md) — cópia carrega
   indisponibilidades (104–107); wall-clock entre fusos (177–183). [ADR 3.2.0006](../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md)
-  — desligado sai do seletor (38–39); histórico (40–41); sem `Clock` (153–155); "FK" (175–176;
+  — desligado sai do seletor (40–41); histórico (42–43); sem `Clock` (155–157); "FK" (177–178;
   errata 2026-09-14).
   [ADR 3.2.0007](../../adr/3_2_0007-terminated-employee-remains-editable.md) — recontratação
   explícita (122–124).
@@ -1107,7 +1121,7 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 - [ADR 3.4.0001](../../adr/3_4_0001-staff-owned-access-guard-port.md) — port de acesso próprio
   (59–64); `ignore_imports` rejeitado (101–118); promoção a `shared` adiada (128–135).
   [ADR 3.4.0002](../../adr/3_4_0002-staff-http-error-status-mapping.md) — `EmployeeInUseError`
-  (110–111; errata 2026-09-14). [ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md) —
+  (112–113; errata 2026-09-14). [ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md) —
   sponsor 2026-08-12 (§1); restrição sobre `hr` (§3 — errata 2026-09-13); famílias (§4); expansão
   de identity autorizada (§5); citado por seção porque ganha errata neste PR.
   [ADR 3.4.0007](../../adr/3_4_0007-unit-enters-the-employee-address.md) — unidade no endereço
@@ -1119,7 +1133,7 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 - `docs/stages/3.1-staff-domain/concept.md` 63–65, 376–381; `docs/stages/3.2-staff-application/
   concept.md` 301–308, 725; `docs/stages/3.3-staff-persistence/concept.md` 691–696;
   `docs/stages/3.6-staff-http/concept.md` 926–933.
-- Código mergeado (HEAD `0bc68b1`): `features/identity/domain/value_objects/{role,permission}.py`;
+- Código mergeado (`origin/develop` `95fba00`): `features/identity/domain/value_objects/{role,permission}.py`;
   `features/identity/domain/entities/{user,unit}.py`; `features/staff/domain/value_objects/
   {identifiers,workload_profile,shift_preference,unavailability_period}.py`;
   `features/staff/domain/entities/{employee,job_function}.py`; `features/staff/application/
@@ -1162,7 +1176,7 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 > e 4º; 158, § 4º — *"Considera-se semana, para fins de pagamento de remuneração, o período de
 > segunda-feira a domingo que antecede o dia determinado como repouso semanal remunerado."*
 > (definição para remuneração do RSR, não para calendário de escala — sustenta só a segunda-feira
-> como default plausível de dia de início, que o sponsor deixou configurável); e 187, I (revoga o
+> como **default** de dia de início, que o sponsor deixou configurável); e 187, I (revoga o
 > Decreto nº 27.048/1949). Disponível em:
 > https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/decreto/D10854.htm. Acesso em: 13 set.
 > 2026.
@@ -1188,7 +1202,7 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 > Anexo IV (atividades autorizadas em caráter permanente ao trabalho aos domingos e feriados —
 > art. 154, § 4º, do Decreto nº 10.854/2021). DOU 11/11/2021, Seção 1, p. 217. URL indicada:
 > https://www.in.gov.br/en/web/dou/-/portaria-mtp-n-671-de-8-de-novembro-de-2021-361085816 —
-> **devolve HTTP 404 em 13 set. 2026** (a URL pode estar errada; a versão compilada em gov.br
+> **devolve HTTP 404 em 13 set. 2026 e 403 em 14 set. 2026** (a URL pode estar errada; a versão compilada em gov.br
 > devolve "Conteúdo Restrito"). **Conteúdo não obtido; não sustenta regra neste doc.**
 
 ### Fontes primárias — jurisprudência (TST; texto confirmado em acórdão do backend oficial, não na página canônica de súmulas)
@@ -1221,8 +1235,8 @@ Nenhum fork aberto após 2026-09-14. Doc ratificado pelo sponsor em 2026-09-14 (
 > ("Monday is 1 and Sunday is 7"), `date.isocalendar()` ("a week starts on a Monday and ends on
 > a Sunday"). The Python Standard Library, Python 3. Disponível em:
 > https://docs.python.org/3/library/datetime.html. Acesso em: 13 set. 2026. (Âncora para a
-> convenção ISO 8601; a norma ISO em si é paga e não foi consultada. Sustenta a segunda-feira só
-> como default plausível — o dia de início é configurável, F2.)
+> convenção ISO 8601; a norma ISO em si é paga e não foi consultada. Sustenta a segunda-feira
+> como **default** — o dia de início é configurável, F2.)
 >
 > PYTHON SOFTWARE FOUNDATION. **zoneinfo — IANA time zone support**. The Python Standard Library,
 > Python 3. Disponível em: https://docs.python.org/3/library/zoneinfo.html. Acesso em: 13 set.

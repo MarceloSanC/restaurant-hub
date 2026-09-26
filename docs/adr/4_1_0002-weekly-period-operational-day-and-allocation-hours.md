@@ -56,7 +56,8 @@ sequence of **7 operational days** starting on the **week start day configured p
 (end = start + 6). The **accounting week** used by the weekly cap and the workload policy is the
 same 7 operational days; the two concepts stay distinct in the model so that fortnightly/monthly
 periods remain an additive evolution, but in v1 they coincide. No fixed default day is imposed by
-law; Monday is the plausible default the sources suggest.
+law; the **default is Monday** — anchored on ISO 8601 (via `isoweekday()`) and Decreto 10.854/2021
+art. 158 § 4º — and every restaurant may change it.
 
 ### 2. Operational day from a configurable cutoff, default 05:00 (F2)
 
@@ -165,7 +166,7 @@ without knowing which day an allocation belongs to and how many hours it counts.
   (policies that consume the operational day and `hours(a)`).
 - [`overview.md`](../overview.md) — §3 line 40 (configurable period, default weekly; 16h–00h
   example), line 45 (one hours number), line 56 (no money); §6 line 110 (CLT not hard-coded).
-- [`roadmap.md`](../roadmap.md) — Stage 4.1 (`SchedulePeriod`, `TimeRange`, line 1179), Stage 4.2
+- [`roadmap.md`](../roadmap.md) — Stage 4.1 (`SchedulePeriod`, `TimeRange`, line 1206), Stage 4.2
   (policies that sum hours).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §2,
   §3.1, §3.2, §3.6.2–§3.6.5, §3.6.9, §6.

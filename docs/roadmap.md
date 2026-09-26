@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-09-13
-last_reviewed_at: 2026-09-13
+updated_at: 2026-09-14
+last_reviewed_at: 2026-09-14
 ---
 
 # Roadmap — restaurant-hub
@@ -1185,8 +1185,8 @@ skills_hint: [hex-arch-python, composition-root]
 > (sem rascunho no servidor; `block` recusa a mutação; concorrência otimista por versão — 4.1.0001);
 > **semana com dia de início configurável + dia operacional com corte configurável (default 05:00)**
 > e **horas = duração − intervalo declarado na faixa** (4.1.0002); **7 políticas v1** — as quatro do
-> bloco 4.2 mais alocação × indisponibilidade (`block` fixo), sobreposição (`block`) e função não
-> detida (`warn` com exceção de função na alocação), defaults trabalhistas ancorados em fonte
+> bloco 4.2 (com o teto contado em dia e em semana; sobreposição em `block`) mais alocação ×
+> indisponibilidade (`block` fixo) e função não detida (`warn` com exceção de função na alocação), defaults trabalhistas ancorados em fonte
 > primária e configuráveis por restaurante (4.1.0003); **`hr` lê a escala** nas suas unidades
 > (4.1.0004 — errata no ADR 3.4.0006 §3); **`Unit.timezone` em identity**, lido por port (4.1.0005);
 > **desligamento reconciliado na leitura** — sem evento, sem FK, inativo omitido de toda tela até a

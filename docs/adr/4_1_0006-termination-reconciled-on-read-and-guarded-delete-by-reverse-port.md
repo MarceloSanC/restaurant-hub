@@ -1,5 +1,5 @@
 ---
-title: ADR 4.1.0006 — Employee termination is reconciled on read by scheduling (no cross-BC write, no domain event, no outbox); inactive records are invisible in every scheduling view; definitive removal keeps the L-E5 guard through a reverse query port in staff implemented in the composition root, without a foreign key
+title: ADR 4.1.0006 — Employee termination is reconciled on read by scheduling (no cross-BC write, no domain event, no outbox); inactive records are invisible in every scheduling view; definitive removal keeps the L-E5 guard through a reverse query port in staff implemented outside staff, without a foreign key
 description: Architecture Decision Record
 when-use: Reference before making staff write anything into scheduling on termination or removal, before adding a domain-event dispatcher or an outbox for staff → scheduling propagation, before showing an inactive employee anywhere in the schedule, calendar, image or e-mail, before implementing EmployeeInUseError, or when a future "employee history" page needs to reopen access to inactive records
 keywords: [adr, scheduling, staff, termination, deactivate, reconcile-on-read, read-model, staff-read-port, employee-in-use, guarded-delete, reverse-port, composition-root, no-foreign-key, domain-event, outbox, cross-bc, domain-gate]
@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-09-14
 updated_at: 2026-09-14
 adr_id: 4.1.0006
-decision: When staff terminates an employee record (active=False) nothing is written into scheduling — no domain event, no dispatcher, no outbox, no port hook; every scheduling read consults the record's current state through StaffReadPort and omits an inactive record entirely (including its past allocations) until a future employee-history page exists; definitive removal keeps the L-E5 guard (EmployeeInUseError) through a reverse query port declared in staff and implemented in the composition root over a scheduling query, with no foreign key between bounded contexts, generalisable to demanded job functions.
+decision: When staff terminates an employee record (active=False) nothing is written into scheduling — no domain event, no dispatcher, no outbox, no port hook; every scheduling read consults the record's current state through StaffReadPort and omits an inactive record entirely (including its past allocations) until a future employee-history page exists; definitive removal keeps the L-E5 guard (EmployeeInUseError) through a reverse query port declared in staff and implemented outside staff (location decided by the 4.4 technical) over a scheduling query, with no foreign key between bounded contexts, generalisable to demanded job functions.
 context_stage: 4.1-scheduling-domain
 bounded_context: scheduling
 ---
@@ -92,10 +92,11 @@ the hub (Step 8) do not show inactive records either.
 
 The guard is **kept**: `delete` is refused with `EmployeeInUseError` while **any** allocation —
 future or historical — references the record. The mechanism is a **reverse query port declared
-in staff** ("is this record referenced?"), **implemented in the composition root** over a
-scheduling query (`has_allocations_for(tenant, unit, employee)`) — the form of
-[ADR 3.4.0001](./3_4_0001-staff-owned-access-guard-port.md) (BC-owned port, translator in the
-composition root, zero import pairs). **No foreign key** between bounded contexts: this
+in staff** ("is this record referenced?"), **implemented outside staff** by a staff-side
+adapter/translator over a scheduling query (`has_allocations_for(tenant, unit, employee)`) —
+the form of [ADR 3.4.0001](./3_4_0001-staff-owned-access-guard-port.md) (BC-owned port,
+translator outside the BC) as revised by issue #47: **where** the translator lives (composition
+root vs. `adapters/out/`) is a decision of the Stage 4.4 `technical.md`, not of this ADR. **No foreign key** between bounded contexts: this
 fulfils the prediction of ADR 3.3.0002 Alternative C. The same port generalises to a **demanded
 job function** (`JobFunctionInUseError`) without a new import pair; the Stage in which staff
 starts consulting it is a concept gap (4.3/4.4).
@@ -230,7 +231,7 @@ before Stage 4.3 designs `StaffReadPort` and Stage 4.4 designs the schema.
   `delete` guard"); [ADR 3.4.0002](./3_4_0002-staff-http-error-status-mapping.md) (errata
   2026-09-14 on "via the 3.3 foreign key"); [ADR 3.3.0002](./3_3_0002-no-cross-bounded-context-foreign-keys.md)
   (no cross-BC FKs — Alternative C fulfilled); [ADR 3.4.0001](./3_4_0001-staff-owned-access-guard-port.md)
-  (BC-owned port with translator in the composition root — the form reused for the guard);
+  (BC-owned port with translator outside the BC — the form reused for the guard);
   [ADR 3.2.0007](./3_2_0007-terminated-employee-remains-editable.md) (rehire is explicit);
   [ADR 4.1.0001](./4_1_0001-every-saved-change-is-the-live-schedule.md) (live schedule; audit
   log); [ADR 2.2.0004](./2_2_0004-synchronous-port-signatures.md) (synchronous ports).
