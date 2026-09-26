@@ -1,13 +1,13 @@
 ---
-title: ADR 4.1.0003 — The v1 validation policy set (seven policies), their value defaults from primary sources, their block/warn mode defaults, the "counts toward workload" flag on the allocation, the employee record per unit as the policy subject, and the function-mismatch policy with an acknowledged exception flag
+title: ADR 4.1.0003 — The v1 validation policy set (eight policies), their value defaults from primary sources, their block/warn mode defaults, the "counts toward workload" flag on the allocation, the employee record per unit as the policy subject, and the function-mismatch policy with an acknowledged exception flag
 description: Architecture Decision Record
 when-use: Reference before adding, removing or re-defaulting a scheduling validation policy, before changing a block/warn default, before touching the "counts toward workload" or "function exception" flags on the allocation, before letting anything but a manual acknowledgement assign a record to a function it does not hold, or when a future Stage proposes weekly rest, Sunday-off, intra-shift break, 12x36 or hours-bank policies
 keywords: [adr, scheduling, validation, policy, block, warn, overlap, rest-between-shifts, max-hours, workload, unavailability, counts-toward-workload, function-mismatch, function-exception, clt, cct, configurable, domain-gate]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-14
+updated_at: 2026-09-26
 adr_id: 4.1.0003
-decision: v1 ships seven configurable-per-restaurant validation policies — overlap (block), allocation × unavailability (fixed block), rest between shifts (11h, warn), daily cap (10h, warn), weekly cap (44h, warn), contracted workload (tolerance 0h, excess direction, warn, fixed-schedule only) and function mismatch (warn; the acknowledgement saves the allocation flagged as a function exception without touching the employee record; block configurable) — with block reserved by default for physical impossibility; the "counts toward workload" flag lives on the allocation, is declared by the editor, defaults to "counts" and is read only by the workload policy; every policy's subject is the employee record per unit; the auto-fill never creates a function exception; weekly rest, Sunday-off, intra-shift break, 12x36 and hours bank are deferred as evolution.
+decision: v1 ships eight configurable-per-restaurant validation policies (including over-coverage, N being a target rather than a cap) — overlap (block), allocation × unavailability (fixed block), rest between shifts (11h, warn), daily cap (10h, warn), weekly cap (44h, warn), contracted workload (tolerance 0h, excess direction, warn, fixed-schedule only) and function mismatch (warn; the acknowledgement saves the allocation flagged as a function exception without touching the employee record; block configurable) — with block reserved by default for physical impossibility; the "counts toward workload" flag lives on the allocation, is declared by the editor, defaults to "counts" and is read only by the workload policy; every policy's subject is the employee record per unit; the auto-fill never creates a function exception; weekly rest, Sunday-off, intra-shift break, 12x36 and hours bank are deferred as evolution.
 context_stage: 4.1-scheduling-domain
 bounded_context: scheduling
 ---
@@ -27,13 +27,13 @@ Taken at the **domain gate of Step 4** for
 F4 of the gate triage (decided by the **human sponsor**, Marcelo, on 2026-09-13 after a worked
 example with real data) and fork F9 — what happens when an editor assigns a record to a demand
 for a function the record does not hold (decided by the sponsor on 2026-09-14). F9 is recorded
-here as sub-decision (f) because it adds a seventh row to the same policy table.
+here as sub-decisions (f) and (g) because each adds a row to the same policy table.
 
 Forces:
 
 - `overview.md` §3 (line 42) lists the validations with an open "etc." — "sobreposição de
   alocação, descanso entre jornadas, tetos de horas **etc.**" — in **block or warn** mode, live,
-  with conscious acceptance. `roadmap.md` Stage 4.2 (1232, 1239) closes the list at four:
+  with conscious acceptance. `roadmap.md` Stage 4.2 (1233, 1240) closes the list at four:
   overlap, rest between shifts, daily/weekly cap, contracted workload.
 - `workforce.md` §1/§3.6 and [ADR 3.1.0001](./3_1_0001-workforce-gate-modeling-decisions.md)
   treat **allocation × unavailability** as "validação do Step 4" — it is not one of the four.
@@ -63,9 +63,10 @@ Forces:
 Sponsor (F4, 2026-09-13): *"Confirmar a tabela (Recomendada)"*. The sponsor treated the first
 six rows below as **one** decision. The sub-decisions (a)–(e) are enumerated here only so that
 each can be traced and, if needed, superseded independently — they were not five separate
-questions. The seventh row is sub-decision (f), taken on 2026-09-14 (F9).
+questions. The seventh row is sub-decision (f), taken on 2026-09-14 (F9); the eighth is sub-decision (g),
+taken on 2026-09-26 (F10).
 
-### (a) The v1 policy set — seven policies
+### (a) The v1 policy set — eight policies
 
 | Policy | What it validates (formula) | Default value (source) | Default mode | Configurable |
 |---|---|---|---|---|
@@ -76,6 +77,7 @@ questions. The seventh row is sub-decision (f), taken on 2026-09-14 (F9).
 | Weekly cap | `Σ hours(accounting week) > cap` | **44h** — CF art. 7º XIII | **warn** | value, mode |
 | Contracted workload (fixed schedule only) | `Σ hours(allocations that count) − contracted workload > tolerance` | tolerance **0h**; direction **excess** | **warn** | tolerance, direction, mode |
 | Function mismatch (2026-09-14) | `function(demand) ∉ functions(record)` | — (product rule) | **warn** — the acknowledgement saves the allocation flagged as a **function exception** | mode (`block`) |
+| Over-coverage (2026-09-26) | `allocated(demand) > N` | — (product rule) | **warn** — the acknowledgement saves the surplus allocation | mode (`block`) |
 
 Operational day, accounting week and `hours(a)` are defined in
 [ADR 4.1.0002](./4_1_0002-weekly-period-operational-day-and-allocation-hours.md). Every policy
@@ -122,6 +124,25 @@ other policies). The flag is an attribute of the allocation, sibling of "counts 
 (d). The **auto-fill (Step 5) never creates an exception** — it keeps matching by function only
 (ADR 3.1.0006); an exception is always a manual act. Whether the exception is re-evaluated when
 the record later gains or loses the function is a Stage 4.2 concept gap.
+
+### (g) Over-coverage: `N` is a target, not a cap — warn and acknowledge
+
+Sponsor, verbatim (2026-09-26): *"Permite com aviso"*.
+
+Allocating beyond the demand (`allocated(demand) > N`) is **allowed**: `N` is a **target**, not
+a cap. The editor sees the warning ("demand for N already covered") and the conscious
+acknowledgement (ADR 4.1.0001 §1) saves the allocation. Coverage **above** 100% is therefore a
+legitimate, visible state of the live schedule — symmetric with coverage below 100%, which the
+overview already treats as normal ("vagas descobertas"). Default mode **warn**; a restaurant
+may configure **block**, and then covering a surplus shift requires raising `N` first. No legal
+source: coverage is a product concept, not a CLT one. The **auto-fill (Step 5) does not
+over-cover** — it fills up to `N`; surplus is always a manual act. Whether the count is per
+demand or per `(day, band, function)` once Stage 4.1 settles demand cardinality, and whether
+lowering `N` reopens the violation on allocations already acknowledged, are Stage 4.2 concept
+gaps.
+
+This closes the gap the draft had left to the Stage 4.1 concept ("alocar mais do que N é
+recusado, avisado ou livre?"): it is a policy, and the answer is *avisado*.
 
 ### (e) The subject of every policy is the employee record per unit
 
@@ -173,13 +194,22 @@ enters as a new strategy in the same protocol, still configurable per `overview.
 - **H (function mismatch) — Auto-add the function to the record on acknowledgement.**
   *Rejected:* the sponsor's "nao muda a escala padrao" — the record must stay as it is; one
   cover shift is not a change of role.
+- **I (over-coverage) — Refuse the surplus (`N` as a hard cap).** *Rejected by the sponsor* on
+  2026-09-26: covering a shift with one extra person is a normal restaurant act; forcing the
+  manager to raise `N` first turns the demand into paperwork.
+- **J (over-coverage) — Allow silently.** *Rejected:* the surplus would be invisible, and
+  coverage — the metric the hub reports (`overview.md` 45) — would silently exceed the plan
+  with no acknowledgement in the audit trail.
+- **K (over-coverage) — Auto-raise `N` on acknowledgement.** *Rejected:* it would rewrite the
+  plan to match the exception, losing the record of what was actually demanded (the same
+  reasoning as H for function mismatch).
 - **Do nothing / status quo.** Not applicable: Stage 4.2 cannot start without the set, the
   defaults and the modes; leaving them open would push five forks into one concept.
 
 ## Consequences
 
 ### Positive
-- Stage 4.2 has an exact scope (seven strategies + evaluator + per-tenant config) with every
+- Stage 4.2 has an exact scope (eight strategies + evaluator + per-tenant config) with every
   number traceable to a verified primary source and every mode justified.
 - Emergency cover is expressible without corrupting the employee record, and it is visible
   (the exception flag) rather than hidden in an edited function set.
@@ -223,7 +253,7 @@ enters as a new strategy in the same protocol, still configurable per `overview.
   (operational day, `hours(a)`).
 - [`overview.md`](../overview.md) — §3 lines 37, 39, 42, 45, 56; §3 ASSUM-4 (69); §6 line 110;
   §7 line 114.
-- [`roadmap.md`](../roadmap.md) — Stage 4.2 (1232–1252); Step 5 (1407).
+- [`roadmap.md`](../roadmap.md) — Stage 4.2 (1233–1253); Step 5 (1408).
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §1, §2, §3.1, §3.3, §3.4, §3.6.
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.4,
   §3.6, §6.

@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-09-14
-last_reviewed_at: 2026-09-14
+updated_at: 2026-09-26
+last_reviewed_at: 2026-09-26
 ---
 
 # Roadmap — restaurant-hub
@@ -1184,9 +1184,10 @@ skills_hint: [hex-arch-python, composition-root]
 > ADRs 4.1.0001–4.1.0006. Os concepts 4.x consomem sem re-derivar: **salvar = publicar literal**
 > (sem rascunho no servidor; `block` recusa a mutação; concorrência otimista por versão — 4.1.0001);
 > **semana com dia de início configurável + dia operacional com corte configurável (default 05:00)**
-> e **horas = duração − intervalo declarado na faixa** (4.1.0002); **7 políticas v1** — as quatro do
+> e **horas = duração − intervalo declarado na faixa** (4.1.0002); **8 políticas v1** — as quatro do
 > bloco 4.2 (com o teto contado em dia e em semana; sobreposição em `block`) mais alocação ×
-> indisponibilidade (`block` fixo) e função não detida (`warn` com exceção de função na alocação), defaults trabalhistas ancorados em fonte
+> indisponibilidade (`block` fixo), função não detida (`warn` com exceção de função na alocação)
+> e sobre-cobertura da demanda (`warn`; `N` é alvo, não teto), defaults trabalhistas ancorados em fonte
 > primária e configuráveis por restaurante (4.1.0003); **`hr` lê a escala** nas suas unidades
 > (4.1.0004 — errata no ADR 3.4.0006 §3); **`Unit.timezone` em identity**, lido por port (4.1.0005);
 > **desligamento reconciliado na leitura** — sem evento, sem FK, inativo omitido de toda tela até a
@@ -1197,7 +1198,7 @@ skills_hint: [hex-arch-python, composition-root]
 > proposta: 5.1, primeiro consumidor; (c) o bloco 5.2 fala em "rascunho de edição" e tem o
 > non-goal "aplicar+publicar num passo só", em tensão com salvar = publicar — reavaliar no gate do
 > Step 5; (d) o bloco 4.2 lista quatro políticas e `arquivos_a_criar` correspondentes — o concept
-> da 4.2 declara a divergência (sete políticas; teto diário e semanal podem ser uma ou duas). O
+> da 4.2 declara a divergência (oito políticas; teto diário e semanal podem ser uma ou duas). O
 > `depends_on: 3.5-employee-login-link` da 4.1 é ordenação, não dependência técnica (a 4.1 consome
 > só ids de staff) — ajuste no kickoff da 4.1.
 
