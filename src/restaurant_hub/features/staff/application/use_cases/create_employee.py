@@ -18,7 +18,10 @@ sem reembrulho (§5.15).
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import CreateEmployeeCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import JobFunctionNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -26,7 +29,6 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.value_objects.identifiers import EmployeeId
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
@@ -79,4 +81,4 @@ class CreateEmployeeUseCase:
         )
         # (3) Escrita.
         self._employees.add(employee)
-        return employee_result(employee)
+        return to_employee_result(employee)

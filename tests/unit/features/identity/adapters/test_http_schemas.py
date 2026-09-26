@@ -7,15 +7,12 @@ documenta o passado — um schema de resposta novo entra na varredura sozinho, s
 depender de o autor lembrar deste arquivo.
 """
 
-import importlib
-
 import pytest
 from pydantic import BaseModel, SecretStr
 
-pytestmark = pytest.mark.unit
+from restaurant_hub.features.identity.adapters.inbound.http import schemas
 
-# `in` é keyword Python: import estático deste caminho é SyntaxError (LAYOUT §8).
-schemas = importlib.import_module("restaurant_hub.features.identity.adapters.in.http.schemas")
+pytestmark = pytest.mark.unit
 
 # Nomes que jamais podem sair numa resposta. `fingerprint` está aqui junto com
 # senha e hash porque, embora não seja utilizável como credencial, é o índice que

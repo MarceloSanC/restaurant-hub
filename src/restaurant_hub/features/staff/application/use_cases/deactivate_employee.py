@@ -24,7 +24,10 @@ não toca o gateway.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import DeactivateEmployeeCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -32,7 +35,6 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
     IdentityGateway,
 )
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class DeactivateEmployeeUseCase:
@@ -61,4 +63,4 @@ class DeactivateEmployeeUseCase:
             self._gateway.revoke_login_sessions(employee.user_id)
         deactivated = employee.deactivate()
         self._employees.update(deactivated)
-        return employee_result(deactivated)
+        return to_employee_result(deactivated)

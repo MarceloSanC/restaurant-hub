@@ -1,10 +1,10 @@
 ---
 name: fastapi-thin-adapter
-description: Thin FastAPI adapter patterns — router, Pydantic schemas only at the adapter boundary, mapping domain exceptions to HTTP. Load on Stages whose target layer is adapters/in/http (FastAPI REST endpoints).
+description: Thin FastAPI adapter patterns — router, Pydantic schemas only at the adapter boundary, mapping domain exceptions to HTTP. Load on Stages whose target layer is adapters/inbound/http (FastAPI REST endpoints).
 metadata:
   status: draft
   applies_when:
-    camada_alvo: [adapters/in/http]
+    camada_alvo: [adapters/inbound/http]
 ---
 
 # FastAPI as a thin adapter
@@ -21,7 +21,7 @@ it only:
 ## Structure
 
 ```
-adapters/in/http/
+adapters/inbound/http/
 ├── routers/
 │   └── users.py          # APIRouter, endpoints
 ├── schemas/
@@ -32,7 +32,7 @@ adapters/in/http/
 
 ## DO
 
-- Pydantic schemas live **only** under `adapters/in/http/schemas/`.
+- Pydantic schemas live **only** under `adapters/inbound/http/schemas/`.
 - Endpoint converts schema → application DTO before calling the use case.
 - Response is built from the DTO returned by the use case.
 - Domain exceptions (`UserNotFound`, `InvalidEmail`) become

@@ -21,7 +21,7 @@ but does not prescribe which layer to start from.
 1. `domain/` — entities, value objects, invariants — **with unit tests in the same commit**.
 2. `application/` — port out (`Protocol`) + use case + **in-memory fake** for the port + **use case test using the fake** — same commit or consecutive Tasks.
 3. `adapters/out/<tech>/` — real implementation of the port + **contract test** proving the adapter satisfies the Protocol.
-4. `adapters/in/<tech>/` — router/handler/CLI + **integration test** end-to-end.
+4. `adapters/inbound/<tech>/` — router/handler/CLI + **integration test** end-to-end.
 5. `bootstrap/` — wiring in the composition root, replacing the fake with the real adapter.
 
 ## DO
@@ -71,8 +71,8 @@ task-03  feat(orders/adapters/out): PostgresOrderRepository + contract  [2.1/tas
                  tests/contract/orders/test_postgres_order_repository.py
          check:  pytest tests/contract/orders/
 
-task-04  feat(orders/adapters/in): POST /orders + integration test      [2.1/task-04]
-         files:  src/orders/adapters/in/http/orders_router.py
+task-04  feat(orders/adapters/inbound): POST /orders + integration test      [2.1/task-04]
+         files:  src/orders/adapters/inbound/http/orders_router.py
                  tests/integration/orders/test_create_order_endpoint.py
          check:  pytest tests/integration/orders/
 

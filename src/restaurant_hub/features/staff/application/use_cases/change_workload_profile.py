@@ -7,12 +7,14 @@ Não há, portanto, caminho daqui que produza aquele erro.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import ChangeWorkloadProfileCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class ChangeWorkloadProfileUseCase:
@@ -34,4 +36,4 @@ class ChangeWorkloadProfileUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         changed = employee.change_workload_profile(command.workload_profile)
         self._employees.update(changed)
-        return employee_result(changed)
+        return to_employee_result(changed)

@@ -357,7 +357,7 @@ não é "runbook colapsado" — é "runbook sem revisão". Regras:
   concept/technical/LAYOUT, o revisor recebe **as skills do `skills_hint`
   da Stage** — LAYOUT pega *onde* o código vive e a direção de import; a
   skill pega *como* ele é escrito dentro da camada (DTO vs entidade,
-  Pydantic só no boundary `adapters/in`, mapper puro, fake vs mock).
+  Pydantic só no boundary `adapters/inbound`, mapper puro, fake vs mock).
   **Método, não lista:** para cada regra acionável da skill, o revisor
   formula a pergunta adversarial "o diff viola isto?" e a responde contra
   o diff — as perguntas **saem das skills carregadas naquela Stage**, não

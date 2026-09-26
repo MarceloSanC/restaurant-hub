@@ -12,7 +12,7 @@ metadata:
 ## Core principle
 
 Dependency direction **only outside-in**:
-`adapters/in → application → domain ← application ← adapters/out`.
+`adapters/inbound → application → domain ← application ← adapters/out`.
 
 `domain` does not import from **anything** inside the project except
 other `domain` modules.
@@ -47,7 +47,7 @@ class UserRepository(Protocol):
 - Don't call `Session.commit()` inside a use case — transaction is
   the persistence adapter's responsibility.
 - Don't return a domain entity outside `application/` — use DTOs in
-  the contract with `adapters/in/`.
+  the contract with `adapters/inbound/`.
 
 ## Anti-example
 

@@ -8,12 +8,14 @@ nunca foram apagadas.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import ReactivateEmployeeCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class ReactivateEmployeeUseCase:
@@ -37,4 +39,4 @@ class ReactivateEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         reactivated = employee.reactivate()
         self._employees.update(reactivated)
-        return employee_result(reactivated)
+        return to_employee_result(reactivated)

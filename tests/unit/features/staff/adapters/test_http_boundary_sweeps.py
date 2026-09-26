@@ -41,18 +41,17 @@ from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import BaseModel
 
+from restaurant_hub.features.staff.adapters.inbound import http as pacote
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies as dependencies_module
+from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
+from restaurant_hub.features.staff.adapters.inbound.http import schemas as schemas_module
 from restaurant_hub.features.staff.domain.exceptions.errors import InvalidIdentifierError
 from tests.fakes.features.staff.in_memory_access_guard import FakeAuthorizationRejected
 from tests.unit.features.staff.adapters.test_http_router_job_functions import Ambiente
 
 pytestmark = pytest.mark.unit
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
 _PACOTE_TESTES_ADAPTER = "tests.unit.features.staff.adapters"
-
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-dependencies_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
-schemas_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
 
 _CORPO_DE_STAFF = "staff_error"
 
@@ -69,8 +68,9 @@ Caminho = tuple[str | int, ...]
 # 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17.
 _TOTAL_DE_CAMPOS_ESCALARES = 15
 
-# Alias local do tipo devolvido por `identifier_fields` — o módulo chega por
-# `importlib` (o pacote `in` é keyword), então o nome não existe como import.
+# Alias local do tipo devolvido por `identifier_fields`: o módulo entra como
+# objeto (`dependencies_module`), então o nome não está no espaço de nomes
+# deste arquivo por si só.
 IdentifierField = dependencies_module.IdentifierField
 
 # Os três valores que o ADR 3.6.0002 §2 rejeita. O eixo de **path** usa só dois:
@@ -638,7 +638,7 @@ def test_ca23_nenhum_modulo_do_adapter_constroi_day_period_diretamente() -> None
 
 
 def _modulos_do_pacote_http() -> list[pathlib.Path]:
-    pacote = importlib.import_module(_PACOTE_HTTP_STAFF)
+
     raiz = pathlib.Path(next(iter(pacote.__path__)))
     encontrados = sorted(raiz.glob("*.py"))
     assert encontrados, "a varredura precisa de módulos para ter o que negar"
@@ -1446,8 +1446,7 @@ _TOTAL_DE_ROTAS_QUE_DEVOLVEM_FUNCIONARIO = 12
 
 def _devolve_funcionario(modelo: object) -> bool:
     """Se a anotação de resposta é, contém ou embute `EmployeeResponse`."""
-    schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
-    if modelo is schemas.EmployeeResponse:
+    if modelo is schemas_module.EmployeeResponse:
         return True
     if get_origin(modelo) is not None:
         return any(_devolve_funcionario(arg) for arg in get_args(modelo))
@@ -1463,8 +1462,7 @@ def test_ca13_toda_resposta_de_funcionario_carrega_o_user_id() -> None:
     **cardinalidade** das rotas que o devolvem — inclusive por embrulho
     (`EmployeeLoginResponse.employee`). O e2e (Task 12) prova o valor no fio.
     """
-    schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
-    campo = schemas.EmployeeResponse.model_fields["user_id"]
+    campo = schemas_module.EmployeeResponse.model_fields["user_id"]
     assert campo.annotation == str | None
     assert campo.is_required(), "user_id sem default: `from_result` sempre o preenche"
 
@@ -1473,6 +1471,6 @@ def test_ca13_toda_resposta_de_funcionario_carrega_o_user_id() -> None:
         rota.path for rota in rotas_de_funcionario
     )
     assert any(rota.path.endswith("/login") for rota in rotas_de_funcionario)
-    assert schemas.EmployeeLoginResponse.model_fields["employee"].annotation is (
-        schemas.EmployeeResponse
+    assert schemas_module.EmployeeLoginResponse.model_fields["employee"].annotation is (
+        schemas_module.EmployeeResponse
     )

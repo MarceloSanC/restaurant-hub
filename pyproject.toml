@@ -58,6 +58,17 @@ dev = [
     # Stage 1.2 existe para consertar.
     "pyyaml>=6.0",
 ]
+# Extra SEPARADA do `dev` de propósito (M2 da issue #45). Uma corrida de
+# mutação gera um processo pytest por mutante — centenas deles —, e esse volume
+# é problema conhecido nesta máquina. Fora do `dev`, ninguém a instala sem
+# querer, `make check` não a alcança, e o pre-commit tampouco: quem a usa é o
+# job noturno do `audit-gate.yml`, que roda no runner.
+#
+# mutmut 3.x **não roda em Windows nativo** (ele mesmo recusa e aponta para o
+# WSL). No host, a corrida é feita em contêiner Linux; no CI, é nativa.
+mutation = [
+    "mutmut>=3.0",
+]
 
 [tool.hatch.build.targets.wheel]
 # Apenas o pacote src/restaurant_hub é empacotado; scripts/ e tests/ ficam fora
@@ -126,3 +137,77 @@ branch = true
 fail_under = 90
 show_missing = true
 skip_covered = false
+
+# ---------------------------------------------------------------------------
+# Mutmut — teste de mutação nos módulos que DECIDEM ACESSO (M2 da issue #45)
+# ---------------------------------------------------------------------------
+# Escopado em quatro arquivos, e não no repositório. O critério de entrada é
+# único e estreito: **o módulo participa da decisão de quem pode o quê**.
+#
+#   - `authorize_action.py`  — os quatro passos do guard (ADR 2.2.0002)
+#   - `user.py`              — a visibilidade de unidade, o eixo B do acesso
+#   - `composition_root.py`  — só por causa do `_IdentityAccessGuard`, que impõe
+#                              a lei L-AG3 (isolamento de tenant) num `raise`
+#   - `dependencies.py`      — a borda que extrai o Bearer e delega ao use case
+#
+# **Por que mutação aqui e cobertura em todo o resto.** Cobertura mede que a
+# linha executou; mutação mede que alguém teria notado se ela mudasse. Nesses
+# quatro arquivos a diferença é a que importa: `if not actor_tenant_id` virando
+# `if actor_tenant_id is None` mantém 100% de cobertura, passa mypy strict e
+# reabre o balde de tenant vazio. Um caso desses já foi medido sobrevivendo à
+# suíte (ver `test_composition_root_staff.py`, comentário de `_ALVOS`) — a
+# mutação não é hipótese aqui, é histórico.
+#
+# **`also_copy` é o que faz a corrida medir alguma coisa.** O mutmut executa a
+# suíte a partir de uma cópia da árvore em `mutants/`, e copia por default só o
+# código e `tests/`. Esta suíte, porém, lê o **repositório** de dentro dos
+# testes — é o idioma mecânico deste projeto: `test_ci_workflow.py` lê
+# `.github/workflows/ci.yml`, `test_bc_independence.py` lê `.importlinter`, os
+# testes de contrato de staff leem `docs/stages/…/concept.md`, e os gates da #45
+# leem `scripts/` e `docs/LAYOUT.md`.
+#
+# Sem esses arquivos, o primeiro teste que os procura levanta `FileNotFoundError`
+# e a corrida morre antes de matar um mutante sequer — medido na primeira
+# execução desta configuração. E o modo de falha silencioso seria pior: com um
+# teste que falhasse por arquivo ausente **sem** derrubar a corrida, todo mutante
+# apareceria como morto, pelo mesmo motivo, e a mutação reportaria uma suíte
+# perfeita sem ter testado nada.
+[tool.mutmut]
+source_paths = ["src/restaurant_hub"]
+only_mutate = [
+    "src/restaurant_hub/features/identity/application/use_cases/authorize_action.py",
+    "src/restaurant_hub/features/identity/domain/entities/user.py",
+    "src/restaurant_hub/composition_root.py",
+    "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
+]
+also_copy = [
+    "docs/",
+    "migrations/",
+    "scripts/",
+    ".github/",
+    ".importlinter",
+    ".env.example",
+]
+# `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
+# conveniência.
+#
+# O mutmut reescreve cada arquivo mutado trocando `def wire_dependencies(...)`
+# por um despachante mais **uma cópia por mutante** —
+# `x_wire_dependencies__mutmut_1`, `__mutmut_2`, … Dentro de `mutants/`, o
+# `composition_root.py` tem então centenas de funções de módulo, e o Gate 1
+# (charter: só `@dataclass` e as duas funções de wiring) reprova — corretamente,
+# sobre um arquivo que a **ferramenta** escreveu. O mesmo vale para o Gate 8:
+# `AuthorizedActor` aparece construído uma vez por cópia de `authorize_action`.
+#
+# Excluí-lo não enfraquece nada, e é a única leitura correta da pergunta que a
+# mutação faz. Ele é um gate **estrutural sobre o texto do fonte**: mudar um
+# `>=` para `>` dentro de `authorize_action` não altera se o charter vale, então
+# ele não teria como matar mutante nenhum. Mantê-lo faria toda a corrida morrer
+# na coleta de estatísticas — que foi o que aconteceu, medido — sem chegar a
+# executar um mutante sequer.
+#
+# Os demais gates da #45 continuam na corrida: `check_dead_shared` e
+# `test_status_map` leem arquivos que o mutmut não toca.
+pytest_add_cli_args_test_selection = [
+    "--ignore=tests/unit/test_check_layout.py",
+]

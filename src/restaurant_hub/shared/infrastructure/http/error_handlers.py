@@ -2,8 +2,7 @@
 
 Converte exceções de domínio em respostas HTTP adequadas, mantendo o domínio
 isolado do protocolo HTTP. O handler mais específico (NotFoundError) é registrado
-antes do mais genérico (DomainError) para que FastAPI use o correto. ApplicationError
-pode ser adicionado com status 500 se necessário.
+antes do mais genérico (DomainError) para que FastAPI use o correto.
 
 Regra: adicione um handler aqui para cada nova hierarquia de exceção que precise
 de tratamento HTTP específico. Nunca coloque lógica de negócio nos handlers.

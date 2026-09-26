@@ -211,7 +211,7 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
 - Use case testado com **fake** do port (pytest-with-fakes skill),
   não mock.
 - **DTOs em `application/dtos/` são `@dataclass(frozen=True)` —
-  `pydantic.BaseModel` só na fronteira `adapters/in/http`** (LAYOUT
+  `pydantic.BaseModel` só na fronteira `adapters/inbound/http`** (LAYOUT
   §7). Pydantic em DTO da application = boundary leak.
 
 **Se `camada_alvo` inclui `adapters/out`:**
@@ -229,7 +229,7 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
   equivalente robusto a wheel/editable install), **não**
   `Path(__file__).parent / "..."`. O segundo quebra em pacote instalado.
 
-**Se `camada_alvo` inclui `adapters/in/http`:**
+**Se `camada_alvo` inclui `adapters/inbound/http`:**
 - Router fino — sem regra de negócio (fastapi-thin-adapter skill).
 - Pydantic só na fronteira; converte DTO → schema.
 - Exceções de domínio mapeadas para status HTTP coerentes —
@@ -238,7 +238,7 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
   no router e (b) **cada `except` no router** aparece na tabela. Integration
   test deveria cobrir cada status code declarado.
 
-**Se `camada_alvo` inclui `adapters/in/scheduler`:**
+**Se `camada_alvo` inclui `adapters/inbound/scheduler`:**
 - **Gated por flag** em `Settings` (default `False` — não arranca em
   CI/dev sem opt-in). Composition root constrói sempre; lifespan decide
   se chama `start()`.

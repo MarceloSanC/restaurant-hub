@@ -107,6 +107,6 @@ make docker-shell       # bash dentro do container app
 1. **Não crie arquivos** fora das convenções do docs/LAYOUT.md sem justificativa explícita.
 2. **Não importe** de camadas proibidas — mypy e o script `scripts/check_layout.py` vão pegar.
 3. **Sempre escreva testes** junto com o código — unit para domínio/application, integration para adapters.
-4. **O diretório `in/`** é uma keyword Python. Use importlib ou injete via FastAPI Depends. Veja docs/LAYOUT.md §8.
+4. **Os adapters de entrada moram em `adapters/inbound/`** — não `in/`, que era keyword Python e forçava `importlib` (renomeado na issue #45). Import estático normal.
 5. **Composition root** (`composition_root.py`) é o único lugar onde instâncias concretas são criadas.
 6. **Use cases** recebem e retornam DTOs — nunca entidades de domínio para fora da camada application.

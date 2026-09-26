@@ -8,17 +8,35 @@ alvo correto das asserções "nenhum outro campo mudou" do concept §11. As
 entidades da 3.1 não servem para isso: `Employee.__eq__` e `JobFunction.__eq__`
 comparam **só por id**, então `assert entidade == entidade` é vacuoso.
 
-**O vínculo de login entrou na Stage 3.5** (`EmployeeResult.user_id`), e com
-ele a restrição que a 3.2 deixou declarada passou a ter conteúdo: a cópia entre
-unidades **não o carrega** (workforce §3.7; ADR 3.2.0003; ADR 3.5.0004 §5), e o
-result é onde isso é verificável por teste. **Há um único sítio de construção
-de `EmployeeResult`** — `use_cases/_results.py` —, para que um campo novo
-apareça em **toda** resposta de funcionário sem depender de ninguém lembrar de
-11 lugares (concept 3.5 D6; Gate 8 da issue #45).
+**O vínculo de login entrou na Stage 3.5** (`EmployeeResult.user_id`), e com ele a
+restrição que a 3.2 deixou declarada passou a ter conteúdo: a cópia entre unidades
+**não o carrega** (workforce §3.7; ADR 3.2.0003; ADR 3.5.0004 §5), e o result é
+onde isso é verificável por teste.
+
+**Cada result é construído num sítio só, e o sítio mora aqui** (issue #45,
+Gate 8). `EmployeeResult` era montado campo a campo em **onze** use cases:
+acrescentar um atributo ao registro exigia onze edições idênticas, e esquecer
+uma delas não produz erro de tipo — produz um result com o campo no default,
+ou um `TypeError` num só dos onze caminhos. A regra é mecânica
+(`scripts/check_layout.py`, regra 8) justamente porque a disciplina não é
+observável em revisão de diff: o décimo-segundo sítio parece igual aos outros
+onze.
+
+As funções ficam **junto das classes** e não num `mappers.py` à parte porque o
+que a regra assere é adjacência: o result e a única forma de construí-lo são a
+mesma unidade de leitura. Elas são o **único** lugar do BC que lê entidade e
+escreve DTO — a fronteira que LAYOUT §7 desenha, num ponto só por agregado.
+
+A Stage 3.5 é o caso que a regra 8 previa: `user_id` entrou no registro e
+apareceu em **toda** resposta de funcionário editando **uma** função — e
+`EmployeeLoginResult`, o result de R17, também tem o seu sítio único aqui
+(`to_employee_login_result`), embora o use case o devolva por dois caminhos.
 """
 
 from dataclasses import dataclass, field
 
+from restaurant_hub.features.staff.domain.entities.employee import Employee
+from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -99,3 +117,52 @@ class EmployeeLoginResult:
 
     employee: EmployeeResult
     setup_link: str | None = field(repr=False)
+
+
+def to_job_function_result(job_function: JobFunction) -> JobFunctionResult:
+    """O único sítio de construção de `JobFunctionResult` (Gate 8, issue #45)."""
+    return JobFunctionResult(
+        id=job_function.id,
+        tenant_id=job_function.tenant_id,
+        name=job_function.name,
+    )
+
+
+def to_employee_result(employee: Employee) -> EmployeeResult:
+    """O único sítio de construção de `EmployeeResult` (Gate 8, issue #45).
+
+    Todos os campos são copiados verbatim da entidade: a função **não** filtra,
+    ordena nem deriva nada. Uma projeção que decidisse algo aqui esconderia a
+    decisão de todos os onze use cases que a chamam, e é o adapter — não este
+    mapeamento — que ordena `job_function_ids` para exibição (ADR 3.1.0006).
+
+    `user_id` entra aqui como qualquer outro campo, e é exatamente o que a regra 8
+    compra: o vínculo de login (Stage 3.5) apareceu nas doze respostas de
+    funcionário com **uma** edição. A cópia entre unidades não o carrega porque
+    `copy_employee_to_unit` constrói um `Employee` novo sem ele — a ausência é do
+    domínio, não deste mapeamento (ADR 3.5.0004 §5).
+    """
+    return EmployeeResult(
+        id=employee.id,
+        tenant_id=employee.tenant_id,
+        unit_id=employee.unit_id,
+        name=employee.name,
+        workload_profile=employee.workload_profile,
+        shift_preference=employee.shift_preference,
+        job_function_ids=employee.job_function_ids,
+        unavailabilities=employee.unavailabilities,
+        active=employee.active,
+        user_id=employee.user_id,
+    )
+
+
+def to_employee_login_result(employee: Employee, setup_link: str | None) -> EmployeeLoginResult:
+    """O único sítio de construção de `EmployeeLoginResult` (regra 8; R17 da 3.5).
+
+    `setup_link` é **posicionalmente explícito** no chamador: o use case decide
+    `None` (canal `email`, o link foi enviado) ou o link (canal `link`, entrega em
+    mãos), e as duas decisões passam por aqui. O registro vem pelo mapper de
+    funcionário, então o `user_id` recém-vinculado sai na resposta sem que este
+    result precise saber que ele existe.
+    """
+    return EmployeeLoginResult(employee=to_employee_result(employee), setup_link=setup_link)

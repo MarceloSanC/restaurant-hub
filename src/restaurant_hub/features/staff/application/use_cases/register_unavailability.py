@@ -12,12 +12,14 @@ O `UnavailabilityPeriod` já chega **construído** no command: período malforma
 from restaurant_hub.features.staff.application.dtos.commands import (
     RegisterUnavailabilityCommand,
 )
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class RegisterUnavailabilityUseCase:
@@ -42,4 +44,4 @@ class RegisterUnavailabilityUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         updated = employee.add_unavailability(command.period)
         self._employees.update(updated)
-        return employee_result(updated)
+        return to_employee_result(updated)

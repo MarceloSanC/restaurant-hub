@@ -11,20 +11,16 @@ exercitada sobrevive às duas. A verificação par a par é o que mata essa muta
 e está provada por mutação real no relatório da Stage.
 """
 
-import importlib
-
 import pytest
 from fastapi import FastAPI
 
+from restaurant_hub.features.staff.adapters.inbound.http import error_handlers as handlers
 from restaurant_hub.features.staff.application import errors as application_errors
 from restaurant_hub.features.staff.domain.exceptions import errors as domain_errors
 from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
 from restaurant_hub.shared.domain.exceptions.base import NotFoundError
 
 pytestmark = pytest.mark.unit
-
-# `in` é keyword Python: import estático é SyntaxError (LAYOUT §8).
-handlers = importlib.import_module("restaurant_hub.features.staff.adapters.in.http.error_handlers")
 
 # Piso de contagem: 11 concretas no domínio + 12 na aplicação (concept 3.6 §6.1
 # mais as cinco recusas de login da 3.5 §6.1 — duas de domínio, três de aplicação). É

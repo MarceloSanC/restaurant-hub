@@ -42,7 +42,6 @@ de cada rota, e a divergência apareceria como um 422 do framework satisfazendo 
 critério de staff — exatamente o defeito que este módulo existe para não ter.
 """
 
-import importlib
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 from typing import Any, Final, get_args, get_origin
@@ -52,6 +51,10 @@ from fastapi.routing import APIRoute
 from httpx import AsyncClient, Response
 from pydantic import BaseModel
 
+from restaurant_hub.features.staff.adapters.inbound.http import (
+    error_handlers as error_handlers_module,
+)
+from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
 from tests.e2e.features.staff.conftest import API, Cenario, auth
 from tests.e2e.features.staff.test_staff_authorization import (
     ROTAS,
@@ -64,9 +67,6 @@ from tests.e2e.features.staff.test_staff_authorization import (
 
 pytestmark = pytest.mark.e2e
 
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
-error_handlers_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.error_handlers")
 
 _DISCRIMINADOR_DE_STAFF: Final = "staff_error"
 

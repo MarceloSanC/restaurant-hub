@@ -20,12 +20,20 @@ name: audit-gate
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
+  # Noturno, só para o job de mutação (M2 da issue #45). O `audit-status` acima
+  # não roda aqui: ele lê o corpo de um PR, e num evento agendado não há PR.
+  schedule:
+    - cron: "0 4 * * *"
+  # Permite disparar a corrida de mutação sob demanda, sem esperar a noite —
+  # é como se mede o efeito de um teste novo sobre os sobreviventes.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   audit-status:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Bloquear enquanto a auditoria não estiver 'complete'
@@ -47,3 +55,102 @@ jobs:
             exit 1
           fi
           echo "OK: auditoria complete."
+
+  # ---------------------------------------------------------------------------
+  # M2 (issue #45) — teste de mutação nos quatro módulos que decidem acesso.
+  #
+  # **Job próprio, noturno, e OBSERVACIONAL na primeira semana.** As três coisas
+  # são decisões, não acidentes:
+  #
+  # 1. **Fora do `make check` e do pre-commit.** Uma corrida de mutação gera um
+  #    processo pytest por mutante, às centenas. Esse volume é problema conhecido
+  #    na máquina de desenvolvimento (trava por antivírus), e um gate que trava a
+  #    máquina de quem o roda é um gate que se desliga.
+  # 2. **Noturno, não por PR.** A corrida leva minutos por mutante sobrevivente,
+  #    e o sinal que ela dá — "esta suíte não notaria esta mudança" — é sobre a
+  #    suíte, não sobre o diff. Não há o que bloquear num PR específico.
+  # 3. **`continue-on-error` enquanto o limiar não está decidido.** A issue #45
+  #    registra a incerteza: falhar a qualquer sobrevivente provavelmente é ruído
+  #    no primeiro dia. A primeira semana mede o baseline; só então se escolhe
+  #    entre "zero sobreviventes" e "não pior que o baseline". Um gate que nasce
+  #    vermelho não é gate — é um alarme que se aprende a ignorar.
+  #
+  # Quando o limiar for decidido, o que muda aqui é UMA linha: o
+  # `continue-on-error: true` sai, e o passo de comparação passa a `exit 1`.
+  # ---------------------------------------------------------------------------
+  mutation-access-modules:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # Observacional: reporta e não reprova (ver nota 3 acima).
+    continue-on-error: true
+
+    # O mesmo Postgres do `ci.yml`, e pela mesma razão: os testes de integração
+    # e e2e não se pulam quando falta banco (ADR 2.3.0001). Sem o service, cada
+    # mutante seria "morto" por um erro de conexão, e a corrida reportaria uma
+    # suíte perfeita medindo nada.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: restaurant_hub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://user:pass@localhost:5432/restaurant_hub
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra mutation
+
+      # A suíte tem de estar verde ANTES da mutação. Com um teste falhando no
+      # código original, todo mutante é reportado como morto — pelo mesmo teste,
+      # pelo mesmo motivo — e a corrida devolve 100% de mutantes mortos medindo
+      # exatamente nada.
+      - name: Suíte verde no código original
+        run: uv run pytest tests/ -q
+
+      # O escopo vem do `[tool.mutmut]` do pyproject (`only_mutate`): os quatro
+      # arquivos que decidem acesso, e nada mais.
+      - name: Rodar mutmut nos módulos de acesso
+        run: uv run mutmut run
+
+      - name: Baseline de sobreviventes
+        if: always()
+        run: |
+          echo "## M2 — mutantes sobreviventes" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uv run mutmut results >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uv run mutmut results 2>&1 || true
+
+      # O cache do mutmut é o que torna a corrida seguinte incremental e o que
+      # permite comparar dois dias. Sem ele, cada noite recomeça do zero e a
+      # pergunta "melhorou?" não tem resposta.
+      - name: Guardar o cache do mutmut
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutmut-cache
+          path: |
+            .mutmut-cache
+            mutants/
+          retention-days: 14
+          if-no-files-found: ignore

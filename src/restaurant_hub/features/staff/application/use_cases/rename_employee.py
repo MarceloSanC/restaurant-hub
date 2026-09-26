@@ -9,12 +9,14 @@ Nome de funcionário **não é único** (homônimos são legítimos — concept 
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import RenameEmployeeCommand
-from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeResult,
+    to_employee_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class RenameEmployeeUseCase:
@@ -38,4 +40,4 @@ class RenameEmployeeUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         renamed = employee.rename(command.name)
         self._employees.update(renamed)
-        return employee_result(renamed)
+        return to_employee_result(renamed)

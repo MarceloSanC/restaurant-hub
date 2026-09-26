@@ -7,11 +7,32 @@ Regra de segurança (concept §5.9): nenhum result carrega senha em claro nem
 `PasswordHash`. Os segredos que saem daqui são o `refresh_token`, que é para o
 cliente e — por definição — nunca é persistido (concept §5.11), e o `setup_link`
 de `ProvisionedAccountResult`, carve-out **único** e declarado (ADR 3.5.0002).
+
+**Cada result é construído num sítio só, e o sítio mora aqui** (issue #45,
+Gate 8). `UserResult` era montado em `create_user` e `invite_user`;
+`AuthenticationResult`, em `authenticate_user` e `refresh_session`. Dois sítios
+já bastam para a falha que a regra fecha: acrescentar um campo ao result e
+lembrar de um só dos dois compila, passa mypy quando o campo tem default, e
+produz duas respostas diferentes para o mesmo recurso — a de login e a de
+refresh, que os clientes tratam como intercambiáveis. A regra é mecânica
+(`scripts/check_layout.py`, regra 8).
+
+**`to_authentication_result` recebe o `IssuedRefreshToken`, não a `str`.** É o
+que dá trabalho à função em vez de fazê-la um repasse: ela é o único ponto que
+escolhe `.value` (o segredo que vai ao cliente) e nunca `.fingerprint` (o que
+fica no banco). Aceitar a `str` já extraída devolveria essa escolha aos dois
+chamadores, que é exatamente onde ela não deve morar.
+
+`ProvisionedAccountResult` (Stage 3.5) é construído em `provision_account.py`, e o
+`UserResult` que ele embrulha vem de `to_user_result` — a regra 8 vale para ele
+como para os outros, contado pelo sítio da classe.
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from restaurant_hub.features.identity.application.dtos.tokens import IssuedRefreshToken
+from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
@@ -19,6 +40,9 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     UserId,
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
+from restaurant_hub.features.identity.domain.value_objects.unit_membership import (
+    UnitMembership,
+)
 
 
 @dataclass(frozen=True)
@@ -98,3 +122,42 @@ class AuthorizedActor:
     actor_tenant_id: RestaurantId | None
     scope_tenant_id: RestaurantId | None
     scope_unit_id: UnitId | None
+
+
+def to_user_result(user: User, memberships: tuple[UnitMembership, ...]) -> UserResult:
+    """O único sítio de construção de `UserResult` (Gate 8, issue #45).
+
+    Recebe os vínculos **efetivamente gravados**, e não os pedidos: é o que o
+    docstring da classe promete, e a ordem em que eles chegam é observável na
+    resposta (`_link_units` deduplica preservando-a).
+    """
+    return UserResult(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        tenant_id=user.tenant_id,
+        unit_ids=tuple(membership.unit_id for membership in memberships),
+    )
+
+
+def to_authentication_result(
+    *,
+    access_token: str,
+    issued_refresh: IssuedRefreshToken,
+    access_token_expires_at: datetime,
+    refresh_token_expires_at: datetime,
+    user_id: UserId,
+) -> AuthenticationResult:
+    """O único sítio de construção de `AuthenticationResult` (Gate 8, issue #45).
+
+    Só argumentos nomeados: os dois `datetime` e os dois valores de token são
+    intercambiáveis por posição e trocá-los não é erro de tipo — seria um par de
+    tokens com as expirações invertidas, servido com status 200.
+    """
+    return AuthenticationResult(
+        access_token=access_token,
+        refresh_token=issued_refresh.value,
+        access_token_expires_at=access_token_expires_at,
+        refresh_token_expires_at=refresh_token_expires_at,
+        user_id=user_id,
+    )

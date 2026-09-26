@@ -6,7 +6,10 @@ restaurante, não da unidade (workforce §3.2).
 """
 
 from restaurant_hub.features.staff.application.dtos.queries import ListJobFunctionsQuery
-from restaurant_hub.features.staff.application.dtos.results import JobFunctionResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    JobFunctionResult,
+    to_job_function_result,
+)
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
@@ -21,10 +24,6 @@ class ListJobFunctionsUseCase:
     def execute(self, query: ListJobFunctionsQuery) -> tuple[JobFunctionResult, ...]:
         """Devolve as funções do tenant — nenhuma de outro (concept §5.4)."""
         return tuple(
-            JobFunctionResult(
-                id=job_function.id,
-                tenant_id=job_function.tenant_id,
-                name=job_function.name,
-            )
+            to_job_function_result(job_function)
             for job_function in self._job_functions.list_by_tenant(query.tenant_id)
         )

@@ -9,22 +9,16 @@ adversarial da 3.3 é congelado aqui, do lado do **aceite**.
 """
 
 import dataclasses
-import importlib
 import inspect
 import typing
 
 import pytest
 from pydantic import BaseModel
 
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies, schemas
 from restaurant_hub.features.staff.domain.exceptions.errors import InvalidIdentifierError
 
 pytestmark = pytest.mark.unit
-
-# `in` é keyword Python: import estático é SyntaxError (LAYOUT §8).
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
-
-dependencies = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.dependencies")
-schemas = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.schemas")
 
 
 # ---------------------------------------------------------------------------

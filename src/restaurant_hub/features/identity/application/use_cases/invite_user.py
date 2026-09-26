@@ -29,7 +29,7 @@ from datetime import timedelta
 
 from restaurant_hub.features.identity.application.dtos.commands import InviteUserCommand
 from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
-from restaurant_hub.features.identity.application.dtos.results import UserResult
+from restaurant_hub.features.identity.application.dtos.results import UserResult, to_user_result
 from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     PasswordSetupToken,
     SetupTokenPurpose,
@@ -150,13 +150,7 @@ class InviteUserUseCase:
         valor_do_token = self._emitir_token(user.id)
         self._enviar_convite(command.email.value, valor_do_token)
 
-        return UserResult(
-            id=user.id,
-            email=user.email,
-            role=user.role,
-            tenant_id=user.tenant_id,
-            unit_ids=tuple(membership.unit_id for membership in memberships),
-        )
+        return to_user_result(user, memberships)
 
     def _link_units(
         self,
