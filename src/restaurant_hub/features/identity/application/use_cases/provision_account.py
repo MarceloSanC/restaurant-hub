@@ -38,7 +38,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
 from restaurant_hub.features.identity.application.dtos.results import (
     ProvisionedAccountResult,
-    UserResult,
+    to_user_result,
 )
 from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     PasswordSetupToken,
@@ -155,13 +155,10 @@ class ProvisionAccountUseCase:
         valor_do_token = self._emitir_token(user.id, handed_over=command.handed_over)
 
         return ProvisionedAccountResult(
-            user=UserResult(
-                id=user.id,
-                email=user.email,
-                role=user.role,
-                tenant_id=user.tenant_id,
-                unit_ids=tuple(membership.unit_id for membership in memberships),
-            ),
+            # Pelo mapper único de `UserResult` (regra 8 do `check_layout`, issue
+            # #45): o result da conta provisionada é o **mesmo** que o convite
+            # devolve, e um campo novo em `UserResult` aparece aqui sem edição.
+            user=to_user_result(user, memberships),
             setup_link=setup_link(self._base_url, valor_do_token),
         )
 

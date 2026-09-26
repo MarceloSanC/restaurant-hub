@@ -30,7 +30,10 @@ mensagem nenhuma (L-IG3) — e nenhuma exceção o carrega (CA05).
 from restaurant_hub.features.staff.application.dtos.commands import (
     CreateLoginForEmployeeCommand,
 )
-from restaurant_hub.features.staff.application.dtos.results import EmployeeLoginResult
+from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeLoginResult,
+    to_employee_login_result,
+)
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -39,7 +42,6 @@ from restaurant_hub.features.staff.application.ports.out.identity_gateway import
     IdentityGateway,
     LoginDelivery,
 )
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 
 
 class CreateLoginForEmployeeUseCase:
@@ -81,7 +83,6 @@ class CreateLoginForEmployeeUseCase:
             self._gateway.send_login_invitation(
                 email=command.email, setup_link=provisioned.setup_link
             )
-            return EmployeeLoginResult(employee=employee_result(linked), setup_link=None)
-        return EmployeeLoginResult(
-            employee=employee_result(linked), setup_link=provisioned.setup_link
-        )
+            # O link **não** volta no result: quem o recebe é a caixa de entrada.
+            return to_employee_login_result(linked, setup_link=None)
+        return to_employee_login_result(linked, setup_link=provisioned.setup_link)

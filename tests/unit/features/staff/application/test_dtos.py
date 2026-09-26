@@ -44,9 +44,10 @@ from restaurant_hub.features.staff.application.dtos.results import (
     EmployeeLoginResult,
     EmployeeResult,
     JobFunctionResult,
+    to_employee_login_result,
+    to_employee_result,
 )
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
-from restaurant_hub.features.staff.application.use_cases._results import employee_result
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -311,10 +312,14 @@ def test_result_de_funcionario_tem_o_estado_de_ciclo_de_vida() -> None:
 # conteúdo em `test_copy_employee_to_unit.py` (CA04).
 
 _PASTA_DE_USE_CASES = pathlib.Path(pacote_use_cases.__file__).parent
-_MODULO_DO_MAPPER = "_results"
-# Contagem **transcrita** dos módulos que consomem `employee_result`: os 11 use
-# cases que devolvem funcionário mais `create_login_for_employee` (3.5). Sem ela
-# a varredura por AST abaixo passaria sobre uma pasta vazia.
+# O mapper mora em `dtos/results.py` desde a issue #45 (regra 8 do
+# `check_layout`); a Stage 3.5 nasceu com ele em `use_cases/_results.py` e foi
+# adaptada no merge. O nome do módulo é o que a varredura de consumidores procura
+# no `ImportFrom`.
+_MODULO_DO_MAPPER = "dtos.results"
+# Contagem **transcrita** dos módulos que consomem o mapper: os 11 use cases que
+# devolvem funcionário mais `create_login_for_employee` (3.5). Sem ela a varredura
+# por AST abaixo passaria sobre uma pasta vazia.
 _TOTAL_DE_CONSUMIDORES_DO_MAPPER = 12
 
 
@@ -350,7 +355,7 @@ def test_o_mapper_copia_todos_os_campos_inclusive_o_login() -> None:
         user_id=UserId("login-1"),
     )
 
-    resultado = employee_result(vinculado)
+    resultado = to_employee_result(vinculado)
 
     for campo in dataclasses.fields(EmployeeResult):
         assert getattr(resultado, campo.name) == getattr(vinculado, campo.name), campo.name
@@ -385,7 +390,15 @@ def _chamadas_a_employee_result(arvore: ast.AST) -> list[int]:
 
 
 def test_ca06_nenhum_use_case_constroi_employee_result_diretamente() -> None:
-    """O único sítio é `_results.employee_result` (concept 3.5 D6, CA06).
+    """O único sítio é `dtos/results.to_employee_result` (concept 3.5 D6, CA06).
+
+    **Redundante com a regra 8 do `check_layout` de propósito, e por dois motivos.**
+    A regra mecânica conta sítios de construção em `src/` inteiro e é o gate;
+    esta varredura é escopada à pasta de use cases de staff e cobra também a
+    **contagem de consumidores** — é ela que reprova quando um use case de
+    funcionário deixa de passar pelo mapper por devolver o result de outro jeito
+    (o que não cria sítio novo e a regra 8 não veria). As duas medem propriedades
+    diferentes do mesmo desenho.
 
     Varredura por AST, não por grep de texto: um `EmployeeResult(` dentro de
     docstring não conta. O que se procura é a **chamada**, por nome ou por
@@ -394,7 +407,7 @@ def test_ca06_nenhum_use_case_constroi_employee_result_diretamente() -> None:
     culpados: dict[str, list[int]] = {}
     consumidores: list[str] = []
     for arquivo in sorted(_PASTA_DE_USE_CASES.glob("*.py")):
-        if arquivo.stem in ("__init__", _MODULO_DO_MAPPER):
+        if arquivo.stem == "__init__":
             continue
         arvore = ast.parse(arquivo.read_text(encoding="utf-8"))
         linhas = _chamadas_a_employee_result(arvore)
@@ -403,13 +416,41 @@ def test_ca06_nenhum_use_case_constroi_employee_result_diretamente() -> None:
         if any(
             isinstance(no, ast.ImportFrom)
             and (no.module or "").endswith(_MODULO_DO_MAPPER)
-            and any(alias.name == "employee_result" for alias in no.names)
+            and any(alias.name.startswith("to_employee") for alias in no.names)
             for no in ast.walk(arvore)
         ):
             consumidores.append(arquivo.stem)
 
     assert culpados == {}, f"EmployeeResult construído fora do mapper: {culpados}"
     assert len(consumidores) == _TOTAL_DE_CONSUMIDORES_DO_MAPPER, sorted(consumidores)
+
+
+def test_o_mapper_do_result_de_login_passa_pelo_mapper_do_funcionario() -> None:
+    """`EmployeeLoginResult` também tem sítio único, e ele reusa o do registro.
+
+    Se `to_employee_login_result` montasse o `EmployeeResult` por fora, o campo
+    novo do registro (hoje `user_id`) precisaria de duas edições — que é a falha
+    que a regra 8 da #45 fecha.
+    """
+    vinculado = Employee(
+        id=_FUNCIONARIO,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        name="Maria",
+        workload_profile=_FIXA,
+        shift_preference=_PREFERENCIA,
+        job_function_ids=frozenset({_FUNCAO}),
+        unavailabilities=(_PERIODO,),
+        user_id=UserId("login-1"),
+    )
+
+    com_link = to_employee_login_result(vinculado, setup_link="https://x/definir-senha?token=t")
+    por_email = to_employee_login_result(vinculado, setup_link=None)
+
+    assert com_link.employee == to_employee_result(vinculado)
+    assert com_link.employee.user_id == UserId("login-1")
+    assert com_link.setup_link == "https://x/definir-senha?token=t"
+    assert por_email.setup_link is None
 
 
 def _tipos_folha(anotacao: object) -> set[object]:

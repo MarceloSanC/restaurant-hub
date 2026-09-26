@@ -8,7 +8,6 @@ O que este módulo trava, acima do status: a **ordem** das duas autorizações, 
 canal `link`.
 """
 
-import importlib
 from collections.abc import Iterator
 from functools import partial
 from http import HTTPStatus
@@ -16,6 +15,7 @@ from http import HTTPStatus
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
 from restaurant_hub.features.staff.application.use_cases.create_login_for_employee import (
     CreateLoginForEmployeeUseCase,
 )
@@ -37,9 +37,6 @@ from tests.unit.features.staff.adapters.test_http_router_job_functions import (
 )
 
 pytestmark = pytest.mark.unit
-
-_PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.in.http"
-router_module = importlib.import_module(f"{_PACOTE_HTTP_STAFF}.router")
 
 _EMAIL = "novo@x.com"
 _SUFIXO = "/units/{unit_id}/employees/{employee_id}"
