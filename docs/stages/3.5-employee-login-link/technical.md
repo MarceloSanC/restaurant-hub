@@ -1226,9 +1226,13 @@ davam o `_results.py` como vivo (`identity/application/use_cases/_invitation.py`
 um vínculo futuro ao login de um gerente que trabalha na escala. Nesse dia, desligar o registro de
 escala dele derrubaria as sessões de gestão. Nem o ADR 3.5.0003 nem o finding "vincular login
 existente" do concept §10 registram a interação.
-**Direção:** a Stage que introduzir mais de um vínculo por conta decide o que R13 faz com as
-sessões (revogar só no último vínculo ativo, excluir o login de gerente do desligamento, ou
-revogar por escopo). Ponto de partida, não solução. **Issue:** #60, com condição de disparo.
+A premissa do ADR 3.5.0003 (revogar corta acesso porque `employee` não tem permissão) não vale
+para login de gerente: ele autentica de novo e recupera a gestão, que vem do papel em identity.
+**Direção:** decidir junto com `is_active` (ADR 3.5.0003 §5, mesmo problema conta × registro).
+Candidata: revogar só se a conta for `employee` e este for o último vínculo ativo. "Último vínculo"
+sozinho não cobre o gerente com um registro, e tirar o login do registro de escala anula "minha
+escala". Ponto de partida, não solução. **Issue:** #60, disparada pela primeira entre "vincular
+login existente" e a primeira permissão de autosserviço do `employee`.
 
 ### 2026-09-27 — [finding] respostas com credencial sem `Cache-Control: no-store` — Claude (autônomo)
 **Contexto:** auditoria pós-merge (issue #59, achado F3). R17 no canal `link` devolve um segredo
@@ -1236,6 +1240,9 @@ válido por 168h; `/auth/login` e `/auth/refresh` devolvem tokens; nenhuma respo
 define `Cache-Control`. Não é regressão desta Stage, que seguiu o padrão de identity.
 **Direção:** `Cache-Control: no-store` e `Pragma: no-cache` nas três rotas, com varredura derivada
 (OWASP ASVS 5.0 14.3.2; RFC 6749 §5.1; semântica e ressalva na RFC 9111 §5.2.2.5, citações
-conferidas na fonte bruta). **Issue:** #61, Stage candidata `6.x` hardening.
+conferidas na fonte bruta), com varredura por marca semântica de credencial e não por nome de
+schema, para pegar a futura rota de reemissão. **Issue:** #61, antes do primeiro frontend do
+Step 3 (quando o canal `link` passa a ser usado); o Step 6 não tem Stage de hardening que a
+absorva.
 
 <!-- END: post-execution -->
