@@ -120,7 +120,7 @@ graph LR
 | `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
-| `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.1-staff-domain` |
+| `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | draft | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
 | `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
