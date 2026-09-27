@@ -143,34 +143,36 @@ def _base(version: int = 1, break_da_ana: int | None = None) -> Schedule:
 
 
 def _retrato(escala: Schedule) -> tuple[object, ...]:
-    """Tudo o que a escala carrega, por valor — para provar a original intacta."""
-    return (
-        escala.version,
-        tuple(
-            (
-                faixa.id,
-                faixa.time_range,
-                tuple(
-                    (
-                        demanda.id,
-                        demanda.job_function_id,
-                        demanda.quantity,
-                        tuple(
-                            (
-                                a.id,
-                                a.employee_id,
-                                a.counts_toward_workload,
-                                a.function_exception,
-                                a.break_minutes,
-                            )
-                            for a in demanda.assignments
-                        ),
-                    )
-                    for demanda in faixa.demands
-                ),
-            )
-            for faixa in escala.bands
-        ),
+    """O estado da árvore, por valor — **sem** a versão.
+
+    A versão fica fora de propósito (Checkpoint C do bloco 3, item 4): com ela
+    dentro, "o estado mudou" seria verdade para qualquer mutação que só
+    incrementasse a versão. Quem precisa da versão a confere à parte.
+    """
+    return tuple(
+        (
+            faixa.id,
+            faixa.time_range,
+            tuple(
+                (
+                    demanda.id,
+                    demanda.job_function_id,
+                    demanda.quantity,
+                    tuple(
+                        (
+                            a.id,
+                            a.employee_id,
+                            a.counts_toward_workload,
+                            a.function_exception,
+                            a.break_minutes,
+                        )
+                        for a in demanda.assignments
+                    ),
+                )
+                for demanda in faixa.demands
+            ),
+        )
+        for faixa in escala.bands
     )
 
 
@@ -223,6 +225,7 @@ def test_cada_mutacao_devolve_nova_instancia_com_versao_mais_um(mutacao: str, ve
     resultado = _MUTACOES[mutacao](original)
     assert resultado is not original
     assert resultado.version == version + 1
+    assert original.version == version
     assert _retrato(original) == antes
     assert _retrato(resultado) != antes
 
@@ -322,6 +325,30 @@ _MATRIZ_DAS_MUTACOES: tuple[tuple[str, type[SchedulingError], _Cenario], ...] = 
         DuplicateAssignmentInBandError,
         lambda e: e.assign(AssignmentId("a9"), ShiftDemandId("d2"), EmployeeId("ana")),
     ),
+    # ids internos repetidos pelas mutações (a raiz revalida o agregado inteiro)
+    (
+        "enable_band",
+        DuplicateEntityIdError,
+        lambda e: e.enable_band(ShiftBandId("f2"), _tr(_QUINTA, 10, 4)),
+    ),
+    (
+        "declare_demand",
+        DuplicateEntityIdError,
+        lambda e: e.declare_demand(
+            ShiftDemandId("d3"), ShiftBandId("f3"), JobFunctionId("cozinheiro"), DemandQuantity(1)
+        ),
+    ),
+    (
+        "assign",
+        DuplicateEntityIdError,
+        lambda e: e.assign(AssignmentId("a1"), ShiftDemandId("d3"), EmployeeId("caio")),
+    ),
+    # destino com start >= end: a recusa sai do TimeRange reconstruído pela faixa
+    (
+        "reschedule_band",
+        InvalidTimeRangeError,
+        lambda e: e.reschedule_band(ShiftBandId("f1"), _as(_SEXTA, 16), _as(_SEXTA, 15)),
+    ),
     # Task 10: as linhas das 2 mutações de intervalo
     (
         "redeclare_band_break",
@@ -359,6 +386,7 @@ def test_cada_celula_da_matriz_recusa_e_deixa_a_original_intacta(
     with pytest.raises(excecao):
         cenario(original)
     assert _retrato(original) == antes
+    assert original.version == 1
     assert metodo in _MUTACOES
 
 
@@ -467,7 +495,7 @@ def test_reschedule_band_preserva_ids_demandas_alocacoes_e_intervalo() -> None:
         start=_as(_SEXTA, 17), end=_as(_SEXTA + timedelta(days=1), 1), break_minutes=60
     )
     # Conteúdo, não só ids: o retrato das demandas é o mesmo.
-    assert _retrato(reagendada)[1][0][2] == _retrato(original)[1][0][2]
+    assert _retrato(reagendada)[0][2] == _retrato(original)[0][2]
     assert reagendada.bands[0].id == ShiftBandId("f1")
 
 
@@ -606,7 +634,9 @@ def test_unassign_retira_so_a_alocacao() -> None:
     assert escala.locate_demand(ShiftDemandId("d1"))[1].allocated == 0
 
 
-def test_mutacao_que_quebra_a_faixa_levanta_o_erro_do_time_range() -> None:
-    # enable_band recebe um TimeRange já construído: a recusa de valor é dele.
+def test_enable_band_nao_produz_invalid_time_range_error() -> None:
+    # enable_band recebe um TimeRange já construído: a recusa de valor é do
+    # construtor do TimeRange, antes da chamada — por isso a §6 não tem a célula
+    # `enable_band` x `InvalidTimeRangeError`.
     with pytest.raises(InvalidTimeRangeError):
-        _base().enable_band(ShiftBandId("f9"), _tr(_QUINTA, 10, 4, break_minutes=240))
+        _tr(_QUINTA, 10, 4, break_minutes=240)

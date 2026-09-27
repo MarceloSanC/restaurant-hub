@@ -269,8 +269,10 @@ def test_a_alocacao_nao_tem_metodo_que_altere_function_exception() -> None:
 
 
 def test_nenhuma_mutacao_da_raiz_altera_function_exception_de_alocacao_existente() -> None:
-    # Varredura comportamental sobre as 11: a marca declarada no ato de alocar
-    # sobrevive a toda mutação que não remove a alocação.
+    # Amostra comportamental, escrita à mão: as 5 mutações que tocam a faixa, a
+    # demanda ou a alocação sem removê-la (as demais criam ou removem estado). A
+    # prova de CA14 são as duas asserções de assinatura acima; esta confirma que a
+    # marca declarada no ato de alocar sobrevive às que a atravessam.
     base = (
         _cenario_do_sponsor()
         .unassign(_COZINHEIRO)
