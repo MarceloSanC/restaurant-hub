@@ -178,3 +178,13 @@ def test_igualdade_e_hash_por_id_ignoram_o_conteudo() -> None:
     assert hash(a) == hash(b)
     assert a != ShiftDemand(id=ShiftDemandId("dem-2"), job_function_id=_COZINHEIRO, quantity=_DOIS)
     assert a.__eq__("dem-1") is NotImplemented
+
+
+# --- auditoria de mutação (S02) ---------------------------------------------------------
+
+
+def test_alocacao_repetida_por_inteiro_levanta_a_colisao_de_id_primeiro() -> None:
+    # Mesmo id e mesmo registro: a precedência é colisão de id (§7, [decision] da
+    # auditoria de mutação) — é a "linha repetida" da reidratação da 4.4.
+    with pytest.raises(DuplicateEntityIdError, match="AssignmentId"):
+        _demanda(_alocacao("a1", "ana"), _alocacao("a1", "ana"))

@@ -1523,4 +1523,25 @@ e não chama a mutação quando N não muda (sem versão nova, sem auditoria). A
 o no-op de §5.16 a `change_demand_quantity`, que é decisão de produto (P) para o sponsor. **Stage
 candidata:** 4.3.
 
+### 2026-09-27 — [decision] precedência da colisão de id sobre a duplicidade de conteúdo — Claude Opus 5.5 (executor)
+
+Achados S02 e B02 da auditoria de mutação (118 mutantes, 6 sobreviventes, todos de teste). Quando a
+entrada de uma coleção se repete **por inteiro**, duas recusas valem ao mesmo tempo:
+- em `ShiftDemand`, o mesmo `AssignmentId` com o mesmo `employee_id` casa com `DuplicateEntityIdError` e
+  com `DuplicateAssignmentError`;
+- em `ShiftBand`, o mesmo `ShiftDemandId` com o mesmo `job_function_id` casa com `DuplicateEntityIdError`
+  e com `DuplicateShiftDemandError`.
+
+A §6 do concept não fixa a precedência, e a ordem das duas guardas podia ser trocada com a suíte
+verde. Opções: (a) **colisão de id primeiro**, que é a ordem atual; (b) duplicidade de conteúdo
+primeiro. **Escolhida (a)**, por convenção, sem pergunta ao sponsor (não é decisão de produto):
+- a entrada repetida por inteiro é o caso da "linha repetida" na reidratação da 4.4 — um defeito de
+  identidade, não de regra de negócio;
+- a exceção escolhida define o status que a 4.5 devolve, então a precedência precisa estar travada,
+  não deixada à ordem do código.
+
+Travada em `test_shift_demand.py` (`match="AssignmentId"`) e `test_shift_band.py`
+(`match="ShiftDemandId"`), com entrada idêntica nas duas posições. Reversível: é a ordem de duas
+guardas e dois testes.
+
 <!-- END: post-execution -->

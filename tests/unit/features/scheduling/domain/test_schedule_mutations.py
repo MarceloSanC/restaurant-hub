@@ -674,3 +674,36 @@ def test_enable_band_nao_produz_invalid_time_range_error() -> None:
     # `enable_band` x `InvalidTimeRangeError`.
     with pytest.raises(InvalidTimeRangeError):
         _tr(_QUINTA, 10, 4, break_minutes=240)
+
+
+# --- auditoria de mutação (R34/R36): o intervalo da faixa sobrevive às mutações ------
+
+
+def _base_com_intervalo_na_faixa() -> Schedule:
+    base = _base()
+    return dataclasses.replace(base, bands=(base.bands[0].with_band_break(60), *base.bands[1:]))
+
+
+@pytest.mark.parametrize(
+    "mutacao",
+    [
+        "assign",
+        "unassign",
+        "change_demand_quantity",
+        "declare_workload_counting",
+        "declare_allocation_break",
+    ],
+)
+def test_mutacoes_de_demanda_e_alocacao_preservam_o_intervalo_da_faixa(mutacao: str) -> None:
+    # As 5 reconstroem a faixa por `_com_demanda`. Valor ABSOLUTO, e não "igual ao
+    # antes": uma reconstrução que zerasse o intervalo da faixa passaria numa
+    # comparação com um arranjo que também passou por ela (auditoria, R34/R36).
+    depois = _MUTACOES[mutacao](_base_com_intervalo_na_faixa())
+    assert depois.band(ShiftBandId("f1")).time_range == _tr(_SEXTA, 16, 8, break_minutes=60)
+
+
+def test_quem_herda_continua_com_sete_horas_depois_de_outra_alocacao() -> None:
+    escala = _base_com_intervalo_na_faixa().assign(
+        AssignmentId("a9"), ShiftDemandId("d1"), EmployeeId("bia")
+    )
+    assert escala.worked_minutes_of(AssignmentId("a1")) == 7 * 60

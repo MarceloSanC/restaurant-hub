@@ -158,3 +158,13 @@ def test_igualdade_e_hash_por_id_ignoram_o_conteudo() -> None:
 def test_comparacao_com_outro_tipo_nao_e_igual() -> None:
     assert Assignment(id=_ID, employee_id=_ANA) != "aloc-1"
     assert Assignment(id=_ID, employee_id=_ANA).__eq__("aloc-1") is NotImplemented
+
+
+# --- auditoria de mutação (A05) ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("valor", [True, False])
+def test_declare_workload_counting_com_o_valor_corrente_mantem_o_valor(valor: bool) -> None:
+    # Declarar não é alternar: o valor passado é o gravado (auditoria, A05).
+    alocacao = Assignment(id=_ID, employee_id=_ANA, counts_toward_workload=valor)
+    assert alocacao.declare_workload_counting(valor).counts_toward_workload is valor

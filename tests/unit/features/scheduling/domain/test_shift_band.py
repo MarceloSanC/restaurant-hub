@@ -378,3 +378,22 @@ def test_igualdade_e_hash_por_id_ignoram_o_conteudo() -> None:
     assert hash(a) == hash(b)
     assert a != ShiftBand(id=ShiftBandId("faixa-2"), time_range=_faixa_16_00())
     assert a.__eq__("faixa-1") is NotImplemented
+
+
+# --- auditoria de mutação (B04, B02) ---------------------------------------------------
+
+
+def test_intervalo_da_alocacao_entre_o_trabalhado_e_o_nominal_da_faixa_e_aceito() -> None:
+    # O teto é a duração NOMINAL (480), não a trabalhada da faixa (480 - 60 = 420):
+    # 479 fica entre as duas e tem de passar (auditoria, B04).
+    alocacao = _aloc("a1", "ana", _NOMINAL - 1)
+    banda = _banda(_dem("d1", "cozinheiro", alocacao), break_minutes=_UMA_HORA)
+    assert banda.effective_break_of(alocacao) == _NOMINAL - 1
+
+
+def test_demanda_repetida_por_inteiro_levanta_a_colisao_de_id_primeiro() -> None:
+    # Mesmo id e mesma função: a precedência é colisão de id (§7, [decision] da
+    # auditoria de mutação) — é a "linha repetida" da reidratação da 4.4.
+    demanda = _dem("d1", "cozinheiro")
+    with pytest.raises(DuplicateEntityIdError, match="ShiftDemandId"):
+        _banda(demanda, _dem("d1", "cozinheiro"))

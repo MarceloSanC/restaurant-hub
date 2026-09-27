@@ -292,3 +292,17 @@ def test_nenhuma_mutacao_da_raiz_altera_function_exception_de_alocacao_existente
     for nome, chamada in chamadas.items():
         resultado = chamada(base)
         assert resultado.locate_assignment(_COZINHEIRO)[2].function_exception is True, nome
+
+
+# --- auditoria de mutação (B04, pela raiz) ----------------------------------------------
+
+
+def test_redeclarar_o_intervalo_da_faixa_acima_do_trabalhado_restante_nao_recusa_alocacao() -> None:
+    # Faixa de 8h com intervalo 400 deixa 80 min trabalhados; a alocação que
+    # declara 120 continua válida, porque o teto dela é a duração nominal (480).
+    escala = (
+        _cenario_do_sponsor()
+        .declare_allocation_break(_COZINHEIRO, 2 * _UMA_HORA)
+        .redeclare_band_break(ShiftBandId("f1"), 400)
+    )
+    assert escala.worked_minutes_of(_COZINHEIRO) == 6 * 60
