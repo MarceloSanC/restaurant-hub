@@ -79,7 +79,7 @@ depends_on: [3.1-staff-domain]
   2026-09-26; ADR 4.1.0011).
 - **Contador de versão** na raiz, com a lei "toda mutação incrementa"
   (ADR 4.1.0001 §2; a coluna e a checagem otimista são da 4.4).
-- **Hierarquia de exceções do BC** (`SchedulingError(DomainError)` + 16
+- **Hierarquia de exceções do BC** (`SchedulingError(DomainError)` + 20
   subclasses).
 - **Enforcement estrutural** (precedente da 2.1/3.1): contrato import-linter de
   pureza de `scheduling.domain` e inclusão de `scheduling` no contrato
@@ -819,7 +819,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     **o dado não existe neste BC**. A nona situação, a **divergência de intervalo**
     do ADR 4.1.0011, entra na mesma família: a 4.1 a representa, a 4.2 a nomeia e
     lhe dá modo. A 4.1 recusa **só** o que é impossível de representar com o que o
-    agregado tem (invariantes 1–17 e 21–22) — e "estrutural" **não** é sinônimo de
+    agregado tem (invariantes 1–17 e 21–23) — e "estrutural" **não** é sinônimo de
     "ratificado como erro": *"alocar registro de outra unidade é erro estrutural,
     não política"* (doc §3.4) é lei imposta na **4.3**, porque a unidade do
     registro não está aqui (§1 Fora do escopo, §8).
@@ -1594,16 +1594,16 @@ erDiagram
       versão); as decisões do sponsor acrescentaram 2 mutações, 3 exceções e o
       intervalo em dois níveis, e empacotá-las na Task 10 a tornaria maior do que
       qualquer outra Task da Stage.
-      **Por que continua 11 depois das decisões de 2026-09-27:** a invariante 23
-      entra na Task 8 (é uma checagem par a par em `ShiftBand.__post_init__`, ao lado
-      das duas que já estão lá), a 20ª exceção na Task 2 e o caminho de `assign` na
-      Task 10 — nenhuma Task nasce, nenhuma passa a empacotar frente nova, e a Q5
-      não move linha de código (é confirmação do comportamento que a Task 4 já
-      implementa). **11 está dentro do teto de 12 — a Stage não precisa ser
+      **Por que continua 10 depois das decisões de 2026-09-27:** a invariante 23
+      entra na Task 07 (é uma checagem par a par em `ShiftBand.__post_init__`, ao lado
+      das duas que já estão lá), a 20ª exceção na Task 01 e o caminho de `assign` na
+      Task 09 — nenhuma Task nasce, nenhuma passa a empacotar frente nova, e a Q5
+      não move linha de código (é confirmação do comportamento que a Task 03 já
+      implementa). **10 está dentro do teto de 12 — a Stage não precisa ser
       cortada.** Se a Fase 3B medir 13+, a **linha de corte** é a
-      raiz: VOs + entidades-folha (Tasks 1–8) numa Stage, `Schedule` + mutações
-      (Tasks 9–11) na seguinte — é o único corte que deixa o build verde entre as
-      duas, porque nada antes da Task 9 importa a raiz.
+      raiz: VOs + entidades-folha (Tasks 01–07) numa Stage, `Schedule` + mutações
+      (Tasks 08–10) na seguinte — é o único corte que deixa o build verde entre as
+      duas, porque nada antes da Task 08 importa a raiz.
 - [x] Riscos críticos têm mitigação plausível? (§10 — 12 riscos, cada um com
       critério de aceitação ou ADR correspondente)
 - [x] O concept aplica a teoria canônica sem re-derivar nem contradizer
