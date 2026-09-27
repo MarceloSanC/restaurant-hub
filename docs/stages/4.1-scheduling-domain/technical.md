@@ -1328,4 +1328,15 @@ localmente (`DATABASE_URL` na porta 5433 da worktree, arquivo gitignored). **Dir
 script reescrever também `DATABASE_URL` e uma guarda contra a divergência. **Destino:** issue #58
 (avulsa, tooling) — não é de nenhuma Stage do Step 4.
 
+### 2026-09-27 — [decision] Task 02, `worked_minutes(k)` sem guarda de faixa — Claude Opus 5.5 (executor)
+
+Lacuna: o concept §4 não diz o que `TimeRange.worked_minutes(k)` faz com `k` fora de
+`[0, nominal_minutes)`. Opções: (a) **só a expressão**, sem guarda — os limites do intervalo da
+alocação são da `ShiftBand.__post_init__` (concept §5.6, ADR 4.1.0011), o único nível que vê `k` e a
+faixa juntos, e `Schedule.worked_minutes_of` só chega aqui com `k` já validado; (b) guarda local
+levantando `InvalidAssignmentBreakError` — duplicaria a invariante num segundo sítio e faria o VO de
+tempo conhecer a exceção da alocação. **Escolhida (a)**, a mais simples: a validação fica num sítio
+só, como a contagem. Reversível (uma checagem e um teste). O `0` explícito é tratado como valor, não
+como ausência (`is None`, não truthiness) — travado em `test_time_range.py`.
+
 <!-- END: post-execution -->
