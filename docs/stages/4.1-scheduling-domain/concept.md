@@ -159,7 +159,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    **dois** movimentos: o contrato novo `scheduling-domain-purity` (espelho de
    `staff-domain-purity`, linhas 197–217) e a inclusão de
    `restaurant_hub.features.scheduling` no contrato `bc-independence` (linhas
-   271–277, hoje só `identity` e `staff`) — a lacuna que o doc de domínio
+   271–277, antes da 4.1 só `identity` e `staff`) — a lacuna que o doc de domínio
    endereça ao `technical.md` da 4.1 (§3.10). Precedente literal: a 3.1 fez o
    mesmo par de movimentos para o BC staff.
 2. **`arquivos_a_criar` cresce em quatro frentes.** (a) placeholders

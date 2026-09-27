@@ -791,7 +791,7 @@ Scheduling **consome** staff e identity e **é consumido** por timeclock e hub. 
 (`identifiers.py` 5–7; `.importlinter` 251–277 — contrato `bc-independence`; ADR 3.3.0002
 31–35). `EmployeeId`/`JobFunctionId` "de staff" no roadmap 4.1 (`roadmap.md` 1270) lê-se como
 **emitidos por staff**; scheduling declara os seus — importar os de staff é violação medida
-(ADR 3.4.0001 106–113). O contrato `bc-independence` hoje lista só `identity` e `staff`
+(ADR 3.4.0001 106–113). O contrato `bc-independence` listava, antes da 4.1, só `identity` e `staff`
 (`.importlinter` 274–277); incluir `scheduling` é tarefa do `technical.md` da 4.1.
 
 #### 3.10.1 Staff — dados consumidos (por id e por dados, sem import)
@@ -1165,7 +1165,7 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 - [`overview.md`](../../overview.md) — §3 (37–47, 57–58, 70), §5 (92–93), §6 (102, 110–111),
   §7 (115), §9 (130–141), §10 (151–154; bloco do Step 4 acrescentado neste PR).
 - [`roadmap.md`](../../roadmap.md) — Step 4 (1219–1465); Step 5 (1471–1519); Step 7 (1608–1651);
-  Step 8 (1720–1741); tabela de Stages (123); ROADMAP-1/3/6 (1801–1806); 1795–1796; 824–825.
+  Step 8 (1720–1741); tabela de Stages (123); ROADMAP-1/3/6 (1801–1806); 1795–1796; 820–824.
 - [`workforce.md`](../staff/workforce.md) — §1, §2, §3.1–§3.6, §3.8, §4, §6, §7. Citado por seção
   porque ganha notas datadas neste PR.
 - ADRs do gate: [4.1.0001](../../adr/4_1_0001-every-saved-change-is-the-live-schedule.md) (F1+F8) ·
