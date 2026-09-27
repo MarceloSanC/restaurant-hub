@@ -1386,4 +1386,18 @@ alocação com intervalo `>= nominal_minutes` levantam `InvalidAssignmentBreakEr
 **Direção para a 4.1 (Task 09):** `redeclare_band_break` herda a mesma realidade — não há recusa de
 alocação a esperar dela.
 
+### 2026-09-27 — [finding] `operational_day_of` aceita instante tz-aware ou com segundos — Claude Opus 5.5 (executor)
+
+Achado M4 do Checkpoint C do bloco 1 (Tasks 02–04). `DayCutoff.operational_day_of` e
+`OperationalCalendar.operational_day_of` aceitam em silêncio instante tz-aware ou com
+segundo/microssegundo: `instant.time()` descarta o `tzinfo`, e o cálculo sai no relógio do fuso de
+quem chamou. **Não é violação do contrato desta Stage:** o concept §4 não pede guarda, e dentro do
+agregado todo instante que chega ao método vem de um `TimeRange`, que já recusa os dois defeitos na
+construção (CA1). O risco é de quem chamar o método público com um instante cru, por exemplo um
+`now()` aware ao resolver "a escala de hoje". **Direção sugerida:** validar o instante na entrada dos
+use cases que recebem instantes de fora do domínio, convertendo para o wall-clock ingênuo da unidade
+(ADR 4.1.0005: o fuso é de identity). A alternativa, uma guarda no próprio VO com
+`InvalidDayCutoffError`, nomearia errado o defeito, que é do instante e não do corte. **Stage
+candidata:** 4.3 (application da escala).
+
 <!-- END: post-execution -->

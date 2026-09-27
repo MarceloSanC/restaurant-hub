@@ -62,12 +62,24 @@ def test_from_date_bate_com_isoweekday_nos_sete_dias(deslocamento: int) -> None:
     assert tuple(Weekday).index(Weekday.from_date(dia)) + 1 == dia.isoweekday()
 
 
-def test_from_date_nomeia_o_dia_certo() -> None:
-    # Ancoragem por nome, para que uma permutação dos membros não passe no teste
-    # de isoweekday acima só por coincidência de índice.
-    assert Weekday.from_date(_SEGUNDA) is Weekday.MONDAY
-    assert Weekday.from_date(_SEXTA) is Weekday.FRIDAY
-    assert Weekday.from_date(_SEGUNDA + timedelta(days=6)) is Weekday.SUNDAY
+@pytest.mark.parametrize(
+    ("dia", "esperado"),
+    [
+        pytest.param(date(2026, 9, 14), Weekday.MONDAY, id="segunda"),
+        pytest.param(date(2026, 9, 15), Weekday.TUESDAY, id="terca"),
+        pytest.param(date(2026, 9, 16), Weekday.WEDNESDAY, id="quarta"),
+        pytest.param(date(2026, 9, 17), Weekday.THURSDAY, id="quinta"),
+        pytest.param(date(2026, 9, 18), Weekday.FRIDAY, id="sexta"),
+        pytest.param(date(2026, 9, 19), Weekday.SATURDAY, id="sabado"),
+        pytest.param(date(2026, 9, 20), Weekday.SUNDAY, id="domingo"),
+    ],
+)
+def test_from_date_nomeia_o_dia_certo(dia: date, esperado: Weekday) -> None:
+    # Ancoragem por NOME, em datas de calendário conhecidas (Checkpoint C, I1):
+    # `from_date` depende da ordem de declaração dos membros, e o teste de
+    # isoweekday acima usa a mesma ordem — sozinho, ele deixaria passar a troca
+    # de TUESDAY com WEDNESDAY.
+    assert Weekday.from_date(dia) is esperado
 
 
 @pytest.mark.parametrize("valor", list(_DIAS_ESPERADOS.values()))
@@ -130,6 +142,21 @@ def test_corte_compara_por_valor() -> None:
 )
 def test_corte_das_cinco(instante: datetime, esperado: date) -> None:
     assert DayCutoff(at=time(5, 0)).operational_day_of(instante) == esperado
+
+
+@pytest.mark.parametrize(
+    ("instante", "esperado"),
+    [
+        pytest.param(datetime(2026, 10, 2, 5, 15), _QUINTA, id="05h15_dia_anterior"),
+        pytest.param(datetime(2026, 10, 2, 5, 29), _QUINTA, id="05h29_dia_anterior"),
+        pytest.param(datetime(2026, 10, 2, 5, 30), _SEXTA, id="05h30_no_corte_mesmo_dia"),
+        pytest.param(datetime(2026, 10, 2, 5, 31), _SEXTA, id="05h31_mesmo_dia"),
+    ],
+)
+def test_corte_com_minutos_decide_pelo_minuto(instante: datetime, esperado: date) -> None:
+    # O corte tem resolução de minuto (Checkpoint C, I2): com corte em hora cheia,
+    # comparar só `hour` passaria; 05:15 e 05:29 separam as duas leituras.
+    assert DayCutoff(at=time(5, 30)).operational_day_of(instante) == esperado
 
 
 @pytest.mark.parametrize(
