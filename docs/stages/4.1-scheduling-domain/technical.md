@@ -1294,4 +1294,38 @@ dentro do teto de 12).
   "direção sugerida" e Stage candidata.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
+### 2026-09-27 — [decision] modo de execução — sessão mestra (Claude Opus 5.5)
+
+A Fase 4 desta Stage corre na **variante autônoma** (`docs/PROMPT-stage-single-session-autonomous.md`)
+por instrução explícita do sponsor nesta sessão: *"quero que voce siga o
+@docs/PROMPT-stage-single-session-autonomous.md, sem parar a cada checkpoint, só segue até o pr."*
+Duas diferenças em relação ao texto da variante: (a) a 4.1 **não** está no recorte registrado em
+"Authorized runs" do ADR 0.0.0004 (`1.2`→`3.5`) — a autorização é esta instrução, registrada aqui;
+(b) o sponsor limitou a corrida **até o PR**: **sem auto-merge**. A auditoria da Stage roda num
+agente de contexto zerado com a skill `stage-audit`, e os findings são corrigidos na sessão mestra.
+A regra "perguntar antes da nota" do cabeçalho desta seção é substituída pela política de decisão
+autônoma da variante (reversível → decide e registra; contradição/irreversível → HALT).
+
+### 2026-09-27 — [deviation] base da branch — sessão mestra (Claude Opus 5.5)
+
+A Stage 3.5 foi mergeada em `develop` (PR #54) durante a Fase 3B. A branch foi **rebaseada** sobre
+`origin/develop` logo depois da Task 01 (nunca publicada, sem force-push). Conflitos resolvidos
+mantendo os dois lados: tabela de Stages do `roadmap.md` (3.5 `done` + `depends_on` da 4.1 em
+`3.1-staff-domain`) e o comentário do contrato `bc-independence` no `.importlinter` (a aresta
+nomeada da 3.5 — `ignore_imports` staff → fachada de identity — e o 3º BC da 4.1 convivem). O teste
+espelho `tests/unit/features/scheduling/test_bc_independence.py` afirmava "nenhum `ignore_imports`"
+no contrato; a 3.5 tornou isso falso por decisão registrada (ADR 3.5.0001), e a propriedade virou
+"nenhum par suprimido envolve scheduling" — inversão verificada à mão (par plantado com scheduling
+reprova; sem ele, passa). Commit da Task 01 corrigido antes de publicar. O rebase deslocou o roadmap
+em +39 linhas; 134 citações reajustadas por conteúdo (commit `3f66162`), 141 conferidas por conteúdo.
+
+### 2026-09-27 — [finding] ambiente de worktree — sessão mestra (Claude Opus 5.5)
+
+O `.env` gerado por `scripts/worktree-new.py` reescreve `POSTGRES_PORT` mas não `DATABASE_URL`: os
+testes de integração da worktree caíam no default (porta 5432, o Postgres do checkout principal) e
+reprovavam com `ResolutionError: No such revision '0004'` — o banco era o de outra sessão. Corrigido
+localmente (`DATABASE_URL` na porta 5433 da worktree, arquivo gitignored). **Direção sugerida:** o
+script reescrever também `DATABASE_URL` e uma guarda contra a divergência. **Destino:** issue #58
+(avulsa, tooling) — não é de nenhuma Stage do Step 4.
+
 <!-- END: post-execution -->
