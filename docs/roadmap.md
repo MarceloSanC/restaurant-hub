@@ -1277,6 +1277,39 @@ gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python]
 ```
 
+> **Nota (2026-09-27): reconciliação pós-execução da Stage 4.1** (issue #55; concept e technical em
+> `docs/stages/4.1-scheduling-domain/`; ADRs 4.1.0007–4.1.0012). O bloco acima foi escrito antes do
+> kickoff e fica como registro; as nove divergências estão declaradas no concept §1:
+>
+> - **Arquivos.** `arquivos_a_modificar` deixou de ser `[]`: `.importlinter` ganhou o contrato
+>   `scheduling-domain-purity` e `scheduling` entrou em `bc-independence`. `arquivos_a_criar`
+>   cresceu com os placeholders `application/` e `adapters/`, `identifiers.py`,
+>   `operational_calendar.py` e `entities/shift_band.py`. Dois testes de nível de repositório
+>   (`test_status_map.py`, `staff/test_bc_independence.py`) entraram no file-scope porque o
+>   terceiro BC os reprovava.
+> - **Modelo.** Quatro entidades, não três: a faixa habilitada é `ShiftBand`, glosa EN nova de
+>   "faixas de funcionamento" (ADR 4.1.0010; nota em `shift-scheduling.md` §6). **Não há evento de
+>   publicação** — superado pelo ADR 4.1.0001 §1; do F1/F8 sobra no domínio o contador de versão,
+>   e o DoD lê-se "montagem da escala com invariantes cobertas por testes unitários".
+> - **Contratos.** Introduzidos crescem: 8 ids próprios, `Weekday`/`DayCutoff`/`OperationalCalendar`,
+>   `DemandQuantity`, `ShiftBand`, as marcas de `Assignment`, a versão, `SchedulingError` + 20
+>   subclasses e 11 mutações na raiz. Consumido é só `DomainError` de `shared/`: scheduling tipa os
+>   seus `EmployeeId`/`JobFunctionId`, sem import de staff. `depends_on` = `3.1-staff-domain`
+>   (nota acima).
+> - **ADRs da Stage.** 4.1.0007 (`TimeRange` de instantes ingênuos de minuto inteiro; sítio único de
+>   horas), 4.1.0008 (faixa além do corte é do dia em que começa), 4.1.0009 (`Schedule` raiz
+>   única), 4.1.0010 (faixa habilitada; demanda única por (faixa, função)), 4.1.0011 (intervalo na
+>   faixa e na alocação; errata no 4.1.0002), 4.1.0012 (uma vaga por registro em cada faixa).
+> - **Decisões do sponsor** (concept §13). Q1: desabilitar faixa ou retirar demanda com gente
+>   alocada **recusa**, sem cascata. Q2: `reschedule_band` **preserva** demandas e alocações, no
+>   mesmo dia operacional. Q3: intervalo **na faixa e na alocação**, divergência derivada. Q4: o
+>   mesmo registro **não** ocupa duas vagas da mesma faixa (invariante). Q5: corte **sem teto**.
+> - **Execução.** Variante autônoma até o PR, sem auto-merge; 10 Tasks; branch rebaseada sobre o
+>   `develop` depois do merge da 3.5 (technical §7).
+> - **Findings abertos** (technical §7). `operational_day_of` aceita instante tz-aware ou com
+>   segundos → validar na entrada dos use cases (**4.3**). `.env` da worktree sem `DATABASE_URL` →
+>   issue #58 (tooling, sem Stage).
+
 #### Stage 4.2 — `4.2-validation-policies`
 
 **Descrição humana:** políticas de validação **parametrizáveis por restaurante** como estratégias plugáveis de domínio (sobreposição de alocações, descanso mínimo entre jornadas, teto de horas dia/semana, carga contratada), cada uma com modo `block`/`warn`; avaliador que devolve lista de violações para a UI exibir ao vivo.
