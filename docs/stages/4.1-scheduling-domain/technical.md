@@ -1365,4 +1365,25 @@ escopo. Na fábrica, a ordem é contagem de dias primeiro (no `SchedulePeriod`) 
 por `is_aligned` — o mesmo predicado que o `Schedule.__post_init__` usará, para a fábrica e a
 reidratação aplicarem uma lei só; o `reason` é o literal `"desalinhado"` do concept §4.
 
+### 2026-09-27 — [deviation] Task 07, cláusula inatingível de `with_band_break` — Claude Opus 5.5 (executor)
+
+O critério de aceite da Task 07 pede que `with_band_break`, "num intervalo que passe a exceder o de
+uma alocação declarada", levante `InvalidAssignmentBreakError`. **A cláusula é inatingível** sob o
+contrato do concept: o teto do intervalo da alocação é `break_minutes < time_range.nominal_minutes`
+(§4 `ShiftBand`, §5.6, ADR 4.1.0011), e `with_band_break` troca só o intervalo **da faixa**, não o
+par de instantes — `nominal_minutes` não muda, logo nenhuma alocação válida antes fica inválida
+depois. Fazer a cláusula passar exigiria inventar uma lei nova (intervalo da alocação limitado pelo
+da faixa), que **contradiz** o cenário do sponsor que a regra existe para permitir (§5.6: cozinheiro
+com 1h numa faixa sem intervalo → 7h; atendente sem → 8h). Mesma família das duas contradições
+internas que o Checkpoint B achou no concept (§1 Pré-condições: a célula inatingível da matriz §6 e o
+CA14 impossível). Não é HALT: o concept é inequívoco e prevalece; o desvio é só no texto do teste.
+**Aplicado:** (a) `test_with_band_break_nao_limita_o_intervalo_da_alocacao` trava a propriedade
+real — reduzir o intervalo da faixa abaixo do declarado pela alocação é válido e só gera divergência;
+(b) o caminho **atingível** da mesma revalidação é provado onde ele existe:
+`rescheduled_to` encurtando a faixa abaixo do intervalo de uma alocação e `with_demand` trazendo
+alocação com intervalo `>= nominal_minutes` levantam `InvalidAssignmentBreakError`; e
+`with_band_break` para `>= nominal_minutes` levanta `InvalidTimeRangeError`, como o critério pede.
+**Direção para a 4.1 (Task 09):** `redeclare_band_break` herda a mesma realidade — não há recusa de
+alocação a esperar dela.
+
 <!-- END: post-execution -->
