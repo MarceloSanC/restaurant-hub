@@ -88,14 +88,14 @@ check: lint typecheck layout-check import-check lock-check docs-check test-gate
 # lint — verifica estilo e regras sem modificar arquivos
 # ---------------------------------------------------------------------------
 lint:
-	uv run ruff check src/ tests/ scripts/
+	uv run ruff check src/ tests/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # fmt — formata e corrige automaticamente o que for possível
 # ---------------------------------------------------------------------------
 fmt:
-	uv run ruff format src/ tests/ scripts/
-	uv run ruff check --fix src/ tests/ scripts/
+	uv run ruff format src/ tests/ scripts/ .claude/hooks/
+	uv run ruff check --fix src/ tests/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # typecheck — checagem estática de tipos
