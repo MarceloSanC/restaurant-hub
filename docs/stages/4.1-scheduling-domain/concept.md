@@ -147,8 +147,8 @@ Primeira Stage do **Step 4 — Escala manual publicável** e primeiro código do
 `scheduling`. Entrega as entidades/VOs que a 4.2 (políticas) avalia, a 4.3 (use
 cases) orquestra, a 4.4 persiste com auditoria e versão, a 4.5 expõe, e que o
 Step 5 (auto-fill), o Step 7 (previsto × realizado) e o Step 8 (hub) consomem por
-DTO. Ver `roadmap.md` §"Stage 4.1 — `4.1-scheduling-domain`" (1205–1235), a nota
-datada do Step 4 (1182–1203) e `overview.md` §3 (40, 43), §9 (129–140).
+DTO. Ver `roadmap.md` §"Stage 4.1 — `4.1-scheduling-domain`" (1245–1275), a nota
+datada do Step 4 (1222–1243) e `overview.md` §3 (40, 43), §9 (129–140).
 
 ### Divergências declaradas em relação ao bloco 4.1 do roadmap
 
@@ -1693,7 +1693,7 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
 - [`../../overview.md`](../../overview.md) §3 (40, 43, 45), §6 (110),
   §9 (129–140).
 - [`../../roadmap.md`](../../roadmap.md) — Stage `4.1-scheduling-domain`
-  (1205–1235), nota do Step 4 (1182–1203), nota do `depends_on` (1207–1211),
+  (1245–1275), nota do Step 4 (1222–1243), nota do `depends_on` (1247–1251),
   tabela de Stages (123), grafo (77), ROADMAP-1/ROADMAP-3.
 - ADRs desta Stage: [`../../adr/`](../../adr/) (prefixo `4_1_`) — do **gate**:
   4.1.0001 (salvar = publicar + concorrência), 4.1.0002 (período, dia
