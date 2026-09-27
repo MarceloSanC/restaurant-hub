@@ -43,9 +43,9 @@ Forces:
   under Wednesday. Nothing ratified says what happens to a shift that ends at 02:00, nor on which
   day the week begins.
 - Three policies sum hours (daily cap, weekly cap, contracted workload) and the hub reports
-  "horas contratadas × escaladas × cumpridas" (`overview.md` 45) — one number, so one counting
+  "horas contratadas × escaladas × cumpridas" (`overview.md` 46) — one number, so one counting
   rule. CLT art. 71 § 2º says rest breaks are not counted in the working time; art. 73 § 1º says a
-  night hour counts as 52 min 30 s. The product does not pay hours (`overview.md` 56), so this is
+  night hour counts as 52 min 30 s. The product does not pay hours (`overview.md` 57), so this is
   counting for validation and reporting only.
 - The skeptic review of the draft (finding #3) rejected "the range belongs to the civil day in
   which it starts" as an unanchored extension of the 16h–00h example, and (finding #1) showed

@@ -86,14 +86,14 @@ Sponsor: *"Unit em identity + port (Recomendada)"*.
 ### Alternative B — One global deployment setting
 - **Description:** a single `TIMEZONE` setting for the whole installation.
 - **Pros:** one line; enough for a single-unit pilot.
-- **Cons:** contradicts "fuso horário configurável por unidade" (`overview.md` 101) and ASSUM-4
+- **Cons:** contradicts "fuso horário configurável por unidade" (`overview.md` 102) and ASSUM-4
   ("multi-unidade modelado desde já"); the second unit in another timezone forces a rewrite.
 - **Why rejected:** violates a ratified constraint to save one column.
 
 ### Alternative C — Store schedule times as UTC instants and drop the wall-clock model
 - **Description:** convert at write time using the unit's timezone; no naive datetimes.
 - **Pros:** industry default for absolute events.
-- **Cons:** "16h–00h" is a local fact (`overview.md` 130); crossing allocation × unavailability
+- **Cons:** "16h–00h" is a local fact (`overview.md` 131); crossing allocation × unavailability
   would require converting staff's naive datetimes on every comparison; contradicts
   ADR 3.1.0005's rationale; DST (if ever) would silently shift stored shifts.
 - **Why rejected:** the wall-clock model is ratified for staff and is what the glossary uses;

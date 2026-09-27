@@ -51,7 +51,7 @@ Two further forces:
   the 4.3 concept (doc §3.1).
 - Staff's precedent is an aggregate root holding an internal collection whose
   pairwise invariant is validated in `__post_init__` — including on the
-  rehydration path (`employee.py` 95–98), a hardening that the 3.1 execution
+  rehydration path (`employee.py` 113–116), a hardening that the 3.1 execution
   added after a surviving-mutation finding.
 
 ## Decision
@@ -238,7 +238,7 @@ Two further forces:
   §3.1 (line 159, the gate's proposal that `Schedule` is the root, to be confirmed
   here; line 166, the period invariant that Decision 6 now enforces), §3.3, §3.4,
   §3.5, §6 (line 1088).
-- Code: `features/staff/domain/entities/employee.py` 95–98 (pairwise validation on
+- Code: `features/staff/domain/entities/employee.py` 113–116 (pairwise validation on
   every construction path, including rehydration).
 - Skill `ddd-tactical-patterns` (§Aggregate, §Invariants, §DON'T).
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)

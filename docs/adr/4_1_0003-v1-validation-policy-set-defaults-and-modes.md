@@ -33,7 +33,7 @@ Forces:
 
 - `overview.md` §3 (line 42) lists the validations with an open "etc." — "sobreposição de
   alocação, descanso entre jornadas, tetos de horas **etc.**" — in **block or warn** mode, live,
-  with conscious acceptance. `roadmap.md` Stage 4.2 (1279, 1286) closes the list at four:
+  with conscious acceptance. `roadmap.md` Stage 4.2 (1312, 1319) closes the list at four:
   overlap, rest between shifts, daily/weekly cap, contracted workload.
 - `workforce.md` §1/§3.6 and [ADR 3.1.0001](./3_1_0001-workforce-gate-modeling-decisions.md)
   treat **allocation × unavailability** as "validação do Step 4" — it is not one of the four.
@@ -198,7 +198,7 @@ enters as a new strategy in the same protocol, still configurable per `overview.
   2026-09-26: covering a shift with one extra person is a normal restaurant act; forcing the
   manager to raise `N` first turns the demand into paperwork.
 - **J (over-coverage) — Allow silently.** *Rejected:* the surplus would be invisible, and
-  coverage — the metric the hub reports (`overview.md` 45) — would silently exceed the plan
+  coverage — the metric the hub reports (`overview.md` 46) — would silently exceed the plan
   with no acknowledgement in the audit trail.
 - **K (over-coverage) — Auto-raise `N` on acknowledgement.** *Rejected:* it would rewrite the
   plan to match the exception, losing the record of what was actually demanded (the same
@@ -253,7 +253,7 @@ enters as a new strategy in the same protocol, still configurable per `overview.
   (operational day, `hours(a)`).
 - [`overview.md`](../overview.md) — §3 lines 37, 39, 42, 45, 56; §3 ASSUM-4 (69); §6 line 110;
   §7 line 114.
-- [`roadmap.md`](../roadmap.md) — Stage 4.2 (1279–1299); Step 5 (1454).
+- [`roadmap.md`](../roadmap.md) — Stage 4.2 (1312–1332); Step 5 (1487).
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §1, §2, §3.1, §3.3, §3.4, §3.6.
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.4,
   §3.6, §6.

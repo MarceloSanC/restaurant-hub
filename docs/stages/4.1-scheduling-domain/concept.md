@@ -174,15 +174,15 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    `{schedule,shift_demand,assignment}`. A faixa habilitada ganha entidade
    própria (`ShiftBand`) porque o exemplo **ratificado** do overview põe **duas
    funções na mesma faixa** — *"qua = 1 cozinheiro 16h–00h + 1 assistente
-   18h–23h + 2 atendentes 16h–00h"* (`overview.md` 40) — e porque a mesma linha
+   18h–23h + 2 atendentes 16h–00h"* (`overview.md` 41) — e porque a mesma linha
    descreve **dois atos distintos**: *"por dia, habilitam-se faixas de horário
    livres **e** define-se a demanda por função × faixa"*. Com a faixa embutida em
    cada demanda, o `16h–00h` de quarta existiria em duas cópias, cada uma com o
    seu **intervalo declarado** — e o intervalo é da faixa (ADR 4.1.0002 §3), de
    onde sai a contagem de horas de todos os alocados. Ver ADR 4.1.0010.
 4. **A "descrição humana" do bloco está superada em um ponto.** `roadmap.md`
-   1213 pede *"o evento de publicação (salvar=publicar, com registro de
-   quem/quando)"* e o DoD (1229) fala em *"montagem e publicação"*; o
+   1253 pede *"o evento de publicação (salvar=publicar, com registro de
+   quem/quando)"* e o DoD (1269) fala em *"montagem e publicação"*; o
    **ADR 4.1.0001 §1** (posterior e `accepted`) aboliu rascunho e versão
    publicada — *"There is **no draft on the server** and **no published version
    separate from the schedule being edited**"* (linha 58) — e mandou o histórico
@@ -309,8 +309,8 @@ seguintes do Step 4.
   (`OperationalCalendar.default()`).
 - Tenancy row-level por `tenant_id` (ROADMAP-3) é herdada da fundação — a Stage
   só carrega o campo tipado.
-- O volume do piloto (ASSUM-4: **uma unidade** hoje, `overview.md` 69; ASSUM-5:
-  quadro de **dezenas de funcionários, não centenas**, `overview.md` 70) e o
+- O volume do piloto (ASSUM-4: **uma unidade** hoje, `overview.md` 70; ASSUM-5:
+  quadro de **dezenas de funcionários, não centenas**, `overview.md` 71) e o
   **período de 7 dias** (ADR 4.1.0002 §1 — não é ASSUM-5) tornam aceitável
   carregar o agregado inteiro por mutação; a estratégia de carga é decisão da 4.4.
 
@@ -741,7 +741,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     atendentes*") pela qual o ADR 4.1.0010 rejeitou a Alternativa A. Com o
     intervalo por alocação (§5.6), o caso real que a chave larga servia deixou de
     precisar dela. Faixas **distintas** continuam podendo se sobrepor — o exemplo
-    ratificado tem `16h–00h` e `18h–23h` na mesma quarta (`overview.md` 40).
+    ratificado tem `16h–00h` e `18h–23h` na mesma quarta (`overview.md` 41).
 11. **Demanda:** no máximo **uma por (faixa, função)** — garantido por
     construção, porque as demandas vivem **dentro** da faixa e o
     `job_function_id` é distinto par a par; `N >= 0`; `N` é **alvo, não teto**
@@ -995,7 +995,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   mesma faixa seriam só `N₁+N₂` e tornariam `alocados(demanda) > N` ambíguo;
   proibir faixas sobrepostas, no outro extremo, impediria o reforço de pico que o
   exemplo ratificado já insinua.
-- **Fonte:** `overview.md` 40 e 45; doc §2 (linha 107), §3.3 (lacuna), §3.6.8
+- **Fonte:** `overview.md` 41 e 46; doc §2 (linha 107), §3.3 (lacuna), §3.6.8
   (que **antecipa** a 4.1 admitir faixas sobrepostas da mesma função).
 - **ADR:** [`../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md`](../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md)
 
@@ -1012,7 +1012,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **Alternativa descartada:** declarar o alinhamento como "regra de fábrica" e
   aceitar que a reidratação o viole. Descartada porque o repo já tratou o mesmo
   caso em staff — a validação par a par da coleção inicial foi endurecida no
-  `__post_init__` justamente por uma mutação sobrevivente (`employee.py` 95–98;
+  `__post_init__` justamente por uma mutação sobrevivente (`employee.py` 113–116;
   `3.1/technical.md` §7, 2026-07-29).
 - **Fonte:** doc §3.1 (linha 166); ADR 4.1.0002 §1; ADR 4.1.0009 §Decision 6;
   §5.2; CA8 e CA10.
@@ -1024,7 +1024,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **Por quê:** BCs se comunicam por ports, nunca por import; importar os ids de
   staff é violação medida. Sem o contrato, a violação é possível e invisível.
 - **Fonte:** doc §3.10 (lacuna endereçada ao technical da 4.1);
-  ADR 3.4.0001 106–113; `.importlinter` 197–228; `check_layout.py` 130;
+  ADR 3.4.0001 106–113; `.importlinter` 197–277; `check_layout.py` 130;
   LAYOUT §3–§4; precedente: concept 3.1 §7.
 
 ### `Weekday` e `DayCutoff` co-locados em `operational_calendar.py`
@@ -1185,7 +1185,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   §13 Q5.
 - **Fonte:** **decisão do sponsor (2026-09-27, via sessão mestra)** — resposta
   literal: *"Sem teto (Recomendada)"*; ADR 4.1.0002 §2 linhas 70–79;
-  `overview.md` 110; CA4.
+  `overview.md` 111; CA4.
 
 ### `function_exception` sem mutação na v1 — por atribuição, não por regra
 - **O quê:** a v1 não expõe caminho para alterar `function_exception` numa alocação
@@ -1298,7 +1298,7 @@ erDiagram
 
 | Risco | Prob. | Impacto | Mitigação |
 |---|---|---|---|
-| A quarta entidade (`ShiftBand`) ser lida como scope creep sobre o bloco do roadmap | A | M | Divergência 3 da §1 com as duas âncoras ratificadas (`overview.md` 40); ADR 4.1.0010 com a alternativa descartada e o custo dela (intervalo declarado em duas cópias) |
+| A quarta entidade (`ShiftBand`) ser lida como scope creep sobre o bloco do roadmap | A | M | Divergência 3 da §1 com as duas âncoras ratificadas (`overview.md` 41); ADR 4.1.0010 com a alternativa descartada e o custo dela (intervalo declarado em duas cópias) |
 | Alguma das oito políticas virar invariante estrutural por descuido, tornando impossível o modo `warn` do tenant | M | A | Invariante 18 enumera a lista fechada **com as duas razões distintas** (modo configurável × dado ausente); CA13 exige que cada uma das **oito** (incluindo descanso entre jornadas) seja **aceita** pelo domínio, derivando a lista de §5.18 |
 | Remover uma faixa montada custar **4 mutações publicadas** (3 desalocações + desabilitar), cada uma auditada, versionada e notificada — o editor percebe como "o sistema me fez avisar 4 vezes" | A | M | Limite **declarado** em §3, §5.21 e §7 (custo da opção escolhida por Q1); a agregação do passo a passo numa ação é **lacuna de UX da 4.5**, e a cascata, se vier, nasce como use case da 4.3 — nunca como batch no domínio |
 | Horas dobradas na **interseção de faixas distintas sobrepostas** do mesmo registro (`16h–00h` + `18h–23h`): teto diário, teto semanal, carga e "horas escaladas" do hub contam a interseção duas vezes | B | A | O caso degenerado da **mesma** faixa foi **eliminado** por invariante (§5.23, `DuplicateAssignmentInBandError`, ADR 4.1.0012), e com ele o dobro sobre o **mesmo** intervalo; o que resta são dois turnos distintos, governados pela política de sobreposição (default `block`, ADR 4.1.0003 (c)) — só existe quando o tenant a põe em `warn` e aceita ciente; o tratamento da interseção é lacuna declarada da 4.2 (§8 (b)) |
@@ -1422,7 +1422,7 @@ erDiagram
 - [ ] **CA13 — o domínio NÃO recusa nenhuma das oito situações de política, e a
       lista é derivada de §5.18** `[teste]`: (1) mesmo registro em duas faixas
       **distintas** sobrepostas da **mesma** função (`16h–00h` e `18h–23h` da
-      mesma quarta, `overview.md` 40); (2) mesmo registro em duas **funções
+      mesma quarta, `overview.md` 41); (2) mesmo registro em duas **funções
       diferentes**, em faixas **distintas** parcialmente sobrepostas — o domínio
       não se importa com a diferença de função, e este é o caminho que **substituiu**
       "duas funções na mesma faixa", que a invariante 23 passou a recusar (§5.23;
@@ -1718,7 +1718,7 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
   registrada como `[decision] Checkpoint C`, 2026-07-29, e **não** como
   `[finding]`: a §7 da 3.1 não tem nenhuma entrada `[finding]`).
 - [`../../LAYOUT.md`](../../LAYOUT.md) §2–§4, §7; `.importlinter`
-  (`staff-domain-purity` 197–217, `bc-independence` 223–228);
+  (`staff-domain-purity` 197–217, `bc-independence` 271–277);
   `scripts/check_layout.py` (130); `scripts/check_docs_claims.py`;
   [`../../CONVENTIONS.md`](../../CONVENTIONS.md) §1, §2, §5 (errata de ADR), §6.
 - Skills: `ddd-tactical-patterns`, `hex-arch-python`.
