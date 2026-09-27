@@ -282,6 +282,11 @@ Sua **saída final** é um **relatório** com a estrutura abaixo:
 ```markdown
 ## Issue #<issue> — relatório de execução
 
+### 0. Valide você — leia isto primeiro
+(mesma estrutura do §0 do relatório do PROMPT-stage: superfície, ≤ 5 passos copiáveis com o
+esperado, saída bruta obtida, o que mostra, decisão P se houver. Issue só de docs/tooling: os
+passos são os comandos que provam a mudança — o gate, o script, o `grep`.)
+
 ### 1. Análise prévia
 - A issue ainda era válida? Algum drift identificado?
 - Impactos além do óbvio descobertos.
