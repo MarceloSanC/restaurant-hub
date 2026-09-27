@@ -74,7 +74,7 @@ graph LR
   end
   S12 --> S21
   S25 --> S31
-  S35 --> S41
+  S31 --> S41
   S47 --> S51
   S45 --> S61
   S12 --> S71
@@ -120,7 +120,7 @@ graph LR
 | `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
-| `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.5-employee-login-link` |
+| `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | draft | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
 | `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
@@ -1246,6 +1246,12 @@ skills_hint: [hex-arch-python, composition-root]
 > só ids de staff) — ajuste no kickoff da 4.1.
 
 #### Stage 4.1 — `4.1-scheduling-domain`
+
+> **Nota (2026-09-26): `depends_on` corrigido de `3.5-employee-login-link` para
+> `3.1-staff-domain`** (tabela de Stages e grafo). A relação com a 3.5 era **ordenação**, não
+> dependência técnica: a 4.1 consome apenas `EmployeeId`/`JobFunctionId` da 3.1 (por id, sem
+> import de entidade) e nada que a 3.5 introduz. A nota do Step 4 já registrava o ajuste como
+> pendente do kickoff (issue #55).
 
 **Descrição humana:** modelar Escala (período configurável, default semanal), Faixa/Turno por dia, Demanda por função×faixa, Alocação de funcionário e o evento de publicação (salvar=publicar, com registro de quem/quando); invariantes estruturais (demanda ≥ 0, alocação dentro do período etc.).
 
