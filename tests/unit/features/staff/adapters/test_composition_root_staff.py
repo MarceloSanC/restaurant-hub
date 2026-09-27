@@ -169,8 +169,9 @@ def test_ca18_a_lista_deste_teste_cobre_a_pasta_de_use_cases_inteira() -> None:
     """
     pasta = _SRC / "features" / "staff" / "application" / "use_cases"
     # Módulos `_`-prefixados são auxiliares da camada, não use cases — a mesma
-    # convenção de `test_application_guards.py`. O primeiro é `_results.py`
-    # (Stage 3.5), o mapper único de `EmployeeResult`.
+    # convenção de `test_application_guards.py`. Hoje não há nenhum: o mapper
+    # único de `EmployeeResult`, que a Stage 3.5 criou como `_results.py`, mora
+    # em `dtos/results.py` desde a sincronização com a issue #45.
     na_pasta = {arquivo.stem for arquivo in pasta.glob("*.py") if not arquivo.stem.startswith("_")}
     na_lista = {nome.removeprefix("staff_") for nome in _USE_CASES_DE_STAFF}
 

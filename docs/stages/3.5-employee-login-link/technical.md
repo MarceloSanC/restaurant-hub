@@ -1205,4 +1205,18 @@ do gate — "acompanha rota nova sem edição" — para toda rota futura com voc
 escrever o corpo sob medida resolveria só R17 e deixaria a próxima repetir o diagnóstico. É
 edição em arquivo de outra issue, registrada aqui por isso.
 
+### 2026-09-26 — [deviation] o mapper único da Task 03 mudou de endereço na sincronização com `develop` — Claude (autônomo)
+**Contexto:** a Task 03 (§2) e a árvore de pastas da §1 nomeiam
+`src/restaurant_hub/features/staff/application/use_cases/_results.py` com `employee_result(...)`.
+Esse módulo **não existe mais**: o commit de adaptação `58f6694` o apagou, porque a issue #45 trouxe
+a regra 8 do `check_layout` (mapper de result mora no módulo do DTO). O mapper é
+`to_employee_result` em `application/dtos/results.py`, e a Task 10 ganhou o irmão
+`to_employee_login_result` no mesmo módulo. Achado da auditoria da Stage (F3).
+**Razão:** a §2 e a §1 ficam como o plano executado — só esta seção é editável após `done` —, e esta
+entrada é o ponteiro para quem as ler. O que o plano prometia continua valendo no endereço novo: CA06
+(`grep "EmployeeResult(" use_cases/` vazio; varredura de AST em `test_dtos.py` com
+`_MODULO_DO_MAPPER = "dtos.results"` e 12 consumidores). Duas frases de `src/`/`tests/` que ainda
+davam o `_results.py` como vivo (`identity/application/use_cases/_invitation.py` e
+`test_composition_root_staff.py`) foram corrigidas junto.
+
 <!-- END: post-execution -->
