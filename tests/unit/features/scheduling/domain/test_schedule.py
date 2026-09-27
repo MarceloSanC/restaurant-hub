@@ -257,6 +257,13 @@ def test_shift_band_id_repetido_nao_consecutivo_e_recusado() -> None:
         )
 
 
+def test_faixa_repetida_por_inteiro_levanta_a_colisao_de_id_primeiro() -> None:
+    # Mesmo id e mesmo intervalo: a precedência é colisão de id (§7, [decision] da
+    # auditoria de mutação) — o terceiro nível da regra, ao lado de demanda e alocação.
+    with pytest.raises(DuplicateEntityIdError, match="ShiftBandId"):
+        _escala(_faixa("f1", _as(_SEXTA, 16), 4), _faixa("f1", _as(_SEXTA, 16), 4))
+
+
 def test_shift_demand_id_repetido_em_faixas_distintas_e_recusado() -> None:
     with pytest.raises(DuplicateEntityIdError, match="ShiftDemandId"):
         _escala(
