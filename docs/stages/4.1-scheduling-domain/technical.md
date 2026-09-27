@@ -1317,7 +1317,7 @@ espelho `tests/unit/features/scheduling/test_bc_independence.py` afirmava "nenhu
 no contrato; a 3.5 tornou isso falso por decisão registrada (ADR 3.5.0001), e a propriedade virou
 "nenhum par suprimido envolve scheduling" — inversão verificada à mão (par plantado com scheduling
 reprova; sem ele, passa). Commit da Task 01 corrigido antes de publicar. O rebase deslocou o roadmap
-em +39 linhas; 134 citações reajustadas por conteúdo (commit `3f66162`), 141 conferidas por conteúdo.
+em +39 linhas; 134 citações reajustadas por conteúdo (commit `3497161`), 141 conferidas por conteúdo.
 
 ### 2026-09-27 — [finding] ambiente de worktree — sessão mestra (Claude Opus 5.5)
 
@@ -1455,7 +1455,7 @@ Q2 não geram nota, porque o doc não fala de desabilitar nem de mover faixa. (b
 para pontos que não deslocam linha citada. Opções: (1) nota dentro de cada seção do doc e dentro do
 bloco 4.1 do roadmap, como os fechamentos anteriores; (2) nota do doc no §6, depois da última linha
 citada (1088), e sem nota no roadmap até a sessão mestra rodar o remapeador. **Escolhida (2):** medido
-contra `2a60359`, (1) deslocaria as 115 linhas do doc citadas pelo concept e pelos ADRs 4.1.x (que o
+contra `2a60359` (pré-rebase; publicado como `83bf4a3`), (1) deslocaria as 115 linhas do doc citadas pelo concept e pelos ADRs 4.1.x (que o
 fechamento não pode editar) e 317 linhas citadas do roadmap (a partir da 1276). Com (2), zero
 deslocamentos nos dois arquivos. Pelo mesmo motivo, `references:` do doc não recebe os ADRs 4.1.0007–0012
 (seis linhas no frontmatter; precedente: a nota da 3.5 em `workforce.md` também não os acrescentou).
@@ -1467,7 +1467,7 @@ findings com Stage candidata), pronta para inserir depois do bloco YAML da 4.1, 
 O rebase sobre a 3.5 mudou arquivos que este technical cita por linha (§1–§6, que estão congelados
 depois da aprovação). Os números abaixo valem para o estado atual; o texto citado é o mesmo,
 conferido por conteúdo com um verificador que atribui cada número ao arquivo citado antes dele
-(pré-rebase `34c506e` × hoje):
+(pré-rebase `34c506e`, publicado como `fa83d90`, × hoje):
 
 | Arquivo citado | Antes (§1–§6) | Hoje | Conteúdo |
 |---|---|---|---|
@@ -1530,7 +1530,9 @@ entrada de uma coleção se repete **por inteiro**, duas recusas valem ao mesmo 
 - em `ShiftDemand`, o mesmo `AssignmentId` com o mesmo `employee_id` casa com `DuplicateEntityIdError` e
   com `DuplicateAssignmentError`;
 - em `ShiftBand`, o mesmo `ShiftDemandId` com o mesmo `job_function_id` casa com `DuplicateEntityIdError`
-  e com `DuplicateShiftDemandError`.
+  e com `DuplicateShiftDemandError`;
+- em `Schedule`, o mesmo `ShiftBandId` com o mesmo intervalo casa com `DuplicateEntityIdError` e com
+  `DuplicateShiftBandError` (terceiro nível, apontado pela auditoria da Stage, F6).
 
 A §6 do concept não fixa a precedência, e a ordem das duas guardas podia ser trocada com a suíte
 verde. Opções: (a) **colisão de id primeiro**, que é a ordem atual; (b) duplicidade de conteúdo
@@ -1540,9 +1542,9 @@ primeiro. **Escolhida (a)**, por convenção, sem pergunta ao sponsor (não é d
 - a exceção escolhida define o status que a 4.5 devolve, então a precedência precisa estar travada,
   não deixada à ordem do código.
 
-Travada em `test_shift_demand.py` (`match="AssignmentId"`) e `test_shift_band.py`
-(`match="ShiftDemandId"`), com entrada idêntica nas duas posições. Reversível: é a ordem de duas
-guardas e dois testes.
+Travada em `test_shift_demand.py` (`match="AssignmentId"`), `test_shift_band.py`
+(`match="ShiftDemandId"`) e `test_schedule.py` (`match="ShiftBandId"`), com entrada idêntica nas duas
+posições. Reversível: é a ordem de três pares de guardas e três testes.
 
 ### 2026-09-27 — [decision] fechamento da execução — sessão mestra (Claude Opus 5.5)
 
@@ -1556,7 +1558,7 @@ correções dos três Checkpoints C e da auditoria de testes:
 | Checkpoint C — Tasks 08–10 | sem bloqueante; 3 importantes + 4 menores corrigidos (§6 do concept nomeia os métodos; matriz método × exceção cobrada nos dois sentidos; `task-09-fix`, `task-10-fix`); 1 `[finding]` → 4.3 |
 | Auditoria de testes (mutação real, agente independente) | 118 mutantes à mão: 111 mortos, 1 equivalente, 6 sobreviventes — mortos por testes novos (commit dos sobreviventes), cada um reprovando sob o mutante |
 | Verificação ponta a ponta | script com objetos de domínio reais (sem fakes): semana alinhada, pausa 7h × 8h com divergência, recusa da mesma pessoa em duas vagas da faixa, madrugada no dia do início, faixa movida preservando vagas e pessoas, recusa de desabilitar com gente alocada, no-op sem versão nova |
-| Citações de linha | 814 citações dos artefatos da Stage conferidas por conteúdo depois dos três rebases (3.5, PR #57, PR #62) |
+| Citações de linha | a contagem original (814, "0 remapeáveis") estava **errada** — ver o `[deviation]` da auditoria da Stage abaixo |
 
 **Isolamento da auditoria de mutação.** A primeira tentativa, numa worktree destacada descartável,
 foi recusada pelo hook `git_guard` (PR #57) e o desvio por cópia exportada foi recusado pelo
@@ -1568,5 +1570,44 @@ hook aceitar `worktree add --detach` — decisão do sponsor, que é quem config
 **Gates de saída** (evidência no relatório de execução e no PR): `make check` verde,
 cobertura dos arquivos novos do BC a 100%, `check_technical_postexec.py` verde, ADRs 4.1.0007–0012
 `accepted`, roadmap com a 4.1 `done` e a nota de reconciliação.
+
+### 2026-09-27 — [deviation] a conferência de citações do fechamento media só as formas que reconhecia — sessão mestra (Claude Opus 5.5)
+
+Achado F1 (bloqueante) da auditoria da Stage. O fechamento afirmou "814 citações conferidas, 0
+remapeáveis" (tabela acima e commits `60dd9d7`/`cbd851a`). **Era falso:** o verificador só atribuía
+um número ao arquivo quando a forma da citação era uma das que ele conhecia. Escaparam:
+- `overview.md §3 (40, 43)` — a janela parava no `§`;
+- `Overview (line 43)` com maiúscula, `linhas NN–MM` e `.importlinter 223–228` no concept;
+- número seguido de ponto final (`overview.md 114.`, `roadmap.md 1481.`);
+- citações do roadmap num doc em que a contagem mudou entre base e hoje — o pareamento era posicional
+  e desistia do arquivo inteiro.
+
+**Correção.** O verificador passou a reconhecer essas formas e a parear por contexto (40 caracteres
+antes do número) quando a contagem muda. Cada remapeamento só é aplicado quando o texto da linha
+citada na base é igual ao da linha de destino hoje. Resultado:
+- 1.139 citações pareadas (doc de domínio 581, ADRs 4.1.0001–0012 288, concept 270);
+- 67 corrigidas (63 pelo verificador, 4 à mão no doc de domínio: `roadmap.md` 1481→1517,
+  1253→1256, 1454→1490 e 820–821→824–825);
+- 1 remapeamento rejeitado: `roadmap.md` 1219 seria movida para 1218, uma linha em branco; a base
+  citava por engano a linha em branco antes do título do Step 4, e 1219 é o título.
+
+As citações de §1–§6 deste technical ficam como estão (congeladas; a tabela do `[deviation]` do rebase
+acima as traduz). As citações da §7 foram conferidas à mão.
+
+**Lição.** "0 remapeáveis" só vale para as formas de citação que o verificador reconhece. Antes de
+afirmar a totalidade, é preciso enumerar as formas sintáticas presentes nos docs.
+
+### 2026-09-27 — [finding] marcação dos commits da Stage — sessão mestra (Claude Opus 5.5)
+
+Achado F7 da auditoria da Stage (observação; a história publicada **não** é reescrita):
+- quatro commits de remapeamento da Fase 4 saíram sem marca `[4.1/…]`: `3497161`, `e3d2ac6`,
+  `60dd9d7`, `cbd851a`. O CONVENTIONS §4 pede que toda mudança na branch da Stage seja commit de Task;
+- 9 commits `[4.1/--]` contra a faixa saudável de 0–2 (a 3.6 teve 31 — prática recorrente do repo);
+- as marcas `-fix` (`task-03-fix`, `task-09-fix`...) não estão na gramática canônica (a issue #34 promove o sufixo);
+- os testes extras da auditoria de mutação usaram `[4.1/--]` em vez de `[4.1/task-NN-extra]`.
+
+O hook de mensagem aceitou tudo isso em silêncio: o grupo da marca em `scripts/check_commit_msg.py`
+é opcional, e uma marca malformada vira parte da descrição (F9). Isso é tooling e fica fora da
+Stage: registrado na issue #34, que já trata do sufixo `-fix`. Os commits de correção desta auditoria usam `[4.1/--]`.
 
 <!-- END: post-execution -->
