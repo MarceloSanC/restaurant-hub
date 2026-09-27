@@ -531,6 +531,32 @@ def test_reschedule_band_nao_colide_com_a_propria_faixa() -> None:
     assert reagendada.band(ShiftBandId("f1")).time_range.start == _as(_SEXTA, 15)
 
 
+def test_reschedule_band_com_destino_que_cruza_o_corte_e_do_dia_do_start() -> None:
+    # Sexta 22:00 a sábado 06:00: o fim cai depois do corte de sábado, e o dia é o
+    # do início (§5.8, ADR 4.1.0008) — Checkpoint C do bloco 3, item 2.
+    reagendada = _base().reschedule_band(
+        ShiftBandId("f1"), _as(_SEXTA, 22), _as(_SEXTA + timedelta(days=1), 6)
+    )
+    faixa = reagendada.band(ShiftBandId("f1"))
+    assert reagendada.calendar.operational_day_of(faixa.time_range.end) != _SEXTA
+    assert reagendada.operational_day_of(faixa) == _SEXTA
+
+
+def test_reschedule_band_cujo_start_cai_no_dia_anterior_e_recusado_mesmo_com_fim_no_dia() -> None:
+    # Quinta 22:00 a sexta 06:00: o fim é da sexta (o dia da faixa), o início não.
+    with pytest.raises(ShiftBandDayChangeError):
+        _base().reschedule_band(ShiftBandId("f1"), _as(_QUINTA, 22), _as(_SEXTA, 6))
+
+
+def test_reschedule_band_do_ultimo_dia_para_depois_do_periodo_pelo_fim_e_aceito() -> None:
+    # ADR 4.1.0008 §3 pelo caminho do reagendamento: domingo 22:00 a segunda 06:00.
+    escala = _base().enable_band(ShiftBandId("f9"), _tr(_DOMINGO, 18, 3))
+    reagendada = escala.reschedule_band(
+        ShiftBandId("f9"), _as(_DOMINGO, 22), _as(_SEGUNDA_SEGUINTE, 6)
+    )
+    assert reagendada.operational_day_of(reagendada.band(ShiftBandId("f9"))) == _DOMINGO
+
+
 # --- CA25 (fecha): uma vaga por registro na faixa, nos dois sentidos ------------------
 
 

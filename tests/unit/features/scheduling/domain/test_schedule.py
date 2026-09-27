@@ -443,6 +443,43 @@ def test_alocacao_sem_declaracao_herda_o_intervalo_da_faixa_pela_raiz() -> None:
     assert escala.has_break_divergence(AssignmentId("a1")) is False
 
 
+def test_intervalo_herdado_vem_da_faixa_que_contem_a_alocacao() -> None:
+    # Checkpoint C do bloco 3, item 3: alocação SEM intervalo próprio na SEGUNDA
+    # faixa, com intervalo diferente do da primeira. Uma raiz que lesse sempre a
+    # primeira faixa devolveria 0.
+    escala = _escala(
+        _faixa("f1", _as(_SEXTA, 8), 6, _dem("d1", "cozinheiro", _aloc("a1", "ana"))),
+        _faixa(
+            "f2",
+            _as(_SEXTA, 16),
+            8,
+            _dem("d2", "cozinheiro", _aloc("a2", "bia")),
+            break_minutes=30,
+        ),
+    )
+    assert escala.effective_break_minutes_of(AssignmentId("a2")) == 30  # noqa: PLR2004
+    assert escala.worked_minutes_of(AssignmentId("a2")) == 8 * 60 - 30
+    assert escala.effective_break_minutes_of(AssignmentId("a1")) == 0
+    assert escala.worked_minutes_of(AssignmentId("a1")) == 6 * 60
+
+
+def test_worked_minutes_of_passa_pelo_sitio_unico(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Teste-espião (Checkpoint C do bloco 3, item 5): a anotação `int` não impede
+    # uma segunda aritmética dentro de `worked_minutes_of`; a sentinela sim.
+    sentinela = 987_654
+    chamadas: list[int | None] = []
+
+    def espiao(self: TimeRange, break_minutes: int | None = None) -> int:
+        chamadas.append(break_minutes)
+        return sentinela
+
+    escala = _escala_de_duas_faixas()
+    monkeypatch.setattr(TimeRange, "worked_minutes", espiao)
+    assert escala.worked_minutes_of(AssignmentId("a1")) == sentinela
+    # Uma chamada, com o intervalo efetivo que a faixa calcula (60, declarado).
+    assert chamadas == [_UMA_HORA]
+
+
 # --- CA12 (parcial): as linhas das leituras na matriz §6 ------------------------------
 
 
