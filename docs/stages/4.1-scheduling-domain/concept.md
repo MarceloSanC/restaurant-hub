@@ -1325,7 +1325,7 @@ erDiagram
 > listas mudar, o critério derivado muda com ela — foi a lição de "teste trava o
 > caso, não a propriedade".
 
-- [ ] **CA1 — `TimeRange` rejeita os 6 defeitos enumerados, e a lista de aceites
+- [x] **CA1 — `TimeRange` rejeita os 6 defeitos enumerados, e a lista de aceites
       é explícita** `[teste]`: recusa com `InvalidTimeRangeError` para `start`
       tz-aware; `end` tz-aware; segundo/microssegundo não zero em `start` ou em
       `end`; `start == end`; `start > end`; duração nominal > 24h. **Aceita**
@@ -1333,32 +1333,32 @@ erDiagram
       fechamento sobre universo aberto): 24h exatas; `break_minutes = 0`;
       `break_minutes = nominal_minutes - 1`; faixa que cruza a meia-noite civil;
       faixa que cruza o corte.
-- [ ] **CA2 — intervalo declarado da faixa:** `break_minutes` negativo e
+- [x] **CA2 — intervalo declarado da faixa:** `break_minutes` negativo e
       `break_minutes == nominal_minutes` são recusados
       (`InvalidTimeRangeError`); `0` (default) e `nominal_minutes - 1` são
       aceitos; `worked_minutes() == nominal_minutes - break_minutes` nos três
       casos aceitos `[teste]`.
-- [ ] **CA3 — `overlaps` cobre a tabela-verdade semi-aberta:** sobreposição
+- [x] **CA3 — `overlaps` cobre a tabela-verdade semi-aberta:** sobreposição
       parcial, contenção total, identidade e **adjacência (`end == start`) não
       sobrepõe**; simetria `a.overlaps(b) == b.overlaps(a)` nos 4 casos; faixa que
       cruza a meia-noite civil não recebe tratamento especial `[teste]`.
-- [ ] **CA4 — dia operacional, inclusive com corte tardio:** para cada um dos 3
+- [x] **CA4 — dia operacional, inclusive com corte tardio:** para cada um dos 3
       casos do corte `05:00` (instante antes do corte → dia anterior; exatamente
       no corte → mesmo dia; depois → mesmo dia), `DayCutoff.operational_day_of`
       devolve o dia esperado; com corte `00:00` o dia operacional coincide com o
       civil; **com corte `23:00`, o jantar de sexta 22:00 tem dia operacional
       quinta** — o caso em que a implementação ingênua "sempre o dia civil" passa
       nos dois primeiros e falha aqui `[teste]`.
-- [ ] **CA5 — faixa que ultrapassa o corte seguinte:** `22:00–06:00` com corte
+- [x] **CA5 — faixa que ultrapassa o corte seguinte:** `22:00–06:00` com corte
       `05:00` é **aceita** e o seu dia operacional é o do `start`; **e a faixa que
       começa no último dia operacional do período e termina depois dele é
       aceita** por `enable_band` (o caso que o ADR 4.1.0008 §3 declara **válido**,
       e que nenhum critério exercitava) `[teste]`.
-- [ ] **CA6 — `Weekday`:** o conjunto é exatamente
+- [x] **CA6 — `Weekday`:** o conjunto é exatamente
       `{MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY}` (nomes
       **e** valores); `from_date` bate com `isoweekday()` nos 7 dias; texto fora
       do conjunto → `InvalidWeekdayError` via `from_string` `[teste]`.
-- [ ] **CA7 — `DayCutoff`/`OperationalCalendar`:** `time` tz-aware e com
+- [x] **CA7 — `DayCutoff`/`OperationalCalendar`:** `time` tz-aware e com
       segundo/microssegundo não zero → `InvalidDayCutoffError`;
       `OperationalCalendar.default()` é `MONDAY` + `05:00` `[teste]`. E os dois
       valores aparecem **uma** vez em `src/` `[gate]`, com o comando literal e o
@@ -1367,16 +1367,16 @@ erDiagram
       deve devolver **exatamente** as linhas de `OperationalCalendar.default()`.
       Escopo: só `src/` do BC `scheduling`; **fora** do escopo os testes, as
       docstrings e a definição dos 7 membros do `StrEnum` `Weekday`.
-- [ ] **CA8 — `SchedulePeriod`:** `days < 1` e `days > 31` →
+- [x] **CA8 — `SchedulePeriod`:** `days < 1` e `days > 31` →
       `InvalidSchedulePeriodError`; `days = 1` e `days = 31` aceitos;
       `last_day == first_day + 6` com `days=7`; `operational_days` tem `days`
       elementos, em ordem, sem repetição; `contains` é verdadeiro nos 7 dias e
       falso no anterior ao primeiro e no seguinte ao último; `period_starting_on`
       com dia inicial diferente do `week_start` configurado →
       `InvalidSchedulePeriodError` `[teste]`.
-- [ ] **CA9 — `DemandQuantity`:** `-1` → `InvalidDemandQuantityError`; `0` e
+- [x] **CA9 — `DemandQuantity`:** `-1` → `InvalidDemandQuantityError`; `0` e
       valores positivos aceitos `[teste]`.
-- [ ] **CA10 — as invariantes do agregado valem na construção direta** (caminho
+- [x] **CA10 — as invariantes do agregado valem na construção direta** (caminho
       da reidratação da 4.4), e não só nas mutações `[teste]`: `Schedule` com duas
       faixas de `(start, end)` igual → `DuplicateShiftBandError`; com faixa fora
       do período → `TimeRangeOutsidePeriodError`; com `version=0` →
@@ -1396,19 +1396,19 @@ erDiagram
       coleção inteira**, provada com um par **não consecutivo** em coleção de 3
       (lição do Checkpoint C da 3.1, `[decision]` em
       `3.1-staff-domain/technical.md` §7, 2026-07-29).
-- [ ] **CA11 — cada uma das 11 mutações da raiz** (`enable_band`,
+- [x] **CA11 — cada uma das 11 mutações da raiz** (`enable_band`,
       `reschedule_band`, `redeclare_band_break`, `disable_band`,
       `declare_demand`, `change_demand_quantity`, `withdraw_demand`, `assign`,
       `unassign`, `declare_workload_counting`, `declare_allocation_break`)
       devolve **nova instância** com `version == anterior + 1` e deixa a instância
       original intacta — teste parametrizado sobre as 11, derivado da enumeração
       de §4 `[teste]`.
-- [ ] **CA11b — cláusula de no-op:** `reschedule_band` para o próprio
+- [x] **CA11b — cláusula de no-op:** `reschedule_band` para o próprio
       `(start, end)`, `redeclare_band_break` para o próprio intervalo,
       `declare_workload_counting` e `declare_allocation_break` para o valor
       corrente devolvem **`self`**, com `version` **inalterada** e **sem**
       `DuplicateShiftBandError` `[teste]`.
-- [ ] **CA12 — caminho negativo de cada transição, derivado da matriz da §6**
+- [x] **CA12 — caminho negativo de cada transição, derivado da matriz da §6**
       `[teste]`: o teste é parametrizado pelo produto **(método × exceção)** que a
       tabela declara — os 5 métodos de `ShiftBandNotFoundError`, os 4 de
       `ShiftDemandNotFoundError`, os 7 de `AssignmentNotFoundError`, os 2 caminhos
@@ -1419,7 +1419,7 @@ erDiagram
       `DuplicateAssignmentInBandError` em `assign` (outra demanda da **mesma**
       faixa). Nenhuma célula da tabela fica sem asserção; se a §6 crescer, o teste
       cresce com ela.
-- [ ] **CA13 — o domínio NÃO recusa nenhuma das oito situações de política, e a
+- [x] **CA13 — o domínio NÃO recusa nenhuma das oito situações de política, e a
       lista é derivada de §5.18** `[teste]`: (1) mesmo registro em duas faixas
       **distintas** sobrepostas da **mesma** função (`16h–00h` e `18h–23h` da
       mesma quarta, `overview.md` 41); (2) mesmo registro em duas **funções
@@ -1443,7 +1443,7 @@ erDiagram
       (derivada do conjunto público de §4, irmã de CA18) — mais o aceite do estado
       que as representa. Os itens (1), (2), (4), (5), (6) e o lado "sobre-cobertura"
       de (8) discriminam de fato, com estado observável.
-- [ ] **CA14 — as três marcas da alocação** `[teste]`: default de
+- [x] **CA14 — as três marcas da alocação** `[teste]`: default de
       `counts_toward_workload` é `True`, de `function_exception` é `False` e de
       `break_minutes` é `None`; **`assign` grava na alocação criada as duas marcas
       que recebe por keyword** (`counts_toward_workload` e `function_exception`,
@@ -1456,14 +1456,14 @@ erDiagram
       numa alocação existente — asserção sobre o conjunto público enumerado de §4,
       rotulada como **estado da v1** (a mutação é lacuna da 4.2, §7), não como
       irrevogabilidade.
-- [ ] **CA15 — entidades e VOs, sobre o conjunto público enumerado** `[teste]`: as
+- [x] **CA15 — entidades e VOs, sobre o conjunto público enumerado** `[teste]`: as
       4 entidades são **frozen** (atribuição direta levanta `FrozenInstanceError`)
       e comparam por id (duas instâncias de id igual e conteúdo diferente são
       iguais e têm o mesmo `hash`); os 6 VOs comparam por valor; e **cada uma das
       8 leituras de `Schedule` enumeradas em §4** devolve `tuple`/valor imutável —
       nenhuma devolve `list`, `dict`, `set` nem a coleção interna (o teste itera a
       lista de §4, não um representante).
-- [ ] **CA16 — o sítio de horas é único, sobre a superfície enumerada** `[teste]`:
+- [x] **CA16 — o sítio de horas é único, sobre a superfície enumerada** `[teste]`:
       `Schedule.worked_minutes_of` devolve `nominal_minutes − intervalo efetivo` da
       faixa que contém a alocação; id inexistente → `AssignmentNotFoundError`; e
       **nenhum outro membro público de `Schedule`, `ShiftBand`, `ShiftDemand` ou
@@ -1471,19 +1471,19 @@ erDiagram
       público enumerado em §4 (`effective_break_minutes_of` devolve minutos de
       **intervalo**, não trabalhados, e é a única outra leitura em minutos), no
       padrão de CA17 (conjunto derivado, não representante).
-- [ ] **CA17 — hierarquia de erros:** as **20** exceções declaradas em §4 herdam de
+- [x] **CA17 — hierarquia de erros:** as **20** exceções declaradas em §4 herdam de
       `SchedulingError` → `DomainError`, e o conjunto público do módulo de
       exceções é **exatamente** essas 20 mais a raiz (teste sobre o conjunto
       derivado, não sobre um representante) `[teste]`.
-- [ ] **CA18 — domínio puro** `[gate]`: sem I/O e sem import de
+- [x] **CA18 — domínio puro** `[gate]`: sem I/O e sem import de
       application/adapters/frameworks/outros BCs — `make check` verde, incluindo o
       contrato novo `scheduling-domain-purity` e `scheduling` dentro de
       `bc-independence`; `python scripts/check_layout.py` verde com os
       placeholders `application/`/`adapters/`; nenhum arquivo novo em
       `domain/services/` (o `[planejado]` do LAYOUT §2 continua verdadeiro em
       `check_docs_claims.py`).
-- [ ] **CA19 — cobertura ≥ 90%** em cada arquivo `src/` tocado `[gate]`.
-- [ ] **CA20 — as duas guardas de remoção e o caso sem alocação** (Q1 — decisão do
+- [x] **CA19 — cobertura ≥ 90%** em cada arquivo `src/` tocado `[gate]`.
+- [x] **CA20 — as duas guardas de remoção e o caso sem alocação** (Q1 — decisão do
       sponsor) `[teste]`: `disable_band` numa faixa com alocação →
       `ShiftBandInUseError`; `withdraw_demand` numa demanda com alocação →
       `ShiftDemandInUseError`; **`disable_band` numa faixa com demandas e sem
@@ -1491,7 +1491,7 @@ erDiagram
       `locate_demand` do id removido → `ShiftDemandNotFoundError`);
       **`withdraw_demand` numa demanda de `N > 0` sem alocados passa**. Os dois
       últimos fixam a cascata **declarada** em §5.21, que nenhum critério cobria.
-- [ ] **CA21 — reagendamento preservador e as suas cinco restrições** (Q2 —
+- [x] **CA21 — reagendamento preservador e as suas cinco restrições** (Q2 —
       decisão do sponsor) `[teste]`: `reschedule_band` de `16h–00h` para
       `17h–01h` **preserva** os ids, as demandas, as alocações e o
       `break_minutes` da faixa (comparação do conteúdo antes/depois, não só do
@@ -1501,14 +1501,14 @@ erDiagram
       ao atual → `self`, versão inalterada (CA11b); e **encurtar a faixa abaixo de
       um intervalo já declarado** (da faixa → `InvalidTimeRangeError`; de uma
       alocação → `InvalidAssignmentBreakError`).
-- [ ] **CA22 — os 8 identificadores recusam vazio e só-whitespace** `[teste]`:
+- [x] **CA22 — os 8 identificadores recusam vazio e só-whitespace** `[teste]`:
       teste parametrizado sobre os **8 tipos** (`ScheduleId`, `ShiftBandId`,
       `ShiftDemandId`, `AssignmentId`, `TenantId`, `UnitId`, `EmployeeId`,
       `JobFunctionId`), em **cada** entidade que os carrega, com `""` e `"   "` →
       `InvalidIdentifierError`. É o critério que a 3.1 tinha (*"Construção de
       `Employee`/`JobFunction` com **cada** identificador vazio ou só-whitespace
       lança `InvalidIdentifierError`"*) e que faltava aqui.
-- [ ] **CA23 — o intervalo nos dois níveis e a divergência** (Q3 — decisão do
+- [x] **CA23 — o intervalo nos dois níveis e a divergência** (Q3 — decisão do
       sponsor; ADR 4.1.0011) `[teste]`: numa faixa `16h–00h` com
       `break_minutes=0`, a alocação do cozinheiro com `break_minutes=60` tem
       `effective_break_minutes_of == 60`, `worked_minutes_of == 420` e
@@ -1520,7 +1520,7 @@ erDiagram
       `>= nominal_minutes` → `InvalidAssignmentBreakError`; e **duas faixas
       `16h–00h` com intervalos 0 e 60 no mesmo dia → `DuplicateShiftBandError`**
       (a chave é `(start, end)`).
-- [ ] **CA24 — leituras da raiz no caminho positivo** `[teste]`:
+- [x] **CA24 — leituras da raiz no caminho positivo** `[teste]`:
       `bands_of(operational_day)` agrupa pelo **dia operacional**, não pelo civil —
       a faixa de sábado `02:00–06:00` com corte `05:00` aparece em
       `bands_of(sexta)` e **não** em `bands_of(sábado)` (o caso que uma
@@ -1528,7 +1528,7 @@ erDiagram
       `locate_demand` devolve o par `(faixa, demanda)` correto e `locate_assignment`
       a tripla `(faixa, demanda, alocação)` correta, em agregado com 2 faixas e 2
       demandas por faixa.
-- [ ] **CA25 — uma vaga por registro em cada faixa, nos dois sentidos** (Q4 —
+- [x] **CA25 — uma vaga por registro em cada faixa, nos dois sentidos** (Q4 —
       decisão do sponsor; ADR 4.1.0012) `[teste]`:
       **negativo** — numa faixa `16h–00h` de sexta com uma demanda de cozinheiro e
       uma de atendente, `assign` da Ana à vaga de cozinheiro passa e o segundo
