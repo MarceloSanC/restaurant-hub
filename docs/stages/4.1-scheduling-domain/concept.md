@@ -3,7 +3,7 @@ title: Concept — Domínio da escala
 description: Modelagem do núcleo de domínio do BC scheduling — o agregado Escala (faixa habilitada por dia, demanda por função × faixa, alocação com as duas marcas), o período de dias operacionais com dia de início configurável, o corte que define o dia operacional e a regra única de contagem de horas
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, scheduling-domain, escala, faixa, dia-operacional, horario-de-corte, demanda, alocacao, agregado, intervalo-declarado, intervalo-efetivo, divergencia-de-intervalo, vaga-unica-por-faixa, versao, conta-para-a-carga, excecao-de-funcao]
-status: done
+status: draft
 created_at: 2026-09-26
 updated_at: 2026-09-27
 stage_id: 4.1-scheduling-domain
@@ -217,6 +217,16 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    registrando o termo — precedente: a reconciliação de `workforce.md` com o gate
    da 3.x. Enquanto a nota não entrar, o doc canônico fica sem o termo central da
    4.1, e este item é o registro dessa pendência.
+9. **O file-scope passa por dois testes fora de `features/scheduling/`.**
+   `tests/unit/test_status_map.py` e `tests/unit/features/staff/test_bc_independence.py`
+   fixam a lista dos dois bounded contexts de hoje e presumem que todo BC tem
+   `application/errors.py`. O terceiro BC os reprova no primeiro commit, e por isso
+   eles entram na Task 01: a lista explícita ganha `scheduling`, a importação dos
+   módulos de erro tolera o sufixo ausente (com asserção de que ao menos um existe,
+   para a varredura não virar verdade vácua) e o contrato de independência passa a
+   ser cobrado contra a pasta, para o quarto BC não entrar em silêncio. São
+   varreduras de **nível de repositório**, não de BC — o plano de execução declara
+   o mesmo item no §1 do [`technical.md`](./technical.md).
 
 ## 2. Objetivo da Stage
 
@@ -891,7 +901,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
 | `SchedulePeriod` com `days < 1` ou `days > 31`; `period_starting_on` com dia inicial que não é o dia de início configurado; **`Schedule` cujo `period.first_day` não cai no `week_start` do calendário fotografado** (construção direta e reidratação) | `InvalidSchedulePeriodError` |
 | `DemandQuantity` com valor negativo | `InvalidDemandQuantityError` |
 | `Schedule` com `version < 1` | `InvalidScheduleVersionError` |
-| `Assignment.break_minutes` negativo, ou `>= nominal_minutes` da faixa que a contém (construção, `assign`, `declare_allocation_break`, ou `reschedule_band` que encurta a faixa) | `InvalidAssignmentBreakError` |
+| `Assignment.break_minutes` negativo, ou `>= nominal_minutes` da faixa que a contém (construção direta/reidratação, `declare_allocation_break` — a **única** mutação que declara o intervalo da alocação —, ou `reschedule_band` que encurta a faixa abaixo de um intervalo já declarado) | `InvalidAssignmentBreakError` |
 | Dois `ShiftBandId`, dois `ShiftDemandId` ou dois `AssignmentId` iguais dentro de uma `Schedule` (construção direta e reidratação; par a par, em qualquer nível) | `DuplicateEntityIdError` |
 | Habilitar faixa cujo par `(start, end)` já existe na escala; `reschedule_band` cujo destino colide com o par de **outra** faixa | `DuplicateShiftBandError` |
 | Habilitar/mover faixa que começa fora dos dias operacionais do período | `TimeRangeOutsidePeriodError` |
@@ -1435,8 +1445,12 @@ erDiagram
       de (8) discriminam de fato, com estado observável.
 - [ ] **CA14 — as três marcas da alocação** `[teste]`: default de
       `counts_toward_workload` é `True`, de `function_exception` é `False` e de
-      `break_minutes` é `None`; `assign` grava os três valores passados
-      explicitamente; `declare_workload_counting` alterna a primeira;
+      `break_minutes` é `None`; **`assign` grava na alocação criada as duas marcas
+      que recebe por keyword** (`counts_toward_workload` e `function_exception`,
+      inclusive quando o valor passado é o mesmo do default) **e a terceira nasce
+      `None`** — a assinatura de `assign` (§4) não recebe intervalo, que é sempre
+      herdado da faixa até `declare_allocation_break` declarar o seu;
+      `declare_workload_counting` alterna a primeira;
       `declare_allocation_break` declara e **limpa** (`None`) a terceira; e **na
       superfície pública da v1 não existe** método que altere `function_exception`
       numa alocação existente — asserção sobre o conjunto público enumerado de §4,
@@ -1555,21 +1569,27 @@ erDiagram
       confirmação do ADR 4.1.0002 §2, registrada em §7 e §13)
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)?
       (`3.1-staff-domain` `done` e mergeada; base `origin/develop` `b69ab6e`)
-- [x] Stage cabe em ~3–12 Tasks? **Medição honesta: 11 Tasks** — (1) esqueleto da
-      feature + placeholders + contratos `.importlinter` + `identifiers`; (2)
-      hierarquia de exceções (20 + raiz); (3) `TimeRange` (incluindo
-      `worked_minutes` parametrizado e `with_bounds`/`with_break`); (4) `Weekday` +
-      `DayCutoff`; (5) `SchedulePeriod` + `OperationalCalendar` (teto, alinhamento,
-      `operational_days`); (6) `DemandQuantity` + `Assignment` (três marcas,
-      intervalo opcional); (7) `ShiftDemand`; (8) `ShiftBand` (intervalo efetivo,
+- [x] Stage cabe em ~3–12 Tasks? **Medição honesta: 10 Tasks** — (1) esqueleto da
+      feature + placeholders + contratos `.importlinter` + `identifiers` + a
+      hierarquia de exceções (20 + raiz) + as varreduras de nível de repositório
+      que o terceiro BC passa a alimentar; (2) `TimeRange` (incluindo
+      `worked_minutes` parametrizado e `with_bounds`/`with_break`); (3) `Weekday` +
+      `DayCutoff`; (4) `SchedulePeriod` + `OperationalCalendar` (teto, alinhamento,
+      `operational_days`); (5) `DemandQuantity` + `Assignment` (três marcas,
+      intervalo opcional); (6) `ShiftDemand`; (7) `ShiftBand` (intervalo efetivo,
       divergência, validação do intervalo das alocações, **uma vaga por registro na
-      faixa**); (9) `Schedule` —
-      construção e invariantes do agregado (alinhamento, `(start, end)`, ids
-      internos); (10) `Schedule` — as 9 mutações estruturais e a lei da versão;
-      (11) `Schedule` — as 2 mutações de intervalo (`redeclare_band_break`,
-      `declare_allocation_break`), a cláusula de no-op e as restrições de
-      `reschedule_band`.
-      **Por que 11 e não 10:** o Checkpoint A recontou a medição anterior em 11–12
+      faixa**); (8) `Schedule` — construção, invariantes do agregado (alinhamento,
+      `(start, end)`, ids internos) e as 8 leituras; (9) `Schedule` — as 9 mutações
+      estruturais e a lei da versão; (10) `Schedule` — as 2 mutações de intervalo
+      (`redeclare_band_break`, `declare_allocation_break`), a cláusula de no-op e as
+      restrições de `reschedule_band`.
+      **Por que 10, e não as 11 medidas no Checkpoint A:** a Fase 3B mostrou que
+      esqueleto e hierarquia de exceções **não podem** ser dois commits — criar
+      `features/scheduling/` e registrar o BC em `bc-independence` reprova três
+      varreduras de nível de repositório que só ficam verdes quando a raiz de erro
+      do BC já existe (`_raiz_de_erro`, `_TOTAIS_MINIMOS`, a cobrança da lista de
+      BCs contra a pasta). O corte é ditado pelas totalidades, como na 3.6. Antes
+      disso, o Checkpoint A recontou a medição original em 11–12
       (a Task 1 empacota 4 frentes e a Task 10 empacotava 9 mutações + a lei da
       versão); as decisões do sponsor acrescentaram 2 mutações, 3 exceções e o
       intervalo em dois níveis, e empacotá-las na Task 10 a tornaria maior do que
