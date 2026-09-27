@@ -1610,4 +1610,21 @@ O hook de mensagem aceitou tudo isso em silêncio: o grupo da marca em `scripts/
 é opcional, e uma marca malformada vira parte da descrição (F9). Isso é tooling e fica fora da
 Stage: registrado na issue #34, que já trata do sufixo `-fix`. Os commits de correção desta auditoria usam `[4.1/--]`.
 
+### 2026-09-27 — [deviation] re-auditoria da Stage: uma correção à mão do F1 estava errada — sessão mestra (Claude Opus 5.5)
+
+Achado R1 da re-auditoria 1. O `[deviation]` do F1 acima lista `820–821→824–825` entre as
+correções à mão, conferidas. **Não foi conferida por conteúdo:** o intervalo base era `816–820`,
+e o verificador truncou o fim ao remapear. O trecho citado é o do controle otimista "sem Stage
+candidata", que hoje está em `roadmap.md` **820–824**. Essa é a mesma âncora que o doc de domínio
+usa na §3 (l. 385) e o ADR 4.1.0001 (l. 48 e 178). Corrigido para `820–824` no doc de domínio. A
+entrada anterior fica como estava; esta a corrige.
+
+Observações da mesma re-auditoria:
+- **O1.** Corrigidas no mesmo commit. Ao lado de `.importlinter` 271–277/274–277, o concept e o doc
+  de domínio diziam "hoje só `identity` e `staff`", mas a linha 276 já lista `scheduling`. Agora
+  dizem "antes da 4.1".
+- **O2.** O ADR 4.1.0012 (l. 211) ainda diz "concept §12, still 11 Tasks"; a §12 diz 10, depois da
+  consolidação da Fase 3B (§12 do concept). O ADR fica como está, porque é `accepted`; a contagem
+  vigente é 10, e esta nota a registra.
+
 <!-- END: post-execution -->
