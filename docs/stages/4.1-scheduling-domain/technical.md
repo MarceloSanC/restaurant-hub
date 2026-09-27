@@ -1485,4 +1485,42 @@ anteriores de remap, ancoradas em `roadmap.md`, não alcançaram — o doc tamb�
 "roadmap" — e as ~100 que o merge da 3.5 deslocou em `overview.md`, `.importlinter` e
 `employee.py`) e 309 nos ADRs e no concept.
 
+### 2026-09-27 — [deviation] concept §6, métodos entre crases e células que faltavam — Claude Opus 5.5 (executor)
+
+Achados 1 e 6 do Checkpoint C do bloco 3. A §6 do concept (`status: done`) foi editada em duas
+frentes, sem mudar contrato: ela passou a casar com o código e com o teste que a lê
+(`test_schedule_mutations.py`, que deriva a matriz método × exceção da própria tabela).
+
+- **Editorial (#1a).** As linhas que nomeavam o método por verbo em prosa ("Habilitar",
+  "Habilitar/mover", "Desabilitar", "Declarar", "Retirar") passaram a nomeá-lo entre crases
+  (`enable_band`, `enable_band`/`reschedule_band`, `disable_band`, `declare_demand`,
+  `withdraw_demand`). Sem isso, seis células ficavam invisíveis para a matriz derivada, e a
+  promessa de CA12 ("se a §6 crescer, o teste cresce com ela") valia só para parte da tabela.
+- **Células que o código já produzia (#6)**, conferidas no código antes da edição:
+  - `DuplicateEntityIdError` em `enable_band`, `declare_demand` e `assign`: as três reconstroem o
+    agregado, e o `Schedule.__post_init__` recusa o id repetido. Estão na mesma linha da exceção
+    ("inclusive por …").
+  - `InvalidTimeRangeError` em `reschedule_band`: o destino passa por `TimeRange.with_bounds`, que
+    recusa `start >= end`, duração > 24h e o encurtamento abaixo do próprio intervalo (CA21). Está
+    na linha de `redeclare_band_break`, e a contagem continua em **21 linhas para 20 exceções**.
+  - **Não** entrou `InvalidTimeRangeError` em `enable_band`: ela recebe um `TimeRange` já
+    construído, então a recusa é do construtor, antes da chamada.
+
+O teste passa a cobrar a tabela nos dois sentidos (§6 ⊆ produzido e produzido ⊆ §6), no commit
+`[4.1/task-09-fix]` seguinte a este.
+
+### 2026-09-27 — [finding] `change_demand_quantity` com o mesmo N incrementa a versão — Claude Opus 5.5 (executor)
+
+Achado 7 do Checkpoint C do bloco 3. `change_demand_quantity(demand_id, quantity)` com a quantidade
+corrente devolve nova instância com `version + 1`. Isso **segue a letra** da §5.16 do concept, que
+enumera fechadas as quatro mutações idempotentes de valor (`reschedule_band`,
+`redeclare_band_break`, `declare_workload_counting`, `declare_allocation_break`), e o comportamento
+**não** foi mudado aqui: estender a cláusula é mudar o contrato da lei da versão. Mas a razão da
+cláusula vale igualmente. Sob o controle otimista da 4.4, uma mutação que não mudou nada faz o
+outro editor perder o trabalho, e sob salvar = publicar (ADR 4.1.0001) gera uma entrada de
+auditoria vazia. **Direção sugerida:** o use case da 4.3 compara a quantidade pedida com a corrente
+e não chama a mutação quando N não muda (sem versão nova, sem auditoria). A alternativa é estender
+o no-op de §5.16 a `change_demand_quantity`, que é decisão de produto (P) para o sponsor. **Stage
+candidata:** 4.3.
+
 <!-- END: post-execution -->

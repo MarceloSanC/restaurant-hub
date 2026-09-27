@@ -902,19 +902,19 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
 | `DemandQuantity` com valor negativo | `InvalidDemandQuantityError` |
 | `Schedule` com `version < 1` | `InvalidScheduleVersionError` |
 | `Assignment.break_minutes` negativo, ou `>= nominal_minutes` da faixa que a contém (construção direta/reidratação, `declare_allocation_break` — a **única** mutação que declara o intervalo da alocação —, ou `reschedule_band` que encurta a faixa abaixo de um intervalo já declarado) | `InvalidAssignmentBreakError` |
-| Dois `ShiftBandId`, dois `ShiftDemandId` ou dois `AssignmentId` iguais dentro de uma `Schedule` (construção direta e reidratação; par a par, em qualquer nível) | `DuplicateEntityIdError` |
-| Habilitar faixa cujo par `(start, end)` já existe na escala; `reschedule_band` cujo destino colide com o par de **outra** faixa | `DuplicateShiftBandError` |
-| Habilitar/mover faixa que começa fora dos dias operacionais do período | `TimeRangeOutsidePeriodError` |
+| Dois `ShiftBandId`, dois `ShiftDemandId` ou dois `AssignmentId` iguais dentro de uma `Schedule` (construção direta e reidratação; par a par, em qualquer nível), inclusive por `enable_band`/`declare_demand`/`assign` com id já usado no agregado | `DuplicateEntityIdError` |
+| `enable_band` com faixa cujo par `(start, end)` já existe na escala; `reschedule_band` cujo destino colide com o par de **outra** faixa | `DuplicateShiftBandError` |
+| `enable_band`/`reschedule_band` com faixa que começa fora dos dias operacionais do período | `TimeRangeOutsidePeriodError` |
 | `band`/`reschedule_band`/`redeclare_band_break`/`disable_band`/`declare_demand` com `ShiftBandId` inexistente | `ShiftBandNotFoundError` |
-| Desabilitar faixa que ainda tem alocação (§5.21) | `ShiftBandInUseError` |
+| `disable_band` de faixa que ainda tem alocação (§5.21) | `ShiftBandInUseError` |
 | `reschedule_band` cujo destino cai em **outro dia operacional** (§5.22) | `ShiftBandDayChangeError` |
-| Declarar segunda demanda da **mesma função** na mesma faixa | `DuplicateShiftDemandError` |
+| `declare_demand` de segunda demanda da **mesma função** na mesma faixa | `DuplicateShiftDemandError` |
 | `change_demand_quantity`/`withdraw_demand`/`assign`/`locate_demand` com `ShiftDemandId` inexistente | `ShiftDemandNotFoundError` |
-| Retirar demanda que ainda tem alocação (§5.21) | `ShiftDemandInUseError` |
+| `withdraw_demand` de demanda que ainda tem alocação (§5.21) | `ShiftDemandInUseError` |
 | Alocar funcionário que já ocupa uma vaga da **mesma** demanda (construção ou `assign`) | `DuplicateAssignmentError` |
 | Alocar funcionário que já ocupa uma vaga de **outra** demanda da **mesma faixa** (construção de `ShiftBand`, reidratação, ou `assign` — §5.23) | `DuplicateAssignmentInBandError` |
 | `unassign`/`declare_workload_counting`/`declare_allocation_break`/`locate_assignment`/`worked_minutes_of`/`effective_break_minutes_of`/`has_break_divergence` com `AssignmentId` inexistente | `AssignmentNotFoundError` |
-| `redeclare_band_break` com valor fora de `0 <= break < nominal_minutes` | `InvalidTimeRangeError` |
+| `redeclare_band_break` com valor fora de `0 <= break < nominal_minutes`; `reschedule_band` cujo destino não é par válido (`start >= end`, duração > 24h) ou encurta a faixa abaixo do próprio intervalo | `InvalidTimeRangeError` |
 
 Todas subclasses de `SchedulingError` → `DomainError`. O mapeamento para status
 HTTP é da 4.5 (precedente ADR 3.4.0002 e 3.6.x); aqui só se garante a hierarquia.
