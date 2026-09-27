@@ -3,7 +3,7 @@ title: Concept — Domínio da escala
 description: Modelagem do núcleo de domínio do BC scheduling — o agregado Escala (faixa habilitada por dia, demanda por função × faixa, alocação com as duas marcas), o período de dias operacionais com dia de início configurável, o corte que define o dia operacional e a regra única de contagem de horas
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, scheduling-domain, escala, faixa, dia-operacional, horario-de-corte, demanda, alocacao, agregado, intervalo-declarado, intervalo-efetivo, divergencia-de-intervalo, vaga-unica-por-faixa, versao, conta-para-a-carga, excecao-de-funcao]
-status: draft
+status: done
 created_at: 2026-09-26
 updated_at: 2026-09-27
 stage_id: 4.1-scheduling-domain
