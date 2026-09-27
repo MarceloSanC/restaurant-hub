@@ -252,7 +252,8 @@ Refs #<issue>"
 **Quando PERGUNTAR (`AskUserQuestion`):**
 
 - Análise prévia revelou ambiguidade no escopo ou critério de aceite.
-- Bifurcação material na decomposição (decisão ausente na issue e nos docs).
+- Bifurcação material na decomposição (decisão ausente na issue e nos docs) classe **P**
+  na triagem da skill `evidence-resolution`; E/C se resolve por evidência e se registra.
 - Lacuna que afeta **contrato**, **fronteira** ou **critério de aceite**.
 - Sub-task precisa tocar arquivo fora do identificado na decomposição.
 - Auditoria de testes revelou cobertura insuficiente **com mais de uma
@@ -280,6 +281,11 @@ Sua **saída final** é um **relatório** com a estrutura abaixo:
 
 ```markdown
 ## Issue #<issue> — relatório de execução
+
+### 0. Valide você — leia isto primeiro
+(mesma estrutura do §0 do relatório do PROMPT-stage: superfície, ≤ 5 passos copiáveis com o
+esperado, saída bruta obtida, o que mostra, decisão P se houver. Issue só de docs/tooling: os
+passos são os comandos que provam a mudança — o gate, o script, o `grep`.)
 
 ### 1. Análise prévia
 - A issue ainda era válida? Algum drift identificado?
@@ -366,7 +372,8 @@ fonte mais alta na hierarquia.**
 2. Carregar contexto (ler docs + `gh issue view` + código do BC afetado).
 3. **Análise prévia:** validade, impacto, pré-requisitos ocultos, tamanho real do escopo.
 4. **Decomposição:** identificar arquivos via leitura de código, listar sub-tasks,
-   perguntar se houver bifurcação material.
+   perguntar se houver bifurcação material classe P (skill `evidence-resolution`;
+   E/C se resolve por evidência e se registra).
 5. **Execução:** para cada sub-task: implementar → resumo → checks → registrar se
    necessário → commit `<type>(<scope>): <desc> [#<issue>/task-NN]`.
 6. **Auditoria de testes:** loop até todos os itens "sim". Testes faltantes

@@ -28,10 +28,14 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
 4. **GitHub CLI (`gh`) preferencial**: usar quando disponível. Fallback para `git` puro se necessário.
 5. **Sem deploy manual**: produção só via merge em `main`. Dev só via merge em `develop`. SSH em prod é proibido.
 6. **Merge commit preserva história**: NUNCA squash, NUNCA rebase no merge. Branches trazem toda sua contexto.
-7. **Uma branch em execução por vez**: não abrir branch nova enquanto a
-   anterior estiver sem PR aberto. Ver §"Uma branch em execução por vez"
-   adiante para o procedimento de PR parcial quando precisar trocar
-   de escopo no meio.
+7. **Até duas branches em execução, cada uma na sua worktree**: no
+   máximo **duas** branches ainda sem PR aberto ao mesmo tempo, e só se
+   **não conflitam** (critérios em §"Branches em execução"). **Toda**
+   implementação roda numa worktree própria criada por
+   `scripts/worktree-new.py`; o **checkout principal fica sempre em
+   `develop`, limpo** — nunca se cria nem se troca de branch nele (o hook
+   `.claude/hooks/git_guard.py` recusa). Ver §"Branches em execução" para
+   critérios, comando, limpeza e o procedimento de PR parcial.
 
 ---
 
@@ -45,7 +49,7 @@ Aqui permanecem apenas o alias operacional e os **Gates de PR** (fonte
 
 ### Aliases recomendados
 
-`git sync` atualiza `main` localmente em um passo (fetch com prune, checkout, fast-forward). Útil antes de abrir branch de hotfix (que sai de `main`) ou logo após merge de release.
+`git sync` atualiza `main` localmente em um passo (fetch com prune, checkout, fast-forward). Útil logo após merge de release. Hotfix não precisa dele: o `scripts/worktree-new.py` já sai de `origin/main`. Depois de usar, volte o checkout principal para `develop` — ele fica sempre em `develop` (§"Branches em execução").
 
 ```bash
 git config --local alias.sync '!git fetch --prune origin && git checkout main && git pull --ff-only origin main'
@@ -262,18 +266,15 @@ gh issue create --title "feat: adicionar login com Google" --body "..."
 
 ### Etapa 2: Criar branch
 
-Atualizar `develop`:
+Criar a branch **numa worktree própria**, a partir do título da issue (slug **em inglês**, ver
+§Princípios fundamentais #3). O script sai de `origin/develop` atualizado (`origin/main` para
+`hotfix/...`); o checkout principal não muda de branch (§"Branches em execução"):
 ```bash
-git checkout develop
-git pull origin develop
+python scripts/worktree-new.py feat/42-add-google-login --no-vscode   # agente
+make worktree BRANCH=feat/42-add-google-login                         # humano (abre o VS Code)
 ```
 
-Criar branch a partir do título da issue (slug **em inglês**, ver §Princípios fundamentais #3):
-```bash
-git checkout -b feat/42-add-google-login
-```
-
-**Gate:** `git branch --show-current` mostra o nome correto.
+**Gate:** dentro da worktree, `git branch --show-current` mostra o nome correto.
 
 ### Etapa 3: Implementar (loop)
 
@@ -450,37 +451,59 @@ Quando a equipe decide promover `develop` para `main`:
 
 ---
 
-## Uma branch em execução por vez
+## Branches em execução
 
-**Regra (Princípios fundamentais #7):** enquanto a branch atual não
-estiver com PR aberto, **não criar branch nova** para outro escopo.
-Trabalho paralelo em dois escopos diferentes — mesmo "rapidinho" —
-costuma:
+**Regra (Princípios fundamentais #7):** até **duas** branches em
+execução (ainda sem PR aberto), **cada uma na sua worktree**, e o
+checkout principal sempre livre em `develop`. Branch com PR aberto
+aguardando review não conta no teto de duas, mas continua contando no
+critério de conflito abaixo. O limite existe porque paralelismo sem
+isolamento costuma:
 
-- misturar commits dos dois escopos via working tree não-limpo
+- misturar commits dos escopos via working tree não-limpo
   (`git stash` muitas vezes vira `git stash drop` errado);
 - gerar PRs simultâneos disputando o mesmo gate humano de review;
 - esconder progresso real — branch antiga vai ficando esquecida
   enquanto a "urgente" cresce e nunca volta.
 
-**Fluxo padrão:** terminar a branch atual → abrir PR → começar a
-próxima. Ponto.
+A worktree resolve o primeiro; o teto de duas e o critério de conflito
+resolvem os outros dois.
 
-### Worktrees paralelas (branches sem correlação)
+**Duas branches só voam juntas se não conflitam** — todas as condições:
 
-A regra "uma branch em execução por vez" trata de **um único checkout
-misturando dois escopos**. Quando o paralelismo é legítimo (ex.: PR da
-branch anterior está em review aguardando aprovação, e você quer
-começar a próxima), o mecanismo aceito é criar uma **worktree
-separada** — cada worktree é um checkout independente, então não há
-working tree compartilhado, não há `git stash`, não há risco de
-misturar commits.
+- nenhuma depende da outra (roadmap "Depende de", issue, ou uma consome
+  contrato que a outra cria);
+- os arquivos a criar/modificar (corpo da issue / `technical.md`) são
+  disjuntos;
+- nenhuma das duas mexe em ponto compartilhado: port/contrato público,
+  schema persistido ou migration Alembic, `.importlinter`,
+  `pyproject.toml`/`uv.lock`, `composition_root.py`.
+
+A exceção é a tabela de issues/Stages do `docs/roadmap.md`, que quase
+toda branch toca: o conflito de linha se resolve no rebase antes do push
+(§Etapa 4), não impede o paralelismo.
+
+Conferência mecânica antes de abrir o PR da segunda (interseção vazia,
+fora `docs/roadmap.md`, = ok):
 
 ```bash
-make worktree BRANCH=feat/42-add-google-login
+comm -12 <(git diff --name-only origin/develop...A | sort) \
+         <(git diff --name-only origin/develop...B | sort)
 ```
 
-O target roda `scripts/worktree-new.py`, que num único comando:
+### Criar a worktree (sempre pelo script)
+
+```bash
+python scripts/worktree-new.py feat/42-2-3-s3-adapter --no-vscode   # agente
+make worktree BRANCH=feat/42-add-google-login                        # humano (abre o VS Code)
+```
+
+`git checkout -b`/`git switch -c` no checkout principal e
+`git worktree add` manual são recusados pelo hook `git_guard`: o script
+é o único caminho, porque é ele que valida o nome e a issue e isola
+portas. Dentro de uma worktree, os comandos de branch passam normalmente.
+
+O script, num único comando:
 
 - valida o nome da branch contra CONVENTIONS.md §4;
 - confere que a issue existe no GitHub (`gh issue view`);
@@ -522,6 +545,21 @@ Se adicionar um serviço novo ao compose com porta exposta no host
 dentro de `scripts/worktree-new.py` para entrar na rotação de
 auto-atribuição.
 
+#### Banco e containers da worktree
+
+Duas armadilhas que a suíte verde não denuncia:
+
+- **O `.env` gerado não traz `DATABASE_URL`.** Sem ela, `Settings()`
+  cai no default (porta 5432, o banco do checkout principal), e a
+  fixture que recria o schema derruba o banco de outra frente. Ao abrir
+  a worktree: `docker compose up -d postgres` dentro dela e acrescentar
+  `DATABASE_URL=...@localhost:<POSTGRES_PORT>/...` ao `.env` antes do
+  primeiro `pytest`.
+- **`worktree-rm.py` só remove containers com label de devcontainer.**
+  O `postgres` subido por `docker compose up` fica órfão segurando a
+  porta. Rodar `docker compose down -v` dentro da worktree **antes** de
+  removê-la; conferir com `docker ps -a --filter name=<pasta-da-worktree>`.
+
 Quando o PR daquela worktree mergear, remover worktree + branch local:
 
 ```bash
@@ -557,19 +595,19 @@ Procedimento:
      do `technical.md` já estão fechadas.
    - Não pedir review ainda. PR draft existe para travar a posição
      do trabalho, não para consumir tempo de revisor.
-4. **Voltar para `develop`** (ou `main` em hotfix) e criar a branch
-   nova:
+4. **Criar a branch nova na sua própria worktree** (a parcial fica
+   parada na dela, intacta):
    ```bash
-   git checkout develop && git pull
-   git checkout -b feat/<num-issue>-<N-M>-<slug>   # a nova
+   python scripts/worktree-new.py feat/<num-issue>-<N-M>-<slug> --no-vscode   # a nova
    ```
 5. **Implementar a nova branch ao fim** — PR contra `develop`,
    review, merge normal.
-6. **Voltar para a branch parcial.** Sair do `draft`, completar
-   trabalho restante, novos commits seguindo escopo mínimo:
+6. **Voltar para a branch parcial** (na worktree dela). Sair do
+   `draft`, completar trabalho restante, novos commits seguindo escopo
+   mínimo:
    ```bash
-   git checkout feat/<branch-parcial>
-   git merge develop                # absorver o que entrou
+   cd ../<repo>-worktrees/<branch-parcial>
+   git merge origin/develop         # absorver o que entrou
    # ... continuar implementação ...
    gh pr ready                      # tira do draft, pede review
    ```
@@ -595,8 +633,7 @@ Procedimento:
 Branch sai de `main`, não de `develop`:
 
 ```bash
-git sync                                                # atualiza main local (ver §Aliases recomendados)
-git checkout -b hotfix/99-fix-critical-checkout-error
+python scripts/worktree-new.py hotfix/99-fix-critical-checkout-error --no-vscode   # base = origin/main
 ```
 
 Implementar com **mesmo rigor** (testes, coverage, lint).
@@ -682,7 +719,7 @@ Exemplo de feedback construtivo:
 - Push de branch com carona de outro escopo: `git log origin/<base>..HEAD` mostra commits que não pertencem ao escopo declarado do branch (ver Etapa 4)
 - Mensagem de commit fora do padrão Conventional Commits **em português** (descrição em PT, escopo em snake/kebab ASCII) ou sem `Refs #<num-issue>` no rodapé quando há issue associada
 - Nome de branch **fora de inglês ASCII kebab-case** (ex.: `feat/42-adicionar-login` ou `feat/42-Add-Login` — deve ser `feat/42-add-google-login`; ver §Princípios fundamentais #3 e [`./CONVENTIONS.md`](./CONVENTIONS.md) §1)
-- Tentativa de criar branch nova **no mesmo checkout** enquanto a branch atual não tem PR aberto (mesmo `--draft`). Exceções: (a) branches **sem correlação/conflito** (escopos disjuntos) em worktrees separadas (ver §"Uma branch em execução por vez" → §Worktrees paralelas); (b) usuário pediu **explicitamente** o fluxo de PR parcial (ver §"Uma branch em execução por vez")
+- Branch criada ou trocada **no checkout principal**, terceira branch em execução, ou duas branches em execução que **conflitam** (critérios em §"Branches em execução"). Exceção: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em execução" → §Quando precisar trocar de escopo no meio)
 - Body de commit de Task sem bullets, ou commit agrupando vários escopos diferentes (deve quebrar em commits separados por escopo mínimo)
 - Iniciar uma Stage (criar branch da Stage, pasta `docs/stages/N.M-<slug>/`, ou rodar prompt da Fase 3A) **sem que a issue correspondente já exista** no backlog do GitHub. Verificação: `gh issue view <num>` deve retornar a issue. Issue-first é Princípio fundamental #1; sem issue verificável, parar e criar a issue primeiro (ver [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passo 1 + `scripts/check_stage_issue.py` em `make docs-check`)
 
@@ -701,7 +738,7 @@ gh issue list --assignee @me
 gh issue view <num>
 
 # Branches (slug em inglês) e commits (subject + body em português; Refs no rodapé)
-git checkout -b feat/42-short-slug-in-english
+python scripts/worktree-new.py feat/42-short-slug-in-english --no-vscode   # nunca checkout -b no principal
 git add .
 git commit -m "feat(escopo): descrição curta em português
 
@@ -726,9 +763,9 @@ gh pr merge <num> --merge --delete-branch  # merge commit + cleanup
 git sync                                 # atualiza main local
 gh pr create --base main --head develop  # criar release PR
 
-# Cleanup
-git checkout develop && git pull
-git remote prune origin
+# Cleanup (após o merge; `docker compose down -v` dentro da worktree antes)
+python scripts/worktree-rm.py <branch>   # worktree + branch local + prune
+git checkout develop && git pull         # no checkout principal
 ```
 
 ---

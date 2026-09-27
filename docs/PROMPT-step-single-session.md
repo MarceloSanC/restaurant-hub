@@ -1,6 +1,6 @@
 ---
 title: Prompt — Orquestração de Step em Sessão Mestra (subagentes de contexto zerado + gate de domínio + decisão assistida rica)
-description: Sessão mestra human-in-the-loop que conduz um Step inteiro (grupo de Stages) do roadmap sem escrever artefato próprio — despacha subagentes de contexto zerado para cada fase do PROMPT-stage-single-session (Concept, Technical, Execução e os Checkpoints), resolve cada fork de decisão (pesquisa abordagens → decide sozinho via docs+skills ou pergunta ao humano, sempre registrando ADR), roda a auditoria de Stage em subagente separado com tratamento de findings, e — ao OK do humano — faz o merge, limpa a branch/worktree e inicia a próxima Stage.
+description: Sessão mestra human-in-the-loop que conduz um Step inteiro (grupo de Stages) do roadmap sem escrever artefato próprio — despacha subagentes de contexto zerado para cada fase do PROMPT-stage-single-session (Concept, Technical, Execução e os Checkpoints), resolve cada fork de decisão (pesquisa abordagens → decide sozinho via docs+skills ou por evidência verificada na triagem E/C da skill evidence-resolution; só fork P vai ao humano; sempre registrando ADR), roda a auditoria de Stage em subagente separado com tratamento de findings, e — ao OK do humano — faz o merge, limpa a branch/worktree e inicia a próxima Stage.
 when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) travar as regras de negócio em fonte oficial antes de codar, (b) isolar cada fase e cada revisão em um subagente de contexto zerado para reduzir viés, (c) manter o humano decidindo só o que os docs não resolvem, com explicação didática, e (d) que o próprio orquestrador conduza cada Stage até o merge, encadeando as Stages do Step.
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
@@ -151,13 +151,15 @@ o projeto já ratificou) e só então abre busca externa para as lacunas que sob
 fonte) para a mestra tratar por §2.
 
 **HALT de sourcing:** se uma regra *load-bearing* (que muda o que o sistema decide, bloqueia ou
-reporta) não tiver fonte primária que a sustente, **não invente e não use blog** — PARE e escale ao
-humano (pode ser decisão de política do projeto, que vira ADR, não achado de pesquisa). Só declare o
+reporta) não tiver fonte primária que a sustente, **não invente e não use blog** — passe pela
+triagem da skill `evidence-resolution`: se a regra é política do restaurante, é **P** e sobe ao humano como
+pergunta (a resposta vira ADR); se há opções defensáveis sem vencedor, é **C** (escada de
+desempate, registrada); sem nenhuma base, PARE e escale. Só declare o
 gate cumprido com o doc `accepted`.
 
 ---
 
-## 2. Decisão em cada fork — pesquisar → docs resolvem? decidir sozinho : perguntar ao humano
+## 2. Decisão em cada fork — pesquisar → docs ou evidência resolvem? decidir sozinho : perguntar ao humano
 
 Vale para **todo** subagente operacional (autor de concept/technical, executor) e também para o
 **tratador de findings** da auditoria (§3.2). Ao esbarrar em um **fork de decisão** (ponto com mais
@@ -174,7 +176,10 @@ de uma abordagem viável):
    - **Docs respondem 100%** → o subagente **decide sozinho** pela abordagem que os docs sustentam,
      e **registra a decisão em ADR** (`docs/adr/<N>_<M>_NNNN-<slug>.md`, `status: accepted`) —
      opções, escolha, trade-offs, reversibilidade, e a **âncora** nos docs que a justifica.
-   - **Docs não respondem 100%** → o subagente **pergunta ao humano** (ele mesmo, se seu contexto de
+   - **Docs não respondem 100%** → **triagem da skill `evidence-resolution`**. Classe **E/C** (lei, segurança,
+     comportamento de lib, convenção de método) → o subagente **resolve por evidência verificada**
+     e registra em ADR, sem perguntar. Só classe **P** (regra de negócio/produto, escopo,
+     prioridade, custo) → o subagente **pergunta ao humano** (ele mesmo, se seu contexto de
      execução permitir falar com o usuário; senão **sobe o fork para a mestra**, que pergunta),
      detalhando a questão no formato rico abaixo. A **decisão do humano também vira ADR**.
 
@@ -215,8 +220,8 @@ aceite.
 ### HALT-and-park (contradição / irreversível)
 
 Hierarquia de fontes (alta→baixa): **Overview > Roadmap > Domain > Concept > Technical > Código**.
-Ao encontrar contradição com fonte superior, contrato externo irreversível e ambíguo, fórmula sem
-fonte oficial (§1), ou gate objetivo que não fecha após tentativa honesta de correção: **PARE**,
+Ao encontrar contradição com fonte superior, contrato externo irreversível e ambíguo, regra sem
+nenhuma base mesmo após a skill `evidence-resolution` (§1), ou gate objetivo que não fecha após tentativa honesta de correção: **PARE**,
 deixe a working tree estável, aponte com referência explícita à fonte conflitante e escale.
 Não force progresso; não use ADR para enterrar contradição que deveria parar.
 
@@ -235,9 +240,11 @@ Invocar `git-versioning-pointer` antes de qualquer operação git.
    e só então `gh issue create` — título e corpo em **PT**, escopo vindo do recorte da Stage no
    `roadmap.md`. Sem issue, a Stage **não começa** (GIT-WORKFLOW §Princípios fundamentais #1).
 2. **Branch** a partir de `develop` atualizada: `feat/<num-issue>-<N-M>-<slug>` (CONVENTIONS §4;
-   slug em **inglês**). Uma branch em execução por vez — a Stage anterior já foi mergeada (§3.5).
-   Worktree dedicada (`scripts/worktree-new.py`) **só** se o usuário pedir paralelismo; o fluxo
-   default do Step é **sequencial**, na worktree principal — e então §3.5 não tem worktree a limpar.
+   slug em **inglês**), **sempre em worktree dedicada**: `python scripts/worktree-new.py <branch>
+   --no-vscode` (GIT-WORKFLOW §"Branches em execução"; o hook `git_guard` recusa `checkout -b` no
+   checkout principal). O Step segue **sequencial** — a Stage anterior já foi mergeada (§3.5).
+   O cwd do shell volta ao checkout principal a cada chamada: todo comando da Stage usa o caminho
+   absoluto da worktree, e todo subagente despachado recebe esse caminho como raiz do trabalho.
 3. **Esqueletos** `docs/stages/<N.M>-<slug>/{concept,technical}.md` a partir de
    [`./templates/`](./templates/), com `issue_id` no frontmatter do technical — é o campo que
    `scripts/check_stage_issue.py` valida em `make docs-check`.
@@ -296,7 +303,8 @@ Com a auditoria `complete`, a mestra entrega ao humano um **relatório completo 
 implementado na Stage**, no **mesmo formato do relatório da skill `stage-audit`** (as 6 seções da
 Fase E + status global + conclusão): linguagem clara para quem não acompanhou, jargão glosado, fato
 com `arquivo:linha`/comando→resultado, e a lente de **valor entregue + qualidade de design**. Este
-relatório **é o gate de aprovação humana**.
+relatório **é o gate de aprovação humana** e **abre com o bloco "Valide você"** da execução
+(PROMPT-stage §0 do relatório): o humano valida pelos passos antes de ler o resto.
 
 ### 3.5 Merge, limpeza e próxima Stage
 
@@ -305,8 +313,9 @@ antes das operações git):
 
 ```bash
 gh pr merge <num> --merge --delete-branch          # merge + apaga a branch remota
-git checkout develop && git pull origin develop && git remote prune origin
-python scripts/worktree-rm.py <worktree>           # se a Stage rodou em worktree dedicada
+docker compose down -v                             # DENTRO da worktree: o worktree-rm não pega o postgres do compose
+python scripts/worktree-rm.py <branch>             # worktree + branch local + prune
+git pull origin develop                            # no checkout principal (sempre em develop)
 ```
 
 Depois: **inicia a próxima Stage** do Step (volta ao Princípio central, despachando os subagentes de

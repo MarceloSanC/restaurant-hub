@@ -99,9 +99,9 @@ Issue-first é princípio bloqueante ([`./GIT-WORKFLOW.md`](./GIT-WORKFLOW.md)
 $issue = "<num-issue>"          # ex: 42 — confirmado por gh issue view
 $N_M_kebab = "$N-$M"            # ex: 2-3
 
-git checkout develop
-git pull origin develop
-git checkout -b "feat/$issue-$N_M_kebab-$slug"
+# Worktree própria (GIT-WORKFLOW §"Branches em execução"); o checkout principal fica em develop
+python scripts/worktree-new.py "feat/$issue-$N_M_kebab-$slug" --no-vscode
+Set-Location "../restaurant-hub-worktrees/feat-$issue-$N_M_kebab-$slug"
 # Exemplo: feat/42-2-3-s3-source-adapter
 ```
 
@@ -177,6 +177,10 @@ Não pergunte:
 - Nomes, formatos triviais ou estilo (seguem LAYOUT e convenções).
 - Detalhes de implementação (pertencem à Fase 3B/4).
 - Preferências subjetivas sem impacto no contrato da Stage.
+- O que a evidência decide ou a convenção resolve (classes E/C da
+  skill `evidence-resolution`: lei, segurança, comportamento de lib): decida,
+  registre como `[decision:E|C]` e siga. Só P (produto/negócio) é
+  pergunta.
 
 # CONDUÇÃO
 
@@ -635,9 +639,10 @@ gh pr merge <num-pr> --merge --delete-branch
 ### Passo 12 — Cleanup
 
 ```powershell
-git checkout develop
+docker compose down -v                    # dentro da worktree da Stage
+Set-Location ../../restaurant-hub         # volta ao checkout principal (sempre em develop)
+python scripts/worktree-rm.py <branch>    # worktree + branch local + prune
 git pull origin develop
-git remote prune origin
 ```
 
 Próxima Stage: voltar ao Passo 1 com a próxima `N.M` do roadmap.

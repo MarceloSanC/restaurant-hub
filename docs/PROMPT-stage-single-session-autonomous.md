@@ -48,6 +48,8 @@ opcional não existe e o commit não espera revisão de diff. Em vez disso:
   **ADR** (`docs/adr/<N>_<M>_NNNN-<slug>.md`, `templates/adr.md`, `status: accepted`,
   frontmatter completo com `bounded_context` — CONVENTIONS §2) com opções, trade-offs e
   reversibilidade. Decisão trivial segue como no canônico: `[decision]` na §7.
+  Fork de lei, segurança ou convenção de lib/método passa pela skill `evidence-resolution`
+  (classe E/C, com a verificação §4 dela) antes do ADR.
 - **HALT-and-park** (pare a Stage e, como a cadeia é dependente, a corrida) **apenas** em:
   - contradição com fonte de hierarquia superior (Overview > Roadmap > Concept > Technical),
   - contrato externo **irreversível** e ambíguo (formato persistido, contrato público de API,
@@ -112,7 +114,9 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
    burlar nem se auto-aprovar.
 4. Cleanup e sync para a próxima Stage:
    ```bash
-   git checkout develop && git pull origin develop && git remote prune origin
+   docker compose down -v                   # dentro da worktree da Stage
+   python scripts/worktree-rm.py <branch>   # worktree + branch local + prune
+   git pull origin develop                  # no checkout principal (sempre em develop)
    ```
 5. **Nunca** force-push em `develop`/`main`; **nunca** reescrever história já mergeada.
 
