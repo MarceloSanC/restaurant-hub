@@ -1,19 +1,31 @@
 """Testes do calendário operacional (value_objects/operational_calendar.py).
 
-`Weekday` (CA6), `DayCutoff` (CA4, lado das recusas de CA7, lado do VO de CA5).
+`Weekday` (CA6), `DayCutoff` (CA4, recusas de CA7, lado do VO de CA5) e
+`OperationalCalendar` (lado positivo de CA7 e o gate de sítio único; o lado
+"desalinhado" de CA8; `is_aligned` nos dois sentidos).
 """
 
+import inspect
+import re
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 import pytest
 
+from restaurant_hub.features import scheduling
 from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidDayCutoffError,
+    InvalidSchedulePeriodError,
     InvalidWeekdayError,
 )
+from restaurant_hub.features.scheduling.domain.value_objects import operational_calendar
 from restaurant_hub.features.scheduling.domain.value_objects.operational_calendar import (
     DayCutoff,
+    OperationalCalendar,
     Weekday,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.schedule_period import (
+    SchedulePeriod,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
 
@@ -151,3 +163,116 @@ def test_faixa_que_ultrapassa_o_corte_seguinte_e_do_dia_do_start() -> None:
     corte = DayCutoff(at=time(5, 0))
     assert corte.operational_day_of(faixa.start) == _QUINTA
     assert corte.operational_day_of(faixa.end) == _SEXTA
+
+
+# --- CA7 (lado positivo) e o gate de sítio único dos defaults -------------------------
+
+
+def test_default_e_segunda_com_corte_as_cinco() -> None:
+    calendario = OperationalCalendar.default()
+    assert calendario.week_start is Weekday.MONDAY
+    assert calendario.day_cutoff == DayCutoff(at=time(5, 0))
+
+
+def test_calendario_compara_por_valor() -> None:
+    assert OperationalCalendar.default() == OperationalCalendar(
+        week_start=Weekday.MONDAY, day_cutoff=DayCutoff(at=time(5, 0))
+    )
+    assert OperationalCalendar.default() != OperationalCalendar(
+        week_start=Weekday.SUNDAY, day_cutoff=DayCutoff(at=time(5, 0))
+    )
+
+
+def test_campos_do_calendario_nao_tem_default() -> None:
+    # Default de campo viraria regra silenciosa (concept §7): construir sem os
+    # dois campos tem de falhar.
+    with pytest.raises(TypeError):
+        OperationalCalendar()  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        DayCutoff()  # type: ignore[call-arg]
+
+
+# O comando literal de CA7 (concept §11), traduzido para varredura permanente:
+# `rg -n --glob 'src/restaurant_hub/features/scheduling/**/*.py'
+#    -e 'time\(\s*5\s*,\s*0' -e '"05:00"' -e 'Weekday\.MONDAY'`
+_PADROES_DOS_DEFAULTS = (r"time\(\s*5\s*,\s*0", r'"05:00"', r"Weekday\.MONDAY")
+
+
+def _ocorrencias_dos_defaults_no_bc() -> set[tuple[Path, int]]:
+    raiz = Path(next(iter(scheduling.__path__)))
+    padrao = re.compile("|".join(_PADROES_DOS_DEFAULTS))
+    return {
+        (arquivo.resolve(), numero)
+        for arquivo in raiz.rglob("*.py")
+        for numero, linha in enumerate(arquivo.read_text(encoding="utf-8").splitlines(), 1)
+        if padrao.search(linha)
+    }
+
+
+def test_defaults_aparecem_so_em_operational_calendar_default() -> None:
+    linhas, inicio = inspect.getsourcelines(OperationalCalendar.default)
+    arquivo = Path(inspect.getfile(operational_calendar)).resolve()
+    linhas_do_default = {(arquivo, inicio + i) for i in range(len(linhas))}
+    ocorrencias = _ocorrencias_dos_defaults_no_bc()
+    # Anti-vácuo: a varredura acha o próprio default; sem isto um padrão quebrado
+    # passaria com zero ocorrências.
+    assert ocorrencias
+    assert ocorrencias <= linhas_do_default
+
+
+# --- operational_day_of delega ao corte ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "instante",
+    [datetime(2026, 10, 2, 4, 59), datetime(2026, 10, 2, 5, 0), datetime(2026, 10, 2, 22, 0)],
+)
+@pytest.mark.parametrize("corte", [time(0, 0), time(5, 0), time(23, 0)])
+def test_operational_day_of_do_calendario_e_o_do_corte(instante: datetime, corte: time) -> None:
+    calendario = OperationalCalendar(week_start=Weekday.MONDAY, day_cutoff=DayCutoff(at=corte))
+    assert calendario.operational_day_of(instante) == DayCutoff(at=corte).operational_day_of(
+        instante
+    )
+
+
+# --- period_starting_on e is_aligned (CA8, lado do calendário) -----------------------
+
+
+def test_period_starting_on_no_week_start_produz_sete_dias() -> None:
+    periodo = OperationalCalendar.default().period_starting_on(_SEGUNDA)
+    assert periodo == SchedulePeriod(first_day=_SEGUNDA, days=7)
+
+
+def test_period_starting_on_repassa_a_contagem() -> None:
+    periodo = OperationalCalendar.default().period_starting_on(_SEGUNDA, days=14)
+    assert periodo == SchedulePeriod(first_day=_SEGUNDA, days=14)
+
+
+@pytest.mark.parametrize("deslocamento", range(1, 7))
+def test_period_starting_on_fora_do_week_start_e_recusado(deslocamento: int) -> None:
+    with pytest.raises(InvalidSchedulePeriodError, match="desalinhado"):
+        OperationalCalendar.default().period_starting_on(_SEGUNDA + timedelta(days=deslocamento))
+
+
+def test_period_starting_on_respeita_week_start_configurado() -> None:
+    # Com week_start domingo, a segunda desalinha e o domingo alinha: o default
+    # não está embutido na fábrica.
+    domingo = _SEGUNDA - timedelta(days=1)
+    calendario = OperationalCalendar(week_start=Weekday.SUNDAY, day_cutoff=DayCutoff(at=time(5, 0)))
+    assert calendario.period_starting_on(domingo).first_day == domingo
+    with pytest.raises(InvalidSchedulePeriodError, match="desalinhado"):
+        calendario.period_starting_on(_SEGUNDA)
+
+
+def test_period_starting_on_com_contagem_invalida_e_recusado_pelo_periodo() -> None:
+    with pytest.raises(InvalidSchedulePeriodError, match="de 1 a 31 dias"):
+        OperationalCalendar.default().period_starting_on(_SEGUNDA, days=0)
+
+
+@pytest.mark.parametrize("dia_de_inicio", list(Weekday))
+def test_is_aligned_nos_dois_sentidos_para_cada_week_start(dia_de_inicio: Weekday) -> None:
+    calendario = OperationalCalendar(week_start=dia_de_inicio, day_cutoff=DayCutoff(at=time(5, 0)))
+    semana = [_SEGUNDA + timedelta(days=i) for i in range(7)]
+    alinhados = [dia for dia in semana if calendario.is_aligned(SchedulePeriod(first_day=dia))]
+    assert len(alinhados) == 1
+    assert Weekday.from_date(alinhados[0]) is dia_de_inicio

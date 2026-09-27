@@ -1351,4 +1351,18 @@ expor; `test_operational_calendar.py` trava o mapeamento nome → valor inteiro,
 se vier, seja deliberada. `from_date` usa a **ordem de declaração** (ISO) em vez de nomear membros,
 o que mantém `Weekday.MONDAY` fora do `src/` fora de `OperationalCalendar.default()` (gate de CA7).
 
+### 2026-09-27 — [decision] Task 04, gate de sítio único de CA7 também como teste — Claude Opus 5.5 (executor)
+
+CA7 declara o sítio único dos defaults como `[gate]` por comando `rg` avulso, que ninguém roda entre
+commits. Opções: (a) só o comando manual, conferido nesta Task (devolve exatamente a linha de
+`return` de `OperationalCalendar.default()`); (b) **além dele**, a mesma varredura como teste em
+`test_operational_calendar.py` (arquivo já listado na Task): os três padrões literais do concept §11
+sobre todo `.py` do pacote `features/scheduling`, exigindo que toda ocorrência caia nas linhas de
+`default()` (via `inspect.getsourcelines`), com asserção anti-vácuo. **Escolhida (b)**: segue a regra
+"varredura derivada, não representante" do §1 — um `time(5, 0)` que a Task 08 ou a 4.4 espalhassem
+reprova `make check`, sem depender de alguém lembrar do `rg`. Custo: um teste; nenhum arquivo fora do
+escopo. Na fábrica, a ordem é contagem de dias primeiro (no `SchedulePeriod`) e alinhamento depois,
+por `is_aligned` — o mesmo predicado que o `Schedule.__post_init__` usará, para a fábrica e a
+reidratação aplicarem uma lei só; o `reason` é o literal `"desalinhado"` do concept §4.
+
 <!-- END: post-execution -->
