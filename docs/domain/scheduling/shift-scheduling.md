@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 4 (
 keywords: [domain, scheduling, shift-scheduling, escala, semana, dia-operacional, horario-de-corte, faixa, turno, intervalo, demanda, vaga, alocacao, excecao-de-funcao, sobre-cobertura, reconciliacao-na-leitura, desligamento, escala-vigente, publicacao, auditoria, versao, concorrencia, validacao, block, warn, aceite-consciente, sobreposicao, interjornada, teto-de-horas, carga-contratada, conta-para-a-carga, indisponibilidade, calendario, minha-escala, notificacao, imagem, fuso-horario, clt, lingua-ubiqua]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-26
+updated_at: 2026-09-27
 bounded_context: scheduling
 subdomain: shift-scheduling
 references:
@@ -1112,6 +1112,49 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 | **sem Stage (roadmap)** | em que Stage entra `Unit.timezone` (4.4 × issue de identity) (§3.9) |
 | **sem Stage (roadmap)** | roadmap 5.2 "rascunho de edição" / non-goal "aplicar+publicar" × F1 — gate do Step 5 (§3.5) |
 | **sem Stage (roadmap)** | feriados por unidade (§5) |
+
+> **Nota (2026-09-27): reconciliação pós-execução da Stage 4.1** (issue #55; concept e technical
+> em `docs/stages/4.1-scheduling-domain/`; ADRs 4.1.0007–4.1.0012). O texto acima fica como foi
+> ratificado; o que a Stage fixou — ou, por decisão do sponsor, estreitou —, seção a seção. A nota
+> mora aqui, e não dentro de cada seção, para não deslocar as citações por linha que o concept e os
+> ADRs 4.1.x fazem deste doc.
+>
+> - **§2 — glosa `ShiftBand`.** As **faixas de funcionamento** (a faixa **habilitada** num dia da
+>   escala) ganham a glosa EN **`ShiftBand`** (†, proposta da Stage 4.1): entidade interna da
+>   escala que carrega o `TimeRange` e o intervalo declarado da faixa, com as demandas dentro dela —
+>   uma por `(faixa, função)`; duas faixas da escala não repetem o par `(início, fim)`, mas faixas
+>   distintas podem se sobrepor, inclusive da mesma função
+>   ([ADR 4.1.0010](../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md); a chave
+>   `(início, fim)` vem do ADR 4.1.0011). Fecha a lacuna de cardinalidade de §3.3.
+> - **§3.1 e §3.2 — as outras lacunas da 4.1.** `Schedule` é a **raiz única** do agregado, com a
+>   versão e uma fotografia do calendário operacional
+>   ([ADR 4.1.0009](../../adr/4_1_0009-schedule-is-the-single-aggregate-root.md)); o `TimeRange` é
+>   par semiaberto de instantes ingênuos de minuto inteiro
+>   ([ADR 4.1.0007](../../adr/4_1_0007-time-range-as-naive-minute-instants.md)); a faixa que passa
+>   do corte seguinte é aceita, pertence ao dia operacional em que começa e tem até 24h nominais
+>   ([ADR 4.1.0008](../../adr/4_1_0008-band-crossing-the-next-cutoff.md)).
+> - **§3.2, §3.6.10 (e a linha "Horas de uma alocação" de §2) — intervalo em dois níveis**
+>   (decisão do sponsor Q3, 2026-09-26). O intervalo declarado existe na **faixa** (default 0) e,
+>   opcional, na **alocação** (ausente = herda o da faixa; presente, prevalece). A regra única lê o
+>   **intervalo efetivo**: `horas(a) = (fim − início) − intervalo_efetivo(a)`, e o sítio de contagem
+>   continua **um só** (`TimeRange.worked_minutes`); `0 ≤ intervalo < duração nominal` vale nos dois
+>   níveis. Quando os dois diferem, a alocação carrega a **divergência de intervalo** — marca
+>   **derivada**, nunca armazenada: o domínio a representa e não escolhe; nomear a política e o modo
+>   é da 4.2, e perguntar ao editor qual intervalo manter é da borda (4.5)
+>   ([ADR 4.1.0011](../../adr/4_1_0011-declared-break-on-band-and-allocation.md) + errata datada no
+>   [ADR 4.1.0002](../../adr/4_1_0002-weekly-period-operational-day-and-allocation-hours.md): a
+>   regra de §3 fica, a premissa "o intervalo é só da faixa" foi ampliada).
+> - **§3.6.1 e §3.4 — o mesmo registro duas vezes na mesma faixa** (decisão do sponsor Q4,
+>   2026-09-27). Duas vagas da **mesma faixa** ocupadas pelo mesmo registro — inclusive em demandas
+>   de funções diferentes — deixaram de ser caso da política de sobreposição e viraram **invariante
+>   estrutural** do agregado (`DuplicateAssignmentInBandError`,
+>   [ADR 4.1.0012](../../adr/4_1_0012-one-record-occupies-at-most-one-slot-per-band.md)). Isso
+>   **estreita** o texto ratificado de §3.6.1, que cobria o caso sob modo configurável, e alarga a
+>   invariante de §3.4 ("duas vagas da mesma demanda" → "da mesma faixa"), por decisão do sponsor.
+>   A política de sobreposição mantém o escopo sobre **faixas distintas** — inclusive parcialmente
+>   sobrepostas — e entre escalas vizinhas; as horas seguem contadas **por alocação**, sem segunda
+>   definição. Quem cobre duas funções no mesmo turno preenche uma vaga e a outra fica descoberta
+>   (cobertura < 100%, estado legítimo de §3.3).
 
 ---
 
