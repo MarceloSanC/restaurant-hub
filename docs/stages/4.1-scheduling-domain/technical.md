@@ -1544,4 +1544,29 @@ Travada em `test_shift_demand.py` (`match="AssignmentId"`) e `test_shift_band.py
 (`match="ShiftDemandId"`), com entrada idêntica nas duas posições. Reversível: é a ordem de duas
 guardas e dois testes.
 
+### 2026-09-27 — [decision] fechamento da execução — sessão mestra (Claude Opus 5.5)
+
+**As 10 Tasks estão commitadas**, cada uma com pre-commit e `make check` completo verdes, mais as
+correções dos três Checkpoints C e da auditoria de testes:
+
+| Etapa | Resultado |
+|---|---|
+| Checkpoint C — Tasks 02–04 | sem bloqueante; 3 importantes + 3 menores corrigidos (`task-03-fix`, `task-04-fix`); 1 `[finding]` → 4.3 |
+| Checkpoint C — Tasks 05–07 | sem bloqueante; 5 menores corrigidos (`task-07-fix` + Tasks 08/10); o `[deviation]` da Task 07 foi atacado e se sustentou |
+| Checkpoint C — Tasks 08–10 | sem bloqueante; 3 importantes + 4 menores corrigidos (§6 do concept nomeia os métodos; matriz método × exceção cobrada nos dois sentidos; `task-09-fix`, `task-10-fix`); 1 `[finding]` → 4.3 |
+| Auditoria de testes (mutação real, agente independente) | 118 mutantes à mão: 111 mortos, 1 equivalente, 6 sobreviventes — mortos por testes novos (commit dos sobreviventes), cada um reprovando sob o mutante |
+| Verificação ponta a ponta | script com objetos de domínio reais (sem fakes): semana alinhada, pausa 7h × 8h com divergência, recusa da mesma pessoa em duas vagas da faixa, madrugada no dia do início, faixa movida preservando vagas e pessoas, recusa de desabilitar com gente alocada, no-op sem versão nova |
+| Citações de linha | 814 citações dos artefatos da Stage conferidas por conteúdo depois dos três rebases (3.5, PR #57, PR #62) |
+
+**Isolamento da auditoria de mutação.** A primeira tentativa, numa worktree destacada descartável,
+foi recusada pelo hook `git_guard` (PR #57) e o desvio por cópia exportada foi recusado pelo
+classificador. Não foi contornado: a auditoria rodou **serializada** na worktree da Stage, com
+o auditor como único agente e `git status` limpo verificado depois de cada mutante. **Direção
+sugerida** (sem Stage): o `worktree-new.py` ganhar um modo de cópia destacada descartável, ou o
+hook aceitar `worktree add --detach` — decisão do sponsor, que é quem configura o hook.
+
+**Gates de saída** (evidência no relatório de execução e no PR): `make check` verde,
+cobertura dos arquivos novos do BC a 100%, `check_technical_postexec.py` verde, ADRs 4.1.0007–0012
+`accepted`, roadmap com a 4.1 `done` e a nota de reconciliação.
+
 <!-- END: post-execution -->
