@@ -8,11 +8,10 @@ alvo correto das asserções "nenhum outro campo mudou" do concept §11. As
 entidades da 3.1 não servem para isso: `Employee.__eq__` e `JobFunction.__eq__`
 comparam **só por id**, então `assert entidade == entidade` é vacuoso.
 
-**Nenhum campo de vínculo de login.** Hoje isso é vacuamente verdadeiro (o
-campo não existe no modelo da 3.1); fica declarado como **restrição para a
-3.5**, que acrescenta `user_id` ao registro: a cópia entre unidades não o
-carrega (workforce §3.7; concept §5.10), e o result é onde a ausência é
-verificável por teste.
+**O vínculo de login entrou na Stage 3.5** (`EmployeeResult.user_id`), e com ele a
+restrição que a 3.2 deixou declarada passou a ter conteúdo: a cópia entre unidades
+**não o carrega** (workforce §3.7; ADR 3.2.0003; ADR 3.5.0004 §5), e o result é
+onde isso é verificável por teste.
 
 **Cada result é construído num sítio só, e o sítio mora aqui** (issue #45,
 Gate 8). `EmployeeResult` era montado campo a campo em **onze** use cases:
@@ -27,9 +26,14 @@ As funções ficam **junto das classes** e não num `mappers.py` à parte porque
 que a regra assere é adjacência: o result e a única forma de construí-lo são a
 mesma unidade de leitura. Elas são o **único** lugar do BC que lê entidade e
 escreve DTO — a fronteira que LAYOUT §7 desenha, num ponto só por agregado.
+
+A Stage 3.5 é o caso que a regra 8 previa: `user_id` entrou no registro e
+apareceu em **toda** resposta de funcionário editando **uma** função — e
+`EmployeeLoginResult`, o result de R17, também tem o seu sítio único aqui
+(`to_employee_login_result`), embora o use case o devolva por dois caminhos.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
@@ -38,6 +42,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import ShiftPreference
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
@@ -76,6 +81,11 @@ class EmployeeResult:
             da 3.4.
         unavailabilities: períodos do registro, sem sobreposição.
         active: estado do ciclo de vida (ADR 3.2.0006).
+        user_id: o login em identity vinculado ao registro, ou `None` (Stage
+            3.5). Default `None` — espelha `Employee.user_id` e é **seguro**
+            porque nenhum use case constrói este DTO diretamente: todos passam
+            por `employee_result`, que copia o campo da entidade (CA06). A
+            cópia devolve `None` **por construção** (§5.2).
     """
 
     id: EmployeeId
@@ -87,6 +97,26 @@ class EmployeeResult:
     job_function_ids: frozenset[JobFunctionId]
     unavailabilities: tuple[UnavailabilityPeriod, ...]
     active: bool
+    user_id: UserId | None = None
+
+
+@dataclass(frozen=True)
+class EmployeeLoginResult:
+    """O registro depois de vinculado **e**, só no canal `link`, o segredo (R17).
+
+    Attributes:
+        employee: o estado resultante do registro — com `user_id` preenchido —,
+            pelo mesmo mapper de toda resposta de funcionário (CA06).
+        setup_link: o link de definição de senha quando `delivery=LINK`; `None`
+            quando foi por e-mail. `repr=False` porque é credencial bearer viva
+            (ADR 3.5.0002 §3): sem isso qualquer traceback com `--showlocals`, ou
+            log de debug do result, imprimiria o segredo. Sem default: o use case
+            decide **explicitamente** `None` ou o link — um default `None`
+            deixaria o canal `link` sair sem o segredo por omissão silenciosa.
+    """
+
+    employee: EmployeeResult
+    setup_link: str | None = field(repr=False)
 
 
 def to_job_function_result(job_function: JobFunction) -> JobFunctionResult:
@@ -105,6 +135,12 @@ def to_employee_result(employee: Employee) -> EmployeeResult:
     ordena nem deriva nada. Uma projeção que decidisse algo aqui esconderia a
     decisão de todos os onze use cases que a chamam, e é o adapter — não este
     mapeamento — que ordena `job_function_ids` para exibição (ADR 3.1.0006).
+
+    `user_id` entra aqui como qualquer outro campo, e é exatamente o que a regra 8
+    compra: o vínculo de login (Stage 3.5) apareceu nas doze respostas de
+    funcionário com **uma** edição. A cópia entre unidades não o carrega porque
+    `copy_employee_to_unit` constrói um `Employee` novo sem ele — a ausência é do
+    domínio, não deste mapeamento (ADR 3.5.0004 §5).
     """
     return EmployeeResult(
         id=employee.id,
@@ -116,4 +152,17 @@ def to_employee_result(employee: Employee) -> EmployeeResult:
         job_function_ids=employee.job_function_ids,
         unavailabilities=employee.unavailabilities,
         active=employee.active,
+        user_id=employee.user_id,
     )
+
+
+def to_employee_login_result(employee: Employee, setup_link: str | None) -> EmployeeLoginResult:
+    """O único sítio de construção de `EmployeeLoginResult` (regra 8; R17 da 3.5).
+
+    `setup_link` é **posicionalmente explícito** no chamador: o use case decide
+    `None` (canal `email`, o link foi enviado) ou o link (canal `link`, entrega em
+    mãos), e as duas decisões passam por aqui. O registro vem pelo mapper de
+    funcionário, então o `user_id` recém-vinculado sai na resposta sem que este
+    result precise saber que ele existe.
+    """
+    return EmployeeLoginResult(employee=to_employee_result(employee), setup_link=setup_link)

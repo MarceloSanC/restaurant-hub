@@ -57,6 +57,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -235,6 +236,7 @@ def employee_to_row(employee: Employee) -> dict[str, Any]:
         "workload_kind": workload_kind,
         "weekly_hours": weekly_hours,
         "active": employee.active,
+        "user_id": employee.user_id,
     }
 
 
@@ -272,4 +274,8 @@ def row_to_employee(
         job_function_ids=frozenset(JobFunctionId(value) for value in job_function_ids),
         unavailabilities=periods,
         active=row.active,
+        # Pelo construtor, como os demais: um `""` gravado por fora cairia na
+        # validação da entidade (`InvalidIdentifierError`), não num vínculo
+        # fantasma (concept 3.5 §4; ADR 3.5.0004 §1).
+        user_id=UserId(row.user_id) if row.user_id is not None else None,
     )

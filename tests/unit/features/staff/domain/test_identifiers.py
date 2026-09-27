@@ -7,6 +7,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 
 pytestmark = pytest.mark.unit
@@ -18,6 +19,7 @@ def test_ids_devolvem_o_proprio_valor() -> None:
     assert JobFunctionId("f1") == "f1"
     assert TenantId("t1") == "t1"
     assert UnitId("u1") == "u1"
+    assert UserId("login-1") == "login-1"
 
 
 def test_nomes_dos_newtypes_batem_com_os_identificadores() -> None:
@@ -27,3 +29,4 @@ def test_nomes_dos_newtypes_batem_com_os_identificadores() -> None:
     assert JobFunctionId.__name__ == "JobFunctionId"
     assert TenantId.__name__ == "TenantId"
     assert UnitId.__name__ == "UnitId"
+    assert UserId.__name__ == "UserId"

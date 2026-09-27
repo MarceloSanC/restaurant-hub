@@ -63,6 +63,7 @@ from restaurant_hub.features.identity.application.errors import (
     PermissionDeniedError,
     UnitNotVisibleError,
 )
+from restaurant_hub.features.identity.application.facade import IdentityFacade
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UserId,
@@ -78,6 +79,9 @@ from restaurant_hub.features.staff.adapters.inbound.http.error_handlers import (
     register_staff_error_handlers,
 )
 from restaurant_hub.features.staff.adapters.inbound.http.router import router as staff_router
+from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway import (
+    LocalIdentityGateway,
+)
 from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
     PostgresEmployeeRepository,
 )
@@ -87,6 +91,9 @@ from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository
 from restaurant_hub.features.staff.application.ports.out.access_guard import (
     AccessGuard,
     AuthorizedScope,
+)
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    IdentityGateway,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId as StaffTenantId,
@@ -124,9 +131,11 @@ _USE_CASES_DE_STAFF = (
     "staff_deactivate_employee",
     "staff_reactivate_employee",
     "staff_copy_employee_to_unit",
+    "staff_create_login_for_employee",
 )
 
-_TOTAL_DE_USE_CASES = 16
+# 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17).
+_TOTAL_DE_USE_CASES = 17
 
 
 def _dependencias() -> ApplicationDependencies:
@@ -134,7 +143,7 @@ def _dependencias() -> ApplicationDependencies:
     return wire_dependencies(Settings(_env_file=None))
 
 
-def test_ca18_os_dezesseis_use_cases_de_staff_estao_no_conteiner() -> None:
+def test_ca18_todos_os_use_cases_de_staff_estao_no_conteiner() -> None:
     """A contagem é asserção, não decoração.
 
     O número 16 vem do plano e da pasta `use_cases/`. Sem asserir a contagem, um
@@ -159,7 +168,11 @@ def test_ca18_a_lista_deste_teste_cobre_a_pasta_de_use_cases_inteira() -> None:
     derivar ajuda em vez de esconder.
     """
     pasta = _SRC / "features" / "staff" / "application" / "use_cases"
-    na_pasta = {arquivo.stem for arquivo in pasta.glob("*.py") if arquivo.stem != "__init__"}
+    # Módulos `_`-prefixados são auxiliares da camada, não use cases — a mesma
+    # convenção de `test_application_guards.py`. Hoje não há nenhum: o mapper
+    # único de `EmployeeResult`, que a Stage 3.5 criou como `_results.py`, mora
+    # em `dtos/results.py` desde a sincronização com a issue #45.
+    na_pasta = {arquivo.stem for arquivo in pasta.glob("*.py") if not arquivo.stem.startswith("_")}
     na_lista = {nome.removeprefix("staff_") for nome in _USE_CASES_DE_STAFF}
 
     assert na_pasta == na_lista, (
@@ -250,21 +263,86 @@ def test_so_o_composition_root_importa_os_adapters_de_staff() -> None:
     )
 
 
-def test_um_import_proibido_plantado_reprova() -> None:
-    """Teste negativo: o detector detecta.
+@pytest.mark.parametrize(
+    "codigo_violador",
+    [
+        pytest.param(
+            "from restaurant_hub.features.staff.adapters.out.postgres.employee_repository "
+            "import PostgresEmployeeRepository",
+            id="repositorio-postgres",
+        ),
+        pytest.param(
+            "from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway "
+            "import LocalIdentityGateway",
+            id="gateway-de-identity",
+        ),
+    ],
+)
+def test_um_import_proibido_plantado_reprova(codigo_violador: str) -> None:
+    """Teste negativo: o detector detecta — e alcança o pacote novo da Stage 3.5.
 
     Um guarda que nunca viu um caso positivo não é um guarda — é uma função que
-    devolve conjunto vazio.
+    devolve conjunto vazio. O segundo caso existe porque `adapters/out/identity/`
+    nasceu depois do detector: a cobertura da varredura sobre ele é o que se
+    verifica, não o resultado dela.
     """
-    codigo_violador = (
-        "from restaurant_hub.features.staff.adapters.out.postgres.employee_repository "
-        "import PostgresEmployeeRepository"
-    )
     arvore = ast.parse(codigo_violador)
 
     alvos = [no.module for no in ast.walk(arvore) if isinstance(no, ast.ImportFrom) and no.module]
 
     assert any(_MODULO_DE_ADAPTERS in alvo for alvo in alvos)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — o gateway de identity (CA07 wiring, CA32)
+# ---------------------------------------------------------------------------
+
+
+def test_ca07_o_gateway_de_identity_e_o_local_sobre_a_fachada_das_rotas() -> None:
+    """Identidade de objeto, não `isinstance`: um grafo, não dois.
+
+    A fachada por baixo do gateway tem de usar **os mesmos** repositórios,
+    `sender` e `clock` que servem as rotas de identity. Uma segunda
+    `PostgresUserRepository` satisfaria qualquer teste de tipo e faria o login do
+    funcionário nascer num pool diferente do que a rota `/auth/login` consulta —
+    sem ganho nenhum e com um `Engine` a mais (ADR 3.5.0001 §Implementation
+    notes; mesmo raciocínio de CA15 para o `IdentityGuard`).
+    """
+    deps = _dependencias()
+
+    assert isinstance(deps.staff_identity_gateway, LocalIdentityGateway)
+    fachada = deps.staff_identity_gateway._facade
+    assert isinstance(fachada, IdentityFacade)
+
+    provisao = fachada._provision_account
+    convite = deps.identity_invite_user
+    assert provisao._users is convite._users
+    assert provisao._restaurants is convite._restaurants
+    assert provisao._units is convite._units
+    assert provisao._hasher is convite._hasher
+    assert provisao._tokens is convite._tokens
+    assert provisao._token_issuer is convite._token_issuer
+    assert provisao._clock is convite._clock
+    assert fachada._send_invitation._email_sender is convite._email_sender
+    assert fachada._revoke_all_sessions._sessions is deps.identity_revoke_session._sessions
+    assert fachada._revoke_all_sessions._clock is deps.identity_revoke_session._clock
+
+
+def test_o_conteiner_de_staff_tem_exatamente_os_campos_declarados() -> None:
+    """Os 17 use cases mais os dois ports consumidos — nenhum campo entra de carona.
+
+    Como `staff_access_guard` na 3.4, `staff_identity_gateway` é anotado com o
+    **port**, não com a classe. Este teste trava o conjunto para que um campo
+    novo entre por decisão.
+    """
+    campos_de_staff = {
+        nome for nome in ApplicationDependencies.__dataclass_fields__ if nome.startswith("staff_")
+    }
+
+    assert campos_de_staff == {*_USE_CASES_DE_STAFF, "staff_access_guard", "staff_identity_gateway"}
+    assert ApplicationDependencies.__dataclass_fields__["staff_identity_gateway"].type is (
+        IdentityGateway
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -372,8 +450,10 @@ def _ator_autenticado(*, tenant_id: str | None = "t1") -> object:
 # universal, representante estreito" — foi assim que a Stage 3.4 vazou duas
 # mutações. Os dois arquivos são comparáveis linha a linha de propósito.
 # Cardinalidades declaradas — piso contra a varredura encolher em silencio.
-_TOTAL_DE_OVERRIDES_DE_STAFF = 17
-_TOTAL_DE_ROTAS_DE_STAFF = 16
+# 17 overrides (16 `_get_*` + `get_access_guard`) e 16 rotas até a 3.6; a Stage
+# 3.5 acrescenta o provedor e a rota de R17.
+_TOTAL_DE_OVERRIDES_DE_STAFF = 18
+_TOTAL_DE_ROTAS_DE_STAFF = 17
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.inbound.http"
 _PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
@@ -1020,8 +1100,8 @@ def test_ca30_cada_override_de_staff_devolve_a_dependencia_montada() -> None:
         assert wiring.dependency_overrides[provedor]() is esperado, nome
 
 
-def test_ca30_as_dezesseis_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None:
-    """As 16 rotas passam a responder — e as de identity continuam como estavam.
+def test_ca30_todas_as_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None:
+    """As 17 rotas passam a responder — e as de identity continuam como estavam.
 
     A varredura é sobre a **app real**, e não sobre o router isolado: é a app que
     o cliente alcança, e é nela que um prefixo errado ou um router não incluído
@@ -1067,3 +1147,36 @@ def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
 
     assert de_identity == _ROTAS_DE_IDENTITY
     assert len(de_identity) == _TOTAL_DE_ROTAS_DE_IDENTITY
+
+
+def test_ca07_deactivate_e_create_login_recebem_a_mesma_instancia_do_gateway() -> None:
+    """Um gateway, uma fachada, um grafo — identidade de objeto nos dois consumidores."""
+    deps = _dependencias()
+
+    assert deps.staff_deactivate_employee._gateway is deps.staff_identity_gateway
+    assert deps.staff_create_login_for_employee._gateway is deps.staff_identity_gateway
+    assert (
+        deps.staff_create_login_for_employee._employees is deps.staff_deactivate_employee._employees
+    )
+
+
+@pytest.mark.parametrize(
+    ("campo", "recebe_gateway"),
+    [
+        pytest.param("staff_create_login_for_employee", True, id="create-login"),
+        pytest.param("staff_deactivate_employee", True, id="deactivate"),
+        pytest.param("staff_delete_employee", False, id="delete"),
+        pytest.param("staff_reactivate_employee", False, id="reactivate"),
+    ],
+)
+def test_so_r13_e_r17_recebem_o_gateway(campo: str, recebe_gateway: bool) -> None:
+    """ADR 3.5.0003: R15 recusa sem falar com identity; R14 não altera o vínculo.
+
+    A assinatura do construtor é a evidência: um `gateway` que aparecesse em
+    `DeleteEmployeeUseCase` seria o começo de "apagar revoga", a alternativa E
+    rejeitada no ADR.
+    """
+    deps = _dependencias()
+    parametros = inspect.signature(type(getattr(deps, campo)).__init__).parameters
+
+    assert ("gateway" in parametros) is recebe_gateway

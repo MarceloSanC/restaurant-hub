@@ -119,7 +119,7 @@ graph LR
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
 | `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
-| `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) | draft | `3.6-staff-http` |
+| `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.5-employee-login-link` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | draft | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
@@ -1170,6 +1170,45 @@ complexidade_estimada: S
 gate_mode: strict
 skills_hint: [hex-arch-python, composition-root]
 ```
+
+> **Nota (2026-09-26): reconciliação pós-execução da Stage 3.5** (issue #51; concept e technical em
+> `docs/stages/3.5-employee-login-link/`; ADRs 3.5.0001–0004). O bloco acima foi escrito antes do
+> kickoff e fica como registro; o que a execução mudou:
+>
+> - **"Convite ou senha provisória" virou "convite por e-mail ou link de definição de senha
+>   entregue em mãos"** (decisão do sponsor, concept §13 Q1; ADR 3.5.0002): a conta nasce
+>   pendente com `unusable_hash` e o **mesmo** token de setup do convite; o canal `link` devolve
+>   o link na resposta, com prazo próprio (`Settings.handover_link_ttl_hours`, 168h contra 72h).
+>   Não há senha provisória nem reemissão de link — link perdido é recuperado pelo pedido público
+>   de redefinição de senha.
+> - **A travessia entre BCs ganhou forma** (ADR 3.5.0001): identity expõe
+>   `features/identity/application/facade.py` (Open Host Service, primitivos) e staff a consome em
+>   `adapters/out/identity/local_identity_gateway.py` — a **única** aresta, nomeada no contrato
+>   `bc-independence` (um par + `unmatched_ignore_imports_alerting = error`), regra agora em
+>   `LAYOUT.md` §3. Supersede parcialmente o ADR 3.4.0001 §3 ("zero `ignore_imports`"), por nota
+>   datada no próprio ADR (`CONVENTIONS.md` §5, terceira forma).
+> - **A Stage entregou em dois BCs** (divergência de PIPELINE §4.2 #4 autorizada pelo sponsor,
+>   concept §13 Q6): em identity, `Email` recusa o byte NUL (era 500 em três rotas),
+>   `ProvisionAccountUseCase`/`SendInvitationUseCase`/`RevokeAllSessionsUseCase`, o helper
+>   `_invitation.py` (única casa do formato do link) e a fachada; em staff, `Employee.user_id`
+>   (coluna `TEXT NULL` sem FK/UNIQUE/índice, migration `0004`, ADR 3.5.0004), o port
+>   `IdentityGateway` com quatro leis e contrato fake × real, três use cases (R17 novo; R13 revoga
+>   sessões antes de gravar; R15 recusa vinculado com 409 — ADR 3.5.0003), a rota R17 com **dupla
+>   permissão** (`manage_staff` e `manage_users`) e `user_id` em toda resposta de funcionário.
+> - **`complexidade_estimada: S` → M** (12 Tasks + 6 commits de `fix` vindos dos Checkpoints C e
+>   da auditoria de testes; 5 Checkpoints C; auditoria independente; as oito mutações de CA28
+>   mortas). `contratos_consumidos` não são `invite_user`/`create_user`: são os três use cases
+>   novos de identity, atrás da fachada.
+> - **Sincronização com o `develop` por merge** (`0c9fd8a` + `58f6694`): a #45 renomeou
+>   `adapters/in` → `adapters/inbound` e centralizou os mappers de result; a 3.5 adotou
+>   `to_employee_result` (com `user_id`) e `to_user_result`, e apagou o `use_cases/_results.py`
+>   que ela havia criado para o mesmo fim. Decisão e divergência da Etapa 4 do GIT-WORKFLOW na
+>   §7 do technical.
+> - **Findings abertos** (technical §7): `AuthenticationResult.refresh_token` sem `repr=False`
+>   (identity, herdado da 2.2); o guarda de não-ramificação não pega `__class__.__name__`;
+>   `foi_revogado` do contrato real observa chamada, não estado; varredura derivada de
+>   `validate_identifier` por rota. Issue #47 re-escopada (ADR 3.5.0001 §5): o tradutor de acesso
+>   fica no `composition_root` até identity expor a autenticação fora do adapter de entrada.
 
 ---
 

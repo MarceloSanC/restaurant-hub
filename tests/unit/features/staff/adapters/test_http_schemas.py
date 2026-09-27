@@ -10,6 +10,7 @@ nestas travas sem que ninguém precise lembrar deste arquivo.
 """
 
 import ast
+import dataclasses
 import datetime
 import decimal
 import pathlib
@@ -20,8 +21,9 @@ from pydantic import BaseModel, ValidationError
 from pydantic import TypeAdapter as PydanticTypeAdapter
 
 from restaurant_hub.features.staff.adapters.inbound import http as pacote
-from restaurant_hub.features.staff.adapters.inbound.http import schemas
+from restaurant_hub.features.staff.adapters.inbound.http import dependencies, schemas
 from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeLoginResult,
     EmployeeResult,
     JobFunctionResult,
 )
@@ -31,6 +33,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -109,11 +112,11 @@ def _modelos_em(anotacao: object) -> list[type[BaseModel]]:
 # contra a *ideia*, não contra a grafia: um `restaurant_id` no corpo consumido
 # pelo router faria o mesmo estrago que um `tenant_id`.
 #
-# Os dois últimos são sobre **vínculo de login**, que é `non_goal` do roadmap e
-# entra no registro só na Stage 3.5. O concept §4.3 é honesto ao chamar a
-# ausência de "hoje vacuamente verdadeiro": é o nome estar nesta lista que a
-# converte de declaração em trava, e sem isso a célula da tabela de `non_goals`
-# ficaria vazia.
+# Os dois últimos são sobre **vínculo de login**. O vínculo entrou na Stage 3.5 —
+# e `user_id` continua proibido **no request** porque nunca vem do cliente: quem
+# o gera é identity, atrás do gateway; o cliente manda o e-mail
+# (`CreateLoginRequest`) e recebe o `user_id` na **resposta**. A lista negra
+# passou de "declaração de non-goal" a trava de fronteira.
 _CAMPOS_PROIBIDOS_EM_REQUEST = (
     "tenant_id",
     "restaurant_id",
@@ -444,3 +447,54 @@ def test_a_uniao_de_perfil_e_realmente_discriminada_pelo_campo_type() -> None:
 
     assert isinstance(adaptador.validate_python(_PERFIL_FIXO), schemas.FixedSchedulePayload)
     assert isinstance(adaptador.validate_python(_PERFIL_SOB_DEMANDA), schemas.OnDemandPayload)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — `CreateLoginRequest` e o `user_id` da resposta
+# ---------------------------------------------------------------------------
+
+
+def test_create_login_request_exige_email_e_canal_sem_default() -> None:
+    """Os dois campos são decisão do gestor — nenhum tem default."""
+    campos = schemas.CreateLoginRequest.model_fields
+    assert set(campos) == {"email", "delivery"}
+    assert campos["email"].is_required()
+    assert campos["delivery"].is_required()
+    with pytest.raises(ValidationError):
+        schemas.CreateLoginRequest(email="a@b.com")  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        schemas.CreateLoginRequest(email="a@b.com", delivery="xpto")  # type: ignore[arg-type]
+
+
+def test_create_login_request_aceita_exatamente_os_dois_canais() -> None:
+    assert schemas.CreateLoginRequest(email="a@b.com", delivery="email").delivery == "email"
+    assert schemas.CreateLoginRequest(email="a@b.com", delivery="link").delivery == "link"
+
+
+def test_o_email_do_request_nao_e_identificador_de_staff() -> None:
+    """Concept §5.7: o e-mail não passa por `validate_identifier` — não é `*_id`."""
+    campos = {campo.name for campo in dependencies.identifier_fields(schemas.CreateLoginRequest)}
+    assert campos == set()
+
+
+def test_employee_response_carrega_o_user_id_do_result() -> None:
+    vinculado = dataclasses.replace(_employee_result(), user_id=UserId("login-1"))
+
+    assert schemas.EmployeeResponse.from_result(_employee_result()).user_id is None
+    assert schemas.EmployeeResponse.from_result(vinculado).user_id == "login-1"
+
+
+def test_employee_login_response_embrulha_o_registro_e_o_link() -> None:
+    vinculado = dataclasses.replace(_employee_result(), user_id=UserId("login-1"))
+
+    com_link = schemas.EmployeeLoginResponse.from_result(
+        EmployeeLoginResult(employee=vinculado, setup_link="https://x/definir-senha?token=t")
+    )
+    por_email = schemas.EmployeeLoginResponse.from_result(
+        EmployeeLoginResult(employee=vinculado, setup_link=None)
+    )
+
+    assert com_link.employee.user_id == "login-1"
+    assert com_link.setup_link == "https://x/definir-senha?token=t"
+    assert por_email.setup_link is None
+    assert set(schemas.EmployeeLoginResponse.model_fields) == {"employee", "setup_link"}

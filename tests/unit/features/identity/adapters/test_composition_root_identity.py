@@ -180,6 +180,29 @@ def test_ttls_do_token_de_setup_vem_da_configuracao() -> None:
     assert deps.identity_request_password_reset._reset_ttl == timedelta(minutes=11)
 
 
+def test_ttls_de_provisao_vem_da_configuracao_com_valores_distintos() -> None:
+    """Stage 3.5 — os dois prazos do `ProvisionAccountUseCase` são alavancas diferentes.
+
+    Valores distintos de propósito, pelo mesmo motivo do teste acima: com os
+    dois iguais, trocar `invitation_ttl` por `handover_ttl` no composition root
+    continuaria verde — e o link em mãos passaria a expirar em horas de e-mail.
+    O use case fica **dentro** da fachada, que fica dentro do gateway de staff:
+    o caminho até ele é o caminho da única aresta entre os BCs.
+    """
+    cfg = Settings(
+        _env_file=None,
+        invitation_token_ttl_hours=5,
+        handover_link_ttl_hours=9,
+    )
+
+    deps = wire_dependencies(cfg)
+
+    provisao = deps.staff_identity_gateway._facade._provision_account
+    assert provisao._invitation_ttl == timedelta(hours=5)
+    assert provisao._handover_ttl == timedelta(hours=9)
+    assert provisao._invitation_ttl == deps.identity_invite_user._invitation_ttl
+
+
 def test_base_url_do_link_vem_da_configuracao() -> None:
     """O link do e-mail aponta para a aplicação web, e o endereço é ambiente."""
     cfg = Settings(_env_file=None, app_base_url="https://app.exemplo.com")
@@ -188,6 +211,10 @@ def test_base_url_do_link_vem_da_configuracao() -> None:
 
     assert deps.identity_invite_user._base_url == "https://app.exemplo.com"
     assert deps.identity_request_password_reset._base_url == "https://app.exemplo.com"
+    assert (
+        deps.staff_identity_gateway._facade._provision_account._base_url
+        == "https://app.exemplo.com"
+    )
 
 
 def test_duas_chamadas_devolvem_grafos_independentes() -> None:

@@ -18,11 +18,20 @@ cobrem coisas diferentes, e a diferença é o conteúdo do CA13:
 - `lint-imports` prova que o contrato **como está escrito** passa. Um
   `ignore_imports` acrescentado ao contrato o mantém verde enquanto abre a
   fronteira — a supressão é invisível para ele, porque é ele quem a obedece.
-- Este arquivo prova que o contrato **não foi afrouxado** (lê o `.importlinter`
-  e falha se a lista de supressões existir) e que o BC não **nomeia** o
-  vocabulário do outro lado, que é mais estreito que não importar: um
-  `Literal["manage_staff"]` é aceitável, um `Permission` importado não é — e a
-  distinção não é expressável como contrato de import.
+- Este arquivo prova que o contrato **não foi afrouxado além do decidido** (lê o
+  `.importlinter` e falha se a lista de supressões for outra que a única aresta
+  nomeada) e que o BC não **nomeia** o vocabulário do outro lado, que é mais
+  estreito que não importar: um `Literal["manage_staff"]` é aceitável, um
+  `Permission` importado não é — e a distinção não é expressável como contrato
+  de import.
+
+**Desde a Stage 3.5 a fronteira tem exatamente uma aresta** (ADR 3.5.0001): o
+gateway em `adapters/out/identity/` importa **um** módulo de identity — a
+fachada — por um par nomeado no contrato. O que este arquivo assere mudou de
+"zero" para "exatamente este": qual pacote pode importar, qual módulo pode ser
+importado, e que o papel do login atravessa como **valor**. Um segundo par entra
+por decisão — editando a lista aqui e no `.importlinter` no mesmo commit —,
+nunca por deriva.
 """
 
 import ast
@@ -40,6 +49,19 @@ _IMPORTLINTER = _REPO_ROOT / ".importlinter"
 _SECAO_BC_INDEPENDENCE = "importlinter:contract:bc-independence"
 _MODULO_IDENTITY = "restaurant_hub.features.identity"
 _MODULO_STAFF = "restaurant_hub.features.staff"
+
+# A única aresta (ADR 3.5.0001 §3): **qual** pacote de staff pode importar
+# identity, **qual** módulo de identity ele pode importar, e o par tal como o
+# `.importlinter` o escreve. Três constantes, uma decisão.
+_PACOTE_DO_GATEWAY = pathlib.PurePosixPath("adapters/out/identity")
+_MODULO_DA_FACHADA = "restaurant_hub.features.identity.application.facade"
+_PAR_UNICO = (
+    "restaurant_hub.features.staff.adapters.out.identity.* -> "
+    "restaurant_hub.features.identity.application.facade"
+)
+_GATEWAY = _STAFF / "adapters" / "out" / "identity" / "local_identity_gateway.py"
+# L-IG1: o papel do login de funcionário é do port, e atravessa como valor.
+_PAPEL_DE_FUNCIONARIO = "employee"
 
 # O vocabulário de acesso de identity. Não basta não importar: **nomear** o tipo
 # já é conhecer como o outro BC decide, e é o começo de reimplementar a decisão
@@ -101,27 +123,54 @@ def _contrato_bc_independence() -> configparser.SectionProxy:
     return parser[_SECAO_BC_INDEPENDENCE]
 
 
-def test_ca12_nenhum_modulo_de_staff_importa_identity() -> None:
+def _violacoes_da_aresta(caminho_relativo: pathlib.PurePosixPath, alvos: set[str]) -> list[str]:
+    """Por que um módulo de staff que importa identity **não** é a aresta permitida.
+
+    Devolve vazio quando o módulo está sob `adapters/out/identity/` **e** todo
+    import de identity é a fachada. Fatorado para que o teste negativo abaixo
+    possa exercitar o detector com casos plantados, sem gravar violador em `src/`.
+    """
+    de_identity = sorted(alvo for alvo in alvos if alvo.startswith(_MODULO_IDENTITY))
+    if not de_identity:
+        return []
+    razoes: list[str] = []
+    if not caminho_relativo.is_relative_to(_PACOTE_DO_GATEWAY):
+        razoes.append(f"fora de {_PACOTE_DO_GATEWAY}/ — só o gateway pode importar identity")
+    alem_da_fachada = [alvo for alvo in de_identity if alvo != _MODULO_DA_FACHADA]
+    if alem_da_fachada:
+        razoes.append(f"importa identity além da fachada: {alem_da_fachada}")
+    return razoes
+
+
+def test_ca12_so_o_gateway_importa_identity_e_importa_so_a_fachada() -> None:
     """A varredura é sobre o BC inteiro, um arquivo de cada vez.
 
     `lint-imports` já cobriria isto, mas o faz sobre o grafo que o contrato
-    descreve — e o contrato é editável. Aqui a asserção não passa por ele.
+    descreve — e o contrato é editável. Aqui a asserção não passa por ele: a
+    forma da aresta (ADR 3.5.0001 §3) é reaplicada sobre a árvore de import de
+    cada módulo. O gateway **tem** de aparecer como importador — senão a
+    asserção estaria verde por vácuo.
     """
-    culpados = {
-        str(arquivo.relative_to(_STAFF))
-        for arquivo in _modulos_de_staff()
-        if any(
-            alvo.startswith(_MODULO_IDENTITY)
-            for alvo in _alvos_de_import(
-                ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
-            )
+    importadores: dict[str, set[str]] = {}
+    for arquivo in _modulos_de_staff():
+        alvos = _alvos_de_import(
+            ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
         )
-    }
+        if any(alvo.startswith(_MODULO_IDENTITY) for alvo in alvos):
+            importadores[arquivo.relative_to(_STAFF).as_posix()] = alvos
 
-    assert culpados == set(), (
-        f"módulos de staff importando {_MODULO_IDENTITY}: {sorted(culpados)}. "
-        f"O vocabulário de acesso entra pelo port `AccessGuard`, e a tradução "
-        f"mora no composition root (ADR 3.4.0001 §3)."
+    violacoes = {
+        caminho: razoes
+        for caminho, alvos in importadores.items()
+        if (razoes := _violacoes_da_aresta(pathlib.PurePosixPath(caminho), alvos))
+    }
+    assert violacoes == {}, (
+        f"módulos de staff fora da única aresta permitida: {violacoes}. "
+        f"Só `{_PACOTE_DO_GATEWAY}/` importa identity, e só `{_MODULO_DA_FACHADA}` "
+        f"(ADR 3.5.0001 §3)."
+    )
+    assert _GATEWAY.relative_to(_STAFF).as_posix() in importadores, (
+        "o gateway deixou de importar a fachada — a asserção acima ficou vazia"
     )
 
 
@@ -146,23 +195,28 @@ def test_ca12_nenhum_modulo_de_staff_nomeia_role_nem_permission() -> None:
     )
 
 
-def test_ca13_o_contrato_bc_independence_nao_tem_nenhum_ignore_imports() -> None:
-    """CA13 — a supressão que ninguém escreveu é a que este teste guarda.
+def test_ca13_o_contrato_bc_independence_tem_exatamente_o_par_da_fachada() -> None:
+    """CA13 — a lista de supressões é **exata**, e a única entrada é a fachada.
 
-    O `ignore_imports` é o caminho de menor resistência no dia em que um import
-    cross-BC aparecer: uma linha no `.importlinter` deixa `make check` verde e a
-    fronteira aberta. O ADR 3.4.0001 escolheu o tradutor no composition root
-    justamente para que o número seja **zero**, e "zero" só é uma propriedade se
-    algo o medir.
+    Até a Stage 3.4 este teste asseria que a lista não existia ("zero" só é
+    propriedade se algo o medir). A 3.5 abriu a fronteira por **uma** aresta,
+    nomeada (ADR 3.5.0001 §3), e a asserção passou de "nenhuma" para "esta, e só
+    esta": um segundo `ignore_imports` — mesmo apontando para a fachada, mesmo
+    vindo de outro pacote de staff — reprova aqui até que alguém o decida e o
+    escreva nos dois lugares. E `unmatched_ignore_imports_alerting = error` faz
+    o par apontar para um import que existe: se o gateway deixar de importar a
+    fachada, a supressão vira erro em vez de lixo silencioso.
     """
     contrato = _contrato_bc_independence()
 
-    assert "ignore_imports" not in contrato, (
-        "o contrato `bc-independence` ganhou `ignore_imports`: "
-        f"{contrato.get('ignore_imports')!r}. É DoD da Stage 3.4 que a lista não "
-        "exista — a alternativa medida (adapter em staff) custaria TRÊS pares, "
-        "não um (ADR 3.4.0001, alternativa A)."
+    pares = [linha.strip() for linha in contrato["ignore_imports"].splitlines() if linha.strip()]
+    assert pares == [_PAR_UNICO], (
+        f"o contrato `bc-independence` tem outra lista de supressões: {pares}. "
+        "A única aresta entre os BCs é `staff.adapters.out.identity.* -> "
+        "identity.application.facade` (ADR 3.5.0001 §3); uma segunda entra por "
+        "decisão, editando esta constante e o `.importlinter` no mesmo commit."
     )
+    assert contrato["unmatched_ignore_imports_alerting"] == "error"
 
 
 def test_ca13_o_contrato_continua_sendo_independencia_entre_os_dois_bcs() -> None:
@@ -181,6 +235,41 @@ def test_ca13_o_contrato_continua_sendo_independencia_entre_os_dois_bcs() -> Non
     assert sorted(modulos) == sorted([_MODULO_IDENTITY, _MODULO_STAFF])
 
 
+def test_o_gateway_fixa_o_papel_de_funcionario_como_valor() -> None:
+    """L-IG1 pelo lado da fronteira: o papel atravessa como **literal**, não como enum.
+
+    O gateway é o único módulo de staff que fala com identity, e é justamente
+    onde `Role.EMPLOYEE` seria tentador. A varredura de vocabulário acima já
+    reprova o nome; esta assere o positivo: existe uma constante com o valor
+    `"employee"`, e é ela que o gateway passa em `role=`.
+    """
+    arvore = ast.parse(_GATEWAY.read_text(encoding="utf-8"), filename=str(_GATEWAY))
+
+    constantes = {
+        alvo.id: no.value.value
+        for no in ast.walk(arvore)
+        if isinstance(no, ast.Assign) and isinstance(no.value, ast.Constant)
+        for alvo in no.targets
+        if isinstance(alvo, ast.Name)
+    }
+    nomes_com_o_papel = {
+        nome for nome, valor in constantes.items() if valor == _PAPEL_DE_FUNCIONARIO
+    }
+    assert nomes_com_o_papel, f"o gateway não declara o literal {_PAPEL_DE_FUNCIONARIO!r}"
+
+    argumentos_role = [
+        palavra.value
+        for no in ast.walk(arvore)
+        if isinstance(no, ast.Call)
+        for palavra in no.keywords
+        if palavra.arg == "role"
+    ]
+    assert argumentos_role, "o gateway não passa `role=` para a fachada"
+    assert all(
+        isinstance(valor, ast.Name) and valor.id in nomes_com_o_papel for valor in argumentos_role
+    ), "o `role=` passado à fachada não é a constante com o papel de funcionário"
+
+
 def test_os_dois_detectores_reprovam_um_caso_plantado() -> None:
     """Teste negativo: guarda que nunca viu um positivo não é guarda.
 
@@ -196,3 +285,45 @@ def test_os_dois_detectores_reprovam_um_caso_plantado() -> None:
 
     assert any(alvo.startswith(_MODULO_IDENTITY) for alvo in _alvos_de_import(violador))
     assert _identificadores(violador) & _VOCABULARIO_DE_IDENTITY == _VOCABULARIO_DE_IDENTITY
+
+
+@pytest.mark.parametrize(
+    ("caminho", "alvo", "razao_esperada"),
+    [
+        pytest.param(
+            "application/use_cases/create_login.py",
+            _MODULO_DA_FACHADA,
+            "fora de",
+            id="fachada-importada-fora-do-gateway",
+        ),
+        pytest.param(
+            "adapters/out/identity/local_identity_gateway.py",
+            "restaurant_hub.features.identity.application.use_cases.provision_account",
+            "além da fachada",
+            id="gateway-importando-alem-da-fachada",
+        ),
+        pytest.param(
+            "adapters/out/identity/local_identity_gateway.py",
+            "restaurant_hub.features.identity.domain.value_objects.role",
+            "além da fachada",
+            id="gateway-importando-o-dominio-de-identity",
+        ),
+    ],
+)
+def test_o_detector_da_aresta_reprova_os_dois_lados_da_forma(
+    caminho: str, alvo: str, razao_esperada: str
+) -> None:
+    """A forma da aresta tem dois lados (quem importa; o que importa) — cada um reprova só."""
+    razoes = _violacoes_da_aresta(pathlib.PurePosixPath(caminho), {alvo})
+
+    assert len(razoes) == 1
+    assert razao_esperada in razoes[0]
+
+
+def test_o_detector_da_aresta_aceita_exatamente_o_gateway_sobre_a_fachada() -> None:
+    razoes = _violacoes_da_aresta(
+        pathlib.PurePosixPath("adapters/out/identity/local_identity_gateway.py"),
+        {_MODULO_DA_FACHADA, "restaurant_hub.features.staff.application.errors"},
+    )
+
+    assert razoes == []

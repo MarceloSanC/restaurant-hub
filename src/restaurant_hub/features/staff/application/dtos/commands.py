@@ -31,6 +31,7 @@ terceiro bloco da §6 do concept.
 
 from dataclasses import dataclass
 
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -203,6 +204,30 @@ class DeleteEmployeeCommand:
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
+
+
+@dataclass(frozen=True)
+class CreateLoginForEmployeeCommand:
+    """Criação do login de um funcionário (R17, Stage 3.5).
+
+    Attributes:
+        tenant_id: restaurante — vem do **token** (ADR 0.0.0005), nunca do corpo.
+        unit_id: unidade do registro, do path — parte do endereço (ADR 3.4.0007).
+        employee_id: o registro a vincular.
+        email: e-mail de login da conta a criar, **como texto**. Não passa por
+            `validate_identifier` nem vira VO aqui: e-mail é vocabulário de
+            identity, e quem o valida é identity, atrás do gateway (concept §5.7).
+            O que staff faz com ele é traduzir a recusa (L-IG2).
+        delivery: por onde o link de definição de senha vai — `EMAIL` (identity
+            envia) ou `LINK` (volta na resposta, para entrega em mãos). Sem
+            default: o gestor decide, e o canal decide o prazo do link.
+    """
+
+    tenant_id: TenantId
+    unit_id: UnitId
+    employee_id: EmployeeId
+    email: str
+    delivery: LoginDelivery
 
 
 @dataclass(frozen=True)

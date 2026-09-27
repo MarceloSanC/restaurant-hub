@@ -144,3 +144,51 @@ class SameUnitCopyError(StaffError):
 
     def __init__(self, unit_id: str) -> None:
         super().__init__(f"cópia exige unidade destino diferente da origem: {unit_id!r}")
+
+
+class LoginEmailAlreadyInUseError(StaffError):
+    """O e-mail já é login de alguém — em **qualquer** tenant (kickoff #2).
+
+    É a tradução, pelo gateway, do `EmailAlreadyRegisteredError` de identity
+    (L-IG2, concept 3.5 §4): staff nomeia a condição no seu vocabulário porque o
+    gerente precisa distingui-la das demais recusas de R17. A mensagem cita
+    **só** o e-mail enviado — nunca de quem é, nem em que tenant: dizer mais
+    seria o oráculo de existência global de conta que a 2.5 §13 registrou e que
+    esta Stage mantém por coerência (concept 3.5 §10). 409: conflito com estado
+    já gravado do outro lado da fronteira.
+    """
+
+    def __init__(self, email: str) -> None:
+        super().__init__(f"e-mail já usado como login: {email!r}")
+
+
+class InvalidLoginEmailError(StaffError):
+    """O conteúdo enviado como e-mail de login não é um e-mail.
+
+    Tradução do `InvalidEmailError` de identity (L-IG2): staff **não** valida
+    e-mail — o VO `Email` é de identity, e é a fachada quem o constrói (concept
+    3.5 §5.7). Inclui o byte NUL, que o VO passa a recusar nesta Stage (D8).
+    422: invariante violada pelo conteúdo enviado.
+    """
+
+    def __init__(self, email: str) -> None:
+        super().__init__(f"e-mail de login inválido: {email!r}")
+
+
+class EmployeeHasLoginError(StaffError):
+    """Remoção definitiva de registro **com login** — recusada (ADR 3.5.0003 §1b).
+
+    Irmã de `EmployeeInUseError`: as duas guardam a remoção (L-E5), com causas
+    diferentes. Remoção definitiva existe para *cadastro criado por engano*
+    (ADR 3.2.0006); um registro que recebeu login não é engano, e apagá-lo
+    deixaria em identity uma conta que ninguém aponta — e-mail tomado
+    globalmente, membership viva, irrecuperável até existir "desvincular". O
+    caminho é **desligar** (R13), que revoga as sessões e preserva o registro.
+    Vale também para o desligado com login: o vínculo é história (concept 3.5
+    §5.5). 409: conflito com estado já gravado.
+    """
+
+    def __init__(self, employee_id: str) -> None:
+        super().__init__(
+            f"funcionário com login não pode ser removido; desligue-o: {employee_id!r}"
+        )

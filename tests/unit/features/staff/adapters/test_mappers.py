@@ -32,6 +32,7 @@ from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmptyJobFunctionsError,
+    InvalidIdentifierError,
     InvalidNameError,
     InvalidUnavailabilityPeriodError,
     OverlappingUnavailabilityError,
@@ -41,6 +42,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -76,6 +78,7 @@ def _linha_de_funcionario(**sobrescritas: object) -> SimpleNamespace:
         "workload_kind": WORKLOAD_KIND_ON_DEMAND,
         "weekly_hours": None,
         "active": True,
+        "user_id": None,
     }
     colunas.update(sobrescritas)
     return _linha(**colunas)
@@ -323,6 +326,7 @@ def test_round_trip_de_funcionario_sob_demanda_sem_preferencia() -> None:
         "workload_kind": WORKLOAD_KIND_ON_DEMAND,
         "weekly_hours": None,
         "active": True,
+        "user_id": None,
     }
 
     de_volta = mappers.row_to_employee(
@@ -489,5 +493,44 @@ def test_precedencia_indisponibilidade_invalida_vence_invariante_da_entidade() -
             unavailabilities=[
                 _linha(start_at=datetime(2026, 8, 10, 12, 0), end_at=datetime(2026, 8, 10, 8, 0))
             ],
+            shift_periods=[],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 — `user_id` nas duas direções (ADR 3.5.0004 §4)
+# ---------------------------------------------------------------------------
+
+
+def test_user_id_atravessa_o_mapper_nas_duas_direcoes() -> None:
+    funcionario = _funcionario(user_id=UserId("login-1"))
+
+    linha = mappers.employee_to_row(funcionario)
+    assert linha["user_id"] == "login-1"
+
+    de_volta = mappers.row_to_employee(
+        _linha(**linha), job_function_ids=["f1"], unavailabilities=[], shift_periods=[]
+    )
+    assert de_volta.user_id == UserId("login-1")
+
+
+def test_user_id_nulo_reidrata_none_e_nao_string() -> None:
+    """`NULL` no banco é "sem login" — e só `None` significa isso na entidade."""
+    de_volta = mappers.row_to_employee(
+        _linha_de_funcionario(user_id=None),
+        job_function_ids=["f1"],
+        unavailabilities=[],
+        shift_periods=[],
+    )
+    assert de_volta.user_id is None
+
+
+def test_user_id_vazio_gravado_por_fora_cai_na_validacao_da_entidade() -> None:
+    """A reidratação passa pelo construtor: `""` é `InvalidIdentifierError`, não vínculo."""
+    with pytest.raises(InvalidIdentifierError, match="login do funcionário"):
+        mappers.row_to_employee(
+            _linha_de_funcionario(user_id=""),
+            job_function_ids=["f1"],
+            unavailabilities=[],
             shift_periods=[],
         )

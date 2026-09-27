@@ -3,6 +3,7 @@
 import pytest
 
 from restaurant_hub.features.identity.domain.exceptions.errors import InvalidEmailError
+from restaurant_hub.features.identity.domain.value_objects import email as modulo_email
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 
 pytestmark = pytest.mark.unit
@@ -79,3 +80,37 @@ def test_mensagem_de_erro_preserva_o_valor_nao_normalizado() -> None:
     with pytest.raises(InvalidEmailError) as excinfo:
         Email("  A@B  ")
     assert "'  A@B  '" in str(excinfo.value)
+
+
+# --- byte NUL (Stage 3.5, D8) ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "com_nul",
+    [
+        "fulano\x00@cantina.com",  # bem-formado para a regex — era o 500
+        "\x00",
+        "ana@cantina.com\x00",
+        "\x00ana@cantina.com",
+    ],
+)
+def test_rejeita_o_byte_nul_em_qualquer_posicao(com_nul: str) -> None:
+    """A regex aceita NUL (a classe de espaço não o casa); o `psycopg` o recusa client-side.
+
+    Medido no Checkpoint A da Stage 3.5: um e-mail bem-formado com NUL no meio
+    construía e ia ao banco — 500 em três rotas de identity. A regra é do
+    tamanho da divergência: só o NUL; acento, `+`, subdomínio continuam aceitos
+    (ver `test_aceita_emails_bem_formados`).
+    """
+    with pytest.raises(InvalidEmailError):
+        Email(com_nul)
+
+
+def test_a_regex_sozinha_aceitaria_o_nul() -> None:
+    """Documenta a **razão** da regra: sem a checagem explícita, a regex passa.
+
+    Se um dia a regex mudar e passar a recusar NUL, este teste avisa que a
+    checagem explícita virou redundante — e aí a decisão de removê-la é
+    consciente, não acidental.
+    """
+    assert modulo_email._EMAIL_RE.match("fulano\x00@cantina.com") is not None

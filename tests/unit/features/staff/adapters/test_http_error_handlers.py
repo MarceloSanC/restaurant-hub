@@ -22,11 +22,12 @@ from restaurant_hub.shared.domain.exceptions.base import NotFoundError
 
 pytestmark = pytest.mark.unit
 
-# Piso de contagem: 9 concretas no domínio + 9 na aplicação (concept §6.1). É
+# Piso de contagem: 11 concretas no domínio + 12 na aplicação (concept 3.6 §6.1
+# mais as cinco recusas de login da 3.5 §6.1 — duas de domínio, três de aplicação). É
 # tripwire contra a enumeração encolher em silêncio — `__subclasses__` só enxerga
 # o que foi importado, então um módulo de erro novo que ninguém importasse aqui
 # faria a varredura passar sobre um universo menor do que o real.
-_TOTAL_DE_ERROS_DE_STAFF = 18
+_TOTAL_DE_ERROS_DE_STAFF = 23
 _TOTAL_DE_MODULOS_DE_ERRO = 2
 
 # Os dois módulos são importados acima de propósito, e não por acaso: é o import
@@ -88,12 +89,12 @@ def test_o_mapa_nao_tem_entrada_orfa() -> None:
     assert orfas == []
 
 
-def test_o_mapa_tem_exatamente_as_dezoito_entradas_do_concept() -> None:
-    """A contagem é asserção: 18 entradas, 9 do domínio e 9 da aplicação."""
+def test_o_mapa_tem_exatamente_as_vinte_e_tres_entradas_do_concept() -> None:
+    """A contagem é asserção: 23 entradas, 11 do domínio e 12 da aplicação."""
     assert len(handlers.STAFF_ERROR_STATUS) == _TOTAL_DE_ERROS_DE_STAFF
 
 
-# **As 18 entradas, par a par.** É CA18, e é o único teste deste arquivo que lê o
+# **As 23 entradas, par a par.** É CA18, e é o único teste deste arquivo que lê o
 # **valor** do mapa. Trocar `JobFunctionInUseError` por 422 e
 # `SameUnitCopyError` por 409 — duas entradas, faixas ambas já exercitadas —
 # sobrevive a tudo o que está acima e morre aqui.
@@ -116,10 +117,16 @@ _STATUS_ESPERADO = [
     (domain_errors.UnavailabilityNotFoundError(), 422),
     (application_errors.EmployeeRelocationError("e1", "u1", "u2"), 422),
     (application_errors.SameUnitCopyError("u1"), 422),
+    # Stage 3.5 — as cinco recusas de login (concept 3.5 §6.1).
+    (domain_errors.EmployeeAlreadyHasLoginError("e1"), 409),
+    (domain_errors.TerminatedEmployeeLoginError("e1"), 409),
+    (application_errors.LoginEmailAlreadyInUseError("ana@x.com"), 409),
+    (application_errors.EmployeeHasLoginError("e1"), 409),
+    (application_errors.InvalidLoginEmailError("nao-e-email"), 422),
 ]
 
 
-def test_ca18_a_verificacao_par_a_par_cobre_as_dezoito_entradas() -> None:
+def test_ca18_a_verificacao_par_a_par_cobre_as_vinte_e_tres_entradas() -> None:
     """A tabela deste arquivo tem de cobrir o mapa inteiro, senão CA18 é amostra."""
     cobertas = {type(excecao) for excecao, _ in _STATUS_ESPERADO}
 

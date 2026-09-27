@@ -91,6 +91,11 @@ _BYTE_NUL: Final = "\x00"
 # type-checker, e sim pelos testes por papel e por rota desta Stage.
 PERMISSION_MANAGE_STAFF: Final = "manage_staff"
 PERMISSION_MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
+# Stage 3.5 — a terceira permissão citada por staff, e a primeira que **não é de
+# staff**: criar o login de um funcionário cria uma conta em identity, e a
+# permissão que governa contas é `manage_users` (concept 3.5 §5.3). R17 a exige
+# **junto** com `manage_staff`, as duas sobre a unidade do path.
+PERMISSION_MANAGE_USERS: Final = "manage_users"
 
 
 def validate_identifier(raw: str, *, entity: str) -> str:
@@ -149,6 +154,12 @@ MANAGE_JOB_FUNCTIONS_ACCESS: Final = AccessRequirement(
 )
 MANAGE_STAFF_IN_UNIT_ACCESS: Final = AccessRequirement(
     permission=PERMISSION_MANAGE_STAFF, names_unit=True
+)
+# Stage 3.5 — o requisito adicional de R17. `names_unit=True` porque o alvo é a
+# unidade do path, como em toda rota de funcionário: `manage_users` é
+# unit-scoped para `manager`/`hr` (ADR 3.4.0006), e o guard decide o resto.
+MANAGE_USERS_IN_UNIT_ACCESS: Final = AccessRequirement(
+    permission=PERMISSION_MANAGE_USERS, names_unit=True
 )
 
 

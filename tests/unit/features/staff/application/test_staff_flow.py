@@ -77,6 +77,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     FixedSchedule,
     OnDemand,
 )
+from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import staff_repositories
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
@@ -165,7 +166,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     assert copia.unit_id == _UNIDADE_B
 
     # 6. Desligamento do registro da unidade A.
-    DeactivateEmployeeUseCase(fakes.employees).execute(
+    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
         DeactivateEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE_A, employee_id=funcionario_id)
     )
 

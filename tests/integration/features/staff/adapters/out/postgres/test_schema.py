@@ -197,6 +197,10 @@ def test_nenhuma_fk_de_staff_aponta_para_tabela_de_identity(engine: Engine) -> N
     assert fora == set(), f"FK de staff atravessando o BC: {sorted(fora)}"
 
 
+# Contagem transcrita (concept 3.5 §9): as sete da 3.3 mais `user_id`.
+_COLUNAS_DE_EMPLOYEES = 8
+
+
 def test_tipos_de_coluna_de_employees(engine: Engine) -> None:
     """`weekly_hours` é `numeric` **sem** precisão — tipo é contrato (§9).
 
@@ -220,6 +224,39 @@ def test_tipos_de_coluna_de_employees(engine: Engine) -> None:
     assert colunas["active"] == ("boolean", None, None, "NO")
     for texto in ("id", "tenant_id", "unit_id", "name"):
         assert colunas[texto] == ("text", None, None, "NO"), texto
+    # Stage 3.5 — o vínculo de login: texto opaco e **anulável** (ADR 3.5.0004).
+    assert colunas["user_id"] == ("text", None, None, "YES")
+    assert len(colunas) == _COLUNAS_DE_EMPLOYEES
+
+
+def test_user_id_nao_tem_fk_unique_nem_indice_no_banco(engine: Engine) -> None:
+    """As três ausências do ADR 3.5.0004 §3, medidas no catálogo do Postgres.
+
+    Este teste olha só o estado `head`. O `downgrade` da `0004` **não** é
+    provado pelo `downgrade base` da fixture (a `0003` derruba `employees`
+    inteira, o que mascararia uma `0004.downgrade` vazia); quem o prova é
+    `tests/integration/test_migration.py::test_downgrade_da_0004_remove_so_a_coluna_user_id`,
+    descendo até `0003` e olhando o catálogo.
+    """
+    with engine.connect() as conexao:
+        constraints_sobre_user_id = conexao.execute(
+            text(
+                "SELECT c.conname, c.contype FROM pg_constraint c "
+                "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) "
+                "WHERE c.conrelid = 'employees'::regclass AND a.attname = 'user_id'"
+            )
+        ).all()
+        indices_sobre_user_id = conexao.execute(
+            text(
+                "SELECT i.relname FROM pg_index x "
+                "JOIN pg_class i ON i.oid = x.indexrelid "
+                "JOIN pg_attribute a ON a.attrelid = x.indrelid AND a.attnum = ANY(x.indkey) "
+                "WHERE x.indrelid = 'employees'::regclass AND a.attname = 'user_id'"
+            )
+        ).all()
+
+    assert constraints_sobre_user_id == []
+    assert indices_sobre_user_id == []
 
 
 def test_instantes_sao_timestamp_sem_fuso_no_banco(engine: Engine) -> None:

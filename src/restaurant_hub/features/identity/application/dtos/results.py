@@ -4,8 +4,9 @@ Regra dura (CLAUDE.md §6, LAYOUT §7): use case devolve DTO, **nunca** entidade
 Por isso `UserResult` carrega campos, não um `User`.
 
 Regra de segurança (concept §5.9): nenhum result carrega senha em claro nem
-`PasswordHash`. O único segredo que sai daqui é o `refresh_token`, que é para o
-cliente e — por definição — nunca é persistido (concept §5.11).
+`PasswordHash`. Os segredos que saem daqui são o `refresh_token`, que é para o
+cliente e — por definição — nunca é persistido (concept §5.11), e o `setup_link`
+de `ProvisionedAccountResult`, carve-out **único** e declarado (ADR 3.5.0002).
 
 **Cada result é construído num sítio só, e o sítio mora aqui** (issue #45,
 Gate 8). `UserResult` era montado em `create_user` e `invite_user`;
@@ -21,9 +22,13 @@ que dá trabalho à função em vez de fazê-la um repasse: ela é o único pont
 escolhe `.value` (o segredo que vai ao cliente) e nunca `.fingerprint` (o que
 fica no banco). Aceitar a `str` já extraída devolveria essa escolha aos dois
 chamadores, que é exatamente onde ela não deve morar.
+
+`ProvisionedAccountResult` (Stage 3.5) é construído em `provision_account.py`, e o
+`UserResult` que ele embrulha vem de `to_user_result` — a regra 8 vale para ele
+como para os outros, contado pelo sítio da classe.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from restaurant_hub.features.identity.application.dtos.tokens import IssuedRefreshToken
@@ -66,6 +71,25 @@ class UserResult:
     role: Role
     tenant_id: RestaurantId | None
     unit_ids: tuple[UnitId, ...]
+
+
+@dataclass(frozen=True)
+class ProvisionedAccountResult:
+    """Conta pendente provisionada **e** o link que a ativa (Stage 3.5).
+
+    É o único result de identity que carrega o valor de um token de setup — o
+    carve-out da regra 1 da 2.5 está no ADR 3.5.0002 §Status. Existe porque quem
+    provisiona (o gateway de staff) ainda vai decidir o canal: e-mail ou em mãos.
+
+    `repr=False` em `setup_link` pelo mesmo motivo de
+    `RefreshSessionCommand.refresh_token`: o result atravessa a fachada e o
+    gateway e fica nos locals de qualquer frame que falhe depois dele.
+    (`AuthenticationResult.refresh_token` **não** tem `repr=False` — finding
+    herdado da 2.2, registrado na Stage 3.5; fora da lista fechada de §5.13.)
+    """
+
+    user: UserResult
+    setup_link: str = field(repr=False)
 
 
 @dataclass(frozen=True)

@@ -220,9 +220,22 @@ forbidden_modules =
 # independência entre bounded contexts planejado no cabeçalho deste arquivo
 # desde a 1.1. BCs se comunicam por ports (identificadores atravessam a
 # fronteira como strings opacas), nunca por import direto entre features.
+#
+# Stage 3.5 — a **única** aresta entre os dois BCs, nomeada (ADR 3.5.0001 §3).
+# A forma é a regra: o curinga fica só do lado do CONSUMIDOR e casa nomes de
+# módulo, não subpacotes — qualquer módulo novo sob `staff/adapters/out/identity/`
+# herda a permissão; qualquer módulo de staff fora dali, e qualquer import de
+# identity que não seja a fachada, continua reprovando. `unmatched_ignore_imports_alerting
+# = error` faz o par apontar para um import que exista: se o gateway deixar de
+# importar a fachada, a supressão vira erro em vez de lixo silencioso.
+# `tests/unit/features/staff/test_bc_independence.py` assere a lista EXATA, para
+# que um segundo par entre por decisão, nunca por deriva.
 [importlinter:contract:bc-independence]
 name = bounded contexts identity e staff sao independentes (LAYOUT §1)
 type = independence
 modules =
     restaurant_hub.features.identity
     restaurant_hub.features.staff
+ignore_imports =
+    restaurant_hub.features.staff.adapters.out.identity.* -> restaurant_hub.features.identity.application.facade
+unmatched_ignore_imports_alerting = error

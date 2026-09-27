@@ -245,6 +245,18 @@ def test_a_equipe_declara_alvo_com_unidade() -> None:
     assert dependencies.MANAGE_STAFF_IN_UNIT_ACCESS.names_unit is True
 
 
+def test_o_login_do_funcionario_declara_manage_users_com_unidade() -> None:
+    """Stage 3.5 — a terceira permissão citada por staff, e a primeira de identity.
+
+    `manage_users` atravessa a fronteira como **valor**, como as duas de staff; o
+    requisito nomeia a unidade porque o alvo de R17 é a unidade do path
+    (concept 3.5 §5.3), e é sobre ela que `manager`/`hr` detêm a permissão.
+    """
+    assert dependencies.PERMISSION_MANAGE_USERS == "manage_users"
+    assert dependencies.MANAGE_USERS_IN_UNIT_ACCESS.permission == "manage_users"
+    assert dependencies.MANAGE_USERS_IN_UNIT_ACCESS.names_unit is True
+
+
 def test_o_requisito_de_acesso_nao_carrega_papel_nem_bypass() -> None:
     """A decisão de acesso **não acontece em staff** (concept §5.2).
 

@@ -126,3 +126,43 @@ async def test_faixa_e_alcancavel_pela_api(
     resposta = await CENARIOS[faixa](client, admin)
 
     assert resposta.status_code == faixa, resposta.text
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.5 (D8) — o byte NUL no e-mail é 422, não 500
+# ---------------------------------------------------------------------------
+
+
+async def test_convite_com_email_contendo_nul_e_422_e_nao_500(
+    client: AsyncClient, admin_semeado: User
+) -> None:
+    """Medido no Checkpoint A da Stage 3.5: era **500**.
+
+    A regex de `Email` aceitava `fulano\x00@cantina.com` (a classe de espaço não
+    casa o NUL), o valor seguia para `users.exists_by_email` e o `psycopg` o
+    recusava client-side com `DataError` — que não é `IdentityError` e virava 500
+    em `POST /users`, `POST /users/invitations` e `POST /auth/login`. Desde a Task
+    06 da 3.5 o VO recusa o byte antes da regex, e a faixa é a de domínio (422).
+    O cenário usa o convite porque é a rota que, em produção, recebe o e-mail
+    digitado por alguém — o mesmo caminho que R17 de staff percorre atrás do
+    gateway.
+    """
+    admin = await fazer_login(client, ADMIN_EMAIL)
+    restaurante = (
+        await client.post(f"{API}/restaurants", json={"name": "Cantina"}, headers=auth(admin))
+    ).json()["id"]
+    await client.post(
+        f"{API}/restaurants/{restaurante}/owners",
+        json={"email": "dono-nul@x.com", "password": SENHA_PADRAO},
+        headers=auth(admin),
+    )
+    owner = await fazer_login(client, "dono-nul@x.com")
+
+    resposta = await client.post(
+        f"{API}/users/invitations",
+        json={"email": "fulano\x00@cantina.com", "role": "manager", "unit_ids": []},
+        headers=auth(owner),
+    )
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, resposta.text
+    assert "e-mail inválido" in resposta.json()["detail"]

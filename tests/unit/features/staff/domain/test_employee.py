@@ -8,10 +8,12 @@ import pytest
 
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmployeeAlreadyHasLoginError,
     EmptyJobFunctionsError,
     InvalidIdentifierError,
     InvalidNameError,
     OverlappingUnavailabilityError,
+    TerminatedEmployeeLoginError,
     UnavailabilityNotFoundError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -19,6 +21,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -398,3 +401,104 @@ def test_ca16_a_mensagem_do_nul_nao_afirma_que_o_nome_esta_vazio() -> None:
 def test_ca18_nomes_adversariais_sem_nul_continuam_aceitos_verbatim(nome: str) -> None:
     """A restrição não cresceu: nada de C0, normalização de espaço ou limite."""
     assert _funcionario(name=nome).name == nome
+
+
+# --- vínculo de login (Stage 3.5, ADR 3.5.0004; concept CA01) --------------------
+
+_LOGIN = UserId("login-1")
+
+
+def _campos_exceto(funcionario: Employee, *excluidos: str) -> dict[str, object]:
+    return {
+        campo.name: getattr(funcionario, campo.name)
+        for campo in dataclasses.fields(funcionario)
+        if campo.name not in excluidos
+    }
+
+
+def test_funcionario_nasce_sem_login() -> None:
+    """`None` é o estado default: login é ato explícito do gerente (workforce §3.8)."""
+    assert _BASE.user_id is None
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_login_vazio_e_rejeitado_na_construcao(invalido: str) -> None:
+    """Presente ⇒ não-vazio. Um `""` reidratado seria vínculo-fantasma."""
+    with pytest.raises(InvalidIdentifierError, match="login do funcionário"):
+        _funcionario(user_id=UserId(invalido))
+
+
+@pytest.mark.parametrize("invalido", ["", "   "])
+def test_login_vazio_e_rejeitado_no_link_login(invalido: str) -> None:
+    with pytest.raises(InvalidIdentifierError, match="login do funcionário"):
+        _BASE.link_login(UserId(invalido))
+
+
+def test_link_login_devolve_nova_instancia_com_o_login_e_nada_mais() -> None:
+    vinculado = _BASE.link_login(_LOGIN)
+
+    assert vinculado is not _BASE
+    assert vinculado.user_id == _LOGIN
+    assert _BASE.user_id is None
+    assert _campos_exceto(vinculado, "user_id") == _campos_exceto(_BASE, "user_id")
+
+
+def test_assert_can_link_login_aceita_registro_ativo_sem_login() -> None:
+    _BASE.assert_can_link_login()  # não levanta
+
+
+def test_ja_vinculado_recusa_segundo_login_na_guarda_e_no_link_login() -> None:
+    """Definido **uma vez**: não há "trocar o login" nesta Stage (concept §5.5).
+
+    As duas portas são asseridas de propósito — `link_login` chama a guarda por
+    dentro, e remover essa chamada interna deixaria a guarda verde e a transição
+    aberta (CA28(h)).
+    """
+    vinculado = _BASE.link_login(_LOGIN)
+
+    with pytest.raises(EmployeeAlreadyHasLoginError, match="e1"):
+        vinculado.assert_can_link_login()
+    with pytest.raises(EmployeeAlreadyHasLoginError, match="e1"):
+        vinculado.link_login(UserId("login-2"))
+
+
+def test_desligado_recusa_login_na_guarda_e_no_link_login() -> None:
+    """Criar login é conceder acesso, e desligar cortou (ADR 3.5.0003)."""
+    desligado = _BASE.deactivate()
+
+    with pytest.raises(TerminatedEmployeeLoginError, match="e1"):
+        desligado.assert_can_link_login()
+    with pytest.raises(TerminatedEmployeeLoginError, match="e1"):
+        desligado.link_login(_LOGIN)
+
+
+def test_precedencia_vinculado_vence_desligado() -> None:
+    """Desligado **e** vinculado ⇒ o erro é o de já-vinculado (CA01).
+
+    A ordem é do domínio, não acidente: o vínculo é o fato mais específico
+    sobre o registro, e é o que o chamador precisa saber primeiro.
+    """
+    desligado_com_login = _BASE.link_login(_LOGIN).deactivate()
+
+    with pytest.raises(EmployeeAlreadyHasLoginError):
+        desligado_com_login.assert_can_link_login()
+
+
+def test_desligar_mantem_o_login_como_historia() -> None:
+    """O desligado com login **mantém** o `user_id` (concept §5.5, ADR 3.2.0006)."""
+    desligado = _BASE.link_login(_LOGIN).deactivate()
+
+    assert desligado.user_id == _LOGIN
+    assert desligado.active is False
+
+
+def test_recontratar_nao_mexe_no_login() -> None:
+    recontratado = _BASE.link_login(_LOGIN).deactivate().reactivate()
+
+    assert recontratado.user_id == _LOGIN
+
+
+def test_login_nao_e_atribuivel() -> None:
+    """A única porta é `link_login` — a entidade é `frozen`."""
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _BASE.user_id = _LOGIN  # type: ignore[misc]

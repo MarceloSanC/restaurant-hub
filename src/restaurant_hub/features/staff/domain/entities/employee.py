@@ -21,10 +21,12 @@ import dataclasses
 from dataclasses import dataclass
 
 from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmployeeAlreadyHasLoginError,
     EmptyJobFunctionsError,
     InvalidIdentifierError,
     InvalidNameError,
     OverlappingUnavailabilityError,
+    TerminatedEmployeeLoginError,
     UnavailabilityNotFoundError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -32,6 +34,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import ShiftPreference
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
@@ -61,6 +64,16 @@ class Employee:
             **sobrevive** com toda a história: some da listagem default da
             unidade, continua endereçável por id e continua contando como
             **referência** para a guarda de remoção da função que ele aponta.
+        user_id: o login em identity vinculado a **este** registro, ou `None`
+            (Stage 3.5, ADR 3.5.0004). Opcional por desenho — login é ato
+            explícito do gerente, por registro (workforce §3.8) —, definido
+            **uma vez** por `link_login` e **nunca carregado pela cópia**: a
+            construção campo a campo do clone não o nomeia, e o default `None`
+            é o que faz "a cópia não carrega" valer por construção
+            (ADR 3.2.0003 — lista de exclusão fechada; ADR 3.5.0004 §5).
+            Quando presente é não-vazio, pela mesma razão dos demais ids: um
+            `""` reidratado seria um vínculo-fantasma que bloquearia R17 para
+            sempre.
     """
 
     id: EmployeeId
@@ -72,6 +85,7 @@ class Employee:
     job_function_ids: frozenset[JobFunctionId]
     unavailabilities: tuple[UnavailabilityPeriod, ...] = ()
     active: bool = True
+    user_id: UserId | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -90,6 +104,10 @@ class Employee:
             raise InvalidNameError("funcionário", reason="não pode conter o byte NUL")
         if not self.job_function_ids:
             raise EmptyJobFunctionsError()
+        # Presente ⇒ não-vazio. `None` é o estado legítimo "sem login"; `""`
+        # não é estado nenhum (concept 3.5 §4; ADR 3.5.0004 §1).
+        if self.user_id is not None and not self.user_id.strip():
+            raise InvalidIdentifierError("login do funcionário")
         # Par a par sobre a coleção inteira: cobre a reidratação da 3.3 e as
         # transições (add_unavailability revalida por aqui via replace).
         for indice, periodo in enumerate(self.unavailabilities):
@@ -137,6 +155,36 @@ class Employee:
     def reactivate(self) -> "Employee":
         """Recontrata o registro — idempotente no valor (já ativo não é erro)."""
         return dataclasses.replace(self, active=True)
+
+    def assert_can_link_login(self) -> None:
+        """As duas guardas do vínculo, **nesta ordem** (concept 3.5 §5.5, CA01).
+
+        Método separado de `link_login` porque o use case precisa **perguntar
+        antes de provisionar** a conta em identity: recusar depois deixaria uma
+        conta pendente sem registro para um pedido que staff sempre ia recusar
+        (§5.4). `link_login` chama esta guarda de novo, para que a regra tenha
+        **uma** casa.
+
+        Raises:
+            EmployeeAlreadyHasLoginError: o registro já tem login — definido
+                uma vez; não há "trocar" nesta Stage.
+            TerminatedEmployeeLoginError: o registro está desligado — criar
+                login é conceder acesso, e desligar cortou (kickoff #4,
+                ADR 3.5.0003). Vinculado vence desligado na precedência.
+        """
+        if self.user_id is not None:
+            raise EmployeeAlreadyHasLoginError(self.id)
+        if not self.active:
+            raise TerminatedEmployeeLoginError(self.id)
+
+    def link_login(self, user_id: UserId) -> "Employee":
+        """Vincula o login recém-criado — nova instância revalidada.
+
+        Passa por `assert_can_link_login` e pelo `__post_init__` (que recusa
+        `user_id` vazio), como toda transição desta entidade.
+        """
+        self.assert_can_link_login()
+        return dataclasses.replace(self, user_id=user_id)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Employee):

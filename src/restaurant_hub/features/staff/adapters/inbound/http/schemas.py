@@ -16,9 +16,10 @@ token e é resolvido no `composition_root` (ADR 0.0.0005); em staff ele não
 aparece em lugar nenhum da requisição. A varredura de `model_fields` que trava
 isso enumera também os aliases plausíveis (`restaurant_id`, `tenant`,
 `restaurant`) e os campos de **vínculo de login** (`user_id`,
-`employee_user_id`) — estes últimos por um motivo diferente: são `non_goal` do
-roadmap, entram no registro só na Stage 3.5, e sem o nome na lista negra a
-restrição seria declaração vacuamente verdadeira em vez de trava.
+`employee_user_id`) — estes últimos por um motivo diferente: o vínculo entrou na
+Stage 3.5, e `user_id` continua proibido **no request** porque nunca vem do
+cliente — quem o gera é identity, atrás do gateway; o cliente manda o
+**e-mail** (`CreateLoginRequest`) e recebe o `user_id` na resposta.
 
 **2. O perfil de jornada é união discriminada por `type`, nos dois sentidos**
 (ADR 3.6.0003 §Decision 1). É o que torna "sob demanda com carga" e "fixa sem
@@ -69,6 +70,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from restaurant_hub.features.staff.application.dtos.results import (
+    EmployeeLoginResult,
     EmployeeResult,
     JobFunctionResult,
 )
@@ -213,6 +215,22 @@ class RegisterUnavailabilityRequest(BaseModel):
     end: datetime
 
 
+class CreateLoginRequest(BaseModel):
+    """Criação do login de um funcionário (R17, Stage 3.5).
+
+    Dois campos, os dois sem default. `email` viaja como **texto**: não é
+    identificador de staff (não passa por `validate_identifier`) e não vira VO
+    aqui — e-mail é vocabulário de identity, que o valida atrás do gateway
+    (concept 3.5 §5.7). `delivery` é o canal do link de definição de senha:
+    `"email"` (identity envia) ou `"link"` (volta na resposta, para entrega em
+    mãos). Sem default porque o canal decide o **prazo** do link e a **exposição**
+    do segredo — é o gestor que decide, explicitamente.
+    """
+
+    email: str
+    delivery: Literal["email", "link"]
+
+
 class CopyEmployeeRequest(BaseModel):
     """Cópia do funcionário para outra unidade.
 
@@ -255,6 +273,10 @@ class EmployeeResponse(BaseModel):
     job_function_ids: list[str]
     unavailabilities: list[UnavailabilityPayload]
     active: bool
+    # Stage 3.5 — o login vinculado, ou `null`. Sai em **toda** resposta de
+    # funcionário porque `from_result` lê o `EmployeeResult`, que já o carrega
+    # pelo mapper único (CA13).
+    user_id: str | None
 
     @classmethod
     def from_result(cls, result: EmployeeResult) -> "EmployeeResponse":
@@ -277,6 +299,27 @@ class EmployeeResponse(BaseModel):
                 to_unavailability_payload(periodo) for periodo in result.unavailabilities
             ],
             active=result.active,
+            user_id=result.user_id,
+        )
+
+
+class EmployeeLoginResponse(BaseModel):
+    """A resposta de R17: o registro vinculado e, só no canal `link`, o segredo.
+
+    `setup_link` é `null` no canal `email` — o link foi por e-mail e a API não o
+    repete. No canal `link` é o único ponto em que o valor de um token de
+    definição de senha sai por API (carve-out do ADR 3.5.0002), para quem acabou
+    de provar `manage_staff` **e** `manage_users` sobre a unidade.
+    """
+
+    employee: EmployeeResponse
+    setup_link: str | None
+
+    @classmethod
+    def from_result(cls, result: EmployeeLoginResult) -> "EmployeeLoginResponse":
+        return cls(
+            employee=EmployeeResponse.from_result(result.employee),
+            setup_link=result.setup_link,
         )
 
 

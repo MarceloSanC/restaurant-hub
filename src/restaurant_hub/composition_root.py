@@ -74,6 +74,7 @@ from restaurant_hub.features.identity.adapters.out.security.setup_token_issuer i
     Sha256SetupTokenIssuer,
 )
 from restaurant_hub.features.identity.application.errors import PermissionDeniedError
+from restaurant_hub.features.identity.application.facade import IdentityFacade
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
 )
@@ -92,14 +93,23 @@ from restaurant_hub.features.identity.application.use_cases.create_user import (
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.provision_account import (
+    ProvisionAccountUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.request_password_reset import (
     RequestPasswordResetUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.revoke_all_sessions import (
+    RevokeAllSessionsUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.revoke_session import (
     RevokeSessionUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.send_invitation import (
+    SendInvitationUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
@@ -120,6 +130,9 @@ from restaurant_hub.features.staff.adapters.inbound.http import (
 from restaurant_hub.features.staff.adapters.inbound.http import (
     router as staff_router_module,
 )
+from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway import (
+    LocalIdentityGateway,
+)
 from restaurant_hub.features.staff.adapters.out.postgres.employee_repository import (
     PostgresEmployeeRepository,
 )
@@ -130,6 +143,9 @@ from restaurant_hub.features.staff.application.ports.out.access_guard import (
     AccessGuard,
     Actor,
     AuthorizedScope,
+)
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    IdentityGateway,
 )
 from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
     AssignJobFunctionsUseCase,
@@ -145,6 +161,9 @@ from restaurant_hub.features.staff.application.use_cases.create_employee import 
 )
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.create_login_for_employee import (
+    CreateLoginForEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
     DeactivateEmployeeUseCase,
@@ -308,7 +327,7 @@ class _IdentityAccessGuard:
         linhas abaixo não fazem.
 
         **`tenant_id` ausente significa "o tenant do próprio ator", e é aqui que
-        ele é resolvido** (ADR 0.0.0005, cláusula 3). Sem isto as 16 rotas de
+        ele é resolvido** (ADR 0.0.0005, cláusula 3). Sem isto as rotas de
         staff são inalcançáveis por **todos** os papéis: o inventário de rotas
         não carrega tenant (cláusula 2), então nada o nomeia, e o passo 3 de
         `AuthorizeActionUseCase` recusa com `TenantScopeRequiredError` qualquer
@@ -402,6 +421,9 @@ class ApplicationDependencies:
     staff_deactivate_employee: DeactivateEmployeeUseCase
     staff_reactivate_employee: ReactivateEmployeeUseCase
     staff_copy_employee_to_unit: CopyEmployeeToUnitUseCase
+    # Stage 3.5 — o 17º use case de staff (R17). Consome `staff_identity_gateway`,
+    # como `staff_deactivate_employee` passou a consumir (R13).
+    staff_create_login_for_employee: CreateLoginForEmployeeUseCase
 
     # --- staff (Stage 3.4) ---------------------------------------------------
     #
@@ -416,6 +438,16 @@ class ApplicationDependencies:
     # Nasce **sem consumidor**, como os 16 acima e pela mesma razão declarada:
     # nenhuma rota de staff existe até a Stage 3.6 (CA21).
     staff_access_guard: AccessGuard
+
+    # --- staff (Stage 3.5) ---------------------------------------------------
+    #
+    # O segundo campo anotado com um port, pela mesma regra do primeiro: é o
+    # **consumido**. A implementação é `LocalIdentityGateway` sobre a
+    # `IdentityFacade` — a única aresta entre os dois BCs (ADR 3.5.0001), montada
+    # aqui sobre os **mesmos** repositórios, `sender` e `clock` das rotas de
+    # identity, não um segundo grafo. Consumido por `staff_create_login_for_employee`
+    # (R17) e `staff_deactivate_employee` (R13) — a **mesma** instância nos dois.
+    staff_identity_gateway: IdentityGateway
 
 
 @dataclass
@@ -508,6 +540,10 @@ def wire_dependencies(
     # atraso humano, redefinição de senha é emergência de minutos.
     invitation_ttl = timedelta(hours=cfg.invitation_token_ttl_hours)
     reset_ttl = timedelta(minutes=cfg.password_reset_token_ttl_minutes)
+    # Stage 3.5 — o prazo do link entregue em mãos (canal `link` de R17). Distinto
+    # do prazo do convite de propósito: o teste de wiring passa valores diferentes
+    # para que trocar um pelo outro aqui não fique verde.
+    handover_ttl = timedelta(hours=cfg.handover_link_ttl_hours)
 
     authorize_action = AuthorizeActionUseCase(users=users, units=units)
 
@@ -522,6 +558,30 @@ def wire_dependencies(
     # porque um segundo guard passaria em qualquer teste de tipo e faria as duas
     # bordas decidirem acesso sobre estados diferentes.
     staff_access_guard = _IdentityAccessGuard(guard)
+
+    # Stage 3.5 — a fachada de identity e o gateway de staff sobre ela (ADR
+    # 3.5.0001). Os três use cases da fachada recebem **os mesmos** `users`,
+    # `restaurants`, `units`, `hasher`, `setup_tokens`, `sessions`, `sender` e
+    # `clock` que servem as rotas de identity: um grafo, um `Engine`. O gateway
+    # é o único módulo de staff que importa identity, e importa só a fachada.
+    identity_facade = IdentityFacade(
+        provision_account=ProvisionAccountUseCase(
+            users=users,
+            restaurants=restaurants,
+            units=units,
+            hasher=hasher,
+            tokens=setup_tokens,
+            token_issuer=setup_token_issuer,
+            id_generator=id_generator,
+            clock=clock,
+            invitation_ttl=invitation_ttl,
+            handover_ttl=handover_ttl,
+            base_url=cfg.app_base_url,
+        ),
+        send_invitation=SendInvitationUseCase(email_sender=sender),
+        revoke_all_sessions=RevokeAllSessionsUseCase(sessions=sessions, clock=clock),
+    )
+    staff_identity_gateway = LocalIdentityGateway(identity_facade)
 
     return ApplicationDependencies(
         identity_authenticate_user=AuthenticateUserUseCase(
@@ -615,19 +675,25 @@ def wire_dependencies(
         staff_declare_shift_preference=DeclareShiftPreferenceUseCase(employees=staff_employees),
         staff_register_unavailability=RegisterUnavailabilityUseCase(employees=staff_employees),
         staff_remove_unavailability=RemoveUnavailabilityUseCase(employees=staff_employees),
-        staff_deactivate_employee=DeactivateEmployeeUseCase(employees=staff_employees),
+        staff_deactivate_employee=DeactivateEmployeeUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway
+        ),
         staff_reactivate_employee=ReactivateEmployeeUseCase(employees=staff_employees),
         staff_copy_employee_to_unit=CopyEmployeeToUnitUseCase(
             employees=staff_employees, id_generator=id_generator
         ),
+        staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway
+        ),
         staff_access_guard=staff_access_guard,
+        staff_identity_gateway=staff_identity_gateway,
     )
 
 
 def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
     """Carrega os adapters HTTP dos dois BCs e monta o que `create_app()` registra.
 
-    **É aqui que as 16 rotas de staff passam a existir na aplicação.** Até esta
+    **É aqui que as 17 rotas de staff passam a existir na aplicação.** Até esta
     Stage o BC era surdo-mudo: os use cases e o `staff_access_guard` estavam
     montados e nada no boot os alcançava. Os seis módulos de borda entram por
     import **estático** desde a #45; até então vinham por `importlib`, porque o
@@ -682,6 +748,9 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
             ),
             staff_router_module._get_deactivate_employee: (lambda: deps.staff_deactivate_employee),
             staff_router_module._get_reactivate_employee: (lambda: deps.staff_reactivate_employee),
+            staff_router_module._get_create_login_for_employee: (
+                lambda: deps.staff_create_login_for_employee
+            ),
             staff_router_module._get_copy_employee_to_unit: (
                 lambda: deps.staff_copy_employee_to_unit
             ),

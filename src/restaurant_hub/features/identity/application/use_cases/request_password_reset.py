@@ -44,6 +44,7 @@ from restaurant_hub.features.identity.application.ports.out.setup_token_issuer i
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
+from restaurant_hub.features.identity.application.use_cases._invitation import setup_link
 from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
 from restaurant_hub.shared.application.ports.out.clock import Clock
 from restaurant_hub.shared.application.ports.out.email_sender import (
@@ -144,7 +145,7 @@ class RequestPasswordResetUseCase:
         registrada — afirmar sem verificar é o defeito que o finding #26 pediu
         para não repetir.
         """
-        link = f"{self._base_url.rstrip('/')}/definir-senha?token={valor_do_token}"
+        link = setup_link(self._base_url, valor_do_token)
         self._email_sender.send(
             EmailMessage(
                 to=destinatario,

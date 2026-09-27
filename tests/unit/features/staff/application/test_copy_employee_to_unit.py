@@ -49,6 +49,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -58,6 +59,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
     UnavailabilityPeriod,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
@@ -209,7 +211,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
             ),
         )
     )
-    DeactivateEmployeeUseCase(fakes.employees).execute(
+    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
         DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=copia_id)
     )
 
@@ -228,7 +230,7 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
     RenameEmployeeUseCase(fakes.employees).execute(
         RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
     )
-    DeactivateEmployeeUseCase(fakes.employees).execute(
+    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
         DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 
@@ -311,6 +313,34 @@ def test_precedencia_origem_de_outro_tenant_vence_destino_igual() -> None:
 
     assert "employees.add" not in fakes.store.calls[antes:]
     assert len(fakes.store.employees) == 1
+
+
+# --- a cópia NÃO carrega o vínculo de login (Stage 3.5, CA04) ----------------
+
+
+def test_ca04_a_copia_nao_carrega_o_vinculo_de_login() -> None:
+    """A lista de exclusão do ADR 3.2.0003 ganha o seu primeiro item com conteúdo.
+
+    Na 3.2 esta propriedade era vacuamente verdadeira (o campo não existia).
+    Agora a origem **tem** login, e o clone nasce sem: a construção campo a campo
+    do use case nunca nomeia `user_id`, e o default `None` faz o resto
+    (ADR 3.5.0004 §5). A origem é **relida pelo port** — comparar o objeto em
+    mãos seria o falso verde que o docstring deste módulo descreve.
+    """
+    fakes = _fakes()
+    origem = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert origem is not None
+    fakes.employees.update(origem.link_login(UserId("login-1")))
+
+    copia = _copiar(fakes).execute(
+        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+    )
+
+    assert copia.user_id is None
+    clone = fakes.employees.find_by_id(_A, _U2, copia.id)
+    assert clone is not None and clone.user_id is None
+    origem_relida = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert origem_relida is not None and origem_relida.user_id == UserId("login-1")
 
 
 # --- limite declarado --------------------------------------------------------

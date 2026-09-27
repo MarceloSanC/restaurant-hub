@@ -164,3 +164,41 @@ def test_downgrade_remove_o_que_o_upgrade_criou(engine: Engine, database_url: st
 
     # E o upgrade de volta reconstrói tudo — o par é reversível, não só destrutivo.
     assert _tabelas(engine) >= _TABELAS_ESPERADAS | _TABELAS_DE_STAFF
+
+
+def _colunas_de_employees(engine: Engine) -> set[str]:
+    with engine.connect() as conexao:
+        linhas = conexao.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'employees'"
+            )
+        )
+        return {linha[0] for linha in linhas}
+
+
+@pytest.mark.slow
+def test_downgrade_da_0004_remove_so_a_coluna_user_id(engine: Engine, database_url: str) -> None:
+    """CA19 da Stage 3.5, metade do `downgrade` — descer **até a 0003**, não até `base`.
+
+    Achado do Checkpoint C (bloco 2): `test_downgrade_remove_o_que_o_upgrade_criou`
+    desce até `base`, e a `0003.downgrade` derruba a tabela `employees` inteira —
+    então uma `0004.downgrade` vazia (`pass`), ou que dropasse a coluna errada,
+    sobrevivia a ele e a toda a suíte. O único ponto em que o `downgrade` da `0004`
+    é observável isoladamente é o estado `0003`: a tabela **existe** e a coluna
+    **não**. É isso que este teste mede, e devolve o banco a `head` no `finally`.
+    """
+    config = Config(str(_ALEMBIC_INI))
+    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", database_url)
+
+    assert "user_id" in _colunas_de_employees(engine)
+    try:
+        command.downgrade(config, "0003")
+        colunas = _colunas_de_employees(engine)
+        assert "employees" in _tabelas(engine), "a 0004 não pode derrubar a tabela"
+        assert "user_id" not in colunas, "downgrade da 0004 deixou `user_id` para trás"
+        assert colunas >= {"id", "tenant_id", "unit_id", "name", "active"}, colunas
+    finally:
+        command.upgrade(config, "head")
+
+    assert "user_id" in _colunas_de_employees(engine)

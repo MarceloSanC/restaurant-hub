@@ -8,8 +8,9 @@ assuntos quebrou.
 
 ## O domínio é derivado do router, e a cardinalidade é asserida junto
 
-Toda lei aqui é universal sobre as 16 rotas, e o produto cartesiano é **explícito**
-— `{employee, platform_admin} x R01…R16` são 32 casos, não dois. As chaves saem de
+Toda lei aqui é universal sobre as 17 rotas (16 da 3.6 + R17 da 3.5), e o produto
+cartesiano é **explícito** — `{employee, platform_admin} x R01…R17` são 34 casos,
+não dois. As chaves saem de
 `router.routes`; a declaração `ROTAS` diz como invocar cada uma contra recursos
 **vivos**, e `test_a_declaracao_de_rotas_e_total_sobre_o_router` reprova a rota que
 entrar sem declaração — a mesma disciplina do `_INVOCACOES` das varreduras
@@ -31,7 +32,7 @@ declarou desde a Task 05.
 
 O ADR 3.4.0006 §1 decidiu que `hr` e `manager` detêm as mesmas duas permissões de
 staff, com o mesmo alcance. CA12 trava a decisão como propriedade: os dois papéis
-respondem o **mesmo status** nas 16 rotas, sobre estados isomorfos. Um mapa de
+respondem o **mesmo status** nas 17 rotas, sobre estados isomorfos. Um mapa de
 papéis editado para dar a `hr` alcance diferente reprova aqui.
 """
 
@@ -62,17 +63,18 @@ pytestmark = pytest.mark.e2e
 # transforma "toda rota satisfaz P" numa afirmação com conteúdo: sem ela, um
 # `_rotas()` que devolvesse a lista vazia deixaria todo `parametrize` deste
 # módulo sem um único caso, e a suíte ficaria verde por não medir nada.
-_TOTAL_DE_ROTAS: Final = 16
+# 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`).
+_TOTAL_DE_ROTAS: Final = 17
 
 # As três partições do inventário e os dois produtos que os critérios nomeiam.
 # São **números transcritos do concept**, não derivados do código: derivá-los faria
 # a expectativa acompanhar qualquer encolhimento do domínio, que é precisamente o
 # modo de falha que estas contagens existem para pegar.
 _TOTAL_DE_RJF: Final = 4
-_TOTAL_DE_REMP: Final = 12
-_TOTAL_COM_EMPLOYEE_ID: Final = 10
-_CASOS_DE_CA09: Final = 32
-_CASOS_DE_CA36: Final = 48
+_TOTAL_DE_REMP: Final = 13
+_TOTAL_COM_EMPLOYEE_ID: Final = 11
+_CASOS_DE_CA09: Final = 34
+_CASOS_DE_CA36: Final = 51
 
 # Os corpos constantes de identity (`identity/adapters/inbound/http/error_handlers.py`).
 # **Transcritos, e não importados**: o critério é sobre o contrato que o cliente
@@ -168,6 +170,16 @@ async def _efeito_removido_da_unidade_do_path(
         params={"include_inactive": "true"},
     )
     assert recursos.employee_id not in {item["id"] for item in restante.json()}
+
+
+async def _efeito_login_no_registro_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R17 (3.5) embrulha o registro: o `unit_id` está em `employee`, e o vínculo também."""
+    corpo = resposta.json()
+    assert corpo["employee"]["unit_id"] == recursos.unidade
+    assert corpo["employee"]["id"] == recursos.employee_id
+    assert corpo["employee"]["user_id"] is not None
 
 
 async def _efeito_copia_lida_da_unidade_do_path(
@@ -339,6 +351,17 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         body=lambda r: {"target_unit_id": r.unidade_destino},
         sucesso=HTTPStatus.CREATED,
         efeito=_efeito_copia_lida_da_unidade_do_path,
+    ),
+    # Stage 3.5 — R17. O e-mail leva o **sufixo** do cenário: a unicidade é global
+    # em identity, e duas células que semeiem recursos lado a lado (CA11, CA12)
+    # colidiriam num e-mail fixo. Canal `link` para que nenhum e-mail saia no
+    # cenário da matriz — o canal `email` é do e2e de fluxo (Task 12).
+    ("POST", f"{_EMPLOYEES}/{{employee_id}}/login"): Rota(
+        path=_do_funcionario,
+        query=_sem_query,
+        body=lambda r: {"email": f"login-{r.sufixo}@cantina.com", "delivery": "link"},
+        sucesso=HTTPStatus.CREATED,
+        efeito=_efeito_login_no_registro_da_unidade_do_path,
     ),
 }
 
@@ -593,7 +616,7 @@ _RECURSOS_FICTICIOS: Final = Recursos(
 async def test_ca08_toda_rota_sem_bearer_recebe_401(
     client: AsyncClient, chave_da_rota: ChaveDeRota
 ) -> None:
-    """CA08 — 401 com corpo constante e `WWW-Authenticate: Bearer`, nas **16**.
+    """CA08 — 401 com corpo constante e `WWW-Authenticate: Bearer`, nas **17**.
 
     O domínio é `router.routes`, não uma amostra: "nenhuma rota de staff é
     pública" (§5.1) é uma lei universal, e uma lei universal travada em duas rotas
@@ -616,7 +639,7 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # §5.1 — autenticar antes de validar o corpo, em **toda** rota com entrada
 # ---------------------------------------------------------------------------
 #
-# **CA08 não alcança esta lei, e a diferença é o corpo.** Ele invoca as 16 rotas
+# **CA08 não alcança esta lei, e a diferença é o corpo.** Ele invoca as 17 rotas
 # com a entrada **válida** da declaração, então o 422 do framework nunca compete
 # com o 401 — e um handler que autenticasse no próprio corpo passaria em CA08
 # inteiro. A lei de §5.1 é sobre a **corrida** entre os dois: sem credencial, a
@@ -633,7 +656,8 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # sozinha. `include_inactive` fica de fora porque tem default — omiti-lo não
 # produz 422, e um caso que não degrada não mede a corrida.
 
-_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 10
+# Dez até a 3.6; R17 (3.5) tem corpo — onze.
+_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 11
 
 # O corpo que nenhum `*Request` aceita. Não é um campo com valor errado: é a
 # **ausência** dos campos obrigatórios, que é o 422 mais barato de produzir e o
@@ -694,7 +718,7 @@ async def _invocar_com_entrada_degradada(
 
 
 def test_o_dominio_das_rotas_com_entrada_tem_a_cardinalidade_declarada() -> None:
-    """Nove rotas com corpo e uma com query obrigatória — **dez**, e a contagem é a prova.
+    """Dez rotas com corpo e uma com query obrigatória — **onze**, e a contagem é a prova.
 
     Um `_tem_corpo` que parasse de encontrar `body_field` esvaziaria o
     `parametrize` e deixaria a lei verde sobre conjunto nenhum. E travar a
@@ -773,7 +797,7 @@ async def test_ca09_papel_sem_permissao_recebe_403_na_rota(  # noqa: PLR0913
     papel: str,
     chave_da_rota: ChaveDeRota,
 ) -> None:
-    """CA09 — produto `{employee, platform_admin} x R01…R16`: **32 casos**.
+    """CA09 — produto `{employee, platform_admin} x R01…R17`: **34 casos**.
 
     **Os recursos existem**, e é isso que separa 403 de 404: se o funcionário e a
     função não estivessem semeados, metade destas rotas poderia responder 404 por
@@ -832,7 +856,7 @@ async def test_ca10_ca11_ca36_papel_com_permissao_alcanca_a_rota(  # noqa: PLR09
     papel: str,
     chave_da_rota: ChaveDeRota,
 ) -> None:
-    """Produto `{owner, manager, hr} x R01…R16` — **48 casos**, e três critérios.
+    """Produto `{owner, manager, hr} x R01…R17` — **51 casos**, e três critérios.
 
     - **CA10** é a linha do `manager`: nenhuma das 16 responde 401 ou 403. Era o
       critério que a fork F1 reprovava; desde o ADR 0.0.0005 é o teste de
@@ -844,7 +868,7 @@ async def test_ca10_ca11_ca36_papel_com_permissao_alcanca_a_rota(  # noqa: PLR09
     - **CA36**: `TenantScopeRequiredError` responde **403**, com o mesmo corpo
       constante de qualquer outra recusa. Não há como distingui-lo pela resposta —
       e não deve haver. O que se assere é o contrapositivo: para os três papéis que
-      detêm permissão, **nenhuma** das 16 rotas produz 403 de espécie alguma. Se o
+      detêm permissão, **nenhuma** das 17 rotas produz 403 de espécie alguma. Se o
       tradutor deixasse de resolver o tenant (ADR 0.0.0005 cláusula 3), as 48
       células ficariam vermelhas de uma vez.
 

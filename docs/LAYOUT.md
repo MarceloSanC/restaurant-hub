@@ -41,6 +41,7 @@ src/restaurant_hub/
 │       ├── application/            # Orquestração — depende apenas de domain + ports
 │       │   ├── use_cases/          # Um arquivo por use case (create_order.py, cancel_order.py) — são os ports primários
 │       │   ├── dtos/               # Objetos de transferência (commands, queries, results)
+│       │   ├── facade.py           # (opcional) Open Host Service: o único módulo deste BC importável por outro BC (§3)
 │       │   └── ports/              # Interfaces (Protocols Python)
 │       │       └── out/            # Ports secundários / driven
 │       │
@@ -48,7 +49,8 @@ src/restaurant_hub/
 │           ├── inbound/            # Adapters primários (HTTP, CLI, workers)
 │           │   └── http/           # Router FastAPI, schemas Pydantic de request/response
 │           └── out/                # Adapters secundários (banco, email, APIs externas)
-│               └── postgres/       # Repositório SQLAlchemy, mappers
+│               ├── postgres/       # Repositório SQLAlchemy, mappers
+│               └── identity/       # Gateway para outro BC: implementa um port daqui sobre a fachada de lá (§3)
 │
 └── shared/                         # Código transversal — usado por múltiplas features
     ├── domain/                     # Exceções base do sistema (DomainError, NotFoundError)
@@ -119,6 +121,29 @@ adapters  →  application  →  domain
 - **Pode importar de:** `application/` (ports e DTOs), `domain/` (entidades para mappers)
 - **Nunca pode importar de:** outros adapters da mesma feature (exceto via port)
 - **Contém:** implementações concretas dos ports (repositórios, controllers HTTP)
+
+### Travessia entre bounded contexts (desde a Stage 3.5)
+
+Bounded contexts são **independentes** (contrato `bc-independence` do import-linter):
+nenhum módulo de `features/<a>/` importa `features/<b>/`. A única exceção tem forma fixa
+([ADR 3.5.0001](./adr/3_5_0001-cross-bc-facade-and-gateway-edge.md)):
+
+- o BC **fornecedor** expõe um *Open Host Service* in-process em
+  `features/<b>/application/facade.py` — assinaturas em **primitivos**, conversão para
+  value objects por dentro, exceções próprias **sem tradução**, re-exportando as que o
+  consumidor precisa capturar; a fachada **não autoriza**;
+- o BC **consumidor** implementa o seu port-out num **gateway** em
+  `features/<a>/adapters/out/<b>/`, que importa **só** `features.<b>.application.facade`
+  e traduz as exceções para o vocabulário do próprio BC;
+- a aresta é **nomeada** no `.importlinter`, um par por travessia
+  (`features.<a>.adapters.out.<b>.* -> features.<b>.application.facade`, com
+  `unmatched_ignore_imports_alerting = error`), e um teste assere a **lista exata** — uma
+  segunda aresta entra por decisão, nunca por deriva.
+
+O que a fachada **não** substitui: o tradutor de autenticação/autorização de identity
+continua no `composition_root` (ADR 3.4.0001 §3; ADR 3.5.0001 §5), porque o guard é
+construído por um módulo do adapter de entrada e chega ao contêiner como dependência
+resolvida, não como import de outro BC.
 
 ### Shared
 

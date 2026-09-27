@@ -57,6 +57,7 @@ from tests.fakes.features.staff.in_memory_access_guard import (
     FakeCredentialRejected,
     InMemoryAccessGuard,
 )
+from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
@@ -110,8 +111,9 @@ class Ambiente:
 
     **Os `_get_*` são conectados por derivação, e não por lista.** Para cada
     provedor do módulo do router, a anotação de retorno nomeia a classe do use
-    case, e o construtor dela pede apenas os três ports que os 16 use cases de
-    staff conhecem (`employees`, `job_functions`, `id_generator`). Isso deixa o
+    case, e o construtor dela pede apenas os ports que os use cases de staff
+    conhecem (`employees`, `job_functions`, `id_generator` e, desde a 3.5,
+    `gateway`). Isso deixa o
     wiring de teste **fechado sob acréscimo de rota**: uma rota escrita numa Task
     seguinte já nasce conectada aqui, e nenhum arquivo desta Task precisa mudar.
     """
@@ -121,6 +123,11 @@ class Ambiente:
         self.guard = InMemoryAccessGuard(credential=FakeActor(id="ator-1", tenant_id=_TENANT))
         self.guard.grant("manage_job_functions", tenant_id=_TENANT)
         self.guard.grant("manage_staff", tenant_id=_TENANT, unit_id=_UNIDADE)
+        # Stage 3.5 — R17 exige também `manage_users` sobre a unidade. O ator do
+        # ambiente detém as três, como `manager`/`hr` em produção: as varreduras
+        # medem a borda com o ator autorizado; a **recusa** por permissão é
+        # cenário de `test_http_router_login.py`, que a retira de propósito.
+        self.guard.grant("manage_users", tenant_id=_TENANT, unit_id=_UNIDADE)
 
         # A ordem espelha `create_app`: genéricos primeiro, de feature depois.
         # **Registrar os genéricos aqui não é zelo** — é o que torna o ambiente
@@ -177,6 +184,10 @@ def overrides_de_use_case(fakes: StaffFakes) -> dict[object, object]:
         "employees": fakes.employees,
         "job_functions": fakes.job_functions,
         "id_generator": FakeIdGenerator(),
+        # Stage 3.5 — `deactivate_employee` e `create_login_for_employee` pedem o
+        # gateway; o fake basta para as rotas que não o exercitam, e o módulo de
+        # R17 substitui por instância própria quando precisa observá-lo.
+        "gateway": InMemoryIdentityGateway(),
     }
 
     construidos: dict[object, object] = {}
