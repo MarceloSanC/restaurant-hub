@@ -1086,7 +1086,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
 
 ### Domínio e application de staff
 
-- [ ] **CA01** — `Employee.user_id` nasce `None`; `UserId("")` ou só-whitespace
+- [x] **CA01** — `Employee.user_id` nasce `None`; `UserId("")` ou só-whitespace
       é recusado no construtor (`InvalidIdentifierError`) — inclusive via
       `link_login`; `link_login(uid)` devolve nova instância com
       `user_id == uid` e todo outro campo igual (igualdade por valor via
@@ -1096,7 +1096,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
       precedência quando ambos valem, com teste dedicado à precedência; e
       **`link_login` chamado diretamente** sobre registro vinculado ou desligado
       levanta o mesmo erro (mata a mutação "remover a chamada interna").
-- [ ] **CA02** — As leis L-IG1…L-IG4 são testadas contra a **segunda**
+- [x] **CA02** — As leis L-IG1…L-IG4 são testadas contra a **segunda**
       implementação (`InMemoryIdentityGateway`), um teste por lei com o nome da
       lei; o fake tem `calls` (mesma forma do `InMemoryAccessGuard`), ledger
       `logins[user_id] = (email, tenant_id, unit_id)` com `user_id` **novo** a
@@ -1104,28 +1104,28 @@ Identity: **nenhuma** mudança de schema (§5.13).
       os dois knobs de L-IG2 — `raw_error` (levantado por
       `provision_employee_login`) e `fail_send_with` (levantado por
       `send_login_invitation`).
-- [ ] **CA03** — `CreateLoginForEmployeeUseCase` no caminho feliz, nos **dois**
+- [x] **CA03** — `CreateLoginForEmployeeUseCase` no caminho feliz, nos **dois**
       canais (parametrizado): grava `user_id` igual ao devolvido pelo gateway;
       `provision_employee_login` recebe o `delivery` do command; canal `email`
       ⇒ `send_login_invitation` chamado **uma vez** com o link provisionado e
       `result.setup_link is None`; canal `link` ⇒ **zero** chamadas a
       `send_login_invitation` e `result.setup_link` igual ao provisionado.
-- [ ] **CA04** — **A cópia não carrega o vínculo, com conteúdo:** copiar um
+- [x] **CA04** — **A cópia não carrega o vínculo, com conteúdo:** copiar um
       registro **com** `user_id` produz clone com `user_id is None`, e a origem
       relida pelo port mantém o seu. Substitui o teste vacuoso da 3.2.
-- [ ] **CA05** — `EmployeeResult.user_id` existe; `EmployeeLoginResult.setup_link`
+- [x] **CA05** — `EmployeeResult.user_id` existe; `EmployeeLoginResult.setup_link`
       e `ProvisionedLogin.setup_link` têm `repr=False` (asserção sobre
       `dataclasses.fields(...).repr`); `repr(result)` **não** contém o link;
       varredura por AST de `features/staff/` prova que nenhuma `raise` recebe
       um argumento chamado `setup_link` ou derivado dele. O teste
       `test_nenhum_result_carrega_vinculo_de_login` da 3.2 é **substituído**
       por este (o guarda cumpriu o papel: falhou quando o campo chegou).
-- [ ] **CA06** — **Nenhum use case constrói `EmployeeResult` diretamente**:
+- [x] **CA06** — **Nenhum use case constrói `EmployeeResult` diretamente**:
       varredura por AST de `application/use_cases/*.py` (excluído `_results.py`)
       não encontra `Call` cujo alvo seja `EmployeeResult`; e os **12** use cases
       que devolvem funcionário importam `employee_result` (contagem esperada
       declarada: 12, para a varredura saber quando está vazia).
-- [ ] **CA07** — **A fronteira abre em uma aresta exata.** `test_bc_independence.py`
+- [x] **CA07** — **A fronteira abre em uma aresta exata.** `test_bc_independence.py`
       lê `.importlinter` e assere que `bc-independence.ignore_imports` é
       **exatamente** `[staff.adapters.out.identity.* -> identity.application.facade]`
       e que `unmatched_ignore_imports_alerting = error`; varredura por AST de
@@ -1135,7 +1135,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
       `Role`/`Permission` (a varredura da 3.4 continua); e o gateway passa o
       papel como o **literal** `"employee"` (asserção sobre o AST). `lint-imports`
       verde.
-- [ ] **CA08** — `LocalIdentityGateway` × `InMemoryIdentityGateway` passam a
+- [x] **CA08** — `LocalIdentityGateway` × `InMemoryIdentityGateway` passam a
       **mesma** suíte de contrato (`tests/contract/features/staff/test_identity_gateway_laws.py`),
       o real montado sobre `IdentityFacade` com os fakes de identity
       (`InMemoryUserRepository` etc.): **L-IG1** — o `User` criado tem
@@ -1150,12 +1150,12 @@ Identity: **nenhuma** mudança de schema (§5.13).
       que falha em `send_login_invitation` sobe **cru** (fake: `fail_send_with`;
       real: `RecordingEmailSender` configurado para levantar); **L-IG4** — duas
       chamadas seguidas, sem sessão, e uma com id desconhecido, sem erro.
-- [ ] **CA09** — **Guardas antes de identity:** registro já vinculado **ou**
+- [x] **CA09** — **Guardas antes de identity:** registro já vinculado **ou**
       desligado ⇒ **zero** entradas `provision_employee_login` em
       `gateway.calls` e nada gravado; e-mail já usado (fake configurado) ⇒
       `LoginEmailAlreadyInUseError` e o registro relido continua
       `user_id is None`.
-- [ ] **CA11** — **R13 revoga antes de escrever; R15 recusa vinculado:** em
+- [x] **CA11** — **R13 revoga antes de escrever; R15 recusa vinculado:** em
       `DeactivateEmployeeUseCase`, registro com `user_id` ⇒
       `revoke_login_sessions(user_id)` aparece em `gateway.calls` **antes** de
       `employees.update` em `store.calls`; registro **sem** `user_id` ⇒ zero
@@ -1169,7 +1169,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
 
 ### Identity — VO, tijolos e fachada
 
-- [ ] **CA15** — `ProvisionAccountUseCase`: cria `User` com `unusable_hash`
+- [x] **CA15** — `ProvisionAccountUseCase`: cria `User` com `unusable_hash`
       (o hash gravado **não** é `hasher.dummy_hash()` e dois provisionamentos
       gravam hashes **distintos** — as duas leis de `unusable_hash`), persiste
       `PasswordSetupToken` de propósito `INVITATION` com
@@ -1181,33 +1181,33 @@ Identity: **nenhuma** mudança de schema (§5.13).
       `InviteUserUseCase` (unicidade global → `platform_admin` **com**
       `unit_ids` → restaurante → construir → unidades), com o teste de
       precedência da 2.5 replicado.
-- [ ] **CA16** — **Identity intacta onde não foi tocada:** toda a suíte de
+- [x] **CA16** — **Identity intacta onde não foi tocada:** toda a suíte de
       identity (unit, contrato, integração, e2e — inclusive
       `test_invitation_flow.py` e a do reset) passa; `InviteUserUseCase` e
       `RequestPasswordResetUseCase` têm construtor, ordem e comportamento
       inalterados (o diff de cada módulo se restringe à chamada do helper); e
       um teste prova que o link do e-mail de convite **e** o do reset continuam
       **byte-idênticos** aos anteriores ao helper.
-- [ ] **CA17** — `SendInvitationUseCase` envia **uma** mensagem para o e-mail
+- [x] **CA17** — `SendInvitationUseCase` envia **uma** mensagem para o e-mail
       dado, cujo corpo contém o `setup_link` e cujo assunto é o da 2.5; a falha
       do sender **propaga**. `RevokeAllSessionsUseCase` chama
       `revoke_all_for_user(user_id, clock.now())` e é idempotente (id
       desconhecido não levanta). O helper `_invitation.py` é a **única** casa
       do formato do link: `grep -rn "definir-senha" src/` devolve **só** ele —
       o que exige que `request_password_reset.py:147` também passe a chamá-lo.
-- [ ] **CA18** — `IdentityFacade` converte primitivos em VOs (`Email`,
+- [x] **CA18** — `IdentityFacade` converte primitivos em VOs (`Email`,
       `Role.from_string`, `RestaurantId`, `UnitId`), repassa `handed_over`,
       **não** captura exceção nenhuma (o teste passa um use case que levanta e
       assere que a mesma instância sobe), e o módulo **re-exporta**
       `EmailAlreadyRegisteredError` e `InvalidEmailError` (asserção
       `facade.EmailAlreadyRegisteredError is errors.EmailAlreadyRegisteredError`).
-- [ ] **CA31** — **`Email` recusa o byte NUL:** `Email("fulano\x00@cantina.com")`
+- [x] **CA31** — **`Email` recusa o byte NUL:** `Email("fulano\x00@cantina.com")`
       levanta `InvalidEmailError` (unit, identity); o valor entra no conjunto
       adversarial de `email` das varreduras de staff (unitária e e2e) e produz
       **422** em R17 pelo HTTP real; `POST /users/invitations` com esse e-mail
       responde **422** pelo HTTP real (era 500 — o teste **documenta** a
       medição na docstring).
-- [ ] **CA32** — **O TTL do canal `link` é configuração:** `wire_dependencies`
+- [x] **CA32** — **O TTL do canal `link` é configuração:** `wire_dependencies`
       com `handover_link_ttl_hours=5` e `invitation_token_ttl_hours=11` monta
       `ProvisionAccountUseCase` com os dois prazos **distintos** e o e2e do
       canal `link` grava um token cujo `expires_at - issued_at` é o de
@@ -1215,7 +1215,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
 
 ### Persistência
 
-- [ ] **CA19** — Round-trip de `user_id` pelo `PostgresEmployeeRepository`:
+- [x] **CA19** — Round-trip de `user_id` pelo `PostgresEmployeeRepository`:
       `add` de registro sem login ⇒ relido `None`; `update` após `link_login`
       ⇒ relido igual; a suíte de contrato de `EmployeeRepository`
       (`test_employee_repository_laws.py`) ganha o campo no snapshot "nenhum
@@ -1226,7 +1226,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
 
 ### Borda HTTP e wiring
 
-- [ ] **CA10** — **Duas permissões, nesta ordem:** com o dublê que registra
+- [x] **CA10** — **Duas permissões, nesta ordem:** com o dublê que registra
       chamadas, R17 produz `authorize(manage_staff, unit_id=<path>)` **e**
       `authorize(manage_users, unit_id=<path>)` (alvo asserido pela string
       exata); com o dublê negando `manage_staff`, há **zero** chamadas com
@@ -1234,7 +1234,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
       teste-pino em `tests/unit/features/identity/` assere
       `required_permissions_for_role(Role.EMPLOYEE) == {MANAGE_USERS}` com
       mensagem que nomeia R17.
-- [ ] **CA12** — **As 16 rotas viram 17 em TODAS as varreduras derivadas de
+- [x] **CA12** — **As 16 rotas viram 17 em TODAS as varreduras derivadas de
       `router.routes` da 3.6**, unitárias e e2e — 401 (CA08), 403 para
       `employee`/`platform_admin` (CA09), alcance de `manager`/`owner`/`hr`
       (CA10–CA12), isolamento 404/403 (CA13), dublê adversarial de escopo
@@ -1248,25 +1248,25 @@ Identity: **nenhuma** mudança de schema (§5.13).
       célula, efeito lido em `["employee"]["unit_id"]`). E R17 **não** produz
       `RestaurantNotFoundError`/`UnitNotFoundError`/`CrossTenantError` de
       identity para nenhum papel com acesso (§6.2).
-- [ ] **CA13** — **`user_id` em toda resposta que embute funcionário:** teste
+- [x] **CA13** — **`user_id` em toda resposta que embute funcionário:** teste
       parametrizado sobre as **12** rotas cujo `response_model` é
       `EmployeeResponse`, `list[EmployeeResponse]` **ou** um modelo com campo
       desse tipo (derivação por introspecção dos modelos; contagem asserida =
       12). Para R07–R14 e para cada item de R06, o corpo traz `user_id` igual
       ao gravado do registro **vinculado**; para R05 e R16 traz `null` por
       construção (§5.2); para R17, `employee.user_id` igual ao recém-criado.
-- [ ] **CA14** — **O valor do token só aparece onde deve, medido nos dois
+- [x] **CA14** — **O valor do token só aparece onde deve, medido nos dois
       canais pelo HTTP real:** canal `email` ⇒ `setup_link` é `null` no corpo
       e o valor está **só** no `RecordingEmailSender`; canal `link` ⇒ o valor
       está **só** no corpo (zero mensagens no sender); em nenhum canal o valor
       aparece em **qualquer coluna de qualquer tabela de staff** (consulta
       direta às cinco tabelas), em `repr(result)` nem em **nenhum registro de
       log** capturado (`caplog`) durante a requisição.
-- [ ] **CA20** — O mapa `STAFF_ERROR_STATUS` tem **23** entradas; CA17/CA18 da
+- [x] **CA20** — O mapa `STAFF_ERROR_STATUS` tem **23** entradas; CA17/CA18 da
       3.6 (totalidade e par a par) passam com as cinco novas; cada faixa nova é
       alcançada pelo **HTTP real**: 409 já-vinculado, 409 desligado, 409 e-mail
       em uso, 409 remoção de vinculado, 422 e-mail inválido.
-- [ ] **CA21** — `create_app()` registra R17; o mapa de overrides tem **18**
+- [x] **CA21** — `create_app()` registra R17; o mapa de overrides tem **18**
       entradas de staff; `_TOTAL_DE_ROTAS_DE_STAFF == 17`; o gateway de
       produção é `LocalIdentityGateway` montado sobre uma `IdentityFacade` cujos
       use cases usam o **mesmo** `Engine`/`EmailSender`/`Clock` das rotas de
@@ -1279,18 +1279,18 @@ Identity: **nenhuma** mudança de schema (§5.13).
 
 ### Fluxo e isolamento (DoD do roadmap e da issue #51)
 
-- [ ] **CA22** — **e2e canal `email`, ator `manager`:** cria funcionário, R17
+- [x] **CA22** — **e2e canal `email`, ator `manager`:** cria funcionário, R17
       com `delivery="email"` ⇒ 201 com `employee.user_id` preenchido e
       `setup_link: null`; o link sai do `RecordingEmailSender`; `POST
       /auth/password` define a senha; `POST /auth/login` como o funcionário
       devolve tokens; e esse `employee` recebe **403** em R06 da própria
       unidade (permissões vazias, §1).
-- [ ] **CA23** — **e2e canal `link`:** R17 com `delivery="link"` ⇒ 201 com
+- [x] **CA23** — **e2e canal `link`:** R17 com `delivery="link"` ⇒ 201 com
       `setup_link`; **zero** e-mails; o link do corpo define a senha e o login
       funciona; **antes** de definir a senha, `POST /auth/login` falha com a
       sentinela do `dummy_hash` (`_SENTINELA_DUMMY`) **e** com uma senha
       qualquer (conta pendente).
-- [ ] **CA24** — **e2e do desligamento e da remoção:** funcionário com login
+- [x] **CA24** — **e2e do desligamento e da remoção:** funcionário com login
       autenticado (tokens em mãos) é desligado por R13 ⇒ `POST /auth/refresh`
       com o refresh dele responde **401**; o **access token** em curso continua
       aceito até expirar (asserção positiva, §5.6); `POST /auth/login` de novo
@@ -1299,7 +1299,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
       `EmployeeHasLoginError`, o registro continua em `GET
       ?include_inactive=true`, e a sessão do funcionário **não** foi tocada
       (refresh continua funcionando quando ele estava ativo).
-- [ ] **CA25** — **e2e das recusas, com o corpo asserido (não só o status):**
+- [x] **CA25** — **e2e das recusas, com o corpo asserido (não só o status):**
       segundo R17 no mesmo registro ⇒ 409 `EmployeeAlreadyHasLoginError`,
       parametrizado sobre `{mesmo e-mail, e-mail novo}` (prova a ordem de §5.4
       — a guarda vence a unicidade); R17 com o e-mail de um login já existente
@@ -1307,10 +1307,10 @@ Identity: **nenhuma** mudança de schema (§5.13).
       `detail` contém **só** o e-mail enviado; R17 em registro desligado ⇒ 409
       `TerminatedEmployeeLoginError`; R17 pela unidade A com `employee_id` de B
       ⇒ 404; `employee` e `platform_admin` ⇒ 403 (coberto por CA12).
-- [ ] **CA26** — **e2e da cópia:** copiar um registro **vinculado** para outra
+- [x] **CA26** — **e2e da cópia:** copiar um registro **vinculado** para outra
       unidade ⇒ o clone em `GET /units/B/employees` tem `user_id: null`; o
       original em A mantém o seu.
-- [ ] **CA30** — **Gravar antes de entregar:** gateway com `send_login_invitation`
+- [x] **CA30** — **Gravar antes de entregar:** gateway com `send_login_invitation`
       que levanta ⇒ a exceção propaga (mesma instância) **e** o registro relido
       tem `user_id` igual ao provisionado; em `calls`, `employees.update`
       precede `send_login_invitation`. Pelo HTTP real (sender configurado para
@@ -1318,10 +1318,10 @@ Identity: **nenhuma** mudança de schema (§5.13).
 
 ### Gates
 
-- [ ] **CA27** — `make check` verde (inclui `lint-imports` com o par novo,
+- [x] **CA27** — `make check` verde (inclui `lint-imports` com o par novo,
       `layout-check`, `docs-check`, mypy strict); cobertura ≥ 90% em **cada**
       arquivo novo/tocado.
-- [ ] **CA28** — **Prova por mutação** das leis mais críticas, com saída colada:
+- [x] **CA28** — **Prova por mutação** das leis mais críticas, com saída colada:
       (a) inverter a ordem provisionar↔guardar em `CreateLoginForEmployeeUseCase`
       derruba CA09; (b) inverter revogar↔escrever em `DeactivateEmployeeUseCase`
       derruba CA11, e remover a guarda `EmployeeHasLoginError` de
@@ -1334,7 +1334,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
       derruba CA08; (h) remover a chamada interna de `assert_can_link_login`
       em `link_login` derruba CA01. Mutação que sobrevive = cobertura
       insuficiente comprovada.
-- [ ] **CA29** — `python scripts/check_technical_postexec.py` verde;
+- [x] **CA29** — `python scripts/check_technical_postexec.py` verde;
       `check_adr_bounded_context.py` aceita os quatro ADRs (`bounded_context:
       staff`); notas datadas em `workforce.md` §3.8 e `overview.md` §3, nota de
       supersessão parcial no ADR 3.4.0001, entrada datada na §7 da 2.5, regra
@@ -1343,19 +1343,19 @@ Identity: **nenhuma** mudança de schema (§5.13).
 
 ## 12. Checklist de validação interna
 
-- [ ] Todos os contratos introduzidos têm assinatura definida? — sim (§4: port
+- [x] Todos os contratos introduzidos têm assinatura definida? — sim (§4: port
       com quatro leis, DTOs, fachada, use cases, helper, rota, schemas, coluna,
       configuração).
-- [ ] Toda decisão em §7 tem fonte rastreável? — sim; sete delas são decisões
+- [x] Toda decisão em §7 tem fonte rastreável? — sim; sete delas são decisões
       do sponsor registradas em §13 com a pesquisa ou a medição que as precedeu.
-- [ ] Toda integração externa tem contrato definido? — não há integração
+- [x] Toda integração externa tem contrato definido? — não há integração
       externa (§8).
-- [ ] Decisões com alternativa real descartada têm ADR escrito? — sim
+- [x] Decisões com alternativa real descartada têm ADR escrito? — sim
       (3.5.0001–3.5.0004); D8 e D9 aplicam princípios já decididos (ADR 3.4.0003;
       2.5 regra 15) e ficam sem ADR próprio, com a razão dita.
-- [ ] Dependências de Stages anteriores estão satisfeitas (`done`)? — sim,
+- [x] Dependências de Stages anteriores estão satisfeitas (`done`)? — sim,
       `3.6-staff-http` está `done` e mergeada (PR #44).
-- [ ] Stage cabe em ~3–12 Tasks? — **sim, 12**, no teto, medidas assim, com as
+- [x] Stage cabe em ~3–12 Tasks? — **sim, 12**, no teto, medidas assim, com as
       exceções de tamanho **declaradas** (PIPELINE §4.3 #2): (1) domínio de
       staff — `UserId`, `user_id` + validação, `link_login`/`assert_can_link_login`,
       dois erros, testes; (2) result — `EmployeeResult.user_id` + mapper único
@@ -1386,10 +1386,10 @@ Identity: **nenhuma** mudança de schema (§5.13).
       fechamento como
       `[3.5/--]` justificado. **Sem margem:** se a 3B medir 13+, o corte é o
       de §13 Q6 (identity vira Stage própria antes) — não cortar staff ao meio.
-- [ ] Riscos críticos têm mitigação plausível? — sim; os de impacto alto
+- [x] Riscos críticos têm mitigação plausível? — sim; os de impacto alto
       (segunda aresta de carona; vazamento do link; envio engolido; NUL) têm
       trava mecânica.
-- [ ] **Os quatro findings herdados da issue #51 estão dispostos?** — sim: nº 1
+- [x] **Os quatro findings herdados da issue #51 estão dispostos?** — sim: nº 1
       (tradutor no composition root) em D1/§10; nº 2 (desativação) em D3/§10;
       nº 3 (`employee` nunca autorizado) em §1 e CA22 (é comportamento
       desejado, travado por teste); nº 4 (tipagem `Any` via `importlib`) em D1
@@ -1397,14 +1397,14 @@ Identity: **nenhuma** mudança de schema (§5.13).
       vizinhas:** 2.4 "guard de escalada no boundary" e 2.5 "oráculo de
       existência" dispostos em §10; 3.6 "definido mas não plugado" em §10; 3.6
       "NUL em identity" parcialmente tratado por D8 (só `Email`).
-- [ ] **A regra 1 da 2.5 sobrevive fora do carve-out?** — sim: canal `email`
+- [x] **A regra 1 da 2.5 sobrevive fora do carve-out?** — sim: canal `email`
       preserva CA14 da 2.5 (o link não está na resposta), e o carve-out está
       nomeado no ADR 3.5.0002 com o seu domínio (uma operação, uma rota, um
       canal).
-- [ ] **Deliverables em dois BCs estão autorizados e limitados?** — sim: §13
+- [x] **Deliverables em dois BCs estão autorizados e limitados?** — sim: §13
       Q6 registra a pergunta e a resposta; §5.13 fixa o limite (nada de schema,
       entidade ou port em identity).
-- [ ] Todo critério com quantificador nomeia o domínio enumerado? — sim (nota
+- [x] Todo critério com quantificador nomeia o domínio enumerado? — sim (nota
       no topo da §11).
 
 ## 13. Questões em aberto
