@@ -25,11 +25,19 @@ As leituras devolvem só tupla ou valor imutável. `worked_minutes_of` **delega*
 ao sítio único de horas (`TimeRange.worked_minutes`) com o intervalo efetivo que
 a faixa calcula — nenhuma aritmética de horas mora aqui (§5.7).
 
+**Mutações.** Cada uma devolve **nova** instância com `version + 1` (ADR
+4.1.0001 §2), reconstruindo a árvore por `dataclasses.replace` e passando de novo
+pelo `__post_init__` da raiz e das internas — as recusas estruturais saem das
+mesmas checagens da construção, sem cópia aqui. Só as guardas que nenhuma
+invariante expressa (remoção com alocação pendente, reagendamento para outro dia)
+são checadas no próprio método.
+
 Entidade **frozen**, igualdade por **identidade**.
 """
 
+import dataclasses
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from restaurant_hub.features.scheduling.domain.entities.assignment import Assignment
 from restaurant_hub.features.scheduling.domain.entities.shift_band import ShiftBand
@@ -41,12 +49,20 @@ from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidIdentifierError,
     InvalidSchedulePeriodError,
     InvalidScheduleVersionError,
+    ShiftBandDayChangeError,
+    ShiftBandInUseError,
     ShiftBandNotFoundError,
+    ShiftDemandInUseError,
     ShiftDemandNotFoundError,
     TimeRangeOutsidePeriodError,
 )
+from restaurant_hub.features.scheduling.domain.value_objects.demand_quantity import (
+    DemandQuantity,
+)
 from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
     AssignmentId,
+    EmployeeId,
+    JobFunctionId,
     ScheduleId,
     ShiftBandId,
     ShiftDemandId,
@@ -59,6 +75,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.operational_calenda
 from restaurant_hub.features.scheduling.domain.value_objects.schedule_period import (
     SchedulePeriod,
 )
+from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
 
 
 def _repetidos(ids: tuple[str, ...]) -> bool:
@@ -119,6 +136,132 @@ class Schedule:
             raise DuplicateEntityIdError("ShiftDemandId")
         if _repetidos(tuple(alocacao.id for alocacao in alocacoes)):
             raise DuplicateEntityIdError("AssignmentId")
+
+    # --- mutações (nova instância, version + 1) -------------------------------------
+
+    def enable_band(self, band_id: ShiftBandId, time_range: TimeRange) -> "Schedule":
+        """Habilita uma faixa no período (id gerado fora do domínio).
+
+        Colisão de `(start, end)` e início fora dos dias operacionais saem da
+        revalidação da raiz. A faixa que começa no último dia operacional e
+        termina depois dele é válida (ADR 4.1.0008 §3).
+        """
+        return self._com_faixas((*self.bands, ShiftBand(id=band_id, time_range=time_range)))
+
+    def reschedule_band(self, band_id: ShiftBandId, start: datetime, end: datetime) -> "Schedule":
+        """Move os limites da faixa, preservando demandas, alocações e o intervalo.
+
+        Recebe `start`/`end`, nunca um `TimeRange`: não mudar o intervalo é
+        estrutural (§5.22). Destino fora do período → `TimeRangeOutsidePeriodError`;
+        dentro do período mas em outro dia operacional → `ShiftBandDayChangeError`;
+        colisão com **outra** faixa → `DuplicateShiftBandError` (a própria é
+        substituída, logo não colide consigo).
+        """
+        faixa = self.band(band_id)
+        destino = self.calendar.operational_day_of(start)
+        if not self.period.contains(destino):
+            raise TimeRangeOutsidePeriodError()
+        if destino != self.operational_day_of(faixa):
+            raise ShiftBandDayChangeError()
+        return self._com_faixa(faixa.rescheduled_to(start, end))
+
+    def disable_band(self, band_id: ShiftBandId) -> "Schedule":
+        """Desabilita a faixa — recusa enquanto houver alocação (§5.21).
+
+        Sem alocação, as demandas saem junto: a guarda protege pessoas escaladas,
+        não vagas vazias. Não há cascata sobre alocações.
+        """
+        faixa = self.band(band_id)
+        if faixa.assignment_count > 0:
+            raise ShiftBandInUseError()
+        return self._com_faixas(tuple(outra for outra in self.bands if outra.id != band_id))
+
+    def declare_demand(
+        self,
+        demand_id: ShiftDemandId,
+        band_id: ShiftBandId,
+        job_function_id: JobFunctionId,
+        quantity: DemandQuantity,
+    ) -> "Schedule":
+        """Declara a demanda de uma função na faixa (uma por função, ADR 4.1.0010)."""
+        faixa = self.band(band_id)
+        demanda = ShiftDemand(id=demand_id, job_function_id=job_function_id, quantity=quantity)
+        return self._com_faixa(faixa.with_demand(demanda))
+
+    def change_demand_quantity(
+        self, demand_id: ShiftDemandId, quantity: DemandQuantity
+    ) -> "Schedule":
+        """Troca a quantidade-alvo — abaixo dos alocados não é recusado (N é alvo)."""
+        faixa, demanda = self.locate_demand(demand_id)
+        return self._com_demanda(faixa, demanda.with_quantity(quantity))
+
+    def withdraw_demand(self, demand_id: ShiftDemandId) -> "Schedule":
+        """Retira a demanda — recusa enquanto houver alocação (§5.21)."""
+        faixa, demanda = self.locate_demand(demand_id)
+        if demanda.allocated > 0:
+            raise ShiftDemandInUseError()
+        return self._com_faixa(faixa.without_demand(demand_id))
+
+    def assign(
+        self,
+        assignment_id: AssignmentId,
+        demand_id: ShiftDemandId,
+        employee_id: EmployeeId,
+        *,
+        counts_toward_workload: bool = True,
+        function_exception: bool = False,
+    ) -> "Schedule":
+        """Aloca o registro a uma vaga da demanda.
+
+        Grava as duas marcas recebidas; o intervalo nasce `None` (herda o da
+        faixa). O registro já nesta demanda → `DuplicateAssignmentError` (da
+        `ShiftDemand`); em outra demanda da mesma faixa →
+        `DuplicateAssignmentInBandError` (da `ShiftBand`, §5.23). Faixas
+        distintas seguem aceitas.
+        """
+        faixa, demanda = self.locate_demand(demand_id)
+        alocacao = Assignment(
+            id=assignment_id,
+            employee_id=employee_id,
+            counts_toward_workload=counts_toward_workload,
+            function_exception=function_exception,
+        )
+        return self._com_demanda(faixa, demanda.with_assignment(alocacao))
+
+    def unassign(self, assignment_id: AssignmentId) -> "Schedule":
+        """Desaloca — a vaga volta a ficar descoberta."""
+        faixa, demanda, _ = self.locate_assignment(assignment_id)
+        return self._com_demanda(faixa, demanda.without_assignment(assignment_id))
+
+    def declare_workload_counting(self, assignment_id: AssignmentId, counts: bool) -> "Schedule":
+        """Re-declara se as horas da alocação contam para a carga (ADR 4.1.0003 (d))."""
+        faixa, demanda, alocacao = self.locate_assignment(assignment_id)
+        return self._com_alocacao(faixa, demanda, alocacao.declare_workload_counting(counts))
+
+    # --- reconstrução da árvore -----------------------------------------------------
+
+    def _com_faixas(self, faixas: tuple[ShiftBand, ...]) -> "Schedule":
+        return dataclasses.replace(self, bands=faixas, version=self.version + 1)
+
+    def _com_faixa(self, faixa: ShiftBand) -> "Schedule":
+        return self._com_faixas(
+            tuple(faixa if existente.id == faixa.id else existente for existente in self.bands)
+        )
+
+    def _com_demanda(self, faixa: ShiftBand, demanda: ShiftDemand) -> "Schedule":
+        demandas = tuple(
+            demanda if existente.id == demanda.id else existente for existente in faixa.demands
+        )
+        return self._com_faixa(faixa.with_demands(demandas))
+
+    def _com_alocacao(
+        self, faixa: ShiftBand, demanda: ShiftDemand, alocacao: Assignment
+    ) -> "Schedule":
+        alocacoes = tuple(
+            alocacao if existente.id == alocacao.id else existente
+            for existente in demanda.assignments
+        )
+        return self._com_demanda(faixa, dataclasses.replace(demanda, assignments=alocacoes))
 
     # --- leituras -------------------------------------------------------------------
 

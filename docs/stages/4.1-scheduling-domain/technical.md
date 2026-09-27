@@ -1411,4 +1411,25 @@ passa a excedê-lo — a direção literal da cláusula), as duas aceitas e com 
 Também no mesmo commit, `rescheduled_to` passou a ser conferido pelos atributos das alocações, não
 pela igualdade por id (achado 5).
 
+### 2026-09-27 — [decision] Task 09, ordem das restrições de `reschedule_band` e a matriz derivada da §6 — Claude Opus 5.5 (executor)
+
+**Ordem.** O concept §5.22 lista as cinco restrições de `reschedule_band` sem fixar precedência, e
+duas delas se cruzam: o destino fora do período está, por definição, **também** em outro dia
+operacional. Opções: (a) "outro dia" primeiro — `TimeRangeOutsidePeriodError` fica **inatingível**
+por `reschedule_band` (uma faixa do período, movida no mesmo dia, continua no período), e a célula
+que a §6 e CA12 exigem ("os 2 caminhos de `TimeRangeOutsidePeriodError`") não teria cenário;
+(b) **período primeiro**, depois dia operacional, depois a revalidação da árvore (intervalo,
+duplicidade). **Escolhida (b)**: é a única que deixa as duas recusas atingíveis, e a mais específica
+sai por último (sair do período é o defeito maior). As duas checagens vivem no método porque nenhuma
+invariante da construção as expressa (a faixa num dia do período é válida em qualquer dia dele);
+tudo o mais sai do `__post_init__`, sem cópia. Reversível: é a ordem de duas linhas.
+
+**Matriz.** A matriz (método × exceção) de CA12 é cobrada **contra a própria §6 do concept**: o teste
+lê a tabela, extrai as células cujo método é da raiz e exige que cada uma esteja na matriz das
+mutações ou na das leituras (`test_schedule.py`). Células de métodos que ainda não existem
+(`redeclare_band_break`, `declare_allocation_break`) entram sozinhas quando a Task 10 os criar. Por
+isso a célula `InvalidAssignmentBreakError × reschedule_band` já entra nesta Task (o plano a punha no
+fecho de CA21, Task 10): o caminho existe desde que `reschedule_band` existe, com a alocação de
+intervalo declarado montada por construção direta.
+
 <!-- END: post-execution -->
