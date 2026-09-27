@@ -174,7 +174,7 @@ without knowing which day an allocation belongs to and how many hours it counts.
   (policies that consume the operational day and `hours(a)`).
 - [`overview.md`](../overview.md) — §3 line 40 (configurable period, default weekly; 16h–00h
   example), line 45 (one hours number), line 56 (no money); §6 line 110 (CLT not hard-coded).
-- [`roadmap.md`](../roadmap.md) — Stage 4.1 (`SchedulePeriod`, `TimeRange`, line 1213), Stage 4.2
+- [`roadmap.md`](../roadmap.md) — Stage 4.1 (`SchedulePeriod`, `TimeRange`, line 1252), Stage 4.2
   (policies that sum hours).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §2,
   §3.1, §3.2, §3.6.2–§3.6.5, §3.6.10, §6.

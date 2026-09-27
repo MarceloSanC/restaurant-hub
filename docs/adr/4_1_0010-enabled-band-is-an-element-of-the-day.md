@@ -206,7 +206,7 @@ And the band is what **carries the declared break** that
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
   §2 (line 107), §3.3 (the gap, lines 257–258), §3.6.8 (the 4.2 gap on how the
   surplus is counted, lines 632–634), §6 (line 1087).
-- [`roadmap.md`](../roadmap.md) 1219–1222 (the three-entity file list this ADR
+- [`roadmap.md`](../roadmap.md) 1258–1261 (the three-entity file list this ADR
   diverges from; the entities line is 1220).
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)
   §1 (divergence 3), §4, §5.10–§5.12, §5.22, §7, §13 (Q2 and Q3, both answered by

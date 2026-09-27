@@ -207,7 +207,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    importada. O único contrato consumido de fora do BC é `DomainError`
    (`shared/domain`).
 7. **`depends_on` é `3.1-staff-domain`**, corrigido de `3.5-employee-login-link`
-   pela nota de 2026-09-26 (`roadmap.md` 1207–1211; tabela de Stages 123 e grafo
+   pela nota de 2026-09-26 (`roadmap.md` 1246–1250; tabela de Stages 123 e grafo
    `S31 --> S41`, linha 77). E é dependência **de ordenação com consumo por
    valor**: nem um import, nem um contrato de código.
 8. **Nota de glosa pendente no doc de domínio.** `ShiftBand` é glosa EN nova para
@@ -726,7 +726,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
 9. **Faixa dentro do período:**
    `period.contains(calendar.operational_day_of(band.time_range.start))` — a
    contenção é medida no **início** (ADR 4.1.0008). É a leitura estrutural de
-   "toda alocação está **dentro do período** da escala" (`roadmap.md` 1213, a
+   "toda alocação está **dentro do período** da escala" (`roadmap.md` 1252, a
    mesma linha que o doc de domínio cita — `shift-scheduling.md` 171), já que a
    alocação herda a faixa por contenção. Corolário **aceito**, não tolerado: a
    faixa que começa no último dia operacional e **termina depois** dele é válida
@@ -1049,7 +1049,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **O quê:** `N` é um VO frozen que valida `>= 0`.
 - **Por quê:** o roadmap já nomeia o contrato; com `int` cru a validação se
   espalharia por `declare_demand`, `change_demand_quantity` e pela reidratação.
-- **Fonte:** `roadmap.md` 1221; doc §3.3; skill `ddd-tactical-patterns`.
+- **Fonte:** `roadmap.md` 1260; doc §3.3; skill `ddd-tactical-patterns`.
 
 ### Nada de publicação, auditoria ou carimbo no domínio
 - **O quê:** sem `publish()`, sem estado rascunho/publicado, sem ator, sem

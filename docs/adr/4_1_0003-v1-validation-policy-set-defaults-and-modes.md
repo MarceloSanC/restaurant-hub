@@ -33,7 +33,7 @@ Forces:
 
 - `overview.md` §3 (line 42) lists the validations with an open "etc." — "sobreposição de
   alocação, descanso entre jornadas, tetos de horas **etc.**" — in **block or warn** mode, live,
-  with conscious acceptance. `roadmap.md` Stage 4.2 (1239, 1246) closes the list at four:
+  with conscious acceptance. `roadmap.md` Stage 4.2 (1278, 1285) closes the list at four:
   overlap, rest between shifts, daily/weekly cap, contracted workload.
 - `workforce.md` §1/§3.6 and [ADR 3.1.0001](./3_1_0001-workforce-gate-modeling-decisions.md)
   treat **allocation × unavailability** as "validação do Step 4" — it is not one of the four.
@@ -253,7 +253,7 @@ enters as a new strategy in the same protocol, still configurable per `overview.
   (operational day, `hours(a)`).
 - [`overview.md`](../overview.md) — §3 lines 37, 39, 42, 45, 56; §3 ASSUM-4 (69); §6 line 110;
   §7 line 114.
-- [`roadmap.md`](../roadmap.md) — Stage 4.2 (1239–1259); Step 5 (1414).
+- [`roadmap.md`](../roadmap.md) — Stage 4.2 (1278–1298); Step 5 (1453).
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §1, §2, §3.1, §3.3, §3.4, §3.6.
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.4,
   §3.6, §6.
