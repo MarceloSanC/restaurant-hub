@@ -1339,4 +1339,16 @@ tempo conhecer a exceção da alocação. **Escolhida (a)**, a mais simples: a v
 só, como a contagem. Reversível (uma checagem e um teste). O `0` explícito é tratado como valor, não
 como ausência (`is None`, não truthiness) — travado em `test_time_range.py`.
 
+### 2026-09-27 — [decision] Task 03, valores do `Weekday` — Claude Opus 5.5 (executor)
+
+Lacuna: CA6 cobra "os 7 nomes **e** os 7 valores", mas nem o concept §4 nem o ADR 4.1.0002 fixam os
+valores. Opções: (a) nome em minúsculas (`MONDAY = "monday"`), a forma de todo `StrEnum` do repo
+(`DayPeriod` em `staff/domain/value_objects/shift_preference.py` 27–30, `Role` de identity); (b) o
+número ISO como texto (`"1"`…`"7"`) — acoplaria o valor de fio à convenção ISO e não se lê na borda;
+(c) nome em PT — contraria a regra de identificadores em EN (`CLAUDE.md`). **Escolhida (a)**: a mais
+simples e a do precedente. Reversível até a 4.4 persistir o `week_start` (é quem o grava) e a 4.5 o
+expor; `test_operational_calendar.py` trava o mapeamento nome → valor inteiro, para que a mudança,
+se vier, seja deliberada. `from_date` usa a **ordem de declaração** (ISO) em vez de nomear membros,
+o que mantém `Weekday.MONDAY` fora do `src/` fora de `OperationalCalendar.default()` (gate de CA7).
+
 <!-- END: post-execution -->
