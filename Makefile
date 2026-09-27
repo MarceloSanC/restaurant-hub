@@ -34,7 +34,7 @@ help:
 	@echo   make layout-check     Valida regras de dependencia - scripts/check_layout.py
 	@echo   make import-check     Valida contratos de import - import-linter
 	@echo   make lock-check       Confere que uv.lock esta sincronizado com pyproject.toml
-	@echo   make docs-check       Valida docs de stage, issues e ADRs
+	@echo   make docs-check       Valida docs de stage, issues, ADRs e harness
 	@echo   make test             Roda todos os testes
 	@echo   make test-fast        Roda testes pulando os marcados como slow
 	@echo   make test-cov         Testes com relatorio de cobertura HTML + gate 90
@@ -140,8 +140,10 @@ lock-check:
 # docs-check — valida (1) que technical.md `done` só mudou dentro da §7
 # post-execution desde o gate da Fase 3B (CONVENTIONS §3.4), (2) que toda
 # Stage tem issue correspondente no backlog do GitHub (best-effort — pula
-# se `gh` não está autenticado), (3) o bounded_context dos ADRs e (4) que a
-# árvore de pastas do LAYOUT §2 descreve o repositório que existe.
+# se `gh` não está autenticado), (3) o bounded_context dos ADRs, (4) que a
+# árvore de pastas do LAYOUT §2 descreve o repositório que existe e (5) o
+# frontmatter de skills/subagentes em `.claude/` — o Claude Code não reporta
+# YAML inválido nem descrição truncada (issue #56).
 #
 # O (4) é o único que compara documento com sistema de arquivos, e é por isso
 # que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda
@@ -153,6 +155,7 @@ docs-check:
 	uv run python scripts/check_stage_issue.py
 	uv run python scripts/check_adr_bounded_context.py
 	uv run python scripts/check_docs_claims.py
+	uv run python scripts/check_harness.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes (sem cobertura — loop rápido local)
