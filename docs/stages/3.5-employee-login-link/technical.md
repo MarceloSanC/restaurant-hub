@@ -1219,4 +1219,23 @@ entrada é o ponteiro para quem as ler. O que o plano prometia continua valendo 
 davam o `_results.py` como vivo (`identity/application/use_cases/_invitation.py` e
 `test_composition_root_staff.py`) foram corrigidas junto.
 
+### 2026-09-27 — [finding] desligar revoga **todas** as sessões da conta; colide com "vincular login existente" — Claude (autônomo)
+**Contexto:** auditoria pós-merge (issue #59, achado F2). `DeactivateEmployeeUseCase` chama
+`revoke_login_sessions(user_id)`, e o caminho até `SessionRepository.revoke_all_for_user` é por
+**usuário**, sem registro nem unidade (L-IG4; ADR 3.5.0003 §1/§6). O concept §4 (`UserId`) admite
+um vínculo futuro ao login de um gerente que trabalha na escala. Nesse dia, desligar o registro de
+escala dele derrubaria as sessões de gestão. Nem o ADR 3.5.0003 nem o finding "vincular login
+existente" do concept §10 registram a interação.
+**Direção:** a Stage que introduzir mais de um vínculo por conta decide o que R13 faz com as
+sessões (revogar só no último vínculo ativo, excluir o login de gerente do desligamento, ou
+revogar por escopo). Ponto de partida, não solução. **Issue:** #60, com condição de disparo.
+
+### 2026-09-27 — [finding] respostas com credencial sem `Cache-Control: no-store` — Claude (autônomo)
+**Contexto:** auditoria pós-merge (issue #59, achado F3). R17 no canal `link` devolve um segredo
+válido por 168h; `/auth/login` e `/auth/refresh` devolvem tokens; nenhuma resposta de `src/`
+define `Cache-Control`. Não é regressão desta Stage, que seguiu o padrão de identity.
+**Direção:** `Cache-Control: no-store` e `Pragma: no-cache` nas três rotas, com varredura derivada
+(OWASP ASVS 5.0 14.3.2; RFC 6749 §5.1; semântica e ressalva na RFC 9111 §5.2.2.5, citações
+conferidas na fonte bruta). **Issue:** #61, Stage candidata `6.x` hardening.
+
 <!-- END: post-execution -->
