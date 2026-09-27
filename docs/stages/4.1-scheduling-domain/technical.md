@@ -1627,4 +1627,35 @@ Observações da mesma re-auditoria:
   consolidação da Fase 3B (§12 do concept). O ADR fica como está, porque é `accepted`; a contagem
   vigente é 10, e esta nota a registra.
 
+### 2026-09-27 — [finding] re-auditoria 2: a precedência "id primeiro" tem um quarto caso que não segue — sessão de auditoria (Claude Opus 5.5)
+
+Achado F2 da re-auditoria 2 (non-blocker). O `[decision]` "precedência da colisão de id sobre a
+duplicidade de conteúdo" enuncia um princípio geral — *"a entrada repetida por inteiro … é um
+defeito de identidade, não de regra de negócio"* — mas o trava em **três** representantes. Há um
+quarto, e nele o princípio **não** vale: a **mesma** `Assignment` (id e `employee_id` iguais) em
+**duas demandas da mesma faixa**. `ShiftBand.__post_init__` não compara `AssignmentId` entre as
+suas demandas (quem compara é a raiz), e roda antes da raiz, então sai
+`DuplicateAssignmentInBandError`, e não `DuplicateEntityIdError("AssignmentId")`. Reproduzido na
+HEAD `0bc8c43` com a construção direta da `ShiftBand`. Nenhum teste fixa esse caso.
+
+**Por que não é bloqueante:** o caso não é alcançável por mutação (`assign` cria a alocação com um id
+novo, e a colisão entre demandas sai da raiz). Na reidratação da 4.4, a mesma linha de alocação sob
+duas demandas exige a PK da alocação repetida, que o banco recusa. **Leitura vigente:** o princípio
+vale para a colisão **dentro** do nível que possui a coleção. Entre coleções irmãs, vale a ordem dos
+níveis: sai primeiro a checagem da entidade interna.
+
+Observações da mesma passada, todas cobertas hoje pelo `mypy --strict` e **não** pelo runtime:
+- `Schedule(bands=[...])` com `list` é aceito, e um `append` posterior contorna todas as invariantes
+  da raiz;
+- `TimeRange(break_minutes=1.5)` devolve `worked_minutes` fracionário, contra os minutos inteiros do
+  ADR 4.1.0007 §3;
+- `bool` passa como `int` em `DemandQuantity`, `SchedulePeriod.days` e `version`.
+
+O staff tem o mesmo padrão (`employee.py` não converte coleção), logo não é desvio desta Stage.
+
+**Direção sugerida:** o mapper da 4.4 entrega `tuple` e `int` já convertidos, e o contract test do
+repositório reidrata a partir de linhas do banco. Se a 4.4 quiser o quarto caso travado, basta
+acrescentar a comparação de `AssignmentId` entre demandas na `ShiftBand`, antes da checagem de
+vaga única, com um teste. **Stage candidata:** 4.4.
+
 <!-- END: post-execution -->
