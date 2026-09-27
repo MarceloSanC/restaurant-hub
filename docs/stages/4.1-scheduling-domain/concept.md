@@ -148,7 +148,7 @@ Primeira Stage do **Step 4 — Escala manual publicável** e primeiro código do
 cases) orquestra, a 4.4 persiste com auditoria e versão, a 4.5 expõe, e que o
 Step 5 (auto-fill), o Step 7 (previsto × realizado) e o Step 8 (hub) consomem por
 DTO. Ver `roadmap.md` §"Stage 4.1 — `4.1-scheduling-domain`" (1248–1278), a nota
-datada do Step 4 (1225–1246) e `overview.md` §3 (40, 43), §9 (129–140).
+datada do Step 4 (1225–1246) e `overview.md` §3 (41, 44), §9 (130–141).
 
 ### Divergências declaradas em relação ao bloco 4.1 do roadmap
 
@@ -159,7 +159,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    **dois** movimentos: o contrato novo `scheduling-domain-purity` (espelho de
    `staff-domain-purity`, linhas 197–217) e a inclusão de
    `restaurant_hub.features.scheduling` no contrato `bc-independence` (linhas
-   223–228, hoje só `identity` e `staff`) — a lacuna que o doc de domínio
+   271–277, hoje só `identity` e `staff`) — a lacuna que o doc de domínio
    endereça ao `technical.md` da 4.1 (§3.10). Precedente literal: a 3.1 fez o
    mesmo par de movimentos para o BC staff.
 2. **`arquivos_a_criar` cresce em quatro frentes.** (a) placeholders
@@ -995,7 +995,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   mesma faixa seriam só `N₁+N₂` e tornariam `alocados(demanda) > N` ambíguo;
   proibir faixas sobrepostas, no outro extremo, impediria o reforço de pico que o
   exemplo ratificado já insinua.
-- **Fonte:** `overview.md` 41 e 46; doc §2 (linha 107), §3.3 (lacuna), §3.6.8
+- **Fonte:** `overview.md` 41 e 46; doc §2 (linha 108), §3.3 (lacuna), §3.6.8
   (que **antecipa** a 4.1 admitir faixas sobrepostas da mesma função).
 - **ADR:** [`../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md`](../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md)
 
@@ -1042,8 +1042,8 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **Por quê:** os dois valores são **defaults de configuração de tenant**
   (ADR 4.1.0002), não regra: a 4.4 os persiste por restaurante e a 4.5 os edita.
   Default espalhado em campo de dataclass viraria regra silenciosa — exatamente o
-  que `overview.md` §6 linha 110 proíbe para valor de origem trabalhista.
-- **Fonte:** ADR 4.1.0002 §1/§2; `overview.md` 110.
+  que `overview.md` §6 linha 111 proíbe para valor de origem trabalhista.
+- **Fonte:** ADR 4.1.0002 §1/§2; `overview.md` 111.
 
 ### `DemandQuantity` como value-object, não `int` cru
 - **O quê:** `N` é um VO frozen que valida `>= 0`.
@@ -1170,7 +1170,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   no domínio.
 - **Por quê:** é o literal do ADR 4.1.0002 §2 (linhas 70–79 — *"configured per
   restaurant"*, default 05:00 *"with no force of rule"*), e inventar um limite
-  trabalhista sem fonte é o que `overview.md` §6 (110) proíbe. A casa que abre só à
+  trabalhista sem fonte é o que `overview.md` §6 (111) proíbe. A casa que abre só à
   noite continua representável.
 - **Limite/erro de configuração declarado:** com `at = 23:00`, o jantar de sexta
   22:00 passa a ter dia operacional **quinta** — muda o rótulo do dia, a semana de
@@ -1690,8 +1690,8 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
 - [`../../domain/scheduling/shift-scheduling.md`](../../domain/scheduling/shift-scheduling.md)
   — teoria canônica consumida (§2, §3.1–§3.5, §3.6.0/§3.6.8/§3.6.10, §3.9, §3.10,
   §5, §6 incluindo a tabela de lacunas, linhas 1086–1088).
-- [`../../overview.md`](../../overview.md) §3 (40, 43, 45), §6 (110),
-  §9 (129–140).
+- [`../../overview.md`](../../overview.md) §3 (41, 44, 46), §6 (111),
+  §9 (130–141).
 - [`../../roadmap.md`](../../roadmap.md) — Stage `4.1-scheduling-domain`
   (1248–1278), nota do Step 4 (1225–1246), nota do `depends_on` (1250–1254),
   tabela de Stages (123), grafo (77), ROADMAP-1/ROADMAP-3.

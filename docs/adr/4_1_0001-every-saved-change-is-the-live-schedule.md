@@ -31,12 +31,12 @@ depends on the state model chosen by the first. Both were decided by the **human
 
 The ratified sources pulled in two directions:
 
-- `overview.md` §3 (line 43) fixes **"salvar = publicar"**, and the glossary (line 136) defines
+- `overview.md` §3 (line 44) fixes **"salvar = publicar"**, and the glossary (line 137) defines
   *publicar* as "salvar a escala tornando-a visível". Overview outranks roadmap.
 - `roadmap.md` describes the editor flow as "editar → avaliar → aceitar violações warn → publicar"
   (Stages 4.3/4.5, lines 1341, 1408), and Stage 5.2 (line 1502) says the auto-fill "grava
   alocações como **rascunho de edição**", with the non-goal "aplicar+publicar num passo só"
-  (line 1516). Those phrases presuppose a working copy that is not yet visible.
+  (line 1519). Those phrases presuppose a working copy that is not yet visible.
 
 The triage's recommended option was a **draft + explicit publish with numbered immutable
 versions** (the version would serve audit, "affected employees" diffs for e-mail, the printed
@@ -172,8 +172,8 @@ the fork into four Stage concepts.
   (no `Clock`/timestamps in staff); [ADR 0.0.0003](./0_0_0003-formalize-domain-and-audits-doc-categories.md)
   (domain-doc category); [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md)
   (block/warn policy set).
-- [`overview.md`](../overview.md) — §3 line 42 ("o editor corrige ou aceita conscientemente"),
-  line 43 ("salvar = publicar"), line 38 (audit trail); §9 line 136 (*publicar*).
+- [`overview.md`](../overview.md) — §3 line 43 ("o editor corrige ou aceita conscientemente"),
+  line 44 ("salvar = publicar"), line 38 (audit trail); §9 line 137 (*publicar*).
 - [`roadmap.md`](../roadmap.md) — Stage 4.3 (1341), 4.4 (1367, 1384), 4.5 (1408); Stage 5.2
   (1502, 1519); Step 5 (1490); optimistic control gap (820–824).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.5,

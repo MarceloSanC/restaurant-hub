@@ -47,7 +47,7 @@ references:
 > em §6 e nos ADRs 4.1.0001–4.1.0006.
 > Nenhum `FORK` permanece aberto.
 >
-> **Regra trabalhista não vira comportamento fixo** (`overview.md` §6, linha 110): toda fonte
+> **Regra trabalhista não vira comportamento fixo** (`overview.md` §6, linha 111): toda fonte
 > legal citada abaixo sustenta o **default e os limites** de uma validação **configurável por
 > restaurante** — nunca um comportamento hard-coded. A convenção coletiva (CCT) da base
 > territorial de cada restaurante **não é embutida** no produto: o restaurante ajusta os
@@ -89,7 +89,7 @@ o **tempo** (§3.9); e as **fronteiras** com `staff`, `identity`, `timeclock` e 
 
 ## 2. Língua ubíqua
 
-Termos ratificados pelo glossário (`overview.md` §9, linhas 129–140 — fontes setoriais de §10,
+Termos ratificados pelo glossário (`overview.md` §9, linhas 130–141 — fontes setoriais de §10,
 válidas para **nome**, não para regra), pelo roadmap (Step 4), pelo `workforce.md` e pelas
 decisões do sponsor de 2026-09-13. A **glosa EN** é o identificador que o roadmap 4.1/4.2 já
 nomeia (`roadmap.md` 1263–1268, 1322–1327); onde não nomeia, a glosa é **proposta deste gate**
@@ -910,7 +910,7 @@ e alocações, aceitar avisos, salvar) e **própria** ("minha escala").
 - **Uma permissão por família de operação** (ADR 3.4.0006 §1, §4 — famílias `cadastro` ×
   `escala`), declarada por rota no adapter HTTP, que mapeia endpoint → conjunto de permissões
   exigidas (ADR 2.4.0003 §Decision 1). **Nomes** são lacuna da 4.5.
-- **Reconciliações aplicadas neste PR**: `overview.md` §5 linha 91 ("Gerente / RH … Montar/ajustar
+- **Reconciliações aplicadas neste PR**: `overview.md` §5 linha 92 ("Gerente / RH … Montar/ajustar
   escala") ganha nota datada — RH **consulta**; montar/ajustar é gerente/dono (ADR 3.4.0006 +
   4.1.0004); `workforce.md` §4 ("é NO STAFF que hr diverge do manager") ganha nota datada — a
   divergência é na **escala** (hr lê, não gerencia), como o finding da 3.6
@@ -1037,12 +1037,12 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 - **Período × semana de apuração são conceitos distintos que coincidem na v1** — critério de
   escalabilidade progressiva. §2.
 - **Semântica semi-aberta `[início, fim)`** — ADR 3.1.0001 52–54, 93–94. §3.2.
-- **"Faixas de funcionamento" = faixas habilitadas por dia** — `overview.md` 46 ⇔ 40. §2.
+- **"Faixas de funcionamento" = faixas habilitadas por dia** — `overview.md` 46 ⇔ 41. §2.
 - **`0 ≤ intervalo < duração nominal`** — derivação da regra de contagem. §3.2.
-- **Demanda ≥ 0; cobertura < 100% legítima** — `roadmap.md` 1256, 1477, 1481. Cobertura > 100%
+- **Demanda ≥ 0; cobertura < 100% legítima** — `roadmap.md` 1256, 1477, 1517. Cobertura > 100%
   é decisão do sponsor (F10, §3.6.8). §3.3.
 - **Elegibilidade**: ativo + mesma unidade + dentro do período + função detida ou exceção
-  aceita (F9) — `workforce.md` §3.1; `overview.md` 37; ADR 3.4.0007; `roadmap.md` 1253. §3.4.
+  aceita (F9) — `workforce.md` §3.1; `overview.md` 37; ADR 3.4.0007; `roadmap.md` 1256. §3.4.
 - **A demanda coberta por um registro inativo lê-se como descoberta** — limite (1) declarado de
   F7 (reconciliação na leitura). §3.4.
 - **Alocação × indisponibilidade é `block` fixo** — `workforce.md` §2, §3.6; ADR 3.1.0004
@@ -1057,11 +1057,11 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 - **Avaliador recebe alocações vizinhas** — derivação da fórmula. §3.6.0.
 - **Regra única de contagem** — `overview.md` 46; qual regra: F3. §3.6.10.
 - **Aceite de `warn` é auditado; a escala vigente nunca contém `block`** — `overview.md` 38, 43;
-  `roadmap.md` 1454. §3.5.
+  `roadmap.md` 1490. §3.5.
 - **Auditoria em instante absoluto (UTC); faixas em wall-clock** — `clock.py` 17; ADR 3.1.0005.
   **Fuso = chave IANA**; Brasil sem DST (Decreto 9.772/2019). §3.9.
 - **Calendário é read model de scheduling; hub consome** — `roadmap.md` 1341–1393, 1734–1741;
-  `overview.md` 114. §3.7.
+  `overview.md` 115. §3.7.
 - **"Minha escala" = vigente, só as próprias alocações, todos os registros do ator** —
   `roadmap.md` 1393 ("funcionário só vê a própria"); `overview.md` 44, 93; `workforce.md` §3.1.
   A alternativa (visão da unidade inteira) existe, mas o roadmap já a exclui — por isso é
@@ -1162,10 +1162,10 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 
 ### Âncoras internas (fontes ratificadas — passo 1 da barra de fontes)
 
-- [`overview.md`](../../overview.md) — §3 (37–46, 56–57, 69), §5 (91–92), §6 (101, 109–110),
-  §7 (114), §9 (129–140), §10 (150–153; bloco do Step 4 acrescentado neste PR).
+- [`overview.md`](../../overview.md) — §3 (37–47, 57–58, 70), §5 (92–93), §6 (102, 110–111),
+  §7 (115), §9 (130–141), §10 (151–154; bloco do Step 4 acrescentado neste PR).
 - [`roadmap.md`](../../roadmap.md) — Step 4 (1219–1465); Step 5 (1471–1519); Step 7 (1608–1651);
-  Step 8 (1720–1741); tabela de Stages (123); ROADMAP-1/3/6 (1801–1806); 1795–1796; 820–821.
+  Step 8 (1720–1741); tabela de Stages (123); ROADMAP-1/3/6 (1801–1806); 1795–1796; 824–825.
 - [`workforce.md`](../staff/workforce.md) — §1, §2, §3.1–§3.6, §3.8, §4, §6, §7. Citado por seção
   porque ganha notas datadas neste PR.
 - ADRs do gate: [4.1.0001](../../adr/4_1_0001-every-saved-change-is-the-live-schedule.md) (F1+F8) ·

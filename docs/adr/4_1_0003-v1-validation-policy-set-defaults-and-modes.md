@@ -31,13 +31,13 @@ here as sub-decisions (f) and (g) because each adds a row to the same policy tab
 
 Forces:
 
-- `overview.md` §3 (line 42) lists the validations with an open "etc." — "sobreposição de
+- `overview.md` §3 (line 43) lists the validations with an open "etc." — "sobreposição de
   alocação, descanso entre jornadas, tetos de horas **etc.**" — in **block or warn** mode, live,
   with conscious acceptance. `roadmap.md` Stage 4.2 (1315, 1322) closes the list at four:
   overlap, rest between shifts, daily/weekly cap, contracted workload.
 - `workforce.md` §1/§3.6 and [ADR 3.1.0001](./3_1_0001-workforce-gate-modeling-decisions.md)
   treat **allocation × unavailability** as "validação do Step 4" — it is not one of the four.
-- `overview.md` §6 (line 110): **labour law is not hard-coded**; every legal value is a default
+- `overview.md` §6 (line 111): **labour law is not hard-coded**; every legal value is a default
   of a per-restaurant parameter, because the collective agreement (CCT) of each restaurant's
   territorial base may change it (CF art. 7º XIII; CLT art. 611-A). The product embeds no CCT.
 - The external-sources pass (2026-09-13) verified, on the Planalto consolidated text, the legal
@@ -251,8 +251,8 @@ enters as a new strategy in the same protocol, still configurable per `overview.
   ("hard blocking is unavailability's job"); [ADR 3.2.0003](./3_2_0003-copy-employee-full-duplication.md)
   (copy carries unavailabilities); [ADR 4.1.0002](./4_1_0002-weekly-period-operational-day-and-allocation-hours.md)
   (operational day, `hours(a)`).
-- [`overview.md`](../overview.md) — §3 lines 37, 39, 42, 45, 56; §3 ASSUM-4 (69); §6 line 110;
-  §7 line 114.
+- [`overview.md`](../overview.md) — §3 lines 37, 39, 43, 46, 57; §3 ASSUM-4 (70); §6 line 111;
+  §7 line 115.
 - [`roadmap.md`](../roadmap.md) — Stage 4.2 (1315–1335); Step 5 (1490).
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §1, §2, §3.1, §3.3, §3.4, §3.6.
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.4,

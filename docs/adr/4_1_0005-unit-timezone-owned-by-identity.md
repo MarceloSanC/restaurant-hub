@@ -29,7 +29,7 @@ F6 of the gate triage (the draft's HALT H2). Decided by the **human sponsor** (M
 
 Forces:
 
-- `overview.md` §6 (line 101) fixes **"Fuso horário configurável por unidade"** as a technical
+- `overview.md` §6 (line 102) fixes **"Fuso horário configurável por unidade"** as a technical
   constraint of the whole product.
 - [ADR 3.1.0005](./3_1_0005-naive-wall-clock-unavailability-datetimes.md) stores staff
   unavailability as naive wall-clock datetimes and states that *"The unit's timezone lives in
@@ -143,8 +143,8 @@ timezone from; every consumer would invent its own.
   the composition root); [ADR 3.4.0006](./3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)
   §5 (touching identity authorised); [ADR 3.2.0003](./3_2_0003-copy-employee-full-duplication.md)
   177–183 (copy between units of different timezones keeps wall-clock).
-- [`overview.md`](../overview.md) — §6 line 101 ("Fuso horário configurável por unidade"); §3
-  ASSUM-4 (line 69); §9 line 130 (16h–00h as local time).
+- [`overview.md`](../overview.md) — §6 line 102 ("Fuso horário configurável por unidade"); §3
+  ASSUM-4 (line 70); §9 line 131 (16h–00h as local time).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.9,
   §3.10.2, §6.
 - `src/restaurant_hub/features/identity/domain/entities/unit.py` lines 32–34 (no timezone
