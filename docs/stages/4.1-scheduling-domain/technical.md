@@ -1,9 +1,9 @@
 ---
 title: Technical — Domínio da escala
-description: Plano de execução da Stage 4.1 — 11 Tasks ordenadas (1 Task = 1 commit) para o núcleo de domínio do BC scheduling
+description: Plano de execução da Stage 4.1 — 10 Tasks ordenadas (1 Task = 1 commit) para o núcleo de domínio do BC scheduling
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, scheduling-domain, escala, faixa, dia-operacional, horario-de-corte, demanda, alocacao, agregado, intervalo-declarado, vaga-unica-por-faixa, versao]
-status: draft
+status: done
 created_at: 2026-09-27
 updated_at: 2026-09-27
 stage_id: 4.1-scheduling-domain
@@ -14,7 +14,7 @@ depends_on: [3.1-staff-domain]
 concept_ref: ./concept.md
 issue_id: 55
 branch: feat/55-4-1-scheduling-domain
-tasks_count: 11
+tasks_count: 10
 ---
 
 # Technical — Stage 4.1 — Domínio da escala
@@ -55,32 +55,37 @@ exigidos por `scripts/check_layout.py` (`REQUIRED_FEATURE_DIRS`, linha 130). Ver
 dele a ordem é a da **dependência de import**, que é também a ordem em que uma
 invariante passa a ser verificável:
 
-1. **Tasks 01–02 — chão.** Scaffold + identificadores + contratos de import, e
-   depois as 20 exceções. Nada valida nada antes de existir a exceção que a
+1. **Task 01 — chão.** Scaffold + identificadores + contratos de import **e** as
+   20 exceções, num commit só. Nada valida nada antes de existir a exceção que a
    recusa nomeia: escrever um VO antes da hierarquia forçaria `ValueError` cru e
-   um refactor no commit seguinte.
-2. **Tasks 03–05 — VOs de tempo.** `TimeRange` (o sítio único de horas), depois
+   um refactor no commit seguinte. O scaffold e as exceções **não** são
+   separáveis em dois commits verdes — as duas varreduras de nível de repositório
+   (abaixo) reprovam a pasta nova sem a hierarquia de erro dentro dela; a
+   justificativa completa está no corpo da Task 01.
+2. **Tasks 02–04 — VOs de tempo.** `TimeRange` (o sítio único de horas), depois
    `Weekday`/`DayCutoff` (a geometria do dia operacional), depois
    `SchedulePeriod` + `OperationalCalendar` (que **produz** e **alinha** períodos,
    logo depende dos dois anteriores).
-3. **Tasks 06–08 — entidades-folha, de dentro para fora.** `DemandQuantity` +
+3. **Tasks 05–07 — entidades-folha, de dentro para fora.** `DemandQuantity` +
    `Assignment`; `ShiftDemand` (que agrega alocações); `ShiftBand` (que agrega
    demandas e é o **único** nível que vê `nominal_minutes` **e** as alocações ao
    mesmo tempo — daí o intervalo efetivo, a divergência, o limite superior do
    intervalo da alocação e a **uma vaga por registro na faixa** viverem lá).
-4. **Tasks 09–11 — a raiz.** Construção + invariantes do agregado + as 8 leituras
-   (Task 09); as 9 mutações estruturais e a lei da versão (Task 10); as 2 mutações
+4. **Tasks 08–10 — a raiz.** Construção + invariantes do agregado + as 8 leituras
+   (Task 08); as 9 mutações estruturais e a lei da versão (Task 09); as 2 mutações
    de intervalo, a cláusula de no-op e o fechamento das restrições de
-   `reschedule_band` (Task 11).
+   `reschedule_band` (Task 10).
 
 **O que fica verde a cada commit.** Cada Task cria o(s) módulo(s) **junto com os
 seus testes unitários** no mesmo commit e deixa `make check` verde (inclui ruff,
 mypy strict, `check_layout.py`, import-linter, lock-check, docs-check e o
 test-gate de cobertura ≥ 90%). Nenhuma Task importa código que uma Task posterior
-cria: nada antes da Task 09 importa `Schedule`, e é exatamente por isso que a
-**linha de corte** declarada no concept §12 (Tasks 01–08 numa Stage, 09–11 na
-seguinte) seria viável — mas a medição fechou em **11**, dentro do teto de 12, e a
-Stage **não** é cortada.
+cria: nada antes da Task 08 importa `Schedule`, e é exatamente por isso que a
+**linha de corte** declarada no concept §12 (Tasks 01–07 numa Stage, 08–10 na
+seguinte) seria viável — mas a medição fechou dentro do teto de 12 e a Stage
+**não** é cortada. A contagem é **10**, não as 11 do concept §12: o Checkpoint B
+desta Fase 3B fundiu as duas primeiras Tasks num commit só (ver Task 01), e
+`tasks_count` acompanha o plano executável, não a medição preliminar.
 
 ### Totalidades derivadas que cada Task tem de alimentar
 
@@ -91,27 +96,67 @@ precedente concreto é
 `tests/unit/features/identity/domain/test_exceptions.py` 45–56, que varre
 `vars(identity_errors)` e não uma lista fixa. Consequência dura para esta Stage:
 **uma Task que acrescenta membro a um conjunto varrido e não atualiza a varredura
-deixa `make check` vermelho entre commits.** As cinco varreduras desta Stage, e
-quem as alimenta:
+deixa `make check` vermelho entre commits.** As **sete** varreduras que esta
+Stage tem de manter verdes — cinco internas ao BC novo e **duas de nível de
+repositório**, que o plano original não media —, e quem as alimenta:
 
 | Varredura (arquivo de teste) | Conjunto derivado | Nasce em | Cresce em |
 |---|---|---|---|
-| `test_exceptions.py` — mapa de erros | `vars(errors)`: toda exceção do módulo é `SchedulingError`; conjunto público == 20 + raiz (CA17) | 02 | **nenhuma** (as 20 nascem completas na 02) |
-| `test_schedule_mutations.py` — lei da versão | as mutações públicas de `Schedule` que devolvem `Schedule` (CA11) | 10 (9 mutações) | **11** (passa a 11) |
-| `test_schedule_mutations.py` — matriz (método × exceção) da §6 | o produto declarado na tabela §6 do concept (CA12) | 09 (linhas de `band`/`locate_*`) | **10**, **11** |
-| `test_schedule.py` — superfície de leitura | as 8 leituras de §4 devolvem imutável; nenhum outro membro devolve minutos trabalhados (CA15, CA16) | 09 | **nenhuma** (as 8 nascem completas na 09) |
-| `test_identifiers.py` + os testes de entidade — 8 identificadores | os 8 tipos × cada entidade que os carrega (CA22) | 06 | **07**, **08**, **09** |
+| `test_exceptions.py` — mapa de erros | `vars(errors)`: toda exceção do módulo é `SchedulingError`; conjunto público == 20 + raiz (CA17) | 01 | **nenhuma** (as 20 nascem completas na 01) |
+| `test_schedule_mutations.py` — lei da versão | as mutações públicas de `Schedule` que devolvem `Schedule`, **por introspecção da classe** pareada com a constante (CA11) | 09 (9 mutações) | **10** (passa a 11 mutações) |
+| `test_schedule_mutations.py` — matriz (método × exceção) da §6 | o produto declarado na tabela §6 do concept (CA12) | 08 (linhas de `band`/`locate_*`) | **09**, **10** |
+| `test_schedule.py` — superfície de leitura | as 8 leituras de §4 devolvem imutável; nenhum outro membro devolve minutos trabalhados (CA15, CA16) | 08 | **nenhuma** (as 8 nascem completas na 08) |
+| `test_identifiers.py` + os testes de entidade — 8 identificadores | os 8 tipos × cada entidade que os carrega (CA22) | 05 | **06**, **07**, **08** |
+| `tests/unit/test_status_map.py` — **os bounded contexts do repositório** | `_bounded_contexts_na_pasta()` == `_BOUNDED_CONTEXTS`; piso `_TOTAIS_MINIMOS[bc]`; **uma** raiz de erro por BC | já existe (identity, staff) | **01** — entra `"scheduling"`, piso **20**, tolerância a `application.errors` ausente **+ asserção anti-vácuo** |
+| `tests/unit/features/staff/test_bc_independence.py` — **os módulos do contrato `bc-independence`** | a lista `modules` do contrato == os BCs que existem em `features/` | já existe (dois BCs, por lista fixa) | **01** — entra `_MODULO_SCHEDULING` **+ a asserção de cobertura da pasta**, que não existia |
+
+**As duas últimas são varreduras de nível de repositório, não do BC — e é o que
+o plano original não mediu.** O Checkpoint B desta Fase 3B achou os dois
+bloqueantes aqui: as cinco primeiras da tabela são todas internas a
+`features/scheduling`, mas o que o **terceiro BC** quebra mora fora dele. Criar
+a pasta `features/scheduling/` reprova `_bounded_contexts_na_pasta()` e entrar no
+contrato `bc-independence` reprova a lista fixa dos dois BCs — as duas no
+**primeiro** commit da Stage.
+
+**Divergência 9 declarada (file-scope), em relação ao bloco 4.1 do roadmap.** Às
+**8** divergências do concept §1 soma-se esta, declarada aqui porque nasce da
+Fase 3B: `arquivos_a_modificar` da Task 01 inclui **dois arquivos de teste fora
+de `features/scheduling/`** — `tests/unit/test_status_map.py` e
+`tests/unit/features/staff/test_bc_independence.py`. O motivo é o **nível** da
+regra, não conveniência: as duas são varreduras **de repositório** (o conjunto
+dos BCs), não de BC, e moram no nível cuja fronteira descrevem — é a própria
+justificativa das docstrings desses arquivos. Um BC novo não pode entrar sem
+tocá-las; a alternativa (afrouxá-las para ignorar BCs desconhecidos) é
+exatamente o falso-verde que elas existem para impedir. O arquivo de staff é
+tocado **só** na parte que fala do conjunto de BCs; nenhuma asserção sobre staff
+é alterada. A nota datada no `roadmap.md` entra no commit de fechamento, junto
+com as outras oito.
 
 Regra operacional: a Task que cresce um conjunto atualiza a varredura **no mesmo
 commit**. Onde a varredura é sobre a superfície pública de `Schedule`, a lista
 esperada vive num único sítio do arquivo de teste (constante no topo), para que
-crescer signifique editar uma linha, não caçar asserções.
+crescer signifique editar uma linha, não caçar asserções — **e a constante é
+cobrada contra a classe**, por introspecção, no mesmo par que
+`tests/unit/test_status_map.py` usa ("lista explícita ao lado + cobrança contra a
+pasta — as duas juntas resolvem"). Sem a metade derivada a "varredura" é uma
+lista escrita à mão: a 12ª mutação que a 4.2/4.3 acrescentar passaria verde, que
+é o defeito que o achado 8 do Checkpoint B mediu.
 
 ### Pré-condições
 - `3.1-staff-domain` em `done` e mergeada em `develop` (dependência de
   **ordenação**; nenhum import atravessa — contrato `bc-independence`).
-- Concept desta Stage em `status: done` (commit `stage 4.1: conceptual approved`,
-  `b9582fb`).
+- Concept desta Stage **re-aprovado** em `status: done`. Atenção: o Checkpoint B
+  desta Fase 3B achou **duas contradições internas** no concept e o corrigiu, o
+  que o regrediu a `status: draft` (regressão de status, `CONVENTIONS.md` §3.2) —
+  (a) a célula `InvalidAssignmentBreakError × assign` da matriz §6 era
+  **inatingível**, porque a assinatura de `assign` (§4) não recebe intervalo: a
+  célula passou a nomear `declare_allocation_break`, a única mutação que declara o
+  intervalo da alocação; (b) a cláusula de **CA14** "`assign` grava os três
+  valores passados explicitamente" era **impossível**, porque `assign` recebe
+  **duas** das três marcas: CA14 passou a afirmar que `assign` grava as duas
+  marcas que recebe por keyword e que a terceira nasce `None`. A totalidade do
+  mapa de erros é preservada (21 linhas, 20 exceções). A Fase 4 **não** começa
+  antes da re-aprovação (`status: done`) pelo sponsor.
 - ADRs `4_1_0001`–`4_1_0012` em `status: accepted`.
 - Branch `feat/55-4-1-scheduling-domain` ativa; `.venv` instalado (`make setup`).
 
@@ -158,23 +203,27 @@ src/restaurant_hub/features/scheduling/
     └── exceptions/{__init__,errors}.py
 tests/unit/features/scheduling/
 ├── __init__.py
+├── test_bc_independence.py            # espelho do de staff, para o BC novo
 └── domain/{__init__,test_identifiers,test_exceptions,test_time_range,
              test_operational_calendar,test_schedule_period,test_demand_quantity,
              test_assignment,test_shift_demand,test_shift_band,test_schedule,
              test_schedule_mutations,test_schedule_policies,
              test_schedule_breaks}.py
 .importlinter                          # + scheduling-domain-purity; + scheduling em bc-independence
+tests/unit/test_status_map.py          # + scheduling na varredura de BCs (nível de repositório)
+tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; + cobrança contra a pasta
 ```
 
 ## 2. Tasks
 
-> **11 Tasks** (medição do concept §12, confirmada nesta Fase 3B). `__init__.py`
+> **10 Tasks** (medição do concept §12 ajustada nesta Fase 3B — a Task 01
+> absorveu a antiga Task 02 das exceções; ver a tabela de totalidades do §1). `__init__.py`
 > são **vazios** (import por caminho absoluto, LAYOUT §7) — sem docstring, para
 > não criar linha não coberta. Escopo do commit = `scheduling` (ASCII/kebab).
 > Baseline de **toda** Task: `make check` verde, incluindo o test-gate de
 > cobertura ≥ 90%.
 
-### Task 01 — Scaffold da feature, identificadores tipados e contratos de import
+### Task 01 — Scaffold da feature, identificadores, hierarquia de exceções e contratos de import
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/__init__.py` (vazio)
@@ -185,18 +234,59 @@ tests/unit/features/scheduling/
   - `src/restaurant_hub/features/scheduling/domain/value_objects/__init__.py` (vazio)
   - `src/restaurant_hub/features/scheduling/domain/exceptions/__init__.py` (vazio)
   - `src/restaurant_hub/features/scheduling/domain/value_objects/identifiers.py`
+  - `src/restaurant_hub/features/scheduling/domain/exceptions/errors.py`
   - `tests/unit/features/scheduling/__init__.py` (vazio)
   - `tests/unit/features/scheduling/domain/__init__.py` (vazio)
+  - `tests/unit/features/scheduling/test_bc_independence.py`
   - `tests/unit/features/scheduling/domain/test_identifiers.py`
-- **Arquivos a modificar:** `.importlinter`
-- **O que fazer:** criar a árvore de pacotes da feature `scheduling`, incluindo os
-  placeholders vazios `application/` e `adapters/` exigidos por
-  `scripts/check_layout.py` (`REQUIRED_FEATURE_DIRS`, linha 130). Em
-  `identifiers.py`, definir os **8** `NewType` sobre `str` **próprios do BC**
-  (concept §4, §7): `ScheduleId`, `ShiftBandId`, `ShiftDemandId`, `AssignmentId`,
-  `TenantId`, `UnitId`, `EmployeeId`, `JobFunctionId`. Em `.importlinter`:
-  1. acrescentar o contrato `scheduling-domain-purity`, espelho literal de
-     `staff-domain-purity` (linhas 197–217): `type = forbidden`,
+  - `tests/unit/features/scheduling/domain/test_exceptions.py`
+- **Arquivos a modificar:** `.importlinter`, `tests/unit/test_status_map.py`,
+  `tests/unit/features/staff/test_bc_independence.py`
+- **Por que o scaffold e as exceções são um commit só (decisão desta Fase 3B,
+  Checkpoint B):** o plano original separava scaffold (01) de exceções (02). Não
+  é separável **sem deixar um commit vermelho no meio**, o que o gate "`make
+  check` verde antes de todo commit" proíbe. O nascimento da pasta
+  `features/scheduling/` e a entrada do BC no contrato `bc-independence` são
+  visíveis para **varreduras de nível de repositório** que já existem e que só
+  ficam verdes quando a hierarquia de erro do BC **já existe**:
+  `_raiz_de_erro(bc)` (`tests/unit/test_status_map.py` 96–113) exige
+  **exatamente uma** classe que herde de `DomainError` diretamente;
+  `_TOTAIS_MINIMOS[bc]` (60) daria `KeyError` sem entrada e exige um **piso** de
+  contagem; e `_bounded_contexts_na_pasta()` (192–194) cobra a pasta contra a
+  lista explícita. Scaffold sem exceções reprovaria as duas primeiras; scaffold
+  sem entrar na lista reprovaria a terceira. Logo **um** commit entrega a pasta,
+  a hierarquia e as atualizações das varreduras juntas.
+- **O que fazer:**
+  1. **Árvore de pacotes** da feature `scheduling`, incluindo os placeholders
+     vazios `application/` e `adapters/` exigidos por `scripts/check_layout.py`
+     (`REQUIRED_FEATURE_DIRS`, linha 130). **Nenhum** `adapters/inbound/` — a
+     ausência é verificada por
+     `test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http`
+     (`tests/unit/test_status_map.py`), que só admite BC sem mapa de status
+     enquanto ele não tiver `adapters/inbound/`.
+  2. **`identifiers.py`** — os **8** `NewType` sobre `str` **próprios do BC**
+     (concept §4, §7): `ScheduleId`, `ShiftBandId`, `ShiftDemandId`,
+     `AssignmentId`, `TenantId`, `UnitId`, `EmployeeId`, `JobFunctionId`.
+  3. **`errors.py`** — `SchedulingError(DomainError)` (importando `DomainError`
+     de `restaurant_hub.shared.domain.exceptions.base`) e as **20** subclasses
+     enumeradas no concept §4: `InvalidIdentifierError`, `InvalidTimeRangeError`,
+     `InvalidWeekdayError`, `InvalidDayCutoffError`,
+     `InvalidSchedulePeriodError`, `InvalidDemandQuantityError`,
+     `InvalidScheduleVersionError`, `InvalidAssignmentBreakError`,
+     `DuplicateEntityIdError`, `DuplicateShiftBandError`,
+     `ShiftBandNotFoundError`, `ShiftBandInUseError`, `ShiftBandDayChangeError`,
+     `TimeRangeOutsidePeriodError`, `DuplicateShiftDemandError`,
+     `ShiftDemandNotFoundError`, `ShiftDemandInUseError`,
+     `DuplicateAssignmentError`, `DuplicateAssignmentInBandError`,
+     `AssignmentNotFoundError`. Cada uma com docstring PT curta; construtor pode
+     receber um valor de contexto e montar a mensagem PT (padrão `errors.py` de
+     identity/staff). **`DuplicateEntityIdError` recebe um `reason`/nome de tipo
+     de id**, porque a invariante 15 o exige para nomear qual coleção quebrou
+     (concept §5.15). **`InvalidSchedulePeriodError` recebe um `reason`**, porque
+     a §6 a usa para dois cenários distintos (teto de `days` e desalinhamento).
+  4. **`.importlinter`:** (i) acrescentar o contrato `scheduling-domain-purity`,
+     espelho literal de `staff-domain-purity` (linhas 197–217):
+     `type = forbidden`,
      `source_modules = restaurant_hub.features.scheduling.domain`,
      `forbidden_modules` = `restaurant_hub.features.scheduling.application`,
      `restaurant_hub.features.scheduling.adapters`,
@@ -204,89 +294,133 @@ tests/unit/features/scheduling/
      `restaurant_hub.shared.infrastructure` e os frameworks/boundary (`fastapi`,
      `starlette`, `uvicorn`, `sqlalchemy`, `alembic`, `psycopg`, `pydantic`,
      `pydantic_settings`, `httpx`, `argon2`, `jwt`). **Não** proibir
-     `restaurant_hub.features` (auto-proibiria imports internos de scheduling) nem
-     `restaurant_hub.shared.domain` (dependência legítima: `SchedulingError`
-     herda de `DomainError`);
-  2. acrescentar `restaurant_hub.features.scheduling` ao contrato
-     `bc-independence` (linhas 223–228, hoje só `identity` e `staff`) e atualizar
-     o `name` do contrato para citar os três BCs.
-- **Detalhes técnicos:** `identifiers.py` **sem lógica de runtime** (padrão 3.1:
-  a recusa de vazio/só-whitespace é imposta **nas entidades** — Tasks 06–09). O
-  teste afirma o passthrough do `NewType` (`ScheduleId("s1") == "s1"`) e que os
-  **8** nomes existem no módulo — é o ponto de partida da varredura de CA22.
-  **Não** criar contrato de pureza para `scheduling.application`: a camada é
-  placeholder vazio e o contrato nasce na 4.3, com o primeiro use case (precedente
-  3.1, que só ativou os dois movimentos declarados no concept).
-- **Critério de aceite:** `make check` verde — `check_layout.py` reconhece os 3
-  diretórios obrigatórios da feature nova; import-linter lista
-  `scheduling-domain-purity` e `bc-independence` como **KEPT** (a contagem de
-  contratos sobe de 9 para 10); `test_identifiers.py` passa com os 8 nomes.
-  **Fecha (parcial):** CA18 (o lado dos contratos e do layout). **Abre:** CA22.
+     `restaurant_hub.features` (auto-proibiria imports internos de scheduling)
+     nem `restaurant_hub.shared.domain` (dependência legítima: `SchedulingError`
+     herda de `DomainError`); (ii) acrescentar
+     `restaurant_hub.features.scheduling` ao contrato `bc-independence` (linhas
+     223–228, hoje só `identity` e `staff`) e atualizar o `name` do contrato para
+     citar os três BCs.
+  5. **`tests/unit/test_status_map.py` — a varredura de BCs passa a admitir o
+     terceiro BC, e o faz sem virar vácuo** (mudança descrita em prosa; o código
+     é da Fase 4):
+     - `_BOUNDED_CONTEXTS` ganha `"scheduling"` (fica
+       `("identity", "scheduling", "staff")`), o que satisfaz
+       `test_a_lista_de_bounded_contexts_cobre_a_pasta_features`;
+     - `_TOTAIS_MINIMOS` ganha `"scheduling": 20` — o piso é o número de
+       subclasses de `SchedulingError` que esta Task cria (**20**, contadas na
+       lista do concept §4; `_subclasses_concretas` não conta a raiz), com o
+       comentário datado no molde do que já existe para identity (28) e staff
+       (18);
+     - **`_importar_modulos_de_erro` passa a tolerar sufixo ausente.** Hoje ela
+       importa incondicionalmente os dois sufixos de `_MODULOS_DE_ERRO`
+       (`domain.exceptions.errors`, `application.errors`) e scheduling **não tem
+       `application/errors.py` nesta Stage** (`application/` é placeholder vazio
+       até a 4.3), logo o import cru daria `ModuleNotFoundError`. A tolerância é
+       **por módulo inexistente**, não por falha de import qualquer: um
+       `ModuleNotFoundError` cujo `name` é o próprio módulo procurado é
+       ignorado; qualquer outra falha continua propagando (um `ImportError` de
+       dentro do módulo tem de reprovar, não desaparecer).
+     - **e a tolerância vem com asserção de que ela não esvaziou a varredura:** a
+       função passa a devolver os módulos que **existem** e um teste novo afirma
+       que **ao menos um** módulo de erro foi importado **por BC**. Sem isso, um
+       BC que renomeasse os dois módulos ficaria com universo vazio e a
+       exaustividade viraria verdade vácua — exatamente o falso-verde que a
+       docstring do arquivo chama de "parametrização vazia", e que
+       `test_ha_pelo_menos_um_bc_com_borda_http` já trata do outro lado. O mesmo
+       tratamento vale para o laço sobre `_MODULOS_DE_ERRO` de
+       `test_toda_excecao_definida_nos_modulos_de_erro_do_bc_herda_da_raiz`, que
+       hoje importa os dois sufixos direto: passa a iterar os módulos existentes
+       devolvidos pela função, para que os dois sítios não divirjam.
+     - `_COM_BORDA_HTTP` / `_SEM_BORDA_HTTP` **não** precisam de mudança:
+       scheduling cai em `_SEM_BORDA_HTTP` (não tem
+       `adapters/inbound/http/error_handlers.py`) e o mapa de status é da 4.5.
+  6. **`tests/unit/features/staff/test_bc_independence.py` — o contrato passa a
+     ser cobrado contra a pasta** (prosa; código na Fase 4):
+     - acrescentar `_MODULO_SCHEDULING = "restaurant_hub.features.scheduling"` e
+       incluí-lo na lista esperada de
+       `test_ca13_o_contrato_continua_sendo_independencia_entre_os_dois_bcs`
+       (`assert sorted(modulos) == sorted([...])`), renomeando o teste para falar
+       dos **BCs**, não "dos dois";
+     - **asserção nova:** o conjunto de módulos do contrato `bc-independence`
+       **iguala** o conjunto dos BCs que existem em
+       `src/restaurant_hub/features/` (varredura de pasta, no molde de
+       `test_a_lista_de_bounded_contexts_cobre_a_pasta_features`). Sem ela, o
+       **quarto** BC entra em silêncio: a lista explícita continuaria verde
+       porque ninguém a cobraria contra a realidade — o defeito que esta Stage
+       acabou de pagar com dois bloqueantes de Checkpoint B.
+  7. **`tests/unit/features/scheduling/test_bc_independence.py` — o espelho do BC
+     novo** (precedente: o arquivo de staff, criado na 3.1/3.4): nenhum módulo de
+     `features/scheduling/` importa `features.identity` nem `features.staff`
+     (varredura AST sobre todos os `.py` do BC, sem filtro de camada), o contrato
+     `bc-independence` não tem `ignore_imports`, e o BC não **nomeia** o
+     vocabulário fechado do outro lado — com o **caso plantado** (violador
+     analisado por AST, nunca gravado em `src/`) que prova que os detectores
+     reprovam. **Atenção ao montar o conjunto de vocabulário:** `EmployeeId` e
+     `JobFunctionId` são identificadores **próprios** de scheduling (concept §7)
+     e **não** entram na lista — a lista é o vocabulário de decisão alheia
+     (`Role`, `Permission` de identity; os tipos fechados de staff, p. ex.
+     `DayPeriod`), nunca um nome que o BC legitimamente tem por si.
+- **Detalhes técnicos:**
+  - `identifiers.py` **sem lógica de runtime** (padrão 3.1: a recusa de vazio/
+    só-whitespace é imposta **nas entidades** — Tasks 05–08). O teste afirma o
+    passthrough do `NewType` (`ScheduleId("s1") == "s1"`) e que os **8** nomes
+    existem no módulo — é o ponto de partida da varredura de CA22.
+  - a raiz é **`SchedulingError`**; nenhuma subclasse herda de `Exception` puro
+    nem de `DomainError` direto — é exatamente o engano que as duas varreduras
+    pegam (a local, `vars(errors)`, e a de repositório, `_raiz_de_erro`), e a de
+    repositório **exige** que a herança direta de `DomainError` seja única. Sem
+    estado além da mensagem e do valor de contexto.
+  - **todas as 20 nascem aqui**, ainda sem consumidor, para que a varredura do
+    mapa de erros seja totalidade desde o primeiro commit e nenhuma Task
+    posterior tenha de crescê-la — e para que o piso de `_TOTAIS_MINIMOS` seja
+    verdadeiro já neste commit.
+  - **Não** criar contrato de pureza para `scheduling.application`: a camada é
+    placeholder vazio e o contrato nasce na 4.3, com o primeiro use case
+    (precedente 3.1, que só ativou os dois movimentos declarados no concept).
+- **Critério de aceite:**
+  - `make check` verde — `check_layout.py` reconhece os 3 diretórios
+    obrigatórios da feature nova; import-linter lista `scheduling-domain-purity`
+    e `bc-independence` como **KEPT** (a contagem de contratos sobe de 9 para
+    10); `test_identifiers.py` passa com os 8 nomes.
+  - `test_exceptions.py` cobre — `SchedulingError` é `DomainError`; teste
+    **parametrizado** sobre as 20 afirmando `issubclass(..., SchedulingError)`;
+    **varredura derivada** `vars(errors)` no molde de
+    `tests/unit/features/identity/domain/test_exceptions.py` 45–56 (nenhuma
+    exceção definida no módulo escapa de `SchedulingError`); o conjunto público
+    do módulo é **exatamente** as 20 + a raiz (21); e a mensagem é preservada ao
+    levantar (`pytest.raises(..., match=...)`) nas que recebem contexto.
+  - **as duas varreduras de repositório ficam verdes com scheduling dentro:**
+    `uv run pytest tests/unit/test_status_map.py tests/unit/features/staff/test_bc_independence.py -v`
+    passa, com `scheduling` parametrizado em `_BOUNDED_CONTEXTS` e presente no
+    contrato; `_subclasses_concretas("scheduling")` devolve **≥ 20**; ao menos um
+    módulo de erro é importado por BC (a asserção anti-vácuo); e a nova asserção
+    de cobertura-da-pasta do contrato reprova se `scheduling` (ou um BC futuro)
+    sair da lista — verificado invertendo a lista à mão **antes** de commitar.
+  - `test_bc_independence.py` do BC novo passa com conjunto de culpados vazio, e
+    o caso plantado reprova os dois detectores.
+  **Fecha:** **CA17**. **Fecha (parcial):** CA18 (o lado dos contratos e do
+  layout). **Abre:** CA22.
 - **Nota de atomicidade (exceção consciente, PIPELINE §4.3):** a Task estoura o
-  guia de ≤ 5 arquivos (11 criados + `.importlinter`) por ser o **scaffold** da
-  feature — 10 dos 11 são `__init__.py` **vazios** (0 statements); o conteúdo
-  lógico é só `identifiers.py` + os dois movimentos no `.importlinter`, mínimos e
-  atados ao scaffold para manter o commit não-vazio e `make check` verde. Mesma
-  exceção declarada na Task 01 da 2.1 e da 3.1.
+  guia de ≤ 5 arquivos (14 criados + 3 modificados) por ser o **scaffold** da
+  feature somado ao chão de exceções que as varreduras de repositório exigem no
+  mesmo commit (ver "por que um commit só", acima). **9 dos 14 criados são
+  `__init__.py` vazios** (0 statements); o conteúdo lógico é `identifiers.py`,
+  `errors.py`, três arquivos de teste e os dois movimentos no `.importlinter`,
+  todos atados ao scaffold. Mesma exceção declarada na Task 01 da 2.1 e da 3.1.
 - **Comando de verificação:**
   ```bash
-  uv run pytest tests/unit/features/scheduling/domain/test_identifiers.py -v
+  uv run pytest tests/unit/features/scheduling/ -v
+  uv run pytest tests/unit/test_status_map.py tests/unit/features/staff/test_bc_independence.py -v
+  uv run mypy --strict src/restaurant_hub/features/scheduling/domain/exceptions/errors.py
   uv run python scripts/check_layout.py
   uv run lint-imports
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): criar scaffold, identificadores e contratos de import [4.1/task-01]`
+- **Commit sugerido:** `feat(scheduling): criar scaffold, identificadores e exceções do BC [4.1/task-01]`
 
 ---
 
-### Task 02 — Hierarquia de exceções do BC (20 subclasses + raiz)
-
-- **Arquivos a criar:**
-  - `src/restaurant_hub/features/scheduling/domain/exceptions/errors.py`
-  - `tests/unit/features/scheduling/domain/test_exceptions.py`
-- **Arquivos a modificar:** nenhum
-- **O que fazer:** definir `SchedulingError(DomainError)` (importando
-  `DomainError` de `restaurant_hub.shared.domain.exceptions.base`) e as **20**
-  subclasses enumeradas no concept §4: `InvalidIdentifierError`,
-  `InvalidTimeRangeError`, `InvalidWeekdayError`, `InvalidDayCutoffError`,
-  `InvalidSchedulePeriodError`, `InvalidDemandQuantityError`,
-  `InvalidScheduleVersionError`, `InvalidAssignmentBreakError`,
-  `DuplicateEntityIdError`, `DuplicateShiftBandError`, `ShiftBandNotFoundError`,
-  `ShiftBandInUseError`, `ShiftBandDayChangeError`, `TimeRangeOutsidePeriodError`,
-  `DuplicateShiftDemandError`, `ShiftDemandNotFoundError`,
-  `ShiftDemandInUseError`, `DuplicateAssignmentError`,
-  `DuplicateAssignmentInBandError`, `AssignmentNotFoundError`. Cada uma com
-  docstring PT curta; construtor pode receber um valor de contexto e montar a
-  mensagem PT (padrão `errors.py` de identity/staff).
-  **`DuplicateEntityIdError` recebe um `reason`/nome de tipo de id**, porque a
-  invariante 15 o exige para nomear qual coleção quebrou (concept §5.15).
-  **`InvalidSchedulePeriodError` recebe um `reason`**, porque a §6 a usa para dois
-  cenários distintos (teto de `days` e desalinhamento).
-- **Detalhes técnicos:** a raiz é **`SchedulingError`**; nenhuma subclasse herda
-  de `Exception` puro nem de `DomainError` direto — é exatamente o engano que a
-  varredura pega. Sem estado além da mensagem e do valor de contexto. **Todas as
-  20 nascem aqui**, ainda sem consumidor, para que a varredura do mapa de erros
-  seja totalidade desde o primeiro commit e nenhuma Task posterior tenha de
-  crescê-la.
-- **Critério de aceite:** `test_exceptions.py` cobre — `SchedulingError` é
-  `DomainError`; teste **parametrizado** sobre as 20 afirmando
-  `issubclass(..., SchedulingError)`; **varredura derivada** `vars(errors)` no
-  molde de `tests/unit/features/identity/domain/test_exceptions.py` 45–56 (nenhuma
-  exceção definida no módulo escapa de `SchedulingError`); o conjunto público do
-  módulo é **exatamente** as 20 + a raiz (21); e a mensagem é preservada ao
-  levantar (`pytest.raises(..., match=...)`) nas que recebem contexto.
-  **Fecha:** **CA17**.
-- **Comando de verificação:**
-  ```bash
-  uv run pytest tests/unit/features/scheduling/domain/test_exceptions.py -v
-  uv run mypy --strict src/restaurant_hub/features/scheduling/domain/exceptions/errors.py
-  make check
-  ```
-- **Commit sugerido:** `feat(scheduling): adicionar hierarquia de exceções do BC [4.1/task-02]`
-
----
-
-### Task 03 — `TimeRange`: instantes ingênuos, intervalo declarado e sítio único de horas
+### Task 02 — `TimeRange`: instantes ingênuos, intervalo declarado e sítio único de horas
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/domain/value_objects/time_range.py`
@@ -328,7 +462,12 @@ tests/unit/features/scheduling/
   **adjacência não sobrepõe**, com simetria `a.overlaps(b) == b.overlaps(a)` nos
   4 casos, e a faixa que cruza a meia-noite sem tratamento especial). Mais:
   `with_bounds` preserva `break_minutes`, `with_break` o troca, e a igualdade é
-  **por valor** (contribui para CA15).
+  **por valor** (contribui para CA15). E **`hours_key` no mesmo commit que o
+  cria** (achado 5 do Checkpoint B — membro sem asserção arrisca o gate de
+  cobertura por arquivo e só seria pego dois commits depois, por CA23):
+  `hours_key == (start, end)`, **sem** `break_minutes` — duas faixas de mesmo par
+  e intervalos diferentes têm `hours_key` **igual** e `!=` como valor, que é
+  exatamente a chave de duplicidade que a raiz usará.
   **Fecha:** **CA1, CA2, CA3**.
 - **Comando de verificação:**
   ```bash
@@ -336,11 +475,11 @@ tests/unit/features/scheduling/
   uv run mypy --strict src/restaurant_hub/features/scheduling/domain/value_objects/time_range.py
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar TimeRange com intervalo e sítio único de horas [4.1/task-03]`
+- **Commit sugerido:** `feat(scheduling): adicionar TimeRange com intervalo e sítio único de horas [4.1/task-02]`
 
 ---
 
-### Task 04 — `Weekday` e `DayCutoff`: a geometria do dia operacional
+### Task 03 — `Weekday` e `DayCutoff`: a geometria do dia operacional
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/domain/value_objects/operational_calendar.py`
@@ -366,7 +505,7 @@ tests/unit/features/scheduling/
     dentro de `shift_preference.py`).
   - **nenhum default de campo** aqui: `DayCutoff.at` não tem valor default e
     `Weekday` não ganha "dia default" — os dois defaults de configuração vivem
-    **só** em `OperationalCalendar.default()`, criado na Task 05 (concept §7
+    **só** em `OperationalCalendar.default()`, criado na Task 04 (concept §7
     "Defaults do calendário num único sítio"). Violar isto quebra o gate de CA7.
 - **Critério de aceite:** `test_operational_calendar.py` cobre — CA6 (o conjunto é
   exatamente os 7 nomes **e** os 7 valores; `from_date` bate com `isoweekday()`
@@ -385,11 +524,11 @@ tests/unit/features/scheduling/
   uv run mypy --strict src/restaurant_hub/features/scheduling/domain/value_objects/operational_calendar.py
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar Weekday e DayCutoff do dia operacional [4.1/task-04]`
+- **Commit sugerido:** `feat(scheduling): adicionar Weekday e DayCutoff do dia operacional [4.1/task-03]`
 
 ---
 
-### Task 05 — `SchedulePeriod` e `OperationalCalendar`: teto, alinhamento e defaults
+### Task 04 — `SchedulePeriod` e `OperationalCalendar`: teto, alinhamento e defaults
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/domain/value_objects/schedule_period.py`
@@ -411,7 +550,7 @@ tests/unit/features/scheduling/
   - o teto **31** é o maior mês civil, logo o maior período que a evolução
     "quinzena/mês" (ADR 4.1.0002 §1) precisa admitir; **`days == 7` não é
     invariante** — é o default da fábrica (concept §5.2, §7 "Teto declarado").
-  - `is_aligned` existe como método público porque a Task 09 a chama no
+  - `is_aligned` existe como método público porque a Task 08 a chama no
     `Schedule.__post_init__` — é o que torna `week_start` dado **vivo** no
     agregado e faz a lei valer na reidratação da 4.4.
   - `OperationalCalendar.default()` é o **único** sítio de `MONDAY` e `05:00` no
@@ -435,11 +574,11 @@ tests/unit/features/scheduling/
   rg -n --glob 'src/restaurant_hub/features/scheduling/**/*.py' -e 'time\(\s*5\s*,\s*0' -e '"05:00"' -e 'Weekday\.MONDAY'
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar SchedulePeriod e OperationalCalendar [4.1/task-05]`
+- **Commit sugerido:** `feat(scheduling): adicionar SchedulePeriod e OperationalCalendar [4.1/task-04]`
 
 ---
 
-### Task 06 — `DemandQuantity` e a entidade `Assignment` (as três marcas)
+### Task 05 — `DemandQuantity` e a entidade `Assignment` (as três marcas)
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/domain/value_objects/demand_quantity.py`
@@ -459,7 +598,7 @@ tests/unit/features/scheduling/
 - **Detalhes técnicos:**
   - **o limite superior do `break_minutes` da alocação NÃO vive aqui** — só a
     faixa conhece `nominal_minutes`, e a checagem
-    `break_minutes < nominal_minutes` é da Task 08 (concept §4 `Assignment`,
+    `break_minutes < nominal_minutes` é da Task 07 (concept §4 `Assignment`,
     §5.6). Aqui só o piso.
   - `None` em `declare_break` **limpa** a declaração e volta a herdar o intervalo
     da faixa (ADR 4.1.0011).
@@ -485,11 +624,11 @@ tests/unit/features/scheduling/
   uv run mypy --strict src/restaurant_hub/features/scheduling/domain/
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar DemandQuantity e a entidade Assignment [4.1/task-06]`
+- **Commit sugerido:** `feat(scheduling): adicionar DemandQuantity e a entidade Assignment [4.1/task-05]`
 
 ---
 
-### Task 07 — A entidade `ShiftDemand` (a demanda de uma função e as suas alocações)
+### Task 06 — A entidade `ShiftDemand` (a demanda de uma função e as suas alocações)
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/domain/entities/shift_demand.py`
@@ -527,11 +666,11 @@ tests/unit/features/scheduling/
   uv run mypy --strict src/restaurant_hub/features/scheduling/domain/entities/shift_demand.py
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar a entidade ShiftDemand [4.1/task-07]`
+- **Commit sugerido:** `feat(scheduling): adicionar a entidade ShiftDemand [4.1/task-06]`
 
 ---
 
-### Task 08 — A entidade `ShiftBand`: intervalo efetivo, divergência e uma vaga por registro
+### Task 07 — A entidade `ShiftBand`: intervalo efetivo, divergência e uma vaga por registro
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/domain/entities/shift_band.py`
@@ -561,7 +700,7 @@ tests/unit/features/scheduling/
   - `rescheduled_to` usa `time_range.with_bounds`, que **preserva**
     `break_minutes` — a preservação do intervalo no reagendamento é estrutural.
   - a varredura de `employee_id` é **entre demandas**, não dentro de cada uma (a
-    de dentro é a `DuplicateAssignmentError` da Task 07): as duas linhas da §6 são
+    de dentro é a `DuplicateAssignmentError` da Task 06): as duas linhas da §6 são
     **disjuntas por nível**, e o teste tem de provar **qual** sai em cada caso.
   - `rescheduled_to`/`with_*` revalidam pelo `__post_init__`, logo encurtar a
     faixa abaixo de um intervalo já declarado (da faixa → `InvalidTimeRangeError`
@@ -577,7 +716,18 @@ tests/unit/features/scheduling/
   verdadeiro só no primeiro caso e **falso** quando o declarado é **igual** ao da
   faixa; `rescheduled_to` preserva `break_minutes`, demandas e alocações;
   `assignment_count` soma as alocações de todas as demandas; CA22 para
-  `ShiftBandId`; frozen + identidade por id; `demands` é `tuple`.
+  `ShiftBandId`; frozen + identidade por id; `demands` é `tuple`. E os **quatro
+  construtores derivados no mesmo commit que os cria** (achado 5 do Checkpoint B
+  — os primeiros consumidores só chegam nas Tasks 09/10, e sem asserção aqui o
+  commit fica com 4 membros descobertos e o gate de cobertura **por arquivo** em
+  risco): `with_band_break`, `with_demand`, `with_demands` e `without_demand`,
+  cada um devolvendo **nova** instância com a original **intacta** e
+  **revalidando** pelo `__post_init__` — `with_band_break` para um intervalo
+  `>= nominal_minutes` levanta `InvalidTimeRangeError` (de dentro do `TimeRange`)
+  e, num intervalo que passe a exceder o de uma alocação declarada,
+  `InvalidAssignmentBreakError`; `with_demand`/`with_demands` de função repetida
+  levantam `DuplicateShiftDemandError`; `without_demand` de id inexistente é
+  **no-op silencioso** (a recusa é da raiz, Task 09).
   **Fecha:** CA25 no lado da **reidratação**. **Parcial:** CA10, CA15, CA22, CA23.
 - **Comando de verificação:**
   ```bash
@@ -585,11 +735,11 @@ tests/unit/features/scheduling/
   uv run mypy --strict src/restaurant_hub/features/scheduling/domain/entities/shift_band.py
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar a entidade ShiftBand com intervalo efetivo [4.1/task-08]`
+- **Commit sugerido:** `feat(scheduling): adicionar a entidade ShiftBand com intervalo efetivo [4.1/task-07]`
 
 ---
 
-### Task 09 — A raiz `Schedule`: invariantes do agregado e as 8 leituras
+### Task 08 — A raiz `Schedule`: invariantes do agregado e as 8 leituras
 
 - **Arquivos a criar:**
   - `src/restaurant_hub/features/scheduling/domain/entities/schedule.py`
@@ -611,7 +761,7 @@ tests/unit/features/scheduling/
   `effective_break_minutes_of`, `has_break_divergence`.
 - **Detalhes técnicos:**
   - **nenhuma mutação nesta Task** — a raiz nasce imutável e legível; as 11
-    mutações vêm nas Tasks 10 e 11. É o que mantém esta Task testável e o commit
+    mutações vêm nas Tasks 09 e 10. É o que mantém esta Task testável e o commit
     pequeno.
   - `worked_minutes_of` **delega** ao sítio único:
     `band.time_range.worked_minutes(band.effective_break_of(assignment))`. Nenhuma
@@ -627,14 +777,42 @@ tests/unit/features/scheduling/
   - toda leitura devolve `tuple` ou valor imutável — **nunca** a coleção interna,
     nunca `list`/`dict`/`set`.
 - **Critério de aceite:**
-  - **CA10 inteiro** — duas faixas de `(start, end)` igual →
-    `DuplicateShiftBandError`; faixa fora do período →
-    `TimeRangeOutsidePeriodError`; `version = 0` →
+  - **CA10 fecha aqui** — as sub-checagens que são **da raiz** (as das entidades
+    internas fecharam nas Tasks 06–07; o rótulo "CA10 inteiro" desta Task era
+    impreciso — achado do Checkpoint B): duas faixas de
+    `(start, end)` igual → `DuplicateShiftBandError`, **em coleção de 3 com o par
+    não consecutivo** (a 1ª e a 3ª faixa com o mesmo par, a 2ª diferente — sem
+    isso a mutação "loop restrito a pares vizinhos" sobrevive, e esta era a
+    **única** checagem par a par do plano sem o qualificador); faixa fora do
+    período → `TimeRangeOutsidePeriodError`; `version = 0` →
     `InvalidScheduleVersionError`; `period.first_day` fora do `week_start`
     fotografado → `InvalidSchedulePeriodError`; dois `ShiftBandId` iguais, dois
     `ShiftDemandId` iguais em **faixas distintas** e dois `AssignmentId` iguais em
     **demandas distintas** → `DuplicateEntityIdError`, cada um em coleção de 3 com
     o par **não consecutivo**.
+  - **a contenção é pelo dia operacional, e o caso discriminante prova** (achado
+    3 do Checkpoint B): a invariante é "toda faixa começa num **dia operacional**
+    do período", e sem um caso em que a **data civil** e o dia operacional caem em
+    lados **opostos** da borda do período a mutação "usar
+    `band.time_range.start.date()` em vez de
+    `calendar.operational_day_of(band.time_range.start)`" sobrevive à suíte
+    inteira. Dois casos, com corte `05:00` e período de segunda a domingo:
+    (a) faixa que **começa** às `02:00` do dia **civil seguinte** ao `last_day` é
+    **aceita** — o dia operacional dela é o `last_day`, que `period.contains`
+    admite; (b) faixa que começa às `02:00` do próprio `first_day` é **recusada**
+    com `TimeRangeOutsidePeriodError` — o dia operacional dela é o dia **anterior**
+    ao `first_day`. A implementação ingênua inverte as duas.
+  - **os homônimos `has_break_divergence`, no caminho positivo** (achado 9 do
+    Checkpoint B): `ShiftBand.has_break_divergence(assignment: Assignment)` e
+    `Schedule.has_break_divergence(assignment_id: AssignmentId)` têm o **mesmo
+    nome** e assinaturas diferentes; trocar as duas na implementação só seria
+    pego dois commits depois (CA23, Task 10). Esta Task dá critério **positivo**
+    próprio à leitura da raiz: numa faixa com `break_minutes = 0` e uma alocação
+    de `break_minutes = 60`, `schedule.has_break_divergence(assignment_id)` é
+    `True` — chamada **por id**, delegando à faixa, que recebe a **entidade** —,
+    e `False` para uma alocação sem declaração; id inexistente →
+    `AssignmentNotFoundError` (o que já força o parâmetro a ser um id, mas é
+    mitigação, não prova).
   - **CA24** — `bands_of` agrupa pelo dia operacional (a faixa de sábado
     `02:00–06:00` com corte `05:00` aparece em `bands_of(sexta)` e **não** em
     `bands_of(sábado)`); `locate_demand` devolve o par correto e
@@ -654,7 +832,7 @@ tests/unit/features/scheduling/
     varredura sobre as **8 leituras** enumeradas (cada uma devolve `tuple`/valor
     imutável), iterando a lista do concept §4 e não um representante.
   - **CA22 fecha** — `ScheduleId`, `TenantId` e `UnitId` com `""` e `"   "`,
-    somando aos 5 já cobertos nas Tasks 06–08: os **8** tipos, em **cada**
+    somando aos 5 já cobertos nas Tasks 05–07: os **8** tipos, em **cada**
     entidade que os carrega.
   - **CA12 (parcial)** — as linhas de `band`/`locate_demand`/`locate_assignment`
     e das três leituras em minutos/divergência.
@@ -665,11 +843,11 @@ tests/unit/features/scheduling/
   uv run mypy --strict src/restaurant_hub/features/scheduling/domain/entities/schedule.py
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar a raiz Schedule com invariantes e leituras [4.1/task-09]`
+- **Commit sugerido:** `feat(scheduling): adicionar a raiz Schedule com invariantes e leituras [4.1/task-08]`
 
 ---
 
-### Task 10 — As 9 mutações estruturais da raiz e a lei da versão
+### Task 09 — As 9 mutações estruturais da raiz e a lei da versão
 
 - **Arquivos a criar:**
   - `tests/unit/features/scheduling/domain/test_schedule_mutations.py`
@@ -706,13 +884,20 @@ tests/unit/features/scheduling/
     aceitas.
   - **`change_demand_quantity`** **não** recusa `N` abaixo do número de alocados —
     `N` é alvo, não teto (ADR 4.1.0003 (g)); a sobre-cobertura é política da 4.2.
-  - **a cláusula de no-op NÃO entra aqui** — é da Task 11, junto com as outras
+  - **a cláusula de no-op NÃO entra aqui** — é da Task 10, junto com as outras
     três mutações idempotentes, para que a regra nasça num sítio só.
 - **Critério de aceite:**
   - **CA11 (parcial, 9 de 11)** — teste parametrizado sobre as 9, cada uma
     devolvendo nova instância com `version == anterior + 1` e deixando a original
     **intacta**; a lista esperada é a constante no topo do arquivo (a varredura
-    que a Task 11 cresce para 11).
+    que a Task 10 cresce para 11). **E a constante é cobrada contra a classe**
+    (achado 8 do Checkpoint B): asserção-par afirmando que o conjunto de métodos
+    **públicos** de `Schedule` cuja anotação de retorno é `Schedule` — obtido por
+    introspecção (`vars(Schedule)` + `typing.get_type_hints`, filtrando os que
+    não começam por `_`) — **iguala** a constante. Sem ela a lista é escrita à
+    mão e uma 12ª mutação acrescentada na 4.2/4.3 passa verde; as leituras ficam
+    fora por devolverem outro tipo, e as **duas** de Task 10 entram junto com a
+    constante no mesmo commit.
   - **CA12 (parcial)** — as linhas da matriz §6 que estes métodos ocupam: os de
     `ShiftBandNotFoundError` desta Task (`reschedule_band`, `disable_band`,
     `declare_demand`), os 3 de `ShiftDemandNotFoundError`
@@ -756,6 +941,17 @@ tests/unit/features/scheduling/
     de §4 — **mais** o aceite do estado que as representa.
   - **CA5 fecha** — `enable_band` aceita a faixa que começa no último dia
     operacional do período e **termina depois** dele.
+  - **CA14 (parcial) — a cláusula de gravação, que é desta Task** (achado 7 do
+    Checkpoint B: `assign` nasce aqui e o critério não a mencionava; a cláusula
+    também estava impossível no concept e foi corrigida — ver §1, pré-condições):
+    `assign` grava na alocação criada as **duas** marcas que recebe por keyword —
+    `counts_toward_workload` e `function_exception` —, inclusive quando o valor
+    passado **coincide** com o default (`assign(..., counts_toward_workload=True,
+    function_exception=False)` e a combinação invertida, as duas lidas de volta
+    por `locate_assignment`); e a **terceira** marca nasce `None`, herdando o
+    intervalo da faixa, porque a assinatura não recebe intervalo — o
+    `break_minutes` da alocação só é declarado por `declare_allocation_break`
+    (Task 10).
 - **Nota de atomicidade:** 3 arquivos (1 modificado + 2 criados), dentro do guia.
   Os dois arquivos de teste são separados porque `test_schedule_policies.py` prova
   **ausência de recusa** (8 cenários) e `test_schedule_mutations.py` prova a lei da
@@ -767,11 +963,11 @@ tests/unit/features/scheduling/
   uv run mypy --strict src/restaurant_hub/features/scheduling/domain/entities/schedule.py
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar as 9 mutações estruturais e a lei da versão [4.1/task-10]`
+- **Commit sugerido:** `feat(scheduling): adicionar as 9 mutações estruturais e a lei da versão [4.1/task-09]`
 
 ---
 
-### Task 11 — As 2 mutações de intervalo, a cláusula de no-op e o fecho de `reschedule_band`
+### Task 10 — As 2 mutações de intervalo, a cláusula de no-op e o fecho de `reschedule_band`
 
 - **Arquivos a criar:**
   - `tests/unit/features/scheduling/domain/test_schedule_breaks.py`
@@ -813,7 +1009,10 @@ tests/unit/features/scheduling/
     volta a herdar e **zera** a divergência; `break_minutes` negativo ou
     `>= nominal_minutes` → `InvalidAssignmentBreakError`; e **duas faixas
     `16h–00h` com intervalos 0 e 60 no mesmo dia → `DuplicateShiftBandError`** (a
-    chave é `(start, end)`).
+    chave é `(start, end)`), **em coleção de 3 com o par não consecutivo** — a 1ª
+    e a 3ª faixa `16h–00h` (intervalos 0 e 60) e a 2ª `18h–23h`, para que a
+    mutação "comparar só pares vizinhos" morra também aqui (achado 4 do
+    Checkpoint B).
   - **CA11b** — as 4 mutações idempotentes devolvem `self`, com `version`
     **inalterada** e **sem** `DuplicateShiftBandError`.
   - **CA11 fecha** — a varredura parametrizada passa a cobrir as **11** mutações.
@@ -823,7 +1022,13 @@ tests/unit/features/scheduling/
     `DuplicateShiftBandError`, `DuplicateShiftDemandError`,
     `DuplicateAssignmentError`, `DuplicateAssignmentInBandError`, e as **três**
     linhas de `InvalidTimeRangeError` (incluindo a de `redeclare_band_break`).
-    Nenhuma célula da tabela sem asserção.
+    Nenhuma célula da tabela sem asserção — o que **só** passou a ser verdade
+    depois da correção da matriz §6 do concept (achado 6 do Checkpoint B): a
+    célula `InvalidAssignmentBreakError × assign` era inatingível e nenhuma Task
+    podia carregá-la. Os caminhos que sobram para essa exceção são a **construção
+    direta/reidratação** (Task 07), `declare_allocation_break` (esta Task) e
+    `reschedule_band` que encurta a faixa abaixo de um intervalo já declarado
+    (esta Task, em CA21).
   - **CA21 fecha** — **encurtar a faixa abaixo de um intervalo já declarado**: da
     faixa → `InvalidTimeRangeError`; de uma alocação →
     `InvalidAssignmentBreakError`.
@@ -838,7 +1043,7 @@ tests/unit/features/scheduling/
   uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
   make check
   ```
-- **Commit sugerido:** `feat(scheduling): adicionar as mutações de intervalo e a cláusula de no-op [4.1/task-11]`
+- **Commit sugerido:** `feat(scheduling): adicionar as mutações de intervalo e a cláusula de no-op [4.1/task-10]`
 
 ---
 
@@ -846,21 +1051,22 @@ tests/unit/features/scheduling/
 
 | Task | Commitável limpa | ≤ 5 arquivos | Checks objetivos | Não mistura port + adapter | Ordem respeita dependências |
 |---|---|---|---|---|---|
-| 01 | sim (`make check` verde) | **12 — exceção declarada** (10 `__init__.py` vazios; conteúdo lógico = `identifiers.py` + 2 movimentos no `.importlinter`); precedente 2.1/3.1 | sim (import-linter KEPT, `check_layout.py`, teste dos 8 nomes) | N/A (Stage domain-only; nenhum port nasce aqui) | raiz da árvore |
-| 02 | sim | 2 | sim (parametrização + varredura `vars`) | N/A | depende só de `shared/domain` |
-| 03 | sim | 2 | sim (6 defeitos + 5 aceites-limite + tabela-verdade) | N/A | depende de 02 (`InvalidTimeRangeError`) |
-| 04 | sim | 2 | sim (7 dias, 5 cenários de corte) | N/A | depende de 02 |
-| 05 | sim | 4 (2 criados + 2 modificados) | sim (teto, alinhamento, **gate de grep** de CA7) | N/A | depende de 04 (`Weekday`/`DayCutoff`) |
-| 06 | sim | 4 | sim (defaults, transições, CA22 parcial) | N/A | depende de 01, 02 |
-| 07 | sim | 2 | sim (par não consecutivo em coleção de 3) | N/A | depende de 06 (`Assignment`, `DemandQuantity`) |
-| 08 | sim | 2 | sim (4 recusas, intervalo efetivo, divergência) | N/A | depende de 03, 07 |
-| 09 | sim | 2 | sim (CA10 inteiro + 3 varreduras) | N/A | depende de 05, 08 |
-| 10 | sim | 3 (1 modificado + 2 criados) | sim (9 mutações, matriz, CA13, CA20) | N/A | depende de 09 |
-| 11 | sim | 3 (1 criado + 2 modificados) | sim (no-op `is self`, matriz fecha) | N/A | depende de 10 |
+| 01 | sim (`make check` verde, **incluindo as duas varreduras de repositório**) | **17 — exceção declarada** (14 criados, 9 deles `__init__.py` vazios; 3 modificados: `.importlinter` + os dois testes de nível de repositório); precedente 2.1/3.1 | sim (import-linter KEPT, `check_layout.py`, teste dos 8 nomes, parametrização das 20 + varredura `vars`, `_TOTAIS_MINIMOS` ≥ 20) | N/A (Stage domain-only; nenhum port nasce aqui) | raiz da árvore |
+| 02 | sim | 2 | sim (6 defeitos + 5 aceites-limite + tabela-verdade + `hours_key`) | N/A | depende de 01 (`InvalidTimeRangeError`) |
+| 03 | sim | 2 | sim (7 dias, 5 cenários de corte) | N/A | depende de 01 |
+| 04 | sim | 4 (2 criados + 2 modificados) | sim (teto, alinhamento, **gate de grep** de CA7) | N/A | depende de 03 (`Weekday`/`DayCutoff`) |
+| 05 | sim | 4 | sim (defaults, transições, CA22 parcial) | N/A | depende de 01 |
+| 06 | sim | 2 | sim (par não consecutivo em coleção de 3) | N/A | depende de 05 (`Assignment`, `DemandQuantity`) |
+| 07 | sim | 2 | sim (4 recusas, intervalo efetivo, divergência, os 4 construtores derivados) | N/A | depende de 02, 06 |
+| 08 | sim | 2 | sim (as sub-checagens da raiz + o caso discriminante civil/operacional + 3 varreduras) | N/A | depende de 04, 07 |
+| 09 | sim | 3 (1 modificado + 2 criados) | sim (9 mutações, asserção-par da lei da versão, matriz, CA13, CA20) | N/A | depende de 08 |
+| 10 | sim | 3 (1 criado + 2 modificados) | sim (no-op `is self`, matriz fecha) | N/A | depende de 09 |
 
 Nenhuma Task falha os 5 critérios. A **única** exceção ao guia de ≤ 5 arquivos é
 a Task 01, declarada no corpo da Task com o mesmo argumento aceito nas Tasks 01
-da 2.1 e da 3.1 (scaffold de feature; 10 arquivos de 0 statements). O critério
+da 2.1 e da 3.1 (scaffold de feature; 9 arquivos de 0 statements) **mais** o
+motivo novo desta Stage: as varreduras de nível de repositório exigem a
+hierarquia de erro no mesmo commit do scaffold. O critério
 "não mistura criação de port com adapter do mesmo port" é **vacuosamente
 satisfeito**: a Stage é `domain`-only e nenhum `Protocol` de port nasce nela (os
 placeholders `application/`/`adapters/` são `__init__.py` vazios).
@@ -869,54 +1075,60 @@ placeholders `application/`/`adapters/` são `__init__.py` vazios).
 
 | CA | Critério (resumo) | Task(s) — **negrito fecha** | Check objetivo |
 |---|---|---|---|
-| CA1 | `TimeRange` recusa os 6 defeitos; 5 aceites-limite explícitos | **03** | `test_time_range.py` |
-| CA2 | intervalo declarado da faixa: limites e `worked_minutes` | **03** | `test_time_range.py` |
-| CA3 | `overlaps` semi-aberto, adjacência não sobrepõe, simetria | **03** | `test_time_range.py` |
-| CA4 | dia operacional nos 3 casos + corte `00:00` + **corte `23:00`** | **04** | `test_operational_calendar.py` |
-| CA5 | faixa além do corte aceita; faixa que termina após o período aceita | 04, **10** | `test_operational_calendar.py`, `test_schedule_mutations.py` |
-| CA6 | `Weekday`: nomes **e** valores; `from_date`; `from_string` erra | **04** | `test_operational_calendar.py` |
-| CA7 | `DayCutoff` recusa tz-aware/sub-minuto; `default()`; **gate de sítio único** | 04, **05** | `test_operational_calendar.py` + o `rg` do concept §11 |
-| CA8 | `SchedulePeriod`: `1..31`, `last_day`, `operational_days`, `contains`, fábrica | **05** | `test_schedule_period.py` |
-| CA9 | `DemandQuantity` recusa `-1`; `0` e positivos aceitos | **06** | `test_demand_quantity.py` |
-| CA10 | invariantes valem na **construção direta** (reidratação), par não consecutivo | 07, 08, **09** | `test_shift_demand.py`, `test_shift_band.py`, `test_schedule.py` |
-| CA11 | cada uma das **11** mutações devolve nova instância com `version + 1` | 10, **11** | `test_schedule_mutations.py` (varredura) |
-| CA11b | cláusula de no-op nas 4 mutações idempotentes devolve `self` | **11** | `test_schedule_breaks.py` |
-| CA12 | matriz (método × exceção) da §6 inteira | 09, 10, **11** | `test_schedule.py`, `test_schedule_mutations.py` |
-| CA13 | as **8** situações de política **salvam** (com rótulo de superfície em 3) | **10** | `test_schedule_policies.py` |
-| CA14 | as três marcas: defaults, gravação, alternância, limpeza, **ausência** de mutação de `function_exception` | 06, **11** | `test_assignment.py`, `test_schedule_breaks.py` |
-| CA15 | 4 entidades frozen + por id; 6 VOs por valor; **8 leituras** imutáveis | 03–08, **09** | testes de cada arquivo + varredura em `test_schedule.py` |
-| CA16 | sítio de horas único; nenhum outro membro devolve minutos trabalhados | **09** | `test_schedule.py` (varredura) |
-| CA17 | **20** exceções + raiz; conjunto público exato | **02** | `test_exceptions.py` (varredura `vars`) |
+| CA1 | `TimeRange` recusa os 6 defeitos; 5 aceites-limite explícitos | **02** | `test_time_range.py` |
+| CA2 | intervalo declarado da faixa: limites e `worked_minutes` | **02** | `test_time_range.py` |
+| CA3 | `overlaps` semi-aberto, adjacência não sobrepõe, simetria | **02** | `test_time_range.py` |
+| CA4 | dia operacional nos 3 casos + corte `00:00` + **corte `23:00`** | **03** | `test_operational_calendar.py` |
+| CA5 | faixa além do corte aceita; faixa que termina após o período aceita | 03, **09** | `test_operational_calendar.py`, `test_schedule_mutations.py` |
+| CA6 | `Weekday`: nomes **e** valores; `from_date`; `from_string` erra | **03** | `test_operational_calendar.py` |
+| CA7 | `DayCutoff` recusa tz-aware/sub-minuto; `default()`; **gate de sítio único** | 03, **04** | `test_operational_calendar.py` + o `rg` do concept §11 |
+| CA8 | `SchedulePeriod`: `1..31`, `last_day`, `operational_days`, `contains`, fábrica | **04** | `test_schedule_period.py` |
+| CA9 | `DemandQuantity` recusa `-1`; `0` e positivos aceitos | **05** | `test_demand_quantity.py` |
+| CA10 | invariantes valem na **construção direta** (reidratação), par não consecutivo, nas entidades internas **e na raiz** — inclusive o caso discriminante civil/operacional | 06, 07, **08** | `test_shift_demand.py`, `test_shift_band.py`, `test_schedule.py` |
+| CA11 | cada uma das **11** mutações devolve nova instância com `version + 1`, com a constante cobrada contra a classe | 09, **10** | `test_schedule_mutations.py` (varredura + asserção-par) |
+| CA11b | cláusula de no-op nas 4 mutações idempotentes devolve `self` | **10** | `test_schedule_breaks.py` |
+| CA12 | matriz (método × exceção) da §6 inteira | 08, 09, **10** | `test_schedule.py`, `test_schedule_mutations.py` |
+| CA13 | as **8** situações de política **salvam** (com rótulo de superfície em 3) | **09** | `test_schedule_policies.py` |
+| CA14 | as três marcas: defaults, **gravação pelas duas marcas de `assign`**, alternância, limpeza, **ausência** de mutação de `function_exception` | 05, 09, **10** | `test_assignment.py`, `test_schedule_mutations.py`, `test_schedule_breaks.py` |
+| CA15 | 4 entidades frozen + por id; 6 VOs por valor; **8 leituras** imutáveis | 02–07, **08** | testes de cada arquivo + varredura em `test_schedule.py` |
+| CA16 | sítio de horas único; nenhum outro membro devolve minutos trabalhados | **08** | `test_schedule.py` (varredura) |
+| CA17 | **20** exceções + raiz; conjunto público exato | **01** | `test_exceptions.py` (varredura `vars`) |
 | CA18 | domínio puro `[gate]`: contratos, layout, nada em `domain/services/` | 01 (+ todas via `make check`) | import-linter + `check_layout.py` + `check_docs_claims.py` |
 | CA19 | cobertura ≥ 90% por arquivo `src/` tocado `[gate]` | todas | test-gate do `make check` + `--cov-report=term-missing` |
-| CA20 | as duas guardas de remoção **e** o caso sem alocação | **10** | `test_schedule_mutations.py` |
-| CA21 | reagendamento preservador e as **5** restrições | 10, **11** | `test_schedule_mutations.py`, `test_schedule_breaks.py` |
-| CA22 | os **8** identificadores recusam `""` e `"   "`, em cada entidade | 06, 07, 08, **09** | `test_assignment.py` … `test_schedule.py` |
-| CA23 | intervalo nos dois níveis, divergência, chave `(start, end)` | 08, 09, **11** | `test_shift_band.py`, `test_schedule_breaks.py` |
-| CA24 | leituras da raiz no caminho positivo (`bands_of` pelo dia operacional) | **09** | `test_schedule.py` |
-| CA25 | uma vaga por registro na faixa, nos dois sentidos | 08, **10** | `test_shift_band.py`, `test_schedule_mutations.py` |
+| CA20 | as duas guardas de remoção **e** o caso sem alocação | **09** | `test_schedule_mutations.py` |
+| CA21 | reagendamento preservador e as **5** restrições | 09, **10** | `test_schedule_mutations.py`, `test_schedule_breaks.py` |
+| CA22 | os **8** identificadores recusam `""` e `"   "`, em cada entidade | 05, 06, 07, **08** | `test_assignment.py` … `test_schedule.py` |
+| CA23 | intervalo nos dois níveis, divergência, chave `(start, end)` | 07, 08, **10** | `test_shift_band.py`, `test_schedule_breaks.py` |
+| CA24 | leituras da raiz no caminho positivo (`bands_of` pelo dia operacional) | **08** | `test_schedule.py` |
+| CA25 | uma vaga por registro na faixa, nos dois sentidos | 07, **09** | `test_shift_band.py`, `test_schedule_mutations.py` |
 
 **Nenhum critério órfão:** os **26** itens do concept §11 (CA1–CA25 + CA11b) têm
-Task que os fecha. **Nenhuma Task sem âncora:** cada uma das 11 fecha ou avança ao
-menos um CA.
+Task que os fecha — revisto item a item **depois** da renumeração desta Fase 3B.
+**Nenhuma Task sem âncora:** cada uma das **10** fecha ou avança ao menos um CA
+(01: CA17 + CA18; 02: CA1–CA3; 03: CA4, CA6; 04: CA7, CA8; 05: CA9; 06: CA10
+parcial; 07: CA25 parcial; 08: CA10, CA15, CA16, CA22, CA24; 09: CA13, CA20,
+CA25; 10: CA11, CA11b, CA12, CA14, CA21, CA23).
 
 **Contratos do concept §4 → Task:**
 
 | Contrato | Task |
 |---|---|
 | os 8 identificadores (`ScheduleId` … `JobFunctionId`) | 01 |
-| `SchedulingError` + 20 subclasses | 02 |
-| `TimeRange` (`nominal_minutes`, `worked_minutes`, `hours_key`, `overlaps`, `with_break`, `with_bounds`) | 03 |
-| `Weekday`, `DayCutoff` | 04 |
-| `SchedulePeriod`, `OperationalCalendar` | 05 |
-| `DemandQuantity`, `Assignment` (3 marcas, 2 transições) | 06 |
-| `ShiftDemand` | 07 |
-| `ShiftBand` (intervalo efetivo, divergência, `rescheduled_to`) | 08 |
-| `Schedule` — construção, invariantes e as **8 leituras** | 09 |
-| `Schedule` — 9 mutações estruturais | 10 |
-| `Schedule` — 2 mutações de intervalo + cláusula de no-op | 11 |
-| consumido: `DomainError` (`shared/domain`) | 02 |
+| `SchedulingError` + 20 subclasses | 01 |
+| `TimeRange` (`nominal_minutes`, `worked_minutes`, `hours_key`, `overlaps`, `with_break`, `with_bounds`) | 02 |
+| `Weekday`, `DayCutoff` | 03 |
+| `SchedulePeriod`, `OperationalCalendar` | 04 |
+| `DemandQuantity`, `Assignment` (3 marcas, 2 transições) | 05 |
+| `ShiftDemand` | 06 |
+| `ShiftBand` (intervalo efetivo, divergência, `rescheduled_to`, os 4 construtores derivados) | 07 |
+| `Schedule` — construção, invariantes e as **8 leituras** | 08 |
+| `Schedule` — 9 mutações estruturais | 09 |
+| `Schedule` — 2 mutações de intervalo + cláusula de no-op | 10 |
+| consumido: `DomainError` (`shared/domain`) | 01 |
 | enforcement: `scheduling-domain-purity`, `scheduling` em `bc-independence`, placeholders | 01 |
+| enforcement: `scheduling` nas duas varreduras de nível de repositório (`test_status_map.py`, `test_bc_independence.py` de staff) + o espelho `test_bc_independence.py` do BC novo | 01 |
+
+Cada contrato tem **exatamente um** dono; nenhum em duas Tasks, nenhum órfão.
 
 ## 3. Gate de saída da Stage
 
@@ -931,7 +1143,15 @@ uv run python scripts/check_docs_claims.py
 uv run python scripts/check_technical_postexec.py "docs/stages/4.1-scheduling-domain/technical.md"
 rg -n --glob 'src/restaurant_hub/features/scheduling/**/*.py' -e 'time\(\s*5\s*,\s*0' -e '"05:00"' -e 'Weekday\.MONDAY'
 rg -n 'features\.(staff|identity)' src/restaurant_hub/features/scheduling/   # deve devolver nada
+# as três varreduras de fronteira, que valem entre commits e não só no gate:
+uv run pytest tests/unit/features/scheduling/test_bc_independence.py tests/unit/test_status_map.py tests/unit/features/staff/test_bc_independence.py -v
 ```
+
+O `rg` acima é conveniência de leitura, **não** o guarda: quem reprova entre
+commits é `tests/unit/features/scheduling/test_bc_independence.py` (espelho do de
+staff, Task 01) — varredura AST sobre o BC inteiro, mais a ausência de
+`ignore_imports` no contrato e a proibição de **nomear** o vocabulário do outro
+lado, que nenhum contrato de import expressa.
 
 ### Verificações funcionais
 - [ ] A Stage é **domínio puro** (sem runtime: sem API, CLI ou job). A verificação
@@ -949,7 +1169,7 @@ rg -n 'features\.(staff|identity)' src/restaurant_hub/features/scheduling/   # d
       `[planejado]` de `LAYOUT.md` 38 continua verdadeiro.
 
 ### Checklist de fechamento da Stage
-- [ ] Todas as **11** Tasks commitadas, cada uma com `make check` verde
+- [ ] Todas as **10** Tasks commitadas, cada uma com `make check` verde
 - [ ] `make check` verde no branch
 - [ ] Cobertura ≥ 90% em cada arquivo `src/` tocado (`term-missing`)
 - [ ] Auditoria de testes (subagente independente) com todos os itens "sim"
@@ -959,54 +1179,68 @@ rg -n 'features\.(staff|identity)' src/restaurant_hub/features/scheduling/   # d
       declaradas no concept §1 (`arquivos_a_modificar` deixa de ser `[]`; as 4
       frentes novas de `arquivos_a_criar`; a 4ª entidade; a descrição humana
       superada pelo ADR 4.1.0001; `contratos_introduzidos` e
-      `contratos_consumidos`; `depends_on`)
+      `contratos_consumidos`; `depends_on`) **mais a 9ª, declarada no §1 deste
+      technical** (file-scope: a Task 01 toca dois arquivos de teste fora de
+      `features/scheduling/`, porque as varreduras são de nível de repositório)
 - [ ] **Nota datada em `docs/domain/scheduling/shift-scheduling.md` §2**
       registrando a glosa EN `ShiftBand` para "faixas de funcionamento"
       (divergência 8 do concept §1 — pendência declarada; precedente: a
       reconciliação de `workforce.md` com o gate da 3.x)
-- [ ] ADRs `4_1_0007`–`4_1_0012` em `status: accepted` (os `0001`–`0006` já são
-      `accepted` desde o gate do Step 4)
-- [ ] `concept.md` desta Stage não precisa de retoque retrospectivo
+- [ ] `concept.md` desta Stage **re-aprovado** em `status: done` depois das duas
+      correções do Checkpoint B (§1, pré-condições) — e sem novo retoque
+      retrospectivo ao fim da execução
+
+> **Item removido nesta Fase 3B (achado 10 do Checkpoint B):** "ADRs
+> `4_1_0007`–`4_1_0012` em `status: accepted`". Os **12** ADRs desta Stage já
+> estão `accepted` (`grep '^status:' docs/adr/4_1_*.md`), o item é **pré-condição**
+> do §1 e não podia reprovar nada — e o parentético sugeria o contrário.
 
 ## 4. Ordem de dependência entre Tasks
 
 ```
-Task 01 (scaffold + identifiers + importlinter)
-   └─► Task 02 (20 exceções + raiz)
-          ├─► Task 03 (TimeRange)                 [InvalidTimeRangeError]
-          ├─► Task 04 (Weekday + DayCutoff)       [InvalidWeekdayError, InvalidDayCutoffError]
-          │      └─► Task 05 (SchedulePeriod + OperationalCalendar)
-          └─► Task 06 (DemandQuantity + Assignment)
-                 └─► Task 07 (ShiftDemand)
-                        └─► Task 08 (ShiftBand)   [+ Task 03: TimeRange]
-Task 05 + Task 08 ─► Task 09 (Schedule: construção, invariantes, 8 leituras)
-                        └─► Task 10 (9 mutações estruturais + lei da versão)
-                               └─► Task 11 (2 mutações de intervalo + no-op + fecho de reschedule)
+Task 01 (scaffold + identifiers + importlinter + 20 exceções + raiz
+         + as duas varreduras de nível de repositório)
+          ├─► Task 02 (TimeRange)                 [InvalidTimeRangeError]
+          ├─► Task 03 (Weekday + DayCutoff)       [InvalidWeekdayError, InvalidDayCutoffError]
+          │      └─► Task 04 (SchedulePeriod + OperationalCalendar)
+          └─► Task 05 (DemandQuantity + Assignment)
+                 └─► Task 06 (ShiftDemand)
+                        └─► Task 07 (ShiftBand)   [+ Task 02: TimeRange]
+Task 04 + Task 07 ─► Task 08 (Schedule: construção, invariantes, 8 leituras)
+                        └─► Task 09 (9 mutações estruturais + lei da versão)
+                               └─► Task 10 (2 mutações de intervalo + no-op + fecho de reschedule)
 ```
 
-Dependências **não óbvias**, explicitadas: a Task 08 depende da **03** (usa
+A Task 01 é a raiz da árvore e **todas** as demais dependem dela por dois
+motivos, não um: o pacote (`identifiers.py`) e a hierarquia de erro
+(`errors.py`), que o plano original separava em duas Tasks e que o Checkpoint B
+mostrou não serem separáveis em dois commits verdes.
+
+Dependências **não óbvias**, explicitadas: a Task 07 depende da **02** (usa
 `TimeRange.nominal_minutes` para o teto do intervalo da alocação e `with_bounds`
-em `rescheduled_to`) além da **07**; a Task 09 depende da **05**
-(`calendar.is_aligned(period)` no `__post_init__`) além da **08**; a Task 11
-depende da **10** porque a cláusula de no-op se aplica a `reschedule_band` e a
-`declare_workload_counting`, criadas lá. Nada antes da Task 09 importa
-`Schedule` — é o que torna viável a linha de corte 01–08 / 09–11 do concept §12,
-**não exercida** (a medição fechou em 11, dentro do teto de 12).
+em `rescheduled_to`) além da **06**; a Task 08 depende da **04**
+(`calendar.is_aligned(period)` no `__post_init__`) além da **07**; a Task 10
+depende da **09** porque a cláusula de no-op se aplica a `reschedule_band` e a
+`declare_workload_counting`, criadas lá. Nada antes da Task 08 importa
+`Schedule` — é o que torna viável a linha de corte do concept §12 (as Tasks até
+`ShiftBand` numa Stage, a raiz na seguinte), **não exercida** (a medição fechou
+dentro do teto de 12).
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
+| **Varredura de nível de repositório** reprovar no primeiro commit (o 3º BC entra em `features/` e em `bc-independence`) | é o motivo de a Task 01 ser um commit só e de ela tocar `tests/unit/test_status_map.py` e `tests/unit/features/staff/test_bc_independence.py` (§1, tabela de totalidades + divergência 9). Rodar os dois arquivos **antes** de commitar a Task 01; se a tolerância a `application.errors` ausente for além do `ModuleNotFoundError` do próprio módulo, a varredura vira vácuo — a asserção anti-vácuo (ao menos um módulo de erro por BC) é o que impede |
 | Contrato `bc-independence` acusar violação inesperada ao entrar o 3º BC (import transitivo) | investigar a cadeia com `lint-imports --verbose`; import legítimo **via `shared`** não é proibido pelo contrato `independence` — corrigir só import direto entre `features`; registrar `[deviation]` em §7 |
 | `scheduling-domain-purity` falhar por pacote externo ausente na lista `forbidden` | remover do contrato o pacote não instalado (mantendo os presentes), como previsto na 2.1/3.1; registrar `[deviation]` |
 | `check_layout.py` reclamar de feature sem `application/`/`adapters/` | garantir os `__init__.py` placeholders da Task 01 (`REQUIRED_FEATURE_DIRS`, linha 130) |
-| Varredura derivada ficar **defasada** entre commits (`make check` vermelho na Task 10/11) | a Task que cresce o conjunto atualiza a varredura **no mesmo commit** (§1, tabela de totalidades); a lista esperada vive numa constante única no topo do arquivo de teste |
+| Varredura derivada ficar **defasada** entre commits (`make check` vermelho na Task 08/09) | a Task que cresce o conjunto atualiza a varredura **no mesmo commit** (§1, tabela de totalidades); a lista esperada vive numa constante única no topo do arquivo de teste |
 | Teste fixar **precedência** entre validações coincidentes do `__post_init__` (comportamento não especificado — finding da 2.1) | um cenário inválido por teste; nunca construir um objeto que viole duas invariantes ao mesmo tempo |
 | Duplicidade provada só com par **consecutivo** (a mutação "loop restrito a pares vizinhos" sobrevive) | **toda** checagem par a par é provada com par **não consecutivo** em coleção de 3 — lição do Checkpoint C da 3.1 (`3.1-staff-domain/technical.md` §7, 2026-07-29) |
 | No-op de `reschedule_band` virar `DuplicateShiftBandError` espúrio | comparação de valor **antes** da checagem de duplicidade, e a checagem **exclui a própria faixa** (concept §5.16, §5.22); o teste afirma `resultado is original` |
 | Aritmética de horas duplicada num segundo sítio (a fórmula reescrita em `Schedule` ou em `ShiftBand`) | CA16 é **varredura** sobre o conjunto público das 4 classes; `worked_minutes_of` **delega** a `TimeRange.worked_minutes` |
 | Cobertura < 90% em `__init__.py` vazio | `__init__.py` sem statements = 100%; **não** adicionar docstring que crie linha não coberta |
-| Task 10 crescer além do saudável (9 mutações num commit) | se na execução o diff passar do que um review absorve, quebrar em 10a (`enable_band`/`reschedule_band`/`disable_band`) e 10b (demanda + alocação), registrando `[deviation]` em §7 — a lei da versão fica na 10b e a varredura cresce nos dois commits; `tasks_count` sobe para 12, ainda no teto |
+| Task 09 crescer além do saudável (9 mutações num commit) | se na execução o diff passar do que um review absorve, quebrar em 09a (`enable_band`/`reschedule_band`/`disable_band`) e 09b (demanda + alocação), registrando `[deviation]` em §7 — a lei da versão fica na 09b e a varredura cresce nos dois commits; `tasks_count` sobe para 11, ainda no teto |
 | Confundir `DuplicateAssignmentError` com `DuplicateAssignmentInBandError` na implementação (recusa certa, exceção errada) | as duas checagens vivem em **níveis distintos** (`ShiftDemand` × `ShiftBand`); o teste de CA25 afirma **qual** sai em cada caso |
 
 ## 6. Referências
