@@ -196,6 +196,9 @@ _MUTACOES: dict[str, _Mutacao] = {
     "assign": lambda e: e.assign(AssignmentId("a9"), ShiftDemandId("d2"), EmployeeId("caio")),
     "unassign": lambda e: e.unassign(AssignmentId("a1")),
     "declare_workload_counting": lambda e: e.declare_workload_counting(AssignmentId("a1"), False),
+    # Task 10: as 2 mutações de intervalo (a lei da versão passa de 9 para 11).
+    "redeclare_band_break": lambda e: e.redeclare_band_break(ShiftBandId("f1"), 30),
+    "declare_allocation_break": lambda e: e.declare_allocation_break(AssignmentId("a1"), 30),
 }
 
 
@@ -318,6 +321,27 @@ _MATRIZ_DAS_MUTACOES: tuple[tuple[str, type[SchedulingError], _Cenario], ...] = 
         "assign",
         DuplicateAssignmentInBandError,
         lambda e: e.assign(AssignmentId("a9"), ShiftDemandId("d2"), EmployeeId("ana")),
+    ),
+    # Task 10: as linhas das 2 mutações de intervalo
+    (
+        "redeclare_band_break",
+        ShiftBandNotFoundError,
+        lambda e: e.redeclare_band_break(ShiftBandId("x"), 30),
+    ),
+    (
+        "redeclare_band_break",
+        InvalidTimeRangeError,
+        lambda e: e.redeclare_band_break(ShiftBandId("f1"), 8 * 60),
+    ),
+    (
+        "declare_allocation_break",
+        AssignmentNotFoundError,
+        lambda e: e.declare_allocation_break(AssignmentId("x"), 30),
+    ),
+    (
+        "declare_allocation_break",
+        InvalidAssignmentBreakError,
+        lambda e: e.declare_allocation_break(AssignmentId("a1"), 8 * 60),
     ),
 )
 

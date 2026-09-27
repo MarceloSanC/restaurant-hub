@@ -32,6 +32,12 @@ mesmas checagens da construção, sem cópia aqui. Só as guardas que nenhuma
 invariante expressa (remoção com alocação pendente, reagendamento para outro dia)
 são checadas no próprio método.
 
+**Cláusula de no-op** (invariante 16): as quatro mutações idempotentes de valor
+— `reschedule_band` para o próprio `(start, end)`, `redeclare_band_break` para o
+próprio intervalo, `declare_workload_counting` e `declare_allocation_break` para
+o valor corrente — devolvem **`self`**, sem incrementar a versão e sem erro de
+duplicidade. A comparação vem **antes** de qualquer outra checagem.
+
 Entidade **frozen**, igualdade por **identidade**.
 """
 
@@ -46,6 +52,7 @@ from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     AssignmentNotFoundError,
     DuplicateEntityIdError,
     DuplicateShiftBandError,
+    InvalidAssignmentBreakError,
     InvalidIdentifierError,
     InvalidSchedulePeriodError,
     InvalidScheduleVersionError,
@@ -158,12 +165,35 @@ class Schedule:
         substituída, logo não colide consigo).
         """
         faixa = self.band(band_id)
+        if (start, end) == faixa.time_range.hours_key:
+            return self
         destino = self.calendar.operational_day_of(start)
         if not self.period.contains(destino):
             raise TimeRangeOutsidePeriodError()
         if destino != self.operational_day_of(faixa):
             raise ShiftBandDayChangeError()
-        return self._com_faixa(faixa.rescheduled_to(start, end))
+        try:
+            reagendada = faixa.rescheduled_to(start, end)
+        except InvalidAssignmentBreakError as exc:
+            # A causa está dois níveis acima do ato (ADR 4.1.0011): a recusa nomeia
+            # o encurtamento, e não a construção genérica da faixa.
+            raise InvalidAssignmentBreakError(
+                "o reagendamento encurta a faixa abaixo do intervalo declarado de uma alocação"
+            ) from exc
+        return self._com_faixa(reagendada)
+
+    def redeclare_band_break(self, band_id: ShiftBandId, break_minutes: int) -> "Schedule":
+        """Redeclara o intervalo da faixa — verbo próprio (ADR 4.1.0011).
+
+        Muda as horas de **todos** os alocados sem intervalo próprio. Fora de
+        `0 <= break < nominal_minutes` → `InvalidTimeRangeError`, do `TimeRange`.
+        Não recusa por causa de alocação: o teto do intervalo da alocação é a
+        duração nominal, que não muda aqui (§7, `[deviation]` da Task 07).
+        """
+        faixa = self.band(band_id)
+        if break_minutes == faixa.time_range.break_minutes:
+            return self
+        return self._com_faixa(faixa.with_band_break(break_minutes))
 
     def disable_band(self, band_id: ShiftBandId) -> "Schedule":
         """Desabilita a faixa — recusa enquanto houver alocação (§5.21).
@@ -236,7 +266,22 @@ class Schedule:
     def declare_workload_counting(self, assignment_id: AssignmentId, counts: bool) -> "Schedule":
         """Re-declara se as horas da alocação contam para a carga (ADR 4.1.0003 (d))."""
         faixa, demanda, alocacao = self.locate_assignment(assignment_id)
+        if counts == alocacao.counts_toward_workload:
+            return self
         return self._com_alocacao(faixa, demanda, alocacao.declare_workload_counting(counts))
+
+    def declare_allocation_break(
+        self, assignment_id: AssignmentId, break_minutes: int | None
+    ) -> "Schedule":
+        """Declara o intervalo próprio da alocação; `None` volta a herdar o da faixa.
+
+        Negativo → `InvalidAssignmentBreakError` (da `Assignment`); `>=` a duração
+        nominal da faixa → a mesma exceção (da `ShiftBand`, ADR 4.1.0011).
+        """
+        faixa, demanda, alocacao = self.locate_assignment(assignment_id)
+        if break_minutes == alocacao.break_minutes:
+            return self
+        return self._com_alocacao(faixa, demanda, alocacao.declare_break(break_minutes))
 
     # --- reconstrução da árvore -----------------------------------------------------
 

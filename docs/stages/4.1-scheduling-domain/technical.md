@@ -1432,4 +1432,16 @@ isso a célula `InvalidAssignmentBreakError × reschedule_band` já entra nesta 
 fecho de CA21, Task 10): o caminho existe desde que `reschedule_band` existe, com a alocação de
 intervalo declarado montada por construção direta.
 
+### 2026-09-27 — [decision] Task 10, `reason` do encurtamento em `reschedule_band` — Claude Opus 5.5 (executor)
+
+Achado 3 do Checkpoint C do bloco 2. A docstring de `InvalidAssignmentBreakError` (`errors.py`,
+Task 01) promete que o `reason` distingue "o encurtamento de faixa que invalida um intervalo já
+declarado (`reschedule_band`)", mas a recusa vinha da revalidação da `ShiftBand` com a mensagem
+genérica da construção. O ADR 4.1.0011 (Negative) pede que a exceção nomeie uma causa que está dois
+níveis acima do ato. Opções: (a) corrigir a docstring e aceitar a mensagem genérica; (b)
+`reschedule_band` captura a `InvalidAssignmentBreakError` de `ShiftBand.rescheduled_to` e relança a
+mesma exceção com o `reason` do encurtamento, encadeando a original (`from exc`). **Escolhida (b)**:
+são quatro linhas, cumprem a docstring e o ADR, e não mudam o tipo que a matriz §6 e a 4.5 mapeiam.
+`errors.py` não é tocado. O teste casa com o texto do encurtamento e confere a causa encadeada.
+
 <!-- END: post-execution -->
