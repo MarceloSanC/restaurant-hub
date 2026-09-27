@@ -1400,4 +1400,15 @@ use cases que recebem instantes de fora do domínio, convertendo para o wall-clo
 `InvalidDayCutoffError`, nomearia errado o defeito, que é do instante e não do corte. **Stage
 candidata:** 4.3 (application da escala).
 
+### 2026-09-27 — [deviation] Task 07-fix, âncora da nota sobre `redeclare_band_break` — Claude Opus 5.5 (executor)
+
+Correção da entrada `[deviation] Task 07, cláusula inatingível de with_band_break`, que fica como
+está (a §7 é registro). A última linha dela aponta "**Direção para a 4.1 (Task 09)**", mas
+`redeclare_band_break` nasce na **Task 10** (Task 10, "as 2 mutações de intervalo"). A direção vale
+para a Task 10. Achado 1 do Checkpoint C do bloco 2. No mesmo commit, o teste que substitui a
+cláusula passou a cobrir as **duas** direções (faixa desce abaixo do intervalo da alocação; faixa
+passa a excedê-lo — a direção literal da cláusula), as duas aceitas e com divergência (achado 2).
+Também no mesmo commit, `rescheduled_to` passou a ser conferido pelos atributos das alocações, não
+pela igualdade por id (achado 5).
+
 <!-- END: post-execution -->

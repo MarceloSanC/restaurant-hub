@@ -226,8 +226,17 @@ def test_rescheduled_to_preserva_intervalo_demandas_e_alocacoes() -> None:
     assert reagendada.time_range == TimeRange(
         start=novo_inicio, end=novo_fim, break_minutes=_UMA_HORA
     )
-    assert reagendada.demands == demandas
-    assert [d.assignments for d in reagendada.demands] == [d.assignments for d in demandas]
+    # Por atributo, não por `==` (que compara só ids — Checkpoint C do bloco 2,
+    # item 5): uma reconstrução que zerasse intervalo ou marcas passaria.
+    assert reagendada.demands is original.demands
+    assert [
+        (a.id, a.employee_id, a.counts_toward_workload, a.function_exception, a.break_minutes)
+        for d in reagendada.demands
+        for a in d.assignments
+    ] == [
+        (AssignmentId("a1"), EmployeeId("ana"), True, False, 30),
+        (AssignmentId("a2"), EmployeeId("bia"), True, False, None),
+    ]
     assert original.time_range == _faixa_16_00(_UMA_HORA)
 
 
@@ -262,15 +271,26 @@ def test_with_band_break_igual_ao_nominal_e_recusado_pelo_time_range() -> None:
         _banda().with_band_break(_NOMINAL)
 
 
-def test_with_band_break_nao_limita_o_intervalo_da_alocacao() -> None:
+@pytest.mark.parametrize(
+    ("faixa_antes", "faixa_depois"),
+    [
+        pytest.param(_UMA_HORA, 0, id="faixa_desce_abaixo_da_alocacao"),
+        pytest.param(0, 3 * _UMA_HORA, id="faixa_passa_a_exceder_a_alocacao"),
+    ],
+)
+def test_with_band_break_nao_limita_o_intervalo_da_alocacao(
+    faixa_antes: int, faixa_depois: int
+) -> None:
     # O teto do intervalo da alocação é a duração nominal, não o intervalo da
-    # faixa (concept §5.6): uma faixa com intervalo menor que o declarado pela
-    # alocação é válida e só diverge. Ver §7, [deviation] Task 07.
+    # faixa (concept §5.6): nas duas direções a faixa redeclarada é válida e só
+    # diverge — a segunda é a direção literal da cláusula que o [deviation] da
+    # Task 07 refuta (§7).
     alocacao = _aloc("a1", "ana", 2 * _UMA_HORA)
-    banda = _banda(_dem("d1", "cozinheiro", alocacao), break_minutes=_UMA_HORA)
-    reduzida = banda.with_band_break(0)
-    assert reduzida.effective_break_of(alocacao) == 2 * _UMA_HORA
-    assert reduzida.has_break_divergence(alocacao) is True
+    banda = _banda(_dem("d1", "cozinheiro", alocacao), break_minutes=faixa_antes)
+    redeclarada = banda.with_band_break(faixa_depois)
+    assert redeclarada.time_range.break_minutes == faixa_depois
+    assert redeclarada.effective_break_of(alocacao) == 2 * _UMA_HORA
+    assert redeclarada.has_break_divergence(alocacao) is True
 
 
 def test_with_demand_acrescenta_no_fim() -> None:
