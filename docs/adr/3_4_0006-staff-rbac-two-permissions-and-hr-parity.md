@@ -5,7 +5,7 @@ when-use: Reference before granting hr any scheduling permission in Step 4, befo
 keywords: [adr, rbac, permission, role, hr, manager, staff, scheduling, forward-constraint, identity]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-08-12
+updated_at: 2026-09-13
 adr_id: 3.4.0006
 decision: Identity gains MANAGE_STAFF and MANAGE_JOB_FUNCTIONS, both granted to owner, manager and hr; within staff hr and manager are equivalent, because the sponsor placed the hr/manager divergence on the scheduling axis (Step 4) rather than on reach — hr edits employee records including workload, shift preference and unavailability, and only manager/owner touch the schedule itself
 context_stage: 3.4-staff-access-scope
@@ -13,6 +13,8 @@ bounded_context: staff
 ---
 
 # ADR 3.4.0006 — Staff RBAC: two permissions, and hr ≡ manager inside staff
+
+> ⚠️ **Errata (2026-09-13):** §3 "Stage 4.x must not grant `hr` any permission over the schedule" is superseded in part — the sponsor granted `hr` unit-scoped **read** access on 2026-09-13 (write/publish remain manager/owner only) — ver [ADR 4.1.0004](./4_1_0004-hr-reads-schedules-in-member-units.md)
 
 ## Status
 
