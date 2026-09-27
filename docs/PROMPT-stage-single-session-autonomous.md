@@ -48,6 +48,8 @@ opcional não existe e o commit não espera revisão de diff. Em vez disso:
   **ADR** (`docs/adr/<N>_<M>_NNNN-<slug>.md`, `templates/adr.md`, `status: accepted`,
   frontmatter completo com `bounded_context` — CONVENTIONS §2) com opções, trade-offs e
   reversibilidade. Decisão trivial segue como no canônico: `[decision]` na §7.
+  Fork de lei, segurança ou convenção de lib/método passa pela skill `evidence-resolution`
+  (classe E/C, com a verificação §4 dela) antes do ADR.
 - **HALT-and-park** (pare a Stage e, como a cadeia é dependente, a corrida) **apenas** em:
   - contradição com fonte de hierarquia superior (Overview > Roadmap > Concept > Technical),
   - contrato externo **irreversível** e ambíguo (formato persistido, contrato público de API,

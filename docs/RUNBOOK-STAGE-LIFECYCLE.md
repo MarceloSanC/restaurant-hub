@@ -177,6 +177,10 @@ Não pergunte:
 - Nomes, formatos triviais ou estilo (seguem LAYOUT e convenções).
 - Detalhes de implementação (pertencem à Fase 3B/4).
 - Preferências subjetivas sem impacto no contrato da Stage.
+- O que a evidência decide ou a convenção resolve (classes E/C da
+  skill `evidence-resolution`: lei, segurança, comportamento de lib): decida,
+  registre como `[decision:E|C]` e siga. Só P (produto/negócio) é
+  pergunta.
 
 # CONDUÇÃO
 

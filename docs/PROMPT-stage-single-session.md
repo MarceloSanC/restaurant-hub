@@ -471,8 +471,11 @@ Refs #<issue>"
 
 **Quando PERGUNTAR (`AskUserQuestion`):**
 
-- Decisão material com alternativas reais, ausente nos docs.
-- Lacuna que afeta **contrato**, **fronteira** ou **critério de aceite**.
+- Decisão material com alternativas reais, ausente nos docs, que a triagem da
+  skill `evidence-resolution` classifica como **P**. Fork E/C (lei, segurança, convenção de
+  lib/método) você resolve por evidência verificada e registra; não pergunta.
+- Lacuna que afeta **contrato**, **fronteira** ou **critério de aceite** (idem: só P vira
+  pergunta; E/C irreversível passa pela verificação §4 da skill).
 - Escopo estrito violado (Task precisa tocar arquivo fora da lista).
 - Auditoria de testes revelou cobertura insuficiente **com mais de uma
   estratégia razoável**.

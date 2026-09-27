@@ -163,7 +163,10 @@ princípio vence.
    permitirem.
 7. **Bifurcação material define pergunta.** A IA pergunta se, e só se,
    precisaria escolher entre alternativas materialmente diferentes sem
-   critério no contexto.
+   critério no contexto **e** a triagem da skill `evidence-resolution` classifica a
+   escolha como **P** (preferência de produto/negócio). Fork E/C (lei,
+   segurança, convenção de lib ou método) a IA resolve por evidência
+   verificada e registra.
 8. **Contradição trava.** Se uma resposta contradiz decisão prévia
    (Overview/Roadmap/código), a IA para e aponta. Não tenta resolver
    autonomamente.
