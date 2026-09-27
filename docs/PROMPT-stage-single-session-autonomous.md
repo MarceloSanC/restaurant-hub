@@ -112,7 +112,9 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
    burlar nem se auto-aprovar.
 4. Cleanup e sync para a próxima Stage:
    ```bash
-   git checkout develop && git pull origin develop && git remote prune origin
+   docker compose down -v                   # dentro da worktree da Stage
+   python scripts/worktree-rm.py <branch>   # worktree + branch local + prune
+   git pull origin develop                  # no checkout principal (sempre em develop)
    ```
 5. **Nunca** force-push em `develop`/`main`; **nunca** reescrever história já mergeada.
 

@@ -51,14 +51,15 @@ seção correspondente. Cada uma traz três blocos:
 
 ## 🌿 `git checkout -b` (criar branch)
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Uma branch em execução por vez" (inclui §Worktrees paralelas: 2ª branch só em worktree separada via `scripts/worktree-new.py` quando escopos são disjuntos); `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
+- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Branches em execução" (até duas sem conflito, cada uma na sua worktree; criar só com `python scripts/worktree-new.py <branch> --no-vscode`, nunca `git checkout -b` no checkout principal — o hook `git_guard` recusa); `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
 - **CHECK:**
   ```bash
   git branch --show-current                        # se != develop/main, voltar
   gh pr list --head $(git branch --show-current)   # PR aberto na branch atual?
   gh issue view <num>                              # toda branch (Stage ou pós-Stage) exige issue
   ```
-- **GOTCHA:** se a branch atual não tem PR aberto, **terminá-la primeiro** (Princípio #7). PR parcial em draft é exceção e só sob pedido explícito do usuário.
+- **GOTCHA:** já há duas branches em execução, ou a nova conflita com uma que está em execução ou em review (critérios em §"Branches em execução") → **terminar uma primeiro** (Princípio #7). PR parcial em draft é exceção e só sob pedido explícito do usuário.
+- **GOTCHA (sessão no checkout principal):** o cwd do shell do agente volta ao checkout principal a cada chamada. Depois de criar a worktree, todo comando da branch usa o caminho absoluto dela (`git -C <worktree> ...`, `cd <worktree> && ...` na mesma chamada) — senão o commit cai em `develop`.
 - **GOTCHA (Stage):** branch de Stage exige issue pré-existente no GitHub (Princípio #1 + CONVENTIONS §3). Se `gh issue view <num>` falha, **não criar branch** — voltar e criar a issue primeiro (RUNBOOK-STAGE-LIFECYCLE Passo 1).
 - **GOTCHA (pós-Stage):** branch criada **depois que o PR da Stage já foi mergeado** volta ao formato **genérico** `<tipo>/<num-issue>-<slug>` — **SEM `<N-M>`**. O `<N-M>` é só durante a execução da Stage. Pós-Stage = bug/chore/doc normal, com **nova issue** (não a issue original da Stage). Ver GIT-WORKFLOW §Branches → "Revisões pós-Stage".
 
@@ -87,7 +88,7 @@ seção correspondente. Cada uma traz três blocos:
 
 ## 🚀 `gh pr create`
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Pull Requests + §Etapa 4 + §"Uma branch em execução por vez" (procedimento PR parcial)
+- **LER:** `docs/GIT-WORKFLOW.md` §Pull Requests + §Etapa 4 + §"Branches em execução" → §Quando precisar trocar de escopo no meio (PR parcial)
 - **CHECK:** Etapa 3 fechada (testes verdes, coverage ≥ 90%, lint, working tree limpo) **E** Etapa 4 fechada (`git log origin/<base>..HEAD` sem carona).
 - **GOTCHA (título):** formato obrigatório `<tipo>(<escopo>): issue #<num> — <descrição>` (branch avulsa/pós-Stage) ou `<tipo>(<escopo>): stage N.M — <descrição>` (Stage). O identificador `issue #<num> —` / `stage N.M —` é o que mais escapa — **não montar de memória nem espelhar o título da issue**. Escopo = BC, nunca a Stage. **Sem validação programática** (o hook `commit-msg` cobre só commit, não título de PR), então só o code review pega — confira CONVENTIONS §4(c) ANTES do `gh pr create`.
 - **GOTCHA:** PR parcial em draft **só sob pedido explícito do usuário**. Título prefixado `... (parcial — checkpoint)` + flag `--draft`.
@@ -126,8 +127,8 @@ seção correspondente. Cada uma traz três blocos:
 | Tag `[N.M/--]` (off-task) | `CONVENTIONS.md` §4(a) → subseção |
 | Seção §7 post-execution do technical.md | `CONVENTIONS.md` §3.4 |
 | Gates de PR | `GIT-WORKFLOW.md` §Gates de PR |
-| PR parcial em draft (procedimento) | `GIT-WORKFLOW.md` §"Uma branch em execução por vez" |
-| Worktrees paralelas (2ª branch, escopos disjuntos) | `GIT-WORKFLOW.md` §"Uma branch em execução por vez" → §Worktrees paralelas; `scripts/worktree-new.py` / `scripts/worktree-rm.py` |
+| PR parcial em draft (procedimento) | `GIT-WORKFLOW.md` §"Branches em execução" → §Quando precisar trocar de escopo no meio |
+| Worktree de toda branch (criar, banco, limpar) | `GIT-WORKFLOW.md` §"Branches em execução" → §Criar a worktree; `scripts/worktree-new.py` / `scripts/worktree-rm.py`; hook `.claude/hooks/git_guard.py` |
 | Hotfix | `GIT-WORKFLOW.md` §Hotfix |
 | Release | `GIT-WORKFLOW.md` §Release |
 | Comportamento bloqueante | `GIT-WORKFLOW.md` §Comportamento bloqueante |

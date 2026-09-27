@@ -235,9 +235,11 @@ Invocar `git-versioning-pointer` antes de qualquer operação git.
    e só então `gh issue create` — título e corpo em **PT**, escopo vindo do recorte da Stage no
    `roadmap.md`. Sem issue, a Stage **não começa** (GIT-WORKFLOW §Princípios fundamentais #1).
 2. **Branch** a partir de `develop` atualizada: `feat/<num-issue>-<N-M>-<slug>` (CONVENTIONS §4;
-   slug em **inglês**). Uma branch em execução por vez — a Stage anterior já foi mergeada (§3.5).
-   Worktree dedicada (`scripts/worktree-new.py`) **só** se o usuário pedir paralelismo; o fluxo
-   default do Step é **sequencial**, na worktree principal — e então §3.5 não tem worktree a limpar.
+   slug em **inglês**), **sempre em worktree dedicada**: `python scripts/worktree-new.py <branch>
+   --no-vscode` (GIT-WORKFLOW §"Branches em execução"; o hook `git_guard` recusa `checkout -b` no
+   checkout principal). O Step segue **sequencial** — a Stage anterior já foi mergeada (§3.5).
+   O cwd do shell volta ao checkout principal a cada chamada: todo comando da Stage usa o caminho
+   absoluto da worktree, e todo subagente despachado recebe esse caminho como raiz do trabalho.
 3. **Esqueletos** `docs/stages/<N.M>-<slug>/{concept,technical}.md` a partir de
    [`./templates/`](./templates/), com `issue_id` no frontmatter do technical — é o campo que
    `scripts/check_stage_issue.py` valida em `make docs-check`.
@@ -305,8 +307,9 @@ antes das operações git):
 
 ```bash
 gh pr merge <num> --merge --delete-branch          # merge + apaga a branch remota
-git checkout develop && git pull origin develop && git remote prune origin
-python scripts/worktree-rm.py <worktree>           # se a Stage rodou em worktree dedicada
+docker compose down -v                             # DENTRO da worktree: o worktree-rm não pega o postgres do compose
+python scripts/worktree-rm.py <branch>             # worktree + branch local + prune
+git pull origin develop                            # no checkout principal (sempre em develop)
 ```
 
 Depois: **inicia a próxima Stage** do Step (volta ao Princípio central, despachando os subagentes de

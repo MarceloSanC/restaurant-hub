@@ -32,9 +32,11 @@ Convenções respeitadas:
     - Formato `<tipo>/<num-issue>-<slug>` ou Stage
       `<tipo>/<num-issue>-<N-M>-<slug>` — CONVENTIONS.md §4.
     - Base remota: `develop` (feat/fix/refactor/...) ou `main` (hotfix).
-    - "Uma branch em execução por vez" deixa de ser bloqueio quando o
-      paralelismo acontece em **worktrees separadas** (cada worktree é
-      um checkout independente). Ver GIT-WORKFLOW.md §Worktrees paralelas.
+    - Toda branch nasce numa worktree criada por este script; até duas
+      em execução, sem conflito; o checkout principal fica livre em
+      `develop` (o hook `.claude/hooks/git_guard.py` recusa
+      `git checkout -b` e `git worktree add` nele). Ver GIT-WORKFLOW.md
+      §"Branches em execução".
 
 Exit codes:
   0  worktree criada com sucesso
