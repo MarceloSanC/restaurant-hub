@@ -7,7 +7,7 @@ propósito enquanto eram dois fluxos. Com `ProvisionAccountUseCase` (que
 — e quatro cópias de um formato que o front-end consome é o cenário em que uma
 diverge sem que nenhum teste note. Este módulo tem um `_` no nome porque é
 detalhe interno da camada, não um use case — não entra no wiring e não tem
-`execute`; a mesma convenção do `_results.py` de staff (Task 03 desta Stage).
+`execute`.
 
 O helper não decide nada: não emite token, não escolhe TTL, não envia. Só
 concatena — por isso não recebe port nenhum e não tem estado. A **byte-identidade**
