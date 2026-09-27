@@ -34,9 +34,9 @@ The ratified sources pulled in two directions:
 - `overview.md` §3 (line 43) fixes **"salvar = publicar"**, and the glossary (line 136) defines
   *publicar* as "salvar a escala tornando-a visível". Overview outranks roadmap.
 - `roadmap.md` describes the editor flow as "editar → avaliar → aceitar violações warn → publicar"
-  (Stages 4.3/4.5, lines 1304, 1371), and Stage 5.2 (line 1465) says the auto-fill "grava
+  (Stages 4.3/4.5, lines 1305, 1372), and Stage 5.2 (line 1466) says the auto-fill "grava
   alocações como **rascunho de edição**", with the non-goal "aplicar+publicar num passo só"
-  (line 1482). Those phrases presuppose a working copy that is not yet visible.
+  (line 1483). Those phrases presuppose a working copy that is not yet visible.
 
 The triage's recommended option was a **draft + explicit publish with numbered immutable
 versions** (the version would serve audit, "affected employees" diffs for e-mail, the printed
@@ -45,7 +45,7 @@ to the sponsor with three options.
 
 For concurrency, the staff precedent is **"last write wins"**
 ([ADR 3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md) lines 91–98),
-and the roadmap records optimistic concurrency as "aberto, sem Stage candidata" (lines 816–820).
+and the roadmap records optimistic concurrency as "aberto, sem Stage candidata" (lines 817–821).
 The schedule is the first aggregate with dozens of mutations per session and more than one
 legitimate editor (owner and manager), so the precedent could not simply be inherited.
 
@@ -66,7 +66,7 @@ Sponsor, verbatim: *"toda alteracao salva é a escala vigente, simple e direto"*
   evaluate live, then save **with** the acknowledgement of the warnings the change introduces.
 - **"Version" is not an immutable snapshot.** The history of the schedule is the **audit log**
   that Stage 4.4 creates ("histórico de edições — quem alterou o quê e quando", `roadmap.md`
-  1330, 1347). The only "version" that exists is the concurrency counter of §2.
+  1331, 1348). The only "version" that exists is the concurrency counter of §2.
 - `overview.md` "salvar = publicar" stays **literal** — no reconciliation note is needed there.
 
 ### 2. Concurrency: optimistic check on the schedule version, reload-or-cancel (F8)
@@ -136,7 +136,7 @@ the fork into four Stage concepts.
 ### Positive
 - One state to understand: what is saved is what everybody sees. Matches the overview literally.
 - The live schedule is never invalid (`block` refuses the mutation); the Step 5 rule "proposal is
-  born without block violations" (`roadmap.md` 1453) reuses the same semantics.
+  born without block violations" (`roadmap.md` 1454) reuses the same semantics.
 - No silent overwrite between editors; the fix is one column, one check and one refusal status.
 
 ### Negative
@@ -174,8 +174,8 @@ the fork into four Stage concepts.
   (block/warn policy set).
 - [`overview.md`](../overview.md) — §3 line 42 ("o editor corrige ou aceita conscientemente"),
   line 43 ("salvar = publicar"), line 38 (audit trail); §9 line 136 (*publicar*).
-- [`roadmap.md`](../roadmap.md) — Stage 4.3 (1304), 4.4 (1330, 1347), 4.5 (1371); Stage 5.2
-  (1465, 1482); Step 5 (1453); optimistic control gap (816–820).
+- [`roadmap.md`](../roadmap.md) — Stage 4.3 (1305), 4.4 (1331, 1348), 4.5 (1372); Stage 5.2
+  (1466, 1483); Step 5 (1454); optimistic control gap (817–821).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.5,
   §3.8, §3.10.3, §6.
 - `src/restaurant_hub/shared/application/ports/out/clock.py` line 17 (absolute "when").

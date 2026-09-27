@@ -47,7 +47,7 @@ The forces:
   operational day still collides correctly with bands that start there — the
   overlap policy sees instants, not day labels.
 - The period invariant "toda alocação está **dentro do período** da escala"
-  (`roadmap.md` 1252, the same line the domain doc cites —
+  (`roadmap.md` 1253, the same line the domain doc cites —
   `shift-scheduling.md` 171) has to be given a precise meaning once a band can end
   after the period's last operational day.
 
@@ -162,7 +162,7 @@ The forces:
   (`block` reserved for physical impossibility; daily cap default 10h).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
   §3.2 (gap (b), line 224), §3.6.1, §3.6.3, §3.6.10, §6 (line 1086).
-- [`roadmap.md`](../roadmap.md) 1252 ("alocação dentro do período").
+- [`roadmap.md`](../roadmap.md) 1253 ("alocação dentro do período").
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)
   §5.5, §5.8, §5.9, §7.
 - External (primary, already verified in the domain gate): BRASIL. **Decreto-Lei
