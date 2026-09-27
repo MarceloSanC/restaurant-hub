@@ -5,8 +5,10 @@
 "desalinhado" de CA8; `is_aligned` nos dois sentidos).
 """
 
+import ast
+import dataclasses
 import inspect
-import re
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
@@ -210,41 +212,102 @@ def test_calendario_compara_por_valor() -> None:
     )
 
 
-def test_campos_do_calendario_nao_tem_default() -> None:
-    # Default de campo viraria regra silenciosa (concept §7): construir sem os
-    # dois campos tem de falhar.
-    with pytest.raises(TypeError):
-        OperationalCalendar()  # type: ignore[call-arg]
-    with pytest.raises(TypeError):
-        DayCutoff()  # type: ignore[call-arg]
+@pytest.mark.parametrize("classe", [OperationalCalendar, DayCutoff])
+def test_campos_do_calendario_nao_tem_default(classe: type) -> None:
+    # Default de campo viraria regra silenciosa (concept §7). Por introspecção,
+    # campo a campo (Checkpoint C, I3): construir sem argumentos só provaria que
+    # UM campo é obrigatório, e `field(default_factory=...)` num só deles passava.
+    for campo in dataclasses.fields(classe):
+        assert campo.default is dataclasses.MISSING, campo.name
+        assert campo.default_factory is dataclasses.MISSING, campo.name
 
 
-# O comando literal de CA7 (concept §11), traduzido para varredura permanente:
-# `rg -n --glob 'src/restaurant_hub/features/scheduling/**/*.py'
-#    -e 'time\(\s*5\s*,\s*0' -e '"05:00"' -e 'Weekday\.MONDAY'`
-_PADROES_DOS_DEFAULTS = (r"time\(\s*5\s*,\s*0", r'"05:00"', r"Weekday\.MONDAY")
+# O gate de CA7 (concept §11) como varredura permanente sobre o **código** do BC.
+# O comando literal é um `rg` por texto; aqui a leitura é por AST (Checkpoint C,
+# M2/M3): docstrings e comentários ficam fora por construção (o escopo de CA7 os
+# exclui), e `time(5)`, `time(5, 0)` e `time(hour=5)` são o mesmo nó. O padrão
+# `"05:00"` do comando literal não tem forma de código no BC e saiu da varredura.
 
 
-def _ocorrencias_dos_defaults_no_bc() -> set[tuple[Path, int]]:
+def _hora_e_minuto_literais(chamada: ast.Call) -> tuple[object, object]:
+    posicionais = [arg.value if isinstance(arg, ast.Constant) else None for arg in chamada.args]
+    nomeados = {
+        kw.arg: kw.value.value if isinstance(kw.value, ast.Constant) else None
+        for kw in chamada.keywords
+    }
+    hora = posicionais[0] if posicionais else nomeados.get("hour")
+    minuto = posicionais[1] if len(posicionais) > 1 else nomeados.get("minute", 0)
+    return hora, minuto
+
+
+def _e_corte_das_cinco(no: ast.AST) -> bool:
+    if not isinstance(no, ast.Call):
+        return False
+    alvo = no.func
+    nome = alvo.id if isinstance(alvo, ast.Name) else getattr(alvo, "attr", None)
+    return nome == "time" and _hora_e_minuto_literais(no) == (5, 0)
+
+
+def _e_segunda_feira(no: ast.AST) -> bool:
+    return (
+        isinstance(no, ast.Attribute)
+        and no.attr == "MONDAY"
+        and isinstance(no.value, ast.Name)
+        and no.value.id == "Weekday"
+    )
+
+
+_DETECTORES_DOS_DEFAULTS = {"time(5, 0)": _e_corte_das_cinco, "Weekday.MONDAY": _e_segunda_feira}
+
+
+def _ocorrencias_no_bc(detector: Callable[[ast.AST], bool]) -> set[tuple[Path, int]]:
     raiz = Path(next(iter(scheduling.__path__)))
-    padrao = re.compile("|".join(_PADROES_DOS_DEFAULTS))
     return {
-        (arquivo.resolve(), numero)
+        (arquivo.resolve(), no.lineno)
         for arquivo in raiz.rglob("*.py")
-        for numero, linha in enumerate(arquivo.read_text(encoding="utf-8").splitlines(), 1)
-        if padrao.search(linha)
+        for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8")))
+        if detector(no) and hasattr(no, "lineno")
     }
 
 
-def test_defaults_aparecem_so_em_operational_calendar_default() -> None:
+@pytest.mark.parametrize("padrao", list(_DETECTORES_DOS_DEFAULTS))
+def test_defaults_aparecem_so_em_operational_calendar_default(padrao: str) -> None:
     linhas, inicio = inspect.getsourcelines(OperationalCalendar.default)
     arquivo = Path(inspect.getfile(operational_calendar)).resolve()
     linhas_do_default = {(arquivo, inicio + i) for i in range(len(linhas))}
-    ocorrencias = _ocorrencias_dos_defaults_no_bc()
-    # Anti-vácuo: a varredura acha o próprio default; sem isto um padrão quebrado
-    # passaria com zero ocorrências.
-    assert ocorrencias
-    assert ocorrencias <= linhas_do_default
+    ocorrencias = _ocorrencias_no_bc(_DETECTORES_DOS_DEFAULTS[padrao])
+    # Anti-vácuo POR PADRÃO (Checkpoint C, M2): cada detector tem de achar o
+    # próprio default; um detector quebrado não se esconde atrás do outro.
+    assert ocorrencias, padrao
+    assert ocorrencias <= linhas_do_default, padrao
+
+
+@pytest.mark.parametrize(
+    "trecho",
+    [
+        "x = time(5, 0)",
+        "x = time(5)",
+        "x = time(hour=5)",
+        "x = datetime.time(5, 0)",
+        "x = Weekday.MONDAY",
+    ],
+)
+def test_os_detectores_reconhecem_as_formas_equivalentes(trecho: str) -> None:
+    arvore = ast.parse(trecho)
+    assert any(
+        detector(no) for detector in _DETECTORES_DOS_DEFAULTS.values() for no in ast.walk(arvore)
+    )
+
+
+@pytest.mark.parametrize(
+    "trecho",
+    ['"""Segunda e Weekday.MONDAY com time(5, 0)."""', "x = time(5, 30)", "x = Weekday.SUNDAY"],
+)
+def test_os_detectores_ignoram_docstring_e_outros_valores(trecho: str) -> None:
+    arvore = ast.parse(trecho)
+    assert not any(
+        detector(no) for detector in _DETECTORES_DOS_DEFAULTS.values() for no in ast.walk(arvore)
+    )
 
 
 # --- operational_day_of delega ao corte ----------------------------------------------
@@ -279,6 +342,14 @@ def test_period_starting_on_repassa_a_contagem() -> None:
 def test_period_starting_on_fora_do_week_start_e_recusado(deslocamento: int) -> None:
     with pytest.raises(InvalidSchedulePeriodError, match="desalinhado"):
         OperationalCalendar.default().period_starting_on(_SEGUNDA + timedelta(days=deslocamento))
+
+
+@pytest.mark.parametrize("days", [1, 31])
+def test_period_starting_on_recusa_desalinhado_com_qualquer_contagem(days: int) -> None:
+    # Checkpoint C, M1: a recusa não pode depender de days == 7.
+    terca = _SEGUNDA + timedelta(days=1)
+    with pytest.raises(InvalidSchedulePeriodError, match="desalinhado"):
+        OperationalCalendar.default().period_starting_on(terca, days=days)
 
 
 def test_period_starting_on_respeita_week_start_configurado() -> None:
