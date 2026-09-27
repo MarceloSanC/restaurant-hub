@@ -1444,4 +1444,22 @@ mesma exceção com o `reason` do encurtamento, encadeando a original (`from exc
 são quatro linhas, cumprem a docstring e o ADR, e não mudam o tipo que a matriz §6 e a 4.5 mapeiam.
 `errors.py` não é tocado. O teste casa com o texto do encurtamento e confere a causa encadeada.
 
+### 2026-09-27 — [decision] fechamento documental — Claude Opus 5.5 (fechamento)
+
+O que foi reconciliado e onde. (a) `shift-scheduling.md`: uma nota datada de reconciliação no §6,
+depois da tabela de lacunas, com um item por seção — §2 (glosa `ShiftBand`, divergência 8 do concept
+§1), §3.1/§3.2 (lacunas fechadas pelos ADRs 4.1.0007–0009), §3.2/§3.6.10 (intervalo em dois níveis,
+Q3) e §3.6.1/§3.4 (a mesma faixa duas vezes vira invariante e estreita o texto `accepted`, Q4); Q1 e
+Q2 não geram nota, porque o doc não fala de desabilitar nem de mover faixa. (b) `roadmap.md`: 4.1
+`done` na tabela de Stages, `updated_at`/`last_reviewed_at` em 2026-09-27. **Decisão:** as notas vão
+para pontos que não deslocam linha citada. Opções: (1) nota dentro de cada seção do doc e dentro do
+bloco 4.1 do roadmap, como os fechamentos anteriores; (2) nota do doc no §6, depois da última linha
+citada (1088), e sem nota no roadmap até a sessão mestra rodar o remapeador. **Escolhida (2):** medido
+contra `2a60359`, (1) deslocaria as 115 linhas do doc citadas pelo concept e pelos ADRs 4.1.x (que o
+fechamento não pode editar) e 317 linhas citadas do roadmap (a partir da 1276). Com (2), zero
+deslocamentos nos dois arquivos. Pelo mesmo motivo, `references:` do doc não recebe os ADRs 4.1.0007–0012
+(seis linhas no frontmatter; precedente: a nota da 3.5 em `workforce.md` também não os acrescentou).
+**Pendente para a sessão mestra:** a nota do bloco 4.1 do roadmap (nove divergências, ADRs, Q1–Q5,
+findings com Stage candidata), pronta para inserir depois do bloco YAML da 4.1, seguida do remapeamento.
+
 <!-- END: post-execution -->
