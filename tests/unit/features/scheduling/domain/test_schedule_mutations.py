@@ -407,14 +407,22 @@ def _celulas_da_secao_6() -> set[tuple[str, str]]:
     return celulas
 
 
-def test_a_matriz_cobre_toda_celula_da_secao_6_do_concept() -> None:
+# Quantas células (método da raiz x exceção) a §6 nomeia hoje. É o piso exato da
+# leitura da tabela: se o parser deixar de ver uma linha, a contagem cai e reprova.
+_CELULAS_DA_SECAO_6 = 33
+
+
+def test_a_matriz_e_a_secao_6_do_concept_coincidem() -> None:
+    # Nos dois sentidos (Checkpoint C do bloco 3, item 1): toda célula que a §6
+    # nomeia é produzida por um cenário da matriz, e toda célula produzida está
+    # na §6. Apagar uma linha da matriz ou da tabela reprova.
     celulas = _celulas_da_secao_6()
-    # Anti-vácuo: a leitura da tabela tem de achar células (a §6 nomeia 17 hoje).
-    assert len(celulas) >= 10  # noqa: PLR2004
-    cobertas = {(m, x.__name__) for m, x, _ in _MATRIZ_DAS_MUTACOES} | {
+    assert len(celulas) == _CELULAS_DA_SECAO_6
+    produzidas = {(m, x.__name__) for m, x, _ in _MATRIZ_DAS_MUTACOES} | {
         (m, x.__name__) for m, x in _MATRIZ_DAS_LEITURAS
     }
-    assert celulas <= cobertas, sorted(celulas - cobertas)
+    assert celulas <= produzidas, sorted(celulas - produzidas)
+    assert produzidas <= celulas, sorted(produzidas - celulas)
 
 
 def test_a_matriz_so_usa_excecoes_do_bc() -> None:
