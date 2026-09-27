@@ -1462,4 +1462,27 @@ deslocamentos nos dois arquivos. Pelo mesmo motivo, `references:` do doc não re
 **Pendente para a sessão mestra:** a nota do bloco 4.1 do roadmap (nove divergências, ADRs, Q1–Q5,
 findings com Stage candidata), pronta para inserir depois do bloco YAML da 4.1, seguida do remapeamento.
 
+### 2026-09-27 — [deviation] citações de linha defasadas pelo rebase — sessão mestra (Claude Opus 5.5)
+
+O rebase sobre a 3.5 mudou arquivos que este technical cita por linha (§1–§6, que estão congelados
+depois da aprovação). Os números abaixo valem para o estado atual; o texto citado é o mesmo,
+conferido por conteúdo com um verificador que atribui cada número ao arquivo citado antes dele
+(pré-rebase `34c506e` × hoje):
+
+| Arquivo citado | Antes (§1–§6) | Hoje | Conteúdo |
+|---|---|---|---|
+| `.importlinter` | 223 | 271 | início do comentário da Stage 4.1 no contrato `bc-independence` |
+| `.importlinter` | 228 | 277 | `restaurant_hub.features.staff` (fim da lista de módulos do contrato) |
+| `src/restaurant_hub/features/staff/domain/entities/employee.py` | 93 | 111 | (mesmo trecho; a 3.5 acrescentou `user_id` acima) |
+| `src/restaurant_hub/features/staff/domain/entities/employee.py` | 98 | 116 | (idem) |
+| `tests/unit/test_status_map.py` | 96 | 108 | (mesmo trecho; a Task 01 acrescentou a tolerância a sufixo ausente) |
+| `tests/unit/test_status_map.py` | 113 | 125 | (idem) |
+| `docs/overview.md` | 110 | 111 | a 3.5 acrescentou uma linha acima |
+
+O doc de domínio, os ADRs 4.1.0001–0012 e o concept receberam o mesmo remapeamento nos próprios
+arquivos (commit desta data): 505 citações conferidas no doc de domínio (39 que três passadas
+anteriores de remap, ancoradas em `roadmap.md`, não alcançaram — o doc também escreve só
+"roadmap" — e as ~100 que o merge da 3.5 deslocou em `overview.md`, `.importlinter` e
+`employee.py`) e 309 nos ADRs e no concept.
+
 <!-- END: post-execution -->
