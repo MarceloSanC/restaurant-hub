@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-09-13
-last_reviewed_at: 2026-09-13
+updated_at: 2026-09-26
+last_reviewed_at: 2026-09-26
 ---
 
 # Roadmap — restaurant-hub
@@ -165,6 +165,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#49](https://github.com/MarceloSanC/restaurant-hub/issues/49) | Consumir o `AccessGuard` na camada application, não só na borda HTTP | staff | application | open | #43 |
+| [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | done | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -1177,6 +1178,29 @@ skills_hint: [hex-arch-python, composition-root]
 - **Resultado de negócio:** gerente configura faixas por dia e demanda por função, aloca pessoas com validação ao vivo (bloquear/avisar configurável), salva=publica com auditoria; funcionário logado vê a própria escala; e-mail opcional a cada publicação; imagem/tabela gerada sob demanda; escalas anteriores viram referência fácil. **Aposenta a planilha.**
 - **Depende de:** Step 3.
 - **Tamanho estimado:** M–L (7 Stages; cada uma ≤ M)
+
+> **Nota (2026-09-14, revista em 2026-09-26): gate de domínio do Step 4 cumprido (issue #52).**
+> `docs/domain/scheduling/shift-scheduling.md` está `accepted` (ratificado pelo sponsor) com os
+> ADRs 4.1.0001–4.1.0006. Os concepts 4.x consomem sem re-derivar: **salvar = publicar literal**
+> (sem rascunho no servidor; `block` recusa a mutação; concorrência otimista por versão — 4.1.0001);
+> **semana com dia de início configurável + dia operacional com corte configurável (default 05:00)**
+> e **horas = duração − intervalo declarado na faixa** (4.1.0002); **8 políticas v1** — as quatro do
+> bloco 4.2 (com o teto contado em dia e em semana; sobreposição em `block`) mais alocação ×
+> indisponibilidade (`block` fixo), função não detida (`warn` com exceção de função na alocação)
+> e sobre-cobertura da demanda (`warn`; `N` é alvo, não teto), defaults trabalhistas ancorados em fonte
+> primária e configuráveis por restaurante (4.1.0003); **`hr` lê a escala** nas suas unidades
+> (4.1.0004 — errata no ADR 3.4.0006 §3); **`Unit.timezone` em identity**, lido por port (4.1.0005);
+> **desligamento reconciliado na leitura** — sem evento, sem FK, inativo omitido de toda tela até a
+> página de histórico; guarda de remoção definitiva por port de consulta reverso (4.1.0006 —
+> erratas nos ADRs 3.2.0006 e 3.4.0002). **Lacunas de escopo deste roadmap** (doc §6): (a) em que
+> Stage entra a coluna `Unit.timezone` — 4.4 ou issue avulsa de identity antes da 4.3; (b) dono do
+> mapa período nomeado → faixas (`workforce.md` §3.5 delega ao Step 4; nenhum bloco 4.x o lista) —
+> proposta: 5.1, primeiro consumidor; (c) o bloco 5.2 fala em "rascunho de edição" e tem o
+> non-goal "aplicar+publicar num passo só", em tensão com salvar = publicar — reavaliar no gate do
+> Step 5; (d) o bloco 4.2 lista quatro políticas e `arquivos_a_criar` correspondentes — o concept
+> da 4.2 declara a divergência (oito políticas; teto diário e semanal podem ser uma ou duas). O
+> `depends_on: 3.5-employee-login-link` da 4.1 é ordenação, não dependência técnica (a 4.1 consome
+> só ids de staff) — ajuste no kickoff da 4.1.
 
 #### Stage 4.1 — `4.1-scheduling-domain`
 

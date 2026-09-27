@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (
 keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao]
 status: accepted
 created_at: 2026-07-23
-updated_at: 2026-08-09
+updated_at: 2026-09-14
 bounded_context: staff
 subdomain: workforce
 references:
@@ -127,6 +127,16 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
   cadastro de quem saiu não é o mesmo ato que recontratá-lo, e o sistema não obriga um para
   conseguir o outro. A reativação é **explícita** e só acontece pela transição de recontratação.
 
+> **Nota (2026-09-14) — gate do Step 4:** o registro **desligado some de todas as telas de escala**
+> (escala vigente, calendário, "minha escala", escalas anteriores, imagem, e-mail) — inclusive as
+> suas alocações passadas. Nada é escrito em scheduling no desligamento: staff só marca o estado, e
+> toda leitura de scheduling **reconcilia na leitura** consultando o estado atual do registro. O
+> histórico continua no banco ("o histórico sobrevive" vale para os dados) e volta a ser visível
+> com a **página de histórico de funcionários** (evolução prevista). A guarda de remoção definitiva
+> é mantida por um port de consulta reverso, sem foreign key entre BCs. Decisão do sponsor —
+> [ADR 4.1.0006](../../adr/4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md);
+> teoria em `docs/domain/scheduling/shift-scheduling.md` §3.4.
+
 **Invariantes:**
 - Todo registro está em exatamente um dos dois estados; nasce **ativo**.
 - Nenhuma operação de edição do registro altera o estado — só as duas transições o alteram.
@@ -201,6 +211,14 @@ operação. Overview §3, §9.
 - A atuação de quem é sob demanda classifica-se **apenas** como **"conta ou não para a carga
   contratada"** — uma classificação, **sem valor monetário** (fora da v1; ver §5). Kickoff #11;
   overview §3 "Fora do escopo". Decisão já resolvida no kickoff — este doc a honra, não a reabre.
+
+> **Nota (2026-09-13) — gate do Step 4:** a classificação "conta ou não para a carga contratada"
+> é atributo da **alocação** (Step 4), declarada pelo editor, com default "conta" — não da
+> atuação do sob demanda em si. Ela existe na alocação de qualquer perfil, mas só a política de
+> carga do **jornada fixa** a lê; o sob demanda **não tem carga** (invariante abaixo), logo para
+> ele a marca não tem efeito de validação. Decisão do sponsor —
+> [ADR 4.1.0003](../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md) (d);
+> teoria em `docs/domain/scheduling/shift-scheduling.md` §3.4.
 
 **Invariantes:**
 - Perfil de jornada é exclusivo: fixa **ou** sob demanda, nunca ambos, nunca nenhum.
@@ -344,7 +362,7 @@ Quem faz o quê no staff (papéis de **acesso** de identity aplicados a este sub
 |---|---|
 | **dono (owner)** | Gerencia a equipe; visibilidade **bypassa** memberships (enxerga todas as unidades do tenant). ADR 2.1.0001 (eixo B); kickoff #9. |
 | **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). Roadmap 3.4 (RBAC "gerente/RH/dono da unidade"). |
-| **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **é NO STAFF que hr diverge do manager** — visibilidade e permissões de equipe são o único eixo de divergência. Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com o mesmo `MANAGE_USERS` em identity). |
+| **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **é NO STAFF que hr diverge do manager** — visibilidade e permissões de equipe são o único eixo de divergência. Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com o mesmo `MANAGE_USERS` em identity). *(Nota 2026-09-13: a divergência real é na **escala**, não no staff — dentro do staff hr ≡ manager ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)); na escala, hr **lê** nas unidades de que é membro e não gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md)).)* |
 | **funcionário (employee)** | Papel fixo, tenant-scoped, com **permissões vazias** — na v1 **não enxerga nada de staff**; o único caso de uso futuro é consultar a própria escala (Step 4, fora deste subdomínio — roadmap 3.5 `non_goals`). Âncoras das permissões vazias: `Role.EMPLOYEE: frozenset()` em `src/restaurant_hub/features/identity/domain/value_objects/role.py` (Stage 2.1, merged); mapeamento bronze do kickoff ("hoje só consulta"). |
 | **admin de plataforma** | Fora do tenant; bypass de visibilidade é da fundação (ADR 2.1.0001), sem particularidade de staff. |
 

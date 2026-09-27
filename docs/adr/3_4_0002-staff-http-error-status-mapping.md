@@ -5,7 +5,7 @@ when-use: Reference when adding an error to the staff hierarchy, when a staff er
 keywords: [adr, http, error-handling, status-code, fastapi, mro, totality, staff]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-08-18
+updated_at: 2026-09-14
 adr_id: 3.4.0002
 decision: Register one FastAPI exception handler on StaffError that resolves status by walking the exception MRO against an explicit total map, guarded by a test enumerating every concrete subclass; UnavailabilityNotFoundError stays 422 because it names a value inside the aggregate, and the 409 band is reserved for conflicts with already-stored identity or references
 context_stage: 3.4-staff-access-scope
@@ -13,6 +13,8 @@ bounded_context: staff
 ---
 
 # ADR 3.4.0002 — Staff HTTP error status mapping
+
+> ⚠️ **Errata (2026-09-14):** §Decision 5 — "`EmployeeInUseError` has no producer in v1 (Step 4 introduces it via the 3.3 foreign key)" is superseded in its mechanism: there is no foreign key between bounded contexts; Step 4 produces the error through a **reverse query port** declared in staff and implemented outside staff over a scheduling query (the 409 mapping itself is unchanged) — ver [ADR 4.1.0006](./4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md)
 
 ## Status
 
