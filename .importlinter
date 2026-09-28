@@ -216,6 +216,38 @@ forbidden_modules =
     argon2
     jwt
 
+# Ativado na Stage 4.1 (1º código do BC scheduling). Espelha para
+# features.scheduling.domain o contrato de pureza de staff-domain-purity
+# (LAYOUT §3 Domain). NÃO proíbe restaurant_hub.features (auto-proibiria imports
+# internos de scheduling) nem restaurant_hub.shared.domain (dependência
+# legítima: SchedulingError herda de DomainError).
+#
+# NÃO há contrato de pureza para scheduling.application: a camada é placeholder
+# vazio (REQUIRED_FEATURE_DIRS do check_layout.py) e o contrato nasce na 4.3, com
+# o primeiro use case — precedente da 3.1, que só ativou os movimentos que já
+# tinham consumidor.
+[importlinter:contract:scheduling-domain-purity]
+name = features.scheduling.domain nao importa camadas externas nem frameworks (LAYOUT §3 Domain)
+type = forbidden
+source_modules =
+    restaurant_hub.features.scheduling.domain
+forbidden_modules =
+    restaurant_hub.features.scheduling.application
+    restaurant_hub.features.scheduling.adapters
+    restaurant_hub.shared.application
+    restaurant_hub.shared.infrastructure
+    fastapi
+    starlette
+    uvicorn
+    sqlalchemy
+    alembic
+    psycopg
+    pydantic
+    pydantic_settings
+    httpx
+    argon2
+    jwt
+
 # Ativado na Stage 3.1, quando o 2º BC (staff) passou a existir — contrato de
 # independência entre bounded contexts planejado no cabeçalho deste arquivo
 # desde a 1.1. BCs se comunicam por ports (identificadores atravessam a
@@ -230,11 +262,18 @@ forbidden_modules =
 # importar a fachada, a supressão vira erro em vez de lixo silencioso.
 # `tests/unit/features/staff/test_bc_independence.py` assere a lista EXATA, para
 # que um segundo par entre por decisão, nunca por deriva.
+#
+# Stage 4.1: entra o 3º BC (scheduling). `type = independence` é par a par entre
+# TODOS os módulos listados, logo os três pares passam a ser cobrados de uma vez
+# — e um BC **fora** da lista não violaria nada, que é por que
+# tests/unit/features/staff/test_bc_independence.py cobra esta lista contra a
+# pasta features/ desde a 4.1.
 [importlinter:contract:bc-independence]
-name = bounded contexts identity e staff sao independentes (LAYOUT §1)
+name = bounded contexts identity, scheduling e staff sao independentes (LAYOUT §1)
 type = independence
 modules =
     restaurant_hub.features.identity
+    restaurant_hub.features.scheduling
     restaurant_hub.features.staff
 ignore_imports =
     restaurant_hub.features.staff.adapters.out.identity.* -> restaurant_hub.features.identity.application.facade

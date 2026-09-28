@@ -74,7 +74,7 @@ graph LR
   end
   S12 --> S21
   S25 --> S31
-  S35 --> S41
+  S31 --> S41
   S47 --> S51
   S45 --> S61
   S12 --> S71
@@ -90,7 +90,7 @@ graph LR
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.5 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.5 |
-| 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | not_started | 4.1 → 4.7 |
+| 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
 | 6 | Implantação piloto | Sistema no ar para o restaurante piloto usar no dia a dia | not_started | 6.1 → 6.3 |
 | 7 | Ponto (Control iD) | Previsto × realizado visível sem conferência manual | not_started | 7.1 → 7.4 |
@@ -120,7 +120,7 @@ graph LR
 | `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
-| `4.1-scheduling-domain` | Domínio da escala | domain | draft | `3.5-employee-login-link` |
+| `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | draft | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
 | `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
@@ -1247,6 +1247,12 @@ skills_hint: [hex-arch-python, composition-root]
 
 #### Stage 4.1 — `4.1-scheduling-domain`
 
+> **Nota (2026-09-26): `depends_on` corrigido de `3.5-employee-login-link` para
+> `3.1-staff-domain`** (tabela de Stages e grafo). A relação com a 3.5 era **ordenação**, não
+> dependência técnica: a 4.1 consome apenas `EmployeeId`/`JobFunctionId` da 3.1 (por id, sem
+> import de entidade) e nada que a 3.5 introduz. A nota do Step 4 já registrava o ajuste como
+> pendente do kickoff (issue #55).
+
 **Descrição humana:** modelar Escala (período configurável, default semanal), Faixa/Turno por dia, Demanda por função×faixa, Alocação de funcionário e o evento de publicação (salvar=publicar, com registro de quem/quando); invariantes estruturais (demanda ≥ 0, alocação dentro do período etc.).
 
 ```yaml
@@ -1270,6 +1276,39 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python]
 ```
+
+> **Nota (2026-09-27): reconciliação pós-execução da Stage 4.1** (issue #55; concept e technical em
+> `docs/stages/4.1-scheduling-domain/`; ADRs 4.1.0007–4.1.0012). O bloco acima foi escrito antes do
+> kickoff e fica como registro; as nove divergências estão declaradas no concept §1:
+>
+> - **Arquivos.** `arquivos_a_modificar` deixou de ser `[]`: `.importlinter` ganhou o contrato
+>   `scheduling-domain-purity` e `scheduling` entrou em `bc-independence`. `arquivos_a_criar`
+>   cresceu com os placeholders `application/` e `adapters/`, `identifiers.py`,
+>   `operational_calendar.py` e `entities/shift_band.py`. Dois testes de nível de repositório
+>   (`test_status_map.py`, `staff/test_bc_independence.py`) entraram no file-scope porque o
+>   terceiro BC os reprovava.
+> - **Modelo.** Quatro entidades, não três: a faixa habilitada é `ShiftBand`, glosa EN nova de
+>   "faixas de funcionamento" (ADR 4.1.0010; nota em `shift-scheduling.md` §6). **Não há evento de
+>   publicação** — superado pelo ADR 4.1.0001 §1; do F1/F8 sobra no domínio o contador de versão,
+>   e o DoD lê-se "montagem da escala com invariantes cobertas por testes unitários".
+> - **Contratos.** Introduzidos crescem: 8 ids próprios, `Weekday`/`DayCutoff`/`OperationalCalendar`,
+>   `DemandQuantity`, `ShiftBand`, as marcas de `Assignment`, a versão, `SchedulingError` + 20
+>   subclasses e 11 mutações na raiz. Consumido é só `DomainError` de `shared/`: scheduling tipa os
+>   seus `EmployeeId`/`JobFunctionId`, sem import de staff. `depends_on` = `3.1-staff-domain`
+>   (nota acima).
+> - **ADRs da Stage.** 4.1.0007 (`TimeRange` de instantes ingênuos de minuto inteiro; sítio único de
+>   horas), 4.1.0008 (faixa além do corte é do dia em que começa), 4.1.0009 (`Schedule` raiz
+>   única), 4.1.0010 (faixa habilitada; demanda única por (faixa, função)), 4.1.0011 (intervalo na
+>   faixa e na alocação; errata no 4.1.0002), 4.1.0012 (uma vaga por registro em cada faixa).
+> - **Decisões do sponsor** (concept §13). Q1: desabilitar faixa ou retirar demanda com gente
+>   alocada **recusa**, sem cascata. Q2: `reschedule_band` **preserva** demandas e alocações, no
+>   mesmo dia operacional. Q3: intervalo **na faixa e na alocação**, divergência derivada. Q4: o
+>   mesmo registro **não** ocupa duas vagas da mesma faixa (invariante). Q5: corte **sem teto**.
+> - **Execução.** Variante autônoma até o PR, sem auto-merge; 10 Tasks; branch rebaseada sobre o
+>   `develop` depois do merge da 3.5 (technical §7).
+> - **Findings abertos** (technical §7), todos da **4.3** salvo o último: `operational_day_of`
+>   aceita instante tz-aware ou com segundos → validar na entrada; `change_demand_quantity` com o
+>   mesmo N gera versão → o use case não chama a mutação; `.env` sem `DATABASE_URL` → issue #58.
 
 #### Stage 4.2 — `4.2-validation-policies`
 
@@ -1786,6 +1825,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-08-12 | Stage 3.4 **cortada em duas** na Fase 3A (issue #40): `3.4-staff-access-scope` (fundação de acesso e escopo, 6 Tasks, sem rota) e **`3.6-staff-http`** (a borda HTTP, 8 Tasks). Motivo: com as três decisões do sponsor sobre os forks F1/F2/F3 e os achados do Checkpoint A, o plano mediu **14 Tasks** — o alarme de CONVENTIONS §6 —, e **7 delas não estavam no bloco original**. A fronteira separa emendar Stage fechada de escrever superfície nova, e faz os dois buracos de acesso fecharem antes de existir rota que os exponha. `3.5` passou a depender de `3.6`; a numeração fora de ordem é legal (número é identidade, ordem é `depends_on`). 8 ADRs (3.4.0001–3.4.0008), cinco governando a 3.4 e três a 3.6. Expansão de camada-alvo para `features/identity` autorizada pelo sponsor | Fase 3A da Stage 3.4 — issue #40 |
 | 2026-08-18 | Stage 3.4-staff-access-scope concluída (`done`); bloco **confirmado sem correção estrutural** (primeira do Step 3) e acrescido de nota datada de reconciliação pós-execução: file-scope real de 22 arquivos de `src/`, as fixtures de fechamento do CA20 são **três** e não duas (sem regressão do concept — o DoD fala da categoria; decisão e medições na §7), errata no ADR 3.4.0001 e quatro `[finding]` novos. A Stage fecha o **furo de acesso intra-tenant**: a unidade entrou no endereço do funcionário até a assinatura do port (ADR 3.4.0007), provado nos dois parâmetros da suíte de contrato com um corpo de teste só. A auditoria de testes independente encontrou **2 mutações sobreviventes** em arquivos com 100% de cobertura — as duas da mesma família, lei universal travada num representante estreito —, ambas fechadas com prova de mutação. Nenhuma rota e nenhuma migration | Execução da Stage 3.4 — issue #40 |
 | 2026-08-30 | Stage 3.6-staff-http concluída (`done`); bloco **confirmado sem correção estrutural** (as três desatualizações já tinham sido medidas na §1 do concept, antes da execução) e acrescido de nota datada de reconciliação pós-execução: as **16 rotas** de staff sob `/api/v1` ao lado das **10 de identity** (26 operações no OpenAPI), file-scope real de 10 arquivos de `src/` mais `LAYOUT.md` e `overview.md` §10, e nenhuma migration. **Cinco ADRs** — 3.6.0001–3.6.0004 e o **global 0.0.0005** (`bounded_context: transversal`), nascido aqui: o tenant que decide acesso vem do token, sem o qual **nenhuma das 16 rotas era alcançável por nenhum papel**. **Terceira expansão de camada para trás no BC staff** (3.6 → `application` da 3.2, ADR 3.6.0004, com errata na §5.16 do concept da 3.2), registrada como `[finding]` para a retrospectiva do Step 3. A auditoria independente aplicou **~25 mutações** e **3 sobreviveram**, todas em linhas com 100% de cobertura de linha e ramo — autenticar-antes-de-validar travada em 1 rota de 9, `EmptyShiftPreferenceError` sem caminho HTTP e a reincidência de `L-AG3` no tenant vazio do argumento —, as três fechadas por lei quantificada sobre domínio derivado, com prova de mutação. O Step 3 segue `in_progress` (falta a 3.5 e o frontend) | Execução da Stage 3.6 — issue #43 |
+| 2026-09-27 | Stage 4.1-scheduling-domain concluída (`done`); bloco acrescido de nota datada de reconciliação pós-execução (nove divergências declaradas no concept §1: file-scope com `.importlinter` e duas varreduras de repositório, quatro entidades com `ShiftBand`, sem evento de publicação, contratos, ADRs 4.1.0007–0012, decisões Q1–Q5 do sponsor, findings para a 4.3); Step 4 → `in_progress` (primeiro código do BC `scheduling`) | Execução da Stage 4.1 — issue #55 |
 
 ## Próxima revisão de roadmap
 

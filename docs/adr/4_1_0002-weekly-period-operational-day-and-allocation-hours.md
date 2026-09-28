@@ -5,7 +5,7 @@ when-use: Reference before modeling SchedulePeriod or TimeRange, before deciding
 keywords: [adr, scheduling, schedule-period, week-start, operational-day, cutoff, time-range, midnight, break, hours, nominal, clt, domain-gate]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-26
+updated_at: 2026-09-27
 adr_id: 4.1.0002
 decision: The v1 schedule period is a week whose start day is configurable per restaurant (end = start + 6); a day is an operational day — a 24h window starting at a per-restaurant cutoff time (default 05:00) — and a time range/allocation belongs to the operational day in which it starts; the hours of an allocation are its nominal duration minus a break declared on the time range (minutes, default 0), a single function consumed by every policy and by the hub; night-hour fiction and an intra-shift-break policy are deferred as evolution.
 context_stage: 4.1-scheduling-domain
@@ -13,6 +13,14 @@ bounded_context: scheduling
 ---
 
 # ADR 4.1.0002 — Weekly period, operational day and allocation hours
+
+> ⚠️ **Errata (2026-09-27):** §3 states that the declared break lives on the time
+> range (i.e. on the band) and is the only place it is declared. That premise was
+> **widened**, not contradicted: the sponsor decided on 2026-09-26 that a break may
+> also be declared **on the allocation** (optional; absent means it inherits the
+> band's), so `hours(a)` is computed from the allocation's **effective** break. The
+> single counting rule of §3 stands unchanged — the input to it now has two possible
+> sources. See [ADR 4.1.0011](./4_1_0011-declared-break-on-band-and-allocation.md).
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
@@ -30,14 +38,14 @@ sponsor** (Marcelo, 2026-09-13).
 
 Forces:
 
-- `overview.md` §3 fixes "escala com período configurável (default **semanal**)" (line 40) and
+- `overview.md` §3 fixes "escala com período configurável (default **semanal**)" (line 41) and
   the glossary example "qua = 1 cozinheiro **16h–00h**" — a shift that ends at midnight is listed
   under Wednesday. Nothing ratified says what happens to a shift that ends at 02:00, nor on which
   day the week begins.
 - Three policies sum hours (daily cap, weekly cap, contracted workload) and the hub reports
-  "horas contratadas × escaladas × cumpridas" (`overview.md` 45) — one number, so one counting
+  "horas contratadas × escaladas × cumpridas" (`overview.md` 46) — one number, so one counting
   rule. CLT art. 71 § 2º says rest breaks are not counted in the working time; art. 73 § 1º says a
-  night hour counts as 52 min 30 s. The product does not pay hours (`overview.md` 56), so this is
+  night hour counts as 52 min 30 s. The product does not pay hours (`overview.md` 57), so this is
   counting for validation and reporting only.
 - The skeptic review of the draft (finding #3) rejected "the range belongs to the civil day in
   which it starts" as an unanchored extension of the 16h–00h example, and (finding #1) showed
@@ -164,9 +172,9 @@ without knowing which day an allocation belongs to and how many hours it counts.
   `[start, end)` semantics that scheduling assumes — decision (i)); [ADR 3.1.0005](./3_1_0005-naive-wall-clock-unavailability-datetimes.md)
   (wall-clock in the unit's timezone); [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md)
   (policies that consume the operational day and `hours(a)`).
-- [`overview.md`](../overview.md) — §3 line 40 (configurable period, default weekly; 16h–00h
-  example), line 45 (one hours number), line 56 (no money); §6 line 110 (CLT not hard-coded).
-- [`roadmap.md`](../roadmap.md) — Stage 4.1 (`SchedulePeriod`, `TimeRange`, line 1207), Stage 4.2
+- [`overview.md`](../overview.md) — §3 line 41 (configurable period, default weekly; 16h–00h
+  example), line 46 (one hours number), line 57 (no money); §6 line 111 (CLT not hard-coded).
+- [`roadmap.md`](../roadmap.md) — Stage 4.1 (`SchedulePeriod`, `TimeRange`, line 1256), Stage 4.2
   (policies that sum hours).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §2,
   §3.1, §3.2, §3.6.2–§3.6.5, §3.6.10, §6.

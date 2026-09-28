@@ -43,11 +43,17 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[4]
-_STAFF = _REPO_ROOT / "src" / "restaurant_hub" / "features" / "staff"
+_FEATURES = _REPO_ROOT / "src" / "restaurant_hub" / "features"
+_STAFF = _FEATURES / "staff"
 _IMPORTLINTER = _REPO_ROOT / ".importlinter"
 
+_PREFIXO_DE_FEATURE = "restaurant_hub.features."
 _SECAO_BC_INDEPENDENCE = "importlinter:contract:bc-independence"
 _MODULO_IDENTITY = "restaurant_hub.features.identity"
+# Entrou na Stage 4.1 (3º BC). A lista explícita abaixo e a varredura de pasta de
+# `test_ca13_...` são um par: sem a primeira, um contrato vazio passaria; sem a
+# segunda, o **quarto** BC entraria em silêncio.
+_MODULO_SCHEDULING = "restaurant_hub.features.scheduling"
 _MODULO_STAFF = "restaurant_hub.features.staff"
 
 # A única aresta (ADR 3.5.0001 §3): **qual** pacote de staff pode importar
@@ -219,20 +225,56 @@ def test_ca13_o_contrato_bc_independence_tem_exatamente_o_par_da_fachada() -> No
     assert contrato["unmatched_ignore_imports_alerting"] == "error"
 
 
-def test_ca13_o_contrato_continua_sendo_independencia_entre_os_dois_bcs() -> None:
+def test_ca13_o_contrato_continua_sendo_independencia_entre_os_bcs() -> None:
     """Sem isto, afrouxar o contrato passaria pela porta de trás.
 
     Trocar `type = independence` por `forbidden` com um `forbidden_modules`
-    vazio, ou remover um dos dois módulos da lista, deixaria `lint-imports`
+    vazio, ou remover um dos módulos da lista, deixaria `lint-imports`
     verde e a asserção de `ignore_imports` também — porque não haveria
     supressão nenhuma a encontrar. O contrato precisa continuar sendo o que o
     CA13 diz que é.
+
+    **Fala dos BCs, não "dos dois".** Eram dois até a Stage 4.1, que trouxe
+    `scheduling`; `type = independence` é par a par entre todos os módulos
+    listados, e a asserção é sobre o conjunto inteiro.
     """
     contrato = _contrato_bc_independence()
     modulos = contrato["modules"].split()
 
     assert contrato["type"] == "independence"
-    assert sorted(modulos) == sorted([_MODULO_IDENTITY, _MODULO_STAFF])
+    assert sorted(modulos) == sorted([_MODULO_IDENTITY, _MODULO_SCHEDULING, _MODULO_STAFF])
+
+
+def test_ca13_o_contrato_cobre_todos_os_bcs_que_existem_na_pasta_features() -> None:
+    """A lista explícita acima, cobrada contra a realidade — Stage 4.1.
+
+    A asserção anterior é uma lista escrita à mão: ela envelhece em silêncio. Um
+    BC **ausente** do contrato não viola nada — `type = independence` só cobra os
+    pares entre os módulos que estão lá —, então `lint-imports` seguiria **KEPT**
+    com a fronteira do BC novo inteiramente aberta, e a lista explícita seguiria
+    verde porque ninguém a cobraria contra a pasta.
+
+    É o defeito que esta asserção paga: a Stage 4.1 descobriu que o terceiro BC
+    entrava sem gate, e o quarto entraria do mesmo jeito. É a forma de
+    `test_a_lista_de_bounded_contexts_cobre_a_pasta_features`
+    (`tests/unit/test_status_map.py`), aplicada ao contrato em vez de à
+    parametrização.
+    """
+    na_pasta = {
+        _PREFIXO_DE_FEATURE + pasta.name
+        for pasta in _FEATURES.iterdir()
+        if pasta.is_dir() and not pasta.name.startswith(("_", "."))
+    }
+    assert na_pasta, f"nenhum BC encontrado em {_FEATURES} — a varredura quebrou"
+
+    no_contrato = set(_contrato_bc_independence()["modules"].split())
+
+    assert no_contrato == na_pasta, (
+        f"o contrato `bc-independence` divergiu da pasta features/: "
+        f"faltam {sorted(na_pasta - no_contrato)}, sobram "
+        f"{sorted(no_contrato - na_pasta)}. Um BC fora do contrato não viola "
+        f"nada — `lint-imports` fica verde com a fronteira dele aberta."
+    )
 
 
 def test_o_gateway_fixa_o_papel_de_funcionario_como_valor() -> None:

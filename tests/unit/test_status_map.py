@@ -49,7 +49,7 @@ _FEATURES = _SRC / "features"
 # cobra contra a pasta — o par de `test_composition_root_staff.py`. Derivada
 # sozinha, ela concordaria com uma varredura quebrada que devolvesse vazio;
 # escrita à mão, ela envelhece. As duas juntas resolvem.
-_BOUNDED_CONTEXTS = ("identity", "staff")
+_BOUNDED_CONTEXTS = ("identity", "scheduling", "staff")
 
 # Piso de contagem por BC — tripwire contra a enumeração encolher em silêncio.
 # `__subclasses__()` só enxerga o que foi importado, então um módulo de erro novo
@@ -57,11 +57,23 @@ _BOUNDED_CONTEXTS = ("identity", "staff")
 # que o real, e a exaustividade seria verdadeira sobre menos erros do que existem.
 #
 # Medidos em 2026-08-31: identity 28 (8 de domínio + 20 de aplicação), staff 18.
-_TOTAIS_MINIMOS = {"identity": 28, "staff": 18}
+# Medido em 2026-09-27 (Stage 4.1, Task 01): scheduling 20 — as 20 subclasses de
+# `SchedulingError` do concept §4, todas de domínio; `application/errors.py` não
+# existe até a 4.3. A raiz não conta (`_subclasses_concretas` desce dela).
+_TOTAIS_MINIMOS = {"identity": 28, "scheduling": 20, "staff": 18}
 
-# Os dois módulos de erro que cada BC tem. É o import deles que popula
+# Os módulos de erro que um BC pode ter. É o import deles que popula
 # `__subclasses__`, então a lista não é documentação: é o que faz a varredura ver
 # o universo inteiro.
+#
+# **O sufixo é opcional, e a tolerância é estreita.** Um BC anterior à sua camada
+# de aplicação não tem `application/errors.py` — foi o caso de scheduling na
+# Stage 4.1, cujo `application/` é placeholder vazio até a 4.3. O import cru
+# daria `ModuleNotFoundError` e reprovaria o BC novo por não ter código que
+# ninguém escreveu ainda. Quem faz a tolerância é `_importar_modulos_de_erro`,
+# **por módulo inexistente** e não por falha de import qualquer — e
+# `test_cada_bc_tem_ao_menos_um_modulo_de_erro` é o que impede a tolerância de
+# esvaziar a varredura.
 _MODULOS_DE_ERRO = ("domain.exceptions.errors", "application.errors")
 
 _PACOTE_HTTP = "adapters.inbound.http"
@@ -113,10 +125,29 @@ def _raiz_de_erro(bc: str) -> type[DomainError]:
     return raizes[0]
 
 
-def _importar_modulos_de_erro(bc: str) -> None:
-    """Popula `__subclasses__` — sem isto a varredura vê um universo parcial."""
+def _importar_modulos_de_erro(bc: str) -> tuple[types.ModuleType, ...]:
+    """Popula `__subclasses__` e devolve os módulos de erro que **existem**.
+
+    Sem o import a varredura vê um universo parcial; sem o valor de retorno, cada
+    sítio que precisa percorrer os módulos repetiria a lógica de tolerância e os
+    dois divergiriam no dia em que um terceiro sufixo entrasse.
+
+    **A tolerância é por módulo inexistente, não por falha de import.** Um
+    `ModuleNotFoundError` cujo `name` é exatamente o módulo procurado significa
+    "este BC ainda não tem esta camada" (scheduling antes da 4.3). Qualquer outra
+    falha — inclusive um `ModuleNotFoundError` de uma dependência *de dentro* do
+    módulo, que é o sintoma de um import quebrado — continua propagando: engoli-la
+    transformaria erro de código em varredura silenciosamente menor.
+    """
+    existentes: list[types.ModuleType] = []
     for sufixo in _MODULOS_DE_ERRO:
-        importlib.import_module(f"restaurant_hub.features.{bc}.{sufixo}")
+        nome = f"restaurant_hub.features.{bc}.{sufixo}"
+        try:
+            existentes.append(importlib.import_module(nome))
+        except ModuleNotFoundError as erro:
+            if erro.name != nome:
+                raise
+    return tuple(existentes)
 
 
 def _subclasses_concretas(bc: str) -> set[type[Exception]]:
@@ -222,12 +253,14 @@ def test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http() -> None:
     exaustividade: seria o mapa faltando exatamente onde ele passa a importar.
 
     **Não é parametrizado, e a escolha é sobre o relatório.** `_SEM_BORDA_HTTP`
-    era `("staff",)` até a Stage 3.6 e hoje é vazio — os dois BCs têm borda. Com
-    `parametrize`, um conjunto vazio vira uma linha `SKIPPED` no relatório, e
-    neste repositório teste pulado é o sintoma que se aprendeu a investigar (o
-    "verde por não ter olhado" da Stage 1.2). Aqui não há nada pulado: a
-    afirmação é sobre um conjunto que hoje está vazio, e quem garante que o
-    **outro** lado não esvaziou é `test_ha_pelo_menos_um_bc_com_borda_http`.
+    era `("staff",)` até a Stage 3.6, ficou vazio quando os dois BCs ganharam
+    borda, e voltou a `("scheduling",)` na Stage 4.1 — o BC novo é domínio puro, e
+    o mapa de status dele é da 4.5. Com `parametrize`, um conjunto vazio vira uma
+    linha `SKIPPED` no relatório, e neste repositório teste pulado é o sintoma que
+    se aprendeu a investigar (o "verde por não ter olhado" da Stage 1.2). Aqui não
+    há nada pulado: a afirmação é sobre um conjunto que pode estar vazio, e quem
+    garante que o **outro** lado não esvaziou é
+    `test_ha_pelo_menos_um_bc_com_borda_http`.
     """
     com_borda_sem_mapa = sorted(
         bc for bc in _SEM_BORDA_HTTP if (_FEATURES / bc / "adapters" / "inbound").exists()
@@ -243,6 +276,27 @@ def test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http() -> None:
 # ---------------------------------------------------------------------------
 # Gate 3 — a exaustividade do mapa, por bounded context
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bc", _BOUNDED_CONTEXTS)
+def test_cada_bc_tem_ao_menos_um_modulo_de_erro(bc: str) -> None:
+    """A guarda da tolerância a sufixo ausente — o outro falso-verde deste arquivo.
+
+    `_importar_modulos_de_erro` passou a ignorar o módulo de erro que não existe,
+    para que um BC anterior à sua camada de aplicação (scheduling até a 4.3) não
+    reprovasse por código que ninguém escreveu. O preço é que um BC que
+    **renomeasse os dois** sufixos ficaria com universo vazio: `_raiz_de_erro`
+    reprovaria por não achar raiz — mas só porque hoje ele importa o módulo de
+    domínio por conta própria, e essa coincidência não é a propriedade que se quer
+    garantir. Aqui a propriedade é direta, e é irmã de
+    `test_ha_pelo_menos_um_bc_com_borda_http`: a tolerância nunca esvazia a
+    varredura.
+    """
+    assert _importar_modulos_de_erro(bc), (
+        f"{bc}: nenhum dos módulos {_MODULOS_DE_ERRO} existe — a tolerância a "
+        f"sufixo ausente esvaziou a varredura, e a exaustividade abaixo passaria "
+        f"a ser verdade vácua"
+    )
 
 
 @pytest.mark.parametrize("bc", _BOUNDED_CONTEXTS)
@@ -274,10 +328,9 @@ def test_toda_excecao_definida_nos_modulos_de_erro_do_bc_herda_da_raiz(bc: str) 
     """
     raiz = _raiz_de_erro(bc)
     fora: list[str] = []
-    for sufixo in _MODULOS_DE_ERRO:
-        modulo = importlib.import_module(f"restaurant_hub.features.{bc}.{sufixo}")
+    for modulo in _importar_modulos_de_erro(bc):
         fora.extend(
-            f"{sufixo}.{nome}"
+            f"{modulo.__name__}.{nome}"
             for nome, valor in vars(modulo).items()
             if isinstance(valor, type)
             and issubclass(valor, Exception)
