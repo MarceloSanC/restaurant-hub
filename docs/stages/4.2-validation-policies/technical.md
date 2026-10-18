@@ -1,214 +1,325 @@
 ---
-title: Technical — <Título da Stage>
-description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
-when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
-keywords: [technical, plano de execução, <slug>]
-status: draft
-created_at: YYYY-MM-DD
-updated_at: YYYY-MM-DD
+title: Technical — Políticas de validação configuráveis
+description: Plano de execução da Stage 4.2 — dez Tasks inside-out (exceções, config, VOs, insumo, nove políticas, avaliador), cada uma com o seu commit verde
+when-use: Consultar durante a Fase 4 desta Stage; cada Task tem arquivos, critério de aceite e comando de verificação
+keywords: [technical, plano de execução, validation-policies, avaliador, politica, violacao]
+status: done
+created_at: 2026-10-18
+updated_at: 2026-10-18
 stage_id: 4.2-validation-policies
-stage_title: <Título humano da Stage>
-step_id: N                       # sequencial, sem zero-padding (1, 2, 15…)
-step_title: <Título humano do Step>
-depends_on: []
+stage_title: Políticas de validação configuráveis
+step_id: 4
+step_title: Escala manual publicável
+depends_on: [4.1-scheduling-domain]
 concept_ref: ./concept.md
 issue_id: 64
 branch: feat/64-4-2-validation-policies
-tasks_count: 0
+tasks_count: 10
 ---
 
-# Technical — Stage N.M — <Título da Stage>
+# Technical — Stage 4.2 — Políticas de validação configuráveis
 
-> **Como usar este documento (para code assistant):**
-> 1. Ler primeiro [§1 Contexto e estratégia](#1-contexto-e-estratégia-de-execução).
-> 2. Executar Tasks em ordem (§2). **1 Task = 1 commit.**
-> 3. Cada Task traz: arquivos a tocar, descrição, critério de aceite,
->    comando de verificação.
-> 4. **Não avançar para próxima Task sem verificação verde.**
-> 5. Mensagem de commit segue [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
->    `<type>(<scope>): <description> [N.M/task-NN]`
-> 6. Ao encontrar algo não previsto em §1–§6 ou no `concept.md`:
->    **pausar**, perguntar ao humano com opções e recomendação, e
->    registrar a decisão em [§7 Execução](#7-execução-post-hoc-editável-após-done).
->    Nunca propagar silenciosamente.
-> 7. Ao fim da última Task, validar [§3 Gate de saída da Stage](#3-gate-de-saída-da-stage),
->    fazer commit `stage N.M: complete` e atualizar `roadmap.md`.
->
-> **Stage = 1 branch.** Todo o trabalho desta Stage acontece em
-> `feat/<num-issue>-<N-M>-<slug>` (ver `CONVENTIONS.md` §4). Não há
-> sub-PRs internos. Sobre o fluxo Git completo ver
-> [`PIPELINE.md`](../../PIPELINE.md) §10.
+> **Como usar:** ler §1; executar as Tasks em ordem (1 Task = 1 commit,
+> `<type>(scheduling): <desc> [4.2/task-NN]` + `Refs #64`); não avançar sem verificação verde;
+> o não previsto vai para §7 conforme o RUNBOOK Passo 8.
 
 ## 1. Contexto e estratégia de execução
 
 ### Resumo
-<1 parágrafo. O que vamos construir nesta Stage, em termos técnicos.>
+Domínio puro em `features/scheduling/domain/`: dois `StrEnum` + regra + config com os defaults
+legais (`value_objects/validation_config.py`), a `Violation` com `key`
+(`value_objects/violation.py`), os fatos de staff por dados (`value_objects/employee_facts.py`),
+o insumo do serviço com a projeção de alocações (`services/validation/context.py`), o protocolo,
+nove políticas e o avaliador (`services/validation/`). Duas exceções novas em `errors.py`.
 
 ### Estratégia
-<Como vamos construir. Bottom-up? Top-down? Spike primeiro? Mock
-dependências externas? Ordem das Tasks e razão.>
+**Inside-out dentro da camada `domain`** (skill `task-ordering-hex`, exceção "Stage de camada
+única"): exceções → VOs → insumo + protocolo → políticas (das geométricas às agregadas) →
+avaliador com o registro. Cada Task traz os testes no mesmo commit.
+
+**Totalidades que ditam o corte** (`grep` feito na Fase 3B; memória "totalidades ditam o corte"):
+- `tests/unit/features/scheduling/domain/test_exceptions.py` afirma **igualdade** do conjunto de
+  exceções do módulo com uma lista fixa (`_AS_VINTE`, `_TOTAL_DE_EXCECOES = 20`) e cobra cada uma
+  numa tabela de mensagem → as duas exceções novas nascem **juntas** na Task 01, com as entradas.
+  `tests/unit/test_status_map.py` tem o piso `_TOTAIS_MINIMOS["scheduling"] = 20` (`>=`): sobe para
+  22 na mesma Task, para o piso continuar medindo.
+- `scripts/check_docs_claims.py` reprova caminho anotado `[planejado]` que já existe →
+  `docs/LAYOUT.md` §2 (`services/ … [planejado]`) muda **na Task que cria o diretório** (04); e
+  `tests/unit/test_check_docs_claims.py` trava por **igualdade** o conjunto de planejados do
+  LAYOUT real (`_PLANEJADOS_DO_LAYOUT_REAL`, hoje `{…/domain/services}`) → vira `frozenset()` na
+  mesma Task, com os comentários/docstrings que citam `services/` como planejado.
+- `scripts/check_layout.py` regra 9: `__init__.py` novos só com docstring.
+- `test_operational_calendar.py` varre o pacote por `time(5, 0)` e `Weekday.MONDAY`;
+  `test_bc_independence.py` varre os imports **e os identificadores** (nomes, atributos, `def`,
+  argumentos, keywords) contra o vocabulário de staff (`UnavailabilityPeriod`, `FixedSchedule`,
+  `OnDemand`, `WorkloadProfile`, `DayPeriod` …) — esses nomes só em docstring.
+- Ruff `PL` (PLR0911, máx. 6 `return`): `rule_for` não pode ser um `match` com 9 `return`; usa
+  um mapeamento montado no método.
+- Hook `commit-msg`: subject ≤ 100 caracteres.
+- `vars(Schedule)` (`test_schedule.py`, `test_schedule_mutations.py`) e o total de mutações de
+  `test_schedule_breaks.py`: **nenhuma** mutação nova na raiz (concept §1 Fora do escopo).
+- O registro `DEFAULT_POLICIES` só nasce na Task 10, com o teste de totalidade × `PolicyKind`;
+  antes dela as políticas são testadas direto, sem registro.
 
 ### Pré-condições
-- <ex.: Stage `<stage_id>` em `done` e mergeada em develop>
-- <ex.: migration X aplicada localmente>
-- <ex.: variáveis de ambiente conforme `.env.example`>
+- Stage `4.1-scheduling-domain` `done` e mergeada (PR #63, `9380963`).
+- Worktree com Postgres próprio (porta 5434, `DATABASE_URL` no `.env` da worktree) para o
+  `make check` — a Stage não toca banco, mas a suíte sim.
 
 ### Premissas técnicas
-- <ex.: Python 3.12+, pyproject já existe>
-- <ex.: redis local rodando em porta 6379>
+- Python 3.12, `mypy --strict`; `Decimal` e `datetime` da stdlib.
+- Cenários de teste das políticas montados por um módulo compartilhado
+  `tests/unit/features/scheduling/domain/services/validation/scenario.py` (builders de `Schedule`
+  com uma demanda por faixa, `EmployeeFacts` e `ValidationConfig`), importado como
+  `tests.unit...` — precedente de import entre módulos de `tests/` em
+  `tests/contract/features/identity/conftest.py`.
 
 ### Estrutura de pastas afetada
 
 ```
-src/restaurant_hub/
-├── <camada-alvo>/
-│   └── <novos arquivos>
-tests/
-└── <pasta>/
-    └── <novos arquivos>
+src/restaurant_hub/features/scheduling/domain/
+├── exceptions/errors.py                      (mod)
+├── value_objects/{validation_config,violation,employee_facts}.py
+└── services/__init__.py
+    └── validation/{__init__,context,policy_protocol,overlap_policy,unavailability_policy,
+                    rest_between_shifts_policy,max_hours_policy,workload_policy,
+                    function_mismatch_policy,over_coverage_policy,break_divergence_policy,
+                    evaluator}.py
+tests/unit/features/scheduling/domain/
+├── test_exceptions.py                        (mod)
+├── test_{validation_config,violation,employee_facts}.py
+└── services/__init__.py
+    └── validation/{__init__,scenario}.py + test_*.py
+tests/unit/test_status_map.py                 (mod)
+docs/LAYOUT.md                                (mod)
 ```
 
 ## 2. Tasks
 
-> Faixa saudável: **3–12 Tasks por Stage**. ≥ 14 = Stage provavelmente
-> está grande demais; reabrir Fase 3A para dividir.
+### Task 01 — exceções da validação
 
-### Task 01 — <descrição curta>
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/scheduling/domain/exceptions/errors.py`
+  - `tests/unit/features/scheduling/domain/test_exceptions.py`
+  - `tests/unit/test_status_map.py`
+- **O que fazer:** acrescentar `InvalidValidationConfigError(reason)` e
+  `InvalidEvaluationInputError(reason)`, filhas de `SchedulingError`, mensagens
+  `"configuração de validação inválida: {reason}"` e `"insumo de avaliação inválido: {reason}"`.
+  Atualizar a lista fechada, o total (22) e a tabela `_COM_CONTEXTO` do teste do BC (e os
+  docstrings que dizem "20"); subir `_TOTAIS_MINIMOS["scheduling"]` para 22 com a data.
+- **Critério de aceite:** CA14 — igualdade do conjunto com 22 + raiz; cada nova com mensagem
+  testada; piso do repositório em 22.
+- **Verificação:** `uv run pytest tests/unit/features/scheduling/domain/test_exceptions.py tests/unit/test_status_map.py -q` + `make check`
+- **Commit:** `feat(scheduling): adicionar as exceções de configuração e de insumo da validação [4.2/task-01]`
+
+---
+
+### Task 02 — `ValidationConfig` e os enums
 
 - **Arquivos a criar:**
-  - `src/restaurant_hub/<camada>/<arquivo>.py`
-  - `tests/<pasta>/test_<arquivo>.py`
-- **Arquivos a modificar:**
-  - <caminho ou "nenhum">
-- **O que fazer:**
-  <Prosa direta descrevendo a mudança material. Sem código completo;
-  apenas indicações como "criar Protocol com método `X(arg: A) -> B`".>
-- **Detalhes técnicos:**
-  - <interface esperada, comportamento esperado, exceções>
-- **Critério de aceite:**
-  - <ex.: testes em `tests/.../test_<arquivo>.py` cobrem happy path e erro>
-- **Comando de verificação:**
-  ```bash
-  pytest tests/<pasta>/test_<arquivo>.py -v
-  mypy --strict src/restaurant_hub/<camada>/<arquivo>.py
-  python scripts/check_layout.py
-  ```
-- **Commit sugerido:** `feat(<scope>): <description> [N.M/task-01]`
+  - `src/restaurant_hub/features/scheduling/domain/value_objects/validation_config.py`
+  - `tests/unit/features/scheduling/domain/test_validation_config.py`
+- **O que fazer:** `PolicyKind` (9, na ordem do concept §4), `EnforcementMode`,
+  `WorkloadDirection` (`StrEnum`, só os membros — conversão de texto é da 4.4/4.5), `PolicyRule`,
+  `ValidationConfig` (concept §4) com `__post_init__` (§5.3), `default()` (§5.2) e `rule_for`
+  (mapeamento `PolicyKind → PolicyRule` montado no método, um `return`; `UNAVAILABILITY` →
+  `PolicyRule(True, BLOCK)` fixo).
+- **Critério de aceite:** CA1 (inclusive a varredura AST de 660/600/2640 sobre o pacote, com
+  anti-vácuo), CA2; valores dos enums travados por nome; `rule_for` total sobre o enum.
+- **Verificação:** `uv run pytest tests/unit/features/scheduling/domain/test_validation_config.py -q` + `make check`
+- **Commit:** `feat(scheduling): adicionar a configuração de validação com os defaults legais [4.2/task-02]`
 
 ---
 
-### Task 02 — <descrição curta>
+### Task 03 — `Violation` e `EmployeeFacts`
 
-- **Arquivos a criar:** <...>
-- **Arquivos a modificar:** <...>
-- **O que fazer:** <...>
-- **Detalhes técnicos:** <...>
-- **Critério de aceite:** <...>
-- **Comando de verificação:**
-  ```bash
-  <comando>
-  ```
-- **Commit sugerido:** `<type>(<scope>): <description> [N.M/task-02]`
+- **Arquivos a criar:**
+  - `src/restaurant_hub/features/scheduling/domain/value_objects/violation.py`
+  - `src/restaurant_hub/features/scheduling/domain/value_objects/employee_facts.py`
+  - `tests/unit/features/scheduling/domain/test_violation.py`
+  - `tests/unit/features/scheduling/domain/test_employee_facts.py`
+- **O que fazer:** `Violation` + `ViolationKey` (`NamedTuple`) com `key` conforme concept §5.8:
+  a coluna "na `key`?" vira um `frozenset[PolicyKind]` de políticas por alocação no módulo. Sem
+  `__post_init__`: quem constrói é sempre uma política, e a forma de cada uma (dias distintos e
+  ordenados, sujeito) é travada nos testes dela (CA11).
+  `UnavailabilityWindow` (naive, `start < end`) e `EmployeeFacts` (concept §4; `contracted_weekly_hours`
+  finito > 0 quando presente) com as recusas de §6.
+- **Critério de aceite:** CA11 (forma da `key` por política, `operational_days`), linhas de §6
+  sobre `UnavailabilityWindow` e carga de CA10.
+- **Verificação:** `uv run pytest tests/unit/features/scheduling/domain/test_violation.py tests/unit/features/scheduling/domain/test_employee_facts.py -q` + `make check`
+- **Commit:** `feat(scheduling): adicionar a violação com identidade e os fatos de staff por dados [4.2/task-03]`
 
 ---
 
-<Repetir Tasks.>
+### Task 04 — insumo do avaliador e protocolo
+
+- **Arquivos a criar:**
+  - `src/restaurant_hub/features/scheduling/domain/services/__init__.py`
+  - `src/restaurant_hub/features/scheduling/domain/services/validation/__init__.py`
+  - `src/restaurant_hub/features/scheduling/domain/services/validation/context.py`
+  - `src/restaurant_hub/features/scheduling/domain/services/validation/policy_protocol.py`
+  - `tests/unit/features/scheduling/domain/services/__init__.py`
+  - `tests/unit/features/scheduling/domain/services/validation/__init__.py`
+  - `tests/unit/features/scheduling/domain/services/validation/scenario.py`
+  - `tests/unit/features/scheduling/domain/services/validation/test_evaluation_context.py`
+- **Arquivos a modificar:** `docs/LAYOUT.md` (§2: `services/` sem `[planejado]`) e
+  `tests/unit/test_check_docs_claims.py` (`_PLANEJADOS_DO_LAYOUT_REAL = frozenset()` e os
+  textos que citam `services/` como planejado).
+- **O que fazer:** `AllocationView` (frozen: `assignment_id`, `employee_id`, `demand_id`,
+  `job_function_id`, `band_id`, `time_range`, `operational_day`, `worked_minutes`,
+  `effective_break_minutes`, `band_break_minutes`, `counts_toward_workload`, `break_divergence`,
+  `schedule_id`, `in_evaluated: bool`) construída pelas leituras públicas da raiz (sem aritmética
+  de horas aqui: `worked_minutes_of`). `EvaluationContext` (concept §4) com as validações de §5.4
+  e as leituras `facts_of(employee_id)`, `allocations` (ativos, avaliada), `all_allocations`
+  (ativos, avaliada + vizinhas), `active_facts`. `ValidationPolicy` (`Protocol`, concept §4).
+  `scenario.py` com os builders.
+- **Detalhes:** 10 arquivos, acima da faixa de 5 — exceção declarada: quatro são `__init__.py`
+  (só docstring) e `LAYOUT.md` + `test_check_docs_claims.py` são as duas entradas de totalidade
+  da mesma mudança (criar `services/`). `operational_days` das políticas de semana é
+  `schedule.period.operational_days` (os 7 dias, com ou sem alocação).
+- **Critério de aceite:** CA9 (fato faltando recusado; inativo fora de `allocations` e
+  `all_allocations`), CA10 (todas as linhas de §6 sobre vizinhas, ids, facts, período ≠ 7).
+- **Verificação:** `uv run pytest tests/unit/features/scheduling/domain/services -q` + `uv run python scripts/check_docs_claims.py` + `make check`
+- **Commit:** `feat(scheduling): adicionar o insumo do avaliador e o protocolo de política [4.2/task-04]`
+
+---
+
+### Task 05 — sobreposição e indisponibilidade
+
+- **Arquivos a criar:**
+  - `src/.../services/validation/overlap_policy.py`
+  - `src/.../services/validation/unavailability_policy.py`
+  - `tests/.../services/validation/test_overlap_policy.py`
+  - `tests/.../services/validation/test_unavailability_policy.py`
+- **O que fazer:** `OverlapPolicy` (pares de `all_allocations` do mesmo registro, com ≥ 1
+  `in_evaluated`, `time_range.overlaps`; medida = minutos da interseção) e
+  `UnavailabilityPolicy` (alocações da avaliada × janelas do registro; medida = minutos dentro das
+  janelas unidas, exatos em `Decimal(µs) / 60_000_000`).
+- **Critério de aceite:** CA3, CA4 (overlap contra anterior e seguinte; indisponibilidade ignora
+  vizinha), CA11 (o par; a alocação), CA16 (interseção do overlap; janelas sobrepostas unidas;
+  janela com segundos).
+- **Verificação:** `uv run pytest tests/unit/features/scheduling/domain/services/validation -q` + `make check`
+- **Commit:** `feat(scheduling): adicionar as políticas de sobreposição e de indisponibilidade [4.2/task-05]`
+
+---
+
+### Task 06 — descanso entre jornadas
+
+- **Arquivos a criar:** `src/.../rest_between_shifts_policy.py`, `tests/.../test_rest_between_shifts_policy.py`
+- **O que fazer:** concept §5.7 (rest) com `all_allocations`; reporta o par se algum dos dois
+  dias é da avaliada; `assignment_ids` = as alocações de `max(end)` de dᵢ e `min(start)` de dⱼ.
+- **Critério de aceite:** CA3, CA4, CA5 (a parte do descanso: `max(end)`/`min(start)`, dia
+  vazio, lacuna no mesmo dia, negativo, descanso 0 no corte), CA11 (`assignment_ids` fora da
+  `key`), CA16 (medida).
+- **Verificação:** idem Task 05.
+- **Commit:** `feat(scheduling): adicionar a política de descanso entre jornadas [4.2/task-06]`
+
+---
+
+### Task 07 — tetos diário e semanal
+
+- **Arquivos a criar:** `src/.../max_hours_policy.py`, `tests/.../test_max_hours_policy.py`
+- **O que fazer:** `DailyCapPolicy` e `WeeklyCapPolicy` sobre `allocations` (só a avaliada).
+- **Critério de aceite:** CA3 (igual ao teto não viola), CA4 (dia da vizinha ignorado), CA5 (a
+  parte do teto: contíguas que atravessam o corte dão 8h + 8h sem violar), CA11, CA16, CA17
+  (faixas distintas sobrepostas somam por alocação).
+- **Verificação:** idem.
+- **Commit:** `feat(scheduling): adicionar as políticas de teto diário e semanal [4.2/task-07]`
+
+---
+
+### Task 08 — carga contratada
+
+- **Arquivos a criar:** `src/.../workload_policy.py`, `tests/.../test_workload_policy.py`
+- **O que fazer:** `WorkloadPolicy` sobre `active_facts` de jornada fixa; soma das alocações da
+  avaliada com `counts_toward_workload`; `excess`/`both`; `Decimal` exato.
+- **Critério de aceite:** CA3, CA4 (alocação da vizinha fora da soma), CA6 (todos os itens),
+  CA11 (as que contam, vazio possível), CA16 (medida com carga 22,5h).
+- **Verificação:** idem.
+- **Commit:** `feat(scheduling): adicionar a política de carga contratada [4.2/task-08]`
+
+---
+
+### Task 09 — função não detida, sobre-cobertura e divergência de intervalo
+
+- **Arquivos a criar:** `src/.../{function_mismatch,over_coverage,break_divergence}_policy.py` e os
+  três testes.
+- **O que fazer:** concept §5.7 para as três; a sobre-cobertura percorre as demandas da avaliada
+  e conta só alocações de registro ativo.
+- **Detalhes:** 6 arquivos — três políticas por alocação de uma linha de lógica cada, irmãs na
+  forma; separá-las não daria commit mais revisável.
+- **Critério de aceite:** CA3, CA4 (vizinha cuja alocação violaria é ignorada pelas três), CA7
+  (Ana e Bruno; `function_exception` ignorada), CA8, CA11 (sobre-cobertura com o conjunto na
+  `key`; as outras duas por alocação), CA16 (`N = 0`; 1/0; intervalo da alocação / da faixa).
+- **Verificação:** idem.
+- **Commit:** `feat(scheduling): adicionar as políticas de função, cobertura e intervalo [4.2/task-09]`
+
+---
+
+### Task 10 — avaliador e registro
+
+- **Arquivos a criar:** `src/.../evaluator.py`, `tests/.../test_evaluator.py`
+- **O que fazer:** `DEFAULT_POLICIES` (uma por `PolicyKind`, ordem do enum), `Evaluation`,
+  `evaluate` (concept §5.10–§5.11): chama só as habilitadas, ordena, devolve.
+- **Critério de aceite:** CA12, CA13 (totalidade registro × enum × campos de `ValidationConfig`
+  via `dataclasses.fields`), CA9 (inativo ausente de toda violação de uma escala com as nove
+  situações), CA4 (avaliação com as duas vizinhas).
+- **Verificação:** `uv run pytest tests/unit/features/scheduling -q` + `make check`
+- **Commit:** `feat(scheduling): adicionar o avaliador com o registro das nove políticas [4.2/task-10]`
 
 ## 3. Gate de saída da Stage
 
-> O que precisa estar verdadeiro para a Stage receber o commit
-> `stage N.M: complete` e ser mergeada em `develop`.
-
 ### Verificações automatizadas
 ```bash
-make check                # lint + type + import-linter + check_layout + testes
-pytest tests/             # todos os testes
-<outros comandos específicos da Stage>
+make check
+uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
+python scripts/check_technical_postexec.py docs/stages/4.2-validation-policies/technical.md
 ```
+CA15: no `term-missing`, conferir **≥ 90% em cada arquivo** de `domain/services/validation/` e
+nos três `value_objects` novos (o `fail_under` é agregado).
 
 ### Verificações funcionais
-- [ ] <comportamento end-to-end que precisa funcionar — ex.: "rodar `python -m restaurant_hub.cli ingest sample.csv` produz N registros no banco">
-- [ ] <outro>
+- [ ] Script de ponta a ponta com objetos de domínio reais (sem fakes): semana com as nove
+      situações + vizinha anterior → `evaluate` devolve as violações esperadas, `blocking`/`warnings`.
 
 ### Checklist de fechamento da Stage
-- [ ] Todas as Tasks commitadas, cada uma com seu check verde
-- [ ] `make check` verde no branch
-- [ ] Commit final `stage N.M: complete` aplicado
-- [ ] Branch mergeado em `develop`
-- [ ] `roadmap.md` atualizado: Stage marcada `done`, `updated_at` e
-      `last_reviewed_at` no mesmo merge (ou em PR de docs imediato)
-- [ ] ADRs novos (se houve) em `status: accepted`
-- [ ] Runbooks operacionais criados se aplicável
-- [ ] `concept.md` desta Stage não precisa de retoque retrospectivo
-      (se precisa, abrir TODO ou nova Stage de correção)
+- [ ] Todas as Tasks commitadas com check verde; `make check` verde
+- [ ] Nota datada em `shift-scheduling.md` §6 (lacunas da 4.2 fechadas; divergência 5) e no
+      roadmap (bloco 4.2); Stage `done` com `updated_at`/`last_reviewed_at`
+- [ ] ADRs 4.2.0001–0002 `accepted`
+- [ ] §7 com os `[finding]` herdados do concept: os quatro da 4.3 (§8), etiqueta "exceção" e
+      vaga multifunção (4.5), cobertura com `N = 0` e contagem de exceções (8.1)
+- [ ] Commit `stage 4.2: complete`
 
 ## 4. Ordem de dependência entre Tasks
 
-<Texto ou lista mostrando quais Tasks dependem de quais. Por padrão a
-ordem listada em §2 já respeita dependências; explicitar aqui só os
-casos não óbvios.>
-
 ```
-Task 01 ─► Task 02 ─► Task 04
-              │
-              └──► Task 03
+01 ─► 02 ─► 03 ─► 04 ─► 05 ─► 06 ─► 07 ─► 08 ─► 09 ─► 10
 ```
+05–09 dependem só de 04 (e entre si não); a ordem linear é por revisão (geométricas → agregadas).
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
-| <ex.: lib X não suporta caso Y> | <ex.: cair para lib Z, ADR registrando> |
+| `mypy` não aceitar o `Protocol` com `kind` como property em classes com atributo de classe | `kind` como `@property` em cada política |
+| Ruff PLR0912/PLR0915 (ramos/instruções) em `EvaluationContext.__post_init__` ou numa política | Extrair helpers privados por regra |
+| Varredura AST de CA1 pegar `600`/`660` legítimos em outro contexto do pacote | Restringir o detector a `int` literal em chamada/atribuição de campo de `ValidationConfig`, registrando `[decision]` |
+| Fronteiras `>` × `≥` mal escolhidas | Testes de fronteira de cada política (CA3) e mutação real na auditoria |
 
 ## 6. Referências
 
-- [`./concept.md`](./concept.md) — conceito desta Stage
-- [`../../overview.md`](../../overview.md)
-- [`../../roadmap.md`](../../roadmap.md)
-- [`../../CONVENTIONS.md`](../../CONVENTIONS.md) — branches, commits, status
-- ADRs desta Stage: [`../../adr/`](../../adr/) (filtrar por prefixo `N_M_`)
-- Skills aplicáveis: <ids de `skills/`>
-- Docs externos: <links>
+- [`./concept.md`](./concept.md); ADRs [4.2.0001](../../adr/4_2_0001-function-mismatch-follows-current-staff-record.md),
+  [4.2.0002](../../adr/4_2_0002-evaluator-input-and-violation-identity.md)
+- [`../../domain/scheduling/shift-scheduling.md`](../../domain/scheduling/shift-scheduling.md) §3.6
+- [`../../LAYOUT.md`](../../LAYOUT.md), [`../../CONVENTIONS.md`](../../CONVENTIONS.md)
+- Skills: `ddd-tactical-patterns`, `hex-arch-python`, `task-ordering-hex`, `pytest-with-fakes`
 
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
-> Preenchida durante/após a **Fase 4**. **Apenas esta seção é editável
-> após `status: done`** — alterações fora dos marcadores
-> `BEGIN/END: post-execution` são rejeitadas no Passo 10 do
-> [`RUNBOOK-STAGE-LIFECYCLE.md`](../../RUNBOOK-STAGE-LIFECYCLE.md) via
-> `scripts/check_technical_postexec.py`. O frontmatter `updated_at`
-> **não muda** com edições aqui — cada entrada carrega data + autor.
-> Seção pode estar vazia se a execução não produziu notas relevantes.
->
-> **Regra de pergunta antes da nota.** Ao encontrar durante a Fase 4
-> algo não previsto no Concept ou neste Technical, **pause** e
-> levante a pergunta para o humano com 2–4 opções e uma marcada como
-> **recomendada** + razão (via `AskUserQuestion` ou equivalente).
-> Apenas após a decisão, registre a entrada abaixo. Na dúvida sobre
-> se algo é "pequeno o suficiente para decidir sozinho", **pergunte**.
-
-**Formato de cada entrada** (ADR-like, ordem cronológica):
-
-```markdown
-### YYYY-MM-DD — [tag] escopo — Autor
-**Contexto:** <o que foi encontrado durante a execução>
-**Pergunta:** <o que precisava ser decidido>            <!-- só [decision] -->
-**Opções:**                                              <!-- só [decision] -->
-- A — <descrição>
-- B — <descrição> ✅ recomendada
-**Decisão:** B                                           <!-- só [decision] -->
-**Razão:** <por que>
-```
-
-- `[decision]` — algo não previsto foi decidido durante a execução.
-  Inclui pergunta, opções, decisão, razão.
-- `[finding]` — gap/observação a tratar em **próxima Stage**; corpo
-  inclui "direção sugerida" e Stage candidata.
-- `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
-  diz o que mudou e por que ficou abaixo do threshold de perguntar.
-
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+> Preenchida durante/após a **Fase 4**. **Apenas esta seção é editável após `status: done`** —
+> alterações fora dos marcadores `BEGIN/END: post-execution` são rejeitadas por
+> `scripts/check_technical_postexec.py`. Cada entrada carrega data + autor.
 
 <!-- END: post-execution -->
