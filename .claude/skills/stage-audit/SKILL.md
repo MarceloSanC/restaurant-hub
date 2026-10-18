@@ -162,8 +162,13 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
    "mapping invariantes ↔ testes" — confirmar que existe e roda).
    Se faltar teste para uma invariante, é **finding**.
 4. **Mapear critérios de aceitação (A1..AN) → evidência**. Cada `AN`
-   tem que ter um comando ou inspeção que prova. `[ ]` não marcado
-   sem evidência = finding.
+   tem que ter um comando ou inspeção que prova. São **dois** findings
+   distintos: `[x]` sem evidência (marcado no escuro) e `[ ]` **com**
+   evidência (o fechamento não marcou). O segundo escapou em duas Stages
+   seguidas, com o critério provado e a caixa aberta: 3.5 (`b52f472`, issue
+   #59) e 4.1 (`35c752d`). Conferir com
+   `grep -c '^- \[ \] \*\*CA' docs/stages/<N.M>-<slug>/concept.md`, que deve
+   dar **0** ao fechar. Na fase de aplicação, marcar as caixas validadas.
 5. **Verificar atualização de docs derivados** (gate clássico):
    - **5.a `docs/roadmap.md`:**
      - Status da Stage na tabela §"Stages" atualizado para `done`?
