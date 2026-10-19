@@ -114,3 +114,11 @@ def test_a_key_distingue_dia_sujeito_e_politica() -> None:
     assert _violacao(PolicyKind.DAILY_CAP, operational_days=(date(2026, 9, 29),)).key != base
     assert _violacao(PolicyKind.DAILY_CAP, employee_id=EmployeeId("bruno")).key != base
     assert _violacao(PolicyKind.WEEKLY_CAP).key != base
+
+
+def test_a_key_distingue_a_demanda_da_sobre_cobertura() -> None:
+    uma = _violacao(PolicyKind.OVER_COVERAGE, employee_id=None, demand_id=ShiftDemandId("d1"))
+    outra = _violacao(PolicyKind.OVER_COVERAGE, employee_id=None, demand_id=ShiftDemandId("d2"))
+
+    assert (uma.key.demand_id, outra.key.demand_id) == ("d1", "d2")
+    assert uma.key != outra.key

@@ -52,6 +52,7 @@ def _fatos(horas: Decimal | None) -> EmployeeFacts:
         active=True,
         job_function_ids=frozenset({JobFunctionId("cozinheiro")}),
         contracted_weekly_hours=horas,
+        unavailabilities=(),
     )
 
 
@@ -60,7 +61,6 @@ def test_fatos_aceitam_sob_demanda_e_carga_positiva_fracionaria(horas: Decimal |
     fatos = _fatos(horas)
 
     assert fatos.contracted_weekly_hours == horas
-    assert fatos.unavailabilities == ()
 
 
 @pytest.mark.parametrize(

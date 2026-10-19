@@ -331,4 +331,21 @@ plano antes da aprovação (Task 04); o concept (`done`) não regride porque a l
 contrato, fronteira nem critério de aceite. O conjunto passa a `frozenset()`: `domain/services/` era
 o último caminho anotado.
 
+### 2026-10-19 — [deviation] Checkpoint C do bloco 1 (Tasks 01–03) — Claude Opus 5.5 (executor)
+
+Sem blocker; disposições (correções no commit `[4.2/task-03-fix]`):
+- **#1 major, corrigido:** `EmployeeFacts.unavailabilities` tinha default `()` — esquecer as janelas
+  calaria a política `block` fixa. O campo ficou obrigatório (o concept §4 já o declarava sem default).
+- **#2, corrigido:** a config aceitava `bool` e `float` como minutos; agora `type(valor) is int`.
+- **#3, corrigido:** a varredura AST do CA1 via só literal; passa a calcular aritmética de literais
+  (`11 * 60`), com teste do próprio detector.
+- **#4 e #5, corrigidos:** teste de `demand_id` na `key`; mensagens das duas exceções cobradas com o
+  prefixo.
+- **#6, refutado com artefato:** identificadores locais em português no `src`. A 4.1, mergeada e
+  auditada, usa o mesmo idioma interno — `schedule.py` 88 `def _repetidos(`, 133 `for faixa in
+  self.bands:` —, e os nomes **públicos** (classes, campos, métodos, enums) desta Stage estão em
+  inglês. Seguir a vizinhança do BC; a regra de idioma não é reaberta aqui.
+- **#7, aceito para o fechamento:** o CA11 é marcado pelos testes das políticas (Tasks 05–09), não
+  pela Task 03.
+
 <!-- END: post-execution -->

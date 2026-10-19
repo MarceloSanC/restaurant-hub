@@ -107,10 +107,14 @@ def test_indisponibilidade_e_sempre_block_habilitada_e_sem_campo() -> None:
         ("daily_cap_minutes", 0),
         ("daily_cap_minutes", -5),
         ("weekly_cap_minutes", 0),
+        ("daily_cap_minutes", True),
+        ("min_rest_minutes", 660.5),
+        ("weekly_cap_minutes", "2640"),
+        ("workload_tolerance_minutes", False),
     ],
 )
 def test_config_recusa_parametro_fora_do_dominio_nomeando_o_parametro(
-    campo: str, valor: int
+    campo: str, valor: object
 ) -> None:
     with pytest.raises(InvalidValidationConfigError, match=campo):
         dataclasses.replace(ValidationConfig.default(), **{campo: valor})
@@ -132,14 +136,42 @@ def test_config_aceita_as_fronteiras() -> None:
     )
 
 
+_OPERADORES = {
+    ast.Add: lambda a, b: a + b,
+    ast.Sub: lambda a, b: a - b,
+    ast.Mult: lambda a, b: a * b,
+    ast.FloorDiv: lambda a, b: a // b,
+}
+
+
+def _inteiro_constante(no: ast.AST) -> int | None:
+    """O valor de um literal inteiro ou de uma aritmética só de literais (`11 * 60`).
+
+    Sem isso a varredura veria o literal e perderia o atalho mais provável — a
+    forma "horas vezes 60" que o próprio teste dos defaults usa.
+    """
+    if isinstance(no, ast.Constant) and type(no.value) is int:
+        return no.value
+    if isinstance(no, ast.BinOp) and type(no.op) in _OPERADORES:
+        esquerda, direita = _inteiro_constante(no.left), _inteiro_constante(no.right)
+        if esquerda is not None and direita is not None and direita != 0:
+            return _OPERADORES[type(no.op)](esquerda, direita)  # type: ignore[no-any-return]
+    return None
+
+
 def _literais_legais_no_bc() -> set[tuple[Path, int, int]]:
     raiz = Path(next(iter(scheduling.__path__)))
     return {
-        (arquivo.resolve(), no.lineno, no.value)
+        (arquivo.resolve(), no.lineno, valor)
         for arquivo in raiz.rglob("*.py")
         for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8")))
-        if isinstance(no, ast.Constant) and type(no.value) is int and no.value in _DEFAULTS_LEGAIS
+        if (valor := _inteiro_constante(no)) is not None and valor in _DEFAULTS_LEGAIS
     }
+
+
+@pytest.mark.parametrize("trecho", ["x = 660", "x = 11 * 60", "x = 44 * 60", "x = 10 * 60 + 0"])
+def test_o_detector_reconhece_literal_e_aritmetica_de_literais(trecho: str) -> None:
+    assert any(_inteiro_constante(no) in _DEFAULTS_LEGAIS for no in ast.walk(ast.parse(trecho)))
 
 
 def test_os_defaults_legais_aparecem_so_em_validation_config_default() -> None:

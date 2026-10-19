@@ -59,14 +59,15 @@ class EmployeeFacts:
         active: se o registro está ativo; inativo não é avaliado.
         job_function_ids: as funções que o registro detém **hoje**.
         contracted_weekly_hours: carga semanal em horas; `None` = sob demanda.
-        unavailabilities: as janelas de indisponibilidade do registro.
+        unavailabilities: as janelas de indisponibilidade do registro — sem default:
+            esquecê-las calaria a política `block` fixa em silêncio.
     """
 
     employee_id: EmployeeId
     active: bool
     job_function_ids: frozenset[JobFunctionId]
     contracted_weekly_hours: Decimal | None
-    unavailabilities: tuple[UnavailabilityWindow, ...] = ()
+    unavailabilities: tuple[UnavailabilityWindow, ...]
 
     def __post_init__(self) -> None:
         horas = self.contracted_weekly_hours

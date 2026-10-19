@@ -85,8 +85,12 @@ _COM_CONTEXTO: tuple[tuple[type[SchedulingError], object, str], ...] = (
     (InvalidScheduleVersionError, 0, "0"),
     (InvalidAssignmentBreakError, "não pode ser negativo", "não pode ser negativo"),
     (DuplicateEntityIdError, "ShiftDemandId", "ShiftDemandId"),
-    (InvalidValidationConfigError, "min_rest_minutes", "min_rest_minutes"),
-    (InvalidEvaluationInputError, "sem fatos", "sem fatos"),
+    (
+        InvalidValidationConfigError,
+        "min_rest_minutes",
+        "configuração de validação inválida: min_rest_minutes",
+    ),
+    (InvalidEvaluationInputError, "sem fatos", "insumo de avaliação inválido: sem fatos"),
 )
 
 # As que não carregam contexto: a mensagem é a invariante inteira.

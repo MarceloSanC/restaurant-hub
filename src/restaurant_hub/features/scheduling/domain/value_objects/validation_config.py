@@ -94,6 +94,18 @@ class ValidationConfig:
     workload_direction: WorkloadDirection
 
     def __post_init__(self) -> None:
+        inteiros = {
+            "min_rest_minutes": self.min_rest_minutes,
+            "daily_cap_minutes": self.daily_cap_minutes,
+            "weekly_cap_minutes": self.weekly_cap_minutes,
+            "workload_tolerance_minutes": self.workload_tolerance_minutes,
+        }
+        for nome, valor in inteiros.items():
+            # `type is int`, não `isinstance`: `bool` é `int` e passaria como 0/1 minuto.
+            if type(valor) is not int:
+                raise InvalidValidationConfigError(
+                    f"{nome} deve ser um número inteiro de minutos (recebido: {valor!r})"
+                )
         nao_negativos = {
             "min_rest_minutes": self.min_rest_minutes,
             "workload_tolerance_minutes": self.workload_tolerance_minutes,
