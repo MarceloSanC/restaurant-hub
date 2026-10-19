@@ -322,4 +322,13 @@ nos três `value_objects` novos (o `fail_under` é agregado).
 > alterações fora dos marcadores `BEGIN/END: post-execution` são rejeitadas por
 > `scripts/check_technical_postexec.py`. Cada entrada carrega data + autor.
 
+### 2026-10-19 — [deviation] Task 04, arquivo de totalidade fora da lista do concept — Claude Opus 5.5 (executor)
+
+A divergência 3 do concept §1 lista os arquivos a modificar e não inclui
+`tests/unit/test_check_docs_claims.py`, que trava por igualdade o conjunto de caminhos
+`[planejado]` do LAYOUT (`_PLANEJADOS_DO_LAYOUT_REAL`). Achado blocker do Checkpoint B, corrigido no
+plano antes da aprovação (Task 04); o concept (`done`) não regride porque a lista de arquivos não é
+contrato, fronteira nem critério de aceite. O conjunto passa a `frozenset()`: `domain/services/` era
+o último caminho anotado.
+
 <!-- END: post-execution -->
