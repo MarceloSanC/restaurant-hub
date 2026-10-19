@@ -167,9 +167,10 @@ class IdentityGateway(Protocol):
     def is_employee_login(self, user_id: UserId) -> bool:
         """Diz se o login é de funcionário (L-IG5 — ADR 3.7.0001 §3).
 
-        Desligar um registro só corta as sessões quando o acesso do login vem do
-        registro: login de gerente ou dono vinculado a um registro de escala tira
-        a autoridade do papel, e revogar não protegeria nada.
+        É uma das condições com que o ADR 3.7.0001 §1 decide se desligar um
+        registro corta as sessões do login: login de gerente ou dono vinculado a
+        um registro de escala tira a autoridade do papel, e revogar não
+        protegeria nada.
 
         Returns:
             `True` se e somente se identity conhece o login e o papel é o de
