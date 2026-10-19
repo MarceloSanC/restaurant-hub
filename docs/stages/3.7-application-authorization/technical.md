@@ -409,4 +409,64 @@ ordem linear evita conflito. 07 exige os 17.
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-10-19 — [decision] Task 01 — a borda reusa o vocabulário do port: prova por AST, não por `is` — Claude
+**Contexto:** a Task 01 pedia que as três constantes de `dependencies` **fossem** as do port (`is`).
+**Pergunta:** `is` prova que a borda não redefine os valores?
+**Opções:**
+- A — `is` entre os atributos dos dois módulos
+- B — AST de `dependencies.py`: as três vêm de `ImportFrom` do port e nenhuma é alvo de atribuição ✅ recomendada
+**Decisão:** B
+**Razão:** literais `str` com forma de identificador são internados pelo CPython — uma redefinição `PERMISSION_MANAGE_STAFF = "manage_staff"` na borda passaria em `is`. O teste (`test_http_dependencies.py`) cobra a forma do módulo.
+
+### 2026-10-19 — [decision] Tasks 03–06 — `guard` é o último parâmetro do construtor — Claude
+**Contexto:** as suítes de regra de negócio constroem use cases **posicionalmente** (`CreateJobFunctionUseCase(fakes.job_functions, gerador)`).
+**Pergunta:** onde entra `guard` na assinatura?
+**Opções:**
+- A — primeiro parâmetro (o acesso antes das dependências de dado)
+- B — último parâmetro, passado por nome em todo sítio ✅ recomendada
+**Decisão:** B
+**Razão:** reversível e barato, sem princípio de concept/ADR que escolha a posição; B não reordena nenhum argumento posicional existente, e o `composition_root` e os ambientes de teste passam por nome. Registrado por não ter âncora (técnica do passo 3 do prompt de Stage).
+
+### 2026-10-19 — [deviation] Task 03 (fix) — os dublês registram o ator — Claude
+Checkpoint C do bloco 01–03 (achado 1): `DenyingAccessGuard`/`PermissiveAccessGuard` registravam só `(permission, tenant_id, unit_id)`, e um use case que autorizasse `None` no lugar de `command.actor` passava por toda a suíte de application — o permissivo concede sem olhar o ator. Os dois passaram a registrar `actors`, e CA03/CA05 cobram o ator do command por identidade. Mutação `query.actor → None` em `list_employees` aplicada: morta por CA03 e CA05. Commit `6cc72e0`, junto com a frase do router que dizia "o mesmo alvo" (a rota omite o tenant; o use case o nomeia — achado 2).
+
+### 2026-10-19 — [deviation] Task 06 (fix) — docstrings do gateway por operação e cenário de desligar com login — Claude
+Checkpoint C do bloco 04–06: os docstrings de `identity_gateway.py` e `local_identity_gateway.py` atribuíam `manage_staff` **e** `manage_users` a todo uso do gateway, mas revogar sessões vem de `deactivate_employee`, que autoriza só `manage_staff`. Reescritos por operação. O mesmo revisor notou que o cenário de `deactivate_employee` desligava registro **sem** login — a medição "gateway intocado" de CA03 não tinha o que deixar de ver; o cenário passou a desligar um registro com `user_id`, e CA07 cobra `gateway.revoked == [login]`.
+
+### 2026-10-19 — [finding] autenticidade do ator fora da borda HTTP — Claude
+A application recusa quem não tem ator **autorizado**, mas não verifica que o ator é **autêntico**: `IdentityGuard.authorize` lê `actor.claims.subject` sem conferir que o ator veio de `authenticate` (o fake confere; produção não). Um driver em processo que forje um `AuthenticatedActor` passa. Inalcançável hoje — o router é a única fonte de ator. Na mesma família: `AccessGuard.authenticate` recebe a requisição HTTP e só a borda o consome (ADR 3.4.0001, nota de 2026-10-19); `actor=None` vira `AttributeError` cru, não negação tipada.
+**Direção sugerida:** ator de sistema/delegado emitido por identity, e o tradutor de produção honrando "ator que este guard não emitiu é negado".
+**Stage candidata:** a primeira que criar worker/CLI sobre staff (Step 4, notificações; ou Step 5, auto-fill).
+
+### 2026-10-19 — [finding] validação de identificador só na borda — Claude
+ADR 3.6.0002 valida identificador na borda HTTP, antes de autorizar. A application autoriza primeiro e não valida: um driver não-HTTP com `unit_id="\x00"` leva o valor a `units.find_by_id` em identity → `DataError` não tipado (fail-closed, 500 se houvesse borda).
+**Direção sugerida:** validar identificador no ponto de entrada de cada driver, ou levar `validate_identifier` para a application.
+**Stage candidata:** a mesma do finding anterior.
+
+### 2026-10-19 — [finding] staff como provedor de scheduling — Claude
+`docs/domain/scheduling/shift-scheduling.md` prevê scheduling lendo staff por `StaffReadPort` (4.3) com adapter local (4.4). Se a leitura passar pelos use cases de staff, o consumidor precisa de um ator; se passar por uma fachada de leitura, o padrão do ADR 3.5.0001 diz que "o chamador autoriza".
+**Direção sugerida:** decidir no concept da 4.3 qual dos dois, à luz do ADR 3.7.0001.
+**Stage candidata:** 4.3-scheduling-application.
+
+### 2026-10-19 — [finding] o padrão do ADR 3.7.0001 em scheduling — Claude
+A 4.3 nasce com use cases; o ADR 3.7.0001 é de staff (`bounded_context: staff`). Adotar desde o primeiro commit custa menos que retrofit (esta Stage tocou 17 use cases e ~20 suítes).
+**Direção sugerida:** a 4.3 decide se promove a regra a ADR transversal ou a reaplica por BC.
+**Stage candidata:** 4.3-scheduling-application.
+
+### 2026-10-19 — [finding] ponteiros `(#49)` do lado de identity — Claude
+`features/identity/application/facade.py` §3 e ADR 3.5.0001 §1 dizem "nenhum use case de identity autoriza hoje (#49)". Continua verdade em identity — a #49 deixou identity fora de escopo —, mas o ponteiro sugere que a #49 resolveria isso.
+**Direção sugerida:** trocar o ponteiro por "ver ADR 3.7.0001 (staff); identity segue sem autorização na application".
+**Stage candidata:** a próxima que tocar a fachada de identity.
+
+### 2026-10-19 — [finding] custo da dupla autorização não medido sob carga — Claude
+Toda requisição de staff autoriza duas vezes (borda + use case): `users.find_by_id` e, com unidade, `units.find_by_id` + `users.list_memberships` — até 6 leituras por chave onde havia 3. Aceito no ADR 3.7.0001, não medido.
+**Direção sugerida:** medir latência p95 das rotas de staff no ambiente piloto.
+**Stage candidata:** 6.3-ops-baseline.
+
+### 2026-10-19 — [deviation] Task 07 (fix) — matriz R3 independente e recusa tipada no CA14 — Claude
+Checkpoint C do bloco 07: (1) CA03/05/06/15 tiravam a expectativa da própria tabela `CENARIOS`, então tabela e código podiam errar **juntos** — a cópia autorizando a origem duas vezes, com a tabela concordando, passava tudo (um gerente da origem copiaria para qualquer unidade). Entrou `_MATRIZ_R3`, transcrição literal do concept R3 **por campo** do command, que cobra a tabela e alimenta o CA15; a mutação dupla aplicada morre em três testes. (2) O CA14 aceitava qualquer `IdentityError`, e `employee`/`platform_admin` param no RBAC sem chegar ao tenant; passou a asserir o tipo exato por papel (`TenantNotVisibleError` para `owner`/`manager`/`hr`). Commit `12b895a`.
+
+### 2026-10-19 — [deviation] Task 07 (extra) — testes faltantes da auditoria de testes — Claude
+A auditoria independente aplicou 13 mutações reais (todas mortas) e apontou duas linhas do concept §6 sem teste de **efeito**: ator inválido (`None`/objeto qualquer) pela cadeia de produção — agora falha fechado com `AttributeError` e nenhum efeito, nos 17 —, e command construído sem ator — agora `TypeError` para os 17 DTOs. Commit `706753b`.
+
 <!-- END: post-execution -->
