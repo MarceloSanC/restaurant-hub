@@ -725,7 +725,12 @@ async def test_ca16_dois_registros_do_login_na_unidade_so_o_ultimo_corta(
 async def test_ca17_registro_ativo_em_outra_unidade_nao_impede_o_corte(
     client: AsyncClient, engine: Engine, cenario: Cenario
 ) -> None:
-    """Decisão do sponsor (concept §13 Q4): só a unidade conta — a pessoa loga de novo."""
+    """Decisão do sponsor (concept §13 Q4): só a unidade conta — a pessoa loga de novo.
+
+    Este teste fixa Q4 contra a checagem entre unidades (ADR 3.7.0001 Alt. C); ele
+    passaria também com a regra da 3.5 (revogar sempre). A regra nova é provada
+    por CA16 e CA18.
+    """
     cabecalho = auth(cenario.manager)
     registro_a, _, tokens = await _funcionario_logado_com_dois_registros(
         client, engine, cenario, unidade_do_segundo=cenario.unidade_b
