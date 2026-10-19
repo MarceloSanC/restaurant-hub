@@ -424,4 +424,57 @@ R07–R09 re-executados: **mortos**. Dos 10 mutantes novos (S01–S10), 2 sobrev
 Os dois testes entraram no commit `[4.2/task-10-extra4]`, com as contas conferidas (660 min na
 segunda; 150 min de descanso de 05:30 a 08:00).
 
+### 2026-10-19 — [decision] auditoria de testes encerrada na rodada 5 — Claude Opus 5.5 (executor)
+
+S01/S03 re-executados: **mortos**. Rodada 5: 13 mutantes novos (T01–T13), 12 mortos; T02 (checar
+fato faltando antes de fato repetido) é **equivalente** — as duas recusam com
+`InvalidEvaluationInputError`, só o `reason` muda num insumo com os dois defeitos, e o concept não
+fixa a ordem. Total: **109 mutantes em cinco rodadas**, restando só M56 e T02, ambos equivalentes;
+os seis itens do questionário satisfeitos. Uma vez o driver de mutação quebrou ao decodificar a saída
+do pytest e deixou `context.py` mutado: restaurado com `git checkout` antes de qualquer commit (o
+commit da rodada 4 é anterior à quebra), e o driver passou a reverter num `try/finally`.
+
+### 2026-10-19 — [decision] fechamento documental sem deslocar citações — Claude Opus 5.5 (fechamento)
+
+Opções: (a) nota datada dentro do bloco 4.2 do roadmap e em cada seção do doc de domínio, como os
+fechamentos até a 3.6; (b) linha no histórico do roadmap e nota única no fim do §6 do doc, depois da
+da 4.1. **Escolhida (b)**, o precedente da 4.1: (a) deslocaria as linhas do roadmap a partir da 1335
+e do doc a partir da 1092, que o doc de domínio, os ADRs 4.1.x e o concept da 4.1 citam por número.
+Medido antes da edição: nenhuma citação aponta para as linhas que (b) desloca.
+
+### 2026-10-19 — [finding] protocolo de aceite: re-pergunta quando a medida piora — Claude Opus 5.5 (executor)
+
+A `key` das políticas agregadas não muda com a medida (concept §5.8). Na **sobre-cobertura** isso não
+basta: reduzir `N` sobre excedente já aceito cria alocações excedentes sem aceite, contra o
+invariante do doc §3.6.8. **Direção sugerida:** o protocolo da 4.3 compara também a medida
+(`observed` mais distante de `limit` = pior, nas políticas ordinais de §5.9) e re-pergunta quando
+piora; nas demais agregadas, a regra é escolha dela. **Stage candidata:** 4.3.
+
+### 2026-10-19 — [finding] violação induzida por mudança de staff — Claude Opus 5.5 (executor)
+
+Férias lançadas ou função retirada em staff, depois da alocação, aparecem como violação ao vivo
+(inclusive `block`), sem mutação de escala que as introduza; os invariantes do doc §3.5, §3.6.6 e
+§3.6.7 só valem para o que a escala introduz (concept §1, divergência 5). **Pergunta P** para o
+sponsor no concept da 4.3: guarda em staff (recusar a indisponibilidade ou a retirada de função
+sobre turno alocado, pelo port de consulta reverso do ADR 4.1.0006) × mostrar e deixar a gerente
+corrigir. **Stage candidata:** 4.3 (com staff, se a guarda for escolhida).
+
+### 2026-10-19 — [finding] aceite da violação da virada e completude do quadro — Claude Opus 5.5 (executor)
+
+(1) A violação entre o domingo da anterior e a segunda da avaliada aparece, com a mesma `key`,
+avaliando qualquer uma das duas (concept §5.6): o protocolo precisa decidir em qual escala o aceite é
+gravado. (2) O avaliador recusa fato faltando de **alocado**, mas não detecta um registro fixo ativo
+**sem** alocação ausente do insumo; em `both`, a falta dele some em silêncio. **Direção sugerida:**
+o use case monta os fatos do quadro ativo inteiro pelo `StaffReadPort`, com teste de contrato.
+**Stage candidata:** 4.3.
+
+### 2026-10-19 — [finding] etiqueta "exceção", vaga multifunção e grandezas do hub — Claude Opus 5.5 (executor)
+
+(1) Com a função não detida seguindo o cadastro atual (ADR 4.2.0001), a marca `function_exception`
+não é a etiqueta: a 4.5 decide de onde a etiqueta vem, inclusive com a política **desabilitada**,
+quando não há violação viva. (2) "Uma pessoa, duas funções, um turno" como cobertura cheia (ADR
+4.1.0012 Decision 6) não muda nenhuma política e fica para a apresentação da vaga. **Stage
+candidata:** 4.5. (3) Cobertura como razão com `N = 0` e a contagem de exceções de função são
+grandezas do hub. **Stage candidata:** 8.1.
+
 <!-- END: post-execution -->
