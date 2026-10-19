@@ -206,6 +206,35 @@ def test_unidade_e_repositorios_do_use_case_compartilham_o_engine(nome: str) -> 
         assert repositorio._engine is unidade._engine, atributo
 
 
+def _use_cases_que_recebem_unidade() -> set[str]:
+    """Classes de `use_cases/` cujo `__init__` recebe `unit_of_work` — derivado do código."""
+    pasta = _SRC / "features" / "identity" / "application" / "use_cases"
+    nomes: set[str] = set()
+    for arquivo in sorted(pasta.glob("*.py")):
+        arvore = ast.parse(arquivo.read_text("utf-8"))
+        for classe in (n for n in arvore.body if isinstance(n, ast.ClassDef)):
+            parametros = {
+                a.arg
+                for m in classe.body
+                if isinstance(m, ast.FunctionDef) and m.name == "__init__"
+                for a in m.args.args + m.args.kwonlyargs
+            }
+            if "unit_of_work" in parametros:
+                nomes.add(classe.name)
+    return nomes
+
+
+def test_todo_use_case_com_unidade_esta_na_conferencia_do_engine() -> None:
+    """A totalidade de `_COM_UNIDADE`: a conferência acima é por caso, e um sexto use
+    case que ganhasse unidade (a regra 10 obriga quem escreve duas vezes) ficaria fora
+    dela em silêncio — com um repositório de outro engine escrevendo fora da unidade.
+    """
+    deps = wire_dependencies(Settings(_env_file=None))
+    conferidos = {type(obter(deps)).__name__ for obter, _ in _COM_UNIDADE.values()}
+
+    assert conferidos == _use_cases_que_recebem_unidade()
+
+
 def test_ttl_dos_tokens_vem_da_configuracao() -> None:
     """CA25 (metade do wiring) — TTL é configuração, não constante.
 
