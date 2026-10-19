@@ -55,7 +55,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     OnDemand,
 )
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -127,7 +127,7 @@ def test_renomear_troca_o_nome_verbatim_e_a_releitura_confirma() -> None:
     fakes = _com_funcionario()
     antes = _result(fakes)
 
-    resultado = RenameEmployeeUseCase(fakes.employees).execute(
+    resultado = RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         RenameEmployeeCommand(
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="  Joana "
         )
@@ -144,7 +144,7 @@ def test_renomear_troca_o_nome_verbatim_e_a_releitura_confirma() -> None:
 def test_renomear_nao_altera_tenant_nem_unidade() -> None:
     """§5.12: a localização do registro é imutável; nenhum use case a toca."""
     fakes = _com_funcionario()
-    resultado = RenameEmployeeUseCase(fakes.employees).execute(
+    resultado = RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         RenameEmployeeCommand(
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
         )
@@ -270,7 +270,9 @@ def _comandos_dos_tres(tenant: TenantId, employee_id: EmployeeId) -> list[object
 
 def _executar(fakes: StaffFakes, comando: object) -> object:
     if isinstance(comando, RenameEmployeeCommand):
-        return RenameEmployeeUseCase(fakes.employees).execute(comando)
+        return RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+            comando
+        )
     if isinstance(comando, ChangeWorkloadProfileCommand):
         return ChangeWorkloadProfileUseCase(fakes.employees).execute(comando)
     assert isinstance(comando, DeclareShiftPreferenceCommand)
@@ -315,7 +317,7 @@ def test_precedencia_registro_inexistente_vence_nome_vazio() -> None:
     """
     fakes = _com_funcionario()
     with pytest.raises(StaffError) as excecao:
-        RenameEmployeeUseCase(fakes.employees).execute(
+        RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
             RenameEmployeeCommand(
                 actor=TEST_ACTOR,
                 tenant_id=_A,
@@ -334,7 +336,7 @@ def test_nome_vazio_em_registro_existente_e_erro_do_dominio_sem_gravar() -> None
     antes_calls = len(fakes.store.calls)
 
     with pytest.raises(InvalidNameError):
-        RenameEmployeeUseCase(fakes.employees).execute(
+        RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
             RenameEmployeeCommand(
                 actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="   "
             )
@@ -364,7 +366,9 @@ def _edicoes_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], obje
     return [
         (
             "rename_employee",
-            lambda fakes: RenameEmployeeUseCase(fakes.employees).execute(
+            lambda fakes: RenameEmployeeUseCase(
+                fakes.employees, guard=PermissiveAccessGuard()
+            ).execute(
                 RenameEmployeeCommand(
                     actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=_E1, name="Joana"
                 )

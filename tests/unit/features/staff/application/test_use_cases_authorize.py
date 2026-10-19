@@ -38,20 +38,38 @@ from typing import Any, Final
 import pytest
 
 from restaurant_hub.features.staff.application.dtos.commands import (
+    CreateEmployeeCommand,
     CreateJobFunctionCommand,
+    DeleteEmployeeCommand,
     DeleteJobFunctionCommand,
+    RenameEmployeeCommand,
     RenameJobFunctionCommand,
 )
-from restaurant_hub.features.staff.application.dtos.queries import ListJobFunctionsQuery
+from restaurant_hub.features.staff.application.dtos.queries import (
+    ListEmployeesQuery,
+    ListJobFunctionsQuery,
+)
 from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
+from restaurant_hub.features.staff.application.use_cases.create_employee import (
+    CreateEmployeeUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.delete_employee import (
+    DeleteEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.delete_job_function import (
     DeleteJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.list_employees import (
+    ListEmployeesUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.list_job_functions import (
     ListJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.rename_employee import (
+    RenameEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
@@ -64,7 +82,10 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
     UnitId,
 )
-from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
+    FixedSchedule,
+    OnDemand,
+)
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.features.staff.stub_access_guards import (
@@ -189,6 +210,32 @@ def _funcao_apagada_no_tenant(montagem: Montagem, resultado: object) -> None:
     assert montagem.fakes.job_functions.find_by_id(_A, _F_LIVRE) is None
 
 
+def _registro_no_endereco(montagem: Montagem, employee_id: EmployeeId) -> Employee | None:
+    return montagem.fakes.employees.find_by_id(_A, _U1, employee_id)
+
+
+def _funcionario_criado_no_endereco(montagem: Montagem, resultado: object) -> None:
+    assert resultado.tenant_id == _A
+    assert resultado.unit_id == _U1
+    assert _registro_no_endereco(montagem, EmployeeId(resultado.id)) is not None
+
+
+def _equipe_da_unidade(montagem: Montagem, resultado: object) -> None:
+    assert [(r.tenant_id, r.unit_id, r.id) for r in resultado] == [(_A, _U1, _E_ATIVO)]
+
+
+def _funcionario_renomeado_no_endereco(montagem: Montagem, resultado: object) -> None:
+    assert (resultado.tenant_id, resultado.unit_id) == (_A, _U1)
+    relido = _registro_no_endereco(montagem, _E_ATIVO)
+    assert relido is not None
+    assert relido.name == "Maria Clara"
+
+
+def _funcionario_apagado_no_endereco(montagem: Montagem, resultado: object) -> None:
+    assert resultado is None
+    assert _registro_no_endereco(montagem, _E_ATIVO) is None
+
+
 CENARIOS: Final[dict[str, Cenario]] = {
     "create_job_function": Cenario(
         classe=CreateJobFunctionUseCase,
@@ -215,6 +262,41 @@ CENARIOS: Final[dict[str, Cenario]] = {
         command=DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F_LIVRE),
         alvos=((_MANAGE_JOB_FUNCTIONS, _A, None),),
         no_endereco_do_command=_funcao_apagada_no_tenant,
+    ),
+    "create_employee": Cenario(
+        classe=CreateEmployeeUseCase,
+        command=CreateEmployeeCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            name="João",
+            workload_profile=OnDemand(),
+            job_function_ids=frozenset({_F_EM_USO}),
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_funcionario_criado_no_endereco,
+    ),
+    "list_employees": Cenario(
+        classe=ListEmployeesUseCase,
+        command=ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_equipe_da_unidade,
+    ),
+    "rename_employee": Cenario(
+        classe=RenameEmployeeUseCase,
+        command=RenameEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_ATIVO, name="Maria Clara"
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_funcionario_renomeado_no_endereco,
+    ),
+    "delete_employee": Cenario(
+        classe=DeleteEmployeeUseCase,
+        command=DeleteEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_ATIVO
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_funcionario_apagado_no_endereco,
     ),
 }
 

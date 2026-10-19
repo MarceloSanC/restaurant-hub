@@ -267,9 +267,12 @@ async def test_o_guard_e_consultado_com_a_unidade_do_path(
 
     await client.get(_BASE)
 
+    # A rota omite o tenant (ADR 0.0.0005); o use case o nomeia (ADR 3.7.0001
+    # §3). Os dois nomeiam a unidade do path.
     assert ambiente.guard.calls == [
         "authenticate",
         f"authorize(manage_staff,None,{_UNIDADE})",
+        f"authorize(manage_staff,{_TENANT},{_UNIDADE})",
     ]
 
 

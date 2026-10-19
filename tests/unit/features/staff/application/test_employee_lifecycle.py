@@ -208,7 +208,7 @@ def test_desligado_some_da_listagem_default_mas_aparece_no_opt_in() -> None:
     _desligar(fakes).execute(
         DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
-    listar = ListEmployeesUseCase(fakes.employees)
+    listar = ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
     assert listar.execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)) == ()
 

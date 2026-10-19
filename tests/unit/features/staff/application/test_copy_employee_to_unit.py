@@ -61,7 +61,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -209,7 +209,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
     origem_antes = _result(fakes, _U1, _E1)
     copia_id = EmployeeId(copia.id)
 
-    RenameEmployeeUseCase(fakes.employees).execute(
+    RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         RenameEmployeeCommand(
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=copia_id, name="Joana"
         )
@@ -243,7 +243,7 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
     copia_id = EmployeeId(copia.id)
     copia_antes = _result(fakes, _U2, copia_id)
 
-    RenameEmployeeUseCase(fakes.employees).execute(
+    RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         RenameEmployeeCommand(
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
         )

@@ -121,7 +121,7 @@ def _renomear_funcao(fakes: StaffFakes, nome: str) -> None:
 
 
 def _renomear_funcionario(fakes: StaffFakes, nome: str) -> None:
-    RenameEmployeeUseCase(fakes.employees).execute(
+    RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         RenameEmployeeCommand(
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name=nome
         )

@@ -88,7 +88,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     OnDemand,
 )
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -143,7 +143,7 @@ def _relido(fakes: StaffFakes) -> Employee:
 _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Employee], None]]] = [
     (
         "rename_employee",
-        lambda fakes: RenameEmployeeUseCase(fakes.employees).execute(
+        lambda fakes: RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
             RenameEmployeeCommand(
                 actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
             )
@@ -274,7 +274,7 @@ def test_desligado_editado_continua_fora_da_listagem_default(
     """
     fakes = _desligado()
     executar(fakes)
-    listar = ListEmployeesUseCase(fakes.employees)
+    listar = ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard())
     assert listar.execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)) == ()
     incluindo = listar.execute(
         ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, include_inactive=True)
@@ -294,7 +294,7 @@ def test_reactivate_e_o_unico_caminho_de_volta() -> None:
         ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
     assert _relido(fakes).active is True
-    listado = ListEmployeesUseCase(fakes.employees).execute(
+    listado = ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)
     )
     assert [resultado.id for resultado in listado] == [_E1]

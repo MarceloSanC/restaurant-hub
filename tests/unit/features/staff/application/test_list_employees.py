@@ -23,7 +23,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -65,7 +65,7 @@ def _grava(
 
 
 def _listar(fakes: StaffFakes) -> ListEmployeesUseCase:
-    return ListEmployeesUseCase(fakes.employees)
+    return ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
 
 def test_lista_os_registros_da_unidade_pedida() -> None:

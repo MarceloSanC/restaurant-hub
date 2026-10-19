@@ -37,7 +37,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     OnDemand,
 )
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -77,7 +77,12 @@ def _comando(
 
 
 def _criar(fakes: StaffFakes, gerador: FakeIdGenerator | None = None) -> CreateEmployeeUseCase:
-    return CreateEmployeeUseCase(fakes.employees, fakes.job_functions, gerador or FakeIdGenerator())
+    return CreateEmployeeUseCase(
+        fakes.employees,
+        fakes.job_functions,
+        gerador or FakeIdGenerator(),
+        guard=PermissiveAccessGuard(),
+    )
 
 
 # --- caminho feliz -----------------------------------------------------------

@@ -50,7 +50,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -98,7 +98,7 @@ def _grava(
 
 
 def _apagar(fakes: StaffFakes) -> DeleteEmployeeUseCase:
-    return DeleteEmployeeUseCase(fakes.employees)
+    return DeleteEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
 
 def test_remove_o_registro_definitivamente() -> None:
@@ -117,7 +117,7 @@ def test_o_removido_some_das_duas_listagens() -> None:
     _apagar(fakes).execute(
         DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
-    listar = ListEmployeesUseCase(fakes.employees)
+    listar = ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard())
     assert listar.execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)) == ()
     assert (
         listar.execute(

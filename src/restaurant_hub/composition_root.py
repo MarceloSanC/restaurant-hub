@@ -680,10 +680,17 @@ def wire_dependencies(
             employees=staff_employees,
             job_functions=staff_job_functions,
             id_generator=id_generator,
+            guard=staff_access_guard,
         ),
-        staff_rename_employee=RenameEmployeeUseCase(employees=staff_employees),
-        staff_list_employees=ListEmployeesUseCase(employees=staff_employees),
-        staff_delete_employee=DeleteEmployeeUseCase(employees=staff_employees),
+        staff_rename_employee=RenameEmployeeUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_list_employees=ListEmployeesUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_delete_employee=DeleteEmployeeUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
         staff_assign_job_functions=AssignJobFunctionsUseCase(
             employees=staff_employees, job_functions=staff_job_functions
         ),

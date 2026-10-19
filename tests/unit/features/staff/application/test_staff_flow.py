@@ -114,7 +114,9 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     ] == ["Cozinheiro"]
 
     # 2. O funcionário na unidade A.
-    funcionario = CreateEmployeeUseCase(fakes.employees, fakes.job_functions, ids).execute(
+    funcionario = CreateEmployeeUseCase(
+        fakes.employees, fakes.job_functions, ids, guard=PermissiveAccessGuard()
+    ).execute(
         CreateEmployeeCommand(
             actor=TEST_ACTOR,
             tenant_id=_TENANT,
@@ -182,7 +184,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     )
 
     # 7. As listagens contam a história.
-    listar = ListEmployeesUseCase(fakes.employees)
+    listar = ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard())
     assert (
         listar.execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE_A))
         == ()
@@ -228,7 +230,9 @@ def test_o_fluxo_nao_escreve_direto_nos_fakes() -> None:
     funcao = CreateJobFunctionUseCase(
         fakes.job_functions, ids, guard=PermissiveAccessGuard()
     ).execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro"))
-    CreateEmployeeUseCase(fakes.employees, fakes.job_functions, ids).execute(
+    CreateEmployeeUseCase(
+        fakes.employees, fakes.job_functions, ids, guard=PermissiveAccessGuard()
+    ).execute(
         CreateEmployeeCommand(
             actor=TEST_ACTOR,
             tenant_id=_TENANT,

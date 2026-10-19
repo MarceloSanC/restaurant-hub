@@ -23,6 +23,10 @@ from restaurant_hub.features.staff.application.dtos.results import (
     to_employee_result,
 )
 from restaurant_hub.features.staff.application.errors import JobFunctionNotFoundError
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_STAFF,
+    AccessGuard,
+)
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
@@ -42,10 +46,12 @@ class CreateEmployeeUseCase:
         employees: EmployeeRepository,
         job_functions: JobFunctionRepository,
         id_generator: IdGenerator,
+        guard: AccessGuard,
     ) -> None:
         self._employees = employees
         self._job_functions = job_functions
         self._id_generator = id_generator
+        self._guard = guard
 
     def execute(self, command: CreateEmployeeCommand) -> EmployeeResult:
         """Cria o registro, já ativo.
@@ -58,6 +64,14 @@ class CreateEmployeeUseCase:
             InvalidNameError: nome vazio (domínio, 3.1).
             InvalidIdentifierError: tenant ou unidade vazios (domínio, 3.1).
         """
+        # (0) Autorização do alvo do command, antes de qualquer outra instrução
+        # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
+        self._guard.authorize(
+            command.actor,
+            PERMISSION_MANAGE_STAFF,
+            tenant_id=command.tenant_id,
+            unit_id=command.unit_id,
+        )
         # (1) Resolução do conjunto — antes da construção, de propósito.
         encontradas = self._job_functions.find_all_by_ids(
             command.tenant_id, command.job_function_ids
