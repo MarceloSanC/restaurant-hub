@@ -41,7 +41,6 @@ Três varreduras fecham o que a tabela sozinha não fecha (Task 07):
 """
 
 import ast
-import dataclasses
 import importlib
 import inspect
 import pkgutil
@@ -726,18 +725,6 @@ def _chamada_esperada(param: str, campo_de_unidade: str | None, permissao: str) 
     return ast.dump(ast.parse(fonte, mode="eval").body)
 
 
-def _campo_de_unidade(command: object, unidade: str | None) -> str | None:
-    """O campo do command que carrega aquela unidade — `unit_id` ou `target_unit_id`."""
-    if unidade is None:
-        return None
-    [campo] = [
-        f.name
-        for f in dataclasses.fields(command)  # type: ignore[arg-type]
-        if f.name.endswith("unit_id") and getattr(command, f.name) == unidade
-    ]
-    return campo
-
-
 def _execute(nome: str) -> ast.FunctionDef:
     modulo = importlib.import_module(f"{pacote_use_cases.__name__}.{nome}")
     arvore = ast.parse(inspect.getsource(modulo))
@@ -759,7 +746,6 @@ def test_ca15_o_execute_abre_com_exatamente_as_autorizacoes_da_matriz(nome: str)
     **instrução solta** — um `scope = self._guard.authorize(...)` é `Assign`, e
     o escopo guardado é o começo de lê-lo (R4).
     """
-    cenario = CENARIOS[nome]
     execute = _execute(nome)
     param = execute.args.args[1].arg
     corpo = execute.body
@@ -771,8 +757,7 @@ def test_ca15_o_execute_abre_com_exatamente_as_autorizacoes_da_matriz(nome: str)
     ):
         corpo = corpo[1:]
     esperadas = [
-        _chamada_esperada(param, _campo_de_unidade(cenario.command, unidade), permissao)
-        for permissao, _, unidade in cenario.alvos
+        _chamada_esperada(param, campo, permissao) for permissao, campo in _MATRIZ_R3[nome]
     ]
     iniciais = corpo[: len(esperadas)]
 
@@ -793,3 +778,63 @@ def test_ca15_o_execute_abre_com_exatamente_as_autorizacoes_da_matriz(nome: str)
 def test_a_varredura_de_forma_conhece_as_tres_permissoes_do_port() -> None:
     """Se o mapa valor→nome perdesse uma, CA15 levantaria KeyError e não diria o porquê."""
     assert set(_PERMISSAO_POR_VALOR) == {"manage_staff", "manage_job_functions", "manage_users"}
+
+
+# ---------------------------------------------------------------------------
+# A matriz R3, transcrita do concept — independente da tabela de cenários
+# ---------------------------------------------------------------------------
+#
+# CA03/CA05/CA06/CA15 constroem a expectativa a partir de `CENARIOS[...].alvos`.
+# Se a tabela e o código errassem **juntos** — a cópia autorizando a origem duas
+# vezes e a tabela dizendo o mesmo —, todos ficariam verdes e um gerente da
+# origem copiaria para qualquer unidade (Checkpoint C do bloco 07). A matriz
+# abaixo é a **transcrição literal** de concept §5 R3, por **campo** do command
+# e não por valor, e a tabela é cobrada contra ela. Mudar a matriz é mudar o
+# concept.
+_MATRIZ_R3: Final[dict[str, tuple[tuple[str, str | None], ...]]] = {
+    "create_job_function": ((_MANAGE_JOB_FUNCTIONS, None),),
+    "list_job_functions": ((_MANAGE_JOB_FUNCTIONS, None),),
+    "rename_job_function": ((_MANAGE_JOB_FUNCTIONS, None),),
+    "delete_job_function": ((_MANAGE_JOB_FUNCTIONS, None),),
+    "create_employee": ((_MANAGE_STAFF, "unit_id"),),
+    "list_employees": ((_MANAGE_STAFF, "unit_id"),),
+    "rename_employee": ((_MANAGE_STAFF, "unit_id"),),
+    "delete_employee": ((_MANAGE_STAFF, "unit_id"),),
+    "assign_job_functions": ((_MANAGE_STAFF, "unit_id"),),
+    "change_workload_profile": ((_MANAGE_STAFF, "unit_id"),),
+    "declare_shift_preference": ((_MANAGE_STAFF, "unit_id"),),
+    "register_unavailability": ((_MANAGE_STAFF, "unit_id"),),
+    "remove_unavailability": ((_MANAGE_STAFF, "unit_id"),),
+    "deactivate_employee": ((_MANAGE_STAFF, "unit_id"),),
+    "reactivate_employee": ((_MANAGE_STAFF, "unit_id"),),
+    "copy_employee_to_unit": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_STAFF, "target_unit_id")),
+    "create_login_for_employee": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_USERS, "unit_id")),
+}
+
+
+def test_a_matriz_transcrita_cobre_a_pasta() -> None:
+    assert sorted(_MATRIZ_R3) == _modulos_da_pasta()
+
+
+@pytest.mark.parametrize("nome", _modulos_da_pasta())
+def test_os_alvos_da_tabela_sao_os_da_matriz_lida_do_command(nome: str) -> None:
+    """A tabela é derivada da matriz pelo command — não o contrário.
+
+    Com os alvos lidos dos **campos** que a matriz nomeia, "autorizar a origem
+    duas vezes" não cabe: a segunda linha da cópia pede o valor de
+    `target_unit_id`, que é outra unidade no command do cenário.
+    """
+    cenario = CENARIOS[nome]
+    command = cenario.command
+    esperados = tuple(
+        (permissao, command.tenant_id, getattr(command, campo) if campo else None)
+        for permissao, campo in _MATRIZ_R3[nome]
+    )
+
+    assert cenario.alvos == esperados
+
+
+def test_na_copia_origem_e_destino_sao_unidades_diferentes_no_cenario() -> None:
+    """Sem isto, a linha da matriz para `target_unit_id` coincidiria com a de `unit_id`."""
+    command = CENARIOS["copy_employee_to_unit"].command
+    assert command.unit_id != command.target_unit_id

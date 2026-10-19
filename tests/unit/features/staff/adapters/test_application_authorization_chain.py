@@ -38,12 +38,15 @@ from restaurant_hub.features.identity.application.dtos.identifiers import (
     SessionId,
 )
 from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
+from restaurant_hub.features.identity.application.errors import (
+    PermissionDeniedError,
+    TenantNotVisibleError,
+)
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.entities.user import User
-from restaurant_hub.features.identity.domain.exceptions.errors import IdentityError
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
@@ -74,8 +77,20 @@ _U2: Final = UnitId("u2")
 _X1: Final = UnitId("x1")
 _HASH: Final = PasswordHash("hashed::x")
 
-# Os papéis que chegam de fora do tenant-alvo. `platform_admin` não tem tenant.
-_PAPEIS_DE_FORA: Final = (Role.OWNER, Role.MANAGER, Role.HR, Role.EMPLOYEE, Role.PLATFORM_ADMIN)
+# Os papéis que chegam de fora do tenant-alvo, com **a checagem que os para** —
+# assertada pelo tipo exato, para que a recusa não passe por um motivo qualquer
+# (Checkpoint C do bloco 07). `owner`/`manager`/`hr` detêm as permissões de staff
+# e passam o passo 2: quem os recusa é o passo 3, a **confirmação do tenant
+# nomeado** — o que este arquivo existe para provar. `employee` não detém
+# permissão nenhuma e `platform_admin` só `manage_platform`: param no passo 2
+# (RBAC), antes do tenant, e ficam aqui como as outras duas portas de entrada.
+_PAPEIS_DE_FORA: Final = {
+    Role.OWNER: TenantNotVisibleError,
+    Role.MANAGER: TenantNotVisibleError,
+    Role.HR: TenantNotVisibleError,
+    Role.EMPLOYEE: PermissionDeniedError,
+    Role.PLATFORM_ADMIN: PermissionDeniedError,
+}
 
 
 @dataclasses.dataclass
@@ -103,7 +118,8 @@ def _ator(identidade: Identidade, papel: Role, tenant: RestaurantId | None) -> o
     """Um usuário **gravado** em identity e o `AuthenticatedActor` real que o representa.
 
     `manager`/`hr`/`employee` são membros de uma unidade do **próprio** tenant —
-    para a recusa ser por tenant, e não por falta de vínculo.
+    para que a recusa de `manager`/`hr` seja pelo tenant e não por falta de vínculo,
+    o que o teste assere pelo tipo exato (`TenantNotVisibleError`).
     """
     tenant_do_papel = None if papel is Role.PLATFORM_ADMIN else tenant
     user_id = UserId(f"{papel.value}-{tenant_do_papel or 'plataforma'}")
@@ -140,7 +156,7 @@ def _executar(montagem: Montagem, nome: str, ator: object) -> object:
     return montagem.use_case.execute(command)
 
 
-@pytest.mark.parametrize("papel", _PAPEIS_DE_FORA, ids=lambda papel: papel.value)
+@pytest.mark.parametrize("papel", list(_PAPEIS_DE_FORA), ids=lambda papel: papel.value)
 @pytest.mark.parametrize("nome", sorted(CENARIOS))
 def test_ca14_ator_de_outro_tenant_e_recusado_por_identity_sem_efeito(
     nome: str, papel: Role
@@ -150,8 +166,10 @@ def test_ca14_ator_de_outro_tenant_e_recusado_por_identity_sem_efeito(
     montagem = _montar(CENARIOS[nome].classe, identidade.guard)
     chamadas_ao_store = len(montagem.fakes.store.calls)
 
-    with pytest.raises(IdentityError):
+    with pytest.raises(_PAPEIS_DE_FORA[papel]) as excinfo:
         _executar(montagem, nome, ator)
+
+    assert type(excinfo.value) is _PAPEIS_DE_FORA[papel]
 
     assert montagem.fakes.store.calls[chamadas_ao_store:] == []
     assert montagem.gateway.calls == []
