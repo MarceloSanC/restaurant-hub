@@ -209,6 +209,34 @@ Exemplo: `<Entity>Repository` — contrato que o use case usa para persistir uma
 
 ---
 
+### A fronteira transacional (desde a Stage 2.6)
+
+Use case que escreve **mais de uma vez** numa requisição escreve dentro de uma
+**unidade de trabalho** — um port de saída como os outros, injetado pelo
+composition root ([ADR 2.6.0001](./adr/2_6_0001-identity-unit-of-work-port-and-ambient-connection.md),
+[ADR 2.6.0002](./adr/2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md)):
+
+- **Quem abre a unidade é o use case**, com `with self._unit_of_work.transaction():`
+  em volta **só** das escritas que precisam ser atômicas. Leitura e checagem que
+  decidem se haverá escrita vêm antes; trabalho de CPU (hash de senha, emissão de
+  token) vem antes; efeito colateral que não se desfaz (e-mail) vem **depois** do
+  commit. Escrita que precisa comitar mesmo quando o use case recusa (a revogação
+  em massa do reuso de refresh) fica fora, seguida do `raise`.
+- **A unidade é de um bounded context e não atravessa a fachada.** Hoje só
+  identity tem uma (`features/identity/application/ports/out/unit_of_work.py`);
+  staff escreve uma vez por requisição em staff, e as travessias staff → identity
+  seguem ordenadas, com as janelas declaradas (ADR 4.1.0006 Alt. A). O port fica
+  na feature até um segundo BC precisar dele (§4).
+- **O adapter não muda o construtor dos repositórios**: eles pedem a conexão a
+  `conexao_da_unidade` e recebem a da unidade ativa do **mesmo** engine, num
+  savepoint por chamada — por isso repositório e unidade precisam do mesmo
+  `Engine` no composition root.
+- **`scripts/check_layout.py` regra 10** reprova o use case com duas ou mais
+  escritas que não estejam todas dentro de **um** bloco de unidade (escrita em
+  laço conta duas; só o "grava e recusa" é tolerado fora). Exceções vivem numa
+  allowlist contável, como a do charter (regra 6) — hoje, as duas travessias de
+  staff para identity.
+
 ## 6. Composition Root
 
 `composition_root.py` é o **único ponto de wiring** da aplicação. Ele:
