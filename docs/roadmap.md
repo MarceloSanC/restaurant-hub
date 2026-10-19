@@ -125,7 +125,7 @@ graph LR
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
 | `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
-| `3.7-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | draft | `3.5-employee-login-link` |
+| `3.7-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
@@ -1377,6 +1377,20 @@ complexidade_estimada: S
 gate_mode: strict
 skills_hint: [hex-arch-python, pytest-with-fakes, composition-root]
 ```
+
+> **Nota (2026-10-19): fechamento da Stage 3.7** (issue #60; concept e technical em
+> `docs/stages/3.7-termination-access-scope/`; ADR 3.7.0001). O que a execução fixou:
+>
+> - **Quatro decisões do sponsor** (concept §13): revogar só com papel `employee` + último vínculo
+>   ativo (Q1); desligar **nunca** desativa a conta (Q2); a Stage entrega em staff + identity
+>   (Q3); "outro registro ativo" olha **só a mesma unidade** (Q4) — por isso não há método novo no
+>   repositório: a checagem lê `list_by_unit` (L-E6).
+> - **Identity:** `GetAccountRoleUseCase` + `IdentityFacade.account_role` (somente leitura).
+>   **Staff:** lei L-IG5 (`is_employee_login`) com contrato fake × real; R13 com a regra e a guarda
+>   `employee.active`. Sem migration.
+> - **6 Tasks + 5 commits de correção** (Checkpoints C) **+ 1 extra** (auditoria de testes: 500 na
+>   borda para falha antes da escrita, lacuna herdada da 3.5). Findings na §7 do technical.
+
 
 ---
 
