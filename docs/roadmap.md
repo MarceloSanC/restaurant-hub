@@ -1346,7 +1346,7 @@ skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin
 
 #### Stage 3.7 — `3.7-termination-access-scope`
 
-**Descrição humana:** desligar um registro de funcionário (R13) passa a revogar as sessões do login vinculado **só quando o registro é a fonte do acesso** — conta de papel `employee` e nenhum outro registro ativo apontando para ela. Login de gerente/dono vinculado a um registro de escala, ou pessoa com outro registro ativo, não perde as sessões. Promovida da issue #60 (achado F2 da auditoria pós-merge da 3.5; PIPELINE §4.5: contrato de port novo + ADR que supersede parcialmente o 3.5.0003).
+**Descrição humana:** desligar um registro de funcionário (R13) passa a revogar as sessões do login vinculado **só quando o registro é a fonte do acesso** — registro ativo, conta de papel `employee` e nenhum outro registro ativo **da mesma unidade** apontando para ela. Login de gerente/dono vinculado a um registro de escala, ou pessoa com outro registro ativo na unidade, não perde as sessões; desligar nunca desativa a conta. Promovida da issue #60 (achado F2 da auditoria pós-merge da 3.5; PIPELINE §4.5: contrato de port novo + ADR que supersede parcialmente o 3.5.0003).
 
 ```yaml
 stage_id: 3.7-termination-access-scope
@@ -1354,27 +1354,28 @@ bounded_context: staff
 camada_alvo: vertical (staff, consumindo consulta nova da fachada de identity)
 depends_on: [3.5-employee-login-link]
 arquivos_a_criar:
-  - features/identity/application/use_cases/<consulta do papel da conta>.py
-  - docs/adr/3_7_0001-*.md
+  - features/identity/application/use_cases/get_account_role.py
+  - docs/adr/3_7_0001-termination-revokes-only-access-the-record-grants.md
 arquivos_a_modificar:
-  - features/identity/application/facade.py (uma consulta somente-leitura)
-  - features/staff/application/ports/out/{identity_gateway,employee_repository}.py (uma lei nova em cada)
-  - features/staff/adapters/out/{identity/local_identity_gateway,postgres/employee_repository}.py
-  - features/staff/application/use_cases/deactivate_employee.py
+  - features/identity/application/{facade.py,dtos/commands.py,dtos/results.py,use_cases/revoke_all_sessions.py}
+  - features/staff/application/ports/out/identity_gateway.py (lei L-IG5)
+  - features/staff/adapters/out/identity/local_identity_gateway.py
+  - features/staff/application/{use_cases/deactivate_employee.py,errors.py}
   - composition_root.py (wiring da fachada)
+  - docs/domain/staff/workforce.md (nota datada em §3.8); docs/adr/3_5_0003 (supersessao parcial)
 contratos_introduzidos:
-  - IdentityGateway.is_employee_login (L-IG5); EmployeeRepository.exists_other_active_with_login (L-E8)
+  - IdentityGateway.is_employee_login (L-IG5); IdentityFacade.account_role; GetAccountRoleUseCase
 contratos_consumidos:
-  - IdentityFacade (3.5), RevokeAllSessionsUseCase (3.5), L-IG4 (3.5)
+  - IdentityFacade e RevokeAllSessionsUseCase (3.5); L-IG4 (3.5); EmployeeRepository.list_by_unit (L-E6)
 definition_of_done:
-  - "R13 revoga as sessoes so se a conta for employee e o registro for o ultimo ativo dela; (a) dois registros e (b) login de gerente travados por teste, inclusive e2e"
+  - "R13 revoga as sessoes so se o registro estiver ativo, a conta for employee e nao houver outro registro ativo do login na mesma unidade; (a) e (b) travados por teste, inclusive e2e"
 non_goals:
-  - vincular login existente a um registro (concept 3.5 §10)
-  - User.is_active / desativacao de conta (decidido no ADR 3.7.0001: desligar nunca desativa)
-  - revogacao por escopo de unidade (SessionRepository sem escopo)
+  - vincular/desvincular login existente (concept 3.5 §10)
+  - User.is_active / desativacao de conta (ADR 3.7.0001: desligar nunca desativa)
+  - olhar registros de outras unidades; revogacao por escopo de unidade
 complexidade_estimada: S
 gate_mode: strict
-skills_hint: [hex-arch-python, pytest-with-fakes, repository-pattern, composition-root]
+skills_hint: [hex-arch-python, pytest-with-fakes, composition-root]
 ```
 
 ---
