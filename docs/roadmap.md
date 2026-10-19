@@ -49,6 +49,7 @@ graph LR
     S33 --> S34[3.4-staff-access-scope]
     S34 --> S36[3.6-staff-http]
     S36 --> S35[3.5-employee-login-link] --> S37[3.7-application-authorization]
+    S35 --> S38[3.7-termination-access-scope]
   end
   subgraph Step4[Step 4 — Escala manual]
     S41[4.1-scheduling-domain] --> S42[4.2-validation-policies]
@@ -124,6 +125,7 @@ graph LR
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
 | `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
+| `3.7-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | draft | `3.5-employee-login-link` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
@@ -171,7 +173,6 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | open | — |
 | [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
-| [#60](https://github.com/MarceloSanC/restaurant-hub/issues/60) | Desligar registro revoga todas as sessões da conta — rever antes de um login ter mais de um vínculo | staff | application | open | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
 | [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | open | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | open | — |
@@ -1342,6 +1343,39 @@ skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin
 > - **Findings abertos** (technical §7): autenticidade do ator e validação de identificador fora da
 >   borda HTTP (Stage do primeiro driver não-HTTP), staff como provedor do `StaffReadPort` e a adoção do
 >   padrão na 4.3, ponteiros `(#49)` do lado de identity, custo da dupla autorização (6.3).
+
+#### Stage 3.7 — `3.7-termination-access-scope`
+
+**Descrição humana:** desligar um registro de funcionário (R13) passa a revogar as sessões do login vinculado **só quando o registro é a fonte do acesso** — conta de papel `employee` e nenhum outro registro ativo apontando para ela. Login de gerente/dono vinculado a um registro de escala, ou pessoa com outro registro ativo, não perde as sessões. Promovida da issue #60 (achado F2 da auditoria pós-merge da 3.5; PIPELINE §4.5: contrato de port novo + ADR que supersede parcialmente o 3.5.0003).
+
+```yaml
+stage_id: 3.7-termination-access-scope
+bounded_context: staff
+camada_alvo: vertical (staff, consumindo consulta nova da fachada de identity)
+depends_on: [3.5-employee-login-link]
+arquivos_a_criar:
+  - features/identity/application/use_cases/<consulta do papel da conta>.py
+  - docs/adr/3_7_0001-*.md
+arquivos_a_modificar:
+  - features/identity/application/facade.py (uma consulta somente-leitura)
+  - features/staff/application/ports/out/{identity_gateway,employee_repository}.py (uma lei nova em cada)
+  - features/staff/adapters/out/{identity/local_identity_gateway,postgres/employee_repository}.py
+  - features/staff/application/use_cases/deactivate_employee.py
+  - composition_root.py (wiring da fachada)
+contratos_introduzidos:
+  - IdentityGateway.is_employee_login (L-IG5); EmployeeRepository.exists_other_active_with_login (L-E8)
+contratos_consumidos:
+  - IdentityFacade (3.5), RevokeAllSessionsUseCase (3.5), L-IG4 (3.5)
+definition_of_done:
+  - "R13 revoga as sessoes so se a conta for employee e o registro for o ultimo ativo dela; (a) dois registros e (b) login de gerente travados por teste, inclusive e2e"
+non_goals:
+  - vincular login existente a um registro (concept 3.5 §10)
+  - User.is_active / desativacao de conta (decidido no ADR 3.7.0001: desligar nunca desativa)
+  - revogacao por escopo de unidade (SessionRepository sem escopo)
+complexidade_estimada: S
+gate_mode: strict
+skills_hint: [hex-arch-python, pytest-with-fakes, repository-pattern, composition-root]
+```
 
 ---
 
