@@ -41,6 +41,7 @@ graph LR
     S22 --> S23[2.3-identity-persistence]
     S23 --> S24[2.4-identity-http]
     S24 --> S25[2.5-email-invite]
+    S26[2.6-identity-unit-of-work]
   end
   subgraph Step3[Step 3 — Equipe]
     S31[3.1-staff-domain] --> S32[3.2-staff-application]
@@ -74,6 +75,7 @@ graph LR
   end
   S12 --> S21
   S25 --> S31
+  S35 --> S26
   S31 --> S41
   S47 --> S51
   S45 --> S61
@@ -88,7 +90,7 @@ graph LR
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
-| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.5 |
+| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.6 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.5 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
@@ -114,6 +116,7 @@ graph LR
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | done | `2.2-identity-application` |
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/inbound/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
+| `2.6-identity-unit-of-work` | Fronteira transacional nos use cases de identity que escrevem mais de uma vez | application + adapters/out/postgres + tooling | draft | `3.5-employee-login-link` |
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
@@ -161,7 +164,6 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | open | — |
 | [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34) | Promover o sufixo `[N.M/task-NN-fix]` de commits de correção de checkpoint a convenção | shared | docs | open | — |
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
-| [#46](https://github.com/MarceloSanC/restaurant-hub/issues/46) | Fronteira transacional nos use cases que escrevem em mais de um repositório | shared | application + adapters/out | open | — |
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#49](https://github.com/MarceloSanC/restaurant-hub/issues/49) | Consumir o `AccessGuard` na camada application, não só na borda HTTP | staff | application | open | #43 |
@@ -553,6 +555,52 @@ skills_hint: [task-ordering-hex, fastapi-thin-adapter, composition-root]
 >   revisores no Checkpoint A; corrigido com `unusable_hash()` (ADR 2.5.0004).
 > - `complexidade_estimada: M` e `gate_mode: strict` seguem válidos (13 Tasks + commits
 >   de correção de revisão e de auditoria).
+
+#### Stage 2.6 — `2.6-identity-unit-of-work`
+
+**Descrição humana:** promovida da issue #46 em 2026-10-19 (o corpo da issue virou mini-concept:
+port novo e trade-off com ADR — PIPELINE §4.5). Os use cases **de identity** que escrevem mais de
+uma vez numa requisição passam a fazê-lo numa unidade atômica: falha na N-ésima escrita deixa o
+banco como estava. Fecha os `[finding]` de atomicidade da rotação de sessão (2.4) e do órfão
+dentro de identity (3.5), corrige o ponteiro órfão para a 4.4 e acrescenta o gate que impede a
+regressão. Travessias entre BCs (staff ↔ identity) ficam ordenadas, como na 3.5. Depende da 3.5
+(`provision_account` e a fachada vêm dela). Ver `docs/stages/2.6-identity-unit-of-work/`.
+
+```yaml
+stage_id: 2.6-identity-unit-of-work
+bounded_context: identity
+camada_alvo: application + adapters/out/postgres + tooling (divergência declarada no concept §1)
+arquivos_a_criar:
+  - features/identity/application/ports/out/unit_of_work.py
+  - features/identity/adapters/out/postgres/unit_of_work.py (+ helper de conexão da unidade)
+  - tests/fakes/features/identity/in_memory_unit_of_work.py
+  - contrato fake × Postgres do UoW + integração por use case
+arquivos_a_modificar:
+  - repositórios Postgres de identity (conexão da unidade ativa) + SessionRepository.revoke -> bool
+  - os cinco use cases de identity com 2+ escritas + composition_root.py
+  - tests/contract/features/staff/conftest.py (fixture do gateway real)
+  - scripts/check_layout.py (regra 10)
+  - docs/LAYOUT.md (fronteira transacional)
+contratos_introduzidos:
+  - UnitOfWork (port-out de identity)
+  - regra 10 do check_layout (escrita múltipla só dentro de uma unidade)
+contratos_modificados:
+  - SessionRepository.revoke devolve bool (aditivo)
+contratos_consumidos:
+  - ports de repositório de identity (2.2/2.5); IdentityFacade (3.5)
+definition_of_done:
+  - "integração: falha na N-ésima escrita de cada um dos cinco use cases deixa o banco inalterado"
+  - "fake e Postgres do UoW passam na mesma suíte de contrato"
+non_goals:
+  - locking otimista (ADR 3.3.0006)
+  - mudar a ordem fail-closed de set_password_with_token
+  - ports assíncronos (ADR 2.2.0004)
+  - transação atravessando bounded contexts
+  - provisionamento composto restaurante + dono (ADR 2.4.0003 Alt. B)
+complexidade_estimada: M
+gate_mode: strict
+skills_hint: [hex-arch-python, repository-pattern, pytest-with-fakes, composition-root, task-ordering-hex]
+```
 
 ---
 
@@ -1827,6 +1875,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-08-30 | Stage 3.6-staff-http concluída (`done`); bloco **confirmado sem correção estrutural** (as três desatualizações já tinham sido medidas na §1 do concept, antes da execução) e acrescido de nota datada de reconciliação pós-execução: as **16 rotas** de staff sob `/api/v1` ao lado das **10 de identity** (26 operações no OpenAPI), file-scope real de 10 arquivos de `src/` mais `LAYOUT.md` e `overview.md` §10, e nenhuma migration. **Cinco ADRs** — 3.6.0001–3.6.0004 e o **global 0.0.0005** (`bounded_context: transversal`), nascido aqui: o tenant que decide acesso vem do token, sem o qual **nenhuma das 16 rotas era alcançável por nenhum papel**. **Terceira expansão de camada para trás no BC staff** (3.6 → `application` da 3.2, ADR 3.6.0004, com errata na §5.16 do concept da 3.2), registrada como `[finding]` para a retrospectiva do Step 3. A auditoria independente aplicou **~25 mutações** e **3 sobreviveram**, todas em linhas com 100% de cobertura de linha e ramo — autenticar-antes-de-validar travada em 1 rota de 9, `EmptyShiftPreferenceError` sem caminho HTTP e a reincidência de `L-AG3` no tenant vazio do argumento —, as três fechadas por lei quantificada sobre domínio derivado, com prova de mutação. O Step 3 segue `in_progress` (falta a 3.5 e o frontend) | Execução da Stage 3.6 — issue #43 |
 | 2026-09-27 | Stage 4.1-scheduling-domain concluída (`done`); bloco acrescido de nota datada de reconciliação pós-execução (nove divergências declaradas no concept §1: file-scope com `.importlinter` e duas varreduras de repositório, quatro entidades com `ShiftBand`, sem evento de publicação, contratos, ADRs 4.1.0007–0012, decisões Q1–Q5 do sponsor, findings para a 4.3); Step 4 → `in_progress` (primeiro código do BC `scheduling`) | Execução da Stage 4.1 — issue #55 |
 | 2026-10-19 | Stage 4.2-validation-policies concluída (`done`); bloco **não** recebe nota interna (deslocaria as citações por linha do doc de domínio e dos ADRs 4.1.x): as sete divergências estão no concept §1 — nove políticas (não quatro), file-scope com `errors.py`, dois testes de totalidade e `LAYOUT.md` (`services/` sai de `[planejado]`), `EmployeeFacts` por dados, quatro invariantes do doc que não resistem a mudança de staff (pergunta P para a 4.3), `enabled` em toda política configurável, período de 7 dias exigido no insumo. ADRs 4.2.0001 (função não detida segue o cadastro atual — decisão do sponsor) e 4.2.0002 (insumo do avaliador e identidade da violação); findings para 4.3, 4.5 e 8.1 na §7 do technical | Execução da Stage 4.2 — issue #64 |
+| 2026-10-19 | Issue #46 promovida à Stage `2.6-identity-unit-of-work` (Step 2); linha sai da Tabela de Issues | O corpo da issue virou mini-concept (port + ADR, PIPELINE §4.5); Step 2 porque o BC é identity e quatro das cinco dívidas nasceram ali |
 
 ## Próxima revisão de roadmap
 
