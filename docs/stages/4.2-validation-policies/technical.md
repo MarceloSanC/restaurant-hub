@@ -477,4 +477,31 @@ quando não há violação viva. (2) "Uma pessoa, duas funções, um turno" como
 candidata:** 4.5. (3) Cobertura como razão com `N = 0` e a contagem de exceções de função são
 grandezas do hub. **Stage candidata:** 8.1.
 
+### 2026-10-19 — [deviation] auditoria da Stage (`stage-audit`, agente Opus de contexto zerado) — Claude Opus 5.5 (executor)
+
+Veredito: "não pronta" por dois bloqueantes, com os gates numéricos verdes (`make check` EXIT=0,
+4129 passed, 100% por arquivo novo). Disposições, todas **corrigidas** no commit
+`fix(scheduling): ... [4.2/--]` (fora de Task: correção de auditoria depois do `stage 4.2:
+complete`) e no commit de docs seguinte:
+- **F1 (bloqueante):** os 17 CAs do concept §11 estavam com a caixa aberta, embora com evidência.
+  Marcados `[x]` — o CA12 só depois do F2.
+- **F2 (bloqueante, major):** modo, `enabled` e direção em **texto cru** falhavam aberto. Um StrEnum
+  é `==` ao texto mas não `is`, e um `"block"` vindo do banco (reidratação da 4.4) sumia de
+  `blocking` e de `warnings`. `PolicyRule` passa a exigir `bool` e `EnforcementMode`, e
+  `ValidationConfig` exige `PolicyRule` nos oito campos e `WorkloadDirection`, todos com
+  `InvalidValidationConfigError` nomeando o campo e com teste.
+- **F3 (minor):** a verificação funcional do §3 ("semana com as nove situações + vizinha anterior")
+  não estava registrada. Coberta por `test_evaluator.py` (as nove políticas, as duas vizinhas, o
+  inativo, a virada) e por um roteiro com objetos reais rodado nesta sessão sobre o HEAD da Stage:
+  `7 violações — 2 block, 5 warn` (sobreposição 300/0 e indisponibilidade 240/0 em `block`;
+  descanso 300/660, teto diário 780/600, carga 1260/600, função 1/0 e sobre-cobertura 2/1 em `warn`).
+- **F4 (minor):** "a mesma `key` dos dois lados da virada" ganhou teste (avalia W com `next` e N com
+  `previous` e compara os conjuntos de `key`).
+- **F5 (minor):** o limite da varredura do CA1 (não vê `timedelta(hours=11)` nem `Decimal("660")`)
+  ficou declarado no docstring do teste.
+- **F6 (minor):** `EmployeeFacts` recusa carga que não é `Decimal`, e `UnavailabilityWindow` recusa
+  `date` sem hora — com `InvalidEvaluationInputError`, não `AttributeError`.
+- **F7 (observação):** os `type: ignore[arg-type]` dos testes são do idioma `**{lado: vizinha}` ou
+  de entrada deliberadamente malformada; sem ação.
+
 <!-- END: post-execution -->

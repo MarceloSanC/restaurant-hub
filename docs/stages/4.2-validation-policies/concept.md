@@ -560,46 +560,46 @@ erDiagram
 
 > `[teste]` = asserção unitária sem I/O; `[gate]` = verificação de processo.
 
-- [ ] **CA1** `ValidationConfig.default()` devolve exatamente os valores e modos de §5.2, e é o
+- [x] **CA1** `ValidationConfig.default()` devolve exatamente os valores e modos de §5.2, e é o
       único sítio de 660/600/2640 no pacote `features/scheduling` — varredura AST de literais
       inteiros sobre todo `.py` do pacote, exigindo que toda ocorrência caia nas linhas de
       `default()`, com asserção anti-vácuo (precedente: CA7 da 4.1) `[teste]`.
-- [ ] **CA2** Config recusa cada parâmetro fora de §5.3 e aceita as fronteiras (descanso 0,
+- [x] **CA2** Config recusa cada parâmetro fora de §5.3 e aceita as fronteiras (descanso 0,
       teto 1, tolerância 0); `rule_for` cobre os 9 `PolicyKind`, com `unavailability` sempre
       `block` habilitada `[teste]`.
-- [ ] **CA3** Cada uma das nove políticas tem teste do caso que viola, do que não viola e da
+- [x] **CA3** Cada uma das nove políticas tem teste do caso que viola, do que não viola e da
       fronteira (adjacência semi-aberta; igualdade ao limite não viola) `[teste]`.
-- [ ] **CA4** Sobreposição e descanso detectam violação contra escala vizinha anterior **e**
+- [x] **CA4** Sobreposição e descanso detectam violação contra escala vizinha anterior **e**
       seguinte, e não reportam violação interna à vizinha; as outras sete políticas ignoram as
       vizinhas (indisponibilidade sobre alocação da vizinha, teto num dia da vizinha) `[teste]`.
-- [ ] **CA5** Descanso usa `max(end)` do dia anterior e `min(start)` do seguinte, pula dias sem
+- [x] **CA5** Descanso usa `max(end)` do dia anterior e `min(start)` do seguinte, pula dias sem
       alocação, ignora lacuna dentro do mesmo dia operacional, reporta descanso negativo junto
       com a sobreposição, e trava o limite das contíguas que atravessam o corte (§5.7) — descanso
       0 viola e o teto diário vê 8h + 8h sem violar `[teste]`.
-- [ ] **CA6** Carga: só jornada fixa ativa; `excess` × `both` (inclusive registro fixo sem
+- [x] **CA6** Carga: só jornada fixa ativa; `excess` × `both` (inclusive registro fixo sem
       alocação em `both`); alocação "não conta" fora da soma; carga fracionária exata `[teste]`.
-- [ ] **CA7** Função não detida segue os fatos atuais e ignora `function_exception` (os dois
+- [x] **CA7** Função não detida segue os fatos atuais e ignora `function_exception` (os dois
       cenários de Ana e Bruno) `[teste]`.
-- [ ] **CA8** Sobre-cobertura por demanda, com `N = 0` e com alocação de inativo fora da conta;
+- [x] **CA8** Sobre-cobertura por demanda, com `N = 0` e com alocação de inativo fora da conta;
       duas faixas sobrepostas da mesma função contadas separadamente `[teste]`.
-- [ ] **CA9** Registro inativo não aparece em violação alguma; fato faltando de alocado é recusado
+- [x] **CA9** Registro inativo não aparece em violação alguma; fato faltando de alocado é recusado
       `[teste]`.
-- [ ] **CA10** Insumo inválido de §6 recusado, cada linha com o seu teste `[teste]`.
-- [ ] **CA11** `Violation.key` e `assignment_ids` seguem a tabela de §5.8 em cada política
+- [x] **CA10** Insumo inválido de §6 recusado, cada linha com o seu teste `[teste]`.
+- [x] **CA11** `Violation.key` e `assignment_ids` seguem a tabela de §5.8 em cada política
       (agregadas sem alocações na `key`; sobre-cobertura com elas; `operational_days` distinto e
       ordenado) `[teste]`.
-- [ ] **CA16** A medida de §5.9 em cada política, incluindo janelas de indisponibilidade
+- [x] **CA16** A medida de §5.9 em cada política, incluindo janelas de indisponibilidade
       sobrepostas (unidas, não somadas), janela com segundos (minutos fracionários exatos),
       descanso negativo e `N = 0` `[teste]`.
-- [ ] **CA17** Soma por alocação em faixas distintas sobrepostas: a interseção conta duas vezes no
+- [x] **CA17** Soma por alocação em faixas distintas sobrepostas: a interseção conta duas vezes no
       teto diário (D5) `[teste]`.
-- [ ] **CA12** O avaliador chama só as habilitadas, carimba o modo da config, separa `blocking` e
+- [x] **CA12** O avaliador chama só as habilitadas, carimba o modo da config, separa `blocking` e
       `warnings` e devolve a ordem de §5.10, estável entre execuções `[teste]`.
-- [ ] **CA13** `DEFAULT_POLICIES` tem exatamente uma política por `PolicyKind`, na ordem do enum,
+- [x] **CA13** `DEFAULT_POLICIES` tem exatamente uma política por `PolicyKind`, na ordem do enum,
       e toda política configurável tem campo em `ValidationConfig` `[teste]`.
-- [ ] **CA14** As duas exceções novas entram nas varreduras de totalidade do BC e do repositório
+- [x] **CA14** As duas exceções novas entram nas varreduras de totalidade do BC e do repositório
       `[teste]`.
-- [ ] **CA15** `make check` verde (lint, mypy strict, import-linter, `check_layout.py`,
+- [x] **CA15** `make check` verde (lint, mypy strict, import-linter, `check_layout.py`,
       `check_docs_claims.py`, cobertura ≥ 90% e ≥ 90% por arquivo da Stage) `[gate]`.
 
 ## 12. Checklist de validação interna
