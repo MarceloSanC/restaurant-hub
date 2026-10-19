@@ -326,4 +326,56 @@ T03 depende da T02 porque o `LocalIdentityGateway` chama `account_role`.
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-10-19 — [decision] Fase 3A — "outro registro ativo" só na unidade, via `list_by_unit` — Claude (Opus 5.5) com o sponsor
+**Contexto:** o concept v1 previa uma lei nova no repositório (L-E8, `exists_other_active_with_login`) atravessando unidades do tenant. O Checkpoint A (conformidade #3) mostrou que isso abria exceção à regra de workforce §3.1, que é decisão de domínio.
+**Pergunta:** a checagem olha outras unidades?
+**Opções:**
+- A — exceção ao workforce §3.1 (tenant-wide, L-E8)
+- B — só a mesma unidade ✅ escolhida pelo sponsor
+**Decisão:** B (concept §13 Q4).
+**Razão:** mantém §3.1 literal; o custo (caso (a) entre unidades revoga) é um login a mais. Consequência técnica: sem método novo no repositório — a checagem lê `list_by_unit` (L-E6, só ativos), que já tem contrato fake × Postgres. Some a questão do índice.
+
+### 2026-10-19 — [decision] Fase 3A — guarda `employee.active` antes da regra — Claude (Opus 5.5)
+**Contexto:** Checkpoint A (domínio #2): reavaliar a regra ao desligar de novo um desligado derrubaria sessões que a pessoa abriu depois do primeiro desligamento (a conta permanece).
+**Decisão:** só registro ativo dispara a regra (concept D3, ADR 3.7.0001 §1). A nova tentativa depois de falha na gravação continua segura — o registro segue ativo; travado por `test_nova_tentativa_depois_de_falha_na_gravacao_revoga_de_novo`.
+**Razão:** ADR 3.5.0003 §3 (a conta permanece) + intenção do sponsor (D6).
+
+### 2026-10-19 — [decision] Fase 3A — corrida entre dois desligamentos simultâneos fica declarada — Claude (Opus 5.5)
+**Contexto:** dois R13 concorrentes sobre dois registros da mesma unidade do mesmo login podem, cada um, ver o outro ativo — nenhum revoga.
+**Opções:**
+- A — re-checar depois da escrita e revogar se preciso
+- B — declarar como residual ✅
+**Decisão:** B — `[decision:C]`, degrau 4.
+**Razão:** A reintroduz o sucesso parcial atrás de 500 que o ADR 3.5.0003 §2 evita e, com a guarda `active`, a nova tentativa não revogaria. O caso não é produzível hoje e as sessões vivas não alcançam nada (registro desligado). ADR 3.7.0001 Alt. H.
+
+### 2026-10-19 — [deviation] Task 04 — teste extra de nova tentativa — Claude (Opus 5.5)
+`test_nova_tentativa_depois_de_falha_na_gravacao_revoga_de_novo` não estava na lista CA05–CA15; cobre a última linha da tabela do concept §6. Mesmo arquivo da Task, sem contrato novo.
+
+### 2026-10-19 — [deviation] Checkpoint C — duas docstrings fora da lista do concept §8 — Claude (Opus 5.5)
+`employee.py` (`TerminatedEmployeeLoginError`) e o comentário do mapa em `error_handlers.py` diziam "desligar cortou" sem qualificar. No bloco T01–T03 marquei como refutado (falam do **registro**); o revisor do bloco T04–T06 mostrou que a leitura pós-3.7 sugere corte incondicional — disposição revertida para corrigido (`[3.7/task-04-fix]`).
+
+### 2026-10-19 — [finding] staff — "vincular login existente" precisa checar o tenant do `User` — Claude (Opus 5.5)
+**Contexto:** `is_employee_login` não recebe tenant; hoje um login só alcança registros do próprio tenant porque R17 provisiona no tenant do registro e a cópia não carrega `user_id`. Não há guarda que imponha isso a um vínculo futuro (`employees.user_id` sem FK — ADR 3.5.0004).
+**Direção sugerida:** a operação de vínculo recusa `User` de outro tenant (e `platform_admin`).
+**Stage candidata:** a que implementar "vincular login existente" (concept 3.5 §10; `4.3-scheduling-application` ou Stage de gestão de acesso anterior).
+
+### 2026-10-19 — [finding] staff — toda operação que encerra um vínculo ativo herda a regra — Claude (Opus 5.5)
+**Contexto:** ADR 3.7.0001 §5: hoje R13 é o único caminho que encerra o vínculo ativo de um registro. "Desvincular" / "trocar login" criarão outro.
+**Direção sugerida:** extrair a regra (unidade + papel) para um ponto único quando o segundo caminho nascer, em vez de duplicar.
+**Stage candidata:** a mesma do finding anterior.
+
+### 2026-10-19 — [finding] shared — corrida de desligamentos concorrentes reforça a #46 — Claude (Opus 5.5)
+**Contexto:** ver o `[decision]` da corrida acima.
+**Direção sugerida:** a Unit of Work da #46, ou um lock por `user_id` na Stage de vínculo, fecha o caso.
+**Stage candidata:** issue #46.
+
+### 2026-10-19 — [deviation] Auditoria de testes — dois e2e extras — Claude (Opus 5.5)
+O auditor independente (11 mutações reais, nenhuma sobrevivente) marcou "não satisfeito" em dois itens: a guarda `active` só era pega no unit, e nenhum teste fixava na borda o 500 de uma falha antes da escrita — lacuna **herdada da 3.5** para a revogação. `[3.7/task-05-extra]` acrescenta os dois e2e (o de 500 parametrizado na consulta de papel e na revogação); a re-auditoria confirmou M3 morrendo também no e2e e o 500 vindo da falha injetada (Mc1–Mc3).
+
+### 2026-10-19 — [decision] Checkpoints — disposição dos achados — Claude (Opus 5.5)
+- **A** (concept): rodada 1 com duas lentes — 13 de domínio/testabilidade e 14 de conformidade; três viraram perguntas P ao sponsor (Q2, Q3, Q4) e o resto foi corrigido; rodada 2 de re-verificação: 14 resolvidos, 3 parciais e 3 contradições novas, todos corrigidos antes do `conceptual approved`.
+- **B** (technical): 1 major (`_RESULT_CLASSES` na T01, deixaria o build vermelho) e 4 minor — corrigidos antes do `technical approved`.
+- **C** bloco T01–T03: 1 major (a fachada podia devolver o `Role` StrEnum sem teste notar — mutação medida sobrevivendo) e 1 minor (docstrings afirmando a regra antes da T04) — `[3.7/task-02-fix]`, `[3.7/task-03-fix]`.
+- **C** bloco T04–T06: 0 blocker/major, 12 de 12 mutações mortas; 4 minor/nit corrigidos — `[3.7/task-04-fix]`, `[3.7/task-05-fix]`, `[3.7/task-06-fix]`.
+
 <!-- END: post-execution -->
