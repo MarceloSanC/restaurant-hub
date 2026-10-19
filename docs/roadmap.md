@@ -124,7 +124,7 @@ graph LR
 | `3.4-staff-access-scope` | Acesso e escopo de equipe | identity (domain+application) + staff (domain, application, adapters/out) | done | `3.3-staff-persistence` |
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
-| `3.7-application-authorization` | Autorização na camada application de staff | application | draft | `3.5-employee-login-link` |
+| `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
@@ -1317,6 +1317,27 @@ gate_mode: strict
 skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin-adapter, task-ordering-hex]
 ```
 
+> **Nota (2026-10-19): reconciliação pós-execução da Stage 3.7** (issue #49; concept e technical em
+> `docs/stages/3.7-application-authorization/`; ADR 3.7.0001). O bloco acima foi escrito na promoção e
+> fica como registro; o que a execução mostrou:
+>
+> - **A forma:** guard por construtor nos 17 use cases, ator como **primeiro campo** de todo command e
+>   query (`execute(<Command>)` não muda — LAYOUT §5), e o tenant do command **confirmado** pelo guard,
+>   não derivado do escopo (ADR 0.0.0005 cl. 1). Supersessão parcial datada nos ADRs 3.2.0002 ("use
+>   cases sem ator"), 3.4.0001 §4 (só para `authorize`) e 3.6.0004 (a regra da checagem mais barata
+>   vale depois da autorização), e errata no concept 3.2 §5.16.
+> - **File-scope real:** os arquivos do bloco, mais `test_application_authorization_chain.py` (CA14,
+>   cadeia de produção sem banco), as suítes de borda unitárias que montam use case por reflexão e as
+>   sequências exatas de chamada ao guard. `tests/e2e/` **intocado** e verde — nenhuma faixa HTTP mudou.
+> - **7 Tasks + 3 `fix` + 1 `extra`.** Os Checkpoints C acharam três classes de buraco que um caminho
+>   feliz não pega: o ator não registrado pelos dublês (autorizar `None` passava), tabela e código
+>   errando juntos (a cópia autorizando a origem duas vezes) e recusa por motivo errado no CA14; a
+>   auditoria independente aplicou **13 mutações reais, todas mortas**, e apontou dois testes de efeito
+>   faltantes. **4220 testes**, arquivos da Stage a **100%**.
+> - **Findings abertos** (technical §7): autenticidade do ator e validação de identificador fora da
+>   borda HTTP (Stage do primeiro driver não-HTTP), staff como provedor do `StaffReadPort` e a adoção do
+>   padrão na 4.3, ponteiros `(#49)` do lado de identity, custo da dupla autorização (6.3).
+
 ---
 
 ### Step 4 — Escala manual publicável (BC `scheduling`)
@@ -1933,6 +1954,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-10-19 | Issue #46 promovida à Stage `2.6-identity-unit-of-work` (Step 2); linha sai da Tabela de Issues | O corpo da issue virou mini-concept (port + ADR, PIPELINE §4.5); Step 2 porque o BC é identity e quatro das cinco dívidas nasceram ali |
 | 2026-10-19 | Stage 2.6-identity-unit-of-work concluída (`done`); bloco acrescido de nota datada (revoke → bool, 13 Tasks, renumeração); issues #67 e #68 na Tabela de Issues | Execução da Stage 2.6 — issue #46 |
 | 2026-10-19 | Issue **#49** promovida a **Stage `3.7-application-authorization`** (Step 3, BC staff; `depends_on: 3.5-employee-login-link`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. O corpo da issue já se declarava candidato a Stage — exige ADR (forma do guard na application e destino do `AuthorizedScope`), toca os 17 use cases e pede uma propriedade sobre a camada inteira — o litmus de PIPELINE §4.5. Step 3 passa a `3.1 → 3.7` | Promoção da issue #49 |
+| 2026-10-19 | Stage 3.7-application-authorization concluída (`done`); bloco acrescido de nota datada de reconciliação pós-execução. Os 17 use cases de staff autorizam o alvo do próprio command pelo `AccessGuard` injetado antes de qualquer outra instrução; a borda HTTP segue autorizando (defesa em profundidade) e nenhuma faixa muda (`tests/e2e/` intocado). ADR 3.7.0001; supersessão parcial datada em 3.2.0002, 3.4.0001 e 3.6.0004; errata no concept 3.2 §5.16. 13 mutações reais na auditoria independente, todas mortas | Execução da Stage 3.7 — issue #49 |
 
 ## Próxima revisão de roadmap
 
