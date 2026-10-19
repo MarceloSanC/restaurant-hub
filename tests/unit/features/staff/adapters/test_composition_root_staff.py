@@ -197,6 +197,24 @@ def test_ca18_os_use_cases_recebem_os_adapters_postgres_e_nao_fakes() -> None:
     assert isinstance(deps.staff_copy_employee_to_unit._employees, PostgresEmployeeRepository)
 
 
+def test_ca08_todo_use_case_de_staff_recebe_o_mesmo_guard_das_rotas() -> None:
+    """Identidade de objeto, para os 17 (Stage 3.7, ADR 3.7.0001 §1).
+
+    Um segundo `_IdentityAccessGuard` satisfaria qualquer teste de tipo e faria a
+    borda e a application decidirem acesso sobre grafos diferentes — a rota
+    autorizaria contra um `IdentityGuard`, o use case contra outro, e a defesa em
+    profundidade deixaria de ser a mesma decisão tomada duas vezes.
+    """
+    deps = _dependencias()
+
+    diferentes = [
+        nome
+        for nome in _USE_CASES_DE_STAFF
+        if getattr(deps, nome)._guard is not deps.staff_access_guard
+    ]
+    assert diferentes == []
+
+
 def test_os_dois_ports_cruzados_compartilham_a_mesma_instancia_de_repositorio() -> None:
     """Os use cases que tocam os dois agregados veem **o mesmo** par.
 

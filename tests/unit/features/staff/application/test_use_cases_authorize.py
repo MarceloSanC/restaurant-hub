@@ -25,11 +25,27 @@ endereço. O use case é construído pelo seu construtor — cada parâmetro é
 preenchido pelo nome com o fake correspondente —, o mesmo mecanismo do ambiente de
 borda: um parâmetro novo aparece aqui como falha de montagem, não some.
 
-A cobrança de que `CENARIOS` cobre a pasta inteira (CA04) nasce quando a tabela
-está completa (technical da 3.7, Task 07).
+Três varreduras fecham o que a tabela sozinha não fecha (Task 07):
+
+- **CA04** — `CENARIOS` **é** a pasta `use_cases/`: use case novo entra coberto ou
+  reprova.
+- **CA01** — todo use case da pasta recebe `guard: AccessGuard` no construtor.
+- **CA15** — a **forma** de todo `execute`, pelo AST: descontado o docstring, as
+  primeiras instruções são exatamente as chamadas `self._guard.authorize(...)` da
+  tabela, com o ator, o tenant e a unidade lidos do parâmetro e a permissão como
+  constante do port. É o que pega o que um caminho feliz não exercita —
+  autorização condicional, uma checagem pura antes dela, permissão como literal
+  `str`, o escopo devolvido guardado numa variável — e o que nenhuma das três
+  suítes de comportamento acima vê (memória do projeto: "teste trava o caso, não a
+  propriedade").
 """
 
+import ast
+import dataclasses
+import importlib
 import inspect
+import pkgutil
+import typing
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -38,6 +54,7 @@ from typing import Any, Final
 
 import pytest
 
+from restaurant_hub.features.staff.application import use_cases as pacote_use_cases
 from restaurant_hub.features.staff.application.dtos.commands import (
     AssignJobFunctionsCommand,
     ChangeWorkloadProfileCommand,
@@ -59,6 +76,7 @@ from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
     ListJobFunctionsQuery,
 )
+from restaurant_hub.features.staff.application.ports.out import access_guard
 from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
@@ -625,3 +643,127 @@ def test_ca06_negar_so_o_segundo_alvo_nao_deixa_efeito(nome: str) -> None:
     assert montagem.fakes.store.calls[chamadas_ao_store:] == []
     assert montagem.gateway.calls == []
     assert montagem.ids.generated == []
+
+
+# ---------------------------------------------------------------------------
+# Totalidade e forma — CA04, CA01, CA15
+# ---------------------------------------------------------------------------
+
+
+def _modulos_da_pasta() -> list[str]:
+    """Os módulos de `use_cases/` — sem os `_`-prefixados, que são auxiliares."""
+    return sorted(
+        modulo.name
+        for modulo in pkgutil.iter_modules(pacote_use_cases.__path__)
+        if not modulo.name.startswith("_")
+    )
+
+
+def _classe_do_modulo(nome: str) -> type:
+    modulo = importlib.import_module(f"{pacote_use_cases.__name__}.{nome}")
+    [classe] = [
+        obj
+        for _, obj in inspect.getmembers(modulo, inspect.isclass)
+        if obj.__module__ == modulo.__name__ and obj.__name__.endswith("UseCase")
+    ]
+    return classe
+
+
+def test_ca04_a_tabela_de_cenarios_cobre_a_pasta_use_cases_inteira() -> None:
+    """Use case novo entra na propriedade ou reprova aqui — não fica de fora em silêncio."""
+    assert sorted(CENARIOS) == _modulos_da_pasta()
+    assert all(CENARIOS[nome].classe is _classe_do_modulo(nome) for nome in CENARIOS)
+
+
+@pytest.mark.parametrize("nome", _modulos_da_pasta())
+def test_ca01_todo_use_case_recebe_o_guard_por_construtor(nome: str) -> None:
+    """Derivado da pasta, e anotado com o **port** — não com uma implementação."""
+    dicas = typing.get_type_hints(_classe_do_modulo(nome).__init__)
+
+    assert dicas.get("guard") is AccessGuard
+
+
+_PERMISSAO_POR_VALOR: Final = {
+    getattr(access_guard, nome): nome
+    for nome in dir(access_guard)
+    if nome.startswith("PERMISSION_")
+}
+
+
+def _chamada_esperada(param: str, campo_de_unidade: str | None, permissao: str) -> str:
+    """O `ast.dump` da chamada que a matriz R3 exige, montado da forma canônica."""
+    unidade = f", unit_id={param}.{campo_de_unidade}" if campo_de_unidade else ""
+    fonte = (
+        f"self._guard.authorize({param}.actor, {_PERMISSAO_POR_VALOR[permissao]}, "
+        f"tenant_id={param}.tenant_id{unidade})"
+    )
+    return ast.dump(ast.parse(fonte, mode="eval").body)
+
+
+def _campo_de_unidade(command: object, unidade: str | None) -> str | None:
+    """O campo do command que carrega aquela unidade — `unit_id` ou `target_unit_id`."""
+    if unidade is None:
+        return None
+    [campo] = [
+        f.name
+        for f in dataclasses.fields(command)  # type: ignore[arg-type]
+        if f.name.endswith("unit_id") and getattr(command, f.name) == unidade
+    ]
+    return campo
+
+
+def _execute(nome: str) -> ast.FunctionDef:
+    modulo = importlib.import_module(f"{pacote_use_cases.__name__}.{nome}")
+    arvore = ast.parse(inspect.getsource(modulo))
+    [classe] = [no for no in arvore.body if isinstance(no, ast.ClassDef)]
+    [execute] = [
+        no for no in classe.body if isinstance(no, ast.FunctionDef) and no.name == "execute"
+    ]
+    return execute
+
+
+@pytest.mark.parametrize("nome", _modulos_da_pasta())
+def test_ca15_o_execute_abre_com_exatamente_as_autorizacoes_da_matriz(nome: str) -> None:
+    """Concept R2/R3/R4, pela forma e não por um caminho feliz.
+
+    Compara o `ast.dump` de cada instrução inicial com o da chamada canônica — o
+    que exige, de uma vez: receptor `self._guard`, ator e tenant lidos do
+    parâmetro, unidade do campo certo do command, permissão como **nome** da
+    constante do port (um literal `str` produz outro dump), e a chamada como
+    **instrução solta** — um `scope = self._guard.authorize(...)` é `Assign`, e
+    o escopo guardado é o começo de lê-lo (R4).
+    """
+    cenario = CENARIOS[nome]
+    execute = _execute(nome)
+    param = execute.args.args[1].arg
+    corpo = execute.body
+    if (
+        corpo
+        and isinstance(corpo[0], ast.Expr)
+        and isinstance(corpo[0].value, ast.Constant)
+        and isinstance(corpo[0].value.value, str)
+    ):
+        corpo = corpo[1:]
+    esperadas = [
+        _chamada_esperada(param, _campo_de_unidade(cenario.command, unidade), permissao)
+        for permissao, _, unidade in cenario.alvos
+    ]
+    iniciais = corpo[: len(esperadas)]
+
+    assert all(isinstance(no, ast.Expr) for no in iniciais), (
+        f"{nome}: a abertura de execute não é só chamada ao guard"
+    )
+    assert [ast.dump(no.value) for no in iniciais if isinstance(no, ast.Expr)] == esperadas
+    autorizacoes = [
+        no
+        for no in ast.walk(execute)
+        if isinstance(no, ast.Call)
+        and isinstance(no.func, ast.Attribute)
+        and no.func.attr == "authorize"
+    ]
+    assert len(autorizacoes) == len(esperadas), f"{nome}: authorize fora da abertura"
+
+
+def test_a_varredura_de_forma_conhece_as_tres_permissoes_do_port() -> None:
+    """Se o mapa valor→nome perdesse uma, CA15 levantaria KeyError e não diria o porquê."""
+    assert set(_PERMISSAO_POR_VALOR) == {"manage_staff", "manage_job_functions", "manage_users"}
