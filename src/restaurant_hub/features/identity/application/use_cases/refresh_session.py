@@ -36,6 +36,11 @@ perdedora desfaz a própria unidade, revoga todas as sessões **fora** dela (ess
 escrita precisa comitar) e levanta `RefreshTokenReuseError`: fail-closed, a
 semântica de reuso do ADR 2.2.0001. Se a primeira rotação é que desfaz, a segunda
 revoga uma linha e rotaciona normalmente.
+
+O mesmo `False` aparece se **qualquer** escrita concorrente revogou ou apagou a
+sessão entre a leitura e a rotação — um logout, um desligamento, o expurgo de uma
+sessão que expirou nessa janela. Também esses casos viram reuso: antes da 2.6 eles
+emitiam um par vivo que sobrevivia ao logout que acabara de acontecer.
 """
 
 from datetime import timedelta
@@ -107,8 +112,10 @@ class RefreshSessionUseCase:
         """Rotaciona a sessão.
 
         Raises:
-            RefreshTokenReuseError: o token já havia sido revogado — reuso. Todas
-                as sessões do usuário são revogadas **antes** de levantar.
+            RefreshTokenReuseError: o token já havia sido revogado — reuso —, ou
+                outra escrita o revogou durante a rotação (corrida perdida). Nos dois
+                casos todas as sessões do usuário são revogadas, e gravadas, **antes**
+                de levantar.
             InvalidRefreshTokenError: token desconhecido, expirado, ou de um
                 usuário que não existe mais. Os três casos são deliberadamente
                 indistinguíveis para o cliente.

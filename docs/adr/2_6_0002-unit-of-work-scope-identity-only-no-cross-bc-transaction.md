@@ -99,8 +99,9 @@ the class has two or more writes:
 
 - **all** of them must be lexically inside a `with self.<attr>.transaction():`
   block whose attribute is annotated as `UnitOfWork` in the constructor;
-- there must be **exactly one** such block (two consecutive units are two
-  transactions);
+- the unit must be entered **exactly once** (two consecutive units are two
+  transactions; so is a helper that opens a unit called twice, and a unit inside a
+  loop counts as more than one);
 - the only write tolerated outside is the **"write and refuse"** pattern: a write
   immediately followed by `raise` in the same statement block (the reuse path of
   `refresh_session`).
