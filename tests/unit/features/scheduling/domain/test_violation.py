@@ -5,6 +5,7 @@ A tabela de §5.8 do concept 4.2 decide, por política, se as alocações entram
 política nova sem decisão explícita reprova em vez de cair num default.
 """
 
+import dataclasses
 from datetime import date
 from decimal import Decimal
 
@@ -122,3 +123,17 @@ def test_a_key_distingue_a_demanda_da_sobre_cobertura() -> None:
 
     assert (uma.key.demand_id, outra.key.demand_id) == ("d1", "d2")
     assert uma.key != outra.key
+
+
+def test_a_violacao_nao_carrega_texto_livre() -> None:
+    # Concept 4.2 §5.12: a mensagem é da borda; um campo `message` entraria aqui.
+    assert {campo.name for campo in dataclasses.fields(Violation)} == {
+        "policy",
+        "mode",
+        "employee_id",
+        "demand_id",
+        "operational_days",
+        "assignment_ids",
+        "observed",
+        "limit",
+    }

@@ -272,3 +272,15 @@ def test_avaliacao_com_as_duas_vizinhas() -> None:
         (PolicyKind.REST_BETWEEN_SHIFTS, (SEGUNDA - timedelta(days=1), SEGUNDA)),
         (PolicyKind.REST_BETWEEN_SHIFTS, (SEGUNDA + timedelta(days=6), seguinte_dia)),
     ]
+
+
+def test_descanso_negativo_sai_junto_com_a_sobreposicao() -> None:
+    avaliada = escala([Turno("ana", em(0, 22), em(1, 6)), Turno("ana", em(1, 5), em(1, 9))])
+
+    avaliacao = evaluate(contexto(avaliada), ValidationConfig.default())
+
+    medidas = {v.policy: v.observed for v in avaliacao.violations}
+    assert medidas == {
+        PolicyKind.OVERLAP: Decimal(60),
+        PolicyKind.REST_BETWEEN_SHIFTS: Decimal(-60),
+    }

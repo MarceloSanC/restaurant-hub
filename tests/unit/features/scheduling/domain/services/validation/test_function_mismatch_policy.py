@@ -125,3 +125,16 @@ def test_o_modo_vem_da_config() -> None:
     (violacao,) = _POLITICA.evaluate(contexto(avaliada), bloqueio)
 
     assert violacao.mode is EnforcementMode.BLOCK
+
+
+@pytest.mark.parametrize(
+    ("ordem", "esperado"), [(("ana", "bruno"), "bruno"), (("bruno", "ana"), "bruno")]
+)
+def test_as_funcoes_sao_as_do_proprio_registro(ordem: tuple[str, str], esperado: str) -> None:
+    avaliada = escala([Turno("ana", em(0, 8), em(0, 16)), Turno("bruno", em(0, 8), em(0, 16))])
+    funcoes = {"ana": (COZINHEIRO,), "bruno": (ATENDENTE,)}
+    contexto_ = contexto(avaliada, *(fatos(nome, funcoes=funcoes[nome]) for nome in ordem))
+
+    (violacao,) = _POLITICA.evaluate(contexto_, config())
+
+    assert violacao.employee_id == esperado

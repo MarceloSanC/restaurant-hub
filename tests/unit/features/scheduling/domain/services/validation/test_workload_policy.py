@@ -158,3 +158,21 @@ def test_o_modo_vem_da_config() -> None:
     )
 
     assert violacao.mode is EnforcementMode.BLOCK
+
+
+def test_registros_nao_se_somam() -> None:
+    turnos = [*_cinco_dias(), Turno("bruno", em(5, 8), em(5, 16))]
+    contexto_ = contexto(
+        escala(turnos), fatos("ana", horas=Decimal(40)), fatos("bruno", horas=None)
+    )
+
+    assert _POLITICA.evaluate(contexto_, config()) == ()
+
+
+def test_registros_fixos_nao_se_somam_em_ambos() -> None:
+    turnos = [*_cinco_dias(), Turno("bruno", em(5, 8), em(5, 16))]
+    contexto_ = contexto(
+        escala(turnos), fatos("ana", horas=Decimal(40)), fatos("bruno", horas=Decimal(8))
+    )
+
+    assert _POLITICA.evaluate(contexto_, config(workload_direction=_AMBOS)) == ()

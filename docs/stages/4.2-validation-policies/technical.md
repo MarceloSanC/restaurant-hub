@@ -378,4 +378,19 @@ testes. O diff revisado (`82e84de..46f668f`) não incluía a Task 07, que passou
   `test_over_coverage_policy.py`; `src` restaurado e conferido por `git status`.
 - **#3:** comentário do cenário das nove situações corrigido (930 min, não 13h).
 
+### 2026-10-19 — [deviation] auditoria de testes, rodada 1 — Claude Opus 5.5 (executor)
+
+Auditor independente (agente que não escreveu os testes), 59 mutantes reais, cada um revertido com
+`git checkout`: **53 mortos, 1 equivalente** (M56: `warnings` como "não block", com o enum de dois
+valores), **5 sobreviventes**. Três estavam na Task 07, que não tinha passado por revisão de código
+(o diff do Checkpoint C do bloco 3 começava depois dela):
+- M58: o teto diário configurado nunca era exercitado (só o default);
+- M13: o modo do teto semanal vindo da config não era testado;
+- M12, M55, M49, M54: sem cenário com **dois** registros, a soma semanal, a carga, as janelas e as
+  funções podiam ser lidas do registro errado (o primeiro dos fatos) com a suíte verde.
+
+Também: nada travava a ausência de texto livre na `Violation` (§5.12), e o descanso negativo junto
+com a sobreposição só aparecia contra uma vizinha. Os 8 testes propostos entraram no commit
+`[4.2/task-10-extra]`; a rodada 2 re-executa os sobreviventes.
+
 <!-- END: post-execution -->

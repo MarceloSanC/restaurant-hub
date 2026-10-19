@@ -189,3 +189,37 @@ def test_semana_da_vizinha_nao_entra_no_teto_semanal() -> None:
     avaliada = escala([Turno("ana", em(0, 8), em(0, 16))])
 
     assert _SEMANAL.evaluate(contexto(avaliada, previous=anterior), config()) == ()
+
+
+def test_o_teto_diario_configurado_vale() -> None:
+    avaliada = escala([Turno("ana", em(0, 8), em(0, 16))])
+
+    assert _DIARIO.evaluate(contexto(avaliada), config(daily_cap_minutes=480)) == ()
+    (violacao,) = _DIARIO.evaluate(contexto(avaliada), config(daily_cap_minutes=479))
+    assert (violacao.observed, violacao.limit) == (Decimal(480), Decimal(479))
+
+
+def test_o_modo_do_teto_semanal_vem_da_config() -> None:
+    avaliada = escala(_quatro_turnos_de_onze_horas(1))
+    bloqueio = config(weekly_cap=PolicyRule(enabled=True, mode=EnforcementMode.BLOCK))
+
+    (violacao,) = _SEMANAL.evaluate(contexto(avaliada), bloqueio)
+
+    assert violacao.mode is EnforcementMode.BLOCK
+
+
+def test_a_semana_soma_por_registro() -> None:
+    turnos = [*_quatro_turnos_de_onze_horas(1), Turno("bruno", em(0, 6), em(0, 14))]
+
+    (violacao,) = _SEMANAL.evaluate(contexto(escala(turnos)), config())
+
+    assert (violacao.employee_id, violacao.observed) == ("ana", Decimal(2641))
+    assert AssignmentId("s-a4") not in violacao.assignment_ids
+
+
+def test_duas_semanas_abaixo_do_teto_nao_somam_entre_registros() -> None:
+    turnos = [
+        Turno(nome, em(dia, 6), em(dia, 17)) for nome in ("ana", "bruno") for dia in (0, 1, 2)
+    ]
+
+    assert _SEMANAL.evaluate(contexto(escala(turnos)), config()) == ()

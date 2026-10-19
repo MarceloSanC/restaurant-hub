@@ -122,3 +122,20 @@ def test_ignora_a_alocacao_da_vizinha() -> None:
 
 def test_registro_sem_indisponibilidade_nao_viola() -> None:
     assert _avaliar() == ()
+
+
+@pytest.mark.parametrize("indisponivel", ["ana", "bruno"])
+def test_a_janela_e_do_proprio_registro(indisponivel: str) -> None:
+    avaliada = escala([Turno("ana", em(0, 8), em(0, 16)), Turno("bruno", em(0, 8), em(0, 16))])
+    janelas = {
+        nome: [(em(0, 9), em(0, 10))] if nome == indisponivel else [] for nome in ("ana", "bruno")
+    }
+    contexto_ = contexto(
+        avaliada,
+        fatos("ana", indisponivel=janelas["ana"]),
+        fatos("bruno", indisponivel=janelas["bruno"]),
+    )
+
+    (violacao,) = _POLITICA.evaluate(contexto_, config())
+
+    assert violacao.employee_id == indisponivel
