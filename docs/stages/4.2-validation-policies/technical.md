@@ -365,4 +365,17 @@ Sem blocker; todos **corrigidos** no commit `[4.2/task-06-fix]`, só em testes (
   ids; a vizinha interna e o período ≠ 7 nos dois lados; `match` específico; `EmployeeId` no lugar do
   `type: ignore`.
 
+### 2026-10-19 — [deviation] Checkpoint C do bloco 3 (Tasks 08–10) — Claude Opus 5.5 (executor)
+
+Sem violação de contrato; os três achados foram **corrigidos** no commit `[4.2/task-10-fix]`, só em
+testes. O diff revisado (`82e84de..46f668f`) não incluía a Task 07, que passou à auditoria de testes.
+- **#1:** o dia operacional da sobre-cobertura (a única política que o calcula pela faixa, e não pela
+  projeção) não era travado: entrou uma faixa às 02:00 de quinta, do dia de quarta.
+- **#2:** três componentes da chave de ordenação (registro, demanda, alocações) sobreviviam à
+  remoção, porque a emissão natural já coincidia com a ordem. Os testes novos têm emissão
+  **inversa** à ordem esperada. Mutação real nesta sessão: remover cada componente reprova
+  `test_evaluator.py` (`1 failed`), e o dia civil no lugar do operacional reprova
+  `test_over_coverage_policy.py`; `src` restaurado e conferido por `git status`.
+- **#3:** comentário do cenário das nove situações corrigido (930 min, não 13h).
+
 <!-- END: post-execution -->

@@ -119,6 +119,19 @@ def test_demandas_distintas_da_mesma_faixa_contam_separadas() -> None:
     assert _POLITICA.evaluate(contexto(avaliada), config()) == ()
 
 
+def test_o_dia_da_violacao_e_o_dia_operacional_da_faixa() -> None:
+    # Quinta 02:00 é antes do corte (05:00): a faixa é do dia operacional de quarta.
+    inicio, fim = em(3, 2), em(3, 6)
+    avaliada = escala(
+        [Turno("ana", inicio, fim, function=ATENDENTE)],
+        quantidades={(inicio, fim, ATENDENTE): 0},
+    )
+
+    (violacao,) = _POLITICA.evaluate(contexto(avaliada), config())
+
+    assert violacao.operational_days == (SEGUNDA + timedelta(days=2),)
+
+
 def test_ignora_a_vizinha() -> None:
     anterior_dia = SEGUNDA - timedelta(days=7)
     inicio, fim = em(2, 16, base=anterior_dia), em(3, 0, base=anterior_dia)

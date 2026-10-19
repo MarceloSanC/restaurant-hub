@@ -14,6 +14,16 @@ from restaurant_hub.features.scheduling.domain.services.validation.evaluator imp
     Evaluation,
     evaluate,
 )
+from restaurant_hub.features.scheduling.domain.value_objects.demand_quantity import (
+    DemandQuantity,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
+    AssignmentId,
+    EmployeeId,
+    ShiftBandId,
+    ShiftDemandId,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
     EnforcementMode,
     PolicyKind,
@@ -47,7 +57,8 @@ _PARAMETROS = {
 def _as_nove_situacoes(registro: str) -> list[Turno]:
     """Uma escala em que `registro` viola as nove políticas."""
     return [
-        # sobreposição (faixas distintas) + teto diário 13h + divergência + função não detida
+        # sobreposição (faixas distintas) + teto diário (930 min) + divergência + função
+        # não detida
         Turno(registro, em(0, 8), em(0, 18), alloc_break=30),
         Turno(registro, em(0, 15), em(0, 21), function=ATENDENTE),
         # descanso: segunda termina 21h, terça começa 05h
@@ -168,12 +179,13 @@ def test_a_ordem_segue_o_enum_e_nao_depende_da_ordem_do_registro() -> None:
     assert evaluate(contexto_, ValidationConfig.default()) == direta
 
 
-def test_dentro_da_politica_a_ordem_e_pelo_dia() -> None:
+def test_dentro_da_politica_a_ordem_e_pelo_dia_e_pelo_registro() -> None:
+    # Bruno é alocado antes de Ana na mesma faixa: a emissão natural sai bruno, ana.
     avaliada = escala(
         [
             Turno("ana", em(3, 6), em(3, 20)),
-            Turno("ana", em(0, 6), em(0, 20)),
             Turno("bruno", em(0, 6), em(0, 20)),
+            Turno("ana", em(0, 6), em(0, 20)),
         ]
     )
 
@@ -185,6 +197,50 @@ def test_dentro_da_politica_a_ordem_e_pelo_dia() -> None:
         (SEGUNDA, "bruno"),
         (SEGUNDA + timedelta(days=3), "ana"),
     ]
+
+
+def test_no_mesmo_dia_a_ordem_e_pela_demanda() -> None:
+    # A faixa das 14h é habilitada primeiro com a demanda "z"; a das 08h depois, com "a":
+    # a emissão sai z, a e a ordem tem de sair a, z.
+    raiz = escala([])
+    for faixa, demanda, inicio, fim, registro in (
+        ("f14", "z", em(0, 14), em(0, 18), "ana"),
+        ("f08", "a", em(0, 8), em(0, 12), "bruno"),
+    ):
+        raiz = raiz.enable_band(ShiftBandId(faixa), TimeRange(inicio, fim))
+        raiz = raiz.declare_demand(
+            ShiftDemandId(demanda), ShiftBandId(faixa), COZINHEIRO, DemandQuantity(0)
+        )
+        raiz = raiz.assign(
+            AssignmentId(f"x-{registro}"), ShiftDemandId(demanda), EmployeeId(registro)
+        )
+
+    avaliacao = evaluate(contexto(raiz), ValidationConfig.default())
+
+    demandas = [v.demand_id for v in avaliacao.violations if v.policy is PolicyKind.OVER_COVERAGE]
+    assert demandas == ["a", "z"]
+
+
+def test_no_mesmo_dia_e_registro_a_ordem_e_pelas_alocacoes() -> None:
+    # Bruno abre a faixa das 08h (s-a0); Ana entra às 14h (s-a1) e às 08h (s-a2): a emissão
+    # das funções não detidas da Ana sai s-a2, s-a1 e a ordem tem de sair s-a1, s-a2.
+    avaliada = escala(
+        [
+            Turno("bruno", em(0, 8), em(0, 12)),
+            Turno("ana", em(0, 14), em(0, 18), function=ATENDENTE),
+            Turno("ana", em(0, 8), em(0, 12), function=ATENDENTE),
+        ]
+    )
+    contexto_ = contexto(avaliada, fatos("ana", funcoes=(COZINHEIRO,)))
+
+    avaliacao = evaluate(contexto_, ValidationConfig.default())
+
+    alocacoes = [
+        sorted(v.assignment_ids)
+        for v in avaliacao.violations
+        if v.policy is PolicyKind.FUNCTION_MISMATCH
+    ]
+    assert alocacoes == [["s-a1"], ["s-a2"]]
 
 
 def test_registro_inativo_nao_aparece_em_violacao_alguma() -> None:
