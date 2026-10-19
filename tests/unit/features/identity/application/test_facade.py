@@ -255,7 +255,12 @@ class TestConversaoDePrimitivos:
         espiao = _EspiaoDePapel(devolve=AccountRoleResult(role=papel))
         fachada, _, _, _ = _fachada_espia(role=espiao)
 
-        assert fachada.account_role("user-42") == papel.value
+        papel_devolvido = fachada.account_role("user-42")
+
+        assert papel_devolvido == papel.value
+        # `Role` é `StrEnum`: o `==` acima passaria com o enum. O tipo é o que
+        # trava a propriedade 1 — o consumidor não recebe tipos de identity.
+        assert type(papel_devolvido) is str
         assert espiao.commands == [GetAccountRoleCommand(user_id=UserId("user-42"))]
 
     def test_account_role_de_conta_desconhecida_e_none(self) -> None:
@@ -399,7 +404,10 @@ class TestSobreOsUseCasesReais:
         fachada, _, _ = self._fachada_real()
         conta = _provisionar(fachada)
 
-        assert fachada.account_role(conta.user_id) == "employee"
+        papel = fachada.account_role(conta.user_id)
+
+        assert papel == "employee"
+        assert type(papel) is str  # não o `Role` (StrEnum) — propriedade 1
         assert fachada.account_role("nunca-existiu") is None
 
     def test_falha_do_repositorio_atravessa_use_case_e_fachada(self) -> None:

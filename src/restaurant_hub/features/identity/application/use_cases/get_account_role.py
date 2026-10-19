@@ -1,11 +1,12 @@
 """Use case: consultar o papel de uma conta.
 
-Nasce na Stage 3.7 para a fachada (ADR 3.7.0001 §3). Desligar um registro de
-funcionário em staff só corta as sessões do login vinculado quando o acesso dele
-vem **do registro** — isto é, quando a conta é de funcionário. Gerente e dono que
-também trabalham na escala tiram a autoridade do papel, não do registro, e não
-perdem as sessões. Staff não conhece `Role`: pergunta pela fachada, que devolve o
-valor em texto, e o gateway de staff compara com o literal que já detém.
+Nasce na Stage 3.7 para a fachada (ADR 3.7.0001 §3). O ADR decide que desligar
+um registro de funcionário em staff só corta as sessões do login vinculado
+quando o acesso dele vem **do registro**; uma das condições é a conta ser de
+funcionário — gerente e dono que também trabalham na escala tiram a autoridade
+do papel, não do registro. É essa condição que staff pergunta aqui. Staff não
+conhece `Role`: pergunta pela fachada, que devolve o valor em texto, e o gateway
+de staff compara com o literal que já detém.
 
 **Só leitura.** Uma linha sobre `UserRepository.find_by_id`.
 
