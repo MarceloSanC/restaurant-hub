@@ -20,6 +20,12 @@ token e é resolvido no `composition_root` (ADR 0.0.0005). Há varredura de AST
 sobre este arquivo que reprova qualquer outra origem — sem ela, um campo
 `restaurant_id` de corpo consumido aqui passaria pela lista negra dos schemas.
 
+**O ator autenticado vai em todo command e query** (Stage 3.7, ADR 3.7.0001): o
+use case autoriza de novo, com ele, o mesmo alvo que a rota acabou de autorizar.
+A autorização daqui continua — vira defesa em profundidade, não a única linha —,
+e é ela que mantém a ordem validar → autorizar antes de qualquer leitura em
+identity.
+
 **Nenhuma rota lê `AuthorizedScope.unit_id`.** O escopo **ecoa** a unidade pedida
 (`authorize_action.py:113`), então lê-lo devolve o que o path já dizia — até o dia
 em que não devolver. A unidade que endereça o registro é sempre a do **path**
@@ -289,7 +295,7 @@ def create_job_function(
     """Cria uma função no catálogo do restaurante do ator."""
     scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission)
     result = use_case.execute(
-        CreateJobFunctionCommand(tenant_id=scope.tenant_id, name=payload.name)
+        CreateJobFunctionCommand(actor=actor, tenant_id=scope.tenant_id, name=payload.name)
     )
     return JobFunctionResponse.from_result(result)
 
@@ -302,7 +308,7 @@ def list_job_functions(
 ) -> list[JobFunctionResponse]:
     """Lista o catálogo do restaurante do ator, na ordem total de `L-ORD`."""
     scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission)
-    results = use_case.execute(ListJobFunctionsQuery(tenant_id=scope.tenant_id))
+    results = use_case.execute(ListJobFunctionsQuery(actor=actor, tenant_id=scope.tenant_id))
     return [JobFunctionResponse.from_result(result) for result in results]
 
 
@@ -319,6 +325,7 @@ def rename_job_function(
     scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission)
     result = use_case.execute(
         RenameJobFunctionCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             job_function_id=JobFunctionId(identifier),
             name=payload.name,
@@ -339,6 +346,7 @@ def delete_job_function(
     scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission)
     use_case.execute(
         DeleteJobFunctionCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             job_function_id=JobFunctionId(identifier),
         )
@@ -374,6 +382,7 @@ def create_employee(
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         CreateEmployeeCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             name=payload.name,
@@ -398,6 +407,7 @@ def list_employees(
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     results = use_case.execute(
         ListEmployeesQuery(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             include_inactive=include_inactive,
@@ -428,6 +438,7 @@ def rename_employee(  # noqa: PLR0913
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         RenameEmployeeCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -454,6 +465,7 @@ def delete_employee(
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     use_case.execute(
         DeleteEmployeeCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -493,6 +505,7 @@ def assign_job_functions(  # noqa: PLR0913
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         AssignJobFunctionsCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -520,6 +533,7 @@ def change_workload_profile(  # noqa: PLR0913
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         ChangeWorkloadProfileCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -552,6 +566,7 @@ def declare_shift_preference(  # noqa: PLR0913
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         DeclareShiftPreferenceCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -584,6 +599,7 @@ def register_unavailability(  # noqa: PLR0913
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         RegisterUnavailabilityCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -619,6 +635,7 @@ def remove_unavailability(  # noqa: PLR0913
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         RemoveUnavailabilityCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -656,6 +673,7 @@ def deactivate_employee(
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         DeactivateEmployeeCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -681,6 +699,7 @@ def reactivate_employee(
     scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         ReactivateEmployeeCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -732,6 +751,7 @@ def copy_employee_to_unit(  # noqa: PLR0913
 
     result = use_case.execute(
         CopyEmployeeToUnitCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),
@@ -781,6 +801,7 @@ def create_login_for_employee(  # noqa: PLR0913
     guard.authorize(actor, MANAGE_USERS_IN_UNIT_ACCESS.permission, unit_id=unidade)
     result = use_case.execute(
         CreateLoginForEmployeeCommand(
+            actor=actor,
             tenant_id=scope.tenant_id,
             unit_id=UnitId(unidade),
             employee_id=EmployeeId(funcionario),

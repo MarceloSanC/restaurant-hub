@@ -27,10 +27,19 @@ o command já chega com o VO **construído**, e quando essa construção falha o
 erro (`InvalidWeeklyHoursError`, `EmptyShiftPreferenceError`,
 `InvalidUnavailabilityPeriodError`) acontece **antes** do use case — é o
 terceiro bloco da §6 do concept.
+
+**Todos carregam `actor`, como primeiro campo** (Stage 3.7, ADR 3.7.0001 §2): o
+use case autoriza o alvo do command com ele antes de qualquer outra instrução.
+É a credencial **opaca** do port (`Actor = object`) — o command diz *quem pede*
+ao lado de *o que pede*, e quem não tem ator não forma o pedido por omissão (o
+campo não tem default). `repr=False` porque staff não sabe o que a credencial
+imprime, e um command chega a traceback e a log. O `execute(<Command>)` não muda
+de forma (LAYOUT §5, ADR 0.0.0006).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from restaurant_hub.features.staff.application.ports.out.access_guard import Actor
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
@@ -52,6 +61,7 @@ class CreateJobFunctionCommand:
     Não há campo de estado: a função **não tem ciclo de vida** (ADR 3.2.0005).
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     name: str
 
@@ -63,6 +73,7 @@ class RenameJobFunctionCommand:
     Renomear para o **próprio nome atual** não é conflito (concept §5.5).
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     job_function_id: JobFunctionId
     name: str
@@ -72,6 +83,7 @@ class RenameJobFunctionCommand:
 class DeleteJobFunctionCommand:
     """Remoção **definitiva** de uma função — guardada por referências (§5.9)."""
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     job_function_id: JobFunctionId
 
@@ -91,6 +103,7 @@ class CreateEmployeeCommand:
             que é o default de um cadastro novo.
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     name: str
@@ -103,6 +116,7 @@ class CreateEmployeeCommand:
 class RenameEmployeeCommand:
     """Renomeação do registro de funcionário (nome verbatim)."""
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -116,6 +130,7 @@ class AssignJobFunctionsCommand:
     Conjunto vazio é rejeitado pelo domínio (`EmptyJobFunctionsError`).
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -126,6 +141,7 @@ class AssignJobFunctionsCommand:
 class ChangeWorkloadProfileCommand:
     """Troca do perfil de jornada (fixa ↔ sob demanda)."""
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -142,6 +158,7 @@ class DeclareShiftPreferenceCommand:
     teria de significar as duas coisas ao mesmo tempo.
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -156,6 +173,7 @@ class RegisterUnavailabilityCommand:
     (`OverlappingUnavailabilityError`); adjacente é aceito (ADR 3.1.0001).
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -169,6 +187,7 @@ class RemoveUnavailabilityCommand:
     O período não tem identidade própria: quem o remove reapresenta o valor.
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -179,6 +198,7 @@ class RemoveUnavailabilityCommand:
 class DeactivateEmployeeCommand:
     """Desligamento do funcionário — o registro **sobrevive** (ADR 3.2.0006)."""
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -188,6 +208,7 @@ class DeactivateEmployeeCommand:
 class ReactivateEmployeeCommand:
     """Recontratação do funcionário — devolve o registro à listagem default."""
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -201,6 +222,7 @@ class DeleteEmployeeCommand:
     isso a operação é guardada (L-E5).
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -223,6 +245,7 @@ class CreateLoginForEmployeeCommand:
             default: o gestor decide, e o canal decide o prazo do link.
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId
@@ -243,6 +266,7 @@ class CopyEmployeeToUnitCommand:
     `tenant_id` só (concept §5.11).
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     employee_id: EmployeeId

@@ -79,6 +79,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 )
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -103,18 +104,19 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
 
     # 1. A função de trabalho do restaurante.
     funcao = CreateJobFunctionUseCase(fakes.job_functions, ids).execute(
-        CreateJobFunctionCommand(tenant_id=_TENANT, name="Cozinheiro")
+        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro")
     )
     assert [
         resultado.name
         for resultado in ListJobFunctionsUseCase(fakes.job_functions).execute(
-            ListJobFunctionsQuery(tenant_id=_TENANT)
+            ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_TENANT)
         )
     ] == ["Cozinheiro"]
 
     # 2. O funcionário na unidade A.
     funcionario = CreateEmployeeUseCase(fakes.employees, fakes.job_functions, ids).execute(
         CreateEmployeeCommand(
+            actor=TEST_ACTOR,
             tenant_id=_TENANT,
             unit_id=_UNIDADE_A,
             name="Maria",
@@ -128,6 +130,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     # 3. Jornada e preferência.
     ChangeWorkloadProfileUseCase(fakes.employees).execute(
         ChangeWorkloadProfileCommand(
+            actor=TEST_ACTOR,
             tenant_id=_TENANT,
             unit_id=_UNIDADE_A,
             employee_id=funcionario_id,
@@ -136,6 +139,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     )
     DeclareShiftPreferenceUseCase(fakes.employees).execute(
         DeclareShiftPreferenceCommand(
+            actor=TEST_ACTOR,
             tenant_id=_TENANT,
             unit_id=_UNIDADE_A,
             employee_id=funcionario_id,
@@ -146,7 +150,11 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     # 4. Indisponibilidade.
     com_periodo = RegisterUnavailabilityUseCase(fakes.employees).execute(
         RegisterUnavailabilityCommand(
-            tenant_id=_TENANT, unit_id=_UNIDADE_A, employee_id=funcionario_id, period=_PERIODO
+            actor=TEST_ACTOR,
+            tenant_id=_TENANT,
+            unit_id=_UNIDADE_A,
+            employee_id=funcionario_id,
+            period=_PERIODO,
         )
     )
     assert com_periodo.unavailabilities == (_PERIODO,)
@@ -154,6 +162,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     # 5. Cópia para a unidade B — leva o cadastro inteiro, já editado.
     copia = CopyEmployeeToUnitUseCase(fakes.employees, ids).execute(
         CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR,
             tenant_id=_TENANT,
             unit_id=_UNIDADE_A,
             employee_id=funcionario_id,
@@ -167,27 +176,38 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
 
     # 6. Desligamento do registro da unidade A.
     DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
-        DeactivateEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE_A, employee_id=funcionario_id)
+        DeactivateEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE_A, employee_id=funcionario_id
+        )
     )
 
     # 7. As listagens contam a história.
     listar = ListEmployeesUseCase(fakes.employees)
-    assert listar.execute(ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE_A)) == ()
+    assert (
+        listar.execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE_A))
+        == ()
+    )
 
     a_com_inativos = listar.execute(
-        ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE_A, include_inactive=True)
+        ListEmployeesQuery(
+            actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE_A, include_inactive=True
+        )
     )
     assert [resultado.id for resultado in a_com_inativos] == [funcionario_id]
     assert a_com_inativos[0].active is False
 
-    da_unidade_b = listar.execute(ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE_B))
+    da_unidade_b = listar.execute(
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE_B)
+    )
     assert [resultado.id for resultado in da_unidade_b] == [copia.id]
     assert da_unidade_b[0].active is True  # a cópia não foi desligada junto
 
     # 8. A função continua bloqueada: o desligado de A e a cópia de B a apontam.
     with pytest.raises(JobFunctionInUseError):
         DeleteJobFunctionUseCase(fakes.job_functions, fakes.employees).execute(
-            DeleteJobFunctionCommand(tenant_id=_TENANT, job_function_id=JobFunctionId(funcao.id))
+            DeleteJobFunctionCommand(
+                actor=TEST_ACTOR, tenant_id=_TENANT, job_function_id=JobFunctionId(funcao.id)
+            )
         )
     assert fakes.job_functions.find_by_id(_TENANT, JobFunctionId(funcao.id)) is not None
 
@@ -204,10 +224,11 @@ def test_o_fluxo_nao_escreve_direto_nos_fakes() -> None:
     fakes = staff_repositories()
     ids = FakeIdGenerator()
     funcao = CreateJobFunctionUseCase(fakes.job_functions, ids).execute(
-        CreateJobFunctionCommand(tenant_id=_TENANT, name="Cozinheiro")
+        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro")
     )
     CreateEmployeeUseCase(fakes.employees, fakes.job_functions, ids).execute(
         CreateEmployeeCommand(
+            actor=TEST_ACTOR,
             tenant_id=_TENANT,
             unit_id=_UNIDADE_A,
             name="Maria",

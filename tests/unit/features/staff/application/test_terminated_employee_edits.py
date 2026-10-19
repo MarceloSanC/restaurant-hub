@@ -88,6 +88,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     OnDemand,
 )
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 
 pytestmark = pytest.mark.unit
 
@@ -143,7 +144,9 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
     (
         "rename_employee",
         lambda fakes: RenameEmployeeUseCase(fakes.employees).execute(
-            RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
+            RenameEmployeeCommand(
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
+            )
         ),
         lambda relido: _assert(relido.name == "Joana", f"nome não mudou: {relido.name!r}"),
     ),
@@ -151,7 +154,11 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
         "change_workload_profile",
         lambda fakes: ChangeWorkloadProfileUseCase(fakes.employees).execute(
             ChangeWorkloadProfileCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, workload_profile=OnDemand()
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                workload_profile=OnDemand(),
             )
         ),
         lambda relido: _assert(
@@ -162,7 +169,11 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
         "declare_shift_preference",
         lambda fakes: DeclareShiftPreferenceUseCase(fakes.employees).execute(
             DeclareShiftPreferenceCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=_PREFERENCIA
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                shift_preference=_PREFERENCIA,
             )
         ),
         lambda relido: _assert(
@@ -173,7 +184,11 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
         "assign_job_functions",
         lambda fakes: AssignJobFunctionsUseCase(fakes.employees, fakes.job_functions).execute(
             AssignJobFunctionsCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, job_function_ids=frozenset({_F2})
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                job_function_ids=frozenset({_F2}),
             )
         ),
         lambda relido: _assert(
@@ -184,7 +199,7 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
         "register_unavailability",
         lambda fakes: RegisterUnavailabilityUseCase(fakes.employees).execute(
             RegisterUnavailabilityCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_OUTRO_PERIODO
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_OUTRO_PERIODO
             )
         ),
         lambda relido: _assert(
@@ -194,7 +209,9 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
     (
         "remove_unavailability",
         lambda fakes: RemoveUnavailabilityUseCase(fakes.employees).execute(
-            RemoveUnavailabilityCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_PERIODO)
+            RemoveUnavailabilityCommand(
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_PERIODO
+            )
         ),
         lambda relido: _assert(relido.unavailabilities == (), "período não foi removido"),
     ),
@@ -258,8 +275,10 @@ def test_desligado_editado_continua_fora_da_listagem_default(
     fakes = _desligado()
     executar(fakes)
     listar = ListEmployeesUseCase(fakes.employees)
-    assert listar.execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1)) == ()
-    incluindo = listar.execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1, include_inactive=True))
+    assert listar.execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)) == ()
+    incluindo = listar.execute(
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, include_inactive=True)
+    )
     assert [resultado.id for resultado in incluindo] == [_E1]
 
 
@@ -272,10 +291,10 @@ def test_reactivate_e_o_unico_caminho_de_volta() -> None:
     assert _relido(fakes).active is False
 
     ReactivateEmployeeUseCase(fakes.employees).execute(
-        ReactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
     assert _relido(fakes).active is True
     listado = ListEmployeesUseCase(fakes.employees).execute(
-        ListEmployeesQuery(tenant_id=_A, unit_id=_U1)
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)
     )
     assert [resultado.id for resultado in listado] == [_E1]

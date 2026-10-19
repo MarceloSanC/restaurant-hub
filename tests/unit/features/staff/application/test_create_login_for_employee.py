@@ -44,6 +44,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 
 pytestmark = pytest.mark.unit
 
@@ -100,6 +101,7 @@ def _comando(
     employee_id: EmployeeId = _E1,
 ) -> CreateLoginForEmployeeCommand:
     return CreateLoginForEmployeeCommand(
+        actor=TEST_ACTOR,
         tenant_id=tenant_id,
         unit_id=unit_id,
         employee_id=employee_id,

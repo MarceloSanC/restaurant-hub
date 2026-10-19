@@ -61,6 +61,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -128,7 +129,9 @@ def test_copia_recebe_id_novo_unidade_destino_e_mesmo_tenant() -> None:
     fakes = _fakes()
     gerador = FakeIdGenerator()
     copia = _copiar(fakes, gerador).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        )
     )
 
     assert copia.id == str(gerador.generated[0])
@@ -142,7 +145,9 @@ def test_copia_replica_todo_o_resto_do_cadastro() -> None:
     fakes = _fakes()
     origem = _result(fakes, _U1, _E1)
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        )
     )
 
     assert (
@@ -172,7 +177,9 @@ def test_copia_carrega_o_estado_de_ciclo_de_vida_como_esta(active: bool) -> None
     """
     fakes = _fakes(active=active)
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        )
     )
     assert copia.active is active
 
@@ -182,7 +189,9 @@ def test_a_origem_permanece_inalterada() -> None:
     fakes = _fakes()
     antes = _result(fakes, _U1, _E1)
     _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        )
     )
     assert _result(fakes, _U1, _E1) == antes
 
@@ -193,16 +202,21 @@ def test_a_origem_permanece_inalterada() -> None:
 def test_editar_a_copia_nao_afeta_a_origem() -> None:
     fakes = _fakes()
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        )
     )
     origem_antes = _result(fakes, _U1, _E1)
     copia_id = EmployeeId(copia.id)
 
     RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=copia_id, name="Joana")
+        RenameEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=copia_id, name="Joana"
+        )
     )
     RegisterUnavailabilityUseCase(fakes.employees).execute(
         RegisterUnavailabilityCommand(
+            actor=TEST_ACTOR,
             tenant_id=_A,
             unit_id=_U2,
             employee_id=copia_id,
@@ -212,7 +226,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
         )
     )
     DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
-        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=copia_id)
+        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=copia_id)
     )
 
     assert _result(fakes, _U1, _E1) == origem_antes
@@ -222,16 +236,20 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
     """O outro sentido — a independência não é assimétrica."""
     fakes = _fakes()
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        )
     )
     copia_id = EmployeeId(copia.id)
     copia_antes = _result(fakes, _U2, copia_id)
 
     RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
+        RenameEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
+        )
     )
     DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
-        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 
     assert _result(fakes, _U2, copia_id) == copia_antes
@@ -247,7 +265,7 @@ def test_destino_igual_a_origem_e_recusado_sem_gravar() -> None:
     with pytest.raises(SameUnitCopyError):
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U1
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U1
             )
         )
 
@@ -270,7 +288,11 @@ def test_unidade_destino_vazia_falha_depois_de_carregar_a_origem(invalido: str) 
     with pytest.raises(InvalidIdentifierError):
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=UnitId(invalido)
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                target_unit_id=UnitId(invalido),
             )
         )
 
@@ -285,7 +307,11 @@ def test_origem_inexistente_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("fantasma"), target_unit_id=_U2
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=EmployeeId("fantasma"),
+                target_unit_id=_U2,
             )
         )
 
@@ -306,7 +332,7 @@ def test_precedencia_origem_de_outro_tenant_vence_destino_igual() -> None:
     with pytest.raises(StaffError) as excecao:
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
-                tenant_id=_B, unit_id=_U1, employee_id=_E1, target_unit_id=_U1
+                actor=TEST_ACTOR, tenant_id=_B, unit_id=_U1, employee_id=_E1, target_unit_id=_U1
             )
         )
     assert type(excecao.value) is EmployeeNotFoundError
@@ -333,7 +359,9 @@ def test_ca04_a_copia_nao_carrega_o_vinculo_de_login() -> None:
     fakes.employees.update(origem.link_login(UserId("login-1")))
 
     copia = _copiar(fakes).execute(
-        CopyEmployeeToUnitCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2)
+        CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        )
     )
 
     assert copia.user_id is None
@@ -360,7 +388,7 @@ def test_copiar_duas_vezes_para_o_mesmo_destino_cria_dois_registros() -> None:
     fakes = _fakes()
     copiar = _copiar(fakes)
     comando = CopyEmployeeToUnitCommand(
-        tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
+        actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, target_unit_id=_U2
     )
 
     primeira = copiar.execute(comando)
@@ -403,7 +431,7 @@ def test_ca11_copia_com_unidade_de_origem_alheia_nao_alcanca_o_registro() -> Non
     with pytest.raises(StaffError) as excecao:
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
-                tenant_id=_A, unit_id=_U2, employee_id=_E1, target_unit_id=_U1
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=_E1, target_unit_id=_U1
             )
         )
     assert type(excecao.value) is EmployeeNotFoundError

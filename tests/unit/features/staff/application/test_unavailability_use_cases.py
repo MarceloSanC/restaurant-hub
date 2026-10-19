@@ -46,6 +46,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 
 pytestmark = pytest.mark.unit
 
@@ -103,7 +104,7 @@ def test_registrar_acrescenta_o_periodo() -> None:
     fakes = _fakes()
     resultado = _registrar(fakes).execute(
         RegisterUnavailabilityCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
         )
     )
     assert resultado.unavailabilities == (_periodo(8, 12),)
@@ -114,7 +115,7 @@ def test_registrar_acrescenta_sem_apagar_os_existentes() -> None:
     fakes = _fakes(_periodo(8, 12))
     _registrar(fakes).execute(
         RegisterUnavailabilityCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(14, 16)
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(14, 16)
         )
     )
     assert _gravados(fakes) == (_periodo(8, 12), _periodo(14, 16))
@@ -127,7 +128,11 @@ def test_periodo_sobreposto_e_recusado_e_nada_e_gravado() -> None:
     with pytest.raises(OverlappingUnavailabilityError):
         _registrar(fakes).execute(
             RegisterUnavailabilityCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(10, 14)
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                period=_periodo(10, 14),
             )
         )
 
@@ -140,7 +145,7 @@ def test_periodo_adjacente_e_aceito() -> None:
     fakes = _fakes(_periodo(8, 12))
     _registrar(fakes).execute(
         RegisterUnavailabilityCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(12, 14)
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(12, 14)
         )
     )
     assert _gravados(fakes) == (_periodo(8, 12), _periodo(12, 14))
@@ -151,6 +156,7 @@ def test_registrar_em_registro_inexistente_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _registrar(fakes).execute(
             RegisterUnavailabilityCommand(
+                actor=TEST_ACTOR,
                 tenant_id=_A,
                 unit_id=_U1,
                 employee_id=EmployeeId("fantasma"),
@@ -164,7 +170,7 @@ def test_registrar_em_registro_de_outro_tenant_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _registrar(fakes).execute(
             RegisterUnavailabilityCommand(
-                tenant_id=_B, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+                actor=TEST_ACTOR, tenant_id=_B, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
             )
         )
     assert _gravados(fakes) == ()
@@ -176,6 +182,7 @@ def test_precedencia_registro_inexistente_vence_periodo_sobreposto() -> None:
     with pytest.raises(StaffError) as excecao:
         _registrar(fakes).execute(
             RegisterUnavailabilityCommand(
+                actor=TEST_ACTOR,
                 tenant_id=_A,
                 unit_id=_U1,
                 employee_id=EmployeeId("fantasma"),
@@ -193,7 +200,7 @@ def test_remover_tira_o_periodo_por_valor() -> None:
     fakes = _fakes(_periodo(8, 12), _periodo(14, 16))
     resultado = _remover(fakes).execute(
         RemoveUnavailabilityCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
         )
     )
     assert resultado.unavailabilities == (_periodo(14, 16),)
@@ -207,7 +214,11 @@ def test_remover_periodo_ausente_e_erro_e_nada_e_gravado() -> None:
     with pytest.raises(UnavailabilityNotFoundError):
         _remover(fakes).execute(
             RemoveUnavailabilityCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(14, 16)
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                period=_periodo(14, 16),
             )
         )
 
@@ -220,6 +231,7 @@ def test_remover_de_registro_inexistente_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _remover(fakes).execute(
             RemoveUnavailabilityCommand(
+                actor=TEST_ACTOR,
                 tenant_id=_A,
                 unit_id=_U1,
                 employee_id=EmployeeId("fantasma"),
@@ -233,7 +245,7 @@ def test_remover_de_registro_de_outro_tenant_e_not_found() -> None:
     with pytest.raises(EmployeeNotFoundError):
         _remover(fakes).execute(
             RemoveUnavailabilityCommand(
-                tenant_id=_B, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+                actor=TEST_ACTOR, tenant_id=_B, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
             )
         )
     assert _gravados(fakes) == (_periodo(8, 12),)
@@ -250,6 +262,7 @@ def test_precedencia_registro_inexistente_vence_periodo_ausente() -> None:
     with pytest.raises(StaffError) as excecao:
         _remover(fakes).execute(
             RemoveUnavailabilityCommand(
+                actor=TEST_ACTOR,
                 tenant_id=_A,
                 unit_id=_U1,
                 employee_id=EmployeeId("fantasma"),
@@ -263,12 +276,12 @@ def test_ciclo_registrar_e_remover_volta_ao_estado_inicial() -> None:
     fakes = _fakes()
     _registrar(fakes).execute(
         RegisterUnavailabilityCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
         )
     )
     _remover(fakes).execute(
         RemoveUnavailabilityCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_periodo(8, 12)
         )
     )
     assert _gravados(fakes) == ()
@@ -295,7 +308,11 @@ def _movimentos_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], o
             "register_unavailability",
             lambda fakes: _registrar(fakes).execute(
                 RegisterUnavailabilityCommand(
-                    tenant_id=_A, unit_id=_U2, employee_id=_E1, period=_periodo(8, 12)
+                    actor=TEST_ACTOR,
+                    tenant_id=_A,
+                    unit_id=_U2,
+                    employee_id=_E1,
+                    period=_periodo(8, 12),
                 )
             ),
         ),
@@ -303,7 +320,11 @@ def _movimentos_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], o
             "remove_unavailability",
             lambda fakes: _remover(fakes).execute(
                 RemoveUnavailabilityCommand(
-                    tenant_id=_A, unit_id=_U2, employee_id=_E1, period=_periodo(8, 12)
+                    actor=TEST_ACTOR,
+                    tenant_id=_A,
+                    unit_id=_U2,
+                    employee_id=_E1,
+                    period=_periodo(8, 12),
                 )
             ),
         ),

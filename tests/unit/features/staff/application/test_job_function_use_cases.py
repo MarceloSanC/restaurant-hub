@@ -43,6 +43,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
 )
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -70,7 +71,7 @@ def test_cria_funcao_e_grava_o_nome_verbatim() -> None:
     fakes = staff_repositories()
     gerador = FakeIdGenerator()
     resultado = _criar(fakes, gerador).execute(
-        CreateJobFunctionCommand(tenant_id=_A, name="  Cozinheiro ")
+        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="  Cozinheiro ")
     )
 
     # Conversão canônica do id (concept §5.3): str(uuid), não outra coisa.
@@ -89,11 +90,11 @@ def test_criar_com_nome_ja_usado_no_mesmo_tenant_e_conflito_sem_tentar_gravar() 
     """
     fakes = staff_repositories()
     criar = _criar(fakes)
-    criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro"))
     antes = len(fakes.store.calls)
 
     with pytest.raises(JobFunctionNameAlreadyExistsError):
-        criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+        criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro"))
 
     assert "job_functions.add" not in fakes.store.calls[antes:]
     assert len(fakes.job_functions.list_by_tenant(_A)) == 1
@@ -103,8 +104,8 @@ def test_criar_com_o_mesmo_nome_em_outro_tenant_e_aceito() -> None:
     """Unicidade de nome é **por tenant** — dois restaurantes têm cozinheiros."""
     fakes = staff_repositories()
     criar = _criar(fakes)
-    criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
-    criar.execute(CreateJobFunctionCommand(tenant_id=_B, name="Cozinheiro"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_B, name="Cozinheiro"))
     assert len(fakes.job_functions.list_by_tenant(_A)) == 1
     assert len(fakes.job_functions.list_by_tenant(_B)) == 1
 
@@ -114,8 +115,8 @@ def test_nomes_que_diferem_so_por_espaco_ou_caixa_sao_distintos(variante: str) -
     """Unicidade **verbatim**: o valor tal como o usuário digitou (workforce §3.2)."""
     fakes = staff_repositories()
     criar = _criar(fakes)
-    criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
-    criar.execute(CreateJobFunctionCommand(tenant_id=_A, name=variante))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name=variante))
     assert {funcao.name for funcao in fakes.job_functions.list_by_tenant(_A)} == {
         "Cozinheiro",
         variante,
@@ -132,7 +133,9 @@ def test_criar_com_nome_vazio_nao_toca_o_port(invalido: str) -> None:
     """
     fakes = staff_repositories()
     with pytest.raises(InvalidNameError):
-        _criar(fakes).execute(CreateJobFunctionCommand(tenant_id=_A, name=invalido))
+        _criar(fakes).execute(
+            CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name=invalido)
+        )
     assert fakes.store.calls == []
 
 
@@ -149,7 +152,9 @@ def test_criar_com_tenant_vazio_nao_toca_o_port(invalido: str) -> None:
     fakes = staff_repositories()
     with pytest.raises(InvalidIdentifierError):
         _criar(fakes).execute(
-            CreateJobFunctionCommand(tenant_id=TenantId(invalido), name="Cozinheiro")
+            CreateJobFunctionCommand(
+                actor=TEST_ACTOR, tenant_id=TenantId(invalido), name="Cozinheiro"
+            )
         )
     assert fakes.store.calls == []
 
@@ -163,7 +168,9 @@ def test_criar_com_nome_vazio_consome_e_descarta_o_id() -> None:
     fakes = staff_repositories()
     gerador = FakeIdGenerator()
     with pytest.raises(InvalidNameError):
-        _criar(fakes, gerador).execute(CreateJobFunctionCommand(tenant_id=_A, name=""))
+        _criar(fakes, gerador).execute(
+            CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="")
+        )
     assert len(gerador.generated) == 1
     assert fakes.job_functions.list_by_tenant(_A) == ()
 
@@ -174,10 +181,15 @@ def test_criar_com_nome_vazio_consome_e_descarta_o_id() -> None:
 def test_renomear_para_o_proprio_nome_atual_e_aceito() -> None:
     """O caso que um `exists_by_name` booleano quebraria (concept §7)."""
     fakes = staff_repositories()
-    criada = _criar(fakes).execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+    criada = _criar(fakes).execute(
+        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro")
+    )
     resultado = _renomear(fakes).execute(
         RenameJobFunctionCommand(
-            tenant_id=_A, job_function_id=JobFunctionId(criada.id), name="Cozinheiro"
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            job_function_id=JobFunctionId(criada.id),
+            name="Cozinheiro",
         )
     )
     assert resultado.name == "Cozinheiro"
@@ -188,10 +200,15 @@ def test_renomear_para_o_proprio_nome_atual_e_aceito() -> None:
 
 def test_renomear_grava_o_nome_novo() -> None:
     fakes = staff_repositories()
-    criada = _criar(fakes).execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+    criada = _criar(fakes).execute(
+        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro")
+    )
     resultado = _renomear(fakes).execute(
         RenameJobFunctionCommand(
-            tenant_id=_A, job_function_id=JobFunctionId(criada.id), name="Chapeiro"
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            job_function_id=JobFunctionId(criada.id),
+            name="Chapeiro",
         )
     )
     assert resultado.name == "Chapeiro"
@@ -208,14 +225,17 @@ def test_renomear_para_o_nome_de_outra_funcao_e_conflito_sem_tentar_gravar() -> 
     """
     fakes = staff_repositories()
     criar = _criar(fakes)
-    criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
-    outra = criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Chapeiro"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro"))
+    outra = criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Chapeiro"))
     antes = len(fakes.store.calls)
 
     with pytest.raises(JobFunctionNameAlreadyExistsError):
         _renomear(fakes).execute(
             RenameJobFunctionCommand(
-                tenant_id=_A, job_function_id=JobFunctionId(outra.id), name="Cozinheiro"
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                job_function_id=JobFunctionId(outra.id),
+                name="Cozinheiro",
             )
         )
 
@@ -230,7 +250,10 @@ def test_renomear_funcao_inexistente_e_not_found() -> None:
     with pytest.raises(JobFunctionNotFoundError):
         _renomear(fakes).execute(
             RenameJobFunctionCommand(
-                tenant_id=_A, job_function_id=JobFunctionId("fantasma"), name="Chapeiro"
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                job_function_id=JobFunctionId("fantasma"),
+                name="Chapeiro",
             )
         )
 
@@ -238,11 +261,16 @@ def test_renomear_funcao_inexistente_e_not_found() -> None:
 def test_renomear_funcao_de_outro_tenant_e_not_found() -> None:
     """Id alheio é indistinguível de inexistente (concept §5.4)."""
     fakes = staff_repositories()
-    criada = _criar(fakes).execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+    criada = _criar(fakes).execute(
+        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro")
+    )
     with pytest.raises(JobFunctionNotFoundError):
         _renomear(fakes).execute(
             RenameJobFunctionCommand(
-                tenant_id=_B, job_function_id=JobFunctionId(criada.id), name="Chapeiro"
+                actor=TEST_ACTOR,
+                tenant_id=_B,
+                job_function_id=JobFunctionId(criada.id),
+                name="Chapeiro",
             )
         )
     gravada = fakes.job_functions.find_by_id(_A, JobFunctionId(criada.id))
@@ -260,13 +288,18 @@ def test_precedencia_inexistente_vence_nome_ja_usado() -> None:
     precedência" de "levantou outra coisa".
     """
     fakes = staff_repositories()
-    _criar(fakes).execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
+    _criar(fakes).execute(
+        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro")
+    )
     antes = len(fakes.store.calls)
 
     with pytest.raises(StaffError) as excecao:
         _renomear(fakes).execute(
             RenameJobFunctionCommand(
-                tenant_id=_A, job_function_id=JobFunctionId("fantasma"), name="Cozinheiro"
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                job_function_id=JobFunctionId("fantasma"),
+                name="Cozinheiro",
             )
         )
     assert type(excecao.value) is JobFunctionNotFoundError
@@ -282,18 +315,18 @@ def test_precedencia_inexistente_vence_nome_ja_usado() -> None:
 def test_listar_devolve_todas_do_tenant_e_nenhuma_de_outro() -> None:
     fakes = staff_repositories()
     criar = _criar(fakes)
-    criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Cozinheiro"))
-    criar.execute(CreateJobFunctionCommand(tenant_id=_A, name="Chapeiro"))
-    criar.execute(CreateJobFunctionCommand(tenant_id=_B, name="Garçom"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Cozinheiro"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Chapeiro"))
+    criar.execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_B, name="Garçom"))
 
-    do_a = _listar(fakes).execute(ListJobFunctionsQuery(tenant_id=_A))
+    do_a = _listar(fakes).execute(ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_A))
     assert {resultado.name for resultado in do_a} == {"Cozinheiro", "Chapeiro"}
     assert all(resultado.tenant_id == _A for resultado in do_a)
 
-    do_b = _listar(fakes).execute(ListJobFunctionsQuery(tenant_id=_B))
+    do_b = _listar(fakes).execute(ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_B))
     assert {resultado.name for resultado in do_b} == {"Garçom"}
 
 
 def test_listar_tenant_sem_funcoes_devolve_vazio() -> None:
     fakes = staff_repositories()
-    assert _listar(fakes).execute(ListJobFunctionsQuery(tenant_id=_A)) == ()
+    assert _listar(fakes).execute(ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_A)) == ()

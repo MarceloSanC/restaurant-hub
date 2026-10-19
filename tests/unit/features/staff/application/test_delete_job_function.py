@@ -42,6 +42,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 
 pytestmark = pytest.mark.unit
 
@@ -88,7 +89,9 @@ def _apagar(fakes: StaffFakes) -> DeleteJobFunctionUseCase:
 def test_remove_funcao_sem_referencias() -> None:
     fakes = _com_funcao_no_tenant_a()
     antes = len(fakes.store.calls)
-    _apagar(fakes).execute(DeleteJobFunctionCommand(tenant_id=_A, job_function_id=_F1))
+    _apagar(fakes).execute(
+        DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1)
+    )
     # Capturado ANTES da releitura, que também registraria uma chamada.
     conduta = list(fakes.store.calls[antes:])
 
@@ -117,7 +120,9 @@ def test_funcao_referenciada_nao_e_removida_e_a_remocao_nem_e_tentada() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(JobFunctionInUseError):
-        _apagar(fakes).execute(DeleteJobFunctionCommand(tenant_id=_A, job_function_id=_F1))
+        _apagar(fakes).execute(
+            DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1)
+        )
 
     assert "job_functions.delete" not in fakes.store.calls[antes:]
     assert fakes.job_functions.find_by_id(_A, _F1) is not None
@@ -130,7 +135,9 @@ def test_referenciador_em_outra_unidade_do_tenant_bloqueia() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(JobFunctionInUseError):
-        _apagar(fakes).execute(DeleteJobFunctionCommand(tenant_id=_A, job_function_id=_F1))
+        _apagar(fakes).execute(
+            DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1)
+        )
 
     assert "job_functions.delete" not in fakes.store.calls[antes:]
     assert fakes.job_functions.find_by_id(_A, _F1) is not None
@@ -148,7 +155,9 @@ def test_referenciador_desligado_tambem_bloqueia() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(JobFunctionInUseError):
-        _apagar(fakes).execute(DeleteJobFunctionCommand(tenant_id=_A, job_function_id=_F1))
+        _apagar(fakes).execute(
+            DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1)
+        )
 
     assert "job_functions.delete" not in fakes.store.calls[antes:]
     assert fakes.job_functions.find_by_id(_A, _F1) is not None
@@ -167,7 +176,9 @@ def test_referencia_de_outro_tenant_nao_bloqueia_a_remocao() -> None:
     fakes.job_functions.add(JobFunction(id=JobFunctionId("f-b"), tenant_id=_B, name="Cozinheiro"))
     _funcionario(fakes, tenant=_B, funcao=JobFunctionId("f-b"))
 
-    _apagar(fakes).execute(DeleteJobFunctionCommand(tenant_id=_A, job_function_id=_F1))
+    _apagar(fakes).execute(
+        DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1)
+    )
     assert fakes.job_functions.find_by_id(_A, _F1) is None
 
 
@@ -175,7 +186,9 @@ def test_apagar_funcao_inexistente_e_not_found() -> None:
     fakes = staff_repositories()
     with pytest.raises(JobFunctionNotFoundError):
         _apagar(fakes).execute(
-            DeleteJobFunctionCommand(tenant_id=_A, job_function_id=JobFunctionId("fantasma"))
+            DeleteJobFunctionCommand(
+                actor=TEST_ACTOR, tenant_id=_A, job_function_id=JobFunctionId("fantasma")
+            )
         )
 
 
@@ -202,7 +215,9 @@ def test_precedencia_not_found_vence_in_use_com_tenant_alheio() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(StaffError) as excecao:
-        _apagar(fakes).execute(DeleteJobFunctionCommand(tenant_id=_B, job_function_id=_F1))
+        _apagar(fakes).execute(
+            DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_B, job_function_id=_F1)
+        )
     assert type(excecao.value) is JobFunctionNotFoundError
 
     conduta = fakes.store.calls[antes:]
@@ -215,5 +230,7 @@ def test_apagar_funcao_de_outro_tenant_sem_referencias_tambem_e_not_found() -> N
     """A meia-verdade do teste acima, isolada: nem sem uso o tenant B a alcança."""
     fakes = _com_funcao_no_tenant_a()
     with pytest.raises(JobFunctionNotFoundError):
-        _apagar(fakes).execute(DeleteJobFunctionCommand(tenant_id=_B, job_function_id=_F1))
+        _apagar(fakes).execute(
+            DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_B, job_function_id=_F1)
+        )
     assert fakes.job_functions.find_by_id(_A, _F1) is not None
