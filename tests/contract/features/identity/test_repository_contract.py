@@ -388,8 +388,9 @@ def test_revogar_duas_vezes_preserva_o_primeiro_instante(repos: Repositorios) ->
     primeira = _NOW
     segunda = _NOW + timedelta(hours=1)
 
-    repos.sessoes.revoke(SessionId("sess-1"), primeira)
-    repos.sessoes.revoke(SessionId("sess-1"), segunda)
+    # O booleano é o que a rotação usa para saber se perdeu a corrida (ADR 2.6.0002 §1b).
+    assert repos.sessoes.revoke(SessionId("sess-1"), primeira) is True
+    assert repos.sessoes.revoke(SessionId("sess-1"), segunda) is False
 
     lida = repos.sessoes.find_by_fingerprint("fp::abc")
     assert lida is not None
@@ -397,8 +398,8 @@ def test_revogar_duas_vezes_preserva_o_primeiro_instante(repos: Repositorios) ->
 
 
 def test_revogar_id_inexistente_nao_levanta(repos: Repositorios) -> None:
-    """Regra 3 — no-op silencioso."""
-    repos.sessoes.revoke(SessionId("fantasma"), _NOW)
+    """Regra 3 — no-op silencioso, e quem chama fica sabendo que nada revogou."""
+    assert repos.sessoes.revoke(SessionId("fantasma"), _NOW) is False
 
 
 def test_revoke_all_atinge_so_o_usuario_indicado(repos: Repositorios) -> None:

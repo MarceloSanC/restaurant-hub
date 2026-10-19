@@ -193,8 +193,8 @@ def test_revogar_duas_vezes_preserva_o_instante_da_primeira(cenario: Engine) -> 
     primeira = _NOW
     segunda = _NOW + timedelta(hours=1)
 
-    repo.revoke(SessionId("sess-1"), primeira)
-    repo.revoke(SessionId("sess-1"), segunda)
+    assert repo.revoke(SessionId("sess-1"), primeira) is True
+    assert repo.revoke(SessionId("sess-1"), segunda) is False
 
     lida = repo.find_by_fingerprint("fp::abc")
     assert lida is not None
@@ -203,7 +203,7 @@ def test_revogar_duas_vezes_preserva_o_instante_da_primeira(cenario: Engine) -> 
 
 def test_revogar_id_inexistente_nao_levanta(cenario: Engine) -> None:
     """CA11 — quem revoga não deve precisar checar antes."""
-    PostgresSessionRepository(cenario).revoke(SessionId("fantasma"), _NOW)
+    assert PostgresSessionRepository(cenario).revoke(SessionId("fantasma"), _NOW) is False
 
 
 def test_revoke_all_atinge_so_as_sessoes_do_usuario(cenario: Engine) -> None:

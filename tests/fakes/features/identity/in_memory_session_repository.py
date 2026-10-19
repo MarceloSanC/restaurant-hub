@@ -52,11 +52,11 @@ class InMemorySessionRepository:
                 return session
         return None
 
-    def revoke(self, session_id: SessionId, revoked_at: datetime) -> None:
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
         session = self.sessions.get(session_id)
         if session is None:
-            return  # regra 3: id inexistente é no-op
-        self._revoke_one(session, revoked_at)
+            return False  # regra 3: id inexistente é no-op
+        return self._revoke_one(session, revoked_at)
 
     def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
         for session in list(self.sessions.values()):
@@ -75,11 +75,12 @@ class InMemorySessionRepository:
             del self.sessions[session_id]
         return len(expiradas)
 
-    def _revoke_one(self, session: Session, revoked_at: datetime) -> None:
+    def _revoke_one(self, session: Session, revoked_at: datetime) -> bool:
         if session.revoked_at is not None:
             # Regra 2: preserva o instante da PRIMEIRA revogação.
-            return
+            return False
         self.sessions[session.id] = dataclasses.replace(session, revoked_at=revoked_at)
+        return True
 
 
 _conforms: SessionRepository = InMemorySessionRepository()

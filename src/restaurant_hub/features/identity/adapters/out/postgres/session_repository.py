@@ -68,10 +68,10 @@ class PostgresSessionRepository:
             ).one_or_none()
             return mappers.linha_para_sessao(linha) if linha is not None else None
 
-    def revoke(self, session_id: SessionId, revoked_at: datetime) -> None:
-        """Revoga uma sessão. Id inexistente é no-op; já revogada preserva o original."""
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
+        """Revoga uma sessão. `True` só se esta chamada revogou (`rowcount == 1`)."""
         with para_escrita(self._engine) as conexao:
-            self._revoke(conexao, sessions.c.id == session_id, revoked_at)
+            return self._revoke(conexao, sessions.c.id == session_id, revoked_at) == 1
 
     def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
         """Revoga todas as sessões do usuário (demissão). Mesmas regras."""
@@ -88,11 +88,13 @@ class PostgresSessionRepository:
 
     def _revoke(
         self, conexao: Connection, criterio: ColumnElement[bool], revoked_at: datetime
-    ) -> None:
-        conexao.execute(
+    ) -> int:
+        """Devolve quantas sessões esta chamada revogou — já revogadas não contam."""
+        resultado = conexao.execute(
             update(sessions)
             # `revoked_at IS NULL` é o que torna a idempotência forte: sessão já
             # revogada não é tocada, e o instante da PRIMEIRA revogação sobrevive.
             .where(criterio, sessions.c.revoked_at.is_(None))
             .values(revoked_at=revoked_at)
         )
+        return int(resultado.rowcount)

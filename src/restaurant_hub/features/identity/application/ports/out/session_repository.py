@@ -45,8 +45,17 @@ class SessionRepository(Protocol):
         """Devolve a sessão do fingerprint, **sem** filtrar revogada/expirada."""
         ...
 
-    def revoke(self, session_id: SessionId, revoked_at: datetime) -> None:
-        """Revoga uma sessão (logout). Idempotente; id inexistente é no-op."""
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
+        """Revoga uma sessão. Idempotente; id inexistente é no-op.
+
+        Devolve `True` **só** se esta chamada revogou — `False` se a sessão não
+        existe ou já estava revogada. O booleano tem o papel do de
+        `PasswordSetupTokenRepository.consume`: é o que a rotação de refresh usa
+        para saber se perdeu a corrida para outra rotação do mesmo token (ADR
+        2.6.0002 §1b). Sem ele, dentro de uma unidade de trabalho, duas rotações
+        concorrentes passariam ambas — a segunda revogando zero linhas em silêncio.
+        O logout ignora o valor.
+        """
         ...
 
     def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
