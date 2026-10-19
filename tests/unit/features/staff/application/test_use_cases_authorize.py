@@ -137,6 +137,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
     DayPeriod,
@@ -170,6 +171,8 @@ _F_EM_USO: Final = JobFunctionId("f-em-uso")
 _F_LIVRE: Final = JobFunctionId("f-livre")
 _E_ATIVO: Final = EmployeeId("e-ativo")
 _E_DESLIGADO: Final = EmployeeId("e-desligado")
+_E_COM_LOGIN: Final = EmployeeId("e-com-login")
+_LOGIN: Final = UserId("login-do-registro")
 _EMAIL: Final = "maria@cantina.com"
 _PERIODO_GRAVADO: Final = UnavailabilityPeriod(
     start=datetime(2026, 11, 2, 8, 0), end=datetime(2026, 11, 2, 12, 0)
@@ -225,6 +228,22 @@ def _semear() -> StaffFakes:
             job_function_ids=frozenset({_F_EM_USO}),
             unavailabilities=(),
             active=False,
+        )
+    )
+    # Com login: é o registro que `deactivate_employee` desliga, para que o efeito
+    # do outro lado da fronteira — revogar as sessões — aconteça no caminho feliz
+    # e a medição de CA03 sobre o gateway tenha o que deixar de ver.
+    fakes.employees.add(
+        Employee(
+            id=_E_COM_LOGIN,
+            tenant_id=_A,
+            unit_id=_U1,
+            name="Ana",
+            workload_profile=OnDemand(),
+            shift_preference=None,
+            job_function_ids=frozenset({_F_EM_USO}),
+            unavailabilities=(),
+            user_id=_LOGIN,
         )
     )
     return fakes
@@ -307,7 +326,11 @@ def _funcionario_criado_no_endereco(montagem: Montagem, resultado: object) -> No
 
 
 def _equipe_da_unidade(montagem: Montagem, resultado: object) -> None:
-    assert [(r.tenant_id, r.unit_id, r.id) for r in resultado] == [(_A, _U1, _E_ATIVO)]
+    # Os ativos da unidade (o desligado só com `include_inactive`).
+    assert {(r.tenant_id, r.unit_id, r.id) for r in resultado} == {
+        (_A, _U1, _E_ATIVO),
+        (_A, _U1, _E_COM_LOGIN),
+    }
 
 
 def _funcionario_renomeado_no_endereco(montagem: Montagem, resultado: object) -> None:
@@ -361,8 +384,11 @@ def _indisponibilidade_removida(montagem: Montagem, resultado: object) -> None:
 
 
 def _desligado_no_endereco(montagem: Montagem, resultado: object) -> None:
-    _devolve_o_registro_do_endereco(resultado)
-    assert _relido(montagem).active is False
+    assert (resultado.tenant_id, resultado.unit_id, resultado.id) == (_A, _U1, _E_COM_LOGIN)
+    relido = _registro_no_endereco(montagem, _E_COM_LOGIN)
+    assert relido is not None
+    assert relido.active is False
+    assert montagem.gateway.revoked == [_LOGIN]
 
 
 def _religado_no_endereco(montagem: Montagem, resultado: object) -> None:
@@ -509,7 +535,7 @@ CENARIOS: Final[dict[str, Cenario]] = {
     "deactivate_employee": Cenario(
         classe=DeactivateEmployeeUseCase,
         command=DeactivateEmployeeCommand(
-            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_ATIVO
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_COM_LOGIN
         ),
         alvos=((_MANAGE_STAFF, _A, _U1),),
         no_endereco_do_command=_desligado_no_endereco,
