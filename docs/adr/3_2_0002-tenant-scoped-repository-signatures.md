@@ -5,7 +5,7 @@ when-use: Reference when adding a method to a staff out port, when implementing 
 keywords: [adr, staff, application, port, multi-tenant, isolation, scope, repository, fail-closed]
 status: accepted
 created_at: 2026-08-08
-updated_at: 2026-08-08
+updated_at: 2026-10-19
 adr_id: 3.2.0002
 decision: Every read, write and delete operation of the staff out ports takes tenant_id as an explicit parameter (and unit_id for the employee listing) — there is no unscoped find_by_id; an id from another tenant is therefore indistinguishable from a nonexistent one.
 context_stage: 3.2-staff-application
@@ -155,3 +155,14 @@ enters.
 - [`roadmap.md`](../roadmap.md) — Stage 3.2 DoD, Stage 3.4 DoD, ROADMAP-3.
 - Project memory: "teste trava o caso, não a propriedade" (2026-07) — the class of defect this
   decision removes structurally.
+
+## Supersessão parcial
+
+**2026-10-19 — Context, a frase *"Staff has no equivalent: its use cases deliberately take **no
+actor** (authorization is Stage 3.4 …)"*, superada por
+[ADR 3.7.0001](./3_7_0001-every-staff-use-case-authorizes-its-own-target.md).** Desde a Stage
+3.7 todo command e query de staff carrega `actor`, e todo use case autoriza o alvo do command
+pelo `AccessGuard` antes de tocar o repositório. A decisão deste ADR — assinaturas de
+repositório escopadas por tenant, para que o isolamento venha da **forma** dos contratos — fica
+intacta e passa a ser a **segunda** linha, não a única. Nota *append-only*; o corpo acima não
+foi editado (CONVENTIONS §5).

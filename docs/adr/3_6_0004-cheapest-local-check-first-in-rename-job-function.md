@@ -5,7 +5,7 @@ when-use: Reference when a use case's declared check order conflicts with the pr
 keywords: [adr, application, ordering, precedence, nul-byte, dataerror, 500, staff, layer-expansion, errata, universal-law]
 status: accepted
 created_at: 2026-08-30
-updated_at: 2026-08-30
+updated_at: 2026-10-19
 adr_id: 3.6.0004
 decision: RenameJobFunctionUseCase performs the domain transition (which validates the name) before find_by_name, so an invalid name never reaches the repository; concept 3.2 §5.16's row for rename_job_function is amended by dated errata, because the principle stated in the note that closes the table governs over the row it contradicts
 context_stage: 3.6-staff-http
@@ -284,3 +284,13 @@ disappears.
   earlier one's decision)
 - `.claude/skills/stage-audit/SKILL.md` — the *"universal law, narrow
   representative"* defect family
+
+## Supersessão parcial
+
+**2026-10-19 — o alcance do princípio *"the cheapest local check that can fail on its own comes
+first"* superado por [ADR 3.7.0001](./3_7_0001-every-staff-use-case-authorizes-its-own-target.md)
+§4.** Desde a Stage 3.7 todo use case de staff abre `execute` com a autorização do alvo do
+command — que faz I/O em identity e precede **toda** checagem, inclusive a validação local do
+nome. O princípio continua governando a ordem das checagens de **negócio** entre si, depois desse
+bloco; a ordem de `rename_job_function` decidida aqui fica intacta a partir do passo (1). Nota
+*append-only*; o corpo acima não foi editado (CONVENTIONS §5).

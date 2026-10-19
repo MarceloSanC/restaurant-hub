@@ -1282,7 +1282,7 @@ skills_hint: [hex-arch-python, composition-root]
 
 #### Stage 3.7 — `3.7-application-authorization`
 
-**Descrição humana:** a camada application de staff passa a ser fail-closed por si — todo use case recebe o port `AccessGuard` por construtor e autoriza o alvo do seu command antes de tocar qualquer outra porta. A borda HTTP continua autorizando (defesa em profundidade) e responde igual. Nasce da issue [#49](https://github.com/MarceloSanC/restaurant-hub/issues/49), promovida a Stage em 2026-10-19 (PIPELINE §4.5: carrega ADR e uma propriedade sobre a camada inteira).
+**Descrição humana:** a camada application de staff passa a ser fail-closed por si — todo use case recebe o port `AccessGuard` por construtor e autoriza o alvo do seu command antes de qualquer outra instrução de `execute`. A borda HTTP continua autorizando (defesa em profundidade) e responde igual. Nasce da issue [#49](https://github.com/MarceloSanC/restaurant-hub/issues/49), promovida a Stage em 2026-10-19 (PIPELINE §4.5: carrega ADR e uma propriedade sobre a camada inteira).
 
 ```yaml
 stage_id: 3.7-application-authorization
@@ -1290,20 +1290,23 @@ bounded_context: staff
 camada_alvo: application (staff) — com o ajuste dos dois consumidores (composition_root e router)
 arquivos_a_criar:
   - tests/fakes/features/staff/{denying,permissive}_access_guard.py
-  - tests/unit/features/staff/application/test_use_cases_authorize.py (propriedade sobre a pasta use_cases/)
+  - tests/unit/features/staff/application/test_use_cases_authorize.py (propriedade, forma e totalidade sobre a pasta use_cases/)
+  - teste da cadeia real (tradutor -> IdentityGuard -> AuthorizeActionUseCase em memoria)
 arquivos_a_modificar:
   - features/staff/application/ports/out/access_guard.py (vocabulario de permissao migra da borda)
   - features/staff/application/dtos/{commands,queries}.py (o ator entra no command)
   - features/staff/application/use_cases/*.py (17 use cases)
   - features/staff/adapters/inbound/http/{router,dependencies}.py
   - composition_root.py (o guard entra em cada use case)
-  - tests de application e de router de staff
+  - features/staff/application/ports/out/identity_gateway.py + adapters/out/identity/local_identity_gateway.py (so docstring)
+  - docs: ADR 3.2.0002 e 3.4.0001 (supersessao parcial datada), concept 3.2 §5.16 (errata datada)
+  - tests de application e de borda (unit) de staff; tests/e2e intocado
 contratos_introduzidos:
   - campo actor em todo command/query de staff; vocabulario de permissao no port
 contratos_consumidos:
   - AccessGuard + leis L-AG1..L-AG4 (3.4); ADR 0.0.0005; 17 use cases (3.2, 3.5)
 definition_of_done:
-  - "todo use case de staff autoriza pelo AccessGuard o alvo do proprio command antes de qualquer outra porta — provado por propriedade sobre a pasta use_cases/ inteira, com as faixas HTTP inalteradas"
+  - "todo use case de staff autoriza pelo AccessGuard o alvo do proprio command antes de qualquer outra instrucao de execute — provado por propriedade sobre a pasta use_cases/ inteira, com as faixas HTTP inalteradas"
 non_goals:
   - remover o guard da borda HTTP (continua, como defesa em profundidade)
   - mudar as quatro leis do port, o vocabulario str da permissao ou a matriz de papeis
