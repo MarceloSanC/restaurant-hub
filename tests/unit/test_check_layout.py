@@ -642,6 +642,77 @@ _DUAS_DENTRO = (
             "fora de unidade: self._coisas.add",
             id="escrita-dentro-de-compreensao-fora-de-unidade",
         ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        any(self._coisas.add(x) for x in xs)\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-dentro-de-genexp-fora-de-unidade",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        {self._coisas.add(x) for x in xs}\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-dentro-de-setcomp-fora-de-unidade",
+        ),
+        pytest.param(
+            "    async def execute(self, xs: object) -> None:\n"
+            "        async for x in xs:\n"
+            "            self._coisas.add(x)\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-em-async-for-fora-de-unidade",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        match self._coisas.remove('x'):\n"
+            "            case _:\n"
+            "                pass\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-no-subject-de-um-match",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        for _ in [self._coisas.remove('x')]:\n"
+            "            pass\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-no-iter-de-um-for",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        with self._ctx(self._coisas.remove('x')):\n"
+            "            pass\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n\n"
+            "    def _ctx(self, x: object) -> object:\n"
+            "        return x\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-nos-itens-de-um-with",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        for x in xs:\n"
+            "            pass\n"
+            "        else:\n"
+            "            self._coisas.remove('x')\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-no-else-de-um-for",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        self._gravar(3)\n\n"
+            "    def _gravar(self, n: int) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        if n:\n"
+            "            self._gravar(n - 1)\n"
+            "        self._coisas.remove('b')\n",
+            "fora de unidade",
+            id="helper-recursivo-nao-trava-o-detector",
+        ),
     ],
 )
 @pytest.mark.usefixtures("regra10_isolada")
@@ -709,6 +780,13 @@ def test_regra10_o_detector_reprova_cada_forma(
             "                self._coisas.add(f.read())\n"
             "                self._coisas.remove('b')\n",
             id="with-aninhado-dentro-da-unidade",
+        ),
+        pytest.param(
+            "    async def execute(self) -> None:\n"
+            "        async with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n"
+            "            self._coisas.remove('b')\n",
+            id="async-with-da-unidade",
         ),
     ],
 )
