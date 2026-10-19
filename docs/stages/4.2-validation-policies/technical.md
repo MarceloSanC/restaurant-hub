@@ -504,4 +504,11 @@ complete`) e no commit de docs seguinte:
 - **F7 (observação):** os `type: ignore[arg-type]` dos testes são do idioma `**{lado: vizinha}` ou
   de entrada deliberadamente malformada; sem ação.
 
+Re-auditoria (mesmo agente, HEAD `0a74fe6`): F1–F7 **fechados**, `make check` EXIT=0 (4146 passed),
+veredito **pronta para merge**. Um achado novo, minor: **N1**, a lista dos oito campos de regra no
+`__post_init__` era uma terceira cópia escrita à mão; **corrigido** — a checagem deriva os campos
+anotados como `PolicyRule`, e um teste trava que eles são exatamente os configuráveis. Observação
+para a 4.3, sem ação aqui: `EmployeeFacts` recusa carga em `int` (staff emite `Decimal`); o adapter
+do `StaffReadPort` entrega `Decimal`.
+
 <!-- END: post-execution -->

@@ -215,3 +215,13 @@ def test_config_recusa_regra_que_nao_e_policy_rule(campo: str) -> None:
 def test_config_recusa_direcao_em_texto_cru() -> None:
     with pytest.raises(InvalidValidationConfigError, match="workload_direction"):
         dataclasses.replace(ValidationConfig.default(), workload_direction="both")
+
+
+def test_os_campos_de_regra_sao_exatamente_os_configuraveis() -> None:
+    # A checagem de tipo de __post_init__ deriva os campos anotados como PolicyRule: eles têm de
+    # ser exatamente as oito políticas configuráveis (achado N1 da re-auditoria).
+    campos = {
+        campo.name for campo in dataclasses.fields(ValidationConfig) if campo.type is PolicyRule
+    }
+
+    assert campos == set(_CONFIGURAVEIS)

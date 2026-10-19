@@ -14,6 +14,7 @@ A indisponibilidade **não tem campo**: é `block` fixo e sempre habilitada (ADR
 4.1.0003 (a) "Configurable: nothing"; ADR 4.2.0002 Decision 4).
 """
 
+import dataclasses
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -106,17 +107,12 @@ class ValidationConfig:
     workload_direction: WorkloadDirection
 
     def __post_init__(self) -> None:
-        regras = {
-            "overlap": self.overlap,
-            "rest_between_shifts": self.rest_between_shifts,
-            "daily_cap": self.daily_cap,
-            "weekly_cap": self.weekly_cap,
-            "workload": self.workload,
-            "function_mismatch": self.function_mismatch,
-            "over_coverage": self.over_coverage,
-            "break_divergence": self.break_divergence,
-        }
-        for nome, regra in regras.items():
+        # Derivado dos campos anotados como PolicyRule: uma política configurável nova tem o tipo
+        # checado sem precisar entrar numa terceira lista escrita à mão.
+        for campo in dataclasses.fields(self):
+            if campo.type is not PolicyRule:
+                continue
+            nome, regra = campo.name, getattr(self, campo.name)
             if not isinstance(regra, PolicyRule):
                 raise InvalidValidationConfigError(
                     f"{nome} deve ser um PolicyRule (recebido: {regra!r})"
