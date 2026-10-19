@@ -74,6 +74,7 @@ class _SessionRepositoryInstrumentado(InMemorySessionRepository):
         super().__init__()
         self.chamadas: list[str] = []
         self.add_deve_falhar = False
+        self.revoke_deve_falhar = False
 
     def add(self, session: Session) -> None:
         self.chamadas.append("add")
@@ -83,7 +84,10 @@ class _SessionRepositoryInstrumentado(InMemorySessionRepository):
 
     def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
         self.chamadas.append("revoke")
-        return super().revoke(session_id, revoked_at)
+        revogou = super().revoke(session_id, revoked_at)
+        if self.revoke_deve_falhar:
+            raise _FalhaDeEscrita()
+        return revogou
 
 
 class _SessoesQuePerdemACorrida(InMemorySessionRepository):
@@ -395,3 +399,20 @@ def test_refresh_apos_logout_e_tratado_como_reuso() -> None:
         _rotacionar(fixture, "refresh-do-celular")
 
     assert fixture.sessions.sessions[desktop.id].revoked_at == _NOW
+
+
+def test_falha_no_revoke_da_antiga_nao_grava_nada() -> None:
+    """Stage 2.6 CA4, escrita N = 1 da rotação: o injetor falha depois de revogar."""
+    sessions = _SessionRepositoryInstrumentado()
+    fixture = _Fixture(sessions=sessions).com_usuario()
+    antiga = fixture.com_sessao()
+    sessions.chamadas.clear()
+    sessions.revoke_deve_falhar = True
+
+    with pytest.raises(_FalhaDeEscrita):
+        _rotacionar(fixture)
+
+    assert sessions.chamadas == ["revoke"]
+    assert set(fixture.sessions.sessions) == {antiga.id}
+    assert fixture.sessions.sessions[antiga.id].revoked_at is None
+    assert fixture.unidade.rollbacks == 1

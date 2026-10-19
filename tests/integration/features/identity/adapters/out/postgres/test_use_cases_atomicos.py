@@ -97,7 +97,10 @@ from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupToken
 from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
-from tests.fakes.shared.recording_email_sender import RecordingEmailSender
+from tests.fakes.shared.recording_email_sender import (
+    EmailSenderFailure,
+    RecordingEmailSender,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -434,8 +437,10 @@ _ESCRITAS_DO_CONVITE = ("users.add", "tokens.add")
 _TABELAS_DO_CONVITE = (tables.users, tables.unit_memberships, tables.password_setup_tokens)
 
 
-def _convidar(engine: Engine, registro: Registro) -> tuple[InviteUserUseCase, RecordingEmailSender]:
-    sender = RecordingEmailSender()
+def _convidar(
+    engine: Engine, registro: Registro, falha_no_envio: Exception | None = None
+) -> tuple[InviteUserUseCase, RecordingEmailSender]:
+    sender = RecordingEmailSender(fail_with=falha_no_envio)
     use_case = InviteUserUseCase(
         users=_Usuarios(engine, registro),
         restaurants=PostgresRestaurantRepository(engine),
@@ -820,3 +825,16 @@ class TestRotacoesConcorrentes:
             assert [type(e) for e in erros_da_segunda] == [RefreshTokenReuseError]
             # Fail-closed: tudo do usuário revogado, inclusive o par que a primeira emitiu.
             assert all(_sessoes_revogadas(com_sessao).values())
+
+
+def test_convite_com_envio_falhando_deixa_conta_e_token_comitados(banco_limpo: Engine) -> None:
+    """CA8 contra o banco real: o envio sai depois do commit, e a falha dele sobe."""
+    _semear_tenant_e_usuario(banco_limpo)
+    use_case, _ = _convidar(banco_limpo, Registro(), falha_no_envio=EmailSenderFailure("fora"))
+
+    with pytest.raises(EmailSenderFailure):
+        use_case.execute(_convite())
+
+    linhas = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)
+    assert sum(1 for linha in linhas["users"] if linha[0] != "user-1") == 1
+    assert len(linhas["password_setup_tokens"]) == 1

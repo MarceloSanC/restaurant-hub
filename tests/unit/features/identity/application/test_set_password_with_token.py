@@ -325,6 +325,7 @@ class TestReplay:
             cenario.use_case.execute(_comando())
 
         assert cenario.sessions.sessions[SessionId("sess-1")].revoked_at is None
+        assert all(t.consumed_at is None for t in cenario.tokens.tokens.values())
         credenciais = cenario.users.find_credentials_by_email(Email("convidado@x.com"))
         assert credenciais is not None
         assert cenario.hasher.verify(_SENHA_NOVA, credenciais.password_hash) is False
