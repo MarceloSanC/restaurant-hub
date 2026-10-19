@@ -169,8 +169,9 @@ class Employee:
             EmployeeAlreadyHasLoginError: o registro já tem login — definido
                 uma vez; não há "trocar" nesta Stage.
             TerminatedEmployeeLoginError: o registro está desligado — criar
-                login é conceder acesso, e desligar cortou (kickoff #4,
-                ADR 3.5.0003). Vinculado vence desligado na precedência.
+                login é conceder acesso, e desligar cortou o acesso que o
+                registro concede (kickoff #4, ADR 3.5.0003, ADR 3.7.0001).
+                Vinculado vence desligado na precedência.
         """
         if self.user_id is not None:
             raise EmployeeAlreadyHasLoginError(self.id)

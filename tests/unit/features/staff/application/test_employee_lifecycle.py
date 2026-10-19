@@ -652,7 +652,7 @@ def test_recontratar_nao_toca_o_gateway_e_o_login_continua_vinculado() -> None:
     gateway = InMemoryIdentityGateway()
     login = _vincular(fakes, gateway)
     _desligar_e1(_desligar(fakes, gateway))
-    chamadas_do_desligamento = list(gateway.calls)
+    assert gateway.revoked == [login]  # o desligamento cortou; a recontratação não devolve nada
 
     resultado = _recontratar(fakes).execute(
         ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
@@ -660,4 +660,7 @@ def test_recontratar_nao_toca_o_gateway_e_o_login_continua_vinculado() -> None:
 
     assert resultado.active is True
     assert resultado.user_id == login
-    assert gateway.calls == chamadas_do_desligamento
+    # A conta nunca deixou de existir: o login continua sendo de funcionário, e
+    # um novo desligamento volta a cortar (o registro está ativo de novo).
+    _desligar_e1(_desligar(fakes, gateway))
+    assert gateway.revoked == [login, login]

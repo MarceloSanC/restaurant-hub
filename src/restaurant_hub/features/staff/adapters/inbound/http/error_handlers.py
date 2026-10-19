@@ -113,7 +113,8 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
     EmployeeInUseError: HTTP_CONFLICT,
     # 409 — as quatro recusas de **login** da Stage 3.5 (concept §6.1), todas
     # conflito com estado já gravado: o registro **já** tem login; o registro
-    # está **desligado** (criar login é conceder acesso, e desligar cortou);
+    # está **desligado** (criar login é conceder acesso, e desligar cortou o que
+    # o registro concedia — ADR 3.7.0001);
     # o e-mail já é login de alguém (tradução de `EmailAlreadyRegisteredError`
     # pelo gateway, L-IG2); o registro tem login e a **remoção** é recusada —
     # irmã de `EmployeeInUseError` (ADR 3.5.0003 §1b). Nascem na Task 01 da
