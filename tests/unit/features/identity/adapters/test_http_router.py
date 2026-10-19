@@ -63,6 +63,7 @@ from tests.fakes.features.identity.in_memory_password_setup_token_repository imp
 from tests.fakes.features.identity.in_memory_restaurant_repository import (
     InMemoryRestaurantRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
@@ -142,6 +143,7 @@ class _Ambiente:
                     clock=self.clock,
                     invitation_ttl=timedelta(hours=72),
                     base_url="https://app.exemplo.com",
+                    unit_of_work=InMemoryUnitOfWork(self.users, self.setup_tokens),
                 ),
             }
         )

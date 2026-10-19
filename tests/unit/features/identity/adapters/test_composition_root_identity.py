@@ -153,6 +153,7 @@ def test_os_adapters_concretos_continuam_sendo_os_do_postgres() -> None:
 # migrado; o teste abaixo vale para todos.
 _COM_UNIDADE: dict[str, Callable[[ApplicationDependencies], object]] = {
     "set_password_with_token": lambda d: d.identity_set_password_with_token,
+    "invite_user": lambda d: d.identity_invite_user,
 }
 _REPOSITORIOS_POSTGRES = (
     PostgresRestaurantRepository,

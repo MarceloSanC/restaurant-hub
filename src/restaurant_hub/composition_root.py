@@ -638,6 +638,7 @@ def wire_dependencies(
             clock=clock,
             invitation_ttl=invitation_ttl,
             base_url=cfg.app_base_url,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_request_password_reset=RequestPasswordResetUseCase(
             users=users,

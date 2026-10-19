@@ -14,12 +14,13 @@ teste passaria pelo motivo errado.
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import Engine, Table, select
+from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import tables
 from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
@@ -41,6 +42,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.user_repository impo
     PostgresUserRepository,
 )
 from restaurant_hub.features.identity.application.dtos.commands import (
+    InviteUserCommand,
     SetPasswordWithTokenCommand,
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import (
@@ -54,6 +56,9 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     SetupTokenPurpose,
 )
 from restaurant_hub.features.identity.application.errors import InvalidSetupTokenError
+from restaurant_hub.features.identity.application.use_cases.invite_user import (
+    InviteUserUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
 )
@@ -67,9 +72,14 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     UserId,
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
+from restaurant_hub.features.identity.domain.value_objects.unit_membership import (
+    UnitMembership,
+)
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
 from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.shared.fake_clock import FakeClock
+from tests.fakes.shared.fake_id_generator import FakeIdGenerator
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.integration
 
@@ -109,6 +119,15 @@ class _Usuarios(PostgresUserRepository):
         super().set_password_hash(user_id, password_hash)
         self._registro.escreveu("users.set_password_hash")
 
+    def add(
+        self,
+        user: User,
+        password_hash: PasswordHash,
+        memberships: Sequence[UnitMembership] = (),
+    ) -> None:
+        super().add(user, password_hash, memberships)
+        self._registro.escreveu("users.add")
+
 
 class _Sessoes(PostgresSessionRepository):
     def __init__(self, engine: Engine, registro: Registro) -> None:
@@ -139,6 +158,10 @@ class _Tokens(PostgresPasswordSetupTokenRepository):
         invalidados = super().invalidate_all_for_user(user_id, consumed_at, purpose)
         self._registro.escreveu("tokens.invalidate_all_for_user")
         return invalidados
+
+    def add(self, token: PasswordSetupToken) -> None:
+        super().add(token)
+        self._registro.escreveu("tokens.add")
 
 
 # ---------------------------------------------------------------------------
@@ -352,3 +375,88 @@ class TestRedencoesConcorrentes:
             assert erros_da_primeira == []
             assert [type(e) for e in erros_da_segunda] == [InvalidSetupTokenError]
             assert _hash_gravado(com_link) == FakePasswordHasher().hash("da-primeira")
+
+
+# ---------------------------------------------------------------------------
+# invite_user — conta e token numa unidade; o e-mail sai depois do commit
+# ---------------------------------------------------------------------------
+
+_ESCRITAS_DO_CONVITE = ("users.add", "tokens.add")
+_TABELAS_DO_CONVITE = (tables.users, tables.unit_memberships, tables.password_setup_tokens)
+
+
+def _convidar(engine: Engine, registro: Registro) -> tuple[InviteUserUseCase, RecordingEmailSender]:
+    sender = RecordingEmailSender()
+    use_case = InviteUserUseCase(
+        users=_Usuarios(engine, registro),
+        restaurants=PostgresRestaurantRepository(engine),
+        units=PostgresUnitRepository(engine),
+        hasher=FakePasswordHasher(),
+        tokens=_Tokens(engine, registro),
+        # Emissor novo: o primeiro valor que ele emite é `setup-1`, o mesmo do link
+        # semeado em `com_link` — é o que permite a falha originada no banco.
+        token_issuer=FakeSetupTokenIssuer(),
+        email_sender=sender,
+        id_generator=FakeIdGenerator(),
+        clock=FakeClock(_AGORA),
+        invitation_ttl=timedelta(hours=72),
+        base_url="https://app.exemplo.com",
+        unit_of_work=PostgresUnitOfWork(engine),
+    )
+    return use_case, sender
+
+
+def _convite() -> InviteUserCommand:
+    return InviteUserCommand(
+        email=Email("novo@x.com"),
+        role=Role.MANAGER,
+        tenant_id=RestaurantId("rest-a"),
+        unit_ids=(UnitId("unit-a1"),),
+    )
+
+
+class TestConviteAtomico:
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS_DO_CONVITE) + 1))
+    def test_falha_na_escrita_n_deixa_as_tabelas_identicas(
+        self, banco_limpo: Engine, n: int
+    ) -> None:
+        _semear_tenant_e_usuario(banco_limpo)
+        antes = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)
+        registro = Registro(falhar_em=n)
+        use_case, sender = _convidar(banco_limpo, registro)
+
+        with pytest.raises(_FalhaInjetada):
+            use_case.execute(_convite())
+
+        assert tuple(registro.escritas) == _ESCRITAS_DO_CONVITE[:n]
+        assert _linhas(banco_limpo, *_TABELAS_DO_CONVITE) == antes
+        assert sender.sent == ()
+
+    def test_fingerprint_repetido_no_banco_desfaz_a_conta(self, com_link: Engine) -> None:
+        """Falha **originada no banco**: `uq_setup_tokens_fingerprint` recusa o `tokens.add`.
+
+        O `users.add` já tinha passado dentro da unidade; o rollback o desfaz, e não
+        nasce conta sem link (o órfão dentro de identity que a 3.5 declarou).
+        """
+        antes = _linhas(com_link, *_TABELAS_DO_CONVITE)
+        registro = Registro()
+        use_case, sender = _convidar(com_link, registro)
+
+        with pytest.raises(IntegrityError):
+            use_case.execute(_convite())
+
+        assert registro.escritas == ["users.add"]
+        assert _linhas(com_link, *_TABELAS_DO_CONVITE) == antes
+        assert sender.sent == ()
+
+    def test_sem_falha_grava_conta_vinculo_e_token(self, banco_limpo: Engine) -> None:
+        _semear_tenant_e_usuario(banco_limpo)
+        use_case, sender = _convidar(banco_limpo, Registro())
+
+        use_case.execute(_convite())
+
+        linhas = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)
+        assert sum(1 for linha in linhas["users"] if linha[0] != "user-1") == 1  # a conta nova
+        assert len(linhas["unit_memberships"]) == 1
+        assert len(linhas["password_setup_tokens"]) == 1
+        assert len(sender.sent) == 1
