@@ -26,7 +26,7 @@ nunca enxergam a unidade uma da outra.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 
 from sqlalchemy import Connection, Engine
 
@@ -72,3 +72,21 @@ def para_leitura(engine: Engine) -> Iterator[Connection]:
         return
     with conexao.begin_nested():
         yield conexao
+
+
+# ---- publicação, de uso exclusivo do `PostgresUnitOfWork` ----
+
+
+def ha_unidade_aberta() -> bool:
+    """Há unidade aberta neste contexto de execução, de qualquer engine (lei L5)."""
+    return _unidade_ativa.get() is not None
+
+
+def publicar(engine: Engine, conexao: Connection) -> Token[tuple[Engine, Connection] | None]:
+    """Torna `conexao` a conexão da unidade para os repositórios deste `engine`."""
+    return _unidade_ativa.set((engine, conexao))
+
+
+def retirar(marca: Token[tuple[Engine, Connection] | None]) -> None:
+    """Desfaz a publicação — chamado em `finally`, mesmo se o commit falhar."""
+    _unidade_ativa.reset(marca)

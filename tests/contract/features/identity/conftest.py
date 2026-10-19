@@ -34,6 +34,9 @@ from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repositor
 from restaurant_hub.features.identity.adapters.out.postgres.session_repository import (
     PostgresSessionRepository,
 )
+from restaurant_hub.features.identity.adapters.out.postgres.unit_of_work import (
+    PostgresUnitOfWork,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.unit_repository import (
     PostgresUnitRepository,
 )
@@ -49,6 +52,7 @@ from restaurant_hub.features.identity.application.ports.out.restaurant_repositor
 from restaurant_hub.features.identity.application.ports.out.session_repository import (
     SessionRepository,
 )
+from restaurant_hub.features.identity.application.ports.out.unit_of_work import UnitOfWork
 from restaurant_hub.features.identity.application.ports.out.unit_repository import (
     UnitRepository,
 )
@@ -65,6 +69,7 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 
@@ -87,6 +92,9 @@ class Repositorios:
     # tokens tem FK para `users`, então um teste que semeasse o pré-requisito de
     # um jeito para o fake e de outro para o Postgres deixaria de ser contrato.
     tokens_de_setup: PasswordSetupTokenRepository
+    # Stage 2.6. A unidade guarda os MESMOS repositórios do pacote — no fake, por
+    # referência; no Postgres, pelo mesmo `Engine` (concept 2.6 R7).
+    unidade_de_trabalho: UnitOfWork
 
 
 @pytest.fixture(params=["fake", "postgres"])
@@ -98,12 +106,20 @@ def repos(request: pytest.FixtureRequest) -> Repositorios:
     falha na outra.
     """
     if request.param == "fake":
+        restaurantes = InMemoryRestaurantRepository()
+        unidades = InMemoryUnitRepository()
+        usuarios = InMemoryUserRepository()
+        sessoes = InMemorySessionRepository()
+        tokens = InMemoryPasswordSetupTokenRepository()
         return Repositorios(
-            restaurantes=InMemoryRestaurantRepository(),
-            unidades=InMemoryUnitRepository(),
-            usuarios=InMemoryUserRepository(),
-            sessoes=InMemorySessionRepository(),
-            tokens_de_setup=InMemoryPasswordSetupTokenRepository(),
+            restaurantes=restaurantes,
+            unidades=unidades,
+            usuarios=usuarios,
+            sessoes=sessoes,
+            tokens_de_setup=tokens,
+            unidade_de_trabalho=InMemoryUnitOfWork(
+                restaurantes, unidades, usuarios, sessoes, tokens
+            ),
         )
 
     # `engine` vem do conftest de integração, que exige Postgres real e falha alto
@@ -116,4 +132,5 @@ def repos(request: pytest.FixtureRequest) -> Repositorios:
         usuarios=PostgresUserRepository(engine),
         sessoes=PostgresSessionRepository(engine),
         tokens_de_setup=PostgresPasswordSetupTokenRepository(engine),
+        unidade_de_trabalho=PostgresUnitOfWork(engine),
     )
