@@ -176,3 +176,25 @@ def test_registros_fixos_nao_se_somam_em_ambos() -> None:
     )
 
     assert _POLITICA.evaluate(contexto_, config(workload_direction=_AMBOS)) == ()
+
+
+@pytest.mark.parametrize("ordem", [("ana", "bruno"), ("bruno", "ana")])
+def test_violacao_de_carga_leva_so_o_proprio_registro(ordem: tuple[str, str]) -> None:
+    turnos = [*_cinco_dias(1), Turno("bruno", em(5, 8), em(5, 16))]
+    cargas = {"ana": Decimal(40), "bruno": Decimal(8)}
+    contexto_ = contexto(escala(turnos), *(fatos(nome, horas=cargas[nome]) for nome in ordem))
+
+    (violacao,) = _POLITICA.evaluate(contexto_, config())
+
+    assert (violacao.employee_id, violacao.observed) == ("ana", Decimal(2401))
+    assert violacao.assignment_ids == {AssignmentId(f"s-a{indice}") for indice in range(5)}
+
+
+def test_carga_fracionaria_nao_representavel_em_float_e_exata() -> None:
+    # 22,33h = 1339,8 min exatos; via float sairia 1339,7999999999999545...
+    turnos = [Turno("ana", em(0, 8), em(0, 18)), Turno("ana", em(1, 8), em(1, 20, 20))]
+
+    (violacao,) = _avaliar(turnos, horas="22.33", workload_direction=_AMBOS)
+
+    assert violacao.limit == Decimal("1339.80")
+    assert violacao.observed - violacao.limit == Decimal("0.20")

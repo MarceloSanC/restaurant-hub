@@ -223,3 +223,18 @@ def test_duas_semanas_abaixo_do_teto_nao_somam_entre_registros() -> None:
     ]
 
     assert _SEMANAL.evaluate(contexto(escala(turnos)), config()) == ()
+
+
+def test_dia_acima_do_teto_leva_so_as_alocacoes_do_proprio_registro() -> None:
+    avaliada = escala(
+        [
+            Turno("ana", em(0, 8), em(0, 14)),
+            Turno("ana", em(0, 15), em(0, 20)),
+            Turno("bruno", em(0, 8), em(0, 12)),
+        ]
+    )
+
+    (violacao,) = _DIARIO.evaluate(contexto(avaliada), config())
+
+    assert violacao.employee_id == "ana"
+    assert violacao.assignment_ids == {AssignmentId("s-a0"), AssignmentId("s-a1")}

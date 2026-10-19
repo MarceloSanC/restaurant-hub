@@ -393,4 +393,14 @@ Também: nada travava a ausência de texto livre na `Violation` (§5.12), e o de
 com a sobreposição só aparecia contra uma vizinha. Os 8 testes propostos entraram no commit
 `[4.2/task-10-extra]`; a rodada 2 re-executa os sobreviventes.
 
+### 2026-10-19 — [deviation] auditoria de testes, rodada 2 — Claude Opus 5.5 (executor)
+
+Mesmo auditor. Os 5 sobreviventes da rodada 1 **morreram** (M12, M13, M49, M54, M55, M58); M56
+segue equivalente. Dos 16 mutantes novos (N01–N16), 3 sobreviveram:
+- N01: o teto diário podia levar alocações de **outro** registro em `assignment_ids`;
+- N03: idem na carga;
+- N05: a carga calculada via `float` passava, porque o único caso fracionário (22,5h) é
+  representável em binário — o teste travava o caso, não a propriedade "Decimal exato".
+Os três testes propostos entraram no commit `[4.2/task-10-extra2]` (22,33h = 1339,80 min exatos).
+
 <!-- END: post-execution -->
