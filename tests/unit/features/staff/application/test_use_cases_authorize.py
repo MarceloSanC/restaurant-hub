@@ -41,11 +41,15 @@ import pytest
 from restaurant_hub.features.staff.application.dtos.commands import (
     AssignJobFunctionsCommand,
     ChangeWorkloadProfileCommand,
+    CopyEmployeeToUnitCommand,
     CreateEmployeeCommand,
     CreateJobFunctionCommand,
+    CreateLoginForEmployeeCommand,
+    DeactivateEmployeeCommand,
     DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
     DeleteJobFunctionCommand,
+    ReactivateEmployeeCommand,
     RegisterUnavailabilityCommand,
     RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
@@ -56,17 +60,27 @@ from restaurant_hub.features.staff.application.dtos.queries import (
     ListJobFunctionsQuery,
 )
 from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
     AssignJobFunctionsUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.change_workload_profile import (
     ChangeWorkloadProfileUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.copy_employee_to_unit import (
+    CopyEmployeeToUnitUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.create_employee import (
     CreateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.create_login_for_employee import (
+    CreateLoginForEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
+    DeactivateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.declare_shift_preference import (
     DeclareShiftPreferenceUseCase,
@@ -82,6 +96,9 @@ from restaurant_hub.features.staff.application.use_cases.list_employees import (
 )
 from restaurant_hub.features.staff.application.use_cases.list_job_functions import (
     ListJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.reactivate_employee import (
+    ReactivateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
     RegisterUnavailabilityUseCase,
@@ -114,6 +131,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     FixedSchedule,
     OnDemand,
 )
+from tests.fakes.features.staff.in_memory_access_guard import InMemoryAccessGuard
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.features.staff.stub_access_guards import (
@@ -129,9 +147,12 @@ pytestmark = pytest.mark.unit
 
 _A: Final = TenantId("tenant-a")
 _U1: Final = UnitId("u1")
+_U2: Final = UnitId("u2")
 _F_EM_USO: Final = JobFunctionId("f-em-uso")
 _F_LIVRE: Final = JobFunctionId("f-livre")
 _E_ATIVO: Final = EmployeeId("e-ativo")
+_E_DESLIGADO: Final = EmployeeId("e-desligado")
+_EMAIL: Final = "maria@cantina.com"
 _PERIODO_GRAVADO: Final = UnavailabilityPeriod(
     start=datetime(2026, 11, 2, 8, 0), end=datetime(2026, 11, 2, 12, 0)
 )
@@ -173,6 +194,19 @@ def _semear() -> StaffFakes:
             shift_preference=None,
             job_function_ids=frozenset({_F_EM_USO}),
             unavailabilities=(_PERIODO_GRAVADO,),
+        )
+    )
+    fakes.employees.add(
+        Employee(
+            id=_E_DESLIGADO,
+            tenant_id=_A,
+            unit_id=_U1,
+            name="Pedro",
+            workload_profile=OnDemand(),
+            shift_preference=None,
+            job_function_ids=frozenset({_F_EM_USO}),
+            unavailabilities=(),
+            active=False,
         )
     )
     return fakes
@@ -308,6 +342,34 @@ def _indisponibilidade_removida(montagem: Montagem, resultado: object) -> None:
     assert _PERIODO_GRAVADO not in _relido(montagem).unavailabilities
 
 
+def _desligado_no_endereco(montagem: Montagem, resultado: object) -> None:
+    _devolve_o_registro_do_endereco(resultado)
+    assert _relido(montagem).active is False
+
+
+def _religado_no_endereco(montagem: Montagem, resultado: object) -> None:
+    assert (resultado.tenant_id, resultado.unit_id, resultado.id) == (_A, _U1, _E_DESLIGADO)
+    relido = _registro_no_endereco(montagem, _E_DESLIGADO)
+    assert relido is not None
+    assert relido.active is True
+
+
+def _copia_na_unidade_destino(montagem: Montagem, resultado: object) -> None:
+    """O destino é o `target_unit_id` do command — não a unidade que o escopo inventou."""
+    assert (resultado.tenant_id, resultado.unit_id) == (_A, _U2)
+    copia = montagem.fakes.employees.find_by_id(_A, _U2, EmployeeId(resultado.id))
+    assert copia is not None
+    assert copia.name == "Maria"
+
+
+def _login_vinculado_no_endereco(montagem: Montagem, resultado: object) -> None:
+    funcionario = resultado.employee
+    assert (funcionario.tenant_id, funcionario.unit_id, funcionario.id) == (_A, _U1, _E_ATIVO)
+    assert _relido(montagem).user_id is not None
+    [registro] = montagem.gateway.logins.values()
+    assert (registro.tenant_id, registro.unit_id) == (_A, _U1)
+
+
 CENARIOS: Final[dict[str, Cenario]] = {
     "create_job_function": Cenario(
         classe=CreateJobFunctionUseCase,
@@ -426,6 +488,43 @@ CENARIOS: Final[dict[str, Cenario]] = {
         alvos=((_MANAGE_STAFF, _A, _U1),),
         no_endereco_do_command=_indisponibilidade_removida,
     ),
+    "deactivate_employee": Cenario(
+        classe=DeactivateEmployeeUseCase,
+        command=DeactivateEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_ATIVO
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_desligado_no_endereco,
+    ),
+    "reactivate_employee": Cenario(
+        classe=ReactivateEmployeeUseCase,
+        command=ReactivateEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_DESLIGADO
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_religado_no_endereco,
+    ),
+    "copy_employee_to_unit": Cenario(
+        classe=CopyEmployeeToUnitUseCase,
+        command=CopyEmployeeToUnitCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_ATIVO, target_unit_id=_U2
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1), (_MANAGE_STAFF, _A, _U2)),
+        no_endereco_do_command=_copia_na_unidade_destino,
+    ),
+    "create_login_for_employee": Cenario(
+        classe=CreateLoginForEmployeeUseCase,
+        command=CreateLoginForEmployeeCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E_ATIVO,
+            email=_EMAIL,
+            delivery=LoginDelivery.LINK,
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1), (_MANAGE_USERS, _A, _U1)),
+        no_endereco_do_command=_login_vinculado_no_endereco,
+    ),
 }
 
 _NOMES: Final = sorted(CENARIOS)
@@ -491,3 +590,38 @@ def test_toda_permissao_da_tabela_e_do_vocabulario_de_staff() -> None:
     """Uma permissão digitada errado na tabela faria CA05 travar o erro, não o acerto."""
     usadas = {alvo[0] for c in CENARIOS.values() for alvo in c.alvos}
     assert usadas <= {_MANAGE_STAFF, _MANAGE_JOB_FUNCTIONS, _MANAGE_USERS}
+
+
+_DE_DOIS_ALVOS: Final = sorted(nome for nome, c in CENARIOS.items() if len(c.alvos) > 1)
+
+
+def test_os_use_cases_de_dois_alvos_sao_os_do_concept() -> None:
+    """Sem a contagem, CA06 passaria vácuo se a tabela perdesse um segundo alvo."""
+    assert _DE_DOIS_ALVOS == ["copy_employee_to_unit", "create_login_for_employee"]
+
+
+@pytest.mark.parametrize("nome", _DE_DOIS_ALVOS)
+def test_ca06_negar_so_o_segundo_alvo_nao_deixa_efeito(nome: str) -> None:
+    """Os dois alvos são autorizados antes da primeira porta (R2).
+
+    O guard é o `InMemoryAccessGuard` — a segunda implementação das leis —,
+    concedendo **só** o primeiro alvo. Um use case que lesse a origem (ou
+    provisionasse a conta) entre as duas autorizações deixaria a leitura para
+    trás, e o registro do store a denunciaria.
+    """
+    cenario = CENARIOS[nome]
+    guard = InMemoryAccessGuard(credential=TEST_ACTOR)
+    permissao, tenant, unidade = cenario.alvos[0]
+    guard.grant(permissao, tenant_id=tenant, unit_id=unidade)
+    montagem = _montar(cenario.classe, guard)
+    chamadas_ao_store = len(montagem.fakes.store.calls)
+
+    with pytest.raises(type(guard.authorization_error)) as excinfo:
+        montagem.use_case.execute(cenario.command)
+
+    assert excinfo.value is guard.authorization_error
+    segundo = cenario.alvos[1]
+    assert guard.calls[-1] == f"authorize({segundo[0]},{segundo[1]},{segundo[2]})"
+    assert montagem.fakes.store.calls[chamadas_ao_store:] == []
+    assert montagem.gateway.calls == []
+    assert montagem.ids.generated == []

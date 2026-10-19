@@ -123,11 +123,13 @@ def _exceto_active(resultado: EmployeeResult) -> dict[str, object]:
 def _desligar(
     fakes: StaffFakes, gateway: InMemoryIdentityGateway | None = None
 ) -> DeactivateEmployeeUseCase:
-    return DeactivateEmployeeUseCase(fakes.employees, gateway or InMemoryIdentityGateway())
+    return DeactivateEmployeeUseCase(
+        fakes.employees, gateway or InMemoryIdentityGateway(), guard=PermissiveAccessGuard()
+    )
 
 
 def _recontratar(fakes: StaffFakes) -> ReactivateEmployeeUseCase:
-    return ReactivateEmployeeUseCase(fakes.employees)
+    return ReactivateEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
 
 # --- as duas transições ------------------------------------------------------

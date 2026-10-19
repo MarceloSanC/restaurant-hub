@@ -74,7 +74,8 @@ class AmbienteComGateway(Ambiente):
         super().__init__()
         self.gateway = InMemoryIdentityGateway()
         self.app.dependency_overrides[router_module._get_create_login_for_employee] = partial(
-            _devolve, CreateLoginForEmployeeUseCase(self.fakes.employees, self.gateway)
+            _devolve,
+            CreateLoginForEmployeeUseCase(self.fakes.employees, self.gateway, guard=self.guard),
         )
 
     def autorizacoes(self) -> list[str]:
@@ -267,9 +268,13 @@ async def test_ca10_autoriza_manage_staff_e_depois_manage_users_sobre_a_unidade_
     resposta = await client.post(_URL, json={"email": _EMAIL, "delivery": "link"})
 
     assert resposta.status_code == HTTPStatus.CREATED
+    # As duas da rota (tenant omitido, ADR 0.0.0005) e as mesmas duas do use case
+    # (tenant nomeado, ADR 3.7.0001), na mesma ordem.
     assert ambiente.autorizacoes() == [
         f"authorize(manage_staff,None,{_UNIDADE})",
         f"authorize(manage_users,None,{_UNIDADE})",
+        f"authorize(manage_staff,{_TENANT},{_UNIDADE})",
+        f"authorize(manage_users,{_TENANT},{_UNIDADE})",
     ]
 
 

@@ -164,7 +164,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     assert com_periodo.unavailabilities == (_PERIODO,)
 
     # 5. Cópia para a unidade B — leva o cadastro inteiro, já editado.
-    copia = CopyEmployeeToUnitUseCase(fakes.employees, ids).execute(
+    copia = CopyEmployeeToUnitUseCase(fakes.employees, ids, guard=PermissiveAccessGuard()).execute(
         CopyEmployeeToUnitCommand(
             actor=TEST_ACTOR,
             tenant_id=_TENANT,
@@ -179,7 +179,9 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     assert copia.unit_id == _UNIDADE_B
 
     # 6. Desligamento do registro da unidade A.
-    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
+    DeactivateEmployeeUseCase(
+        fakes.employees, InMemoryIdentityGateway(), guard=PermissiveAccessGuard()
+    ).execute(
         DeactivateEmployeeCommand(
             actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE_A, employee_id=funcionario_id
         )

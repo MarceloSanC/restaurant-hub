@@ -300,7 +300,7 @@ def test_reactivate_e_o_unico_caminho_de_volta() -> None:
         executar(fakes)
     assert _relido(fakes).active is False
 
-    ReactivateEmployeeUseCase(fakes.employees).execute(
+    ReactivateEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
     assert _relido(fakes).active is True

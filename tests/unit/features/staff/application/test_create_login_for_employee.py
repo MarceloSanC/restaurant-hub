@@ -44,7 +44,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -130,9 +130,9 @@ def test_grava_o_user_id_provisionado_e_repassa_o_canal(delivery: LoginDelivery)
     fakes = _fakes()
     gateway = _gateway(fakes)
 
-    resultado = CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-        _comando(delivery=delivery)
-    )
+    resultado = CreateLoginForEmployeeUseCase(
+        fakes.employees, gateway, guard=PermissiveAccessGuard()
+    ).execute(_comando(delivery=delivery))
 
     (user_id,) = gateway.logins
     assert _relido(fakes).user_id == user_id
@@ -147,9 +147,9 @@ def test_canal_email_envia_uma_vez_e_nao_devolve_o_link() -> None:
     fakes = _fakes()
     gateway = _gateway(fakes)
 
-    resultado = CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-        _comando(delivery=LoginDelivery.EMAIL)
-    )
+    resultado = CreateLoginForEmployeeUseCase(
+        fakes.employees, gateway, guard=PermissiveAccessGuard()
+    ).execute(_comando(delivery=LoginDelivery.EMAIL))
 
     (user_id,) = gateway.logins
     assert gateway.sent == [(_EMAIL, gateway.logins[user_id].setup_link)]
@@ -160,9 +160,9 @@ def test_canal_link_devolve_o_link_e_nao_envia_nada() -> None:
     fakes = _fakes()
     gateway = _gateway(fakes)
 
-    resultado = CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-        _comando(delivery=LoginDelivery.LINK)
-    )
+    resultado = CreateLoginForEmployeeUseCase(
+        fakes.employees, gateway, guard=PermissiveAccessGuard()
+    ).execute(_comando(delivery=LoginDelivery.LINK))
 
     (user_id,) = gateway.logins
     assert resultado.setup_link == gateway.logins[user_id].setup_link
@@ -174,7 +174,9 @@ def test_o_result_traz_o_estado_resultante_pelo_mapper() -> None:
     fakes = _fakes()
     gateway = _gateway(fakes)
 
-    resultado = CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(_comando())
+    resultado = CreateLoginForEmployeeUseCase(
+        fakes.employees, gateway, guard=PermissiveAccessGuard()
+    ).execute(_comando())
 
     relido = _relido(fakes)
     assert isinstance(resultado, EmployeeLoginResult)
@@ -191,7 +193,9 @@ def test_o_link_nao_aparece_no_repr_do_result() -> None:
     fakes = _fakes()
     gateway = _gateway(fakes)
 
-    resultado = CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(_comando())
+    resultado = CreateLoginForEmployeeUseCase(
+        fakes.employees, gateway, guard=PermissiveAccessGuard()
+    ).execute(_comando())
 
     assert resultado.setup_link is not None
     assert resultado.setup_link not in repr(resultado)
@@ -209,7 +213,9 @@ def test_ja_vinculado_recusa_sem_tocar_em_identity() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(EmployeeAlreadyHasLoginError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(_comando())
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando())
 
     assert _provisionamentos(gateway) == []
     assert gateway.calls == []
@@ -223,7 +229,9 @@ def test_desligado_recusa_sem_tocar_em_identity() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(TerminatedEmployeeLoginError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(_comando())
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando())
 
     assert gateway.calls == []
     assert fakes.store.calls[antes:] == ["employees.find_by_id"]
@@ -236,7 +244,9 @@ def test_vinculado_e_desligado_recusa_pelo_vinculo_primeiro() -> None:
     gateway = _gateway(fakes)
 
     with pytest.raises(EmployeeAlreadyHasLoginError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(_comando())
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando())
 
     assert gateway.calls == []
 
@@ -257,9 +267,9 @@ def test_registro_fora_do_endereco_e_404_sem_tocar_em_identity(
     gateway = _gateway(fakes)
 
     with pytest.raises(EmployeeNotFoundError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-            _comando(tenant_id=tenant_id, unit_id=unit_id, employee_id=employee_id)
-        )
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando(tenant_id=tenant_id, unit_id=unit_id, employee_id=employee_id))
 
     assert gateway.calls == []
     assert _relido(fakes).user_id is None
@@ -276,7 +286,9 @@ def test_email_ja_usado_sobe_traduzido_e_nada_e_gravado() -> None:
     gateway.used_emails.add(_EMAIL)
 
     with pytest.raises(LoginEmailAlreadyInUseError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(_comando())
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando())
 
     assert _relido(fakes).user_id is None
     assert "employees.update" not in fakes.store.calls
@@ -289,9 +301,9 @@ def test_email_invalido_sobe_traduzido_e_nada_e_gravado() -> None:
     gateway.invalid_emails.add("nao-e-email")
 
     with pytest.raises(InvalidLoginEmailError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-            _comando(email="nao-e-email")
-        )
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando(email="nao-e-email"))
 
     assert _relido(fakes).user_id is None
     assert "employees.update" not in fakes.store.calls
@@ -307,7 +319,7 @@ def test_o_vinculo_e_gravado_antes_do_envio() -> None:
     fakes = _fakes()
     gateway = _gateway(fakes)
 
-    CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
+    CreateLoginForEmployeeUseCase(fakes.employees, gateway, guard=PermissiveAccessGuard()).execute(
         _comando(delivery=LoginDelivery.EMAIL)
     )
 
@@ -330,9 +342,9 @@ def test_falha_do_envio_sobe_na_mesma_instancia_e_o_vinculo_fica() -> None:
     gateway.fail_send_with = falha
 
     with pytest.raises(RuntimeError) as excinfo:
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-            _comando(delivery=LoginDelivery.EMAIL)
-        )
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando(delivery=LoginDelivery.EMAIL))
 
     assert excinfo.value is falha
     (user_id,) = gateway.logins
@@ -345,14 +357,14 @@ def test_segundo_pedido_apos_falha_do_envio_e_ja_vinculado() -> None:
     gateway = _gateway(fakes)
     gateway.fail_send_with = RuntimeError("smtp indisponível")
     with pytest.raises(RuntimeError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-            _comando(delivery=LoginDelivery.EMAIL)
-        )
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando(delivery=LoginDelivery.EMAIL))
     gateway.fail_send_with = None
 
     with pytest.raises(EmployeeAlreadyHasLoginError):
-        CreateLoginForEmployeeUseCase(fakes.employees, gateway).execute(
-            _comando(delivery=LoginDelivery.EMAIL)
-        )
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando(delivery=LoginDelivery.EMAIL))
 
     assert len(gateway.logins) == 1

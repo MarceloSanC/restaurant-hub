@@ -707,14 +707,16 @@ def wire_dependencies(
             employees=staff_employees, guard=staff_access_guard
         ),
         staff_deactivate_employee=DeactivateEmployeeUseCase(
-            employees=staff_employees, gateway=staff_identity_gateway
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
         ),
-        staff_reactivate_employee=ReactivateEmployeeUseCase(employees=staff_employees),
+        staff_reactivate_employee=ReactivateEmployeeUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
         staff_copy_employee_to_unit=CopyEmployeeToUnitUseCase(
-            employees=staff_employees, id_generator=id_generator
+            employees=staff_employees, id_generator=id_generator, guard=staff_access_guard
         ),
         staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
-            employees=staff_employees, gateway=staff_identity_gateway
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
         ),
         staff_access_guard=staff_access_guard,
         staff_identity_gateway=staff_identity_gateway,

@@ -131,7 +131,9 @@ def test_remover_desligado_tambem_funciona() -> None:
     """Apagar é ortogonal a desligar: o desligado é removível como qualquer um."""
     fakes = _fakes()
     _grava(fakes)
-    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
+    DeactivateEmployeeUseCase(
+        fakes.employees, InMemoryIdentityGateway(), guard=PermissiveAccessGuard()
+    ).execute(
         DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
     _apagar(fakes).execute(

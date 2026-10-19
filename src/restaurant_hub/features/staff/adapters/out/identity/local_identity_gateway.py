@@ -22,8 +22,9 @@ O que o gateway faz é **tradução de vocabulário**, nas duas direções:
   erro só por ter atravessado a fronteira.
 
 Não autoriza: a fachada não autoriza (#49) e este adapter tampouco. Quem
-responde pela autorização é a rota R17 (`manage_staff` **e** `manage_users`),
-antes de o use case chegar aqui.
+responde pela autorização é o use case que o chama — desde a Stage 3.7 ele
+autoriza `manage_staff` **e** `manage_users` antes de chegar aqui (ADR 3.7.0001) —,
+e a rota R17, que autoriza as mesmas duas antes do use case.
 """
 
 from restaurant_hub.features.identity.application.facade import (

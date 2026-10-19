@@ -20,8 +20,10 @@ não é lei, é descrição.
 **funcionário**. É a forma estrutural, do lado de staff, de "não se concede o
 que não se detém" (2.4 concept §5 regra 4): nenhum chamador consegue pedir
 outro papel, porque não existe onde pedir. Quem responde pela autorização do
-ato é a borda (R17 exige `manage_staff` **e** `manage_users` — concept §5.3);
-a fachada de identity não autoriza (#49).
+ato é o **use case consumidor** — desde a Stage 3.7 ele autoriza `manage_staff`
+**e** `manage_users` antes de chamar este port (ADR 3.7.0001; concept 3.5 §5.3),
+e a rota R17 autoriza as mesmas duas antes dele; a fachada de identity não
+autoriza (#49).
 
 **As quatro leis** (concept 3.5 §4). Texto normativo deste módulo, pareado com
 a suíte de contrato `tests/contract/features/staff/test_identity_gateway_laws.py`,

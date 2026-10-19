@@ -119,7 +119,9 @@ def _result(fakes: StaffFakes, unidade: UnitId, employee_id: EmployeeId) -> Empl
 
 
 def _copiar(fakes: StaffFakes, gerador: FakeIdGenerator | None = None) -> CopyEmployeeToUnitUseCase:
-    return CopyEmployeeToUnitUseCase(fakes.employees, gerador or FakeIdGenerator())
+    return CopyEmployeeToUnitUseCase(
+        fakes.employees, gerador or FakeIdGenerator(), guard=PermissiveAccessGuard()
+    )
 
 
 # --- a cópia replica ---------------------------------------------------------
@@ -225,7 +227,9 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
             ),
         )
     )
-    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
+    DeactivateEmployeeUseCase(
+        fakes.employees, InMemoryIdentityGateway(), guard=PermissiveAccessGuard()
+    ).execute(
         DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=copia_id)
     )
 
@@ -248,7 +252,9 @@ def test_editar_a_origem_nao_afeta_a_copia() -> None:
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
         )
     )
-    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
+    DeactivateEmployeeUseCase(
+        fakes.employees, InMemoryIdentityGateway(), guard=PermissiveAccessGuard()
+    ).execute(
         DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 

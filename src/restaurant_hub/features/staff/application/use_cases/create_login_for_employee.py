@@ -22,9 +22,14 @@ da fronteira, e a ordem em que o faz é contrato (concept 3.5 §5.4):
    sai de identity por API, e sai para quem acabou de provar `manage_staff` e
    `manage_users` sobre a unidade (concept §5.3).
 
-O que este use case **não** faz: não autoriza (a rota autoriza, duas vezes); não
-escolhe o papel (é do port, L-IG1); não loga, não formata nem repete o link em
-mensagem nenhuma (L-IG3) — e nenhuma exceção o carrega (CA05).
+**Antes de tudo, autoriza — duas vezes** (Stage 3.7, ADR 3.7.0001): `manage_staff`
+e depois `manage_users` sobre a unidade do command, as duas antes do passo 1, para
+que uma negação na segunda não deixe leitura nem conta para trás. A rota autoriza
+as mesmas duas antes de chegar aqui; esta é a linha que vale para qualquer driver.
+
+O que este use case **não** faz: não escolhe o papel (é do port, L-IG1); não loga,
+não formata nem repete o link em mensagem nenhuma (L-IG3) — e nenhuma exceção o
+carrega (CA05).
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import (
@@ -35,6 +40,11 @@ from restaurant_hub.features.staff.application.dtos.results import (
     to_employee_login_result,
 )
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_STAFF,
+    PERMISSION_MANAGE_USERS,
+    AccessGuard,
+)
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
@@ -47,9 +57,12 @@ from restaurant_hub.features.staff.application.ports.out.identity_gateway import
 class CreateLoginForEmployeeUseCase:
     """Cria a conta pendente em identity e a vincula ao registro do funcionário."""
 
-    def __init__(self, employees: EmployeeRepository, gateway: IdentityGateway) -> None:
+    def __init__(
+        self, employees: EmployeeRepository, gateway: IdentityGateway, guard: AccessGuard
+    ) -> None:
         self._employees = employees
         self._gateway = gateway
+        self._guard = guard
 
     def execute(self, command: CreateLoginForEmployeeCommand) -> EmployeeLoginResult:
         """Vincula um login novo ao registro.
@@ -63,6 +76,20 @@ class CreateLoginForEmployeeUseCase:
             Exception: qualquer outra falha de identity sobe crua — inclusive a do
                 envio, que acontece **depois** de o vínculo estar gravado.
         """
+        # (0) Autorização do alvo do command, antes de qualquer outra instrução
+        # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
+        self._guard.authorize(
+            command.actor,
+            PERMISSION_MANAGE_STAFF,
+            tenant_id=command.tenant_id,
+            unit_id=command.unit_id,
+        )
+        self._guard.authorize(
+            command.actor,
+            PERMISSION_MANAGE_USERS,
+            tenant_id=command.tenant_id,
+            unit_id=command.unit_id,
+        )
         employee = self._employees.find_by_id(
             command.tenant_id, command.unit_id, command.employee_id
         )
