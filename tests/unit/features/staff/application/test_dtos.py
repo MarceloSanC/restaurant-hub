@@ -301,6 +301,26 @@ def test_ca02_o_ator_e_o_primeiro_campo_obrigatorio_e_fora_do_repr(dto_class: ty
 @pytest.mark.parametrize(
     "dto", [d for d in _TODOS_OS_DTOS if hasattr(d, "actor")], ids=lambda d: type(d).__name__
 )
+def test_ca02_construir_sem_o_ator_e_type_error(dto: object) -> None:
+    """O efeito da declaração: todos os outros campos presentes, só o ator ausente.
+
+    A varredura acima prova `default is MISSING`; esta prova que a omissão
+    **não constrói** — um `__init__` escrito à mão poderia declarar o campo sem
+    default e aceitar a omissão mesmo assim (concept 3.7 §6).
+    """
+    sem_ator = {
+        campo.name: getattr(dto, campo.name)
+        for campo in dataclasses.fields(dto)  # type: ignore[arg-type]
+        if campo.name != "actor"
+    }
+
+    with pytest.raises(TypeError, match="actor"):
+        type(dto)(**sem_ator)
+
+
+@pytest.mark.parametrize(
+    "dto", [d for d in _TODOS_OS_DTOS if hasattr(d, "actor")], ids=lambda d: type(d).__name__
+)
 def test_ca02_o_repr_do_command_nao_imprime_o_ator(dto: object) -> None:
     """O efeito, e não só a declaração: um ator cujo `repr` é um segredo não aparece."""
 

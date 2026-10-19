@@ -186,3 +186,26 @@ def test_ca14_controle_positivo_o_dono_do_tenant_executa_o_mesmo_command(nome: s
     resultado = _executar(montagem, nome, dono)
 
     CENARIOS[nome].no_endereco_do_command(montagem, resultado)
+
+
+@pytest.mark.parametrize("ator_invalido", [None, object()], ids=["none", "objeto-qualquer"])
+@pytest.mark.parametrize("nome", sorted(CENARIOS))
+def test_ator_que_nao_e_ator_falha_fechado_sem_efeito(nome: str, ator_invalido: object) -> None:
+    """Concept 3.7 §6 — `actor=None` (ou um objeto qualquer) vindo de um driver não-HTTP.
+
+    `Actor = object`, então o command constrói. Quem recusa é a cadeia de produção:
+    `IdentityGuard.authorize` lê `actor.claims.subject` e levanta `AttributeError`
+    — **fail-closed, mas não tipado** (finding da §7). O teste trava as duas
+    metades: que recusa, e que nada acontece antes. Uma mudança que passasse a
+    aceitar `None` como "ator anônimo" reprova aqui.
+    """
+    identidade = _identidade()
+    montagem = _montar(CENARIOS[nome].classe, identidade.guard)
+    chamadas_ao_store = len(montagem.fakes.store.calls)
+
+    with pytest.raises(AttributeError):
+        _executar(montagem, nome, ator_invalido)
+
+    assert montagem.fakes.store.calls[chamadas_ao_store:] == []
+    assert montagem.gateway.calls == []
+    assert montagem.ids.generated == []
