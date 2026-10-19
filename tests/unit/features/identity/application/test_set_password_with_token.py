@@ -1,8 +1,10 @@
-"""Testes do use case `set_password_with_token` — CA8, CA8b, CA9, CA10, CA11b.
+"""Testes do use case `set_password_with_token` — CA8, CA8b, CA9, CA10, CA11b; Stage 2.6 CA4.
 
 Este é o use case que uma requisição **não autenticada** alcança para trocar uma
 credencial. Os testes aqui não são sobre o caminho feliz: são sobre replay, sobre
-o alvo vir do token e não do pedido, e sobre a ordem em que os efeitos acontecem.
+o alvo vir do token e não do pedido, e sobre a ordem em que os efeitos acontecem —
+e, desde a Stage 2.6, sobre a unidade de trabalho: falha em qualquer das quatro
+escritas não deixa nenhuma gravada.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -41,6 +43,7 @@ from tests.fakes.features.identity.in_memory_password_setup_token_repository imp
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
 
@@ -49,11 +52,70 @@ _SENHA_NOVA = "senha-nova-do-convidado"
 _VALOR = "setup-1"
 
 
-class RepositorioQueFalhaAoGravar(InMemoryUserRepository):
-    """Falha só em `set_password_hash` — para observar a ordem dos efeitos."""
+class _FalhaInjetada(Exception):
+    pass
+
+
+class _Registro:
+    """Ordem das escritas tentadas, compartilhada pelos três injetores, e onde falhar."""
+
+    def __init__(self, falhar_em: int | None = None) -> None:
+        self.falhar_em = falhar_em
+        self.escritas: list[str] = []
+
+    def escreveu(self, nome: str) -> None:
+        self.escritas.append(nome)
+        if self.falhar_em is not None and len(self.escritas) == self.falhar_em:
+            raise _FalhaInjetada(nome)
+
+
+class _UsuariosRegistrados(InMemoryUserRepository):
+    def __init__(self, registro: _Registro) -> None:
+        super().__init__()
+        self._registro = registro
 
     def set_password_hash(self, user_id: UserId, password_hash: PasswordHash) -> None:
-        raise RuntimeError("banco indisponível")
+        super().set_password_hash(user_id, password_hash)
+        self._registro.escreveu("users.set_password_hash")
+
+
+class _SessoesRegistradas(InMemorySessionRepository):
+    def __init__(self, registro: _Registro) -> None:
+        super().__init__()
+        self._registro = registro
+
+    def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
+        super().revoke_all_for_user(user_id, revoked_at)
+        self._registro.escreveu("sessions.revoke_all_for_user")
+
+
+class _TokensRegistrados(InMemoryPasswordSetupTokenRepository):
+    def __init__(self, registro: _Registro) -> None:
+        super().__init__()
+        self._registro = registro
+
+    def consume(self, token_id: SetupTokenId, consumed_at: datetime) -> bool:
+        consumiu = super().consume(token_id, consumed_at)
+        self._registro.escreveu("tokens.consume")
+        return consumiu
+
+    def invalidate_all_for_user(
+        self,
+        user_id: UserId,
+        consumed_at: datetime,
+        purpose: SetupTokenPurpose | None = None,
+    ) -> int:
+        invalidados = super().invalidate_all_for_user(user_id, consumed_at, purpose)
+        self._registro.escreveu("tokens.invalidate_all_for_user")
+        return invalidados
+
+
+_ESCRITAS = (
+    "tokens.consume",
+    "sessions.revoke_all_for_user",
+    "tokens.invalidate_all_for_user",
+    "users.set_password_hash",
+)
 
 
 class TokensQuePerdemACorrida(InMemoryPasswordSetupTokenRepository):
@@ -71,13 +133,6 @@ class TokensQuePerdemACorrida(InMemoryPasswordSetupTokenRepository):
         return False
 
 
-class SessoesQueFalhamAoRevogar(InMemorySessionRepository):
-    """Falha só em `revoke_all_for_user` — para observar o passo intermediário."""
-
-    def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
-        raise RuntimeError("banco indisponível")
-
-
 class Cenario:
     """Um usuário com um token de convite vivo e uma sessão aberta."""
 
@@ -87,6 +142,7 @@ class Cenario:
         *,
         users: InMemoryUserRepository | None = None,
         sessions: InMemorySessionRepository | None = None,
+        tokens: InMemoryPasswordSetupTokenRepository | None = None,
         tokens_perdem_corrida: bool = False,
         expires_at: datetime | None = None,
         consumed_at: datetime | None = None,
@@ -94,11 +150,13 @@ class Cenario:
     ) -> None:
         self.users = users if users is not None else InMemoryUserRepository()
         self.sessions = sessions if sessions is not None else InMemorySessionRepository()
-        self.tokens = (
-            TokensQuePerdemACorrida()
-            if tokens_perdem_corrida
-            else InMemoryPasswordSetupTokenRepository()
-        )
+        self.tokens: InMemoryPasswordSetupTokenRepository
+        if tokens is not None:
+            self.tokens = tokens
+        elif tokens_perdem_corrida:
+            self.tokens = TokensQuePerdemACorrida()
+        else:
+            self.tokens = InMemoryPasswordSetupTokenRepository()
         self.issuer = FakeSetupTokenIssuer()
         self.hasher = FakePasswordHasher()
         self.clock = FakeClock(_AGORA)
@@ -135,6 +193,7 @@ class Cenario:
             )
         )
 
+        self.unidade = InMemoryUnitOfWork(self.users, self.sessions, self.tokens)
         self.use_case = SetPasswordWithTokenUseCase(
             users=self.users,
             sessions=self.sessions,
@@ -142,6 +201,7 @@ class Cenario:
             token_issuer=self.issuer,
             hasher=self.hasher,
             clock=self.clock,
+            unit_of_work=self.unidade,
         )
 
 
@@ -310,6 +370,10 @@ class TestFalhasIndistinguiveis:
         with pytest.raises(InvalidSetupTokenError):
             cenario.use_case.execute(_comando())
 
+        # A unidade desfaz o `consume`: o token de um usuário apagado não é
+        # queimado — e nem precisa, porque nunca mais redime nada.
+        assert cenario.tokens.tokens[SetupTokenId("tok-1")].consumed_at is None
+
     def test_todas_as_causas_tem_a_mesma_mensagem(self) -> None:
         """Cada causa precisa alcançar o seu **próprio** `raise`.
 
@@ -346,41 +410,76 @@ class TestFalhasIndistinguiveis:
 
         assert len(mensagens) == 1
 
-    def test_falha_ao_revogar_sessoes_ja_consumiu_o_token(self) -> None:
-        """Falha no passo intermediário também deixa a conta mais fechada."""
-        cenario = Cenario(sessions=SessoesQueFalhamAoRevogar())
 
-        with pytest.raises(RuntimeError):
+def _cenario_registrado(falhar_em: int | None = None) -> tuple[Cenario, _Registro]:
+    registro = _Registro(falhar_em)
+    cenario = Cenario(
+        users=_UsuariosRegistrados(registro),
+        sessions=_SessoesRegistradas(registro),
+        tokens=_TokensRegistrados(registro),
+    )
+    return cenario, registro
+
+
+class TestUnidadeDeTrabalho:
+    """Stage 2.6 CA4 — falha em qualquer das quatro escritas não deixa nenhuma gravada.
+
+    Substitui a antiga `TestOrdemFailClosed` (CA8b da 2.5), que asseverava o
+    contrário — token queimado e sessões revogadas depois da falha — como prova
+    de que a ordem deixava a conta "mais fechada". Com a unidade, a falha desfaz
+    tudo; a ordem continua (R2) e é fixada pelo teste de ordem abaixo.
+    """
+
+    def test_as_quatro_escritas_acontecem_na_ordem_fail_closed_dentro_da_unidade(self) -> None:
+        cenario, registro = _cenario_registrado()
+
+        cenario.use_case.execute(_comando())
+
+        assert tuple(registro.escritas) == _ESCRITAS
+        assert (cenario.unidade.aberturas, cenario.unidade.commits) == (1, 1)
+
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS) + 1))
+    def test_falha_na_escrita_n_nao_deixa_nada_gravado(self, n: int) -> None:
+        cenario, registro = _cenario_registrado(falhar_em=n)
+        hash_antes = cenario.users.password_hashes[UserId("user-1")]
+
+        with pytest.raises(_FalhaInjetada):
             cenario.use_case.execute(_comando())
 
-        assert cenario.tokens.tokens[SetupTokenId("tok-1")].consumed_at == _AGORA
+        # O injetor disparou na escrita N, e as anteriores foram tentadas.
+        assert tuple(registro.escritas) == _ESCRITAS[:n]
+        assert cenario.tokens.tokens[SetupTokenId("tok-1")].consumed_at is None
+        assert cenario.sessions.sessions[SessionId("sess-1")].revoked_at is None
+        assert cenario.users.password_hashes[UserId("user-1")] == hash_antes
+        assert cenario.unidade.rollbacks == 1
 
-
-class TestOrdemFailClosed:
-    """CA8b — toda falha parcial deixa a conta mais fechada, nunca mais aberta."""
-
-    def test_falha_ao_gravar_a_senha_ja_consumiu_o_token(self) -> None:
-        cenario = Cenario(users=RepositorioQueFalhaAoGravar())
-
-        with pytest.raises(RuntimeError):
+    def test_o_mesmo_link_funciona_depois_de_uma_falha(self) -> None:
+        cenario, registro = _cenario_registrado(falhar_em=4)
+        with pytest.raises(_FalhaInjetada):
             cenario.use_case.execute(_comando())
 
-        assert cenario.tokens.tokens[SetupTokenId("tok-1")].consumed_at == _AGORA
+        registro.falhar_em = None
+        cenario.use_case.execute(_comando())
 
-    def test_falha_ao_gravar_a_senha_ja_revogou_as_sessoes(self) -> None:
-        """O ponto inteiro da ordem.
+        credenciais = cenario.users.find_credentials_by_email(Email("convidado@x.com"))
+        assert credenciais is not None
+        assert cenario.hasher.verify(_SENHA_NOVA, credenciais.password_hash) is True
 
-        Se a senha fosse gravada primeiro, uma falha em `revoke_all_for_user`
-        deixaria a sessão do atacante viva **depois** de uma redefinição
-        concluída — o buraco que o ADR 2.5.0003 fecha, reaberto por um erro
-        transitório de banco.
-        """
-        cenario = Cenario(users=RepositorioQueFalhaAoGravar())
+    def test_o_hash_e_calculado_antes_de_a_unidade_abrir(self) -> None:
+        """R5 — argon2 é CPU; dentro da unidade alongaria a janela de lock."""
+        cenario = Cenario()
+        aberturas_no_hash: list[int] = []
+        hash_original = cenario.hasher.hash
 
-        with pytest.raises(RuntimeError):
-            cenario.use_case.execute(_comando())
+        def hash_observado(senha: str) -> PasswordHash:
+            aberturas_no_hash.append(cenario.unidade.aberturas)
+            return hash_original(senha)
 
-        assert cenario.sessions.sessions[SessionId("sess-1")].revoked_at == _AGORA
+        cenario.hasher.hash = hash_observado  # type: ignore[method-assign]
+        cenario.use_case.execute(_comando())
+
+        assert aberturas_no_hash == [0]
+        assert cenario.unidade.aberturas == 1
 
     def test_token_invalido_nao_revoga_sessao_nenhuma(self) -> None:
         """Quem apresenta lixo não derruba as sessões de ninguém.

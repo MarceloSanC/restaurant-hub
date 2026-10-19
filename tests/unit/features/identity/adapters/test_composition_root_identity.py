@@ -14,16 +14,23 @@ o caminho indireto; este teste fecha essa lacuna pelo lado do consumidor.
 import ast
 import io
 import pathlib
+from collections.abc import Callable
 from datetime import timedelta
 
 import pytest
 
 from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
+from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
+    PostgresPasswordSetupTokenRepository,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.session_repository import (
     PostgresSessionRepository,
+)
+from restaurant_hub.features.identity.adapters.out.postgres.unit_of_work import (
+    PostgresUnitOfWork,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.unit_repository import (
     PostgresUnitRepository,
@@ -140,6 +147,38 @@ def test_os_adapters_concretos_continuam_sendo_os_do_postgres() -> None:
     assert isinstance(use_case._sessions, PostgresSessionRepository)
     assert isinstance(deps.identity_create_unit._units, PostgresUnitRepository)
     assert isinstance(deps.identity_create_unit._restaurants, PostgresRestaurantRepository)
+
+
+# Stage 2.6 — os use cases com unidade de trabalho. Cresce a cada use case
+# migrado; o teste abaixo vale para todos.
+_COM_UNIDADE: dict[str, Callable[[ApplicationDependencies], object]] = {
+    "set_password_with_token": lambda d: d.identity_set_password_with_token,
+}
+_REPOSITORIOS_POSTGRES = (
+    PostgresRestaurantRepository,
+    PostgresUnitRepository,
+    PostgresUserRepository,
+    PostgresSessionRepository,
+    PostgresPasswordSetupTokenRepository,
+)
+
+
+@pytest.mark.parametrize("nome", sorted(_COM_UNIDADE))
+def test_unidade_e_repositorios_do_use_case_compartilham_o_engine(nome: str) -> None:
+    """CA9 (concept 2.6 R7) — a unidade é chaveada pelo `Engine`.
+
+    Um repositório montado sobre outro engine escreveria fora da unidade em
+    silêncio: a suíte inteira continuaria verde e a atomicidade sumiria em
+    produção. Aqui a fiação real é conferida repositório a repositório.
+    """
+    use_case = _COM_UNIDADE[nome](wire_dependencies(Settings(_env_file=None)))
+    atributos = vars(use_case)
+    unidade = atributos["_unit_of_work"]
+    repositorios = [v for v in atributos.values() if isinstance(v, _REPOSITORIOS_POSTGRES)]
+
+    assert isinstance(unidade, PostgresUnitOfWork)
+    assert repositorios, "o use case não recebeu repositório Postgres nenhum"
+    assert all(r._engine is unidade._engine for r in repositorios)
 
 
 def test_ttl_dos_tokens_vem_da_configuracao() -> None:

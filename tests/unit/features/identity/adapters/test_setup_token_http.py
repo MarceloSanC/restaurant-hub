@@ -52,6 +52,7 @@ from tests.fakes.features.identity.in_memory_password_setup_token_repository imp
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
@@ -140,6 +141,7 @@ def _montar(  # noqa: PLR0913
         token_issuer=issuer,
         hasher=hasher,
         clock=FakeClock(_AGORA),
+        unit_of_work=InMemoryUnitOfWork(users, sessions, tokens),
     )
     pedir_reset = RequestPasswordResetUseCase(
         users=users,
@@ -251,8 +253,8 @@ class TestDefinirSenha:
     def test_falha_ao_gravar_a_senha_nao_vira_4xx(self) -> None:
         """§6 — consume OK e `set_password_hash` falhando propaga como 5xx.
 
-        A conta fica **mais fechada** (token queimado, sessões revogadas, senha
-        inalterada — regra 5), e o cliente precisa ver que algo deu errado. Um
+        Desde a Stage 2.6 a unidade de trabalho desfaz as quatro escritas — o
+        link continua válido —, e o cliente precisa ver que algo deu errado. Um
         4xx aqui diria "seu token é inválido" a quem tem um token perfeitamente
         válido, e a pessoa pediria outro para sempre.
         """

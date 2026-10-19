@@ -58,6 +58,9 @@ from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repositor
 from restaurant_hub.features.identity.adapters.out.postgres.session_repository import (
     PostgresSessionRepository,
 )
+from restaurant_hub.features.identity.adapters.out.postgres.unit_of_work import (
+    PostgresUnitOfWork,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.unit_repository import (
     PostgresUnitRepository,
 )
@@ -513,6 +516,10 @@ def wire_dependencies(
     sessions = PostgresSessionRepository(engine)
 
     setup_tokens = PostgresPasswordSetupTokenRepository(engine)
+    # Stage 2.6 — a unidade de trabalho de identity sobre o MESMO `Engine` dos
+    # repositórios acima: é chaveada por ele, e um repositório de outro engine
+    # escreveria fora dela em silêncio (ADR 2.6.0001, concept 2.6 R7).
+    identity_unit_of_work = PostgresUnitOfWork(engine)
 
     # Staff (Stage 3.3), sobre o **mesmo** `Engine` — não um novo. Os dois ports
     # se cruzam (L-JF3 consulta funcionário, L-E4 consulta função), e dois
@@ -649,6 +656,7 @@ def wire_dependencies(
             token_issuer=setup_token_issuer,
             hasher=hasher,
             clock=clock,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_authorize_action=authorize_action,
         identity_guard=guard,
