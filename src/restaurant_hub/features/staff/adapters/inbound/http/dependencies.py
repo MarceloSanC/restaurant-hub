@@ -71,6 +71,9 @@ from fastapi import Depends, Request
 from pydantic import BaseModel
 
 from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_JOB_FUNCTIONS,
+    PERMISSION_MANAGE_STAFF,
+    PERMISSION_MANAGE_USERS,
     AccessGuard,
     Actor,
 )
@@ -84,18 +87,10 @@ from restaurant_hub.features.staff.domain.exceptions.errors import InvalidIdenti
 # a justificativa errada envelhece pior que nenhuma (concept §5.14).
 _BYTE_NUL: Final = "\x00"
 
-# As duas permissões do Step 3, como **valores**. Citadas, jamais importadas: o
-# vocabulário fechado mora do outro lado da fronteira, e o contrato
-# `bc-independence` proíbe as duas direções sem nenhum `ignore_imports`. O preço
-# está declarado no ADR 3.4.0001 — um erro de digitação aqui não é pego pelo
-# type-checker, e sim pelos testes por papel e por rota desta Stage.
-PERMISSION_MANAGE_STAFF: Final = "manage_staff"
-PERMISSION_MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
-# Stage 3.5 — a terceira permissão citada por staff, e a primeira que **não é de
-# staff**: criar o login de um funcionário cria uma conta em identity, e a
-# permissão que governa contas é `manage_users` (concept 3.5 §5.3). R17 a exige
-# **junto** com `manage_staff`, as duas sobre a unidade do path.
-PERMISSION_MANAGE_USERS: Final = "manage_users"
+# As três permissões que staff cita moram no módulo do **port** desde a Stage 3.7
+# (ADR 3.7.0001 §5): os use cases autorizam com elas, e application não importa
+# adapter. A borda as importa de lá — continuam atributos deste módulo, e é daqui
+# que os requisitos abaixo e os testes de borda as leem.
 
 
 def validate_identifier(raw: str, *, entity: str) -> str:

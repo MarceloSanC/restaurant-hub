@@ -58,7 +58,7 @@ que não tem.
 """
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Final, Protocol
 
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
@@ -70,6 +70,20 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 # dele. Tipá-lo exigiria conhecer a forma que identity dá ao ator autenticado, e
 # conhecê-la é o começo de reimplementar a decisão de acesso aqui.
 Actor = object
+
+# As permissões que staff cita, como **valores** (ADR 3.4.0001). Citadas, jamais
+# importadas: o vocabulário fechado mora do outro lado da fronteira, e o contrato
+# `bc-independence` proíbe as duas direções. O preço está declarado — um erro de
+# digitação aqui não é pego pelo type-checker, e sim pelos testes por papel e por
+# rota. Moram neste módulo, e não na borda, desde a Stage 3.7: os **use cases**
+# autorizam com elas (ADR 3.7.0001 §5), e application não importa adapter.
+PERMISSION_MANAGE_STAFF: Final = "manage_staff"
+PERMISSION_MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
+# Stage 3.5 — a terceira permissão citada por staff, e a primeira que **não é de
+# staff**: criar o login de um funcionário cria uma conta em identity, e a
+# permissão que governa contas é `manage_users` (concept 3.5 §5.3). R17 a exige
+# **junto** com `manage_staff`, as duas sobre a unidade do alvo.
+PERMISSION_MANAGE_USERS: Final = "manage_users"
 
 
 @dataclass(frozen=True)

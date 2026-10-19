@@ -8,14 +8,17 @@ que a Stage 3.3 mediu como sobreviventes do round-trip. Por isso o conjunto
 adversarial da 3.3 é congelado aqui, do lado do **aceite**.
 """
 
+import ast
 import dataclasses
 import inspect
 import typing
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
 
 from restaurant_hub.features.staff.adapters.inbound.http import dependencies, schemas
+from restaurant_hub.features.staff.application.ports.out import access_guard
 from restaurant_hub.features.staff.domain.exceptions.errors import InvalidIdentifierError
 
 pytestmark = pytest.mark.unit
@@ -226,6 +229,44 @@ def test_as_permissoes_atravessam_a_fronteira_como_valores() -> None:
     """
     assert dependencies.PERMISSION_MANAGE_STAFF == "manage_staff"
     assert dependencies.PERMISSION_MANAGE_JOB_FUNCTIONS == "manage_job_functions"
+
+
+def test_a_borda_reusa_o_vocabulario_do_port_e_nao_o_redefine() -> None:
+    """Uma fonte só para os valores (ADR 3.7.0001 §5).
+
+    Desde a Stage 3.7 os use cases autorizam com as mesmas três constantes. Se a
+    borda voltasse a defini-las, as duas camadas poderiam divergir num erro de
+    digitação — e a autorização da rota e a do use case pediriam permissões
+    diferentes sem que nenhum type-checker visse.
+
+    **Pela forma do módulo, e não por `is`:** literais `str` com forma de
+    identificador são internados pelo CPython, então uma redefinição de mesmo
+    valor passaria numa comparação de identidade. O que se assere é que
+    `dependencies.py` **importa** as três do port e não **atribui** nenhuma.
+    """
+    arvore = ast.parse(Path(dependencies.__file__).read_text(encoding="utf-8"))
+    importadas = {
+        alias.name
+        for no in arvore.body
+        if isinstance(no, ast.ImportFrom) and no.module == access_guard.__name__
+        for alias in no.names
+    }
+    atribuidas = {
+        alvo.id
+        for no in ast.walk(arvore)
+        if isinstance(no, ast.Assign | ast.AnnAssign)
+        for alvo in (no.targets if isinstance(no, ast.Assign) else [no.target])
+        if isinstance(alvo, ast.Name)
+    }
+    vocabulario = {
+        "PERMISSION_MANAGE_STAFF",
+        "PERMISSION_MANAGE_JOB_FUNCTIONS",
+        "PERMISSION_MANAGE_USERS",
+    }
+
+    assert vocabulario <= importadas
+    assert vocabulario.isdisjoint(atribuidas)
+    assert all(getattr(dependencies, nome) == getattr(access_guard, nome) for nome in vocabulario)
 
 
 def test_o_catalogo_de_funcoes_declara_alvo_sem_unidade() -> None:
