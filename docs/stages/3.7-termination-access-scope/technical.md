@@ -1,214 +1,329 @@
 ---
-title: Technical — <Título da Stage>
-description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
-when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
-keywords: [technical, plano de execução, <slug>]
-status: draft
-created_at: YYYY-MM-DD
-updated_at: YYYY-MM-DD
-stage_id: N.M-<slug>
-stage_title: <Título humano da Stage>
-step_id: N                       # sequencial, sem zero-padding (1, 2, 15…)
-step_title: <Título humano do Step>
-depends_on: []
+title: Technical — Desligamento corta só o acesso que o registro concede
+description: Plano de execução da Stage 3.7 — 6 Tasks (1 Task = 1 commit) que tornam a revogação de sessões do R13 condicional ao registro ser a fonte do acesso, com uma consulta somente-leitura nova na fachada de identity e a lei L-IG5 no gateway de staff
+when-use: Consultar durante a Fase 4 (execução) desta Stage; cada Task tem arquivos, critério de aceite e comando de verificação; consultar a §7 para o que aconteceu de fato
+keywords: [technical, plano de execução, termination-access-scope, desligamento, revogacao, identity-gateway, facade, staff, identity]
+status: done
+created_at: 2026-10-19
+updated_at: 2026-10-19
+stage_id: 3.7-termination-access-scope
+stage_title: Desligamento corta só o acesso que o registro concede
+step_id: 3
+step_title: Equipe da unidade
+depends_on: [3.5-employee-login-link]
 concept_ref: ./concept.md
-issue_id: 0
-branch: feat/<num-issue>-<N-M>-<slug>
-tasks_count: 0
+issue_id: 60
+branch: feat/60-3-7-termination-access-scope
+tasks_count: 6
 ---
 
-# Technical — Stage N.M — <Título da Stage>
+# Technical — Stage 3.7 — Desligamento corta só o acesso que o registro concede
 
 > **Como usar este documento (para code assistant):**
-> 1. Ler primeiro [§1 Contexto e estratégia](#1-contexto-e-estratégia-de-execução).
+> 1. Ler primeiro a §1, em especial **"As totalidades ditam o recorte"**.
 > 2. Executar Tasks em ordem (§2). **1 Task = 1 commit.**
-> 3. Cada Task traz: arquivos a tocar, descrição, critério de aceite,
->    comando de verificação.
-> 4. **Não avançar para próxima Task sem verificação verde.**
-> 5. Mensagem de commit segue [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
->    `<type>(<scope>): <description> [N.M/task-NN]`
-> 6. Ao encontrar algo não previsto em §1–§6 ou no `concept.md`:
->    **pausar**, perguntar ao humano com opções e recomendação, e
->    registrar a decisão em [§7 Execução](#7-execução-post-hoc-editável-após-done).
->    Nunca propagar silenciosamente.
-> 7. Ao fim da última Task, validar [§3 Gate de saída da Stage](#3-gate-de-saída-da-stage),
->    fazer commit `stage N.M: complete` e atualizar `roadmap.md`.
->
-> **Stage = 1 branch.** Todo o trabalho desta Stage acontece em
-> `feat/<num-issue>-<N-M>-<slug>` (ver `CONVENTIONS.md` §4). Não há
-> sub-PRs internos. Sobre o fluxo Git completo ver
-> [`PIPELINE.md`](../../PIPELINE.md) §10.
+> 3. Re-hidratar a Task e as §4/§5/§11 do [`concept.md`](./concept.md) antes de
+>    implementar — nunca de memória.
+> 4. Baseline: **`make check` verde antes de todo commit**, além dos checks da Task.
+> 5. Commit: `<type>(<scope>): <descrição> [3.7/task-NN]` + `Refs #60`.
+> 6. O que não estiver previsto em §1–§6 ou no concept: pausar, perguntar com
+>    opções e recomendação, registrar na §7.
 
 ## 1. Contexto e estratégia de execução
 
 ### Resumo
-<1 parágrafo. O que vamos construir nesta Stage, em termos técnicos.>
+
+R13 deixa de revogar incondicionalmente. Identity ganha uma consulta de leitura
+(`GetAccountRoleUseCase` → `IdentityFacade.account_role`); o `IdentityGateway`
+de staff ganha `is_employee_login` (L-IG5) com contrato fake × real; o use case
+lê a unidade com `list_by_unit` e só revoga quando o registro está ativo, é o
+único ativo do login na unidade e o login é `employee`. E2e trava os casos (a),
+(a) entre unidades e (b) contra Postgres.
 
 ### Estratégia
-<Como vamos construir. Bottom-up? Top-down? Spike primeiro? Mock
-dependências externas? Ordem das Tasks e razão.>
+
+Inside-out (skill `task-ordering-hex`): identity (DTO + use case) → fachada e
+wiring → port + implementações + contrato → use case → e2e → doc de domínio.
+Cada Task deixa o build verde: o use case novo de identity nasce sem consumidor
+por um commit (T01) e é ligado na T02; o método novo do port só passa a ser
+chamado na T04.
+
+### As totalidades ditam o recorte
+
+Varreduras que reprovam mudança incremental, e a Task que leva a entrada:
+
+| Varredura | Onde | Task |
+|---|---|---|
+| `_TOTAL_DE_DTOS = 25` (todo DTO de identity é `frozen`) | `tests/unit/features/identity/application/test_dtos.py` | T01 (→ 27) |
+| `_RESULT_CLASSES` (dataclasses de `results.py` = tupla exata; varredura de segredo/entidade) | `test_dtos.py:60-67`, `:302`, `:314-332` | T01 |
+| Gate 8: cada classe de `results.py` construída em exatamente 1 sítio | `scripts/check_layout.py` regra 8 | T01 (o use case é o sítio) |
+| Toda construção de `IdentityFacade(...)` (posicional) | `composition_root.py`, `tests/contract/features/staff/conftest.py`, `tests/unit/features/identity/application/test_facade.py` (2×) | T02 |
+| Identidade dos colaboradores da fachada × deps | `tests/unit/features/staff/adapters/test_composition_root_staff.py:315-328` | T02 |
+| Estrutura do `Protocol`: `LocalIdentityGateway` e o fake passados como `IdentityGateway` (mypy) | `composition_root.py`, contrato, unit | T03 (port + duas implementações juntos) |
+| Lei documentada no port, parametrizada | `test_identity_gateway_laws.py::test_a_lei_esta_documentada_no_port` | T03 |
+| Nenhum `if` sobre implementação no corpo do contrato | `test_no_implementation_branching.py` | T03 (arranjos no holder) |
+| Ordem exata de `store.calls` nos testes de R13 | `test_employee_lifecycle.py` | T04 |
+
+**Exceção declarada ao critério 4 de Task atômica (PIPELINE §4.3):** a T03 cria
+o método no port **e** nas duas implementações. Com `Protocol` estrutural, um
+port com método que o `LocalIdentityGateway` não tem reprova o mypy no
+`composition_root`; o fake é exigido pelo contrato (que roda o mesmo corpo nos
+dois). É a mesma mudança propagada, não escopo (precedente: 3.5).
 
 ### Pré-condições
-- <ex.: Stage `<stage_id>` em `done` e mergeada em develop>
-- <ex.: migration X aplicada localmente>
-- <ex.: variáveis de ambiente conforme `.env.example`>
+- Stage `3.5-employee-login-link` `done` e mergeada (✔ `develop` em `2c71615`).
+- Postgres da worktree no ar (porta 5436) e `DATABASE_URL` no `.env` dela.
 
 ### Premissas técnicas
-- <ex.: Python 3.12+, pyproject já existe>
-- <ex.: redis local rodando em porta 6379>
+- `InMemoryUserRepository.add(user, hash, memberships)` semeia contas de
+  qualquer papel; `Role` tem 5 membros (`role.py`); `UserId` de identity é
+  `NewType` de `str` (sem validação na conversão).
+- O fake `InMemoryIdentityGateway` tem `mirror` para ledger único com o store.
+- O `cenario` do e2e de staff tem duas unidades e um gerente membro das duas.
 
 ### Estrutura de pastas afetada
 
 ```
 src/restaurant_hub/
-├── <camada-alvo>/
-│   └── <novos arquivos>
+├── composition_root.py                                   (T02)
+├── features/identity/application/
+│   ├── dtos/{commands,results}.py                        (T01)
+│   ├── use_cases/get_account_role.py                     (T01, novo)
+│   ├── use_cases/revoke_all_sessions.py                  (T02, docstring)
+│   └── facade.py                                         (T02)
+└── features/staff/
+    ├── application/ports/out/identity_gateway.py         (T03)
+    ├── application/use_cases/deactivate_employee.py      (T04)
+    ├── application/errors.py                             (T04, docstring)
+    └── adapters/out/identity/local_identity_gateway.py   (T03)
 tests/
-└── <pasta>/
-    └── <novos arquivos>
+├── unit/features/identity/application/{test_get_account_role,test_dtos,test_facade}.py
+├── unit/features/staff/adapters/test_composition_root_staff.py
+├── unit/features/staff/application/test_employee_lifecycle.py
+├── fakes/features/staff/in_memory_identity_gateway.py
+├── contract/features/staff/{conftest,test_identity_gateway_laws}.py
+└── e2e/features/staff/test_employee_login_flow.py
+docs/domain/staff/workforce.md                            (T06)
 ```
 
 ## 2. Tasks
 
-> Faixa saudável: **3–12 Tasks por Stage**. ≥ 14 = Stage provavelmente
-> está grande demais; reabrir Fase 3A para dividir.
-
-### Task 01 — <descrição curta>
+### Task 01 — Identity: `GetAccountRoleUseCase` e seus DTOs
 
 - **Arquivos a criar:**
-  - `src/restaurant_hub/<camada>/<arquivo>.py`
-  - `tests/<pasta>/test_<arquivo>.py`
+  - `src/restaurant_hub/features/identity/application/use_cases/get_account_role.py`
+  - `tests/unit/features/identity/application/test_get_account_role.py`
 - **Arquivos a modificar:**
-  - <caminho ou "nenhum">
+  - `src/restaurant_hub/features/identity/application/dtos/commands.py` (`GetAccountRoleCommand(user_id: UserId)`, frozen)
+  - `src/restaurant_hub/features/identity/application/dtos/results.py` (`AccountRoleResult(role: Role)`, frozen)
+  - `tests/unit/features/identity/application/test_dtos.py` (`_TOTAL_DE_DTOS` 25 → 27, comentário da série; `AccountRoleResult` em `_RESULT_CLASSES` e no docstring de `test_modulo_de_results_declara_exatamente_os_esperados`)
+- **O que fazer:** use case `GetAccountRoleUseCase(users: UserRepository)` com
+  `execute(command) -> AccountRoleResult | None`: `users.find_by_id`; `None` se
+  ausente, senão `AccountRoleResult(role=user.role)`. Docstring do módulo: nasce
+  para a fachada (ADR 3.7.0001 §3), só leitura, "não existe" não é erro.
+- **Critério de aceite:** CA01 — parametrizado sobre os 5 membros de `Role`
+  (platform_admin com `tenant_id=None`); id desconhecido ⇒ `None`; o repositório
+  fake não muda (contas e memberships iguais antes/depois); exceção do
+  repositório em `find_by_id` sobe na mesma instância.
+- **Comando de verificação:**
+  ```bash
+  uv run pytest tests/unit/features/identity/application/test_get_account_role.py tests/unit/features/identity/application/test_dtos.py -q
+  make check
+  ```
+- **Commit sugerido:** `feat(identity): consulta do papel da conta para a fachada [3.7/task-01]`
+
+---
+
+### Task 02 — Identity: `IdentityFacade.account_role` e wiring
+
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/identity/application/facade.py` (4º colaborador `get_account_role`; método `account_role(user_id: str) -> str | None`, devolve `result.role.value`; docstrings "três" → "quatro")
+  - `src/restaurant_hub/composition_root.py` (constrói `GetAccountRoleUseCase(users=users)`; comentário "Os três use cases da fachada")
+  - `src/restaurant_hub/features/identity/application/use_cases/revoke_all_sessions.py` (docstring do módulo: **o consumidor decide quando chamar** — ver ADR 3.7.0001; redação válida antes e depois da T04)
+  - `tests/unit/features/identity/application/test_facade.py` (espião do 4º use case para a delegação e o `None`; e, em `_fachada_real`, um `InMemoryUserRepository` armado em `find_by_id` para provar que a exceção **do repositório** atravessa use case e fachada na mesma instância)
+  - `tests/contract/features/staff/conftest.py` (`_gateway_real` constrói a fachada com o 4º use case — sem lei nova ainda)
+  - `tests/unit/features/staff/adapters/test_composition_root_staff.py` (o use case da fachada usa o **mesmo** `users` das rotas de identity)
+- **Detalhes técnicos:** o novo colaborador entra como **último** parâmetro do
+  construtor, para não reordenar os posicionais existentes; `__all__` da fachada
+  não muda.
+- **Critério de aceite:** CA02; identidade do `users` asserida no composition root.
+- **Comando de verificação:**
+  ```bash
+  uv run pytest tests/unit/features/identity/application/test_facade.py tests/unit/features/staff/adapters/test_composition_root_staff.py -q
+  make check
+  ```
+- **Commit sugerido:** `feat(identity): expor o papel da conta na fachada [3.7/task-02]`
+- **Nota:** 6 arquivos — a mesma mudança de assinatura propagada (ver §1).
+
+---
+
+### Task 03 — Staff: lei L-IG5 `is_employee_login` no port, nas duas implementações e no contrato
+
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/staff/application/ports/out/identity_gateway.py` (método + L-IG5 no docstring; "três operações"/"quatro leis" → quatro/cinco)
+  - `src/restaurant_hub/features/staff/adapters/out/identity/local_identity_gateway.py` (`account_role(str(user_id)) == _EMPLOYEE_ROLE`; nada de `try`)
+  - `tests/fakes/features/staff/in_memory_identity_gateway.py` (`other_role_logins: set[UserId]`, `fail_role_query_with: Exception | None`; `True` sse em `logins` e fora de `other_role_logins`; `record("is_employee_login(...)")`). O arranjo de "login de outro papel" no fake grava o id **em `logins` e em `other_role_logins`** — é `other_role_logins` que decide o `False`, não a ausência (senão o caso colapsa no "desconhecido" e remover a checagem não derruba teste)
+  - `tests/contract/features/staff/conftest.py` (holder ganha **arranjos** `login_de_outro_papel(papel: str) -> UserId` e `consulta_de_papel_falha(exc)`; real: semeia `User` do papel em `users` e subclasse de `InMemoryUserRepository` armável; fake: ledger/knob; `login_role_of` do fake passa a responder pelo ledger de outro papel)
+  - `tests/contract/features/staff/test_identity_gateway_laws.py` (testes L-IG5; `"L-IG5"` na parametrização de lei documentada; docstring do módulo "cinco leis")
+- **Detalhes técnicos:** o papel do arranjo é passado como **valor** (`"owner"`,
+  `"manager"`, `"hr"`, `"platform_admin"`), nunca `Role` — o corpo de contrato é
+  de staff. No real, `platform_admin` nasce com `tenant_id=None`. Falha da
+  consulta: a mesma instância sobe nos dois lados (`is`).
+- **Critério de aceite:** CA03, CA04; `test_no_implementation_branching.py`
+  verde.
+- **Comando de verificação:**
+  ```bash
+  uv run pytest tests/contract/features/staff/test_identity_gateway_laws.py tests/contract/features/staff/test_no_implementation_branching.py -q
+  make check
+  ```
+- **Commit sugerido:** `feat(staff): lei L-IG5 — consultar se o login é de funcionário [3.7/task-03]`
+- **Nota:** port + duas implementações no mesmo commit — exceção declarada na §1.
+
+---
+
+### Task 04 — Staff: R13 revoga só quando o registro é a fonte do acesso
+
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/staff/application/use_cases/deactivate_employee.py` (regra concept §5.1–§5.2; docstrings)
+  - `src/restaurant_hub/features/staff/application/errors.py` (docstring de `EmployeeHasLoginError`)
+  - `tests/unit/features/staff/application/test_employee_lifecycle.py` (rearranjo + CA05–CA15)
 - **O que fazer:**
-  <Prosa direta descrevendo a mudança material. Sem código completo;
-  apenas indicações como "criar Protocol com método `X(arg: A) -> B`".>
-- **Detalhes técnicos:**
-  - <interface esperada, comportamento esperado, exceções>
-- **Critério de aceite:**
-  - <ex.: testes em `tests/.../test_<arquivo>.py` cobrem happy path e erro>
+  ```
+  employee = find_by_id(...)            # 404 como hoje
+  if employee.active and employee.user_id is not None and self._is_source_of_access(employee):
+      gateway.revoke_login_sessions(employee.user_id)
+  update(employee.deactivate())
+  ```
+  `_is_source_of_access`: nenhum `other` em `list_by_unit(tenant, unit)` com
+  `other.user_id == employee.user_id and other.id != employee.id`, **e só então**
+  `gateway.is_employee_login(user_id)` (curto-circuito: D4 do concept).
+- **Detalhes técnicos (testes):**
+  - `_fakes_com_login()` passa a obter o `user_id` de
+    `gateway.provision_employee_login(...)` do **mesmo** fake que o use case
+    recebe; o login entra como `employee` pelo ledger.
+  - `test_desligar_duas_vezes_um_vinculado_revoga_duas_vezes_sem_erro` vira
+    "desligar duas vezes revoga uma vez" (expectativa invertida — concept §1).
+  - Falha em `list_by_unit`: subclasse local de `InMemoryEmployeeRepository`
+    sobre o **mesmo** `fakes.store` (preserva o ledger e o holder); falha em
+    `is_employee_login`: `fail_role_query_with`; em `revoke_login_sessions`: a
+    subclasse `_GatewayQueFalha` que já existe.
+  - Os outros registros dos cenários (mesma unidade, outra unidade, sem login,
+    outro login, desligado) são semeados por `fakes.employees.add`/`update`.
+- **Critério de aceite:** CA05–CA15.
 - **Comando de verificação:**
   ```bash
-  pytest tests/<pasta>/test_<arquivo>.py -v
-  mypy --strict src/restaurant_hub/<camada>/<arquivo>.py
-  python scripts/check_layout.py
+  uv run pytest tests/unit/features/staff/application/test_employee_lifecycle.py -q
+  make check
   ```
-- **Commit sugerido:** `feat(<scope>): <description> [N.M/task-01]`
+- **Commit sugerido:** `fix(staff): desligar revoga só o acesso que o registro concede [3.7/task-04]`
 
 ---
 
-### Task 02 — <descrição curta>
+### Task 05 — E2e: casos (a), (a) entre unidades e (b) contra Postgres
 
-- **Arquivos a criar:** <...>
-- **Arquivos a modificar:** <...>
-- **O que fazer:** <...>
-- **Detalhes técnicos:** <...>
-- **Critério de aceite:** <...>
+- **Arquivos a modificar:**
+  - `tests/e2e/features/staff/test_employee_login_flow.py` (três testes novos; helpers do módulo reaproveitados; CA24 intocado)
+- **O que fazer:**
+  - CA16: R17 (canal `link`) no registro A da unidade A; criar B na **mesma**
+    unidade; `UPDATE employees SET user_id = :u WHERE id = :b`; definir senha e
+    logar; desligar A ⇒ refresh 200 (guardar o token **rotacionado**); desligar
+    B ⇒ refresh com o rotacionado 401.
+  - CA17: B na unidade B; desligar A ⇒ refresh 401.
+  - CA18: `SELECT id FROM users WHERE email = <e-mail do gerente do cenario>`;
+    criar registro, `UPDATE` com esse `user_id`; desligar ⇒ refresh do gerente
+    200 e listar funcionários da unidade com o access novo 200.
+- **Critério de aceite:** CA16–CA19 (CA24 da 3.5 passa sem edição).
 - **Comando de verificação:**
   ```bash
-  <comando>
+  uv run pytest tests/e2e/features/staff/test_employee_login_flow.py -q
+  make check
   ```
-- **Commit sugerido:** `<type>(<scope>): <description> [N.M/task-02]`
+- **Commit sugerido:** `test(staff): travar no e2e o desligamento de login compartilhado e de gerente [3.7/task-05]`
 
 ---
 
-<Repetir Tasks.>
+### Task 06 — Doc de domínio: nota datada no workforce §3.8
+
+- **Arquivos a modificar:**
+  - `docs/domain/staff/workforce.md` (nota `> **Nota (2026-10-19)**` em §3.8 ajustando o bullet "Desligar corta o acesso"; `updated_at`)
+- **Critério de aceite:** CA20 (parte do doc de domínio); `make docs-check` verde.
+- **Comando de verificação:**
+  ```bash
+  make docs-check
+  make check
+  ```
+- **Commit sugerido:** `docs(staff): registrar no workforce a revogação condicional do desligamento [3.7/task-06]`
 
 ## 3. Gate de saída da Stage
 
-> O que precisa estar verdadeiro para a Stage receber o commit
-> `stage N.M: complete` e ser mergeada em `develop`.
-
 ### Verificações automatizadas
 ```bash
-make check                # lint + type + import-linter + check_layout + testes
-pytest tests/             # todos os testes
-<outros comandos específicos da Stage>
+make check
+uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
+python scripts/check_technical_postexec.py docs/stages/3.7-termination-access-scope/technical.md
 ```
 
+Cobertura por arquivo (CA22): conferir no `term-missing` cada arquivo de `src/`
+tocado — `get_account_role.py`, `dtos/commands.py`, `dtos/results.py`,
+`facade.py`, `composition_root.py`, `identity_gateway.py`,
+`local_identity_gateway.py`, `deactivate_employee.py`. Lista derivável por
+`git diff --name-only origin/develop...HEAD -- src/`.
+
+### Mutações reais (CA21)
+
+Aplicar uma por vez, rodar o alvo, reverter (`git checkout -- <arquivo>`); a saída
+de cada uma vai para o relatório final (§4 da auditoria de testes).
+
+| # | Mutação | Arquivo | Deve cair |
+|---|---|---|---|
+| M1 | remover a checagem da unidade (`_is_source_of_access` só consulta o gateway) | `deactivate_employee.py` | CA06 |
+| M2 | remover `is_employee_login` (só a checagem da unidade) | `deactivate_employee.py` | CA10, CA11 |
+| M3 | remover a guarda `employee.active` | `deactivate_employee.py` | CA12 |
+| M4 | trocar `_EMPLOYEE_ROLE` comparado por `"manager"` | `local_identity_gateway.py` | CA03 (real) |
+| M5 | ignorar `user_id` no filtro (qualquer outro ativo bloqueia) | `deactivate_employee.py` | CA09 |
+
 ### Verificações funcionais
-- [ ] <comportamento end-to-end que precisa funcionar — ex.: "rodar `python -m restaurant_hub.cli ingest sample.csv` produz N registros no banco">
-- [ ] <outro>
+- [ ] CA16–CA18 verdes contra o Postgres da worktree (o e2e é a superfície de
+      runtime; o bloco §0 do relatório reproduz pela API).
+- [ ] CA19: `git diff origin/develop...HEAD -- tests/e2e/features/staff/test_employee_login_flow.py`
+      não toca as funções `test_ca24_*`.
+- [ ] CA21: M1–M5 derrubam ao menos um teste cada.
 
 ### Checklist de fechamento da Stage
 - [ ] Todas as Tasks commitadas, cada uma com seu check verde
 - [ ] `make check` verde no branch
-- [ ] Commit final `stage N.M: complete` aplicado
-- [ ] Branch mergeado em `develop`
-- [ ] `roadmap.md` atualizado: Stage marcada `done`, `updated_at` e
-      `last_reviewed_at` no mesmo merge (ou em PR de docs imediato)
-- [ ] ADRs novos (se houve) em `status: accepted`
-- [ ] Runbooks operacionais criados se aplicável
-- [ ] `concept.md` desta Stage não precisa de retoque retrospectivo
-      (se precisa, abrir TODO ou nova Stage de correção)
+- [ ] Checkpoints A, B e C com achados dispostos; auditoria de testes por subagente
+- [ ] Commit final `stage 3.7: complete`
+- [ ] `roadmap.md`: Stage `done`, `updated_at` e `last_reviewed_at`
+- [ ] ADR 3.7.0001 `accepted`
+- [ ] `concept.md` sem retoque retrospectivo
 
 ## 4. Ordem de dependência entre Tasks
 
-<Texto ou lista mostrando quais Tasks dependem de quais. Por padrão a
-ordem listada em §2 já respeita dependências; explicitar aqui só os
-casos não óbvios.>
+```
+T01 ─► T02 ─► T03 ─► T04 ─► T05
+T06 (independente; por último)
+```
 
-```
-Task 01 ─► Task 02 ─► Task 04
-              │
-              └──► Task 03
-```
+T03 depende da T02 porque o `LocalIdentityGateway` chama `account_role`.
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
-| <ex.: lib X não suporta caso Y> | <ex.: cair para lib Z, ADR registrando> |
+| Postgres compartilhado com a worktree da 4.2 | A worktree tem Postgres próprio (5436); nunca rodar e2e em paralelo com `make check` |
+| Avast trava com o volume de processos do `make check` | Um `make check` por Task, nunca em paralelo |
+| Gerente do `cenario` sem e-mail exposto no fixture | Ler o e-mail do docstring/código do `cenario`; se não for estável, criar o gerente no próprio teste por `POST /users` |
 
 ## 6. Referências
 
-- [`./concept.md`](./concept.md) — conceito desta Stage
-- [`../../overview.md`](../../overview.md)
+- [`./concept.md`](./concept.md)
+- [ADR 3.7.0001](../../adr/3_7_0001-termination-revokes-only-access-the-record-grants.md)
 - [`../../roadmap.md`](../../roadmap.md)
-- [`../../CONVENTIONS.md`](../../CONVENTIONS.md) — branches, commits, status
-- ADRs desta Stage: [`../../adr/`](../../adr/) (filtrar por prefixo `N_M_`)
-- Skills aplicáveis: <ids de `skills/`>
-- Docs externos: <links>
+- [`../../CONVENTIONS.md`](../../CONVENTIONS.md)
+- Skills: `hex-arch-python`, `pytest-with-fakes`, `composition-root`, `task-ordering-hex`
 
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
-
-> Preenchida durante/após a **Fase 4**. **Apenas esta seção é editável
-> após `status: done`** — alterações fora dos marcadores
-> `BEGIN/END: post-execution` são rejeitadas no Passo 10 do
-> [`RUNBOOK-STAGE-LIFECYCLE.md`](../../RUNBOOK-STAGE-LIFECYCLE.md) via
-> `scripts/check_technical_postexec.py`. O frontmatter `updated_at`
-> **não muda** com edições aqui — cada entrada carrega data + autor.
-> Seção pode estar vazia se a execução não produziu notas relevantes.
->
-> **Regra de pergunta antes da nota.** Ao encontrar durante a Fase 4
-> algo não previsto no Concept ou neste Technical, **pause** e
-> levante a pergunta para o humano com 2–4 opções e uma marcada como
-> **recomendada** + razão (via `AskUserQuestion` ou equivalente).
-> Apenas após a decisão, registre a entrada abaixo. Na dúvida sobre
-> se algo é "pequeno o suficiente para decidir sozinho", **pergunte**.
-
-**Formato de cada entrada** (ADR-like, ordem cronológica):
-
-```markdown
-### YYYY-MM-DD — [tag] escopo — Autor
-**Contexto:** <o que foi encontrado durante a execução>
-**Pergunta:** <o que precisava ser decidido>            <!-- só [decision] -->
-**Opções:**                                              <!-- só [decision] -->
-- A — <descrição>
-- B — <descrição> ✅ recomendada
-**Decisão:** B                                           <!-- só [decision] -->
-**Razão:** <por que>
-```
-
-- `[decision]` — algo não previsto foi decidido durante a execução.
-  Inclui pergunta, opções, decisão, razão.
-- `[finding]` — gap/observação a tratar em **próxima Stage**; corpo
-  inclui "direção sugerida" e Stage candidata.
-- `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
-  diz o que mudou e por que ficou abaixo do threshold de perguntar.
-
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
 
 <!-- END: post-execution -->
