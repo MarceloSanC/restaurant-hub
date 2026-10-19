@@ -48,8 +48,7 @@ graph LR
     S32 --> S33[3.3-staff-persistence]
     S33 --> S34[3.4-staff-access-scope]
     S34 --> S36[3.6-staff-http]
-    S36 --> S35[3.5-employee-login-link]
-    S35 --> S37[3.7-application-authorization]
+    S36 --> S35[3.5-employee-login-link] --> S37[3.7-application-authorization]
   end
   subgraph Step4[Step 4 — Escala manual]
     S41[4.1-scheduling-domain] --> S42[4.2-validation-policies]
