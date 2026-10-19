@@ -21,7 +21,9 @@ sobre este arquivo que reprova qualquer outra origem — sem ela, um campo
 `restaurant_id` de corpo consumido aqui passaria pela lista negra dos schemas.
 
 **O ator autenticado vai em todo command e query** (Stage 3.7, ADR 3.7.0001): o
-use case autoriza de novo, com ele, o mesmo alvo que a rota acabou de autorizar.
+use case autoriza de novo, com ele, o alvo do command — a mesma permissão e a mesma
+unidade que a rota pediu, mas com o tenant **nomeado** (o do escopo que a rota lhe
+passou), onde a rota o omite.
 A autorização daqui continua — vira defesa em profundidade, não a única linha —,
 e é ela que mantém a ordem validar → autorizar antes de qualquer leitura em
 identity.

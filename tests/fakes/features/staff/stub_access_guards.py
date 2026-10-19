@@ -18,7 +18,11 @@ cuja infidelidade é o instrumento:
 
 **Os dois registram o pedido como veio** — `(permission, tenant_id, unit_id)` —,
 porque é a sequência exata de alvos que CA05 trava. Registrar strings como o
-`InMemoryAccessGuard` faz obrigaria cada asserção a reformatar o alvo.
+`InMemoryAccessGuard` faz obrigaria cada asserção a reformatar o alvo. **O ator vai
+num registro à parte, `actors`, por identidade**: sem ele, um use case que
+autorizasse `None` (ou qualquer objeto) no lugar de `command.actor` passaria por
+toda a suíte de application — o permissivo concede sem olhar o ator (Checkpoint C
+da 3.7).
 
 **`PermissiveAccessGuard` recusa `tenant_id=None`.** Todo use case de staff
 **nomeia** o tenant do command (concept 3.7 R3); a ausência significa "o tenant do
@@ -71,6 +75,7 @@ class DenyingAccessGuard:
     """
 
     calls: list[AuthorizeCall] = field(default_factory=list)
+    actors: list[object] = field(default_factory=list)
     denial: Exception = field(default_factory=StubAuthorizationDenied)
 
     def authenticate(self, request: object) -> FakeActor:
@@ -87,6 +92,7 @@ class DenyingAccessGuard:
     ) -> AuthorizedScope:
         """Registra o pedido e nega."""
         self.calls.append((permission, tenant_id, unit_id))
+        self.actors.append(actor)
         raise self.denial
 
 
@@ -100,6 +106,7 @@ class PermissiveAccessGuard:
     """
 
     calls: list[AuthorizeCall] = field(default_factory=list)
+    actors: list[object] = field(default_factory=list)
     denial: Exception = field(default_factory=StubAuthorizationDenied)
 
     def authenticate(self, request: object) -> FakeActor:
@@ -116,6 +123,7 @@ class PermissiveAccessGuard:
     ) -> AuthorizedScope:
         """Registra o pedido; concede se o tenant foi nomeado, com escopo inventado."""
         self.calls.append((permission, tenant_id, unit_id))
+        self.actors.append(actor)
         if tenant_id is None:
             raise self.denial
         return AuthorizedScope(tenant_id=INFIDEL_TENANT, unit_id=INFIDEL_UNIT)

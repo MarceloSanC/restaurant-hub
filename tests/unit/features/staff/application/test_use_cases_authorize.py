@@ -317,6 +317,8 @@ def test_ca03_guard_que_nega_faz_o_use_case_levantar_sem_efeito_nenhum(nome: str
         montagem.use_case.execute(cenario.command)
 
     assert excinfo.value is guard.denial
+    assert len(guard.actors) == 1
+    assert guard.actors[0] is cenario.command.actor
     assert montagem.fakes.store.calls[chamadas_ao_store:] == []
     assert montagem.gateway.calls[chamadas_ao_gateway:] == []
     assert montagem.ids.generated[ids_gerados:] == []
@@ -334,6 +336,10 @@ def test_ca05_o_use_case_autoriza_exatamente_os_alvos_da_matriz(nome: str) -> No
     montagem.use_case.execute(cenario.command)
 
     assert guard.calls == list(cenario.alvos)
+    # O ator autorizado é **o do command**, por identidade — o primeiro elemento
+    # de R3, que a tupla de alvos não carrega.
+    assert len(guard.actors) == len(cenario.alvos)
+    assert all(ator is cenario.command.actor for ator in guard.actors)
 
 
 @pytest.mark.parametrize("nome", _NOMES)

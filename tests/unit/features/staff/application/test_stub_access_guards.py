@@ -38,6 +38,8 @@ def test_o_guard_que_nega_levanta_sempre_a_mesma_instancia(
         assert excinfo.value is guard.denial
 
     assert guard.calls == [(permission, tenant_id, unit_id)] * 2
+    assert all(ator is TEST_ACTOR for ator in guard.actors)
+    assert len(guard.actors) == 2  # noqa: PLR2004 — as duas chamadas do laço
 
 
 def test_o_guard_permissivo_concede_e_devolve_um_escopo_que_ninguem_pediu() -> None:
@@ -49,6 +51,7 @@ def test_o_guard_permissivo_concede_e_devolve_um_escopo_que_ninguem_pediu() -> N
     assert escopo.tenant_id != "t1"
     assert escopo.unit_id != "u1"
     assert guard.calls == [("manage_staff", "t1", "u1")]
+    assert guard.actors == [TEST_ACTOR]
 
 
 def test_o_guard_permissivo_recusa_o_pedido_que_omite_o_tenant() -> None:
