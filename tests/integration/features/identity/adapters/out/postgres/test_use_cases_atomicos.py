@@ -43,6 +43,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.user_repository impo
 )
 from restaurant_hub.features.identity.application.dtos.commands import (
     InviteUserCommand,
+    ProvisionAccountCommand,
     SetPasswordWithTokenCommand,
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import (
@@ -58,6 +59,9 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 from restaurant_hub.features.identity.application.errors import InvalidSetupTokenError
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_account import (
+    ProvisionAccountUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
@@ -480,3 +484,62 @@ class TestConviteAtomico:
         assert len(linhas["unit_memberships"]) == 1
         assert len(linhas["password_setup_tokens"]) == 1
         assert len(sender.sent) == 1
+
+
+# ---------------------------------------------------------------------------
+# provision_account — a metade identity da travessia de staff (3.5 R17)
+# ---------------------------------------------------------------------------
+
+
+def _provisionar(engine: Engine, registro: Registro) -> ProvisionAccountUseCase:
+    return ProvisionAccountUseCase(
+        users=_Usuarios(engine, registro),
+        restaurants=PostgresRestaurantRepository(engine),
+        units=PostgresUnitRepository(engine),
+        hasher=FakePasswordHasher(),
+        tokens=_Tokens(engine, registro),
+        token_issuer=FakeSetupTokenIssuer(),
+        id_generator=FakeIdGenerator(),
+        clock=FakeClock(_AGORA),
+        invitation_ttl=timedelta(hours=72),
+        handover_ttl=timedelta(hours=168),
+        base_url="https://app.exemplo.com",
+        unit_of_work=PostgresUnitOfWork(engine),
+    )
+
+
+def _provisao() -> ProvisionAccountCommand:
+    return ProvisionAccountCommand(
+        email=Email("funcionario@x.com"),
+        role=Role.EMPLOYEE,
+        tenant_id=RestaurantId("rest-a"),
+        unit_ids=(UnitId("unit-a1"),),
+        handed_over=True,
+    )
+
+
+class TestProvisaoAtomica:
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS_DO_CONVITE) + 1))
+    def test_falha_na_escrita_n_deixa_as_tabelas_identicas(
+        self, banco_limpo: Engine, n: int
+    ) -> None:
+        _semear_tenant_e_usuario(banco_limpo)
+        antes = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)
+        registro = Registro(falhar_em=n)
+
+        with pytest.raises(_FalhaInjetada):
+            _provisionar(banco_limpo, registro).execute(_provisao())
+
+        assert tuple(registro.escritas) == _ESCRITAS_DO_CONVITE[:n]
+        assert _linhas(banco_limpo, *_TABELAS_DO_CONVITE) == antes
+
+    def test_fingerprint_repetido_no_banco_desfaz_a_conta(self, com_link: Engine) -> None:
+        """Falha originada no banco (`uq_setup_tokens_fingerprint`) depois do `users.add`."""
+        antes = _linhas(com_link, *_TABELAS_DO_CONVITE)
+        registro = Registro()
+
+        with pytest.raises(IntegrityError):
+            _provisionar(com_link, registro).execute(_provisao())
+
+        assert registro.escritas == ["users.add"]
+        assert _linhas(com_link, *_TABELAS_DO_CONVITE) == antes

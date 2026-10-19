@@ -21,6 +21,12 @@ carrega `handed_over` e o use case escolhe entre `invitation_ttl` (o das 72h da
 reemissão nesta Stage — link perdido é recuperado pelo pedido público de
 redefinição de senha, como qualquer convite (ADR 3.5.0002).
 
+**Conta e token são uma unidade de trabalho** (Stage 2.6, ADR 2.6.0001): se o
+`tokens.add` falha, o `users.add` é desfeito. Fecha o "órfão dentro de identity"
+que o concept 3.5 §6.4 declarou — conta pendente sem token e, no fluxo de staff,
+sem vínculo. A unidade é **de identity**: não envolve o `employees.update` que o
+gateway de staff faz depois (ADR 2.6.0002 §2), e essa janela segue declarada.
+
 **A ordem das checagens é a de `InviteUserUseCase`, verbatim**, e pelas mesmas
 razões (unicidade global primeiro; rejeição de `platform_admin` com unidades
 antes de tocar no `UnitRepository`, senão a diferença entre `UnitNotFoundError`
@@ -61,6 +67,7 @@ from restaurant_hub.features.identity.application.ports.out.restaurant_repositor
 from restaurant_hub.features.identity.application.ports.out.setup_token_issuer import (
     SetupTokenIssuer,
 )
+from restaurant_hub.features.identity.application.ports.out.unit_of_work import UnitOfWork
 from restaurant_hub.features.identity.application.ports.out.unit_repository import (
     UnitRepository,
 )
@@ -100,6 +107,7 @@ class ProvisionAccountUseCase:
         invitation_ttl: timedelta,
         handover_ttl: timedelta,
         base_url: str,
+        unit_of_work: UnitOfWork,
     ) -> None:
         self._users = users
         self._restaurants = restaurants
@@ -112,6 +120,7 @@ class ProvisionAccountUseCase:
         self._invitation_ttl = invitation_ttl
         self._handover_ttl = handover_ttl
         self._base_url = base_url
+        self._unit_of_work = unit_of_work
 
     def execute(self, command: ProvisionAccountCommand) -> ProvisionedAccountResult:
         """Provisiona a conta pendente.
@@ -150,9 +159,9 @@ class ProvisionAccountUseCase:
         # O hash inutilizável, e não `dummy_hash()` — ADR 2.5.0004. O dummy é
         # derivado de um literal deste repositório; gravá-lo aqui faria a senha
         # dessa string abrir a conta da pessoa.
-        self._users.add(user, self._hasher.unusable_hash(), memberships)
-
-        valor_do_token = self._emitir_token(user.id, handed_over=command.handed_over)
+        with self._unit_of_work.transaction():
+            self._users.add(user, self._hasher.unusable_hash(), memberships)
+            valor_do_token = self._emitir_token(user.id, handed_over=command.handed_over)
 
         return ProvisionedAccountResult(
             # Pelo mapper único de `UserResult` (regra 8 do `check_layout`, issue

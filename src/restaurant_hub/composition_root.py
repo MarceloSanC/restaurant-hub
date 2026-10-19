@@ -584,6 +584,7 @@ def wire_dependencies(
             invitation_ttl=invitation_ttl,
             handover_ttl=handover_ttl,
             base_url=cfg.app_base_url,
+            unit_of_work=identity_unit_of_work,
         ),
         send_invitation=SendInvitationUseCase(email_sender=sender),
         revoke_all_sessions=RevokeAllSessionsUseCase(sessions=sessions, clock=clock),

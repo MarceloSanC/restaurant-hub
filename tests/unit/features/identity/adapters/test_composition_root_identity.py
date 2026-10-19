@@ -162,6 +162,11 @@ _COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[s
         lambda d: d.identity_invite_user,
         {"_users", "_restaurants", "_units", "_tokens"},
     ),
+    # O da fachada, dentro do gateway de staff — o caminho da travessia entre BCs.
+    "provision_account": (
+        lambda d: d.staff_identity_gateway._facade._provision_account,
+        {"_users", "_restaurants", "_units", "_tokens"},
+    ),
 }
 _REPOSITORIOS_POSTGRES = (
     PostgresRestaurantRepository,

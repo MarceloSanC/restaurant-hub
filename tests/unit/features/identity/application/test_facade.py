@@ -68,6 +68,7 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
@@ -322,19 +323,21 @@ class TestSobreOsUseCasesReais:
         units.add(Unit(id=UnitId("unit-a1"), restaurant_id=RestaurantId("rest-a"), name="Centro"))
         sender = RecordingEmailSender()
         clock = FakeClock(_AGORA)
+        tokens = InMemoryPasswordSetupTokenRepository()
         fachada = IdentityFacade(
             ProvisionAccountUseCase(
                 users=users,
                 restaurants=restaurants,
                 units=units,
                 hasher=FakePasswordHasher(),
-                tokens=InMemoryPasswordSetupTokenRepository(),
+                tokens=tokens,
                 token_issuer=FakeSetupTokenIssuer(),
                 id_generator=FakeIdGenerator(),
                 clock=clock,
                 invitation_ttl=timedelta(hours=72),
                 handover_ttl=timedelta(hours=168),
                 base_url=_BASE_URL,
+                unit_of_work=InMemoryUnitOfWork(users, tokens),
             ),
             SendInvitationUseCase(sender),
             RevokeAllSessionsUseCase(InMemorySessionRepository(), clock),

@@ -1,4 +1,4 @@
-"""Testes do use case `provision_account` — Stage 3.5, CA15.
+"""Testes do use case `provision_account` — Stage 3.5, CA15; Stage 2.6, CA4.
 
 O que estes testes protegem: a conta nasce **sem senha utilizável**, o token
 ganha o **prazo do canal**, nenhum e-mail sai daqui, e o link devolvido é o
@@ -7,6 +7,7 @@ consome. A ordem das checagens é a de `InviteUserUseCase`, e o teste de
 precedência da 2.5 está replicado porque a ordem é contrato, não detalhe.
 """
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -14,7 +15,9 @@ import pytest
 from restaurant_hub.features.identity.application.dtos.commands import (
     ProvisionAccountCommand,
 )
+from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 from restaurant_hub.features.identity.application.dtos.setup_tokens import (
+    PasswordSetupToken,
     SetupTokenPurpose,
 )
 from restaurant_hub.features.identity.application.errors import (
@@ -27,6 +30,7 @@ from restaurant_hub.features.identity.application.use_cases.provision_account im
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
+from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions.errors import (
     CrossTenantError,
     PlatformAdminMembershipError,
@@ -37,6 +41,9 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     UnitId,
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
+from restaurant_hub.features.identity.domain.value_objects.unit_membership import (
+    UnitMembership,
+)
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
 from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
@@ -45,6 +52,7 @@ from tests.fakes.features.identity.in_memory_password_setup_token_repository imp
 from tests.fakes.features.identity.in_memory_restaurant_repository import (
     InMemoryRestaurantRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
@@ -59,15 +67,63 @@ _TTL_EM_MAOS = timedelta(hours=168)
 _BASE_URL = "https://app.exemplo.com"
 
 
+class _FalhaInjetada(Exception):
+    pass
+
+
+class _Registro:
+    """Ordem das escritas tentadas, compartilhada pelos injetores, e onde falhar."""
+
+    def __init__(self, falhar_em: int | None = None) -> None:
+        self.falhar_em = falhar_em
+        self.escritas: list[str] = []
+
+    def escreveu(self, nome: str) -> None:
+        self.escritas.append(nome)
+        if self.falhar_em is not None and len(self.escritas) == self.falhar_em:
+            raise _FalhaInjetada(nome)
+
+
+class _UsuariosRegistrados(InMemoryUserRepository):
+    def __init__(self, registro: _Registro) -> None:
+        super().__init__()
+        self._registro = registro
+
+    def add(
+        self,
+        user: User,
+        password_hash: PasswordHash,
+        memberships: Sequence[UnitMembership] = (),
+    ) -> None:
+        super().add(user, password_hash, memberships)
+        self._registro.escreveu("users.add")
+
+
+class _TokensRegistrados(InMemoryPasswordSetupTokenRepository):
+    def __init__(self, registro: _Registro) -> None:
+        super().__init__()
+        self._registro = registro
+
+    def add(self, token: PasswordSetupToken) -> None:
+        super().add(token)
+        self._registro.escreveu("tokens.add")
+
+
 class Cenario:
     """Grafo de fakes montado uma vez — **sem `EmailSender`**: o use case não envia."""
 
-    def __init__(self, *, base_url: str = _BASE_URL) -> None:
-        self.users = InMemoryUserRepository()
+    def __init__(self, *, base_url: str = _BASE_URL, registro: _Registro | None = None) -> None:
+        self.users = (
+            _UsuariosRegistrados(registro) if registro is not None else InMemoryUserRepository()
+        )
         self.restaurants = InMemoryRestaurantRepository()
         self.units = InMemoryUnitRepository()
         self.hasher = FakePasswordHasher()
-        self.tokens = InMemoryPasswordSetupTokenRepository()
+        self.tokens = (
+            _TokensRegistrados(registro)
+            if registro is not None
+            else InMemoryPasswordSetupTokenRepository()
+        )
         self.issuer = FakeSetupTokenIssuer()
         self.clock = FakeClock(_AGORA)
 
@@ -80,6 +136,7 @@ class Cenario:
             Unit(id=UnitId("unit-b1"), restaurant_id=RestaurantId("rest-b"), name="Outra")
         )
 
+        self.unidade = InMemoryUnitOfWork(self.users, self.tokens)
         self.use_case = ProvisionAccountUseCase(
             users=self.users,
             restaurants=self.restaurants,
@@ -92,6 +149,7 @@ class Cenario:
             invitation_ttl=_TTL_CONVITE,
             handover_ttl=_TTL_EM_MAOS,
             base_url=base_url,
+            unit_of_work=self.unidade,
         )
 
 
@@ -298,3 +356,33 @@ class TestCasosDeErro:
 
         assert cenario.users.exists_by_email(Email("nao@x.com")) is False
         assert cenario.tokens.tokens == {}
+
+
+_ESCRITAS = ("users.add", "tokens.add")
+
+
+class TestUnidadeDeTrabalho:
+    """Stage 2.6 CA4 — conta e token são tudo ou nada (o órfão da 3.5 §6.4 fecha aqui)."""
+
+    def test_as_duas_escritas_acontecem_dentro_de_uma_unidade(self) -> None:
+        registro = _Registro()
+        cenario = Cenario(registro=registro)
+
+        cenario.use_case.execute(_comando())
+
+        assert tuple(registro.escritas) == _ESCRITAS
+        assert (cenario.unidade.aberturas, cenario.unidade.commits) == (1, 1)
+
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS) + 1))
+    def test_falha_na_escrita_n_nao_deixa_nada_gravado(self, n: int) -> None:
+        registro = _Registro(falhar_em=n)
+        cenario = Cenario(registro=registro)
+
+        with pytest.raises(_FalhaInjetada):
+            cenario.use_case.execute(_comando())
+
+        assert tuple(registro.escritas) == _ESCRITAS[:n]
+        assert cenario.users.exists_by_email(Email("funcionario@x.com")) is False
+        assert cenario.users.memberships == []
+        assert cenario.tokens.tokens == {}
+        assert cenario.unidade.rollbacks == 1
