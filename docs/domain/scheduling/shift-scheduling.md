@@ -1156,6 +1156,35 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 >   definição. Quem cobre duas funções no mesmo turno preenche uma vaga e a outra fica descoberta
 >   (cobertura < 100%, estado legítimo de §3.3).
 
+> **Nota (2026-10-19): reconciliação pós-execução da Stage 4.2** (issue #64; concept e technical
+> em `docs/stages/4.2-validation-policies/`; ADRs 4.2.0001–4.2.0002). Como a da 4.1, a nota mora
+> aqui para não deslocar as citações por linha deste doc. As lacunas da tabela acima endereçadas à
+> 4.2 foram fechadas assim:
+>
+> - **§3.6.0 — forma da `Violation`, ordem, indisponibilidade.** A `Violation` traz política, modo,
+>   sujeito (registro, ou a demanda na sobre-cobertura), dias operacionais, alocações e a medida;
+>   o avaliador aplica só as habilitadas, em ordem fixa, sem curto-circuito. A indisponibilidade
+>   vive **no avaliador**, sempre habilitada e `block` fixo — o mesmo avaliador serve o editor e o
+>   Step 5 ([ADR 4.2.0002](../../adr/4_2_0002-evaluator-input-and-violation-identity.md)).
+> - **§3.6.7 — exceção de função × mudança do cadastro** (decisão do sponsor, 2026-10-18: *"Segue o
+>   cadastro atual"*). A política lê as funções do registro **no momento da avaliação** e não lê a
+>   marca `function_exception`, que fica como registro do aceite no ato de alocar
+>   ([ADR 4.2.0001](../../adr/4_2_0001-function-mismatch-follows-current-staff-record.md)).
+> - **§3.6.8 — sobre-cobertura.** Por demanda (já única por faixa e função), sem agregar faixas
+>   sobrepostas da mesma função; `N = 0` com alocado viola; reduzir `N` sobre excedente já aceito
+>   não muda a identidade da violação, e a 4.3 tem de re-perguntar quando a medida piora.
+> - **§3.5 — identidade da violação para o aceite** (com a 4.3). A `key` é política + sujeito +
+>   dias, com as alocações só nas políticas por alocação e na sobre-cobertura; a medida fica ao
+>   lado. O protocolo de aceite continua da 4.3.
+> - **Divergência de intervalo** (nota da 4.1 acima). Virou a nona política, `warn` por default;
+>   "manter o da faixa" volta a herdar.
+> - **Invariantes que deixam de valer sob mudança de staff.** "Nunca contém violação `block`" e
+>   "toda `warn` foi aceita" (§3.5), "nunca contém alocação sobre indisponibilidade" (§3.6.6) e
+>   "toda função não detida carrega a marca" (§3.6.7) valem para o que a **escala** introduz.
+>   Férias lançadas ou função retirada depois, em staff, aparecem como violação ao vivo, sem
+>   mutação de escala que as tenha introduzido. Guarda em staff × mostrar e deixar a gerente
+>   corrigir é pergunta de produto para o concept da 4.3 (divergência 5 do concept da 4.2).
+
 ---
 
 ## 7. Referências

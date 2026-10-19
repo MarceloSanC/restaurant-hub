@@ -83,7 +83,8 @@ def test_gate5_a_arvore_real_do_layout_confere_com_o_repositorio() -> None:
     """O critério de pronto, medido contra o `LAYOUT.md` real.
 
     Antes desta issue, `application/ports/in/` reprovava aqui — e
-    `domain/services/` também, que é o caminho anotado `[planejado]` hoje.
+    `domain/services/` também, que ficou anotado `[planejado]` até a Stage 4.2
+    criar o primeiro serviço de domínio (`scheduling/domain/services/validation/`).
     """
     problemas = check_docs_claims.claims_falsas(_REPO_ROOT)
 
@@ -137,9 +138,9 @@ def test_gate5_uma_feature_basta_para_o_caminho_com_placeholder(tmp_path: pathli
 def test_gate5_a_anotacao_de_planejado_absolve_o_caminho_ausente(tmp_path: pathlib.Path) -> None:
     """A válvula: promessa declarada como futura é legítima.
 
-    É o que mantém `domain/services/` no documento — slot hexagonal real, sem
-    ocupante ainda — sem que o gate obrigue a criar uma pasta vazia para
-    silenciá-lo.
+    Foi o que manteve `domain/services/` no documento até a Stage 4.2 — slot
+    hexagonal real, sem ocupante — sem que o gate obrigasse a criar uma pasta
+    vazia para silenciá-lo.
     """
     arvore = _ARVORE.replace(
         "        ├── domain/                 # Núcleo",
@@ -165,8 +166,8 @@ def test_gate5_a_anotacao_de_planejado_sobre_caminho_existente_reprova(
     Anotação que ninguém remove deixa de significar alguma coisa: em pouco tempo
     metade da árvore está marcada como futura, e o gate passa a aprovar
     qualquer coisa. Por isso `[planejado]` sobre caminho que já existe também
-    reprova, e é este teste que obriga a anotação de `domain/services/` a sair
-    no mesmo commit que criar o primeiro serviço de domínio.
+    reprova, e foi este teste que obrigou a anotação de `domain/services/` a sair
+    no mesmo commit que criou o primeiro serviço de domínio (Stage 4.2, Task 04).
     """
     arvore = _ARVORE.replace(
         "        ├── domain/                 # Núcleo",
@@ -232,10 +233,9 @@ def test_gate5_bloco_de_arvore_ausente_falha_fechado(tmp_path: pathlib.Path) -> 
 # O conjunto de caminhos anotados `[planejado]` no LAYOUT real, hoje. Uma
 # anotação nova entra aqui com a justificativa ao lado — e só então no doc.
 #
-# - `domain/services/`: slot hexagonal real sem ocupante (nenhum serviço de
-#   domínio existe nos dois BCs); intenção adiada, não retirada (ADR 0.0.0006
-#   §Implementation notes).
-_PLANEJADOS_DO_LAYOUT_REAL = frozenset({"src/restaurant_hub/features/<feature>/domain/services"})
+# Vazio desde a Stage 4.2 (Task 04): `domain/services/` foi o último caminho
+# anotado e saiu quando `scheduling/domain/services/validation/` nasceu.
+_PLANEJADOS_DO_LAYOUT_REAL: frozenset[str] = frozenset()
 
 
 def test_gate5_o_conjunto_de_planejados_do_layout_real_nao_cresceu() -> None:

@@ -35,7 +35,7 @@ src/restaurant_hub/
 │       ├── domain/                 # Núcleo — zero dependências externas
 │       │   ├── entities/           # Objetos com identidade
 │       │   ├── value_objects/      # Objetos imutáveis sem identidade
-│       │   ├── services/           # Serviços de domínio (lógica que não cabe em entidade) [planejado]
+│       │   ├── services/           # Serviços de domínio (lógica que não cabe em entidade)
 │       │   └── exceptions/         # Exceções de domínio
 │       │
 │       ├── application/            # Orquestração — depende apenas de domain + ports
