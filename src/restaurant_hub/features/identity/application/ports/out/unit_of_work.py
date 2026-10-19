@@ -16,7 +16,9 @@ rollback não "desenvia" uma mensagem.
 - **L1 — tudo ou nada.** As escritas de repositório feitas dentro do bloco ficam
   duráveis se ele sai normalmente, e nenhuma fica se ele sai por exceção.
 - **L2 — a exceção atravessa intacta.** A unidade não traduz, não embrulha e não
-  engole o que saiu do bloco: quem chama recebe o **mesmo** objeto.
+  engole o que saiu do bloco: quem chama recebe o **mesmo** objeto. Única exceção
+  (ADR 2.6.0001 §1): se o próprio rollback falha, sobe o erro dele, encadeado ao
+  original — a conexão está perdida de qualquer forma.
 - **L3 — chamada que falha não deixa efeito próprio nem envenena a unidade.** As
   escritas anteriores continuam pendentes, e é a saída do bloco que decide o
   destino delas.

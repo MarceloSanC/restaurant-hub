@@ -21,7 +21,10 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     SetupTokenPurpose,
 )
 from restaurant_hub.features.identity.application.ports.out.unit_of_work import UnitOfWork
-from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    UnitId,
+    UserId,
+)
 from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
     InMemoryPasswordSetupTokenRepository,
 )
@@ -29,6 +32,7 @@ from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
 from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
+from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 
 _AGORA = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
 
@@ -71,6 +75,7 @@ class _SessoesQueRegistram(InMemorySessionRepository):
 
 
 def test_satisfaz_o_port() -> None:
+    """Uso pelo tipo do port; a conformidade estática é o `_conforms` do módulo do fake."""
     unidade: UnitOfWork = InMemoryUnitOfWork()
     with unidade.transaction():
         pass
@@ -129,6 +134,18 @@ def test_log_do_injetor_sobrevive_ao_rollback() -> None:
 
     assert sessoes.sessions == {}
     assert sessoes.chamadas == ["add:sess-1"]
+
+
+def test_contador_de_chamadas_da_classe_base_sobrevive_ao_rollback() -> None:
+    """`find_calls` não é estado persistido — se voltasse, a tabela estaria errada."""
+    unidades = InMemoryUnitRepository()
+    unidade = InMemoryUnitOfWork(unidades)
+
+    with pytest.raises(_Falha), unidade.transaction():
+        unidades.find_by_id(UnitId("unit-x"))
+        raise _Falha
+
+    assert unidades.find_calls == 1
 
 
 def test_aninhar_duas_unidades_distintas_levanta_sem_tocar_no_estado() -> None:

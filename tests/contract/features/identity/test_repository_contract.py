@@ -244,10 +244,15 @@ def test_email_duplicado_em_outro_tenant_levanta(repos: Repositorios) -> None:
     _semear_tenant(repos, tenant="rest-b", unidade="unit-b1")
     repos.usuarios.add(_user("user-1", "dono@x.com", tenant="rest-a"), _HASH)
 
+    segundo = _user("user-2", "dono@x.com", tenant="rest-b")
+    unidade_b1 = repos.unidades.find_by_id(UnitId("unit-b1"))
+    assert unidade_b1 is not None
+
     with pytest.raises(EmailAlreadyRegisteredError):
-        repos.usuarios.add(_user("user-2", "dono@x.com", tenant="rest-b"), _HASH)
+        repos.usuarios.add(segundo, _HASH, [segundo.link_to_unit(unidade_b1)])
 
     assert repos.usuarios.find_by_id(UserId("user-2")) is None
+    assert repos.usuarios.list_memberships(UserId("user-2")) == ()
     credenciais = repos.usuarios.find_credentials_by_email(Email("dono@x.com"))
     assert credenciais is not None
     assert credenciais.user.id == "user-1"
@@ -437,6 +442,10 @@ def test_fingerprint_duplicado_levanta_erro_proprio(repos: Repositorios) -> None
     original = repos.sessoes.find_by_fingerprint("fp::a")
     assert original is not None
     assert original.id == "sess-1"
+    # Contagem pelo próprio port: um fake que gravasse `sess-2` antes de checar o
+    # fingerprint teria duas linhas com `fp::a` e o `find` acima ainda acharia a
+    # primeira. O expurgo de tudo devolve quantas linhas existiam.
+    assert repos.sessoes.purge_expired(_NOW + _TTL + timedelta(days=1)) == 1
 
 
 def test_purge_expired_usa_fronteira_inclusiva(repos: Repositorios) -> None:

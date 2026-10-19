@@ -29,6 +29,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+from restaurant_hub.features.identity.application.ports.out.unit_of_work import UnitOfWork
 from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
     InMemoryPasswordSetupTokenRepository,
 )
@@ -106,3 +107,6 @@ class InMemoryUnitOfWork:
             self.commits += 1
         finally:
             _unidade_aberta.reset(marca)
+
+
+_conforms: UnitOfWork = InMemoryUnitOfWork()
