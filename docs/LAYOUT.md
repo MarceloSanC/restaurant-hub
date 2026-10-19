@@ -218,8 +218,8 @@ composition root ([ADR 2.6.0001](./adr/2_6_0001-identity-unit-of-work-port-and-a
 
 - **Quem abre a unidade é o use case**, com `with self._unit_of_work.transaction():`
   em volta **só** das escritas que precisam ser atômicas. Leitura e checagem que
-  decidem se haverá escrita vêm antes; trabalho de CPU (hash de senha, emissão de
-  token) vem antes; efeito colateral que não se desfaz (e-mail) vem **depois** do
+  decidem se haverá escrita vêm antes; trabalho de CPU caro (o hash argon2 da
+  senha) vem antes; efeito colateral que não se desfaz (e-mail) vem **depois** do
   commit. Escrita que precisa comitar mesmo quando o use case recusa (a revogação
   em massa do reuso de refresh) fica fora, seguida do `raise`.
 - **A unidade é de um bounded context e não atravessa a fachada.** Hoje só
