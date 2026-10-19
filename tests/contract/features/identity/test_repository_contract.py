@@ -43,6 +43,7 @@ from restaurant_hub.features.identity.application.errors import (
     SessionAlreadyExistsError,
     SessionFingerprintAlreadyExistsError,
     UnitAlreadyExistsError,
+    UnitMembershipAlreadyExistsError,
     UserAlreadyExistsError,
     UserNotFoundError,
 )
@@ -93,6 +94,12 @@ def _user(
     )
 
 
+def _unidade_a1(repos: Repositorios) -> Unit:
+    unidade = repos.unidades.find_by_id(UnitId("unit-a1"))
+    assert unidade is not None
+    return unidade
+
+
 def _session(
     session_id: str = "sess-1",
     user_id: str = "user-1",
@@ -138,6 +145,12 @@ def test_restaurante_duplicado_levanta(repos: Repositorios) -> None:
     with pytest.raises(RestaurantAlreadyExistsError):
         repos.restaurantes.add(Restaurant(id=RestaurantId("rest-a"), name="Outra"))
 
+    # A recusa não grava nada: o fake valida antes de mutar, como a PK faz. É a
+    # premissa da lei L3 do fake da unidade de trabalho (Stage 2.6, CA14).
+    gravado = repos.restaurantes.find_by_id(RestaurantId("rest-a"))
+    assert gravado is not None
+    assert gravado.name == "Cantina"
+
 
 # ---------------------------------------------------------------------------
 # UnitRepository
@@ -166,6 +179,10 @@ def test_unidade_duplicada_levanta(repos: Repositorios) -> None:
         repos.unidades.add(
             Unit(id=UnitId("unit-a1"), restaurant_id=RestaurantId("rest-a"), name="Praia")
         )
+
+    gravada = repos.unidades.find_by_id(UnitId("unit-a1"))
+    assert gravada is not None
+    assert gravada.name == "Centro"
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +224,18 @@ def test_usuario_com_id_duplicado_levanta_erro_de_id(repos: Repositorios) -> Non
     """
     _semear_tenant(repos)
     repos.usuarios.add(_user(), _HASH)
+    dono = _user()
 
     with pytest.raises(UserAlreadyExistsError):
-        repos.usuarios.add(_user(), _HASH)
+        repos.usuarios.add(
+            dono, PasswordHash("hashed::outra"), [dono.link_to_unit(_unidade_a1(repos))]
+        )
+
+    # Nem a credencial nem o vínculo da tentativa recusada ficam gravados.
+    credenciais = repos.usuarios.find_credentials_by_email(Email("dono@x.com"))
+    assert credenciais is not None
+    assert credenciais.password_hash == _HASH
+    assert repos.usuarios.list_memberships(UserId("user-1")) == ()
 
 
 def test_email_duplicado_em_outro_tenant_levanta(repos: Repositorios) -> None:
@@ -220,6 +246,26 @@ def test_email_duplicado_em_outro_tenant_levanta(repos: Repositorios) -> None:
 
     with pytest.raises(EmailAlreadyRegisteredError):
         repos.usuarios.add(_user("user-2", "dono@x.com", tenant="rest-b"), _HASH)
+
+    assert repos.usuarios.find_by_id(UserId("user-2")) is None
+    credenciais = repos.usuarios.find_credentials_by_email(Email("dono@x.com"))
+    assert credenciais is not None
+    assert credenciais.user.id == "user-1"
+
+
+def test_vinculo_repetido_no_mesmo_add_levanta_e_nao_grava_o_usuario(
+    repos: Repositorios,
+) -> None:
+    """PK composta `(user_id, unit_id)`: o `add` inteiro é recusado, não só o vínculo."""
+    _semear_tenant(repos)
+    dono = _user()
+    vinculo = dono.link_to_unit(_unidade_a1(repos))
+
+    with pytest.raises(UnitMembershipAlreadyExistsError):
+        repos.usuarios.add(dono, _HASH, [vinculo, vinculo])
+
+    assert repos.usuarios.find_by_id(UserId("user-1")) is None
+    assert repos.usuarios.list_memberships(UserId("user-1")) == ()
 
 
 def test_exists_by_email_e_global_e_ignora_caixa(repos: Repositorios) -> None:
@@ -373,6 +419,11 @@ def test_sessao_com_id_duplicado_levanta(repos: Repositorios) -> None:
     with pytest.raises(SessionAlreadyExistsError):
         repos.sessoes.add(_session("sess-1", fingerprint="fp::b"))
 
+    assert repos.sessoes.find_by_fingerprint("fp::b") is None
+    original = repos.sessoes.find_by_fingerprint("fp::a")
+    assert original is not None
+    assert original.id == "sess-1"
+
 
 def test_fingerprint_duplicado_levanta_erro_proprio(repos: Repositorios) -> None:
     """Erro distinto do de id: fingerprint repetido é sinal de reuso de token."""
@@ -382,6 +433,10 @@ def test_fingerprint_duplicado_levanta_erro_proprio(repos: Repositorios) -> None
 
     with pytest.raises(SessionFingerprintAlreadyExistsError):
         repos.sessoes.add(_session("sess-2", fingerprint="fp::a"))
+
+    original = repos.sessoes.find_by_fingerprint("fp::a")
+    assert original is not None
+    assert original.id == "sess-1"
 
 
 def test_purge_expired_usa_fronteira_inclusiva(repos: Repositorios) -> None:
