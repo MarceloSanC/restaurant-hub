@@ -32,16 +32,22 @@ está completa (technical da 3.7, Task 07).
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Final
 
 import pytest
 
 from restaurant_hub.features.staff.application.dtos.commands import (
+    AssignJobFunctionsCommand,
+    ChangeWorkloadProfileCommand,
     CreateEmployeeCommand,
     CreateJobFunctionCommand,
+    DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
     DeleteJobFunctionCommand,
+    RegisterUnavailabilityCommand,
+    RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
 )
@@ -50,11 +56,20 @@ from restaurant_hub.features.staff.application.dtos.queries import (
     ListJobFunctionsQuery,
 )
 from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
+from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
+    AssignJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.change_workload_profile import (
+    ChangeWorkloadProfileUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.create_employee import (
     CreateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.declare_shift_preference import (
+    DeclareShiftPreferenceUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.delete_employee import (
     DeleteEmployeeUseCase,
@@ -67,6 +82,12 @@ from restaurant_hub.features.staff.application.use_cases.list_employees import (
 )
 from restaurant_hub.features.staff.application.use_cases.list_job_functions import (
     ListJobFunctionsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
+    RegisterUnavailabilityUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.remove_unavailability import (
+    RemoveUnavailabilityUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.rename_employee import (
     RenameEmployeeUseCase,
@@ -81,6 +102,13 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+)
+from restaurant_hub.features.staff.domain.value_objects.shift_preference import (
+    DayPeriod,
+    ShiftPreference,
+)
+from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
+    UnavailabilityPeriod,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
     FixedSchedule,
@@ -104,6 +132,12 @@ _U1: Final = UnitId("u1")
 _F_EM_USO: Final = JobFunctionId("f-em-uso")
 _F_LIVRE: Final = JobFunctionId("f-livre")
 _E_ATIVO: Final = EmployeeId("e-ativo")
+_PERIODO_GRAVADO: Final = UnavailabilityPeriod(
+    start=datetime(2026, 11, 2, 8, 0), end=datetime(2026, 11, 2, 12, 0)
+)
+_PERIODO_NOVO: Final = UnavailabilityPeriod(
+    start=datetime(2026, 11, 9, 8, 0), end=datetime(2026, 11, 9, 12, 0)
+)
 
 _MANAGE_STAFF: Final = "manage_staff"
 _MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
@@ -138,7 +172,7 @@ def _semear() -> StaffFakes:
             workload_profile=FixedSchedule(weekly_hours=Decimal("44")),
             shift_preference=None,
             job_function_ids=frozenset({_F_EM_USO}),
-            unavailabilities=(),
+            unavailabilities=(_PERIODO_GRAVADO,),
         )
     )
     return fakes
@@ -236,6 +270,44 @@ def _funcionario_apagado_no_endereco(montagem: Montagem, resultado: object) -> N
     assert _registro_no_endereco(montagem, _E_ATIVO) is None
 
 
+def _relido(montagem: Montagem) -> Employee:
+    """O registro relido **no endereço do command** — se o efeito foi para lá."""
+    relido = _registro_no_endereco(montagem, _E_ATIVO)
+    assert relido is not None
+    return relido
+
+
+def _devolve_o_registro_do_endereco(resultado: object) -> None:
+    assert (resultado.tenant_id, resultado.unit_id, resultado.id) == (_A, _U1, _E_ATIVO)
+
+
+def _funcoes_atribuidas(montagem: Montagem, resultado: object) -> None:
+    _devolve_o_registro_do_endereco(resultado)
+    assert _relido(montagem).job_function_ids == frozenset({_F_EM_USO, _F_LIVRE})
+
+
+def _jornada_trocada(montagem: Montagem, resultado: object) -> None:
+    _devolve_o_registro_do_endereco(resultado)
+    assert _relido(montagem).workload_profile == OnDemand()
+
+
+def _preferencia_declarada(montagem: Montagem, resultado: object) -> None:
+    _devolve_o_registro_do_endereco(resultado)
+    assert _relido(montagem).shift_preference == ShiftPreference(
+        periods=frozenset({DayPeriod.MORNING})
+    )
+
+
+def _indisponibilidade_registrada(montagem: Montagem, resultado: object) -> None:
+    _devolve_o_registro_do_endereco(resultado)
+    assert _PERIODO_NOVO in _relido(montagem).unavailabilities
+
+
+def _indisponibilidade_removida(montagem: Montagem, resultado: object) -> None:
+    _devolve_o_registro_do_endereco(resultado)
+    assert _PERIODO_GRAVADO not in _relido(montagem).unavailabilities
+
+
 CENARIOS: Final[dict[str, Cenario]] = {
     "create_job_function": Cenario(
         classe=CreateJobFunctionUseCase,
@@ -297,6 +369,62 @@ CENARIOS: Final[dict[str, Cenario]] = {
         ),
         alvos=((_MANAGE_STAFF, _A, _U1),),
         no_endereco_do_command=_funcionario_apagado_no_endereco,
+    ),
+    "assign_job_functions": Cenario(
+        classe=AssignJobFunctionsUseCase,
+        command=AssignJobFunctionsCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E_ATIVO,
+            job_function_ids=frozenset({_F_EM_USO, _F_LIVRE}),
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_funcoes_atribuidas,
+    ),
+    "change_workload_profile": Cenario(
+        classe=ChangeWorkloadProfileUseCase,
+        command=ChangeWorkloadProfileCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E_ATIVO,
+            workload_profile=OnDemand(),
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_jornada_trocada,
+    ),
+    "declare_shift_preference": Cenario(
+        classe=DeclareShiftPreferenceUseCase,
+        command=DeclareShiftPreferenceCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E_ATIVO,
+            shift_preference=ShiftPreference(periods=frozenset({DayPeriod.MORNING})),
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_preferencia_declarada,
+    ),
+    "register_unavailability": Cenario(
+        classe=RegisterUnavailabilityUseCase,
+        command=RegisterUnavailabilityCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E_ATIVO, period=_PERIODO_NOVO
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_indisponibilidade_registrada,
+    ),
+    "remove_unavailability": Cenario(
+        classe=RemoveUnavailabilityUseCase,
+        command=RemoveUnavailabilityCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E_ATIVO,
+            period=_PERIODO_GRAVADO,
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1),),
+        no_endereco_do_command=_indisponibilidade_removida,
     ),
 }
 

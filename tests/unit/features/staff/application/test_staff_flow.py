@@ -130,7 +130,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     assert funcionario.active is True
 
     # 3. Jornada e preferência.
-    ChangeWorkloadProfileUseCase(fakes.employees).execute(
+    ChangeWorkloadProfileUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         ChangeWorkloadProfileCommand(
             actor=TEST_ACTOR,
             tenant_id=_TENANT,
@@ -139,7 +139,7 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
             workload_profile=OnDemand(),
         )
     )
-    DeclareShiftPreferenceUseCase(fakes.employees).execute(
+    DeclareShiftPreferenceUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         DeclareShiftPreferenceCommand(
             actor=TEST_ACTOR,
             tenant_id=_TENANT,
@@ -150,7 +150,9 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     )
 
     # 4. Indisponibilidade.
-    com_periodo = RegisterUnavailabilityUseCase(fakes.employees).execute(
+    com_periodo = RegisterUnavailabilityUseCase(
+        fakes.employees, guard=PermissiveAccessGuard()
+    ).execute(
         RegisterUnavailabilityCommand(
             actor=TEST_ACTOR,
             tenant_id=_TENANT,

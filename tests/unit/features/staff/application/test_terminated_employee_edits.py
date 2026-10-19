@@ -152,7 +152,9 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
     ),
     (
         "change_workload_profile",
-        lambda fakes: ChangeWorkloadProfileUseCase(fakes.employees).execute(
+        lambda fakes: ChangeWorkloadProfileUseCase(
+            fakes.employees, guard=PermissiveAccessGuard()
+        ).execute(
             ChangeWorkloadProfileCommand(
                 actor=TEST_ACTOR,
                 tenant_id=_A,
@@ -167,7 +169,9 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
     ),
     (
         "declare_shift_preference",
-        lambda fakes: DeclareShiftPreferenceUseCase(fakes.employees).execute(
+        lambda fakes: DeclareShiftPreferenceUseCase(
+            fakes.employees, guard=PermissiveAccessGuard()
+        ).execute(
             DeclareShiftPreferenceCommand(
                 actor=TEST_ACTOR,
                 tenant_id=_A,
@@ -182,7 +186,9 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
     ),
     (
         "assign_job_functions",
-        lambda fakes: AssignJobFunctionsUseCase(fakes.employees, fakes.job_functions).execute(
+        lambda fakes: AssignJobFunctionsUseCase(
+            fakes.employees, fakes.job_functions, guard=PermissiveAccessGuard()
+        ).execute(
             AssignJobFunctionsCommand(
                 actor=TEST_ACTOR,
                 tenant_id=_A,
@@ -197,7 +203,9 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
     ),
     (
         "register_unavailability",
-        lambda fakes: RegisterUnavailabilityUseCase(fakes.employees).execute(
+        lambda fakes: RegisterUnavailabilityUseCase(
+            fakes.employees, guard=PermissiveAccessGuard()
+        ).execute(
             RegisterUnavailabilityCommand(
                 actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_OUTRO_PERIODO
             )
@@ -208,7 +216,9 @@ _EDICOES: list[tuple[str, Callable[[StaffFakes], EmployeeResult], Callable[[Empl
     ),
     (
         "remove_unavailability",
-        lambda fakes: RemoveUnavailabilityUseCase(fakes.employees).execute(
+        lambda fakes: RemoveUnavailabilityUseCase(
+            fakes.employees, guard=PermissiveAccessGuard()
+        ).execute(
             RemoveUnavailabilityCommand(
                 actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, period=_PERIODO
             )

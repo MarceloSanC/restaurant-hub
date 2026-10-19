@@ -692,12 +692,20 @@ def wire_dependencies(
             employees=staff_employees, guard=staff_access_guard
         ),
         staff_assign_job_functions=AssignJobFunctionsUseCase(
-            employees=staff_employees, job_functions=staff_job_functions
+            employees=staff_employees, job_functions=staff_job_functions, guard=staff_access_guard
         ),
-        staff_change_workload_profile=ChangeWorkloadProfileUseCase(employees=staff_employees),
-        staff_declare_shift_preference=DeclareShiftPreferenceUseCase(employees=staff_employees),
-        staff_register_unavailability=RegisterUnavailabilityUseCase(employees=staff_employees),
-        staff_remove_unavailability=RemoveUnavailabilityUseCase(employees=staff_employees),
+        staff_change_workload_profile=ChangeWorkloadProfileUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_declare_shift_preference=DeclareShiftPreferenceUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_register_unavailability=RegisterUnavailabilityUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_remove_unavailability=RemoveUnavailabilityUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
         staff_deactivate_employee=DeactivateEmployeeUseCase(
             employees=staff_employees, gateway=staff_identity_gateway
         ),

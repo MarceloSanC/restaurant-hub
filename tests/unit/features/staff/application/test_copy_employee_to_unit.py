@@ -214,7 +214,7 @@ def test_editar_a_copia_nao_afeta_a_origem() -> None:
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=copia_id, name="Joana"
         )
     )
-    RegisterUnavailabilityUseCase(fakes.employees).execute(
+    RegisterUnavailabilityUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
         RegisterUnavailabilityCommand(
             actor=TEST_ACTOR,
             tenant_id=_A,

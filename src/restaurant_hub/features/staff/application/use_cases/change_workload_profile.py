@@ -12,6 +12,10 @@ from restaurant_hub.features.staff.application.dtos.results import (
     to_employee_result,
 )
 from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_STAFF,
+    AccessGuard,
+)
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
@@ -20,8 +24,9 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 class ChangeWorkloadProfileUseCase:
     """Troca o perfil de jornada de um funcionário."""
 
-    def __init__(self, employees: EmployeeRepository) -> None:
+    def __init__(self, employees: EmployeeRepository, guard: AccessGuard) -> None:
         self._employees = employees
+        self._guard = guard
 
     def execute(self, command: ChangeWorkloadProfileCommand) -> EmployeeResult:
         """Troca o perfil.
@@ -29,6 +34,14 @@ class ChangeWorkloadProfileUseCase:
         Raises:
             EmployeeNotFoundError: id inexistente **no endereço (tenant + unidade)**.
         """
+        # (0) Autorização do alvo do command, antes de qualquer outra instrução
+        # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
+        self._guard.authorize(
+            command.actor,
+            PERMISSION_MANAGE_STAFF,
+            tenant_id=command.tenant_id,
+            unit_id=command.unit_id,
+        )
         employee = self._employees.find_by_id(
             command.tenant_id, command.unit_id, command.employee_id
         )

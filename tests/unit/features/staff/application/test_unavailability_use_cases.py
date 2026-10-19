@@ -46,7 +46,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -90,11 +90,11 @@ def _gravados(fakes: StaffFakes) -> tuple[UnavailabilityPeriod, ...]:
 
 
 def _registrar(fakes: StaffFakes) -> RegisterUnavailabilityUseCase:
-    return RegisterUnavailabilityUseCase(fakes.employees)
+    return RegisterUnavailabilityUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
 
 def _remover(fakes: StaffFakes) -> RemoveUnavailabilityUseCase:
-    return RemoveUnavailabilityUseCase(fakes.employees)
+    return RemoveUnavailabilityUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
 
 # --- registrar ---------------------------------------------------------------

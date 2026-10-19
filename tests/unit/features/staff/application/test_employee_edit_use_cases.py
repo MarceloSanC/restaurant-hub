@@ -157,7 +157,7 @@ def test_renomear_nao_altera_tenant_nem_unidade() -> None:
 
 def test_troca_de_jornada_fixa_para_sob_demanda_e_de_volta() -> None:
     fakes = _com_funcionario()
-    trocar = ChangeWorkloadProfileUseCase(fakes.employees)
+    trocar = ChangeWorkloadProfileUseCase(fakes.employees, guard=PermissiveAccessGuard())
     antes = _result(fakes)
 
     sob_demanda = trocar.execute(
@@ -193,7 +193,9 @@ def test_declarar_preferencia_quando_nao_havia() -> None:
     fakes = _com_funcionario(preferencia=None)
     antes = _result(fakes)
 
-    resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
+    resultado = DeclareShiftPreferenceUseCase(
+        fakes.employees, guard=PermissiveAccessGuard()
+    ).execute(
         DeclareShiftPreferenceCommand(
             actor=TEST_ACTOR,
             tenant_id=_A,
@@ -219,7 +221,9 @@ def test_declarar_none_limpa_a_preferencia() -> None:
     fakes = _com_funcionario(preferencia=_PREFERENCIA)
     antes = _result(fakes)
 
-    resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
+    resultado = DeclareShiftPreferenceUseCase(
+        fakes.employees, guard=PermissiveAccessGuard()
+    ).execute(
         DeclareShiftPreferenceCommand(
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=None
         )
@@ -234,7 +238,9 @@ def test_declarar_none_limpa_a_preferencia() -> None:
 def test_substituir_uma_preferencia_por_outra() -> None:
     fakes = _com_funcionario(preferencia=_PREFERENCIA)
     outra = ShiftPreference(periods=frozenset({DayPeriod.MORNING, DayPeriod.AFTERNOON}))
-    resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
+    resultado = DeclareShiftPreferenceUseCase(
+        fakes.employees, guard=PermissiveAccessGuard()
+    ).execute(
         DeclareShiftPreferenceCommand(
             actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=outra
         )
@@ -274,9 +280,13 @@ def _executar(fakes: StaffFakes, comando: object) -> object:
             comando
         )
     if isinstance(comando, ChangeWorkloadProfileCommand):
-        return ChangeWorkloadProfileUseCase(fakes.employees).execute(comando)
+        return ChangeWorkloadProfileUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+            comando
+        )
     assert isinstance(comando, DeclareShiftPreferenceCommand)
-    return DeclareShiftPreferenceUseCase(fakes.employees).execute(comando)
+    return DeclareShiftPreferenceUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+        comando
+    )
 
 
 @pytest.mark.parametrize("indice", range(3))
@@ -376,7 +386,9 @@ def _edicoes_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], obje
         ),
         (
             "change_workload_profile",
-            lambda fakes: ChangeWorkloadProfileUseCase(fakes.employees).execute(
+            lambda fakes: ChangeWorkloadProfileUseCase(
+                fakes.employees, guard=PermissiveAccessGuard()
+            ).execute(
                 ChangeWorkloadProfileCommand(
                     actor=TEST_ACTOR,
                     tenant_id=_A,
@@ -388,7 +400,9 @@ def _edicoes_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], obje
         ),
         (
             "declare_shift_preference",
-            lambda fakes: DeclareShiftPreferenceUseCase(fakes.employees).execute(
+            lambda fakes: DeclareShiftPreferenceUseCase(
+                fakes.employees, guard=PermissiveAccessGuard()
+            ).execute(
                 DeclareShiftPreferenceCommand(
                     actor=TEST_ACTOR,
                     tenant_id=_A,
