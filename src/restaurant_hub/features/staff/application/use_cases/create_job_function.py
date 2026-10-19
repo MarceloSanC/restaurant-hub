@@ -6,6 +6,12 @@ regra por trás é "a checagem mais barata que possa falhar sozinha vem primeiro
 pré-condição: validar antes evita uma consulta inútil ao repositório para um
 payload que já se sabe inválido.
 
+**Tudo isso vale depois da autorização** (Stage 3.7, ADR 3.7.0001 §4): o alvo do
+command é autorizado antes de qualquer outra instrução — antes até do gerador de
+id e da validação local do nome —, porque quem é negado não aprende nada, nem a
+forma do pedido. A regra "a checagem mais barata primeiro" ordena as checagens de
+**negócio** entre si.
+
 A assimetria com `create_employee` (que consulta o port **antes** de construir)
 é deliberada e tem a mesma regra atrás: lá a entidade **não pode** ser
 construída sem o conjunto de funções resolvido, e construir primeiro esconderia
@@ -23,6 +29,10 @@ from restaurant_hub.features.staff.application.dtos.results import (
     to_job_function_result,
 )
 from restaurant_hub.features.staff.application.errors import JobFunctionNameAlreadyExistsError
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_JOB_FUNCTIONS,
+    AccessGuard,
+)
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
@@ -34,9 +44,12 @@ from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
 class CreateJobFunctionUseCase:
     """Cria uma função de trabalho, com nome único no tenant."""
 
-    def __init__(self, job_functions: JobFunctionRepository, id_generator: IdGenerator) -> None:
+    def __init__(
+        self, job_functions: JobFunctionRepository, id_generator: IdGenerator, guard: AccessGuard
+    ) -> None:
         self._job_functions = job_functions
         self._id_generator = id_generator
+        self._guard = guard
 
     def execute(self, command: CreateJobFunctionCommand) -> JobFunctionResult:
         """Cria a função.
@@ -48,6 +61,11 @@ class CreateJobFunctionUseCase:
             JobFunctionNameAlreadyExistsError: nome já usado no tenant,
                 comparado **verbatim** (sem trim, sem case-folding).
         """
+        # (0) Autorização do alvo do command, antes de qualquer outra instrução
+        # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
+        self._guard.authorize(
+            command.actor, PERMISSION_MANAGE_JOB_FUNCTIONS, tenant_id=command.tenant_id
+        )
         # (1) Construção: o domínio rejeita o nome vazio aqui, antes do port.
         job_function = JobFunction(
             id=JobFunctionId(str(self._id_generator.next_id())),

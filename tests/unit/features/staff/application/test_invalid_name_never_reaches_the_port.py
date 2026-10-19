@@ -68,7 +68,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -115,7 +115,7 @@ def _com_registros() -> StaffFakes:
 
 
 def _renomear_funcao(fakes: StaffFakes, nome: str) -> None:
-    RenameJobFunctionUseCase(fakes.job_functions).execute(
+    RenameJobFunctionUseCase(fakes.job_functions, guard=PermissiveAccessGuard()).execute(
         RenameJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1, name=nome)
     )
 
@@ -129,9 +129,9 @@ def _renomear_funcionario(fakes: StaffFakes, nome: str) -> None:
 
 
 def _criar_funcao(fakes: StaffFakes, nome: str) -> None:
-    CreateJobFunctionUseCase(fakes.job_functions, FakeIdGenerator()).execute(
-        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name=nome)
-    )
+    CreateJobFunctionUseCase(
+        fakes.job_functions, FakeIdGenerator(), guard=PermissiveAccessGuard()
+    ).execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name=nome))
 
 
 @dataclasses.dataclass(frozen=True)

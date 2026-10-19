@@ -665,13 +665,17 @@ def wire_dependencies(
         identity_authorize_action=authorize_action,
         identity_guard=guard,
         staff_create_job_function=CreateJobFunctionUseCase(
-            job_functions=staff_job_functions, id_generator=id_generator
+            job_functions=staff_job_functions, id_generator=id_generator, guard=staff_access_guard
         ),
-        staff_rename_job_function=RenameJobFunctionUseCase(job_functions=staff_job_functions),
+        staff_rename_job_function=RenameJobFunctionUseCase(
+            job_functions=staff_job_functions, guard=staff_access_guard
+        ),
         staff_delete_job_function=DeleteJobFunctionUseCase(
-            job_functions=staff_job_functions, employees=staff_employees
+            job_functions=staff_job_functions, employees=staff_employees, guard=staff_access_guard
         ),
-        staff_list_job_functions=ListJobFunctionsUseCase(job_functions=staff_job_functions),
+        staff_list_job_functions=ListJobFunctionsUseCase(
+            job_functions=staff_job_functions, guard=staff_access_guard
+        ),
         staff_create_employee=CreateEmployeeUseCase(
             employees=staff_employees,
             job_functions=staff_job_functions,

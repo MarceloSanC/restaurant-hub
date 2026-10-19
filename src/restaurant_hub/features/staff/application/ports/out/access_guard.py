@@ -46,15 +46,19 @@ obedece — lei que só a implementação de produção cumpre não é lei, é d
   obtido para alcançar uma segunda unidade é escalada de escopo, não economia de
   chamada.
 
-**Onde este port mora, e por quê** (ADR 3.4.0001 §4). Ele fica em
-`application/ports/out/`, e **não** dentro do adapter HTTP. O único consumidor
-previsto é o router da Stage 3.6, o que argumentaria por `adapters/inbound/http/`. A
-colocação **antecipa a Stage 3.5**, cujo `IdentityGateway` é consumido por **use
-case** e cuja pasta o roadmap já nomeia. A justificativa é o critério de
-escalabilidade progressiva do projeto, **não** LAYOUT §5 — que descreve port de
-saída como consumido por use case e, portanto, **ainda não é literalmente
-verdade aqui**. Fica dito em vez de glosado: esta Stage não afirma conformidade
-que não tem.
+**Onde este port mora, e por quê** (ADR 3.4.0001 §4; ADR 3.7.0001). Ele fica em
+`application/ports/out/`, e **não** dentro do adapter HTTP. Quando nasceu, o único
+consumidor era o router da Stage 3.6, e a colocação **antecipava** um consumidor de
+use case — o ADR 3.4.0001 declarou, então, que LAYOUT §5 ("port de saída é o que o
+use case consome") ainda não era literalmente verdade aqui.
+
+**Desde a Stage 3.7, para `authorize`, é.** Os use cases de staff recebem este port
+por construtor e autorizam o alvo do próprio command antes de qualquer outra
+instrução; o router continua autorizando, como defesa em profundidade. **Para
+`authenticate`, não**: o único consumidor segue sendo o adapter de entrada, e o
+argumento é a requisição HTTP. Uma autenticação independente de driver fica para a
+Stage que criar o primeiro driver não-HTTP. Dito em vez de glosado: este módulo não
+afirma conformidade que não tem.
 """
 
 from dataclasses import dataclass

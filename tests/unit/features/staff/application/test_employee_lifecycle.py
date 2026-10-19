@@ -61,7 +61,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -242,9 +242,9 @@ def test_desligado_continua_bloqueando_a_remocao_das_suas_funcoes() -> None:
     )
 
     with pytest.raises(JobFunctionInUseError):
-        DeleteJobFunctionUseCase(fakes.job_functions, fakes.employees).execute(
-            DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1)
-        )
+        DeleteJobFunctionUseCase(
+            fakes.job_functions, fakes.employees, guard=PermissiveAccessGuard()
+        ).execute(DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1))
     assert fakes.job_functions.find_by_id(_A, _F1) is not None
 
 

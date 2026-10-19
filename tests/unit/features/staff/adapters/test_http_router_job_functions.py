@@ -41,6 +41,7 @@ from restaurant_hub.features.staff.adapters.inbound.http import (
     error_handlers as error_handlers_module,
 )
 from restaurant_hub.features.staff.adapters.inbound.http import router as router_module
+from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -112,8 +113,8 @@ class Ambiente:
     **Os `_get_*` são conectados por derivação, e não por lista.** Para cada
     provedor do módulo do router, a anotação de retorno nomeia a classe do use
     case, e o construtor dela pede apenas os ports que os use cases de staff
-    conhecem (`employees`, `job_functions`, `id_generator` e, desde a 3.5,
-    `gateway`). Isso deixa o
+    conhecem (`employees`, `job_functions`, `id_generator`, desde a 3.5
+    `gateway` e, desde a 3.7, `guard` — o mesmo guard do ambiente). Isso deixa o
     wiring de teste **fechado sob acréscimo de rota**: uma rota escrita numa Task
     seguinte já nasce conectada aqui, e nenhum arquivo desta Task precisa mudar.
     """
@@ -142,7 +143,7 @@ class Ambiente:
         self.app.dependency_overrides.update(
             {dependencies_module.get_access_guard: lambda: self.guard}
         )
-        self.app.dependency_overrides.update(overrides_de_use_case(self.fakes))
+        self.app.dependency_overrides.update(overrides_de_use_case(self.fakes, self.guard))
         self.app.include_router(router_module.router, prefix="/api/v1")
 
     def com_funcao(self, job_function_id: str = "jf-1", name: str = "Garçom") -> JobFunction:
@@ -171,7 +172,7 @@ def _devolve(instancia: object) -> object:
     return instancia
 
 
-def overrides_de_use_case(fakes: StaffFakes) -> dict[object, object]:
+def overrides_de_use_case(fakes: StaffFakes, guard: AccessGuard) -> dict[object, object]:
     """Constrói um override por provedor `_get_*` do router, **derivando** o alvo.
 
     Cada `_get_*` declara no retorno a classe do use case; cada construtor de use
@@ -188,6 +189,12 @@ def overrides_de_use_case(fakes: StaffFakes) -> dict[object, object]:
         # gateway; o fake basta para as rotas que não o exercitam, e o módulo de
         # R17 substitui por instância própria quando precisa observá-lo.
         "gateway": InMemoryIdentityGateway(),
+        # Stage 3.7 — os use cases autorizam também (ADR 3.7.0001). O guard é o
+        # **do ambiente**, e não um novo: o `InMemoryAccessGuard` só reconhece o
+        # ator que ele mesmo emitiu (L-AG2), então um segundo guard recusaria
+        # toda chamada da application — e as concessões do ambiente valem para
+        # as duas camadas, como o mesmo `staff_access_guard` vale em produção.
+        "guard": guard,
     }
 
     construidos: dict[object, object] = {}
@@ -400,7 +407,14 @@ async def test_as_rotas_de_catalogo_autorizam_sem_nomear_unidade(
 
     await client.get("/api/v1/job-functions")
 
-    assert ambiente.guard.calls == ["authenticate", "authorize(manage_job_functions,None,None)"]
+    # A rota omite o tenant (ADR 0.0.0005); o use case o **nomeia**, com o
+    # tenant do escopo que a rota lhe passou (ADR 3.7.0001 §3). Os dois sem
+    # unidade.
+    assert ambiente.guard.calls == [
+        "authenticate",
+        "authorize(manage_job_functions,None,None)",
+        f"authorize(manage_job_functions,{_TENANT},None)",
+    ]
 
 
 # ---------------------------------------------------------------------------

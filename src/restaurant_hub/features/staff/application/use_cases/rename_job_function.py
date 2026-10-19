@@ -15,6 +15,10 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
 )
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_JOB_FUNCTIONS,
+    AccessGuard,
+)
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
@@ -23,14 +27,16 @@ from restaurant_hub.features.staff.application.ports.out.job_function_repository
 class RenameJobFunctionUseCase:
     """Renomeia uma função existente do tenant."""
 
-    def __init__(self, job_functions: JobFunctionRepository) -> None:
+    def __init__(self, job_functions: JobFunctionRepository, guard: AccessGuard) -> None:
         self._job_functions = job_functions
+        self._guard = guard
 
     def execute(self, command: RenameJobFunctionCommand) -> JobFunctionResult:
         """Renomeia a função.
 
-        A ordem é o contrato (concept §5.16, com a errata de 2026-08-30):
-        **existência primeiro**, depois a **validação local do nome**, e só então
+        A ordem é o contrato (concept §5.16, com as erratas de 2026-08-30 e de
+        2026-10-19): a **autorização** do alvo antes de tudo (ADR 3.7.0001),
+        depois a **existência**, depois a **validação local do nome**, e só então
         a sonda de unicidade. Renomear uma função inexistente para um nome já
         usado devolve `JobFunctionNotFoundError`, não o conflito — do contrário a
         resposta confirmaria que aquele nome existe no tenant a quem pediu por um
@@ -53,6 +59,11 @@ class RenameJobFunctionUseCase:
             JobFunctionNameAlreadyExistsError: nome já usado por **outra**
                 função do tenant.
         """
+        # (0) Autorização do alvo do command, antes de qualquer outra instrução
+        # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
+        self._guard.authorize(
+            command.actor, PERMISSION_MANAGE_JOB_FUNCTIONS, tenant_id=command.tenant_id
+        )
         # (1) Existência no tenant.
         job_function = self._job_functions.find_by_id(command.tenant_id, command.job_function_id)
         if job_function is None:

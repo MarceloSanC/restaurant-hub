@@ -79,7 +79,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 )
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -103,14 +103,14 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     ids = FakeIdGenerator()
 
     # 1. A função de trabalho do restaurante.
-    funcao = CreateJobFunctionUseCase(fakes.job_functions, ids).execute(
-        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro")
-    )
+    funcao = CreateJobFunctionUseCase(
+        fakes.job_functions, ids, guard=PermissiveAccessGuard()
+    ).execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro"))
     assert [
         resultado.name
-        for resultado in ListJobFunctionsUseCase(fakes.job_functions).execute(
-            ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_TENANT)
-        )
+        for resultado in ListJobFunctionsUseCase(
+            fakes.job_functions, guard=PermissiveAccessGuard()
+        ).execute(ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_TENANT))
     ] == ["Cozinheiro"]
 
     # 2. O funcionário na unidade A.
@@ -204,7 +204,9 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
 
     # 8. A função continua bloqueada: o desligado de A e a cópia de B a apontam.
     with pytest.raises(JobFunctionInUseError):
-        DeleteJobFunctionUseCase(fakes.job_functions, fakes.employees).execute(
+        DeleteJobFunctionUseCase(
+            fakes.job_functions, fakes.employees, guard=PermissiveAccessGuard()
+        ).execute(
             DeleteJobFunctionCommand(
                 actor=TEST_ACTOR, tenant_id=_TENANT, job_function_id=JobFunctionId(funcao.id)
             )
@@ -223,9 +225,9 @@ def test_o_fluxo_nao_escreve_direto_nos_fakes() -> None:
     """
     fakes = staff_repositories()
     ids = FakeIdGenerator()
-    funcao = CreateJobFunctionUseCase(fakes.job_functions, ids).execute(
-        CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro")
-    )
+    funcao = CreateJobFunctionUseCase(
+        fakes.job_functions, ids, guard=PermissiveAccessGuard()
+    ).execute(CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro"))
     CreateEmployeeUseCase(fakes.employees, fakes.job_functions, ids).execute(
         CreateEmployeeCommand(
             actor=TEST_ACTOR,
