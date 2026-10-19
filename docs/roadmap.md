@@ -116,7 +116,7 @@ graph LR
 | `2.3-identity-persistence` | Persistência de identity | adapters/out/postgres | done | `2.2-identity-application` |
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/inbound/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
-| `2.6-identity-unit-of-work` | Fronteira transacional nos use cases de identity que escrevem mais de uma vez | application + adapters/out/postgres + tooling | draft | `3.5-employee-login-link` |
+| `2.6-identity-unit-of-work` | Fronteira transacional nos use cases de identity que escrevem mais de uma vez | application + adapters/out/postgres + tooling | done | `3.5-employee-login-link` |
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
@@ -172,6 +172,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
 | [#60](https://github.com/MarceloSanC/restaurant-hub/issues/60) | Desligar registro revoga todas as sessões da conta — rever antes de um login ter mais de um vínculo | staff | application | open | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | open | — |
+| [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | open | `2.6-identity-unit-of-work` |
+| [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -601,6 +603,21 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [hex-arch-python, repository-pattern, pytest-with-fakes, composition-root, task-ordering-hex]
 ```
+
+> **Nota (2026-10-19): reconciliação pós-execução da Stage 2.6** (issue #46; concept, technical e
+> §7 em `docs/stages/2.6-identity-unit-of-work/`; ADRs 2.6.0001 e 2.6.0002). O bloco acima foi
+> escrito na promoção e se sustentou; o que a execução acrescentou:
+>
+> - **`SessionRepository.revoke` passou a devolver `bool`** (contratos_modificados, já no bloco): a
+>   rotação concorrente perdida vira reuso. Realiza o desfecho que o concept 2.4 §6 descrevia e
+>   que a auditoria de 2026-09-28 mediu como quebrado (dois refresh vivos em 11 de 12 corridas).
+> - **13 Tasks** e não 12: os docstrings de staff numa Task própria. Mais 7 commits de correção ou
+>   cobertura vindos de quatro Checkpoints C e de duas rodadas de auditoria de testes com mutação
+>   real.
+> - **Findings com pouso:** #67 (provisionamento composto restaurante + dono), #68 (`user_id`
+>   condicional em staff) e a regra 10 encontrando a dupla escrita da 4.4 (§7 do technical).
+> - **Renumeração:** promovida como 3.7, renumerada para 2.6 antes do primeiro gate — o número
+>   colidia com as Stages paralelas das #49 e #60.
 
 ---
 
@@ -1876,6 +1893,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-09-27 | Stage 4.1-scheduling-domain concluída (`done`); bloco acrescido de nota datada de reconciliação pós-execução (nove divergências declaradas no concept §1: file-scope com `.importlinter` e duas varreduras de repositório, quatro entidades com `ShiftBand`, sem evento de publicação, contratos, ADRs 4.1.0007–0012, decisões Q1–Q5 do sponsor, findings para a 4.3); Step 4 → `in_progress` (primeiro código do BC `scheduling`) | Execução da Stage 4.1 — issue #55 |
 | 2026-10-19 | Stage 4.2-validation-policies concluída (`done`); bloco **não** recebe nota interna (deslocaria as citações por linha do doc de domínio e dos ADRs 4.1.x): as sete divergências estão no concept §1 — nove políticas (não quatro), file-scope com `errors.py`, dois testes de totalidade e `LAYOUT.md` (`services/` sai de `[planejado]`), `EmployeeFacts` por dados, quatro invariantes do doc que não resistem a mudança de staff (pergunta P para a 4.3), `enabled` em toda política configurável, período de 7 dias exigido no insumo. ADRs 4.2.0001 (função não detida segue o cadastro atual — decisão do sponsor) e 4.2.0002 (insumo do avaliador e identidade da violação); findings para 4.3, 4.5 e 8.1 na §7 do technical | Execução da Stage 4.2 — issue #64 |
 | 2026-10-19 | Issue #46 promovida à Stage `2.6-identity-unit-of-work` (Step 2); linha sai da Tabela de Issues | O corpo da issue virou mini-concept (port + ADR, PIPELINE §4.5); Step 2 porque o BC é identity e quatro das cinco dívidas nasceram ali |
+| 2026-10-19 | Stage 2.6-identity-unit-of-work concluída (`done`); bloco acrescido de nota datada (revoke → bool, 13 Tasks, renumeração); issues #67 e #68 na Tabela de Issues | Execução da Stage 2.6 — issue #46 |
 
 ## Próxima revisão de roadmap
 
