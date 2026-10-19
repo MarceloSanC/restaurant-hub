@@ -210,3 +210,35 @@ def test_o_modo_vem_da_config() -> None:
     )
 
     assert violacao.mode is EnforcementMode.BLOCK
+
+
+def test_descanso_contra_a_seguinte_pula_dia_vazio() -> None:
+    avaliada = escala([Turno("ana", em(4, 8), em(4, 16))])
+    seguinte = escala(
+        [Turno("ana", em(0, 8, base=_SEGUINTE), em(0, 16, base=_SEGUINTE))],
+        schedule_id="n",
+        first_day=_SEGUINTE,
+    )
+
+    (violacao,) = _POLITICA.evaluate(
+        contexto(avaliada, next=seguinte), config(min_rest_minutes=6000)
+    )
+
+    assert violacao.operational_days == (SEGUNDA + timedelta(days=4), _SEGUINTE)
+    assert violacao.observed == Decimal(3840)  # sexta 16h -> segunda 08h = 64h
+
+
+def test_descanso_contra_a_anterior_pula_dia_vazio() -> None:
+    anterior = escala(
+        [Turno("ana", em(4, 8, base=_ANTERIOR), em(4, 16, base=_ANTERIOR))],
+        schedule_id="p",
+        first_day=_ANTERIOR,
+    )
+    avaliada = escala([Turno("ana", em(0, 8), em(0, 16))])
+
+    (violacao,) = _POLITICA.evaluate(
+        contexto(avaliada, previous=anterior), config(min_rest_minutes=6000)
+    )
+
+    assert violacao.operational_days == (_ANTERIOR + timedelta(days=4), SEGUNDA)
+    assert violacao.observed == Decimal(3840)  # sexta 16h -> segunda 08h = 64h

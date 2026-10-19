@@ -152,3 +152,10 @@ def test_o_modo_vem_da_config() -> None:
     (violacao,) = _POLITICA.evaluate(contexto(avaliada), bloqueio)
 
     assert violacao.mode is EnforcementMode.BLOCK
+
+
+@pytest.mark.parametrize("alvo", [2, 0])
+def test_varios_excedentes_medem_a_contagem_real(alvo: int) -> None:
+    (violacao,) = _avaliar(_atendentes("ana", "bruno", "carla", "davi"), alvo)
+
+    assert (violacao.observed, violacao.limit) == (Decimal(4), Decimal(alvo))

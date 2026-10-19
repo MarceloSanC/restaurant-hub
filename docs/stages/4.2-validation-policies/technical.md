@@ -403,4 +403,14 @@ segue equivalente. Dos 16 mutantes novos (N01–N16), 3 sobreviveram:
   representável em binário — o teste travava o caso, não a propriedade "Decimal exato".
 Os três testes propostos entraram no commit `[4.2/task-10-extra2]` (22,33h = 1339,80 min exatos).
 
+### 2026-10-19 — [deviation] auditoria de testes, rodada 3 — Claude Opus 5.5 (executor)
+
+Mesmo auditor; os sobreviventes da rodada 2 (N01, N03, N04, N05, N15) foram re-executados e
+**morreram**. Dos 11 mutantes novos (R01–R11), 3 sobreviveram:
+- R07: a medida da sobre-cobertura só era travada com **um** excedente (`N + 1` passava);
+- R08/R09: o "pula dias sem alocação" do descanso não era travado **atravessando a vizinha**.
+Os testes entraram no commit `[4.2/task-10-extra3]`. A expectativa proposta para R08/R09 (72h)
+estava errada: sexta 16h até segunda 08h são **64h** (3840 min), e o teste afirma o valor
+recalculado — o código estava certo.
+
 <!-- END: post-execution -->
