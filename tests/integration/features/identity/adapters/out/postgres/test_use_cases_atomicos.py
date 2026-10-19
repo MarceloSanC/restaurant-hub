@@ -44,6 +44,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.user_repository impo
 from restaurant_hub.features.identity.application.dtos.commands import (
     InviteUserCommand,
     ProvisionAccountCommand,
+    RequestPasswordResetCommand,
     SetPasswordWithTokenCommand,
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import (
@@ -62,6 +63,9 @@ from restaurant_hub.features.identity.application.use_cases.invite_user import (
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.request_password_reset import (
+    RequestPasswordResetUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
@@ -543,3 +547,82 @@ class TestProvisaoAtomica:
 
         assert registro.escritas == ["users.add"]
         assert _linhas(com_link, *_TABELAS_DO_CONVITE) == antes
+
+
+# ---------------------------------------------------------------------------
+# request_password_reset — invalidar e emitir numa unidade; toda falha absorvida
+# ---------------------------------------------------------------------------
+
+_ESCRITAS_DA_REDEFINICAO = ("tokens.invalidate_all_for_user", "tokens.add")
+
+
+def _pedir_redefinicao(
+    engine: Engine, registro: Registro, issuer: FakeSetupTokenIssuer | None = None
+) -> tuple[RequestPasswordResetUseCase, RecordingEmailSender]:
+    sender = RecordingEmailSender()
+    use_case = RequestPasswordResetUseCase(
+        users=PostgresUserRepository(engine),
+        tokens=_Tokens(engine, registro),
+        token_issuer=issuer if issuer is not None else FakeSetupTokenIssuer(),
+        email_sender=sender,
+        id_generator=FakeIdGenerator(),
+        clock=FakeClock(_AGORA),
+        reset_ttl=timedelta(minutes=30),
+        base_url="https://app.exemplo.com",
+        unit_of_work=PostgresUnitOfWork(engine),
+    )
+    return use_case, sender
+
+
+def _emissor_a_partir_de(n: int) -> FakeSetupTokenIssuer:
+    """Emissor que já "gastou" `n - 1` valores — para não colidir com os links semeados."""
+    issuer = FakeSetupTokenIssuer()
+    for _ in range(n - 1):
+        issuer.issue()
+    return issuer
+
+
+_REDEFINIR = RequestPasswordResetCommand(email=Email("um@x.com"))
+
+
+class TestRedefinicaoAtomica:
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS_DA_REDEFINICAO) + 1))
+    def test_falha_na_escrita_n_e_absorvida_e_deixa_a_tabela_identica(
+        self, com_link: Engine, n: int
+    ) -> None:
+        antes = _linhas(com_link, tables.password_setup_tokens)
+        registro = Registro(falhar_em=n)
+        use_case, sender = _pedir_redefinicao(com_link, registro, _emissor_a_partir_de(10))
+
+        assert use_case.execute(_REDEFINIR) is None
+
+        assert tuple(registro.escritas) == _ESCRITAS_DA_REDEFINICAO[:n]
+        assert _linhas(com_link, tables.password_setup_tokens) == antes
+        assert sender.sent == ()
+
+    def test_fingerprint_repetido_no_banco_e_absorvido_e_desfaz_a_invalidacao(
+        self, com_link: Engine
+    ) -> None:
+        """Falha originada no banco: o emissor novo repete o fingerprint do link `tok-1`."""
+        antes = _linhas(com_link, tables.password_setup_tokens)
+        registro = Registro()
+        use_case, sender = _pedir_redefinicao(com_link, registro)
+
+        assert use_case.execute(_REDEFINIR) is None
+
+        assert registro.escritas == ["tokens.invalidate_all_for_user"]
+        assert _linhas(com_link, tables.password_setup_tokens) == antes
+        assert sender.sent == ()
+
+    def test_sem_falha_grava_o_token_pela_unidade_real(self, com_link: Engine) -> None:
+        """CA8 — o caminho positivo: a unidade real comita e o e-mail sai."""
+        use_case, sender = _pedir_redefinicao(com_link, Registro(), _emissor_a_partir_de(10))
+
+        use_case.execute(_REDEFINIR)
+
+        tokens = PostgresPasswordSetupTokenRepository(com_link)
+        nova = tokens.find_by_fingerprint(FakeSetupTokenIssuer().fingerprint("setup-10"))
+        anterior = tokens.find_by_fingerprint(FakeSetupTokenIssuer().fingerprint("setup-outro"))
+        assert nova is not None and nova.consumed_at is None
+        assert anterior is not None and anterior.consumed_at == _AGORA
+        assert len(sender.sent) == 1

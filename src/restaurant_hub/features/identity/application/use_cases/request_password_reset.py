@@ -15,6 +15,12 @@ provedor rejeita, e ler o status. É o oposto do que acontece no convite, onde a
 falha propaga — lá quem chama é um ator autenticado que precisa saber que o
 e-mail não saiu, e não há nada a enumerar.
 
+**Invalidar as anteriores e gravar a nova é uma unidade de trabalho** (Stage
+2.6, ADR 2.6.0001): sem ela, uma falha no `add` deixava as redefinições anteriores
+mortas e nenhuma nova. A unidade fica **dentro** do `try` — um rollback é falha
+como outra qualquer, e é absorvido pela mesma regra 8 — e o envio sai **depois**
+de ela comitar, ainda dentro do `try` (ADR 2.6.0002 §3).
+
 **A invalidação é escopada por `PASSWORD_RESET`**, e não global: um pedido de
 redefinição não pode matar um convite pendente, senão qualquer pessoa na internet
 mataria o convite de qualquer vítima em laço, por esta mesma rota.
@@ -41,6 +47,7 @@ from restaurant_hub.features.identity.application.ports.out.password_setup_token
 from restaurant_hub.features.identity.application.ports.out.setup_token_issuer import (
     SetupTokenIssuer,
 )
+from restaurant_hub.features.identity.application.ports.out.unit_of_work import UnitOfWork
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
@@ -69,6 +76,7 @@ class RequestPasswordResetUseCase:
         clock: Clock,
         reset_ttl: timedelta,
         base_url: str,
+        unit_of_work: UnitOfWork,
     ) -> None:
         self._users = users
         self._tokens = tokens
@@ -78,6 +86,7 @@ class RequestPasswordResetUseCase:
         self._clock = clock
         self._reset_ttl = reset_ttl
         self._base_url = base_url
+        self._unit_of_work = unit_of_work
 
     def execute(self, command: RequestPasswordResetCommand) -> None:
         """Processa o pedido. **Nunca levanta e nunca devolve nada.**
@@ -102,7 +111,8 @@ class RequestPasswordResetUseCase:
         # e o desconhecido dar 202. Enumeração completa pelo status, sem medir
         # tempo nenhum, exatamente o ataque que esta regra existe para fechar.
         try:
-            valor_do_token = self._emitir_token(credenciais.user.id)
+            with self._unit_of_work.transaction():
+                valor_do_token = self._emitir_token(credenciais.user.id)
             self._enviar(command.email.value, valor_do_token)
         except Exception:
             return

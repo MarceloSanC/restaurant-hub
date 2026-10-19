@@ -7,6 +7,8 @@ que um pedido de redefinição não pode ser usado para matar o convite de ningu
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from restaurant_hub.features.identity.application.dtos.commands import (
     RequestPasswordResetCommand,
 )
@@ -30,6 +32,7 @@ from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupToken
 from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
     InMemoryPasswordSetupTokenRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
@@ -107,6 +110,7 @@ class Cenario:
             self.hasher.hash("senha-atual"),
         )
 
+        self.unidade = InMemoryUnitOfWork(self.tokens)
         self.use_case = RequestPasswordResetUseCase(
             users=self.users,
             tokens=self.tokens,
@@ -116,6 +120,7 @@ class Cenario:
             clock=FakeClock(_AGORA),
             reset_ttl=_TTL,
             base_url=_BASE_URL,
+            unit_of_work=self.unidade,
         )
 
 
@@ -324,3 +329,102 @@ class TestInvalidacaoEscopadaPorProposito:
         cenario.use_case.execute(_comando(_CADASTRADO))
 
         assert cenario.tokens.tokens[token_do_outro].consumed_at is None
+
+
+class _FalhaInjetada(Exception):
+    pass
+
+
+class _TokensRegistrados(InMemoryPasswordSetupTokenRepository):
+    """Registra as duas escritas e falha na N-ésima, depois de gravar."""
+
+    def __init__(self, falhar_em: int | None = None) -> None:
+        super().__init__()
+        self.falhar_em = falhar_em
+        self.escritas: list[str] = []
+
+    def _escreveu(self, nome: str) -> None:
+        self.escritas.append(nome)
+        if self.falhar_em is not None and len(self.escritas) == self.falhar_em:
+            raise _FalhaInjetada(nome)
+
+    def invalidate_all_for_user(
+        self,
+        user_id: UserId,
+        consumed_at: datetime,
+        purpose: SetupTokenPurpose | None = None,
+    ) -> int:
+        invalidados = super().invalidate_all_for_user(user_id, consumed_at, purpose)
+        self._escreveu("tokens.invalidate_all_for_user")
+        return invalidados
+
+    def add(self, token: PasswordSetupToken) -> None:
+        super().add(token)
+        self._escreveu("tokens.add")
+
+
+_ESCRITAS = ("tokens.invalidate_all_for_user", "tokens.add")
+
+
+def _com_redefinicao_pendente(tokens: InMemoryPasswordSetupTokenRepository) -> Cenario:
+    cenario = Cenario(tokens=tokens)
+    tokens.tokens[SetupTokenId("tok-0")] = PasswordSetupToken(
+        id=SetupTokenId("tok-0"),
+        user_id=UserId("user-1"),
+        purpose=SetupTokenPurpose.PASSWORD_RESET,
+        token_fingerprint="sfp::anterior",
+        issued_at=_AGORA - timedelta(minutes=5),
+        expires_at=_AGORA + timedelta(minutes=25),
+    )
+    return cenario
+
+
+class TestUnidadeDeTrabalho:
+    """Stage 2.6 CA4/CA8 — invalidar e emitir são tudo ou nada, e a falha segue absorvida."""
+
+    def test_as_duas_escritas_acontecem_dentro_de_uma_unidade(self) -> None:
+        tokens = _TokensRegistrados()
+        cenario = _com_redefinicao_pendente(tokens)
+
+        cenario.use_case.execute(_comando(_CADASTRADO))
+
+        assert tuple(tokens.escritas) == _ESCRITAS
+        assert (cenario.unidade.aberturas, cenario.unidade.commits) == (1, 1)
+
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS) + 1))
+    def test_falha_na_escrita_n_e_absorvida_e_nao_deixa_nada_gravado(self, n: int) -> None:
+        tokens = _TokensRegistrados(falhar_em=n)
+        cenario = _com_redefinicao_pendente(tokens)
+        antes = dict(tokens.tokens)
+
+        assert cenario.use_case.execute(_comando(_CADASTRADO)) is None
+
+        assert tuple(tokens.escritas) == _ESCRITAS[:n]
+        # A redefinição anterior continua viva: a invalidação foi desfeita junto.
+        assert tokens.tokens == antes
+        assert cenario.sender.sent == ()
+        assert cenario.unidade.rollbacks == 1
+
+    def test_o_envio_acontece_depois_de_a_unidade_comitar(self) -> None:
+        cenario = Cenario()
+        commits_no_envio: list[int] = []
+        enviar_original = cenario.sender.send
+
+        def enviar_observado(mensagem: object) -> None:
+            commits_no_envio.append(cenario.unidade.commits)
+            enviar_original(mensagem)  # type: ignore[arg-type]
+
+        cenario.sender.send = enviar_observado  # type: ignore[method-assign]
+        cenario.use_case.execute(_comando(_CADASTRADO))
+
+        assert commits_no_envio == [1]
+
+    def test_unidade_que_recusa_abrir_tambem_e_absorvida(self) -> None:
+        """Regra 8 vale para a própria unidade: nem o `RuntimeError` da L5 vira 500."""
+        cenario = Cenario()
+
+        with cenario.unidade.transaction():
+            assert cenario.use_case.execute(_comando(_CADASTRADO)) is None
+
+        assert cenario.tokens.tokens == {}
+        assert cenario.sender.sent == ()

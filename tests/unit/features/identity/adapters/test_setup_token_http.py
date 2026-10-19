@@ -152,6 +152,7 @@ def _montar(  # noqa: PLR0913
         clock=FakeClock(_AGORA),
         reset_ttl=timedelta(minutes=30),
         base_url="https://app.exemplo.com",
+        unit_of_work=InMemoryUnitOfWork(tokens),
     )
     app.dependency_overrides[router_module._get_set_password_with_token] = lambda: set_password
     app.dependency_overrides[router_module._get_request_password_reset] = lambda: pedir_reset

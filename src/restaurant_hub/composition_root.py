@@ -650,6 +650,7 @@ def wire_dependencies(
             clock=clock,
             reset_ttl=reset_ttl,
             base_url=cfg.app_base_url,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_set_password_with_token=SetPasswordWithTokenUseCase(
             users=users,

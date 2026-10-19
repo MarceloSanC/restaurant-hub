@@ -167,6 +167,10 @@ _COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[s
         lambda d: d.staff_identity_gateway._facade._provision_account,
         {"_users", "_restaurants", "_units", "_tokens"},
     ),
+    "request_password_reset": (
+        lambda d: d.identity_request_password_reset,
+        {"_users", "_tokens"},
+    ),
 }
 _REPOSITORIOS_POSTGRES = (
     PostgresRestaurantRepository,
