@@ -25,6 +25,9 @@ from sqlalchemy import Engine, text
 from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
     _SENTINELA_DUMMY,
 )
+from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway import (
+    LocalIdentityGateway,
+)
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
 from tests.conftest import truncar_tudo
@@ -763,3 +766,62 @@ async def test_ca18_gerente_vinculado_a_registro_de_escala_nao_perde_a_sessao(
         f"{API}/units/{cenario.unidade_a}/employees", headers=auth(vivo.json())
     )
     assert gestao.status_code == HTTPStatus.OK, gestao.text
+
+
+async def test_desligar_de_novo_nao_derruba_a_sessao_aberta_depois_do_primeiro_desligamento(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """CA12 da 3.7 na ponta: a conta permanece, e o duplo clique não derruba quem relogou."""
+    cabecalho = auth(cenario.manager)
+    employee_id = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Duda")
+    corpo = await _criar_login(
+        client, cabecalho, cenario.unidade_a, employee_id, email="duda@cantina.com", delivery="link"
+    )
+    await _definir_senha(client, _token_de(corpo["setup_link"]))
+    await _login(client, "duda@cantina.com")
+    await _desligar(client, cabecalho, cenario.unidade_a, employee_id)
+
+    sessao_nova = await _login(client, "duda@cantina.com")
+    await _desligar(client, cabecalho, cenario.unidade_a, employee_id)
+
+    viva = await _refresh(client, sessao_nova["refresh_token"])
+    assert viva.status_code == HTTPStatus.OK, viva.text
+
+
+@pytest.mark.parametrize("metodo", ["is_employee_login", "revoke_login_sessions"])
+async def test_falha_antes_de_gravar_e_500_e_registro_e_sessao_ficam(
+    client_500: AsyncClient, cenario: Cenario, monkeypatch: pytest.MonkeyPatch, metodo: str
+) -> None:
+    """Concept 3.7 §6: falha da consulta de papel (3.7) ou da revogação (3.5) ⇒ 500.
+
+    Tudo acontece antes de gravar (ADR 3.5.0003 §2): o registro continua **ativo** e a
+    sessão continua **viva** — a operação falhou inteira, não pela metade. A falha é
+    injetada no adapter real de produção, depois da autorização da rota.
+    """
+    cabecalho = auth(cenario.manager)
+    employee_id = await _criar_funcionario(client_500, cabecalho, cenario.unidade_a, "Elis")
+    corpo = await _criar_login(
+        client_500,
+        cabecalho,
+        cenario.unidade_a,
+        employee_id,
+        email="elis@cantina.com",
+        delivery="link",
+    )
+    await _definir_senha(client_500, _token_de(corpo["setup_link"]))
+    tokens = await _login(client_500, "elis@cantina.com")
+
+    def _falha(self: LocalIdentityGateway, user_id: object) -> None:
+        raise RuntimeError(f"identity fora em {metodo}")
+
+    monkeypatch.setattr(LocalIdentityGateway, metodo, _falha)
+    resposta = await client_500.post(
+        f"{API}/units/{cenario.unidade_a}/employees/{employee_id}/termination", headers=cabecalho
+    )
+    monkeypatch.undo()
+
+    assert resposta.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, resposta.text
+    registro = await _registro(client_500, cabecalho, cenario.unidade_a, employee_id)
+    assert registro["active"] is True
+    viva = await _refresh(client_500, tokens["refresh_token"])
+    assert viva.status_code == HTTPStatus.OK, viva.text
