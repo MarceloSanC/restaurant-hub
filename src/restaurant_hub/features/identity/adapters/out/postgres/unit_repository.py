@@ -1,7 +1,7 @@
 """Adapter Postgres de `UnitRepository`.
 
 Mesma fronteira transacional do `PostgresRestaurantRepository` — ver o docstring
-daquele módulo para por que a transação é aberta aqui e não por um unit-of-work.
+daquele módulo: transação própria fora de unidade de trabalho, a da unidade dentro.
 
 Nota sobre erro: a unidade referencia o restaurante por FK, e restaurante
 inexistente estoura `fk_units_restaurant`. Essa violação **não** é traduzida
@@ -15,6 +15,10 @@ from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
+from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
+    para_escrita,
+    para_leitura,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
     traduzir,
 )
@@ -32,16 +36,16 @@ class PostgresUnitRepository:
     def add(self, unit: Unit) -> None:
         """Insere uma unidade. Id já gravado levanta `UnitAlreadyExistsError`."""
         try:
-            with self._engine.begin() as conexao:
+            with para_escrita(self._engine) as conexao:
                 self._add(conexao, unit)
         except IntegrityError as erro:
             raise traduzir(erro, unit.id) from erro
 
     def find_by_id(self, unit_id: UnitId) -> Unit | None:
-        with self._engine.connect() as conexao:
+        with para_leitura(self._engine) as conexao:
             return self._find_by_id(conexao, unit_id)
 
-    # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) ----
+    # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
     def _add(self, conexao: Connection, unit: Unit) -> None:
         conexao.execute(units.insert().values(**mappers.unidade_para_linha(unit)))

@@ -1,27 +1,28 @@
 """Adapter Postgres de `RestaurantRepository`.
 
-**Fronteira transacional** (concept §7 Decisão 6): o repositório recebe um
-`Engine` e abre a própria transação por método público, via `engine.begin()`.
+**Fronteira transacional** (ADR 2.6.0001, que supera para identity o concept
+2.3 §7 Decisão 6): o repositório recebe um `Engine` e pede a conexão a
+`conexao_da_unidade`. Fora de unidade de trabalho, cada método público é a própria
+transação (`engine.begin()`), como desde a 2.3. Dentro de uma unidade aberta pelo
+use case (`UnitOfWork.transaction()`), usa a conexão dela, num savepoint — e as
+escritas de vários repositórios ficam atômicas juntas.
 
-A skill `repository-pattern` recomenda o oposto — transação controlada por um
-unit-of-work externo, nunca implícita no repositório. O desvio é consciente e tem
-uma razão concreta: os ports da 2.2 são **síncronos e sem UoW** (ADR 2.2.0004), a
-camada `application` está proibida de importar SQLAlchemy (contrato
-`identity-application-purity` do import-linter), e nenhum use case desta Stage
-precisa de atomicidade **entre** repositórios — `UserRepository.add`, que precisa
-de atomicidade, a obtém dentro de uma única chamada. Inventar um port de UoW agora
-seria contrato novo sem consumidor.
-
-Para manter a troca barata quando esse consumidor existir, cada método público só
-abre a transação e delega a um privado que recebe `Connection`. Passar a aceitar
-uma `Connection` de fora vira uma mudança de construtor, sem tocar na lógica nem
-na forma do port.
+A skill `repository-pattern` recomenda transação controlada de fora, nunca
+implícita no repositório: é o que a unidade de trabalho faz. O construtor não
+mudou — a 2.3 previa "passar a aceitar uma `Connection` de fora" como mudança de
+construtor, e a Stage 2.6 preferiu a conexão ambiente (ADR 2.6.0001, Alternativa
+B, explica por quê). Cada método público delega a um privado que recebe
+`Connection`, e é a mesma `Connection` dentro e fora da unidade.
 """
 
 from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
+from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
+    para_escrita,
+    para_leitura,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
     traduzir,
 )
@@ -41,7 +42,7 @@ class PostgresRestaurantRepository:
     def add(self, restaurant: Restaurant) -> None:
         """Insere um restaurante. Id já gravado levanta `RestaurantAlreadyExistsError`."""
         try:
-            with self._engine.begin() as conexao:
+            with para_escrita(self._engine) as conexao:
                 self._add(conexao, restaurant)
         except IntegrityError as erro:
             # `from erro` preserva a cadeia de causa: sem ela, o diagnóstico de um
@@ -49,10 +50,10 @@ class PostgresRestaurantRepository:
             raise traduzir(erro, restaurant.id) from erro
 
     def find_by_id(self, restaurant_id: RestaurantId) -> Restaurant | None:
-        with self._engine.connect() as conexao:
+        with para_leitura(self._engine) as conexao:
             return self._find_by_id(conexao, restaurant_id)
 
-    # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) ----
+    # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
     def _add(self, conexao: Connection, restaurant: Restaurant) -> None:
         conexao.execute(restaurants.insert().values(**mappers.restaurante_para_linha(restaurant)))

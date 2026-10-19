@@ -3,7 +3,8 @@
 O repositório com mais regra da Stage. Três pontos merecem atenção:
 
 **1. `add` é atômico de verdade.** Usuário, credencial e vínculos entram numa
-única `engine.begin()`, como o docstring do port exige. Se qualquer parte falhar
+única transação (ou num único savepoint, dentro de uma unidade de trabalho — ADR
+2.6.0001), como o docstring do port exige. Se qualquer parte falhar
 — um vínculo apontando para unidade inexistente, um vínculo cruzando tenant — a
 transação inteira reverte e **nada** fica gravado. Sem isso, o caso que o port
 existe para impedir (usuário persistido sem credencial, ou com metade dos
@@ -29,6 +30,10 @@ from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
+from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
+    para_escrita,
+    para_leitura,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
     nome_da_constraint,
     traduzir,
@@ -62,7 +67,7 @@ class PostgresUserRepository:
     ) -> None:
         """Grava usuário, credencial e vínculos como **uma única** unidade."""
         try:
-            with self._engine.begin() as conexao:
+            with para_escrita(self._engine) as conexao:
                 self._add(conexao, user, password_hash, memberships)
         except IntegrityError as erro:
             # Qual valor entra na mensagem depende de QUAL regra foi violada: o
@@ -72,7 +77,7 @@ class PostgresUserRepository:
             raise traduzir(erro, detalhe) from erro
 
     def find_by_id(self, user_id: UserId) -> User | None:
-        with self._engine.connect() as conexao:
+        with para_leitura(self._engine) as conexao:
             return self._find_by_id(conexao, user_id)
 
     def exists_by_email(self, email: Email) -> bool:
@@ -82,7 +87,7 @@ class PostgresUserRepository:
         mesmo login existir em dois restaurantes, e passaria em qualquer teste que
         só usasse um tenant.
         """
-        with self._engine.connect() as conexao:
+        with para_leitura(self._engine) as conexao:
             achado = conexao.execute(
                 select(users.c.id).where(users.c.email == email.value)
             ).one_or_none()
@@ -90,7 +95,7 @@ class PostgresUserRepository:
 
     def find_credentials_by_email(self, email: Email) -> UserCredentials | None:
         """Usuário + hash numa ida só — `authenticate_user` precisa dos dois."""
-        with self._engine.connect() as conexao:
+        with para_leitura(self._engine) as conexao:
             linha = conexao.execute(select(users).where(users.c.email == email.value)).one_or_none()
             if linha is None:
                 return None
@@ -100,13 +105,13 @@ class PostgresUserRepository:
             )
 
     def list_memberships(self, user_id: UserId) -> tuple[UnitMembership, ...]:
-        with self._engine.connect() as conexao:
+        with para_leitura(self._engine) as conexao:
             linhas = conexao.execute(
                 select(unit_memberships).where(unit_memberships.c.user_id == user_id)
             ).all()
             return tuple(mappers.linha_para_vinculo(linha) for linha in linhas)
 
-    # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) ----
+    # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
     def _add(
         self,
@@ -144,7 +149,7 @@ class PostgresUserRepository:
         sucesso: uma redefinição de senha que reporta "pronto" sem ter gravado
         nada.
         """
-        with self._engine.begin() as conexao:
+        with para_escrita(self._engine) as conexao:
             resultado = conexao.execute(
                 users.update().where(users.c.id == user_id).values(password_hash=password_hash)
             )
