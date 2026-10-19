@@ -5,13 +5,16 @@ Todas herdam de `SchedulingError`, que por sua vez herda de `DomainError`
 resposta 4xx; o mapa de status deste BC é da Stage 4.5. Aqui garante-se apenas a
 hierarquia e a mensagem; nenhuma exceção carrega estado além do texto.
 
-**As 20 nascem juntas, antes de terem consumidor.** O mapa de erros do concept
+**As 20 da Stage 4.1 nasceram juntas, antes de terem consumidor.** O mapa de erros do concept
 §6 é uma **totalidade** (21 linhas para 20 exceções), e a varredura que o cobra
 (`test_exceptions.py`) enumera `vars` deste módulo. Se as exceções chegassem aos
 poucos, junto com cada VO/entidade que as levanta, a varredura não seria
 totalidade em nenhum commit intermediário e o piso de
 `tests/unit/test_status_map.py` (`_TOTAIS_MINIMOS["scheduling"]`) seria falso no
 primeiro commit da Stage. Cada uma é levantada por uma Task 02-10.
+
+A Stage 4.2 acrescenta duas, pelo mesmo motivo juntas na Task 01: a recusa da
+configuração de validação e a do insumo do avaliador (concept 4.2 §6).
 """
 
 from restaurant_hub.shared.domain.exceptions.base import DomainError
@@ -250,3 +253,29 @@ class AssignmentNotFoundError(SchedulingError):
 
     def __init__(self) -> None:
         super().__init__("alocação não encontrada na escala")
+
+
+class InvalidValidationConfigError(SchedulingError):
+    """Configuração de validação do restaurante fora do domínio válido (Stage 4.2).
+
+    Descanso mínimo negativo, teto diário ou semanal não positivo, tolerância da
+    carga negativa (concept 4.2 §5.3). `reason` nomeia o parâmetro: uma recusa que
+    cobre cinco parâmetros e não diz qual quebrou não diz o que corrigir.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"configuração de validação inválida: {reason}")
+
+
+class InvalidEvaluationInputError(SchedulingError):
+    """Insumo do avaliador incompleto ou incoerente (Stage 4.2, concept §5.4).
+
+    Fail-closed: vizinha de outro tenant/unidade ou não adjacente, período que não
+    é de 7 dias, `AssignmentId` repetido entre escalas, fatos repetidos ou faltando
+    para um registro alocado, carga ou janela de indisponibilidade malformada.
+    Pular o que falta deixaria passar uma violação `block` em silêncio. `reason`
+    distingue os cenários.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"insumo de avaliação inválido: {reason}")

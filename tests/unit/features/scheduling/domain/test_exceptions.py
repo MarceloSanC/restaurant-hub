@@ -1,11 +1,12 @@
 """Testes da hierarquia de exceções do BC scheduling (domain/exceptions/errors.py).
 
-**CA17 é uma totalidade, não um representante.** O mapa de erros do concept §6
-tem 21 linhas para 20 exceções, e a Stage 4.1 nasce com as 20 completas para que
-nenhuma Task posterior tenha de crescer esta varredura. Por isso há **três**
-asserções sobre o conjunto, e não uma: a parametrizada (cada uma das 20 herda da
-raiz), a derivada de `vars` (nenhuma exceção do módulo escapa da raiz) e a de
-igualdade (o módulo define **exatamente** as 20 + a raiz). A terceira é a que
+**CA17 (4.1) e CA14 (4.2) são uma totalidade, não um representante.** O mapa de
+erros do concept 4.1 §6 tem 21 linhas para 20 exceções, e a Stage 4.1 nasceu com as
+20 completas para que nenhuma Task posterior tivesse de crescer esta varredura; a
+Stage 4.2 acrescentou as 2 da validação (concept 4.2 §6) na sua Task 01. Por isso
+há **três** asserções sobre o conjunto, e não uma: a parametrizada (cada uma das 22
+herda da raiz), a derivada de `vars` (nenhuma exceção do módulo escapa da raiz) e a
+de igualdade (o módulo define **exatamente** as 22 + a raiz). A terceira é a que
 pega a exceção criada aqui e esquecida no concept §6 — o inverso do que as duas
 primeiras pegam.
 """
@@ -23,10 +24,12 @@ from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidAssignmentBreakError,
     InvalidDayCutoffError,
     InvalidDemandQuantityError,
+    InvalidEvaluationInputError,
     InvalidIdentifierError,
     InvalidSchedulePeriodError,
     InvalidScheduleVersionError,
     InvalidTimeRangeError,
+    InvalidValidationConfigError,
     InvalidWeekdayError,
     SchedulingError,
     ShiftBandDayChangeError,
@@ -40,10 +43,11 @@ from restaurant_hub.shared.domain.exceptions.base import DomainError
 
 pytestmark = pytest.mark.unit
 
-_TOTAL_DE_EXCECOES = 20
+_TOTAL_DE_EXCECOES = 22
 
-# As 20 subclasses declaradas no concept §4, na ordem em que ele as lista.
-_AS_VINTE: tuple[type[SchedulingError], ...] = (
+# As 20 subclasses declaradas no concept 4.1 §4, na ordem em que ele as lista,
+# seguidas das 2 do concept 4.2 §4.
+_AS_DO_BC: tuple[type[SchedulingError], ...] = (
     InvalidIdentifierError,
     InvalidTimeRangeError,
     InvalidWeekdayError,
@@ -64,6 +68,8 @@ _AS_VINTE: tuple[type[SchedulingError], ...] = (
     DuplicateAssignmentError,
     DuplicateAssignmentInBandError,
     AssignmentNotFoundError,
+    InvalidValidationConfigError,
+    InvalidEvaluationInputError,
 )
 
 # As que recebem valor de contexto, com o argumento e o trecho que a mensagem
@@ -79,6 +85,8 @@ _COM_CONTEXTO: tuple[tuple[type[SchedulingError], object, str], ...] = (
     (InvalidScheduleVersionError, 0, "0"),
     (InvalidAssignmentBreakError, "não pode ser negativo", "não pode ser negativo"),
     (DuplicateEntityIdError, "ShiftDemandId", "ShiftDemandId"),
+    (InvalidValidationConfigError, "min_rest_minutes", "min_rest_minutes"),
+    (InvalidEvaluationInputError, "sem fatos", "sem fatos"),
 )
 
 # As que não carregam contexto: a mensagem é a invariante inteira.
@@ -125,7 +133,7 @@ def test_a_raiz_do_bc_herda_de_domain_error_diretamente() -> None:
     """`_raiz_de_erro` de `tests/unit/test_status_map.py` exige **exatamente uma**.
 
     Uma subclasse que herdasse de `DomainError` direto (o engano mais provável
-    num módulo de 21 classes) daria duas raízes e reprovaria a varredura de
+    num módulo de 23 classes) daria duas raízes e reprovaria a varredura de
     repositório — aqui a propriedade é afirmada no nível do BC, onde o defeito
     nasce.
     """
@@ -134,7 +142,7 @@ def test_a_raiz_do_bc_herda_de_domain_error_diretamente() -> None:
     assert raizes == [SchedulingError]
 
 
-@pytest.mark.parametrize("exc_type", _AS_VINTE)
+@pytest.mark.parametrize("exc_type", _AS_DO_BC)
 def test_toda_excecao_do_bc_herda_de_scheduling_error(exc_type: type[SchedulingError]) -> None:
     assert issubclass(exc_type, SchedulingError)
 
@@ -149,31 +157,31 @@ def test_nenhuma_excecao_do_modulo_escapa_de_scheduling_error() -> None:
         assert issubclass(exc_type, SchedulingError)
 
 
-def test_o_conjunto_publico_do_modulo_e_exatamente_as_vinte_mais_a_raiz() -> None:
-    """CA17 — o conjunto é **21**, e a igualdade fecha os dois quantificadores.
+def test_o_conjunto_publico_do_modulo_e_exatamente_as_do_bc_mais_a_raiz() -> None:
+    """CA17/CA14 — o conjunto é **23**, e a igualdade fecha os dois quantificadores.
 
     A varredura acima pega a exceção do módulo que escapa da raiz; esta pega a
     exceção que **existe** no módulo e não está no mapa de erros do concept §6 —
     e também a que sai da lista do concept sem sair do código. Sem a igualdade, a
-    21ª exceção entraria herdando corretamente de `SchedulingError`, sem linha na
+    24ª exceção entraria herdando corretamente de `SchedulingError`, sem linha na
     §6, e nada reprovaria.
     """
-    esperado = {SchedulingError, *_AS_VINTE}
+    esperado = {SchedulingError, *_AS_DO_BC}
 
     assert _excecoes_definidas_no_modulo() == esperado
-    assert len(_AS_VINTE) == _TOTAL_DE_EXCECOES
+    assert len(_AS_DO_BC) == _TOTAL_DE_EXCECOES
 
 
-def test_toda_excecao_das_vinte_aparece_numa_das_duas_tabelas_de_mensagem() -> None:
-    """Anti-vácuo das tabelas de mensagem: nenhuma das 20 fica sem asserção.
+def test_toda_excecao_do_bc_aparece_numa_das_duas_tabelas_de_mensagem() -> None:
+    """Anti-vácuo das tabelas de mensagem: nenhuma das 22 fica sem asserção.
 
-    Sem esta, acrescentar a exceção à lista `_AS_VINTE` e esquecê-la nas tabelas
+    Sem esta, acrescentar a exceção à lista `_AS_DO_BC` e esquecê-la nas tabelas
     deixaria a mensagem dela sem nenhum teste — e o gate de cobertura não a
     pegaria, porque o `super().__init__` de uma linha ficaria coberto pelo import.
     """
     com_mensagem = {tipo for tipo, _, _ in _COM_CONTEXTO} | {tipo for tipo, _ in _SEM_CONTEXTO}
 
-    assert com_mensagem == set(_AS_VINTE)
+    assert com_mensagem == set(_AS_DO_BC)
 
 
 @pytest.mark.parametrize(("exc_type", "argumento", "trecho"), _COM_CONTEXTO)
