@@ -44,6 +44,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.user_repository impo
 from restaurant_hub.features.identity.application.dtos.commands import (
     InviteUserCommand,
     ProvisionAccountCommand,
+    RefreshSessionCommand,
     RequestPasswordResetCommand,
     SetPasswordWithTokenCommand,
 )
@@ -57,12 +58,20 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     PasswordSetupToken,
     SetupTokenPurpose,
 )
-from restaurant_hub.features.identity.application.errors import InvalidSetupTokenError
+from restaurant_hub.features.identity.application.dtos.tokens import IssuedRefreshToken
+from restaurant_hub.features.identity.application.errors import (
+    InvalidSetupTokenError,
+    RefreshTokenReuseError,
+    SessionFingerprintAlreadyExistsError,
+)
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.refresh_session import (
+    RefreshSessionUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.request_password_reset import (
     RequestPasswordResetUseCase,
@@ -85,6 +94,7 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
 )
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
 from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
+from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
@@ -145,6 +155,15 @@ class _Sessoes(PostgresSessionRepository):
     def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
         super().revoke_all_for_user(user_id, revoked_at)
         self._registro.escreveu("sessions.revoke_all_for_user")
+
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
+        revogou = super().revoke(session_id, revoked_at)
+        self._registro.escreveu("sessions.revoke")
+        return revogou
+
+    def add(self, session: Session) -> None:
+        super().add(session)
+        self._registro.escreveu("sessions.add")
 
 
 class _Tokens(PostgresPasswordSetupTokenRepository):
@@ -626,3 +645,176 @@ class TestRedefinicaoAtomica:
         assert nova is not None and nova.consumed_at is None
         assert anterior is not None and anterior.consumed_at == _AGORA
         assert len(sender.sent) == 1
+
+
+# ---------------------------------------------------------------------------
+# refresh_session — rotação numa unidade; corrida perdida é reuso
+# ---------------------------------------------------------------------------
+
+_ESCRITAS_DA_ROTACAO = ("sessions.revoke", "sessions.add")
+_REFRESH = "refresh-original"
+
+
+@pytest.fixture
+def com_sessao(banco_limpo: Engine) -> Engine:
+    """Usuário com duas sessões ativas: a que vai rotacionar e a de outro dispositivo."""
+    _semear_tenant_e_usuario(banco_limpo)
+    sessoes = PostgresSessionRepository(banco_limpo)
+    for session_id, valor in (("sess-1", _REFRESH), ("sess-2", "outro-dispositivo")):
+        sessoes.add(
+            Session(
+                id=SessionId(session_id),
+                user_id=UserId("user-1"),
+                refresh_token_fingerprint=FakeTokenIssuer().fingerprint(valor),
+                issued_at=_AGORA - timedelta(days=1),
+                expires_at=_AGORA + timedelta(days=14),
+            )
+        )
+    return banco_limpo
+
+
+def _rotacionador(
+    engine: Engine,
+    registro: Registro,
+    *,
+    sessoes: PostgresSessionRepository | None = None,
+    issuer: FakeTokenIssuer | None = None,
+) -> RefreshSessionUseCase:
+    return RefreshSessionUseCase(
+        users=PostgresUserRepository(engine),
+        sessions=sessoes if sessoes is not None else _Sessoes(engine, registro),
+        token_issuer=issuer if issuer is not None else FakeTokenIssuer(),
+        id_generator=FakeIdGenerator(),
+        clock=FakeClock(_AGORA),
+        access_token_ttl=timedelta(minutes=15),
+        refresh_token_ttl=timedelta(days=14),
+        unit_of_work=PostgresUnitOfWork(engine),
+    )
+
+
+def _sessoes_revogadas(engine: Engine) -> dict[str, bool]:
+    with engine.connect() as conexao:
+        linhas = conexao.execute(select(tables.sessions.c.id, tables.sessions.c.revoked_at)).all()
+    return {str(linha.id): linha.revoked_at is not None for linha in linhas}
+
+
+class _EmissorQueRepete(FakeTokenIssuer):
+    """Emite como "novo" o refresh da sessão do outro dispositivo — colisão no banco."""
+
+    def issue_refresh_token(self) -> IssuedRefreshToken:
+        return IssuedRefreshToken(
+            value="outro-dispositivo", fingerprint=self.fingerprint("outro-dispositivo")
+        )
+
+
+class TestRotacaoAtomica:
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS_DA_ROTACAO) + 1))
+    def test_falha_na_escrita_n_deixa_as_sessoes_identicas(
+        self, com_sessao: Engine, n: int
+    ) -> None:
+        antes = _linhas(com_sessao, tables.sessions)
+        registro = Registro(falhar_em=n)
+
+        with pytest.raises(_FalhaInjetada):
+            _rotacionador(com_sessao, registro).execute(
+                RefreshSessionCommand(refresh_token=_REFRESH)
+            )
+
+        assert tuple(registro.escritas) == _ESCRITAS_DA_ROTACAO[:n]
+        assert _linhas(com_sessao, tables.sessions) == antes
+
+    def test_add_recusado_pelo_banco_deixa_o_refresh_antigo_valido(
+        self, com_sessao: Engine
+    ) -> None:
+        """CA6 — falha **originada no banco** (`uq_sessions_fingerprint`) no `add` da nova.
+
+        O emissor fixado devolve como "novo" o fingerprint da sessão do outro
+        dispositivo; o banco recusa, a unidade desfaz o `revoke`, e uma rotação
+        seguinte com o mesmo refresh funciona.
+        """
+        antes = _linhas(com_sessao, tables.sessions)
+
+        with pytest.raises(SessionFingerprintAlreadyExistsError):
+            _rotacionador(com_sessao, Registro(), issuer=_EmissorQueRepete()).execute(
+                RefreshSessionCommand(refresh_token=_REFRESH)
+            )
+
+        assert _linhas(com_sessao, tables.sessions) == antes
+        resultado = _rotacionador(com_sessao, Registro()).execute(
+            RefreshSessionCommand(refresh_token=_REFRESH)
+        )
+        assert resultado.refresh_token
+
+    def test_reuso_revoga_todas_as_sessoes_e_grava(self, com_sessao: Engine) -> None:
+        """CA6 — o caminho de reuso fica fora da unidade: a revogação em massa comita."""
+        _rotacionador(com_sessao, Registro()).execute(RefreshSessionCommand(refresh_token=_REFRESH))
+
+        with pytest.raises(RefreshTokenReuseError):
+            _rotacionador(com_sessao, Registro()).execute(
+                RefreshSessionCommand(refresh_token=_REFRESH)
+            )
+
+        assert all(_sessoes_revogadas(com_sessao).values())
+
+
+class _SessoesQueSeguramAUnidade(PostgresSessionRepository):
+    """Depois do `revoke`, avisa e espera — a linha da sessão fica travada na unidade."""
+
+    def __init__(self, engine: Engine, *, falhar_depois: bool) -> None:
+        super().__init__(engine)
+        self.revogou = threading.Event()
+        self.liberar = threading.Event()
+        self._falhar_depois = falhar_depois
+
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
+        revogou = super().revoke(session_id, revoked_at)
+        self.revogou.set()
+        assert self.liberar.wait(_ESPERA), "a thread principal não liberou a primeira rotação"
+        if self._falhar_depois:
+            raise _FalhaInjetada("depois do revoke")
+        return revogou
+
+
+class TestRotacoesConcorrentes:
+    """CA13 — a segunda rotação espera o lock; se a primeira comita, é reuso."""
+
+    @pytest.mark.parametrize("primeira_falha", [False, True], ids=["comita", "desfaz"])
+    def test_segunda_rotacao_do_mesmo_refresh(
+        self, com_sessao: Engine, primeira_falha: bool
+    ) -> None:
+        segurador = _SessoesQueSeguramAUnidade(com_sessao, falhar_depois=primeira_falha)
+        resultados: dict[str, object] = {}
+
+        def rotacionar(nome: str, sessoes: PostgresSessionRepository | None) -> Callable[[], None]:
+            def alvo() -> None:
+                resultados[nome] = _rotacionador(com_sessao, Registro(), sessoes=sessoes).execute(
+                    RefreshSessionCommand(refresh_token=_REFRESH)
+                )
+
+            return alvo
+
+        primeira, erros_da_primeira = _em_thread(rotacionar("primeira", segurador))
+        segunda, erros_da_segunda = _em_thread(rotacionar("segunda", None))
+
+        primeira.start()
+        assert segurador.revogou.wait(_ESPERA)
+        segunda.start()
+        _esperar_alguem_bloqueado_por_lock(com_sessao)
+        assert segunda.is_alive()
+
+        segurador.liberar.set()
+        primeira.join(_ESPERA)
+        segunda.join(_ESPERA)
+
+        if primeira_falha:
+            assert [type(e) for e in erros_da_primeira] == [_FalhaInjetada]
+            assert erros_da_segunda == []
+            assert "segunda" in resultados
+            revogadas = _sessoes_revogadas(com_sessao)
+            assert revogadas["sess-1"] is True
+            assert revogadas["sess-2"] is False
+        else:
+            assert erros_da_primeira == []
+            assert [type(e) for e in erros_da_segunda] == [RefreshTokenReuseError]
+            # Fail-closed: tudo do usuário revogado, inclusive o par que a primeira emitiu.
+            assert all(_sessoes_revogadas(com_sessao).values())

@@ -20,6 +20,22 @@ literalmente, revogar **todas as sessões do usuário**. A consequência declara
 (concept §5 regra 6): reapresentar um refresh que saiu por *logout* também conta
 como reuso e derruba as demais sessões. Erra para o lado seguro, e está registrado
 como `[finding]` para uma Stage que distinga a causa.
+
+**A rotação é uma unidade de trabalho, e a corrida perdida é reuso** (Stage 2.6,
+ADR 2.6.0002 §1b). `revoke` da antiga e `add` da nova vão juntos: se o `add`
+falha, a antiga continua válida e a retentativa do cliente funciona — antes da
+2.6 ela ficava revogada sem substituta, e a retentativa caía na detecção de reuso
+e derrubava **todas** as sessões do usuário por causa de um erro transitório.
+
+E `revoke` devolve se revogou. Duas rotações concorrentes do mesmo refresh leem a
+sessão ativa; a segunda espera o lock da linha e, quando a primeira comita,
+revoga **zero** linhas. Antes da 2.6 o retorno era descartado e as duas emitiam
+par novo — dois refresh vivos, medidos em 11 de 12 corridas na auditoria de
+2026-09-28 —, ao contrário do que o concept 2.4 §6 descrevia como aceito. Agora a
+perdedora desfaz a própria unidade, revoga todas as sessões **fora** dela (essa
+escrita precisa comitar) e levanta `RefreshTokenReuseError`: fail-closed, a
+semântica de reuso do ADR 2.2.0001. Se a primeira rotação é que desfaz, a segunda
+revoga uma linha e rotaciona normalmente.
 """
 
 from datetime import timedelta
@@ -42,11 +58,22 @@ from restaurant_hub.features.identity.application.ports.out.session_repository i
     SessionRepository,
 )
 from restaurant_hub.features.identity.application.ports.out.token_issuer import TokenIssuer
+from restaurant_hub.features.identity.application.ports.out.unit_of_work import UnitOfWork
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
 from restaurant_hub.shared.application.ports.out.clock import Clock
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
+
+
+class _RotacaoPerdida(Exception):
+    """A rotação perdeu a corrida dentro da unidade (`revoke` devolveu `False`).
+
+    Classe privada do módulo, fora da hierarquia de erros de identity: só existe
+    para sair da unidade por exceção — o que a desfaz — e é capturada no próprio
+    `execute`. Nunca chega ao chamador, e por isso as varreduras do mapa de status
+    não precisam (nem devem) enxergá-la.
+    """
 
 
 class RefreshSessionUseCase:
@@ -65,6 +92,7 @@ class RefreshSessionUseCase:
         clock: Clock,
         access_token_ttl: timedelta,
         refresh_token_ttl: timedelta,
+        unit_of_work: UnitOfWork,
     ) -> None:
         self._users = users
         self._sessions = sessions
@@ -73,6 +101,7 @@ class RefreshSessionUseCase:
         self._clock = clock
         self._access_token_ttl = access_token_ttl
         self._refresh_token_ttl = refresh_token_ttl
+        self._unit_of_work = unit_of_work
 
     def execute(self, command: RefreshSessionCommand) -> AuthenticationResult:
         """Rotaciona a sessão.
@@ -110,13 +139,8 @@ class RefreshSessionUseCase:
             # 404 — para quem apresenta o token, é apenas credencial inválida.
             raise InvalidRefreshTokenError()
 
-        # A partir daqui a rotação acontece. `revoke` antes de `add` para que, se
-        # a segunda escrita falhar, o token antigo já esteja morto: a alternativa
-        # (dois refresh válidos ao mesmo tempo) é pior num sistema com detecção
-        # de reuso. As duas escritas não são atômicas — não há port de unidade de
-        # trabalho — e a consequência está declarada no concept §6.
-        self._sessions.revoke(session.id, now)
-
+        # A partir daqui a rotação acontece. A emissão dos tokens é CPU, sem I/O,
+        # e fica antes da unidade para não alongar o lock da linha da sessão.
         new_session_id = SessionId(str(self._id_generator.next_id()))
         access_token_expires_at = now + self._access_token_ttl
         refresh_token_expires_at = now + self._refresh_token_ttl
@@ -135,17 +159,26 @@ class RefreshSessionUseCase:
             )
         )
 
-        self._sessions.add(
-            Session(
-                id=new_session_id,
-                user_id=user.id,
-                refresh_token_fingerprint=issued_refresh.fingerprint,
-                issued_at=now,
-                # Renovado a partir de `now`: não há teto absoluto de vida de
-                # sessão nesta Stage (`[finding]`, concept §13).
-                expires_at=refresh_token_expires_at,
-            )
+        nova = Session(
+            id=new_session_id,
+            user_id=user.id,
+            refresh_token_fingerprint=issued_refresh.fingerprint,
+            issued_at=now,
+            # Renovado a partir de `now`: não há teto absoluto de vida de
+            # sessão nesta Stage (`[finding]`, concept §13).
+            expires_at=refresh_token_expires_at,
         )
+
+        # `revoke` antes de `add`, numa unidade — ver o docstring do módulo.
+        try:
+            with self._unit_of_work.transaction():
+                if not self._sessions.revoke(session.id, now):
+                    raise _RotacaoPerdida()
+                self._sessions.add(nova)
+        except _RotacaoPerdida:
+            # Fora da unidade (já desfeita): esta revogação precisa comitar.
+            self._sessions.revoke_all_for_user(session.user_id, now)
+            raise RefreshTokenReuseError() from None
 
         return to_authentication_result(
             access_token=access_token,

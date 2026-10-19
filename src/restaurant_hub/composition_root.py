@@ -610,6 +610,7 @@ def wire_dependencies(
             clock=clock,
             access_token_ttl=access_ttl,
             refresh_token_ttl=refresh_ttl,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_revoke_session=RevokeSessionUseCase(
             sessions=sessions, token_issuer=token_issuer, clock=clock
