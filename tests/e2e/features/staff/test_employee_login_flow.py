@@ -1,4 +1,4 @@
-"""E2E do login do funcionário — Stage 3.5 (CA13, CA14, CA22 a CA26, CA30 a CA32).
+"""E2E do login do funcionário — Stages 3.5 (CA13, CA14, CA22-26, CA30-32) e 3.7 (CA16-18).
 
 O fluxo inteiro pelo entrypoint real, contra Postgres: o `manager` cria o
 funcionário e o login; o link sai pelo canal escolhido; o funcionário define a
@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator
 from datetime import timedelta
 from http import HTTPStatus
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import Engine, text
@@ -649,3 +650,111 @@ async def test_ca31_email_com_byte_nul_e_422_de_staff(
     assert resposta.json()["type"] == "staff_error"
     assert "e-mail de login inválido" in resposta.json()["detail"]
     assert (await _registro(client, cabecalho, cenario.unidade_a, employee_id))["user_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.7 — desligar corta só o acesso que o registro concede (ADR 3.7.0001)
+# ---------------------------------------------------------------------------
+#
+# Os casos (a) e (b) da issue #60 não são produzíveis pela API ainda: a cópia não
+# carrega o `user_id` e "vincular login existente" não existe. O arranjo é um
+# `UPDATE employees SET user_id` direto — a única forma até lá, declarada no ADR.
+#
+# **Sempre o refresh rotacionado.** Um refresh com 200 rotaciona o token; reapresentar
+# o **original** depois dispara a detecção de reuso e responde 401 mesmo que o
+# desligamento não tenha revogado nada — um 401 que não prova coisa alguma.
+
+
+def _vincular_direto(engine: Engine, employee_id: str, user_id: str) -> None:
+    with engine.begin() as conexao:
+        alterados = conexao.execute(
+            text("UPDATE employees SET user_id = :user_id WHERE id = :id"),
+            {"user_id": user_id, "id": employee_id},
+        ).rowcount
+    assert alterados == 1
+
+
+async def _desligar(
+    client: AsyncClient, cabecalho: dict[str, str], unidade: str, employee_id: str
+) -> None:
+    desligado = await client.post(
+        f"{API}/units/{unidade}/employees/{employee_id}/termination", headers=cabecalho
+    )
+    assert desligado.status_code == HTTPStatus.OK, desligado.text
+    assert desligado.json()["active"] is False
+
+
+async def _refresh(client: AsyncClient, refresh_token: str) -> httpx.Response:
+    return await client.post(f"{API}/auth/refresh", json={"refresh_token": refresh_token})
+
+
+async def _funcionario_logado_com_dois_registros(
+    client: AsyncClient, engine: Engine, cenario: Cenario, *, unidade_do_segundo: str
+) -> tuple[str, str, dict]:
+    """Registro A com login por R17 na unidade A; registro B recebe o mesmo login."""
+    cabecalho = auth(cenario.manager)
+    registro_a = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Cris")
+    registro_b = await _criar_funcionario(client, cabecalho, unidade_do_segundo, "Cris (2)")
+    corpo = await _criar_login(
+        client, cabecalho, cenario.unidade_a, registro_a, email="cris@cantina.com", delivery="link"
+    )
+    _vincular_direto(engine, registro_b, corpo["employee"]["user_id"])
+    await _definir_senha(client, _token_de(corpo["setup_link"]))
+    return registro_a, registro_b, await _login(client, "cris@cantina.com")
+
+
+async def test_ca16_dois_registros_do_login_na_unidade_so_o_ultimo_corta(
+    client: AsyncClient, engine: Engine, cenario: Cenario
+) -> None:
+    """Caso (a) da issue #60: enquanto o outro registro da unidade está ativo, ele concede."""
+    cabecalho = auth(cenario.manager)
+    registro_a, registro_b, tokens = await _funcionario_logado_com_dois_registros(
+        client, engine, cenario, unidade_do_segundo=cenario.unidade_a
+    )
+
+    await _desligar(client, cabecalho, cenario.unidade_a, registro_a)
+    vivo = await _refresh(client, tokens["refresh_token"])
+    assert vivo.status_code == HTTPStatus.OK, vivo.text
+
+    await _desligar(client, cabecalho, cenario.unidade_a, registro_b)
+    # O rotacionado da resposta anterior — ver o comentário da seção.
+    cortado = await _refresh(client, vivo.json()["refresh_token"])
+    assert cortado.status_code == HTTPStatus.UNAUTHORIZED, cortado.text
+
+
+async def test_ca17_registro_ativo_em_outra_unidade_nao_impede_o_corte(
+    client: AsyncClient, engine: Engine, cenario: Cenario
+) -> None:
+    """Decisão do sponsor (concept §13 Q4): só a unidade conta — a pessoa loga de novo."""
+    cabecalho = auth(cenario.manager)
+    registro_a, _, tokens = await _funcionario_logado_com_dois_registros(
+        client, engine, cenario, unidade_do_segundo=cenario.unidade_b
+    )
+
+    await _desligar(client, cabecalho, cenario.unidade_a, registro_a)
+
+    cortado = await _refresh(client, tokens["refresh_token"])
+    assert cortado.status_code == HTTPStatus.UNAUTHORIZED, cortado.text
+    assert (await _login(client, "cris@cantina.com"))["access_token"]
+
+
+async def test_ca18_gerente_vinculado_a_registro_de_escala_nao_perde_a_sessao(
+    client: AsyncClient, engine: Engine, cenario: Cenario
+) -> None:
+    """Caso (b) da issue #60: a autoridade do gerente vem do papel, não do registro."""
+    cabecalho = auth(cenario.manager)
+    registro = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Gerente na escala")
+    with engine.connect() as conexao:
+        gerente_id = conexao.execute(
+            text("SELECT id FROM users WHERE email = :email"), {"email": "gerente@cantina.com"}
+        ).scalar_one()
+    _vincular_direto(engine, registro, gerente_id)
+
+    await _desligar(client, cabecalho, cenario.unidade_a, registro)
+
+    vivo = await _refresh(client, cenario.manager["refresh_token"])
+    assert vivo.status_code == HTTPStatus.OK, vivo.text
+    gestao = await client.get(
+        f"{API}/units/{cenario.unidade_a}/employees", headers=auth(vivo.json())
+    )
+    assert gestao.status_code == HTTPStatus.OK, gestao.text
