@@ -103,6 +103,14 @@ class InMemoryIdentityGateway:
             gateway e uma ao repositório num ledger só (ex.: "revogar antes de
             gravar", "gravar antes de enviar"): dois ledgers separados não têm
             posição relativa.
+        other_role_logins: logins do ledger cujo papel **não** é o de
+            funcionário (gerente/dono vinculado a um registro de escala —
+            ADR 3.7.0001). É **este** conjunto que faz `is_employee_login`
+            responder `False` para um login conhecido; um id fora de `logins` é
+            o caso "desconhecido", que também responde `False` (L-IG5). Semear
+            por `seed_login_of_other_role`, que grava nos dois.
+        fail_role_query_with: se definido, `is_employee_login` levanta **esta
+            instância** (L-IG5, metade da falha).
     """
 
     logins: dict[UserId, ProvisionedLoginRecord] = field(default_factory=dict)
@@ -114,6 +122,8 @@ class InMemoryIdentityGateway:
     raw_errors_by_tenant: dict[TenantId, Exception] = field(default_factory=dict)
     raw_errors_by_unit: dict[UnitId, Exception] = field(default_factory=dict)
     fail_send_with: Exception | None = None
+    other_role_logins: set[UserId] = field(default_factory=set)
+    fail_role_query_with: Exception | None = None
     mirror: Callable[[str], None] | None = None
     _sequence: int = 0
 
@@ -170,3 +180,31 @@ class InMemoryIdentityGateway:
         """L-IG4 — idempotente e total: registra, nunca levanta."""
         self.record(f"revoke_login_sessions({user_id!r})")
         self.revoked.append(user_id)
+
+    def is_employee_login(self, user_id: UserId) -> bool:
+        """L-IG5 — `True` sse o login está no ledger e não é de outro papel."""
+        self.record(f"is_employee_login({user_id!r})")
+        if self.fail_role_query_with is not None:
+            raise self.fail_role_query_with
+        return user_id in self.logins and user_id not in self.other_role_logins
+
+    # ---- ganchos de teste (não fazem parte do port) ----
+
+    def seed_login_of_other_role(
+        self, user_id: UserId, *, tenant_id: TenantId, unit_id: UnitId
+    ) -> None:
+        """Um login **conhecido** de papel diferente de funcionário.
+
+        Grava no ledger **e** em `other_role_logins`: só assim é o segundo
+        conjunto que decide o `False` de L-IG5, e não a ausência do login —
+        senão o caso colapsaria no "desconhecido". Não registra em `calls`: é
+        arranjo, não chamada recebida.
+        """
+        self.logins[user_id] = ProvisionedLoginRecord(
+            email=f"{user_id}@outro-papel.invalid",
+            tenant_id=tenant_id,
+            unit_id=unit_id,
+            delivery=LoginDelivery.EMAIL,
+            setup_link="",
+        )
+        self.other_role_logins.add(user_id)

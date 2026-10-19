@@ -265,6 +265,11 @@ class GatewaySobContrato:
             **arranjo** — devolvem o valor que produz a falha crua e o tipo que
             sobe deste lado.
         envio_falha: **arranjo** — faz o próximo envio levantar a instância dada.
+        login_de_outro_papel: **arranjo** (Stage 3.7, L-IG5) — cria deste lado um
+            login **conhecido** do papel dado como **valor** (`"owner"`,
+            `"manager"`, `"hr"`, `"platform_admin"`) e devolve o id dele.
+        consulta_de_papel_falha: **arranjo** (L-IG5) — faz a próxima consulta de
+            papel levantar a instância dada.
     """
 
     gateway: IdentityGateway
@@ -282,6 +287,8 @@ class GatewaySobContrato:
     unidade_de_outro_tenant: Callable[[], CenarioCru]
     tenant_inexistente: Callable[[], CenarioCru]
     envio_falha: Callable[[Exception], None]
+    login_de_outro_papel: Callable[[str], UserId]
+    consulta_de_papel_falha: Callable[[Exception], None]
 
 
 def _gateway_fake() -> GatewaySobContrato:
@@ -312,11 +319,29 @@ def _gateway_fake() -> GatewaySobContrato:
     def envio_falha(excecao: Exception) -> None:
         fake.fail_send_with = excecao
 
+    # O fake não guarda o papel dos logins de outro papel — só que não são de
+    # funcionário. O holder lembra o valor pedido, para `login_role_of` responder.
+    papeis_de_outro: dict[UserId, str] = {}
+
+    def login_de_outro_papel(papel: str) -> UserId:
+        user_id = UserId(f"outro-papel-{len(papeis_de_outro) + 1}")
+        fake.seed_login_of_other_role(user_id, tenant_id=tenant, unit_id=unidade)
+        papeis_de_outro[user_id] = papel
+        return user_id
+
+    def consulta_de_papel_falha(excecao: Exception) -> None:
+        fake.fail_role_query_with = excecao
+
+    def login_role_of(user_id: UserId) -> str | None:
+        if user_id in papeis_de_outro:
+            return papeis_de_outro[user_id]
+        return "employee" if user_id in fake.logins else None
+
     return GatewaySobContrato(
         gateway=fake,
         tenant_id=tenant,
         unit_id=unidade,
-        login_role_of=lambda user_id: "employee" if user_id in fake.logins else None,
+        login_role_of=login_role_of,
         login_scope_of=lambda user_id: (
             (str(fake.logins[user_id].tenant_id), (str(fake.logins[user_id].unit_id),))
             if user_id in fake.logins
@@ -334,6 +359,8 @@ def _gateway_fake() -> GatewaySobContrato:
         unidade_de_outro_tenant=unidade_de_outro_tenant,
         tenant_inexistente=tenant_inexistente,
         envio_falha=envio_falha,
+        login_de_outro_papel=login_de_outro_papel,
+        consulta_de_papel_falha=consulta_de_papel_falha,
     )
 
 
@@ -364,6 +391,24 @@ class _SessoesQueLembramRevogacoes(InMemorySessionRepository):
         super().revoke_all_for_user(user_id, revoked_at)
 
 
+class _UsuariosArmaveis(InMemoryUserRepository):
+    """O fake de usuários, com uma falha de leitura armável **depois** de montado.
+
+    A consulta de papel (L-IG5) lê `find_by_id`; o holder arma a falha entre o
+    arranjo e a chamada (`consulta_de_papel_falha`), com o grafo já montado — o
+    mesmo motivo de `_EmailSenderArmavel`.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.falhar_com: Exception | None = None
+
+    def find_by_id(self, user_id: IdentityUserId) -> User | None:
+        if self.falhar_com is not None:
+            raise self.falhar_com
+        return super().find_by_id(user_id)
+
+
 class _EmailSenderArmavel:
     """Um `EmailSender` que grava o que enviou e falha sob demanda, **depois** de montado.
 
@@ -390,7 +435,7 @@ def _link_do_corpo(corpo: str) -> str:
 
 
 def _gateway_real() -> GatewaySobContrato:
-    users = InMemoryUserRepository()
+    users = _UsuariosArmaveis()
     restaurants = InMemoryRestaurantRepository()
     units = InMemoryUnitRepository()
     tokens = InMemoryPasswordSetupTokenRepository()
@@ -471,6 +516,29 @@ def _gateway_real() -> GatewaySobContrato:
             argumento="unit_id", valor="unidade-fantasma", tipo_esperado=UnitNotFoundError
         )
 
+    outros_papeis = 0
+
+    def login_de_outro_papel(papel: str) -> UserId:
+        nonlocal outros_papeis
+        outros_papeis += 1
+        role = Role.from_string(papel)
+        user_id = f"outro-papel-{outros_papeis}"
+        users.add(
+            User(
+                id=IdentityUserId(user_id),
+                email=Email(f"{user_id}@contrato.exemplo"),
+                role=role,
+                # `platform_admin` não tem tenant; os outros exigem um (User).
+                tenant_id=None if role is Role.PLATFORM_ADMIN else RestaurantId(tenant),
+            ),
+            hasher.unusable_hash(),
+            (),
+        )
+        return UserId(user_id)
+
+    def consulta_de_papel_falha(excecao: Exception) -> None:
+        users.falhar_com = excecao
+
     def unidade_de_outro_tenant() -> CenarioCru:
         restaurants.add(Restaurant(id=RestaurantId("tenant-alheio"), name="Alheia"))
         units.add(
@@ -509,6 +577,8 @@ def _gateway_real() -> GatewaySobContrato:
         unidade_de_outro_tenant=unidade_de_outro_tenant,
         tenant_inexistente=tenant_inexistente,
         envio_falha=sender.falhar_com,
+        login_de_outro_papel=login_de_outro_papel,
+        consulta_de_papel_falha=consulta_de_papel_falha,
     )
 
 

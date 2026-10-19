@@ -96,3 +96,12 @@ class LocalIdentityGateway:
     def revoke_login_sessions(self, user_id: UserId) -> None:
         """Corta as sessões do login; idempotente e total (L-IG4)."""
         self._facade.revoke_all_sessions(str(user_id))
+
+    def is_employee_login(self, user_id: UserId) -> bool:
+        """Compara o papel da conta com o literal de L-IG1 (L-IG5).
+
+        Conta desconhecida chega como `None` e responde `False`. **Sem `try`:** a
+        falha da fachada sobe na mesma instância — um `except` que respondesse
+        `False` faria o desligamento gravar com a sessão viva.
+        """
+        return self._facade.account_role(str(user_id)) == _EMPLOYEE_ROLE
