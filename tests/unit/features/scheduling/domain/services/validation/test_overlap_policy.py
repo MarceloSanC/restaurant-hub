@@ -1,6 +1,6 @@
 """Testes da política de sobreposição — CA3, CA4, CA11, CA16."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -8,7 +8,10 @@ import pytest
 from restaurant_hub.features.scheduling.domain.services.validation.overlap_policy import (
     OverlapPolicy,
 )
-from restaurant_hub.features.scheduling.domain.value_objects.identifiers import AssignmentId
+from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
+    AssignmentId,
+    EmployeeId,
+)
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
     EnforcementMode,
     PolicyKind,
@@ -49,7 +52,7 @@ def test_faixas_distintas_sobrepostas_do_mesmo_registro_violam_com_a_interseccao
     assert violacao == Violation(
         policy=PolicyKind.OVERLAP,
         mode=EnforcementMode.BLOCK,
-        employee_id="ana",  # type: ignore[arg-type]
+        employee_id=EmployeeId("ana"),
         demand_id=None,
         operational_days=(SEGUNDA + timedelta(days=2),),
         assignment_ids=frozenset({AssignmentId("s-a0"), AssignmentId("s-a1")}),
@@ -126,14 +129,28 @@ def test_sobreposicao_contra_a_escala_seguinte() -> None:
     assert violacao.assignment_ids == {AssignmentId("s-a0"), AssignmentId("n-a0")}
 
 
-def test_sobreposicao_interna_a_vizinha_nao_e_reportada() -> None:
-    anterior = escala(
+@pytest.mark.parametrize(("lado", "base"), [("previous", _ANTERIOR), ("next", _SEGUINTE)])
+def test_sobreposicao_interna_a_vizinha_nao_e_reportada(lado: str, base: date) -> None:
+    vizinha = escala(
         [
-            Turno("ana", em(2, 8, base=_ANTERIOR), em(2, 16, base=_ANTERIOR)),
-            Turno("ana", em(2, 10, base=_ANTERIOR), em(2, 18, base=_ANTERIOR)),
+            Turno("ana", em(2, 8, base=base), em(2, 16, base=base)),
+            Turno("ana", em(2, 10, base=base), em(2, 18, base=base)),
         ],
-        schedule_id="p",
-        first_day=_ANTERIOR,
+        schedule_id="v",
+        first_day=base,
     )
+    contexto_ = contexto(escala([]), **{lado: vizinha})  # type: ignore[arg-type]
 
-    assert _POLITICA.evaluate(contexto(escala([]), previous=anterior), config()) == ()
+    assert _POLITICA.evaluate(contexto_, config()) == ()
+
+
+def test_insercao_fora_de_ordem_da_dias_ordenados() -> None:
+    # Domingo inserido antes de sábado; sábado 22h-domingo 06h cruza domingo 05h-09h.
+    avaliada = escala([Turno("ana", em(6, 5), em(6, 9)), Turno("ana", em(5, 22), em(6, 6))])
+
+    (violacao,) = _POLITICA.evaluate(contexto(avaliada), config())
+
+    assert violacao.operational_days == (
+        SEGUNDA + timedelta(days=5),
+        SEGUNDA + timedelta(days=6),
+    )

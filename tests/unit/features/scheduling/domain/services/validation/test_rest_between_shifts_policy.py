@@ -1,6 +1,6 @@
 """Testes da política de descanso entre jornadas — CA3, CA4, CA5 (descanso), CA11, CA16."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -8,10 +8,14 @@ import pytest
 from restaurant_hub.features.scheduling.domain.services.validation import (
     rest_between_shifts_policy,
 )
-from restaurant_hub.features.scheduling.domain.value_objects.identifiers import AssignmentId
+from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
+    AssignmentId,
+    EmployeeId,
+)
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
     EnforcementMode,
     PolicyKind,
+    PolicyRule,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
 from tests.unit.features.scheduling.domain.services.validation.scenario import (
@@ -46,7 +50,7 @@ def test_fechamento_e_abertura_violam_com_o_descanso_medido() -> None:
     assert violacao == Violation(
         policy=PolicyKind.REST_BETWEEN_SHIFTS,
         mode=EnforcementMode.WARN,
-        employee_id="ana",  # type: ignore[arg-type]
+        employee_id=EmployeeId("ana"),
         demand_id=None,
         operational_days=(SEGUNDA, _TERCA),
         assignment_ids=frozenset({AssignmentId("s-a0"), AssignmentId("s-a1")}),
@@ -163,14 +167,46 @@ def test_descanso_contra_a_escala_seguinte() -> None:
     assert violacao.operational_days == (SEGUNDA + timedelta(days=6), _SEGUINTE)
 
 
-def test_par_interno_a_vizinha_nao_e_reportado() -> None:
-    anterior = escala(
+@pytest.mark.parametrize(("lado", "base"), [("previous", _ANTERIOR), ("next", _SEGUINTE)])
+def test_par_interno_a_vizinha_nao_e_reportado(lado: str, base: date) -> None:
+    vizinha = escala(
         [
-            Turno("ana", em(2, 16, base=_ANTERIOR), em(3, 0, base=_ANTERIOR)),
-            Turno("ana", em(3, 8, base=_ANTERIOR), em(3, 16, base=_ANTERIOR)),
+            Turno("ana", em(2, 16, base=base), em(3, 0, base=base)),
+            Turno("ana", em(3, 8, base=base), em(3, 16, base=base)),
         ],
-        schedule_id="p",
-        first_day=_ANTERIOR,
+        schedule_id="v",
+        first_day=base,
+    )
+    contexto_ = contexto(escala([]), **{lado: vizinha})  # type: ignore[arg-type]
+
+    assert _POLITICA.evaluate(contexto_, config()) == ()
+
+
+def test_madrugada_antes_do_corte_e_do_mesmo_dia_e_nao_conta() -> None:
+    # Segunda 18-22 + terça 03-06: tudo do dia operacional de segunda.
+    assert _avaliar(Turno("ana", em(0, 18), em(0, 22)), Turno("ana", em(1, 3), em(1, 6))) == ()
+
+
+def test_o_corte_separa_o_mesmo_dia_do_dia_seguinte() -> None:
+    antes_do_corte = (Turno("ana", em(0, 14), em(0, 22)), Turno("ana", em(1, 4), em(1, 6)))
+    no_corte = (Turno("ana", em(0, 14), em(0, 22)), Turno("ana", em(1, 5), em(1, 9)))
+
+    assert _avaliar(*antes_do_corte) == ()
+    (violacao,) = _avaliar(*no_corte)
+    assert (violacao.operational_days, violacao.observed) == ((SEGUNDA, _TERCA), Decimal(420))
+
+
+def test_turnos_inseridos_fora_de_ordem_pareiam_em_ordem() -> None:
+    (violacao,) = _avaliar(Turno("ana", em(1, 8), em(1, 16)), Turno("ana", em(0, 16), em(1, 0)))
+
+    assert (violacao.operational_days, violacao.observed) == ((SEGUNDA, _TERCA), Decimal(480))
+
+
+def test_o_modo_vem_da_config() -> None:
+    (violacao,) = _avaliar(
+        Turno("ana", em(0, 16), em(1, 0)),
+        Turno("ana", em(1, 8), em(1, 16)),
+        rest_between_shifts=PolicyRule(enabled=True, mode=EnforcementMode.BLOCK),
     )
 
-    assert _POLITICA.evaluate(contexto(escala([]), previous=anterior), config()) == ()
+    assert violacao.mode is EnforcementMode.BLOCK

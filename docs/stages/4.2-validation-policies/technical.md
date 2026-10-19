@@ -348,4 +348,21 @@ Sem blocker; disposições (correções no commit `[4.2/task-03-fix]`):
 - **#7, aceito para o fechamento:** o CA11 é marcado pelos testes das políticas (Tasks 05–09), não
   pela Task 03.
 
+### 2026-10-19 — [deviation] Checkpoint C do bloco 2 (Tasks 04–06) — Claude Opus 5.5 (executor)
+
+Sem blocker; todos **corrigidos** no commit `[4.2/task-06-fix]`, só em testes (nenhum defeito no
+`src`):
+- **#1 major:** nenhum cenário começava antes do corte (05:00), e o mutante "dia civil no lugar do
+  dia operacional" sobrevivia. Entraram a projeção com faixa às 02:00 de terça (dia de segunda) e
+  dois testes de descanso que cruzam o corte. Na Task 06, o executor já tinha pegado dois testes de
+  fronteira que passavam à toa pelo mesmo motivo (terça 02:59 e 03:00 ainda são segunda) e os
+  reescrevera antes do commit.
+- **#2 major:** os três `sorted` (dias do descanso, janelas, dias da sobreposição) sobreviviam à
+  remoção, porque todo cenário era inserido em ordem. Entrou um teste fora de ordem por política.
+- **#3 major:** a união das janelas não travava o "fim corrente = o maior"; entrou a janela depois
+  de uma contida.
+- **#4–#8:** modo do descanso vindo da config; a projeção conferida também no segundo registro e nos
+  ids; a vizinha interna e o período ≠ 7 nos dois lados; `match` específico; `EmployeeId` no lugar do
+  `type: ignore`.
+
 <!-- END: post-execution -->

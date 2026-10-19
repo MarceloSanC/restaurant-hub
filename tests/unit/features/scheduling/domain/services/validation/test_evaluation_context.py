@@ -24,6 +24,8 @@ from restaurant_hub.features.scheduling.domain.value_objects.schedule_period imp
     SchedulePeriod,
 )
 from tests.unit.features.scheduling.domain.services.validation.scenario import (
+    ATENDENTE,
+    COZINHEIRO,
     SEGUNDA,
     Turno,
     contexto,
@@ -50,7 +52,7 @@ def test_a_projecao_espelha_as_leituras_da_raiz() -> None:
     avaliada = escala(
         [
             Turno("ana", em(0, 8), em(0, 16), band_break=60, alloc_break=30, counts=False),
-            Turno("bruno", em(1, 22), em(2, 6)),
+            Turno("bruno", em(1, 2), em(1, 6), function=ATENDENTE),
         ]
     )
     contexto_ = contexto(avaliada)
@@ -63,9 +65,18 @@ def test_a_projecao_espelha_as_leituras_da_raiz() -> None:
         False,
     )
     assert ana.worked_minutes == avaliada.worked_minutes_of(ana.assignment_id)
-    # Madrugada fica no dia operacional em que a faixa começa (corte 05:00).
-    assert bruno.operational_day == SEGUNDA + timedelta(days=1)
+    # Terça 02:00 é antes do corte (05:00): a faixa é do dia operacional de segunda.
+    assert bruno.operational_day == SEGUNDA
+    assert (bruno.break_divergence, bruno.counts_toward_workload) == (False, True)
+    assert (bruno.band_break_minutes, bruno.effective_break_minutes) == (0, 0)
     assert (ana.in_evaluated, ana.schedule_id) == (True, "s")
+    faixa_da_ana, faixa_do_bruno = avaliada.bands
+    assert (ana.band_id, ana.time_range) == (faixa_da_ana.id, faixa_da_ana.time_range)
+    assert (bruno.demand_id, bruno.job_function_id) == (
+        faixa_do_bruno.demands[0].id,
+        ATENDENTE,
+    )
+    assert ana.job_function_id == COZINHEIRO
 
 
 def test_vizinhas_entram_em_all_allocations_e_nao_em_allocations() -> None:
@@ -121,14 +132,15 @@ def test_periodo_que_nao_e_de_sete_dias_e_recusado(dias: int) -> None:
         EvaluationContext(schedule=avaliada, facts=())
 
 
-def test_vizinha_com_periodo_que_nao_e_de_sete_dias_e_recusada() -> None:
-    anterior = dataclasses.replace(
-        escala([], schedule_id="p", first_day=_ANTERIOR),
-        period=SchedulePeriod(first_day=_ANTERIOR, days=14),
+@pytest.mark.parametrize(("lado", "base"), [("previous", _ANTERIOR), ("next", _SEGUINTE)])
+def test_vizinha_com_periodo_que_nao_e_de_sete_dias_e_recusada(lado: str, base: date) -> None:
+    vizinha = dataclasses.replace(
+        escala([], schedule_id="v", first_day=base),
+        period=SchedulePeriod(first_day=base, days=14),
     )
 
     with pytest.raises(InvalidEvaluationInputError, match="7 dias"):
-        EvaluationContext(schedule=escala([]), facts=(), previous=anterior)
+        EvaluationContext(schedule=escala([]), facts=(), **{lado: vizinha})  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("endereco", [("t2", "u1"), ("t1", "u2")])
@@ -163,7 +175,7 @@ def test_vizinha_nao_adjacente_e_recusada(lado: str, base: object, trecho: str) 
 def test_vizinha_com_o_id_da_avaliada_e_recusada(lado: str, base: object) -> None:
     vizinha = escala([], schedule_id="s", first_day=base)  # type: ignore[arg-type]
 
-    with pytest.raises(InvalidEvaluationInputError, match="id"):
+    with pytest.raises(InvalidEvaluationInputError, match="id da avaliada ou da outra"):
         EvaluationContext(schedule=escala([]), facts=(), **{lado: vizinha})  # type: ignore[arg-type]
 
 
@@ -171,7 +183,7 @@ def test_as_duas_vizinhas_com_o_mesmo_id_sao_recusadas() -> None:
     anterior = escala([], schedule_id="v", first_day=_ANTERIOR)
     seguinte = escala([], schedule_id="v", first_day=_SEGUINTE)
 
-    with pytest.raises(InvalidEvaluationInputError, match="id"):
+    with pytest.raises(InvalidEvaluationInputError, match="id da avaliada ou da outra"):
         EvaluationContext(schedule=escala([]), facts=(), previous=anterior, next=seguinte)
 
 

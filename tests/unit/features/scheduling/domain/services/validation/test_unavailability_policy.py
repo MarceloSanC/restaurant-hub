@@ -8,7 +8,10 @@ import pytest
 from restaurant_hub.features.scheduling.domain.services.validation.unavailability_policy import (
     UnavailabilityPolicy,
 )
-from restaurant_hub.features.scheduling.domain.value_objects.identifiers import AssignmentId
+from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
+    AssignmentId,
+    EmployeeId,
+)
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
     EnforcementMode,
     PolicyKind,
@@ -44,7 +47,7 @@ def test_alocacao_sobre_ferias_viola_com_a_faixa_inteira() -> None:
     assert violacao == Violation(
         policy=PolicyKind.UNAVAILABILITY,
         mode=EnforcementMode.BLOCK,
-        employee_id="ana",  # type: ignore[arg-type]
+        employee_id=EmployeeId("ana"),
         demand_id=None,
         operational_days=(SEGUNDA,),
         assignment_ids=frozenset({AssignmentId("s-a0")}),
@@ -75,9 +78,16 @@ def test_janelas_sobrepostas_sao_unidas_e_nao_somadas() -> None:
 
 
 def test_janela_contida_em_outra_nao_conta_duas_vezes() -> None:
-    (violacao,) = _avaliar((em(0, 9), em(0, 15)), (em(0, 10), em(0, 11)))
+    # A terceira janela vem depois de uma contida: o fim corrente é o da maior (15h).
+    (violacao,) = _avaliar((em(0, 9), em(0, 15)), (em(0, 10), em(0, 11)), (em(0, 12), em(0, 13)))
 
     assert violacao.observed == Decimal(360)
+
+
+def test_janelas_fora_de_ordem_sao_unidas() -> None:
+    (violacao,) = _avaliar((em(0, 14), em(0, 15)), (em(0, 10), em(0, 13)), (em(0, 9), em(0, 12)))
+
+    assert violacao.observed == Decimal(300)
 
 
 def test_janela_com_segundos_da_minutos_fracionarios_exatos() -> None:
