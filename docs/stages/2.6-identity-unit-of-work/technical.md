@@ -511,4 +511,61 @@ ainda não migrados.
 > `scripts/check_technical_postexec.py`. O frontmatter `updated_at`
 > **não muda** com edições aqui — cada entrada carrega data + autor.
 
+### 2026-10-19 — [decision] Renumeração 3.7 → 2.6 antes do primeiro gate — Claude (sessão única)
+**Contexto:** a #46 foi promovida como Stage 3.7 (Step 3). Minutos depois, duas sessões paralelas promoveram as issues #49 e #60 também como 3.7, uma delas já com ADR `3_7_0001`. O número da Stage e o `adr_id` são identidade e não reciclam (CONVENTIONS §1). O Checkpoint A (conformidade) apontou ainda que quatro das cinco dívidas nasceram no Step 2.
+**Pergunta:** que número dar à Stage?
+**Opções:**
+- A — manter 3.7 e disputar com #49/#60 no merge
+- B — 3.8 no Step 3
+- C — 2.6 no Step 2, o Step do BC identity ✅ recomendada
+**Decisão:** C. Os dois commits locais (roadmap e esqueleto) foram refeitos antes de qualquer gate. A branch passou de `refactor/46-3-7-unit-of-work` para `refactor/46-2-6-identity-unit-of-work`; a pasta da worktree mantém o nome antigo, porque movê-la quebraria o venv.
+**Razão:** PIPELINE §4.5 ("Step certo"). O Step do próprio BC raramente disputa número com Stages de outro BC. Aprendizado registrado na memória do projeto.
+
+### 2026-10-19 — [deviation] Docstrings de staff numa Task própria (T13) — Claude (sessão única)
+O plano inicial punha os docstrings de `employee_repository.py` e `job_function_repository.py` na T03, que é um commit `refactor(identity)`. O Checkpoint B apontou que isso fere "1 commit = 1 escopo" (CONVENTIONS §4). Os dois docstrings foram para a T13 (`docs(staff)`). Ficou abaixo do limiar de pergunta porque não muda contrato nem comportamento, só o corte dos commits.
+
+### 2026-10-19 — [deviation] Três commits de correção vindos dos Checkpoints C — Claude (sessão única)
+- `561ee2b` [task-03-fix]: contrato de recusa conta linhas pelo port; `_conforms` do fake; detector mecânico positivo; L2 do port com a exceção do ADR; contador da classe-base sobrevive ao rollback.
+- `42fcfd9` [task-06-fix]: L5 conta checkouts **durante** a unidade aninhada; a corrida espera `wait_event_type = 'Lock'` em vez de `sleep`; CA9 com conjunto exato de atributos. O achado de deadlock entre unidades do mesmo usuário foi **refutado**, com o artefato: a linha da tabela do concept §6 "Deadlock entre duas unidades (ex.: o mesmo usuário redime convite e link de redefinição ao mesmo tempo…)".
+- `5e584c3` [task-09-fix]: o teste unitário do convite manda um vínculo, para a asserção sobre `memberships` não ser vazia; a espera de lock filtra o `UPDATE` na tabela da corrida.
+Em todas as correções a mutação apontada pelo revisor foi rodada antes e depois da correção.
+
+### 2026-10-19 — [deviation] Teste da regra 10 isola as tabelas globais nas árvores sintéticas — Claude (sessão única)
+Nas árvores de `tmp_path`, a allowlist real e os métodos de gateway declarados apareciam como entradas mortas e afogavam a violação plantada. Uma fixture (`regra10_isolada`) esvazia as duas tabelas nesses testes, e os casos de entrada morta ganharam testes próprios. O gate de produção não mudou.
+
+### 2026-10-19 — [finding] Provisionamento composto restaurante + dono — Claude (sessão única)
+**Stage/issue candidata: #67.** O gatilho do ADR 2.4.0003 ("revisit when a transaction port exists") disparou com o port desta Stage. Compor as duas rotas muda o contrato HTTP e o fluxo do admin, e fica fora do escopo (concept §1). **Direção sugerida:** ADR que supersede ou confirma a Alternativa B, com a unidade em volta de `restaurants.add` + `users.add`.
+
+### 2026-10-19 — [finding] `Employee.user_id` sem escrita condicional em staff — Claude (sessão única)
+**Stage/issue candidata: #68.** A janela "última escrita vence sobre `user_id`" do concept 3.5 §6.4 apontava para "a Stage da #46". O port desta Stage é de identity e não alcança staff (ADR 2.6.0002 §2). **Direção sugerida:** método dedicado do port de staff com `UPDATE … WHERE user_id IS NULL`, mais um teste de conduta com duas conexões.
+
+### 2026-10-19 — [finding] Escrita múltipla em scheduling vai encontrar a regra 10 — Claude (sessão única)
+**Stage candidata: `4.4-scheduling-persistence`.** O DoD da 4.4 ("toda mutação de escala gera entrada de auditoria") são duas escritas. A regra 10 vale para todo `use_cases/`, e o port `UnitOfWork` é de identity, que `bc-independence` impede scheduling de importar. A 4.4 precisa escolher entre um port próprio, mover este para `shared/` (aí o reuso já é medido, LAYOUT §4) ou uma entrada de allowlist (ADR 2.6.0002 §5, "Scope across bounded contexts").
+
+### 2026-10-19 — [deviation] Checkpoint C das Tasks 10 a 13 e duas rodadas da auditoria de testes — Claude (sessão única)
+O último Checkpoint C não trouxe blocker: 2 achados médios e 4 baixos na regra 10 e no LAYOUT, todos corrigidos. Correções:
+- `63ca1ad` [task-11-fix]: a regra 10 passa a contar cada entrada numa unidade (helper chamado duas vezes e unidade em laço reprovam), lê a condição do `while`, os cabeçalhos e os `except`, as formas `async`, o `match` e a atribuição anotada; não segue mais chamada de público para público.
+- `9cb5f6f` [task-12-fix]: o LAYOUT afirmava que a emissão de token vem antes da unidade, e o código mostra o contrário em três use cases.
+- `723ef33` [task-10-fix]: o docstring da rotação registra que logout, desligamento ou expurgo concorrentes também viram reuso; o ADR 2.6.0002 §5 explicita a unidade entrada uma vez só.
+
+Auditoria independente:
+- **Rodada 1:** um sobrevivente em `para_leitura` (leitura sem savepoint) e quatro na regra 10. Fechados em `f74017c` [task-13-extra] e nas fixtures de `63ca1ad`.
+- **Rodada 2:** todos os sobreviventes da rodada 1 morrem; oito mutantes novos da regra 10 sobrevivem. Fechados em `6213d9f` [task-11-extra]. Os oito foram reaplicados e todos morrem, e a auditoria fecha "sim" nos seis itens. Um mutante de `refresh_session` (um `revoke_all` a mais dentro da unidade) foi classificado como equivalente, porque a escrita de dentro é desfeita e a de fora é refeita.
+
+Os commits `63ca1ad`, `9cb5f6f`, `723ef33` e `f74017c` foram verificados por **um** `make check` sobre o estado final dos quatro (4098 passed). Eles mexem em arquivos disjuntos e foram comitados em sequência sem rodar o gate entre um e outro: os três primeiros são documentação ou mudanças que o último não altera. Abaixo do limiar de pergunta, porque não muda contrato e o estado comitado final é o verificado. Fica declarado porque foge da letra de "make check antes de todo commit".
+
+### 2026-10-19 — [decision] Sincronização com o develop por rebase — Claude (sessão única)
+**Contexto:** a Stage 4.2 mergeou no develop durante a execução (25 commits, PR #66).
+**Pergunta:** rebase ou merge (memória do projeto: medir antes de decidir)?
+**Opções:**
+- A — merge com commit de adaptação
+- B — rebase, a regra da Etapa 4 do GIT-WORKFLOW ✅ recomendada
+**Decisão:** B. Medição: interseção de arquivos limitada a `docs/roadmap.md` e `docs/LAYOUT.md`, e o rebase parou só no commit de promoção do roadmap (`last_reviewed_at` e a linha de histórico, resolvidos mantendo os dois lados). O LAYOUT não conflitou.
+**Razão:** a divergência é documental e cabe num conflito. A regra literal vale sem precisar levar a decisão ao sponsor.
+
+### 2026-10-19 — [decision] Verificação end-to-end contra a app real — Claude (sessão única)
+**Contexto:** gate de saída "fluxo exercitado pelo entrypoint real".
+**Decisão:** app na porta 8001 da worktree com o Postgres dela; usuário semeado com o hasher argon2 real; a falha da escrita da senha forçada por um trigger temporário em `users`, removido em `finally`. Resultado: duas rotações simultâneas dão `[200, 401]` e o refresh emitido pela vencedora já está morto (401); `POST /auth/password` com a escrita falhando dá 500 e nenhum token é consumido; o mesmo link, sem a falha, dá 204, e o login com a senha nova dá 200. O roteiro ficou no scratchpad da sessão, fora do repo.
+**Razão:** os testes de integração já provam as duas propriedades no use case; aqui elas são vistas pela borda HTTP, que é o que o sponsor observa.
+
 <!-- END: post-execution -->
