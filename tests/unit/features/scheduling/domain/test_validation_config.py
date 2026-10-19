@@ -5,6 +5,8 @@ abaixo exige que os três números legais (660, 600, 2640) apareçam como litera
 inteiro **só** nas linhas de `ValidationConfig.default()` em todo o pacote
 `features/scheduling` — precedente do CA7 da 4.1 (`test_operational_calendar.py`).
 Um `660` copiado numa política reprova aqui, sem depender de alguém rodar `rg`.
+**Limite declarado:** o detector vê literal inteiro e aritmética só de literais
+(`11 * 60`); não vê `timedelta(hours=11)`, `Decimal("660")` nem `11 * CONSTANTE`.
 """
 
 import ast
@@ -184,3 +186,32 @@ def test_os_defaults_legais_aparecem_so_em_validation_config_default() -> None:
     # Anti-vácuo por valor: cada um dos três tem de ser achado no próprio default.
     assert {valor for _, _, valor in ocorrencias} == set(_DEFAULTS_LEGAIS)
     assert {(caminho, linha) for caminho, linha, _ in ocorrencias} <= linhas_do_default
+
+
+@pytest.mark.parametrize(
+    ("enabled", "mode", "trecho"),
+    [
+        (True, "block", "mode"),
+        (True, "warn", "mode"),
+        ("false", EnforcementMode.WARN, "enabled"),
+        (1, EnforcementMode.BLOCK, "enabled"),
+    ],
+)
+def test_regra_recusa_modo_e_habilitacao_em_tipo_cru(
+    enabled: object, mode: object, trecho: str
+) -> None:
+    # Texto do banco: um StrEnum é == ao texto mas não `is`, e o "block" cru sumiria das
+    # duas listas da avaliação (achado F2 da auditoria da Stage).
+    with pytest.raises(InvalidValidationConfigError, match=trecho):
+        PolicyRule(enabled=enabled, mode=mode)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("campo", _CONFIGURAVEIS)
+def test_config_recusa_regra_que_nao_e_policy_rule(campo: str) -> None:
+    with pytest.raises(InvalidValidationConfigError, match=campo):
+        dataclasses.replace(ValidationConfig.default(), **{campo: (True, "block")})
+
+
+def test_config_recusa_direcao_em_texto_cru() -> None:
+    with pytest.raises(InvalidValidationConfigError, match="workload_direction"):
+        dataclasses.replace(ValidationConfig.default(), workload_direction="both")

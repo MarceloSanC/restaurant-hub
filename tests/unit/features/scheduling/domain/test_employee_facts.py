@@ -69,3 +69,17 @@ def test_fatos_aceitam_sob_demanda_e_carga_positiva_fracionaria(horas: Decimal |
 def test_fatos_recusam_carga_nao_finita_ou_nao_positiva(horas: Decimal) -> None:
     with pytest.raises(InvalidEvaluationInputError, match="carga semanal"):
         _fatos(horas)
+
+
+def test_fatos_recusam_carga_que_nao_e_decimal() -> None:
+    with pytest.raises(InvalidEvaluationInputError, match="Decimal"):
+        _fatos(22.5)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("campo", ["start", "end"])
+def test_janela_recusa_data_sem_hora(campo: str) -> None:
+    instantes = {"start": _INICIO, "end": _FIM}
+    instantes[campo] = instantes[campo].date()  # type: ignore[assignment]
+
+    with pytest.raises(InvalidEvaluationInputError, match="datetime"):
+        UnavailabilityWindow(**instantes)  # type: ignore[arg-type]

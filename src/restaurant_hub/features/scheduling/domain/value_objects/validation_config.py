@@ -62,6 +62,18 @@ class PolicyRule:
     enabled: bool
     mode: EnforcementMode
 
+    def __post_init__(self) -> None:
+        # Tipo exato, não só valor: a reidratação da 4.4 traz texto do banco, e um StrEnum é
+        # `==` ao seu texto mas não `is` — `"block"` cru sumiria de `Evaluation.blocking`.
+        if type(self.enabled) is not bool:
+            raise InvalidValidationConfigError(
+                f"enabled deve ser bool (recebido: {self.enabled!r})"
+            )
+        if not isinstance(self.mode, EnforcementMode):
+            raise InvalidValidationConfigError(
+                f"mode deve ser um EnforcementMode (recebido: {self.mode!r})"
+            )
+
 
 _REGRA_DA_INDISPONIBILIDADE = PolicyRule(enabled=True, mode=EnforcementMode.BLOCK)
 
@@ -94,6 +106,26 @@ class ValidationConfig:
     workload_direction: WorkloadDirection
 
     def __post_init__(self) -> None:
+        regras = {
+            "overlap": self.overlap,
+            "rest_between_shifts": self.rest_between_shifts,
+            "daily_cap": self.daily_cap,
+            "weekly_cap": self.weekly_cap,
+            "workload": self.workload,
+            "function_mismatch": self.function_mismatch,
+            "over_coverage": self.over_coverage,
+            "break_divergence": self.break_divergence,
+        }
+        for nome, regra in regras.items():
+            if not isinstance(regra, PolicyRule):
+                raise InvalidValidationConfigError(
+                    f"{nome} deve ser um PolicyRule (recebido: {regra!r})"
+                )
+        if not isinstance(self.workload_direction, WorkloadDirection):
+            raise InvalidValidationConfigError(
+                "workload_direction deve ser um WorkloadDirection "
+                f"(recebido: {self.workload_direction!r})"
+            )
         inteiros = {
             "min_rest_minutes": self.min_rest_minutes,
             "daily_cap_minutes": self.daily_cap_minutes,

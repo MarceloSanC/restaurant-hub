@@ -39,6 +39,11 @@ class UnavailabilityWindow:
     end: datetime
 
     def __post_init__(self) -> None:
+        # `datetime`, não `date`: um `date` cru quebraria em `tzinfo` com AttributeError.
+        if not isinstance(self.start, datetime) or not isinstance(self.end, datetime):
+            raise InvalidEvaluationInputError(
+                "janela de indisponibilidade deve ter instantes datetime"
+            )
         # Tz-aware ANTES de comparar: start < end só roda entre instantes ingênuos.
         if self.start.tzinfo is not None or self.end.tzinfo is not None:
             raise InvalidEvaluationInputError(
@@ -71,6 +76,10 @@ class EmployeeFacts:
 
     def __post_init__(self) -> None:
         horas = self.contracted_weekly_hours
+        if horas is not None and not isinstance(horas, Decimal):
+            raise InvalidEvaluationInputError(
+                f"carga semanal contratada deve ser Decimal (recebido: {horas!r})"
+            )
         # is_finite() ANTES de comparar: comparar NaN com 0 levantaria InvalidOperation.
         if horas is not None and (not horas.is_finite() or horas <= 0):
             raise InvalidEvaluationInputError(

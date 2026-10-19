@@ -284,3 +284,26 @@ def test_descanso_negativo_sai_junto_com_a_sobreposicao() -> None:
         PolicyKind.OVERLAP: Decimal(60),
         PolicyKind.REST_BETWEEN_SHIFTS: Decimal(-60),
     }
+
+
+def test_a_violacao_da_virada_tem_a_mesma_key_dos_dois_lados() -> None:
+    # Concept §5.6 / ADR 4.2.0002 Decision 1: domingo 22h-segunda 06h na semana W e
+    # segunda 05h-09h na semana N dão sobreposição e descanso, vistos de W e de N.
+    seguinte_dia = SEGUNDA + timedelta(days=7)
+    semana = escala([Turno("ana", em(6, 22), em(7, 6))])
+    seguinte = escala(
+        [Turno("ana", em(0, 5, base=seguinte_dia), em(0, 9, base=seguinte_dia))],
+        schedule_id="n",
+        first_day=seguinte_dia,
+    )
+
+    vista_de_w = evaluate(contexto(semana, next=seguinte), ValidationConfig.default())
+    vista_de_n = evaluate(contexto(seguinte, previous=semana), ValidationConfig.default())
+
+    chaves_w = {v.key for v in vista_de_w.violations}
+    chaves_n = {v.key for v in vista_de_n.violations}
+    assert {chave.policy for chave in chaves_w} == {
+        PolicyKind.OVERLAP,
+        PolicyKind.REST_BETWEEN_SHIFTS,
+    }
+    assert chaves_w == chaves_n
