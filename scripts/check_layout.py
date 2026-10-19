@@ -606,7 +606,7 @@ class _Escrita:
 @dataclass
 class _Varredura:
     escritas: list[_Escrita]
-    unidades: set[int]
+    unidades: list[int]
 
 
 def _anotacao(no: ast.expr | None) -> str | None:
@@ -641,7 +641,7 @@ def port_methods(src_root: Path) -> dict[str, set[str]]:
         if tree is None:
             continue
         for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
-            metodos[classe.name] = {m.name for m in classe.body if isinstance(m, ast.FunctionDef)}
+            metodos[classe.name] = {m.name for m in classe.body if isinstance(m, _FUNCOES)}
     return metodos
 
 
@@ -652,10 +652,14 @@ def is_write(port: str, method: str, repository_ports: set[str]) -> bool:
     return method in GATEWAY_WRITE_METHODS.get(port, frozenset())
 
 
+_FUNCOES = (ast.FunctionDef, ast.AsyncFunctionDef)
+_COMPREENSOES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
 def _tipos_dos_atributos(classe: ast.ClassDef) -> dict[str, str]:
-    """`self._x = x` no `__init__`, com `x` anotado — atributo → nome do tipo."""
+    """`self._x = x` (ou `self._x: T = x`) no `__init__`, com `x` anotado — atributo → tipo."""
     init = next(
-        (m for m in classe.body if isinstance(m, ast.FunctionDef) and m.name == "__init__"),
+        (m for m in classe.body if isinstance(m, _FUNCOES) and m.name == "__init__"),
         None,
     )
     if init is None:
@@ -667,16 +671,15 @@ def _tipos_dos_atributos(classe: ast.ClassDef) -> dict[str, str]:
     }
     tipos: dict[str, str] = {}
     for no in ast.walk(init):
-        if (
-            isinstance(no, ast.Assign)
-            and len(no.targets) == 1
-            and isinstance(no.targets[0], ast.Attribute)
-            and isinstance(no.targets[0].value, ast.Name)
-            and no.targets[0].value.id == "self"
-            and isinstance(no.value, ast.Name)
-            and no.value.id in parametros
-        ):
-            tipos[no.targets[0].attr] = parametros[no.value.id]
+        if isinstance(no, ast.Assign) and len(no.targets) == 1:
+            alvo, valor = no.targets[0], no.value
+        elif isinstance(no, ast.AnnAssign) and no.value is not None:
+            alvo, valor = no.target, no.value
+        else:
+            continue
+        atributo = _atributo_de_self(alvo) if isinstance(alvo, ast.expr) else None
+        if atributo is not None and isinstance(valor, ast.Name) and valor.id in parametros:
+            tipos[atributo] = parametros[valor.id]
     return tipos
 
 
@@ -686,19 +689,38 @@ def _atributo_de_self(no: ast.expr) -> str | None:
     return None
 
 
+def _dentro_de_compreensao(no: ast.AST) -> set[int]:
+    """Ids dos nós avaliados a cada iteração de alguma compreensão contida em `no`."""
+    ids: set[int] = set()
+    for interno in ast.walk(no):
+        if isinstance(interno, _COMPREENSOES):
+            ids |= {id(n) for n in ast.walk(interno) if n is not interno}
+    return ids
+
+
 class _Varredor:
-    """Percorre os métodos de uma classe de use case coletando escritas e unidades."""
+    """Percorre os métodos de uma classe de use case coletando escritas e unidades.
+
+    Entradas são os métodos públicos; helpers (`self._x()`) entram pelo fecho
+    transitivo de quem os chama, no contexto de quem chama (dentro ou fora de
+    unidade, em laço ou não). Chamada de público para público não é seguida — o
+    chamado já é entrada, e segui-lo contaria a mesma escrita duas vezes.
+
+    Cada **entrada** num bloco de unidade conta: um helper que abre unidade,
+    chamado duas vezes, são duas transações; uma unidade dentro de laço conta como
+    duas (são N).
+    """
 
     def __init__(self, classe: ast.ClassDef, repository_ports: set[str]) -> None:
-        self._metodos = {m.name: m for m in classe.body if isinstance(m, ast.FunctionDef)}
+        self._metodos = {m.name: m for m in classe.body if isinstance(m, _FUNCOES)}
         self._tipos = _tipos_dos_atributos(classe)
         self._repository_ports = repository_ports
 
     def varrer(self) -> _Varredura:
-        resultado = _Varredura(escritas=[], unidades=set())
+        resultado = _Varredura(escritas=[], unidades=[])
         for nome, metodo in self._metodos.items():
             if nome.startswith("_"):
-                continue  # helpers entram pelo fecho transitivo de quem os chama
+                continue
             self._bloco(metodo.body, resultado, unidade=False, laco=False, pilha=(nome,))
         return resultado
 
@@ -733,25 +755,30 @@ class _Varredor:
         seguida_de_raise: bool,
         pilha: tuple[str, ...],
     ) -> None:
-        if isinstance(instrucao, ast.With):
+        if isinstance(instrucao, ast.With | ast.AsyncWith):
             abre = any(self._e_unidade(item) for item in instrucao.items)
             if abre:
-                resultado.unidades.add(id(instrucao))
+                # Unidade em laço são N transações: conta como duas entradas.
+                resultado.unidades.extend([instrucao.lineno] * (2 if laco else 1))
             for item in instrucao.items:
                 self._expressao(item.context_expr, resultado, unidade, laco, False, pilha)
             self._bloco(instrucao.body, resultado, unidade=unidade or abre, laco=laco, pilha=pilha)
             return
-        if isinstance(instrucao, ast.For | ast.While):
-            self._expressao(
-                instrucao.iter if isinstance(instrucao, ast.For) else instrucao.test,
-                resultado,
-                unidade,
-                laco,
-                False,
-                pilha,
-            )
+        if isinstance(instrucao, ast.For | ast.AsyncFor):
+            self._expressao(instrucao.iter, resultado, unidade, laco, False, pilha)
             self._bloco(instrucao.body, resultado, unidade=unidade, laco=True, pilha=pilha)
             self._bloco(instrucao.orelse, resultado, unidade=unidade, laco=laco, pilha=pilha)
+            return
+        if isinstance(instrucao, ast.While):
+            # A condição roda a cada volta: escrita nela é escrita em laço.
+            self._expressao(instrucao.test, resultado, unidade, True, False, pilha)
+            self._bloco(instrucao.body, resultado, unidade=unidade, laco=True, pilha=pilha)
+            self._bloco(instrucao.orelse, resultado, unidade=unidade, laco=laco, pilha=pilha)
+            return
+        if isinstance(instrucao, ast.Match):
+            self._expressao(instrucao.subject, resultado, unidade, laco, False, pilha)
+            for caso in instrucao.cases:
+                self._bloco(caso.body, resultado, unidade=unidade, laco=laco, pilha=pilha)
             return
         blocos = [
             getattr(instrucao, campo)
@@ -759,6 +786,8 @@ class _Varredor:
             if isinstance(getattr(instrucao, campo, None), list)
         ]
         if blocos:
+            # As expressões do próprio cabeçalho (o `test` de um `if`, por exemplo)
+            # também escrevem: `if not self._tokens.consume(...)` é uma escrita.
             for campo, valor in ast.iter_fields(instrucao):
                 if campo not in {"body", "orelse", "finalbody", "handlers"} and isinstance(
                     valor, ast.expr
@@ -780,22 +809,21 @@ class _Varredor:
         seguida_de_raise: bool,
         pilha: tuple[str, ...],
     ) -> None:
-        for interno in ast.walk(no):
-            if isinstance(interno, ast.comprehension):
-                laco = True
+        em_compreensao = _dentro_de_compreensao(no)
         for interno in ast.walk(no):
             if not (isinstance(interno, ast.Call) and isinstance(interno.func, ast.Attribute)):
                 continue
+            laco_aqui = laco or id(interno) in em_compreensao
             metodo = interno.func.attr
             dono = interno.func.value
             atributo = _atributo_de_self(dono)
             if isinstance(dono, ast.Name) and dono.id == "self" and metodo in self._metodos:
-                if metodo not in pilha:  # recursão: cada helper uma vez por caminho
+                if metodo.startswith("_") and metodo not in pilha:
                     self._bloco(
                         self._metodos[metodo].body,
                         resultado,
                         unidade=unidade,
-                        laco=laco,
+                        laco=laco_aqui,
                         pilha=(*pilha, metodo),
                     )
                 continue
@@ -808,7 +836,7 @@ class _Varredor:
                         linha=interno.lineno,
                         alvo=f"self.{atributo}.{metodo}",
                         dentro_da_unidade=unidade,
-                        em_laco=laco,
+                        em_laco=laco_aqui,
                         seguida_de_raise=seguida_de_raise,
                     )
                 )
