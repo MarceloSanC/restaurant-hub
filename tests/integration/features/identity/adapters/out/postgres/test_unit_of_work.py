@@ -11,7 +11,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
@@ -77,13 +77,27 @@ def com_usuario(banco_limpo: Engine) -> Engine:
 
 
 def test_l5_unidade_aninhada_nao_retira_conexao_do_pool(com_usuario: Engine) -> None:
+    """Conta os checkouts **durante** a tentativa aninhada.
+
+    Comparar `pool.checkedout()` depois não serve: uma unidade que retirasse a
+    conexão e só então recusasse a devolveria ao sair, e a contagem voltaria ao
+    valor de antes — o mutante passaria.
+    """
     unidade = PostgresUnitOfWork(com_usuario)
+    checkouts: list[object] = []
+
+    def contar(*_: object) -> None:
+        checkouts.append(object())
 
     with unidade.transaction():
-        retiradas = com_usuario.pool.checkedout()  # type: ignore[attr-defined]
-        with pytest.raises(RuntimeError, match="L5"), unidade.transaction():
-            pass  # pragma: no cover — nunca abre
-        assert com_usuario.pool.checkedout() == retiradas  # type: ignore[attr-defined]
+        event.listen(com_usuario.pool, "checkout", contar)
+        try:
+            with pytest.raises(RuntimeError, match="L5"), unidade.transaction():
+                pass  # pragma: no cover — nunca abre
+        finally:
+            event.remove(com_usuario.pool, "checkout", contar)
+
+    assert checkouts == []
 
 
 def test_conexao_volta_ao_pool_depois_de_excecao(com_usuario: Engine) -> None:

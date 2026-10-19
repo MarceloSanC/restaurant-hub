@@ -149,11 +149,19 @@ def test_os_adapters_concretos_continuam_sendo_os_do_postgres() -> None:
     assert isinstance(deps.identity_create_unit._restaurants, PostgresRestaurantRepository)
 
 
-# Stage 2.6 — os use cases com unidade de trabalho. Cresce a cada use case
-# migrado; o teste abaixo vale para todos.
-_COM_UNIDADE: dict[str, Callable[[ApplicationDependencies], object]] = {
-    "set_password_with_token": lambda d: d.identity_set_password_with_token,
-    "invite_user": lambda d: d.identity_invite_user,
+# Stage 2.6 — os use cases com unidade de trabalho e, para cada um, o conjunto
+# EXATO de atributos que guardam repositório. Exato de propósito: um filtro por
+# `isinstance` pularia em silêncio um embrulho (cache, métrica) montado sobre outro
+# engine, e o teste continuaria verde.
+_COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[str]]] = {
+    "set_password_with_token": (
+        lambda d: d.identity_set_password_with_token,
+        {"_users", "_sessions", "_tokens"},
+    ),
+    "invite_user": (
+        lambda d: d.identity_invite_user,
+        {"_users", "_restaurants", "_units", "_tokens"},
+    ),
 }
 _REPOSITORIOS_POSTGRES = (
     PostgresRestaurantRepository,
@@ -172,14 +180,17 @@ def test_unidade_e_repositorios_do_use_case_compartilham_o_engine(nome: str) -> 
     silêncio: a suíte inteira continuaria verde e a atomicidade sumiria em
     produção. Aqui a fiação real é conferida repositório a repositório.
     """
-    use_case = _COM_UNIDADE[nome](wire_dependencies(Settings(_env_file=None)))
-    atributos = vars(use_case)
+    obter, esperados = _COM_UNIDADE[nome]
+    atributos = vars(obter(wire_dependencies(Settings(_env_file=None))))
     unidade = atributos["_unit_of_work"]
-    repositorios = [v for v in atributos.values() if isinstance(v, _REPOSITORIOS_POSTGRES)]
+    com_engine = {k for k, v in atributos.items() if hasattr(v, "_engine")} - {"_unit_of_work"}
 
     assert isinstance(unidade, PostgresUnitOfWork)
-    assert repositorios, "o use case não recebeu repositório Postgres nenhum"
-    assert all(r._engine is unidade._engine for r in repositorios)
+    assert com_engine == esperados
+    for atributo in esperados:
+        repositorio = atributos[atributo]
+        assert isinstance(repositorio, _REPOSITORIOS_POSTGRES), atributo
+        assert repositorio._engine is unidade._engine, atributo
 
 
 def test_ttl_dos_tokens_vem_da_configuracao() -> None:

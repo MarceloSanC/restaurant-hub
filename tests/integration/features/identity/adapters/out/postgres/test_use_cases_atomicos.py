@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import Engine, Table, select
+from sqlalchemy import Engine, Table, select, text
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import tables
@@ -85,7 +85,7 @@ pytestmark = pytest.mark.integration
 
 _AGORA = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
 _ESPERA = 10  # segundos — teto de toda espera entre threads: o teste falha em vez de travar
-_BLOQUEIO_OBSERVADO = 0.5  # segundos que a segunda thread tem de continuar bloqueada
+_SONDAGEM = 0.05  # segundos entre leituras de `pg_stat_activity`
 
 
 class _FalhaInjetada(Exception):
@@ -326,6 +326,26 @@ class _TokensQueSeguramAUnidade(PostgresPasswordSetupTokenRepository):
         return consumiu
 
 
+def _esperar_alguem_bloqueado_por_lock(engine: Engine) -> None:
+    """Espera até uma sessão deste banco aparecer esperando **lock** (`wait_event_type`).
+
+    É a prova de que a segunda thread está parada na linha travada pela primeira —
+    e não apenas lenta (retirando conexão, lendo o fingerprint). Um `sleep` seguido
+    de `is_alive()` passaria pelo motivo errado numa máquina carregada.
+    """
+    limite = time.monotonic() + _ESPERA
+    consulta = text(
+        "SELECT count(*) FROM pg_stat_activity "
+        "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+    )
+    while time.monotonic() < limite:
+        with engine.connect() as conexao:
+            if conexao.execute(consulta).scalar_one() > 0:
+                return
+        time.sleep(_SONDAGEM)
+    pytest.fail("nenhuma sessão ficou esperando lock — a segunda thread não bloqueou na linha")
+
+
 def _em_thread(alvo: Callable[[], None]) -> tuple[threading.Thread, list[BaseException]]:
     erros: list[BaseException] = []
 
@@ -360,8 +380,8 @@ class TestRedencoesConcorrentes:
         primeira.start()
         assert segurador.consumiu.wait(_ESPERA)
         segunda.start()
-        time.sleep(_BLOQUEIO_OBSERVADO)
-        assert segunda.is_alive(), "a segunda redenção não esperou o lock da linha do token"
+        _esperar_alguem_bloqueado_por_lock(com_link)
+        assert segunda.is_alive()
 
         segurador.liberar.set()
         primeira.join(_ESPERA)
