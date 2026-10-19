@@ -238,3 +238,13 @@ def test_dia_acima_do_teto_leva_so_as_alocacoes_do_proprio_registro() -> None:
 
     assert violacao.employee_id == "ana"
     assert violacao.assignment_ids == {AssignmentId("s-a0"), AssignmentId("s-a1")}
+
+
+def test_faixa_antes_do_corte_soma_no_dia_operacional_anterior() -> None:
+    # Terça 02:00 é antes do corte (05:00): 14-20 (360) + 02-07 (300) somam na segunda.
+    avaliada = escala([Turno("ana", em(0, 14), em(0, 20)), Turno("ana", em(1, 2), em(1, 7))])
+
+    (violacao,) = _DIARIO.evaluate(contexto(avaliada), config())
+
+    assert violacao.operational_days == (SEGUNDA,)
+    assert (violacao.observed, violacao.limit) == (Decimal(660), Decimal(600))

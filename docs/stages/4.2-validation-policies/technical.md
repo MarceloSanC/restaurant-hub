@@ -413,4 +413,15 @@ Os testes entraram no commit `[4.2/task-10-extra3]`. A expectativa proposta para
 estava errada: sexta 16h até segunda 08h são **64h** (3840 min), e o teste afirma o valor
 recalculado — o código estava certo.
 
+### 2026-10-19 — [deviation] auditoria de testes, rodada 4 — Claude Opus 5.5 (executor)
+
+R07–R09 re-executados: **mortos**. Dos 10 mutantes novos (S01–S10), 2 sobreviveram:
+- S01: o dia operacional das alocações da vizinha podia ser calculado pelo calendário da escala
+  **avaliada** — o calendário é fotografado por escala (ADR 4.1.0009), e nenhum teste usava cortes
+  diferentes;
+- S03: o teto diário com "dia = data do início" passava, porque nenhuma faixa do teto começava entre
+  a meia-noite e o corte.
+Os dois testes entraram no commit `[4.2/task-10-extra4]`, com as contas conferidas (660 min na
+segunda; 150 min de descanso de 05:30 a 08:00).
+
 <!-- END: post-execution -->

@@ -5,7 +5,8 @@ conferida contra as leituras da raiz (nenhuma aritmética de horas no contexto).
 """
 
 import dataclasses
-from datetime import date, timedelta
+from datetime import date, time, timedelta
+from decimal import Decimal
 
 import pytest
 
@@ -13,21 +14,36 @@ from restaurant_hub.features.scheduling.domain.entities.schedule import Schedule
 from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidEvaluationInputError,
 )
+from restaurant_hub.features.scheduling.domain.services.validation import (
+    rest_between_shifts_policy,
+)
 from restaurant_hub.features.scheduling.domain.services.validation.context import (
     EvaluationContext,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.demand_quantity import (
+    DemandQuantity,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
     AssignmentId,
     EmployeeId,
+    ShiftBandId,
+    ShiftDemandId,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.operational_calendar import (
+    DayCutoff,
+    OperationalCalendar,
+    Weekday,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.schedule_period import (
     SchedulePeriod,
 )
+from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
 from tests.unit.features.scheduling.domain.services.validation.scenario import (
     ATENDENTE,
     COZINHEIRO,
     SEGUNDA,
     Turno,
+    config,
     contexto,
     em,
     escala,
@@ -218,3 +234,25 @@ def test_vizinhas_adjacentes_validas_sao_aceitas() -> None:
     )
 
     assert contexto_.allocations == ()
+
+
+def test_dia_operacional_da_vizinha_usa_o_calendario_dela() -> None:
+    # A anterior tem corte às 06:00: a faixa de segunda 05:00-05:30 é do domingo dela.
+    corte_seis = OperationalCalendar(week_start=Weekday.MONDAY, day_cutoff=DayCutoff(time(6, 0)))
+    anterior = dataclasses.replace(
+        escala([], schedule_id="p", first_day=_ANTERIOR), calendar=corte_seis
+    )
+    anterior = anterior.enable_band(ShiftBandId("p-b0"), TimeRange(em(0, 5), em(0, 5, 30)))
+    anterior = anterior.declare_demand(
+        ShiftDemandId("p-d0"), ShiftBandId("p-b0"), COZINHEIRO, DemandQuantity(1)
+    )
+    anterior = anterior.assign(AssignmentId("p-a0"), ShiftDemandId("p-d0"), EmployeeId("ana"))
+    avaliada = escala([Turno("ana", em(0, 8), em(0, 16))])
+    contexto_ = contexto(avaliada, previous=anterior)
+
+    (vista,) = (v for v in contexto_.all_allocations if not v.in_evaluated)
+    (violacao,) = rest_between_shifts_policy.RestBetweenShiftsPolicy().evaluate(contexto_, config())
+
+    assert vista.operational_day == SEGUNDA - timedelta(days=1)
+    assert violacao.operational_days == (SEGUNDA - timedelta(days=1), SEGUNDA)
+    assert violacao.observed == Decimal(150)
