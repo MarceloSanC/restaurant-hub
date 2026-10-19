@@ -353,21 +353,23 @@ class _TokensQueSeguramAUnidade(PostgresPasswordSetupTokenRepository):
         return consumiu
 
 
-def _esperar_alguem_bloqueado_por_lock(engine: Engine) -> None:
-    """Espera até uma sessão deste banco aparecer esperando **lock** (`wait_event_type`).
+def _esperar_bloqueio_em(engine: Engine, tabela: Table) -> None:
+    """Espera até um `UPDATE` em `tabela` aparecer esperando **lock** (`wait_event_type`).
 
     É a prova de que a segunda thread está parada na linha travada pela primeira —
     e não apenas lenta (retirando conexão, lendo o fingerprint). Um `sleep` seguido
-    de `is_alive()` passaria pelo motivo errado numa máquina carregada.
+    de `is_alive()` passaria pelo motivo errado numa máquina carregada. O filtro
+    pela tabela e pela própria sessão de fora evita contar um bloqueio alheio.
     """
     limite = time.monotonic() + _ESPERA
     consulta = text(
         "SELECT count(*) FROM pg_stat_activity "
-        "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+        "WHERE datname = current_database() AND wait_event_type = 'Lock' "
+        "AND pid <> pg_backend_pid() AND query ILIKE :padrao"
     )
     while time.monotonic() < limite:
         with engine.connect() as conexao:
-            if conexao.execute(consulta).scalar_one() > 0:
+            if conexao.execute(consulta, {"padrao": f"UPDATE {tabela.name} %"}).scalar_one() > 0:
                 return
         time.sleep(_SONDAGEM)
     pytest.fail("nenhuma sessão ficou esperando lock — a segunda thread não bloqueou na linha")
@@ -407,7 +409,7 @@ class TestRedencoesConcorrentes:
         primeira.start()
         assert segurador.consumiu.wait(_ESPERA)
         segunda.start()
-        _esperar_alguem_bloqueado_por_lock(com_link)
+        _esperar_bloqueio_em(com_link, tables.password_setup_tokens)
         assert segunda.is_alive()
 
         segurador.liberar.set()
@@ -799,7 +801,7 @@ class TestRotacoesConcorrentes:
         primeira.start()
         assert segurador.revogou.wait(_ESPERA)
         segunda.start()
-        _esperar_alguem_bloqueado_por_lock(com_sessao)
+        _esperar_bloqueio_em(com_sessao, tables.sessions)
         assert segunda.is_alive()
 
         segurador.liberar.set()

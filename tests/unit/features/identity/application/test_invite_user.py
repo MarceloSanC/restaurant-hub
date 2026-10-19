@@ -356,9 +356,10 @@ class TestUnidadeDeTrabalho:
         registro = _Registro()
         cenario = Cenario(registro=registro)
 
-        cenario.use_case.execute(_comando())
+        cenario.use_case.execute(_comando(unit_ids=("unit-a1",)))
 
         assert tuple(registro.escritas) == _ESCRITAS
+        assert len(cenario.users.memberships) == 1
         assert (cenario.unidade.aberturas, cenario.unidade.commits) == (1, 1)
 
     @pytest.mark.parametrize("n", range(1, len(_ESCRITAS) + 1))
@@ -366,8 +367,9 @@ class TestUnidadeDeTrabalho:
         registro = _Registro(falhar_em=n)
         cenario = Cenario(registro=registro)
 
+        # Com vínculo: sem ele, a asserção sobre `memberships` abaixo seria vazia.
         with pytest.raises(_FalhaInjetada):
-            cenario.use_case.execute(_comando())
+            cenario.use_case.execute(_comando(unit_ids=("unit-a1",)))
 
         assert tuple(registro.escritas) == _ESCRITAS[:n]
         assert cenario.users.exists_by_email(Email("convidado@x.com")) is False
