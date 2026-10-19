@@ -375,7 +375,7 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
 >   ([ADR 3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md)).
 >
 > **Nota (2026-10-19): alcance do corte no desligamento (Stage 3.7).** O bullet "Desligar corta
-> o acesso" acima vale para o login de funcionário com um registro só. Desde a Stage 3.7 o
+> o acesso" acima vale quando o registro é o único ativo do login na unidade. Desde a Stage 3.7 o
 > desligamento revoga as sessões **só quando o registro é a fonte do acesso**:
 >
 > - o registro desligado **estava ativo** (desligar de novo não derruba sessões abertas depois);
