@@ -9,6 +9,7 @@ updated_at: 2026-10-21
 bounded_context: staff
 subdomain: workforce
 references:
+  - ../scheduling/shift-scheduling.md
   - ../../adr/0_0_0003-formalize-domain-and-audits-doc-categories.md
   - ../../adr/2_1_0001-identity-aggregates-and-membership.md
   - ../../adr/2_3_0005-names-persisted-verbatim.md
@@ -167,17 +168,21 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 - **O que identifica o registro é o seu id**, opaco — nunca o nome. O nome **não** é chave: dois
   registros com o mesmo nome na mesma unidade, ou no mesmo tenant, são legítimos (homônimos
   existem — dois "João Silva" na mesma cozinha).
-- **Nome:** texto livre, **não-vazio** — ao menos um caractere que não seja espaço; a validação
-  não altera o valor guardado — e persistido **verbatim**, sem normalização silenciosa
+- **Nome:** texto livre, **não-vazio** — ao menos um caractere que não seja espaço em branco; a
+  validação não altera o valor guardado — e persistido **verbatim**, sem normalização silenciosa
   ([ADR 2.3.0005](../../adr/2_3_0005-names-persisted-verbatim.md)).
 - **Sem contato, documento, data de admissão ou observações na v1.** Nenhuma feature v1 os lê (o
   login da Stage 3.5 colhe o e-mail na hora e o guarda em identity — §3.8), e dado pessoal sem
   consumidor é superfície de LGPD sem valor (overview §6). Acrescentar qualquer um deles depois é
   **evolução aditiva**, não mudança de forma do registro.
 - **Funções do registro: conjunto não-vazio.** O registro referencia **ao menos uma** função
-  (§3.2), só por id; uma função só é o caso particular. No Step 4/5 o registro casa com vagas de
-  **qualquer** das suas funções; registro sem função não existe. Decisão do **sponsor**
-  (2026-07-28).
+  (§3.2), só por id; uma função só é o caso particular. Decisão do **sponsor** (2026-07-28). Toda
+  função referenciada **existe no tenant do registro** — a validade referencial é uma das três
+  regras entre agregados que sobreviveram na Stage 3.2
+  ([ADR 3.2.0005](../../adr/3_2_0005-job-function-has-no-lifecycle-state.md), decisão 2). No
+  Step 4/5 o registro casa com vagas de **qualquer** das suas funções; registro sem função não
+  existe. Alocá-lo fora delas é **exceção manual** da escala, que não altera o cadastro
+  (`docs/domain/scheduling/shift-scheduling.md` §3.6.7).
 - O restante do que o registro carrega tem casa própria neste doc: perfil de jornada (§3.3),
   preferência de turno opcional (§3.5), indisponibilidades (§3.6), estado do ciclo de vida
   (acima) e vínculo opcional com login (§3.8).
@@ -185,7 +190,8 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 **Invariantes:**
 - O registro é identificado só pelo id; o nome é não-vazio e **não** é único — nem na unidade, nem
   no tenant.
-- Todo registro referencia ao menos uma função.
+- Todo registro referencia ao menos uma função, e toda função referenciada existe no tenant do
+  registro.
 
 > **Lacuna fechada (2026-10-21) —
 > [ADR 3.1.0002](../../adr/3_1_0002-minimal-employee-record-attributes.md):** os **atributos
@@ -279,11 +285,12 @@ operação. Overview §3, §9.
 > funcionário **sob demanda** também declara preferência de turno era lacuna aberta deste doc — o
 > kickoff #5 prende a preferência à jornada fixa ("carga = horas/semana + preferência de turno"), e
 > o overview §3 a lista junto do perfil de jornada em geral. O concept da Stage 3.1 a fechou em
-> 2026-07-27 pela fonte mais alta, o overview: **os dois perfis declaram**. A preferência é atributo
-> do **registro**, não do perfil — trocar fixa ↔ sob demanda não a apaga —, e a regra canônica
-> mora em §3.5. O kickoff #5 continua honrado: a jornada fixa segue sendo "horas/semana +
+> 2026-07-27 pela fonte mais alta, o overview: **os dois perfis podem declarar**. A preferência é
+> atributo do **registro**, não do perfil — trocar fixa ↔ sob demanda não a apaga —, e a regra
+> canônica mora em §3.5. O kickoff #5 continua honrado: a jornada fixa segue sendo "horas/semana +
 > preferência"; a decisão só não **nega** o mesmo sinal a quem é sob demanda (o extra que só
-> trabalha à noite é exatamente o caso que o auto-preenchimento quer conhecer).
+> trabalha à noite é exatamente o caso que a lógica de transbordo do auto-preenchimento quer
+> conhecer).
 
 ### 3.4 Fronteira terminológica — o contrato intermitente da CLT
 
@@ -326,8 +333,9 @@ dia** — **manhã, tarde, noite, madrugada**. Kickoff #6.
 
 - **É do registro, vale para os dois perfis e é opcional**
   ([ADR 3.1.0004](../../adr/3_1_0004-shift-preference-scope-and-cardinality.md) (a)): jornada fixa
-  e sob demanda declaram do mesmo jeito (§3.3). **Não declarar** é estado legítimo e quer dizer
-  *indiferente* — para o auto-preenchimento, o funcionário pode ser escalado em qualquer período.
+  e sob demanda podem declará-la do mesmo jeito (§3.3). **Não declarar** é estado legítimo e quer
+  dizer *indiferente* — para o auto-preenchimento, o funcionário pode ser escalado em qualquer
+  período.
 - **Declarada, é um conjunto não-vazio de períodos** (ADR 3.1.0004 (b)): um período só é o caso
   particular, e "tarde e noite" é expressável. Declarar os quatro equivale, no efeito, a não
   declarar, mas continua sendo uma declaração explícita. Não existe preferência vazia — dizer
@@ -338,9 +346,9 @@ dia** — **manhã, tarde, noite, madrugada**. Kickoff #6.
   `non_goals` ("noção de escala/demanda é Step 4"); overview §6 (configuração por restaurante vive
   em scheduling).
 - Consumidores: o auto-preenchimento respeita a preferência (overview §3 — "respeita carga,
-  preferência de turno e indisponibilidade"). É **sinal soft** (afinidade, justiça), não restrição:
-  bloquear é papel da indisponibilidade (§3.6), e a semântica do casamento pertence ao Step 5
-  (ADR 3.1.0004).
+  preferência de turno e indisponibilidade"). É **sinal soft** (afinidade, justiça), não restrição
+  rígida: bloquear é papel da indisponibilidade (§3.6), e a semântica do casamento pertence ao
+  Step 5 (ADR 3.1.0004).
 
 **Invariantes:**
 - A preferência, quando declarada, é um subconjunto **não-vazio** do conjunto fechado {manhã,
@@ -377,9 +385,10 @@ atestados** (overview §3) — casos absolutos, não recorrentes.
   unidade (overview §6); os instantes de indisponibilidade de um funcionário são **horário de
   parede** (*wall-clock*) do fuso da unidade do seu registro — o fato declarado ("indisponível das
   08:00 às 12:00 do dia 14") é **local**, não um instante absoluto. Representação: datetimes
-  **ingênuos**, sem fuso; valor com fuso é recusado na construção. O staff **nunca converte** para
-  instante absoluto: quando um consumidor precisa converter, quem converte é ele, que conhece o
-  fuso da unidade ([ADR 3.1.0005](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md)).
+  **ingênuos**, sem fuso; valor com fuso é recusado na construção. O **domínio** do staff **nunca
+  converte** para instante absoluto: quando é preciso converter, converte quem conhece o fuso da
+  unidade — um consumidor como o scheduling ou, se um dia for preciso, um adapter
+  ([ADR 3.1.0005](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md)).
 - **Recorrência fora da v1**: o overview §3 delimita o caso de uso a períodos absolutos
   (férias, atestados); recorrência ("toda segunda de manhã") é **evolução aditiva** (ver §5) — o
   modelo de intervalo instante→instante não a bloqueia.
@@ -424,7 +433,10 @@ entre unidades").
 - As **funções tenant-scoped** (§3.2) tornam a cópia coerente: a função referenciada já existe no
   restaurante inteiro — não é preciso recriá-la na unidade destino (overview §3; ver §3.2).
 - A cópia é sempre **dentro do mesmo tenant** (unidades do mesmo restaurante) — decorre do
-  isolamento de tenant (§3.1); não existe cópia cross-tenant.
+  isolamento de tenant (§3.1); não existe cópia cross-tenant. Copiar exige poder gerir a equipe
+  **nas duas** unidades: o destino é alvo de autorização tal como a origem, e é essa autorização
+  que recusa um destino de outro tenant, inexistente ou fora do alcance de quem copia
+  (ADR 3.4.0005; `docs/stages/3.6-staff-http/concept.md` §5.6).
 - **Copiar para a própria unidade de origem é recusado** (ADR 3.2.0003): a operação é para *outra*
   unidade, e o gêmeo na mesma unidade seria indistinguível do original — nomes não são únicos
   (§3.1).
@@ -439,7 +451,8 @@ entre unidades").
 > única exclusão — o `user_id` — e silenciava sobre três pontos que a Stage 3.2 teve de fixar: se
 > as indisponibilidades viajam com a cópia, o que acontece quando o destino é a própria unidade de
 > origem e o que acontece com a cópia repetida. Os três bullets acima registram o que o ADR
-> decidiu; a borda HTTP manteve o limite declarado, sem guarda de duplicidade (ADR 3.4.0005).
+> decidiu; a borda HTTP manteve o limite declarado, sem guarda de duplicidade (ADR 3.4.0005), e a
+> unidade destino passou a ser autorizada tal como a de origem (bullet do mesmo tenant, acima).
 
 ### 3.8 Fronteira com identity — login opcional do funcionário
 
@@ -510,7 +523,7 @@ Quem faz o quê no staff (papéis de **acesso** de identity aplicados a este sub
 |---|---|
 | **dono (owner)** | Gerencia a equipe; visibilidade **bypassa** memberships (enxerga todas as unidades do tenant). ADR 2.1.0001 (eixo B); kickoff #9. |
 | **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). Roadmap 3.4 (RBAC "gerente/RH/dono da unidade"). O **catálogo de funções**, que é do restaurante (§3.2), ele gerencia sem nomear unidade — a permissão do catálogo é *tenant-wide* ([ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)). |
-| **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **no staff também coincide** — mesmas permissões e mesmo alcance (as unidades das quais é membro), **sem** alcance cross-unidade ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)). A divergência que o kickoff #10 previu existe, mas é de **família de operação** e mora na **escala** (Step 4): o RH mexe no cadastro; a escala é do gerente e do dono (ver a lacuna fechada abaixo). Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com o mesmo conjunto: `MANAGE_USERS`, `MANAGE_STAFF`, `MANAGE_JOB_FUNCTIONS`). *(Nota 2026-09-13: a divergência real é na **escala**, não no staff — dentro do staff hr ≡ manager ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)); na escala, hr **lê** nas unidades de que é membro e não gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md)).)* |
+| **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **no staff também coincide** — mesmas permissões e mesmo alcance do gerente: os registros das unidades das quais é membro, **sem** alcance cross-unidade, e o catálogo de funções do restaurante inteiro ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md); ADR 3.4.0008). A divergência que o kickoff #10 previu existe, mas é de **família de operação** e mora na **escala** (Step 4): o RH mexe no cadastro; mexer na escala é do gerente e do dono, e o RH só a lê (ADR 4.1.0004; ver a lacuna fechada abaixo). Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com o mesmo conjunto: `MANAGE_USERS`, `MANAGE_STAFF`, `MANAGE_JOB_FUNCTIONS`). *(Nota 2026-09-13: a divergência real é na **escala**, não no staff — dentro do staff hr ≡ manager ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)); na escala, hr **lê** nas unidades de que é membro e não gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md)).)* |
 | **funcionário (employee)** | Papel fixo, tenant-scoped, com **permissões vazias** — na v1 **não enxerga nada de staff**; o único caso de uso futuro é consultar a própria escala (Step 4, fora deste subdomínio — roadmap 3.5 `non_goals`). Âncoras das permissões vazias: `Role.EMPLOYEE: frozenset()` em `src/restaurant_hub/features/identity/domain/value_objects/role.py` (Stage 2.1, merged); mapeamento bronze do kickoff ("hoje só consulta"). |
 | **admin de plataforma** | Fora do tenant; bypass de visibilidade é da fundação (ADR 2.1.0001), sem particularidade de staff. |
 
@@ -582,7 +595,9 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
   [ADR 3.2.0005](../../adr/3_2_0005-job-function-has-no-lifecycle-state.md): a função **não tem
   estado**, e a remoção guardada é o único caminho de saída.
 - Recorrência de indisponibilidade **fora da v1** — overview §3 (períodos absolutos: férias/atestados).
-- Interpretação temporal no **fuso da unidade** — overview §6.
+- Interpretação temporal no **fuso da unidade** — overview §6. A **representação** foi fixada
+  depois pelo [ADR 3.1.0005](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md)
+  (2026-07-27): relógio de parede ingênuo, sem conversão no domínio do staff (§3.6).
 - CLT entra **só como fronteira terminológica**; teoria de validação trabalhista é do gate do Step 4 —
   overview §9 e §6.
 - Período extra = **classificação sem dinheiro** — kickoff #11; overview §3 "Fora do escopo".
@@ -599,6 +614,9 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
   ubíqua), §10 Referências (fontes setoriais de terminologia).
 - [`roadmap.md`](../../roadmap.md) — bloco "Step 3 — Equipe da unidade", Stages 3.1–3.5
   (contratos, DoD, non_goals); ROADMAP-1 (BCs); ROADMAP-3 (tenancy row-level).
+- [`shift-scheduling.md`](../scheduling/shift-scheduling.md) — teoria do BC scheduling, que lê os
+  dados do staff: desligamento reconciliado na leitura e "conta para a carga" na alocação (§3.4),
+  indisponibilidade cruzada sem conversão (§3.6.6, §3.9) e exceção de função (§3.6.7).
 - [ADR 0.0.0003](../../adr/0_0_0003-formalize-domain-and-audits-doc-categories.md) — contrato da
   categoria `domain/` que este doc instancia.
 - [ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md) — agregados de
@@ -621,7 +639,8 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 - [ADR 3.1.0004](../../adr/3_1_0004-shift-preference-scope-and-cardinality.md) — preferência de
   turno do registro, declarável pelos dois perfis, como conjunto não-vazio de períodos (§3.3, §3.5).
 - [ADR 3.1.0005](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md) — instantes de
-  indisponibilidade como relógio de parede ingênuo da unidade; conversão fora do staff (§3.6).
+  indisponibilidade como relógio de parede ingênuo da unidade; conversão fora do domínio do staff
+  (§3.6).
 - [ADR 3.1.0006](../../adr/3_1_0006-employee-function-set-cardinality.md) — o registro referencia
   um conjunto não-vazio de funções (§3.1).
 - [ADR 3.2.0003](../../adr/3_2_0003-copy-employee-full-duplication.md) — a cópia entre unidades
@@ -641,7 +660,8 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 - [ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md) — a
   permissão do catálogo de funções é tenant-wide, sem unidade alvo (§4).
 - [ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) — fachada de identity e
-  gateway de staff, a única aresta entre os dois bounded contexts (§3.8).
+  gateway de staff, a única aresta entre os dois bounded contexts nomeada no contrato de import
+  (§3.8).
 - [ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) — conta
   pendente e link de definição de senha entregue em mãos, sem senha provisória (§3.8).
 - [ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md) — desligar
