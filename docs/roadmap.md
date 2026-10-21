@@ -165,7 +165,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#29](https://github.com/MarceloSanC/restaurant-hub/issues/29) | Doc de domínio do BC staff — gate do Step 3 | staff | docs | done | — |
 | [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | open | — |
 | [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34) | Promover o sufixo `[N.M/task-NN-fix]` de commits de correção de checkpoint a convenção | shared | docs + tooling | done | — |
-| [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37) | Varrer `workforce.md` contra os ADRs 3.1.x — três lacunas declaradas abertas já foram fechadas | staff | docs | open | — |
+| [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37) | Varrer `workforce.md` contra os ADRs 3.1.x — três lacunas declaradas abertas já foram fechadas | staff | docs | done | — |
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
