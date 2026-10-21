@@ -16,6 +16,12 @@ lei diz que o papel é do port, não do chamador.
 **`calls` nunca carrega o `setup_link`** (L-IG3): registra-se a chamada, não o
 segredo. Um teste que quisesse o link o lê pelo ledger ou por `sent`.
 
+**A linha `_conforms` no fim do arquivo é o gate da conformidade.**
+`make typecheck` é `mypy src/ tests/fakes/`, e nenhum outro sítio que o mypy
+checa passa este fake como `IdentityGateway` — sem ela, um método divergente do
+port (assinatura ou retorno) passaria no gate e só apareceria, se aparecesse, em
+runtime (auditoria da Stage 3.7).
+
 **Ordem das recusas**, espelhando o lado real (fachada + use case): e-mail
 inválido primeiro (o VO `Email` é construído na fachada, antes de tudo), depois
 e-mail já usado (unicidade global é a primeira checagem do use case), depois
@@ -31,6 +37,7 @@ from restaurant_hub.features.staff.application.errors import (
     LoginEmailAlreadyInUseError,
 )
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    IdentityGateway,
     LoginDelivery,
     ProvisionedLogin,
 )
@@ -208,3 +215,6 @@ class InMemoryIdentityGateway:
             setup_link="",
         )
         self.other_role_logins.add(user_id)
+
+
+_conforms: IdentityGateway = InMemoryIdentityGateway()
