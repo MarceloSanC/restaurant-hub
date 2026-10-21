@@ -355,9 +355,13 @@ atestados** (overview §3) — casos absolutos, não recorrentes.
   `início_A < fim_B` **e** `início_B < fim_A`. Consequência: períodos **adjacentes** (fim de um ==
   início do outro) **não** se sobrepõem — terminar às 14:00 e começar às 14:00 é válido. Semântica
   semi-aberta ratificada no ADR 3.1.0001 (decisão i).
-- **Interpretação temporal: no fuso da unidade.** O fuso é configurável por unidade (overview §6);
-  os instantes de indisponibilidade de um funcionário são interpretados no fuso da unidade do seu
-  registro.
+- **Interpretação temporal: relógio de parede no fuso da unidade.** O fuso é configurável por
+  unidade (overview §6); os instantes de indisponibilidade de um funcionário são **horário de
+  parede** (*wall-clock*) do fuso da unidade do seu registro — o fato declarado ("indisponível das
+  08:00 às 12:00 do dia 14") é **local**, não um instante absoluto. Representação: datetimes
+  **ingênuos**, sem fuso; valor com fuso é recusado na construção. O staff **nunca converte** para
+  instante absoluto: quando um consumidor precisa converter, quem converte é ele, que conhece o
+  fuso da unidade ([ADR 3.1.0005](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md)).
 - **Recorrência fora da v1**: o overview §3 delimita o caso de uso a períodos absolutos
   (férias, atestados); recorrência ("toda segunda de manhã") é **evolução aditiva** (ver §5) — o
   modelo de intervalo instante→instante não a bloqueia.
@@ -365,6 +369,18 @@ atestados** (overview §3) — casos absolutos, não recorrentes.
 **Invariantes:**
 - `início < fim` (intervalo não vazio).
 - Períodos do mesmo funcionário não se sobrepõem (definição semi-aberta acima).
+- Os limites são horário de parede da unidade, sem fuso — nunca um instante absoluto.
+
+> **Nota (2026-10-21) — reconciliação com o
+> [ADR 3.1.0005](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md):** o bullet
+> "Interpretação temporal" dizia só que os instantes "são interpretados no fuso da unidade" — frase
+> que admitia também a leitura que o ADR **descartou** (guardar instante absoluto, em UTC ou com o
+> fuso da unidade). O que vale é o relógio de parede, e é ele que torna a regra estável: corrigir o
+> fuso de uma unidade **não desloca** o que o gerente declarou (08:00 continua 08:00 local). O fuso
+> mora **fora do staff** — o dono é o `Unit` de identity
+> ([ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md)) —, e a validação de
+> escala cruza indisponibilidade × alocação **sem conversão**, porque as duas são relógio de parede
+> da mesma unidade (`docs/domain/scheduling/shift-scheduling.md` §3.6.6, §3.9).
 
 ### 3.7 Cópia de funcionário entre unidades
 
