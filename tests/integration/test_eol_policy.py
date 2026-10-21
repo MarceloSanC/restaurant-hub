@@ -10,10 +10,11 @@ como modificada. Medido no `develop` em que a política entrou: 518 arquivos e 1
 
 Duas camadas:
 
-1. **Estado do repositório**, no índice real: todo arquivo rastreado recebe a regra da sua
-   classe, texto está em LF no índice e conteúdo que o git lê como binário tem regra
-   `binary`. A última é a falha do `9951acd`: um byte NUL fez o git tratar um
-   `technical.md` como binário, a normalização foi pulada e o blob entrou em CRLF.
+1. **Estado do repositório**, no índice real e no `.gitattributes`: todo arquivo rastreado
+   recebe a regra da sua classe, texto está em LF no índice, conteúdo que o git lê como
+   binário tem regra `binary` e o arquivo declara exatamente as regras do espelho. A
+   terceira é a falha do `9951acd`: um byte NUL fez o git tratar um `technical.md` como
+   binário, a normalização foi pulada e o blob entrou em CRLF.
 2. **Efeito da política**, num repositório descartável com o `.gitattributes` real, operado
    com a configuração do Git for Windows: o que sai no checkout, o que o `git add` avisa, o
    que um `git` sem autocrlf enxerga e o que acontece com os bytes de um binário.
@@ -207,6 +208,37 @@ def test_content_git_reads_as_binary_has_a_binary_rule(tracked: list[_Entry]) ->
     assert not undeclared, (
         "conteúdo binário sem regra `binary` no `.gitattributes` (formato novo? byte NUL num"
         " texto?):\n" + "\n".join(undeclared)
+    )
+
+
+def _declared_rules(gitattributes: str) -> set[tuple[str, tuple[str, ...]]]:
+    rules = set()
+    for line in gitattributes.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            pattern, *attrs = stripped.split()
+            rules.add((pattern, tuple(attrs)))
+    return rules
+
+
+def test_gitattributes_declares_exactly_the_mirrored_rules(repo_root: Path) -> None:
+    """Nos dois sentidos: nenhuma regra sai sem ser notada, nenhuma entra sem o espelho.
+
+    O teste de classe do sandbox pega a regra apagada. Este pega a acrescentada por fora do
+    espelho: um binário declarado lá e não aqui ficaria sem proteção contra a remoção
+    seguinte, e uma regra de outra forma (`*.sh text eol=lf`, `uv.lock -diff`) entra por
+    decisão, com este teste atualizado junto. Ler o arquivo como texto serve só para listar
+    as declarações; o efeito delas é conferido pelo git nos outros testes.
+    """
+    expected = {
+        ("*", ("text=auto", "eol=lf")),
+        *((f"*{suffix}", ("binary",)) for suffix in _BINARY_SUFFIXES),
+        *((f"*{suffix}", ("text", "eol=crlf")) for suffix in _CRLF_SUFFIXES),
+    }
+    declared = _declared_rules((repo_root / ".gitattributes").read_text(encoding="utf-8"))
+    assert declared == expected, (
+        f"só no .gitattributes: {sorted(declared - expected)}; "
+        f"só no espelho deste teste: {sorted(expected - declared)}"
     )
 
 
