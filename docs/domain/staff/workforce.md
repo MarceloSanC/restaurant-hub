@@ -491,15 +491,34 @@ Quem faz o quê no staff (papéis de **acesso** de identity aplicados a este sub
 | Papel | No subdomínio workforce |
 |---|---|
 | **dono (owner)** | Gerencia a equipe; visibilidade **bypassa** memberships (enxerga todas as unidades do tenant). ADR 2.1.0001 (eixo B); kickoff #9. |
-| **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). Roadmap 3.4 (RBAC "gerente/RH/dono da unidade"). |
-| **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **é NO STAFF que hr diverge do manager** — visibilidade e permissões de equipe são o único eixo de divergência. Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com o mesmo `MANAGE_USERS` em identity). *(Nota 2026-09-13: a divergência real é na **escala**, não no staff — dentro do staff hr ≡ manager ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)); na escala, hr **lê** nas unidades de que é membro e não gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md)).)* |
+| **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). Roadmap 3.4 (RBAC "gerente/RH/dono da unidade"). O **catálogo de funções**, que é do restaurante (§3.2), ele gerencia sem nomear unidade — a permissão do catálogo é *tenant-wide* ([ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)). |
+| **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **no staff também coincide** — mesmas permissões e mesmo alcance (as unidades das quais é membro), **sem** alcance cross-unidade ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)). A divergência que o kickoff #10 previu existe, mas é de **família de operação** e mora na **escala** (Step 4): o RH mexe no cadastro; a escala é do gerente e do dono (ver a lacuna fechada abaixo). Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com o mesmo conjunto: `MANAGE_USERS`, `MANAGE_STAFF`, `MANAGE_JOB_FUNCTIONS`). *(Nota 2026-09-13: a divergência real é na **escala**, não no staff — dentro do staff hr ≡ manager ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)); na escala, hr **lê** nas unidades de que é membro e não gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md)).)* |
 | **funcionário (employee)** | Papel fixo, tenant-scoped, com **permissões vazias** — na v1 **não enxerga nada de staff**; o único caso de uso futuro é consultar a própria escala (Step 4, fora deste subdomínio — roadmap 3.5 `non_goals`). Âncoras das permissões vazias: `Role.EMPLOYEE: frozenset()` em `src/restaurant_hub/features/identity/domain/value_objects/role.py` (Stage 2.1, merged); mapeamento bronze do kickoff ("hoje só consulta"). |
 | **admin de plataforma** | Fora do tenant; bypass de visibilidade é da fundação (ADR 2.1.0001), sem particularidade de staff. |
 
-> **Lacuna para o concept da Stage 3.4:** o **detalhe da divergência hr × manager** (quais
-> operações de staff cada um pode — hr vê tudo do tenant? só cadastro, sem jornada?) não está
-> fixado em fonte ratificada além de "divergem na visibilidade e nas permissões de staff" — o
-> concept da 3.4 fixa a matriz exata.
+> **Lacuna fechada (2026-10-21) —
+> [ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md):** o **detalhe da
+> divergência hr × manager** era lacuna aberta deste doc, delegada ao concept da Stage 3.4, que
+> perguntava se o RH veria o tenant inteiro ou só o cadastro, sem jornada. O **sponsor** decidiu em
+> 2026-08-12 e **mudou o eixo** — a divergência não é de alcance, é de **família de operação**:
+> *"RH pode mexer nos cadastros dos funcionários (cadastrar, desativar, editar etc). Apenas o
+> gerente ou dono pode mexer na escala."* Jornada contratada, preferência de turno e
+> indisponibilidade são **cadastro**, e o RH as edita. A matriz exata no staff:
+>
+> - `owner`, `manager` e `hr` detêm as **mesmas duas** permissões de staff: `MANAGE_STAFF` (os
+>   registros de funcionário — **por unidade**: o dono em todas as do tenant, gerente e RH nas de
+>   que são membros) e `MANAGE_JOB_FUNCTIONS` (o catálogo de funções — **do restaurante inteiro**,
+>   sem unidade alvo, porque a função é do tenant, §3.2;
+>   [ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md));
+> - `employee` e `platform_admin` não detêm nenhuma;
+> - o alcance cross-unidade do RH foi **explicitamente recusado** — era a opção recomendada pelo
+>   concept, não a decisão.
+>
+> A frase que a linha RH trazia ("é NO STAFF que hr diverge do manager — visibilidade e permissões
+> de equipe são o único eixo de divergência") registrava a previsão do kickoff #10. O que dela
+> continua de pé é que a divergência existe; ela se materializa na escala, onde o RH **lê** e não
+> gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md), que supera em
+> parte o §3 do ADR 3.4.0006).
 
 ---
 
@@ -573,8 +592,9 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 - [ADR 2.5.0004](../../adr/2_5_0004-unusable-hash-for-pending-accounts.md) — `unusable_hash` para
   conta pendente.
 - Decisões de kickoff ratificadas (memória do projeto, 2026-07-16/19): #5 (carga fixa =
-  horas/semana + preferência), #6 (períodos nomeados), #10 (hr = variante; diverge no staff), #11
-  (extra sem dinheiro), derivada (dois caminhos de login).
+  horas/semana + preferência), #6 (períodos nomeados), #10 (hr = variante; diverge no staff — eixo
+  reenquadrado pelo sponsor para a escala, ADR 3.4.0006; ver §4), #11 (extra sem dinheiro),
+  derivada (dois caminhos de login).
 - [ADR 3.1.0001](../../adr/3_1_0001-workforce-gate-modeling-decisions.md) — as três decisões de
   modelagem com alternativa real do gate de domínio do Step 3 (2026-07-23); as demais decisões do
   gate são derivações ancoradas — ver §6.
