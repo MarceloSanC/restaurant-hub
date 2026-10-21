@@ -407,9 +407,11 @@ URL_PORT_KEYS: dict[str, str] = {
 # Ausente do `.env`, a URL entra com o default que a app usaria, na porta da
 # worktree: sem `DATABASE_URL`, o checkout principal fala com o default do
 # Settings, e a worktree passa a falar com o mesmo banco deslocado. Só a
-# `DATABASE_URL` tem leitor; a `REDIS_URL` é reescrita se existir, nunca
-# acrescentada. `tests/unit/test_worktree_new.py` cobra a igualdade com o default
-# de `Settings.database_url`.
+# `DATABASE_URL` tem leitor hoje; a `REDIS_URL` é reescrita se existir, nunca
+# acrescentada. Quando a app ganhar leitor de outra URL, o default dela entra
+# aqui — sem ele, a worktree que não herdar a chave fica no default do Settings,
+# na porta do checkout principal. `tests/unit/test_worktree_new.py` cobra a
+# igualdade com o default de `Settings.database_url`.
 URL_DEFAULTS: dict[str, str] = {
     "DATABASE_URL": "postgresql+psycopg://user:pass@localhost:5432/restaurant_hub",
 }

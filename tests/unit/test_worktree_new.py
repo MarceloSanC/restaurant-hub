@@ -120,6 +120,8 @@ def test_loopback_url_gets_only_the_port_swapped(url: str, expected: str) -> Non
         "postgresql+psycopg://user:pass@localhost:abc/restaurant_hub",
         "postgresql+psycopg://user:pass@localhost:70000/restaurant_hub",
         "postgresql+psycopg://user:pass@[::1/restaurant_hub",
+        # tab no host: o urlsplit o descarta, e o netloc deixa de ser trecho literal
+        "postgresql+psycopg://user:pass@local\thost:5432/restaurant_hub",
         "não é uma url",
         "",
     ],
@@ -239,7 +241,7 @@ def test_quoted_or_commented_url_is_read_like_dotenv(tmp_path: Path, line: str) 
 def test_non_loopback_database_url_is_kept_and_not_duplicated(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Caminho A/B (devcontainer/compose): a app fala com `postgres:5432`."""
+    """Devcontainer ou compose direto: a app fala com `postgres:5432`."""
     line = "DATABASE_URL=postgresql+psycopg://user:pass@postgres:5432/restaurant_hub"
     _write_env(tmp_path, line)
 
