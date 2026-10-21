@@ -2,12 +2,14 @@
 
 import json
 import os
+import runpy
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 import pytest
+import uvicorn
 from fastapi import FastAPI
 
 from restaurant_hub import main
@@ -139,3 +141,27 @@ def test_boot_real_configura_o_logging_uma_vez_no_nivel_do_ambiente(
     # pendurasse no root antes do boot apareceria aqui, e teria anulado a chamada.
     assert boot["handlers"] == [["StreamHandler", "<stdout>"]]
     assert boot["sqlalchemy"] == "WARNING"
+
+
+def test_python_m_entrega_ao_uvicorn_a_app_ja_montada(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`python -m restaurant_hub.main`, o outro boot que `main.py` documenta, também é um só.
+
+    Com a string de import, o uvicorn reimportava `restaurant_hub.main`, que nesse
+    caminho roda como `__main__` e é outro módulo para o import, e montava a app e o
+    logging de novo no mesmo processo. A issue #6 mediu duas chamadas de
+    `create_app` e duas de `configure_logging`. Com o objeto não há import:
+    `uvicorn.importer.import_from_string` devolve sem tocar no que não é string.
+
+    O teste roda o arquivo como `__main__` aqui mesmo, com o `uvicorn.run` trocado,
+    e não num subprocess, porque esta é a linha que a cobertura precisa ver. O
+    reimport em si não se reproduz in-process (o módulo já está em `sys.modules`);
+    o que se trava é o contrato que o evita: o uvicorn recebe **a** app já montada.
+    """
+    recebidas: list[object] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **_: recebidas.append(app))
+
+    globais = runpy.run_path(main.__file__, run_name="__main__")
+
+    assert len(recebidas) == 1
+    assert isinstance(recebidas[0], FastAPI)
+    assert recebidas[0] is globais["app"]
