@@ -98,6 +98,7 @@ def _check(targets: Sequence[str], rows: str, subjects: frozenset[str]) -> list[
         ("3.5-employee-login-link", "3.5"),
         ("12.10-multi-tenant", "12.10"),
         ("X.4-openai-gateway", "X.4"),
+        ("2.1-oauth2-login", "2.1"),
     ],
 )
 def test_number_is_the_prefix_up_to_the_first_hyphen(stage_id: str, number: str) -> None:
@@ -106,7 +107,17 @@ def test_number_is_the_prefix_up_to_the_first_hyphen(stage_id: str, number: str)
 
 @pytest.mark.parametrize(
     "not_a_stage_id",
-    ["1.1", "bootstrap", "1.1-", "1-1-bootstrap", "1.1-Bootstrap", "`1.1-bootstrap`", ""],
+    [
+        "1.1",
+        "bootstrap",
+        "1.1-",
+        "1-1-bootstrap",
+        "1.1-Bootstrap",
+        "`1.1-bootstrap`",
+        "",
+        "1.1-bootstrap/",
+        "1.1-bootstrap extra",
+    ],
 )
 def test_number_refuses_what_is_not_a_stage_id(not_a_stage_id: str) -> None:
     with pytest.raises(ValueError, match="stage_id malformado"):
@@ -170,7 +181,11 @@ _SECTION = "## Tabela de Stages\n\n"
     [
         ("# Roadmap\n\n## Tabela de Issues\n", "ausente"),
         (_SECTION + "texto sem tabela\n", "sem cabeçalho"),
-        (_SECTION + "| Stage | Status | Depende de |\n| `1.1-x` | done | — |\n", "separador"),
+        (
+            _SECTION + "| Stage | Status | Depende de |\n| `1.1-x` | done | — |\n",
+            "não é o separador",
+        ),
+        (_SECTION + "| Stage | Status | Depende de |\n|---|x|---|\n", "não é o separador"),
         (_SECTION + "| Stage | Status |\n|---|---|\n| `1.1-x` | done |\n", "Depende de"),
     ],
 )
@@ -185,7 +200,8 @@ def test_parse_fails_closed_when_the_table_is_not_readable(text: str, reason: st
         ("| 1.1 | T | domain | done | — |\n", "não é um stage_id"),
         ("| `1.1-bootstrap` | T | domain | done | 1.1 |\n", "nem issue `#N`"),
         ("| `1.1-bootstrap` | T | domain | done | issue 45 |\n", "nem issue `#N`"),
-        ("| `1.1-bootstrap` | T | done | — |\n", "célula"),
+        ("| `1.1-bootstrap` | T | done | — |\n", "4 célula(s)"),
+        ("| `1.1-bootstrap` | T | domain | done | — | extra |\n", "6 célula(s)"),
         (_row("1.1-bootstrap") + _row("1.1-bootstrap", status="draft"), "mais de uma linha"),
     ],
 )
@@ -251,9 +267,16 @@ def test_partial_gate_commits_do_not_close_a_dependency() -> None:
     ]
 
 
+_NOT_MERGED_1_1 = [
+    "1.2-ci → 1.1-bootstrap: commit `stage 1.1: complete` não está mergeado em origin/develop"
+]
+
+
 def test_the_stage_id_in_the_subject_does_not_close_a_dependency() -> None:
     """F-C do PR #11: o commit reservado carrega o número; o `stage_id` ali não casa nada."""
-    assert _check(["1.2-ci"], _CHAIN, frozenset({"stage 1.1-bootstrap: complete"})) != []
+    assert _check(["1.2-ci"], _CHAIN, frozenset({"stage 1.1-bootstrap: complete"})) == (
+        _NOT_MERGED_1_1
+    )
     assert _check(["1.2-ci"], _CHAIN, frozenset({"stage 1.1: complete"})) == []
 
 
@@ -268,7 +291,7 @@ def test_the_stage_id_in_the_subject_does_not_close_a_dependency() -> None:
     ],
 )
 def test_the_subject_must_match_exactly(lookalike: str) -> None:
-    assert _check(["1.2-ci"], _CHAIN, frozenset({lookalike})) != []
+    assert _check(["1.2-ci"], _CHAIN, frozenset({lookalike})) == _NOT_MERGED_1_1
 
 
 def test_status_and_commit_are_reported_together() -> None:
@@ -277,16 +300,57 @@ def test_status_and_commit_are_reported_together() -> None:
     assert len(_check(["1.2-ci"], rows, frozenset())) == 2  # noqa: PLR2004
 
 
-def test_every_dependency_is_checked() -> None:
+@pytest.mark.parametrize(
+    "deps",
+    [
+        "`7.1-controlid-spike`, `4.5-scheduling-http`",  # a aberta por último
+        "`4.5-scheduling-http`, `7.1-controlid-spike`",  # a aberta primeiro, a fechada depois
+    ],
+)
+def test_an_open_dependency_is_reported_in_any_position(deps: str) -> None:
     rows = (
         _row("4.5-scheduling-http", status="draft")
         + _row("7.1-controlid-spike")
-        + _row("7.2-timeclock-domain", deps="`7.1-controlid-spike`, `4.5-scheduling-http`")
+        + _row("7.2-timeclock-domain", deps=deps)
     )
 
     violations = _check(["7.2-timeclock-domain"], rows, frozenset({"stage 7.1: complete"}))
 
     assert {v.split(":")[0] for v in violations} == {"7.2-timeclock-domain → 4.5-scheduling-http"}
+    assert len(violations) == 2  # status e commit da 4.5  # noqa: PLR2004
+
+
+@pytest.mark.parametrize(
+    ("deps", "subjects"),
+    [
+        ("`1.1-bootstrap`, `#46`", frozenset({"stage 1.1: complete"})),  # Stage fecha, issue não
+        ("`#45`, `1.1-bootstrap`", frozenset()),  # issue fecha, Stage não
+    ],
+)
+def test_stage_and_issue_dependencies_are_both_checked(deps: str, subjects: frozenset[str]) -> None:
+    rows = _row("1.1-bootstrap") + _row("4.3-scheduling-application", deps=deps)
+
+    assert len(_check(["4.3-scheduling-application"], rows, subjects)) == 1
+
+
+def test_every_target_is_checked_not_only_the_first() -> None:
+    violations = _check(
+        ["1.2-ci", "2.1-identity-domain"], _CHAIN, frozenset({"stage 1.1: complete"})
+    )
+
+    assert violations == [
+        "2.1-identity-domain → 1.2-ci: commit `stage 1.2: complete` não está mergeado em "
+        "origin/develop"
+    ]
+
+
+@pytest.mark.parametrize("status", ["draft", "in_progress", "review", "archived", "Done"])
+def test_only_done_closes_a_dependency(status: str) -> None:
+    rows = _row("1.1-bootstrap", status=status) + _row("1.2-ci", deps="`1.1-bootstrap`")
+
+    assert _check(["1.2-ci"], rows, _CLOSED) == [
+        f"1.2-ci → 1.1-bootstrap: status `{status}` na Tabela de Stages (esperado `done`)"
+    ]
 
 
 def test_target_without_a_row_is_a_violation() -> None:
@@ -635,10 +699,10 @@ class _Git:
         self.shallow = shallow
         self.resolvable = set(resolvable)
         self.log = log
-        self.calls: list[tuple[list[str], Any]] = []
+        self.calls: list[tuple[list[str], dict[str, Any]]] = []
 
     def __call__(self, cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:  # noqa: ANN401
-        self.calls.append((cmd, kwargs.get("cwd")))
+        self.calls.append((cmd, dict(kwargs)))
         if cmd[1:3] == ["rev-parse", "--is-shallow-repository"]:
             return self._done(0, b"true\n" if self.shallow else b"false\n")
         if cmd[1:3] == ["rev-parse", "--verify"]:
@@ -663,7 +727,7 @@ def test_history_is_the_union_of_the_integration_branches_that_resolve(
 
     assert history.subjects == frozenset({"stage 1.1: complete", "feat(x): acentuação"})
     assert history.refs == ("origin/develop", "develop")
-    assert all(cwd == tmp_path for _, cwd in git.calls)
+    assert all(kwargs["cwd"] == tmp_path for _, kwargs in git.calls)
     assert git.calls[-1][0] == ["git", "log", "--format=%s", "origin/develop", "develop"]
 
 
@@ -728,3 +792,140 @@ def test_main_without_git_has_no_verdict_for_an_explicit_target(
 
     assert int(csd.main(["1.2-ci", "--repo", str(repo)])) == csd.EXIT_ERROR  # leitor real
     assert "`git` não pôde ser executado" in capsys.readouterr().err
+
+
+# --- o que a auditoria de testes da #12 pegou sobrevivendo ---------------------------
+
+
+@pytest.mark.parametrize("missing", ["Stage", "Status", "Depende de"])
+def test_each_required_column_is_required(missing: str) -> None:
+    columns = [c for c in ("Stage", "Título", "Status", "Depende de") if c != missing]
+    header = "| " + " | ".join(columns) + " |\n|" + "---|" * len(columns) + "\n"
+
+    with pytest.raises(csd.RoadmapError, match=f"coluna\\(s\\) {missing}$"):
+        csd.parse_stage_table(_SECTION + header)
+
+
+def test_a_table_with_no_rows_is_empty_not_unreadable() -> None:
+    assert csd.parse_stage_table(_SECTION + _HEADER) == ([], [])
+
+
+def test_a_second_table_in_the_section_is_not_read() -> None:
+    text = (
+        _SECTION
+        + _HEADER
+        + _row("1.1-bootstrap")
+        + "\nOutra tabela, de exemplo:\n\n"
+        + _HEADER
+        + "| 2.1 | T | domain | done | — |\n\n## Próxima seção\n"
+    )
+
+    assert csd.parse_stage_table(text) == (
+        [csd.StageRow("1.1-bootstrap", "done", (), ())],
+        [],
+    )
+
+
+def test_a_section_without_a_table_does_not_borrow_the_next_one() -> None:
+    text = (
+        "## Tabela de Stages\n\nAinda sem Stages.\n\n"
+        "## Tabela de Issues\n\n| Stage | Status | Depende de |\n|---|---|---|\n"
+    )
+
+    with pytest.raises(csd.RoadmapError, match="sem cabeçalho e separador"):
+        csd.parse_stage_table(text)
+
+
+@pytest.mark.parametrize("cell", ["—", "-", ""])
+def test_the_no_dependency_markers(cell: str) -> None:
+    (row,) = _rows(f"| `1.1-bootstrap` | T | domain | done | {cell} |\n")
+
+    assert (row.depends_on, row.depends_on_issues) == ((), ())
+
+
+def test_cells_may_omit_the_code_span() -> None:
+    (row,) = _rows("| 1.2-ci | T | domain | done | 1.1-bootstrap, #45 |\n")
+
+    assert (row.stage_id, row.depends_on, row.depends_on_issues) == (
+        "1.2-ci",
+        ("1.1-bootstrap",),
+        (45,),
+    )
+
+
+def test_a_bare_x_number_gets_the_same_explanation() -> None:
+    problem = csd.target_problem("X.4")
+
+    assert problem is not None
+    assert "número da Stage" in problem
+
+
+def test_main_refuses_a_bad_target_in_any_position(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    history = _History()
+
+    assert _main(_repo(tmp_path), history, "1.2-ci", "4.3") == csd.EXIT_ERROR
+    assert history.calls == []
+    assert "`4.3` é o número da Stage" in capsys.readouterr().err
+
+
+def test_main_checks_every_folder_not_only_the_first(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path, folders=("1.1-bootstrap", "2.1-identity-domain"))
+
+    assert _main(repo, _History(frozenset({"stage 1.1: complete"}))) == csd.EXIT_VIOLATION
+    assert "2.1-identity-domain → 1.2-ci" in capsys.readouterr().err
+
+
+def test_main_reports_every_violation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    rows = _row("1.1-bootstrap", status="draft") + _row("1.2-ci", deps="`1.1-bootstrap`")
+    repo = _repo(tmp_path, rows=rows, folders=("1.2-ci",))
+
+    assert _main(repo, _History(frozenset())) == csd.EXIT_VIOLATION
+    err = capsys.readouterr().err
+    assert "FALHA — 2 violação(ões)" in err
+    assert "status `draft`" in err
+    assert "não está mergeado" in err
+
+
+def test_main_closes_an_issue_dependency_without_reading_git(tmp_path: Path) -> None:
+    rows = _row("4.3-scheduling-application", deps="`#45`")  # a #45 está done
+    repo = _repo(tmp_path, rows=rows, folders=("4.3-scheduling-application",))
+    history = _History()
+
+    assert _main(repo, history) == csd.EXIT_OK
+    assert history.calls == []
+
+
+def test_git_runs_with_exact_commands_and_without_check(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Bytes capturados e `check=False`: erro do git vira `GitError`, nunca traceback."""
+    git = _Git(log=b"stage 1.1: complete\n")
+    monkeypatch.setattr(csd.subprocess, "run", git)
+
+    csd.git_history(("origin/develop",), tmp_path, True)
+
+    assert [cmd for cmd, _ in git.calls] == [
+        ["git", "rev-parse", "--is-shallow-repository"],
+        ["git", "rev-parse", "--verify", "--quiet", "origin/develop^{commit}"],
+        ["git", "log", "--format=%s", "origin/develop"],
+    ]
+    assert all(
+        kwargs == {"cwd": tmp_path, "capture_output": True, "check": False}
+        for _, kwargs in git.calls
+    )
+
+
+def test_integration_branches_are_the_ones_the_section_7_freeze_uses() -> None:
+    """ "Mergeada" quer dizer o mesmo aqui e no `check_technical_postexec.py` (ADR 1.2.0001)."""
+    path = _SCRIPT.parent / "check_technical_postexec.py"
+    spec = importlib.util.spec_from_file_location("check_technical_postexec", path)
+    assert spec is not None and spec.loader is not None
+    postexec = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(postexec)
+
+    assert csd.INTEGRATION_REFS == postexec._INTEGRATION_REFS
+    assert csd.INTEGRATION_REFS == ("origin/develop", "develop", "origin/main", "main")
