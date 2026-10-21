@@ -50,7 +50,10 @@ e `docs/roadmap.md` aprovados; Stage anterior (se houver) já mergeada.
 - [ ] `docs/roadmap.md` define a Stage `N.M` com todos os campos da
       "Descrição para IA" preenchidos (ver template em
       `templates/roadmap.md`).
-- [ ] Stages em `depends_on` estão `done` no roadmap.
+- [ ] Stages em `depends_on` fechadas: `python scripts/check_stage_deps.py N.M-<slug>`
+      sai com 0. O script recebe o `stage_id` e confere cada dependência — `done` no roadmap
+      e o commit `stage N.M: complete` no histórico, com o número derivado por ele
+      ([`CONVENTIONS.md`](./CONVENTIONS.md) §1; ADR 0.0.0007).
 
 ## Procedimento
 
@@ -63,6 +66,8 @@ $N = "<numero-step>"            # ex: 2
 $M = "<numero-stage>"           # ex: 3
 $slug = "<stage-slug>"          # ex: s3-source-adapter
 $title_humano = "<titulo>"      # ex: adicionar S3 source adapter
+# Formas (CONVENTIONS §1): "$N.$M" é o NÚMERO — commit reservado, tag de Task, título;
+# "$N.$M-$slug" é o stage_id — pasta, roadmap, depends_on; "$N-$M" vai na branch.
 
 gh issue create `
   --title "feat: stage $N.$M — $title_humano" `
@@ -114,7 +119,7 @@ Copy-Item docs/templates/stage-technical.md "docs/stages/$N.$M-$slug/technical.m
 ```
 
 > ADRs desta Stage **não** vão num subdir local — vivem em
-> `docs/adr/N_M_NNNN-<slug>.md` (pasta única para Stage e globais; ver
+> `docs/adr/N_M_NNNN-<slug-do-adr>.md` (pasta única para Stage e globais; ver
 > [`../CONVENTIONS.md`](../CONVENTIONS.md) §1). Se `docs/adr/` ainda
 > não existe (projeto novo sem bootstrap ADRs), criar:
 > `New-Item -ItemType Directory -Force -Path "docs/adr" | Out-Null`.
@@ -217,7 +222,7 @@ Use o template `docs/templates/stage-concept.md`, salvar em
 escreva "N/A").
 
 Decisões maiores com alternativa real descartada DEVEM virar ADR em
-`docs/adr/N_M_NNNN-<slug>.md` (ex.: `docs/adr/2_3_0001-stream-vs-batch.md`)
+`docs/adr/N_M_NNNN-<slug-do-adr>.md` (ex.: `docs/adr/2_3_0001-stream-vs-batch.md`)
 usando `docs/templates/adr.md`. Pasta única para ADRs de Stage e globais;
 o prefixo `N_M` no filename é o separador. Referenciar o ADR no
 Concept pelo `adr_id` (ex.: `2.3.0001`).
@@ -650,14 +655,17 @@ Próxima Stage: voltar ao Passo 1 com a próxima `N.M` do roadmap.
 ## Verificação
 
 ```powershell
-# Branch deletada local e remotamente
-git branch -a | Select-String "$N-$M"   # nada deve retornar
+# Branch deletada local e remotamente — pelo nome inteiro: o fragmento "$N-$M" casa
+# branch de outra Stage ("2-3" está em feat/32-3-1-staff-domain)
+git branch -a | Select-String -SimpleMatch "feat/$issue-$N_M_kebab-$slug"   # nada deve retornar
 
 # Issue fechada automaticamente pelo PR
 gh issue view $issue                    # deve mostrar state CLOSED
 
-# Roadmap reflete status
-Get-Content docs/roadmap.md | Select-String "$N\.$M.*done"
+# Roadmap reflete status — a linha da Stage na Tabela de Stages, cuja chave é o stage_id
+# (o número solto casa também o Histórico e a linha de issue que cita a Stage, e dá verde
+# com a linha da Stage fora de done). Na regex, "." casa a crase em volta do stage_id.
+Select-String -Path docs/roadmap.md -Pattern "^\| .$N\.$M-$slug. \|[^|]*\|[^|]*\| done \|"   # 1 linha
 ```
 
 ## Troubleshooting
