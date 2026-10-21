@@ -235,6 +235,21 @@ def test_other_rejections_keep_their_reasons(
     assert reason in capsys.readouterr().err
 
 
+# O limite que os technicals citam (`subject ≤ 100 caracteres`, `MAX_SUBJECT_LEN`).
+_SUBJECT_LIMIT = 100
+
+
+@pytest.mark.parametrize(
+    ("length", "exit_code"),
+    [(_SUBJECT_LIMIT, _EXIT_OK), (_SUBJECT_LIMIT + 1, _EXIT_REJECTED)],
+)
+def test_subject_limit_is_inclusive_and_counts_the_tag(length: int, exit_code: int) -> None:
+    head, tag = "feat(scheduling): ", " [4.1/task-03]"
+    subject = head + "x" * (length - len(head) - len(tag)) + tag
+    assert len(subject) == length
+    assert ccm.validate_subject(subject) == exit_code
+
+
 # --- O hook como o git o chama -------------------------------------------------
 
 
