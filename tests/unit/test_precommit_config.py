@@ -58,9 +58,23 @@ _RUFF_PREFIX_LEN = 4
 _RUFF_CHECK_FLAGS = frozenset({"--force-exclude", "--fix"})
 _RUFF_FORMAT_FLAGS = frozenset({"--force-exclude"})
 
+# Sem `--force-exclude`, o ruff checa todo arquivo passado por nome, até o que a
+# configuração exclui; com diretório, como o Makefile passa, ele respeita a
+# exclusão. Medido na issue #7: `ruff check --extend-exclude X X` acha o erro de X,
+# e com `--force-exclude` ou com o diretório não acha. O pre-commit passa por nome,
+# então é a flag que dá ao hook o veredito do target.
+_RUFF_REQUIRED_FLAGS = frozenset({"--force-exclude"})
+
 # Tags de `types` que todo arquivo `.py` do repositório carrega. Um filtro `types`
 # com qualquer outra (`executable`, por exemplo) tiraria arquivos do hook.
 _PYTHON_FILE_TAGS = frozenset({"file", "text", "python"})
+
+# O estágio em que o hook roda no `git commit` e no `pre-commit run` (`commit` é o
+# nome legado do mesmo estágio).
+_COMMIT_STAGES = frozenset({"pre-commit", "commit"})
+
+# Os hooks que espelham um target do Makefile.
+_MIRRORED_HOOKS = ("ruff-format", "ruff", "mypy", "lint-imports")
 
 
 @pytest.fixture(scope="module")
@@ -127,12 +141,51 @@ def _receives_python(hook: dict[str, Any], path: str) -> bool:
     return _receives(hook, path) and types_ok and types_or_ok
 
 
-def test_hook_ids_are_unique(config: dict[str, Any]) -> None:
-    """Um `id` repetido esconderia o segundo hook das asserções deste arquivo.
+def _assert_triggered_by(hook: dict[str, Any], paths: list[str]) -> None:
+    """O hook dispara quando o commit traz qualquer um de `paths`.
 
-    O pre-commit roda os dois, mas o dicionário por `id` guarda um só — e um
-    `mirrors-mypy` reintroduzido ao lado do hook local passaria pelas asserções sobre
-    o primeiro.
+    O filtro tem de ser só por caminho: um filtro por tipo deixaria de fora os
+    arquivos que decidem o veredito sem ser Python (`pyproject.toml`, `uv.lock`,
+    `.importlinter`).
+    """
+    type_filters = sorted(key for key in ("types", "types_or", "exclude_types") if key in hook)
+    assert type_filters == [], (
+        f"o hook `{hook['id']}` filtra por tipo ({type_filters}): arquivos que não são "
+        f"Python e decidem o veredito deixariam de disparar o hook"
+    )
+    ignored = [path for path in paths if not _receives(hook, path)]
+    assert ignored == [], (
+        f"um commit só com {ignored} não dispara o hook `{hook['id']}`, mas muda o "
+        f"veredito do target que ele espelha"
+    )
+
+
+def test_mirrored_hooks_run_at_commit(
+    config: dict[str, Any], hooks: dict[str, dict[str, Any]]
+) -> None:
+    """Os hooks que espelham o gate rodam no `git commit` e no `pre-commit run`.
+
+    Um `stages: [manual]` (ou `pre-push`) tira o hook do commit sem nenhum sinal, e o
+    commit passa pelo que o gate reprova: a direção da Stage 1.1, por outro caminho.
+    Sem `stages` no hook, vale o `default_stages` do arquivo; sem os dois, todos.
+    """
+    off_commit: list[str] = []
+    for hook_id in _MIRRORED_HOOKS:
+        stages = _hook(hooks, hook_id).get("stages", config.get("default_stages"))
+        if stages is not None and not _COMMIT_STAGES & set(stages):
+            off_commit.append(f"{hook_id}: {stages}")
+    assert off_commit == [], (
+        f"hook que espelha o gate fora do estágio de commit: {off_commit}. Ele deixa de "
+        f"rodar no `git commit` e no `pre-commit run`, e o commit passa sem ele."
+    )
+
+
+def test_hook_ids_are_unique(config: dict[str, Any]) -> None:
+    """Um `id` repetido esconderia um dos hooks das asserções deste arquivo.
+
+    O pre-commit roda os dois, mas o dicionário por `id` guarda só o último. Medido na
+    issue #7: um `mirrors-mypy` reintroduzido antes do hook local ficava fora de toda
+    asserção que lê o dicionário.
     """
     ids = [hook["id"] for repo in config["repos"] for hook in repo["hooks"]]
     repeated = sorted({hook_id for hook_id in ids if ids.count(hook_id) > 1})
@@ -214,27 +267,13 @@ def test_mypy_hook_triggers_on_every_input_of_its_verdict(
     o target checa (o antigo `files: ^src/` deixava `tests/fakes/` sem hook), a
     configuração do mypy (`[tool.mypy]` no `pyproject.toml`) e o lock, porque o
     commit que sobe o mypy ou um pacote tipado é justamente o que muda o veredito.
-
-    O filtro é só por caminho: `types` deixaria de fora o `pyproject.toml` e o
-    `uv.lock`, que não são Python.
     """
     hook = _hook(hooks, "mypy")
-    type_filters = sorted(key for key in ("types", "types_or", "exclude_types") if key in hook)
-    assert type_filters == [], (
-        f"o hook de mypy filtra por tipo ({type_filters}): pyproject.toml e uv.lock "
-        f"não são Python e deixariam de disparar o hook"
-    )
-
     [typecheck] = _recipe("typecheck")
     checked = _positional(typecheck, _TOOL_PREFIX_LEN)
     assert checked, f"o `make typecheck` não nomeia caminho nenhum: {typecheck}"
     inputs = [f"{path.rstrip('/')}/module.py" for path in checked]
-    inputs += ["pyproject.toml", "uv.lock"]
-    ignored = [path for path in inputs if not _receives(hook, path)]
-    assert ignored == [], (
-        f"um commit só com {ignored} não dispara o hook de mypy, mas muda o veredito "
-        f"do `make typecheck`"
-    )
+    _assert_triggered_by(hook, [*inputs, "pyproject.toml", "uv.lock"])
 
 
 @pytest.mark.parametrize(
@@ -276,6 +315,12 @@ def test_ruff_hooks_run_the_ruff_of_their_make_target(
         f"o hook `{hook_id}` passa {extra} ao ruff: flag que muda as regras faz o hook "
         f"julgar diferente do `make {target}`"
     )
+    missing = sorted(_RUFF_REQUIRED_FLAGS - set(command[_RUFF_PREFIX_LEN:]))
+    assert missing == [], (
+        f"o hook `{hook_id}` precisa de {missing}: o pre-commit passa os arquivos por "
+        f"nome, e sem a flag o ruff checa até o que a configuração exclui, que o "
+        f"`make {target}` (por diretório) pula"
+    )
 
     directories = _positional(matching[0], _RUFF_PREFIX_LEN)
     assert directories, f"o `make {target}` não nomeia caminho nenhum: {matching[0]}"
@@ -296,7 +341,8 @@ def test_lint_imports_hook_runs_exactly_make_import_check(
     Já era assim antes da issue #7 — é o padrão que ela estendeu aos outros hooks. Fica
     cobrado aqui porque a mesma deriva o alcançaria: com `entry: lint-imports`, sem o
     `uv run`, o console script viria do PATH de quem commita, numa versão que o lock
-    não controla.
+    não controla. E o hook dispara também pelo `.importlinter`: um commit que só muda
+    um contrato muda o veredito do target.
     """
     hook = _hook(hooks, "lint-imports")
     import_check = _recipe("import-check")
@@ -308,3 +354,4 @@ def test_lint_imports_hook_runs_exactly_make_import_check(
         "o lint-imports analisa o grafo inteiro e não aceita lista de arquivos: o hook "
         "precisa de `pass_filenames: false`"
     )
+    _assert_triggered_by(hook, ["src/restaurant_hub/module.py", ".importlinter"])
