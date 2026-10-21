@@ -114,7 +114,10 @@ class ProvisionedLogin:
 
 
 class IdentityGateway(Protocol):
-    """Provisiona logins pendentes, envia convites e revoga sessões — em identity."""
+    """Provisiona logins pendentes, envia convites e revoga sessões — em identity.
+
+    E, desde a Stage 3.7, diz se um login é de funcionário (L-IG5).
+    """
 
     def provision_employee_login(
         self,
