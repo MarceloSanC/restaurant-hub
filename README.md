@@ -33,8 +33,9 @@ Pré-requisitos: Python 3.12+, [uv](https://docs.astral.sh/uv/) e GNU Make 4+.
    `winget install ezwinports.make`, ou o do MSYS2). Se usar o do MSYS2,
    adicione `C:\msys64\usr\bin` ao PATH do usuário **no final (append,
    nunca prepend)** — esse diretório carrega um `git.exe` próprio que NÃO
-   pode ganhar do Git for Windows (causa churn fantasma de CRLF no
-   `git diff`). Depois confira:
+   pode ganhar do Git for Windows (ADR 1.1.0001; antes do `.gitattributes`
+   da issue #8, a troca causava churn fantasma de CRLF no `git diff`).
+   Depois confira:
    ```powershell
    make --version      # GNU Make 4.x
    Get-Command git     # deve resolver para C:\Program Files\Git\cmd\git.exe
