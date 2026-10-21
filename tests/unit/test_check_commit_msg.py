@@ -20,6 +20,7 @@ como marca (`group("tag")`).
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -292,3 +293,123 @@ def test_main_without_the_message_file_argument_exits_usage() -> None:
 
 def test_main_with_an_unreadable_message_file_exits_usage(tmp_path: Path) -> None:
     assert ccm.main(["check_commit_msg.py", str(tmp_path / "ausente")]) == _EXIT_USAGE
+
+
+# --- Os docs que prescrevem a marca, contra o hook -----------------------------
+#
+# O hook que recusa marca fora da gramática cria o risco inverso do que ele
+# fecha: uma forma que um prompt, runbook ou skill manda usar e que o hook não
+# conhece trava o commit de quem segue o doc. Esta varredura passa pelo hook
+# cada marca escrita nos docs que PRESCREVEM a forma do commit.
+#
+# Ficam fora `docs/stages/**` e `docs/adr/**`: registram o que aconteceu, e o
+# histórico tem formas anteriores à gramática (`-extra2`, …) que não se
+# reescrevem (CONVENTIONS.md §4(a), "Marca de Task", regra 5). Exemplo negativo
+# vai numa linha marcada com ❌.
+
+_PRESCRIBING_DOCS = (
+    "CLAUDE.md",
+    "README.md",
+    "docs/CONVENTIONS.md",
+    "docs/GIT-WORKFLOW.md",
+    "docs/LAYOUT.md",
+    "docs/PIPELINE.md",
+    "docs/PROMPT-*.md",
+    "docs/RUNBOOK-*.md",
+    "docs/templates/*.md",
+    "docs/runbooks/*.md",
+    ".claude/skills/*/SKILL.md",
+    ".claude/agents/*.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+)
+
+# Marca escrita num doc: dono reconhecível (placeholder ou número) e posição. Dono
+# que não casa (`<stage_id>`, `1.1-bootstrap`) fica fora: o que a varredura cobra
+# é a posição, que é onde doc e hook divergem.
+_DOC_TAG = re.compile(
+    r"\[(?P<owner><N\.M>|N\.M|\$N\.\$M|\d+\.\d+|#<issue>|#<num>|#\d+)"
+    r"/(?P<position>[^\]\s`|]+)\]"
+)
+_OWNER_EXAMPLE = {
+    "<N.M>": "4.1",
+    "N.M": "4.1",
+    "$N.$M": "4.1",
+    "#<issue>": "#34",
+    "#<num>": "#34",
+}
+_NEGATIVE_EXAMPLE = "❌"
+_ELLIPSIS = frozenset({"...", "…"})
+
+
+def _prescribed_tags() -> list[tuple[str, str, str]]:
+    """(onde, dono, posição) de cada marca escrita nos docs que prescrevem."""
+    found: list[tuple[str, str, str]] = []
+    for pattern in _PRESCRIBING_DOCS:
+        for path in sorted(_REPO_ROOT.glob(pattern)):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for number, line in enumerate(lines, start=1):
+                if _NEGATIVE_EXAMPLE in line:
+                    continue
+                for tag in _DOC_TAG.finditer(line):
+                    if tag["position"] in _ELLIPSIS:
+                        continue
+                    where = f"{path.relative_to(_REPO_ROOT)}:{number}"
+                    found.append((where, tag["owner"], tag["position"]))
+    return found
+
+
+_PRESCRIBED = _prescribed_tags()
+
+
+def _instantiate(owner: str, position: str) -> str:
+    return f"{_OWNER_EXAMPLE.get(owner, owner)}/{position.replace('NN', '07')}"
+
+
+def _kind(owner: str, position: str) -> tuple[str, str]:
+    owner_kind = "issue" if owner.startswith("#") else "stage"
+    if position == "--":
+        return owner_kind, "off-task"
+    for suffix in ("fix", "extra"):
+        if position.endswith(f"-{suffix}"):
+            return owner_kind, suffix
+    return owner_kind, "task"
+
+
+def test_every_tag_the_docs_prescribe_is_accepted_by_the_hook() -> None:
+    refused = [
+        f"{where}: [{owner}/{position}]"
+        for where, owner, position in _PRESCRIBED
+        if not _accepted(f"docs(conventions): exemplo [{_instantiate(owner, position)}]")
+    ]
+    assert not refused, (
+        "marca prescrita que o hook recusa — alinhe o doc à gramática de "
+        'CONVENTIONS.md §4(a), "Marca de Task", ou, se for exemplo negativo, '
+        "marque a linha com ❌:\n" + "\n".join(refused)
+    )
+
+
+def test_the_scan_sees_every_position_for_both_owners() -> None:
+    """Sem este piso, um `_DOC_TAG` quebrado não acharia marca nenhuma e a
+    varredura acima passaria vazia."""
+    seen = {_kind(owner, position) for _, owner, position in _PRESCRIBED}
+    expected = {
+        (owner, position)
+        for owner in ("stage", "issue")
+        for position in ("task", "fix", "extra", "off-task")
+    }
+    assert expected <= seen, f"faltam na varredura: {sorted(expected - seen)}"
+
+
+def test_a_negative_example_is_really_refused_by_the_hook() -> None:
+    """O ❌ tira a linha da varredura; o exemplo negativo do §4(a) tem de ser
+    mesmo recusado, senão a marca de negativo esconde uma forma válida."""
+    conventions = (_REPO_ROOT / "docs" / "CONVENTIONS.md").read_text(encoding="utf-8")
+    negatives = [
+        tag
+        for line in conventions.splitlines()
+        if _NEGATIVE_EXAMPLE in line
+        for tag in _DOC_TAG.finditer(line)
+    ]
+    assert negatives, "o §4(a) perdeu os exemplos negativos da marca"
+    for tag in negatives:
+        assert not _accepted(f"docs(conventions): exemplo {tag.group(0)}")
