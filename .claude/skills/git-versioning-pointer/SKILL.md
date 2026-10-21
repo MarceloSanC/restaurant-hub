@@ -65,13 +65,14 @@ seção correspondente. Cada uma traz três blocos:
 
 ## ✍️ `git commit -m`
 
-- **LER:** `docs/CONVENTIONS.md` §4(a) (formato + escopo mínimo + bullets) + §4(b) (reserved gate commits) + §3.2 (regressão `done → draft`); `docs/GIT-WORKFLOW.md` §Commits
+- **LER:** `docs/CONVENTIONS.md` §4(a) (formato + escopo mínimo + bullets + subseção "Marca de Task") + §4(b) (reserved gate commits) + §3.2 (regressão `done → draft`); `docs/GIT-WORKFLOW.md` §Commits
 - **CHECK:** hook `commit-msg` (de `scripts/check_commit_msg.py`) valida no `git commit`. Antes de re-aprovar algo já `approved`:
   ```bash
   git log --grep="stage N.M:.*approved" --oneline $(git branch --show-current)
   ```
   Se já houver `approved` anterior, fazer `chore(concept|technical): revert to draft — …` PRIMEIRO.
-- **GOTCHA:** `[N.M/post-done]` **não existe** — só `[N.M/task-NN]` (Task numerada) ou `[N.M/--]` (off-task com justificativa no body). "Fix rapidinho" não vai junto: ou é `[N.M/--]` com justificativa, ou sai do branch.
+- **GOTCHA:** a marca só tem as posições da gramática — `task-NN`, `task-NN-fix`, `task-NN-extra`, `--`, com dono `N.M` (Stage) ou `#<num>` (issue avulsa); o hook recusa o resto (ex.: ❌ `[N.M/post-done]`). Ver CONVENTIONS §4(a) → "Marca de Task". "Fix rapidinho" não vai junto: ou é `[N.M/--]` com justificativa, ou sai do branch.
+- **GOTCHA (correção de checkpoint):** correção de achado do Checkpoint C (ou de regressão mid-stage local) **não reusa a marca canônica da Task** — é `[N.M/task-NN-fix]`, com o `NN` da Task corrigida; teste que a auditoria de testes pediu é Task extra, `[N.M/task-NN-extra]` numerada acima do `tasks_count`. Ver CONVENTIONS §4(a) → "Marca de Task", regras 1–3.
 - **GOTCHA (idioma):** subject em **PT-BR** (commit/PR/issue são PT; só nome de branch e identificadores de código são EN). Não escrever subject em inglês por reflexo.
 
 ## ⬆️ `git push` (qualquer push de branch)
@@ -124,6 +125,7 @@ seção correspondente. Cada uma traz três blocos:
 | Conventional Commits (formato) | `GIT-WORKFLOW.md` §Commits + `CONVENTIONS.md` §4(a) |
 | Reserved gate commits (`stage N.M: ...`) | `CONVENTIONS.md` §4(b) |
 | Regressão `done → draft` | `CONVENTIONS.md` §3.2 |
+| Marca de Task (gramática, `-fix`, `-extra`, dono `#<num>`) | `CONVENTIONS.md` §4(a) → subseção "Marca de Task" |
 | Tag `[N.M/--]` (off-task) | `CONVENTIONS.md` §4(a) → subseção |
 | Seção §7 post-execution do technical.md | `CONVENTIONS.md` §3.4 |
 | Gates de PR | `GIT-WORKFLOW.md` §Gates de PR |
