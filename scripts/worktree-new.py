@@ -9,7 +9,11 @@ sem `git stash`/checkout no checkout principal. Em um único comando:
      Opcionalmente cria a issue antes via `gh issue create`.
   3. Cria a worktree em `../<repo>-worktrees/<branch-slug>/` saindo de
      `origin/<base>` (default `develop`; `main` para `hotfix/...`).
-  4. Copia `.env` (e `.env.local` se existir) do checkout principal.
+  4. Copia `.env` (e `.env.local` se existir) do checkout principal e gera
+     portas livres no `.env` da worktree (`APP_PORT`/`POSTGRES_PORT`/
+     `REDIS_PORT`), levando para elas as URLs que as embutem com host
+     loopback: a `DATABASE_URL` (acrescentada se faltar) e a `REDIS_URL`,
+     se houver.
   5. Roda `make setup` na worktree (uv venv + deps + pre-commit hooks),
      com fallback para `uv` direto se `make` não estiver disponível.
   6. Abre uma nova janela do VS Code na worktree (`code -n <path>`).
@@ -48,12 +52,14 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import ipaddress
 import json
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -389,6 +395,25 @@ PORT_DEFAULTS: dict[str, int] = {
 # Limite de offset para detectar caso degenerado (>100 worktrees).
 PORT_OFFSET_MAX = 100
 
+# URLs que carregam, por dentro, a porta que o compose publica no host. A app lê
+# a URL inteira (`DATABASE_URL`, settings.py), não as portas soltas: deslocar só a
+# `POSTGRES_PORT` deixava a worktree com a URL do checkout principal — ou, sem a
+# chave, com o default do Settings, porta 5432 — e a suíte recriava o schema do
+# banco de outra frente (issue #58).
+URL_PORT_KEYS: dict[str, str] = {
+    "DATABASE_URL": "POSTGRES_PORT",
+    "REDIS_URL": "REDIS_PORT",
+}
+# Ausente do `.env`, a URL entra com o default que a app usaria, na porta da
+# worktree: sem `DATABASE_URL`, o checkout principal fala com o default do
+# Settings, e a worktree passa a falar com o mesmo banco deslocado. Só a
+# `DATABASE_URL` tem leitor; a `REDIS_URL` é reescrita se existir, nunca
+# acrescentada. `tests/unit/test_worktree_new.py` cobra a igualdade com o default
+# de `Settings.database_url`.
+URL_DEFAULTS: dict[str, str] = {
+    "DATABASE_URL": "postgresql+psycopg://user:pass@localhost:5432/restaurant_hub",
+}
+
 
 def _list_worktree_paths() -> list[Path]:
     """Caminhos de todas as worktrees registradas (inclui a principal)."""
@@ -460,38 +485,120 @@ def assign_worktree_ports(new_wt: Path) -> dict[str, int]:
     return chosen
 
 
+def is_loopback(host: str | None) -> bool:
+    """Host que alcança a porta publicada no host: `localhost`, 127.0.0.0/8 ou `::1`.
+
+    Os demais não passam por ela: `postgres` é o service dentro da rede do
+    compose, que responde na porta do contêiner (5432), e um banco remoto não
+    tem relação com o mapeamento local. `0.0.0.0` também fica de fora: não é
+    endereço de destino (RFC 1122 §3.2.1.3).
+    """
+    if not host:
+        return False
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def url_with_port(url: str, port: int) -> str | None:
+    """`url` com a porta trocada por `port`, ou None quando não aponta para loopback.
+
+    Só o trecho `host:porta` muda — usuário, senha, banco e query ficam byte a
+    byte. URL sem porta ganha a porta. URL ilegível (porta não numérica, sem
+    host) também volta None: fica como está, e a guarda da suíte
+    (`tests/conftest.py`) é quem recusa a divergência que sobrar.
+    """
+    try:
+        parts = urlsplit(url)  # colchete de IPv6 sem par levanta ValueError
+        _ = parts.port  # porta não numérica ou fora de 0..65535, idem
+    except ValueError:
+        return None
+    start = url.find("//") + 2
+    if not is_loopback(parts.hostname) or not url.startswith(parts.netloc, start):
+        return None
+    userinfo, at, hostport = parts.netloc.rpartition("@")
+    if hostport.startswith("["):  # IPv6: o host vai até o colchete
+        host = hostport[: hostport.index("]") + 1]
+    else:
+        host = hostport.split(":", 1)[0]
+    return f"{url[:start]}{userinfo}{at}{host}:{port}{url[start + len(parts.netloc) :]}"
+
+
+def _env_entry(line: str) -> tuple[str | None, str]:
+    """`(chave, valor cru)` de uma linha `CHAVE=valor`; `(None, "")` se não for uma."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in stripped:
+        return None, ""
+    key, _, raw = stripped.partition("=")
+    return key.strip(), raw
+
+
+def _env_value(raw: str) -> str:
+    """O valor como o dotenv o lê: sem aspas envolventes nem comentário no fim."""
+    value = raw.strip()
+    if value[:1] in ("'", '"'):
+        end = value.find(value[0], 1)
+        return value[1:end] if end > 0 else value[1:]
+    return value.split(maxsplit=1)[0] if value else ""
+
+
 def write_worktree_env_ports(wt_path: Path, ports: dict[str, int]) -> None:
-    """Mescla `APP_PORT`/`POSTGRES_PORT`/`REDIS_PORT` no `.env` da
-    worktree, sobrescrevendo se já existirem.
+    """Mescla as portas no `.env` da worktree e reescreve as URLs que as embutem.
+
+    `APP_PORT`/`POSTGRES_PORT`/`REDIS_PORT` sobrescrevem a chave se ela já
+    existir — **toda** ocorrência: o dotenv e o compose ficam com a última, e
+    reescrever só a primeira deixava a antiga valendo. Cada URL de
+    `URL_PORT_KEYS` com host loopback passa à porta da worktree; com outro host,
+    fica como está. Ausentes, as portas e as URLs de `URL_DEFAULTS` entram num
+    bloco no fim do arquivo.
     """
     envfile = wt_path / ".env"
     existing = envfile.read_text(encoding="utf-8") if envfile.is_file() else ""
-    lines = existing.splitlines()
 
-    pending = dict(ports)
+    seen: set[str] = set()
+    notes: list[str] = []
     out_lines: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key = stripped.split("=", 1)[0].strip()
-            if key in pending:
-                out_lines.append(f"{key}={pending.pop(key)}")
-                continue
-        out_lines.append(line)
+    for line in existing.splitlines():
+        key, raw = _env_entry(line)
+        if key is not None and key in ports:
+            out_lines.append(f"{key}={ports[key]}")
+            seen.add(key)
+        elif key is not None and URL_PORT_KEYS.get(key) in ports:
+            port = ports[URL_PORT_KEYS[key]]
+            new_url = url_with_port(_env_value(raw), port)
+            if new_url is None:
+                out_lines.append(line)
+                notes.append(f"{key} mantida: não aponta para localhost/127.0.0.1/::1")
+            else:
+                out_lines.append(f"{key}={new_url}")
+                notes.append(f"{key} reescrita na porta {port}")
+            seen.add(key)
+        else:
+            out_lines.append(line)
+
+    pending = [f"{key}={ports[key]}" for key in PORT_DEFAULTS if key in ports and key not in seen]
+    for key, default in URL_DEFAULTS.items():
+        port_key = URL_PORT_KEYS[key]
+        if key not in seen and port_key in ports:
+            pending.append(f"{key}={url_with_port(default, ports[port_key])}")
+            notes.append(f"{key} acrescentada na porta {ports[port_key]}")
 
     if pending:
         if out_lines and out_lines[-1].strip():
             out_lines.append("")
         out_lines.append(
-            "# Portas auto-geradas para esta worktree paralela (scripts/worktree-new.py)"
+            "# Portas e URLs auto-geradas para esta worktree paralela (scripts/worktree-new.py)"
         )
-        for key in PORT_DEFAULTS:
-            if key in pending:
-                out_lines.append(f"{key}={pending[key]}")
+        out_lines.extend(pending)
 
     envfile.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
     summary = ", ".join(f"{k}={v}" for k, v in ports.items())
     _info(f".env atualizado: {summary}")
+    for note in notes:
+        _info(note)
 
 
 # ---------------------------------------------------------------------------
@@ -538,8 +645,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-port-assign",
         action="store_true",
-        help="Não escreve APP_PORT/POSTGRES_PORT/REDIS_PORT no "
-        ".env da worktree (default: gera portas livres).",
+        help="Não escreve APP_PORT/POSTGRES_PORT/REDIS_PORT nem reescreve "
+        "DATABASE_URL/REDIS_URL no .env da worktree (default: gera portas livres).",
     )
     parser.add_argument("--no-vscode", action="store_true", help="Não abre VS Code ao final.")
     parser.add_argument(
@@ -585,11 +692,13 @@ def _print_summary(*, branch: str, path: Path, issue: int, base: str) -> None:
     print()
     print("Próximos passos:")
     print(f"  cd {path}")
+    print("  docker compose up -d --wait postgres   # o banco desta worktree, antes do 1º pytest")
     print("  # implementar, commitar (1 commit = 1 mudança, body em bullets);")
     print(f"  # depois: git push -u origin {branch} && gh pr create --base {base}")
     print()
     print("Quando terminar a worktree (após PR mergeado):")
-    print(f"  git worktree remove {path}")
+    print("  docker compose down -v   # dentro dela: o worktree-rm não derruba esse Postgres")
+    print(f"  python scripts/worktree-rm.py {branch}   # do checkout principal")
 
 
 def main() -> int:
@@ -645,7 +754,7 @@ def main() -> int:
         copy_env_files(repo_root, wt_path)
 
     if not args.no_port_assign:
-        _section("8. Atribuindo portas livres (worktree paralela)")
+        _section("8. Atribuindo portas livres e a DATABASE_URL (worktree paralela)")
         ports = assign_worktree_ports(wt_path)
         write_worktree_env_ports(wt_path, ports)
 
