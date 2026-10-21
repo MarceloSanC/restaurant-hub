@@ -3,7 +3,7 @@
 **Pydantic vive só aqui.** Os use cases recebem e devolvem dataclasses da camada
 `application`; um schema nunca atravessa para dentro.
 
-Três decisões deste módulo valem explicação, porque cada uma parece um detalhe e
+Quatro decisões deste módulo valem explicação, porque cada uma parece um detalhe e
 nenhuma é:
 
 **1. Credencial em request é `SecretStr`.** O `repr` de um `SecretStr` é
@@ -24,6 +24,16 @@ Pydantic v2, mantido de propósito): endurecer para `extra="forbid"` faria a
 requisição maliciosa receber 422 em vez de ser silenciosamente desarmada, e o
 teste que prova a defesa (CA13) deixaria de poder observá-la.
 
+**4. Credencial em resposta é declarada no campo, e é a declaração que tira a
+resposta do cache.** Os dois tokens de `TokenResponse` são `Credential`: a marca
+`x-credential` no JSON Schema do campo faz o middleware de
+`shared/infrastructure/http/credential_no_store.py` gravar `Cache-Control:
+no-store` e `Pragma: no-cache` em toda resposta de login e de refresh (issue
+#61). A chave vai por extenso porque adapter não importa `shared.infrastructure`
+(LAYOUT §3); o teste deste schema a confere contra o detector de `shared`. Um
+schema de resposta novo que carregue credencial usa o mesmo alias e nasce com os
+cabeçalhos, qualquer que seja o seu nome.
+
 A conversão de texto para value object (`Email`, `Role.from_string`) **não**
 acontece aqui: fica no router, para que a falha seja erro de domínio — e caia no
 mapa de status de `error_handlers.py` — em vez de virar um
@@ -31,8 +41,14 @@ mapa de status de `error_handlers.py` — em vez de virar um
 """
 
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, Field, SecretStr
+
+# Campo de resposta que carrega credencial (nota 4 do módulo). A anotação do campo
+# continua `str` — a marca vai para o `FieldInfo` e para o JSON Schema, não para o
+# tipo.
+Credential = Annotated[str, Field(json_schema_extra={"x-credential": True})]
 
 
 class LoginRequest(BaseModel):
@@ -59,11 +75,13 @@ class TokenResponse(BaseModel):
 
     `refresh_token` é `str`, e não `SecretStr`, por necessidade: ele **é** a
     resposta ao cliente, e um `SecretStr` serializaria como `**********`. A
-    proteção do valor, no caminho de volta, é o `SecretStr` do request.
+    proteção do valor, no caminho de volta, é o `SecretStr` do request. No
+    caminho de ida, é a marca `Credential` dos dois tokens que impede a resposta
+    de ficar em cache (nota 4 do módulo).
     """
 
-    access_token: str
-    refresh_token: str
+    access_token: Credential
+    refresh_token: Credential
     token_type: str = "bearer"
     access_token_expires_at: datetime
     refresh_token_expires_at: datetime

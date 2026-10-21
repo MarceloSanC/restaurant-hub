@@ -11,6 +11,10 @@ import pytest
 from pydantic import BaseModel, SecretStr
 
 from restaurant_hub.features.identity.adapters.inbound.http import schemas
+from restaurant_hub.shared.infrastructure.http.credential_no_store import (
+    CREDENTIAL_MARK,
+    declares_credential,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -146,3 +150,25 @@ def test_token_response_expoe_o_refresh_em_claro_por_necessidade() -> None:
     volta, onde `RefreshRequest` o recebe como `SecretStr`.
     """
     assert schemas.TokenResponse.model_fields["refresh_token"].annotation is str
+
+
+def _campos_marcados_como_credencial(schema: type[BaseModel]) -> set[str]:
+    """Os campos de topo cujo JSON Schema de serialização traz a marca."""
+    propriedades = schema.model_json_schema(mode="serialization")["properties"]
+    return {nome for nome, valor in propriedades.items() if valor.get(CREDENTIAL_MARK) is True}
+
+
+def test_token_response_declara_os_dois_tokens_como_credencial() -> None:
+    """Issue #61: é a marca que tira do cache as respostas de login e de refresh.
+
+    Duas asserções, porque falham por motivos diferentes. A primeira cruza a
+    chave escrita por extenso no schema com o detector de `shared`: um erro de
+    digitação na chave desarmaria a regra sem mais nenhum sintoma. A segunda fixa
+    **quais** campos: `token_type` e os instantes de expiração não são segredo, e
+    marcá-los diria no OpenAPI uma coisa falsa.
+    """
+    assert declares_credential(schemas.TokenResponse) is True
+    assert _campos_marcados_como_credencial(schemas.TokenResponse) == {
+        "access_token",
+        "refresh_token",
+    }
