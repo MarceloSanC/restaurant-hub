@@ -80,7 +80,11 @@ a issue pode ter deixado implícito.
   globais `0_0_*`/`1_1_*` e os do mesmo bounded context — têm chance de
   restringir a solução)
 - `docs/stages/<dep>/concept.md` das Stages que definiram o BC (identificar em `depends_on`
-  da linha da issue no roadmap) — para entender os contratos estabelecidos
+  da linha da issue no roadmap) — para entender os contratos estabelecidos. `<dep>` é o
+  `stage_id` com slug, o nome da pasta (`3.6-staff-http`). A coluna `Depende de` da Tabela de
+  Issues lista **issues**: `#N` que não está na tabela é issue de Stage, e a pasta é a do
+  `technical.md` com `issue_id: N` (`grep -l "^issue_id: N$" docs/stages/*/technical.md`);
+  issue avulsa não tem pasta (CONVENTIONS §1 "Identificador da Stage")
 - A **§7 (post-execution) do `technical.md`** dessas Stages que definiram o BC:
   ler `[finding]` (alguma foi escalada para esta issue?), `[decision]` e
   `[deviation]` que possam orientar ou restringir a implementação
@@ -108,7 +112,9 @@ gh issue view <issue> --json number,state,title
 # (ler docs/roadmap.md, seção "Tabela de Issues", confirmar status = open)
 
 # 5. depends_on da issue estão concluídas
-# (checar no roadmap.md se cada Stage/issue listada em "Depende de" está done)
+# (checar no roadmap.md se cada Stage/issue listada em "Depende de" está done;
+#  `#N` fora da Tabela de Issues é issue de Stage: confira a linha da Stage cujo
+#  technical.md tem `issue_id: N` na Tabela de Stages)
 ```
 
 Pré-condições **não são burocracia**: pular qualquer uma compromete o resto
