@@ -256,10 +256,16 @@ operação. Overview §3, §9.
 - Jornada fixa exige carga semanal contratada > 0 (horas).
 - Perfil sob demanda **não** carrega carga contratada nem valor monetário.
 
-> **Lacuna para o concept da Stage 3.1:** as fontes prendem a **preferência de turno** à jornada
-> fixa (kickoff #5: "carga = horas/semana + preferência de turno"), mas o overview §3 lista a
-> preferência junto do perfil de jornada em geral — se o funcionário **sob demanda** também declara
-> preferência de turno não está fixado. O concept da 3.1 decide.
+> **Lacuna fechada (2026-10-21) —
+> [ADR 3.1.0004](../../adr/3_1_0004-shift-preference-scope-and-cardinality.md) (a):** se o
+> funcionário **sob demanda** também declara preferência de turno era lacuna aberta deste doc — o
+> kickoff #5 prende a preferência à jornada fixa ("carga = horas/semana + preferência de turno"), e
+> o overview §3 a lista junto do perfil de jornada em geral. O concept da Stage 3.1 a fechou em
+> 2026-07-27 pela fonte mais alta, o overview: **os dois perfis declaram**. A preferência é atributo
+> do **registro**, não do perfil — trocar fixa ↔ sob demanda não a apaga —, e a regra canônica
+> mora em §3.5. O kickoff #5 continua honrado: a jornada fixa segue sendo "horas/semana +
+> preferência"; a decisão só não **nega** o mesmo sinal a quem é sob demanda (o extra que só
+> trabalha à noite é exatamente o caso que o auto-preenchimento quer conhecer).
 
 ### 3.4 Fronteira terminológica — o contrato intermitente da CLT
 
@@ -300,19 +306,35 @@ A fronteira, com a fonte primária verificada (Planalto, 2026-07-23):
 **Regra canônica:** a preferência de turno do funcionário é expressa em **períodos nomeados do
 dia** — **manhã, tarde, noite, madrugada**. Kickoff #6.
 
-- **As fronteiras horárias dos períodos NÃO pertencem ao staff.** O BC staff guarda **só o período
-  nomeado**; o mapeamento período → faixas de horário concretas é responsabilidade do
+- **É do registro, vale para os dois perfis e é opcional**
+  ([ADR 3.1.0004](../../adr/3_1_0004-shift-preference-scope-and-cardinality.md) (a)): jornada fixa
+  e sob demanda declaram do mesmo jeito (§3.3). **Não declarar** é estado legítimo e quer dizer
+  *indiferente* — para o auto-preenchimento, o funcionário pode ser escalado em qualquer período.
+- **Declarada, é um conjunto não-vazio de períodos** (ADR 3.1.0004 (b)): um período só é o caso
+  particular, e "tarde e noite" é expressável. Declarar os quatro equivale, no efeito, a não
+  declarar, mas continua sendo uma declaração explícita. Não existe preferência vazia — dizer
+  "nenhum período" é não declarar.
+- **As fronteiras horárias dos períodos NÃO pertencem ao staff.** O BC staff guarda **só os
+  períodos nomeados**; o mapeamento período → faixas de horário concretas é responsabilidade do
   **scheduling** (Step 4), onde vive a configuração por restaurante. Âncoras: roadmap 3.2
   `non_goals` ("noção de escala/demanda é Step 4"); overview §6 (configuração por restaurante vive
   em scheduling).
 - Consumidores: o auto-preenchimento respeita a preferência (overview §3 — "respeita carga,
-  preferência de turno e indisponibilidade").
+  preferência de turno e indisponibilidade"). É **sinal soft** (afinidade, justiça), não restrição:
+  bloquear é papel da indisponibilidade (§3.6), e a semântica do casamento pertence ao Step 5
+  (ADR 3.1.0004).
 
-**Invariante:**
-- Preferência assume valores apenas do conjunto fechado {manhã, tarde, noite, madrugada}.
+**Invariantes:**
+- A preferência, quando declarada, é um subconjunto **não-vazio** do conjunto fechado {manhã,
+  tarde, noite, madrugada}.
+- A preferência é independente do perfil de jornada: trocar o perfil não a altera.
 
-> **Lacuna para o concept da Stage 3.1:** a **cardinalidade** da preferência (um período por
-> funcionário ou vários?) não está fixada em fonte ratificada — o concept decide.
+> **Lacuna fechada (2026-10-21) —
+> [ADR 3.1.0004](../../adr/3_1_0004-shift-preference-scope-and-cardinality.md) (b):** a
+> **cardinalidade** da preferência ("um período por funcionário ou vários?") era lacuna aberta
+> deste doc. O concept da Stage 3.1 a fechou em 2026-07-27 com o **conjunto não-vazio** — a forma
+> geral, que o Step 5 consome sem conversão e da qual o período único é caso particular (a UI pode
+> começar com seleção única). A ausência de preferência é "não declarada", nunca um conjunto vazio.
 
 ### 3.6 Indisponibilidade
 
