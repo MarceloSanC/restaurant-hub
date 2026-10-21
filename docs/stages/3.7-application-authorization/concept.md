@@ -342,44 +342,44 @@ Configuração candidata: nenhuma · Reversível: sim
 
 ## 11. Critérios de aceitação
 
-- [ ] **CA01** — Todo use case da pasta `use_cases/` (derivado, não listado) tem
+- [x] **CA01** — Todo use case da pasta `use_cases/` (derivado, não listado) tem
       no construtor um parâmetro `guard` anotado `AccessGuard`.
-- [ ] **CA02** — Todo command e query de staff tem `actor` como **primeiro**
+- [x] **CA02** — Todo command e query de staff tem `actor` como **primeiro**
       campo, sem default e com `repr=False`; o `repr` de um command não contém o
       `repr` do ator.
-- [ ] **CA03** — Com um guard que **sempre nega**, cada um dos 17 use cases,
+- [x] **CA03** — Com um guard que **sempre nega**, cada um dos 17 use cases,
       chamado com um command válido sobre dados semeados, levanta **a própria
       instância** sentinela do guard (`is`) e, **medido a partir do instante
       depois da semeadura**, não acrescenta nenhuma entrada ao registro de
       chamadas do store de repositórios nem ao do gateway, e não consome nenhum id
       do gerador.
-- [ ] **CA04** — A lista de use cases da suíte de CA03 é igual ao conjunto de
+- [x] **CA04** — A lista de use cases da suíte de CA03 é igual ao conjunto de
       módulos da pasta `use_cases/` (sem `_`-prefixados): use case novo entra
       coberto ou reprova.
-- [ ] **CA05** — Para cada use case, num caminho feliz com o guard que concede e
+- [x] **CA05** — Para cada use case, num caminho feliz com o guard que concede e
       registra, a sequência de `authorize` é **exatamente** a da matriz R3
       (permissão, `tenant_id` do command, `unit_id` do command; cópia: origem e
       depois destino; login: `manage_staff` e depois `manage_users`).
-- [ ] **CA06** — Nos dois use cases de dois alvos, negar **só o segundo** alvo
+- [x] **CA06** — Nos dois use cases de dois alvos, negar **só o segundo** alvo
       produz a exceção do guard e nenhum efeito (mesma medição de CA03).
-- [ ] **CA07** — Com o guard que devolve escopo infiel (tenant e unidade
+- [x] **CA07** — Com o guard que devolve escopo infiel (tenant e unidade
       divergentes), cada use case que escreve ou devolve registro opera sobre o
       tenant e a unidade do **command**: o result e a releitura pelo port carregam
       os do command.
-- [ ] **CA08** — No grafo real (`wire_dependencies`), os 17 use cases recebem a
+- [x] **CA08** — No grafo real (`wire_dependencies`), os 17 use cases recebem a
       **mesma** instância `deps.staff_access_guard` (identidade de objeto).
-- [ ] **CA09** — Faixas HTTP inalteradas: `git diff origin/develop -- tests/e2e`
+- [x] **CA09** — Faixas HTTP inalteradas: `git diff origin/develop -- tests/e2e`
       vazio e a suíte e2e verde em `make check`.
-- [ ] **CA10** — A borda continua autorizando: a varredura de 19 autorizações do
+- [x] **CA10** — A borda continua autorizando: a varredura de 19 autorizações do
       router (`test_http_boundary_sweeps.py`) passa sem mudar a cardinalidade.
-- [ ] **CA11** — Os valores `"manage_staff"`, `"manage_job_functions"` e
+- [x] **CA11** — Os valores `"manage_staff"`, `"manage_job_functions"` e
       `"manage_users"` são **atribuídos** em `src/restaurant_hub/features/staff/`
       só em `application/ports/out/access_guard.py`
       (`grep -rnE '= "manage_' src/restaurant_hub/features/staff` devolve só esse
       arquivo), e nenhuma chamada a `authorize` em `application/use_cases/`
       recebe a permissão como literal `str` (verificado pelo AST de CA15;
       docstrings e comentários não contam).
-- [ ] **CA12** — As frases que esta Stage torna falsas deixam de existir:
+- [x] **CA12** — As frases que esta Stage torna falsas deixam de existir:
       `create_login_for_employee.py` *"não autoriza (a rota autoriza, duas
       vezes)"*; `identity_gateway.py` *"Quem responde pela autorização do ato é a
       borda"*; `local_identity_gateway.py` *"Quem responde pela autorização é a
@@ -387,15 +387,15 @@ Configuração candidata: nenhuma · Reversível: sim
       `authorize` é consumido pelos use cases e `authenticate` segue só na borda.
       As menções a *"a fachada de identity não autoriza (#49)"* continuam — são
       verdade do lado de identity.
-- [ ] **CA13** — `make check` verde; cobertura ≥ 90% por arquivo de `src/`
+- [x] **CA13** — `make check` verde; cobertura ≥ 90% por arquivo de `src/`
       tocado.
-- [ ] **CA14** — **Cadeia real:** com o `_IdentityAccessGuard` de produção sobre
+- [x] **CA14** — **Cadeia real:** com o `_IdentityAccessGuard` de produção sobre
       `IdentityGuard` → `AuthorizeActionUseCase` e repositórios de identity em
       memória, para **todo** use case × **todo** papel (`owner`, `manager`, `hr`,
       `employee` do tenant A; `platform_admin`), um command que nomeia o tenant B
       (com registros semeados em B) é negado com a exceção de identity e nenhum
       efeito; controle positivo: o `owner` de B executa o mesmo command.
-- [ ] **CA15** — **Forma de todo `execute`**, por AST sobre a pasta: ignorado o
+- [x] **CA15** — **Forma de todo `execute`**, por AST sobre a pasta: ignorado o
       docstring inicial, as primeiras instruções são exatamente as chamadas
       `self._guard.authorize(<p>.actor, PERMISSION_<…>, tenant_id=<p>.tenant_id[, unit_id=<p>.<campo de unidade>])`
       da matriz R3 — `<p>` é o primeiro parâmetro de `execute` (`command` ou
