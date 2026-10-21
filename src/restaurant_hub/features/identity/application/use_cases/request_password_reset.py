@@ -150,10 +150,10 @@ class RequestPasswordResetUseCase:
         cadastrado dá 500, desconhecido dá 202.
 
         A falha não é silenciada por desprezo ao problema: ela deveria ir para o
-        log do servidor. `configure_logging` ainda não está plugado no boot
-        (finding #6, herdado), então esta Stage **não afirma** que a falha é
-        registrada — afirmar sem verificar é o defeito que o finding #26 pediu
-        para não repetir.
+        log do servidor. O logging é configurado no boot desde a issue #6, mas
+        nenhuma linha registra esta falha, então esta Stage **não afirma** que a
+        falha é registrada — afirmar sem verificar é o defeito que o finding #26
+        pediu para não repetir.
         """
         link = setup_link(self._base_url, valor_do_token)
         self._email_sender.send(
