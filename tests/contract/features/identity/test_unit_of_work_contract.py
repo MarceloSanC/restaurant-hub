@@ -13,18 +13,25 @@ sabe com qual implementação está falando. O ponto de cada parametrização:
   `uq_sessions_fingerprint`.
 - **L4 por método de leitura.** Leitura que não usasse a conexão da unidade
   enxergaria o banco de antes dela.
+- **As duas tabelas cobrem os ports inteiros.** "Todo método" é derivado dos
+  ports de repositório de identity, não da memória de quem escreveu as tabelas:
+  o teste do fim do módulo reprova uma linha apagada e um método novo sem linha.
 
 Leis que dependem de recursos que só o Postgres tem (pool de conexões, threads com
 conexões distintas, um segundo engine) vivem na integração, em
 `tests/integration/features/identity/adapters/out/postgres/test_unit_of_work.py`.
 """
 
+import importlib
+import inspect
+import pathlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
+import restaurant_hub.features.identity.application.ports.out as ports_out_de_identity
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SessionId,
@@ -37,6 +44,21 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 )
 from restaurant_hub.features.identity.application.errors import (
     SessionFingerprintAlreadyExistsError,
+)
+from restaurant_hub.features.identity.application.ports.out.password_setup_token_repository import (
+    PasswordSetupTokenRepository,
+)
+from restaurant_hub.features.identity.application.ports.out.restaurant_repository import (
+    RestaurantRepository,
+)
+from restaurant_hub.features.identity.application.ports.out.session_repository import (
+    SessionRepository,
+)
+from restaurant_hub.features.identity.application.ports.out.unit_repository import (
+    UnitRepository,
+)
+from restaurant_hub.features.identity.application.ports.out.user_repository import (
+    UserRepository,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
@@ -121,7 +143,8 @@ def _vincular_user_2(repos: Repositorios) -> None:
 
 
 # Os doze métodos de escrita dos cinco ports. Um método novo de escrita num port de
-# identity precisa entrar aqui — é o que mantém a L1 total.
+# identity precisa entrar aqui — é o que mantém a L1 total, e o teste de totalidade
+# do fim do módulo reprova enquanto ele não entra.
 _ESCRITAS: dict[str, Callable[[Repositorios], object]] = {
     "restaurantes.add": lambda r: r.restaurantes.add(
         Restaurant(id=RestaurantId("rest-b"), name="Outro")
@@ -329,6 +352,27 @@ def test_l5_unidade_aninhada_levanta_e_a_externa_segue_utilizavel(repos: Reposit
     assert repos.tokens_de_setup.find_by_fingerprint("tfp::3") is not None
 
 
+def test_l5_recusa_nao_desvia_as_escritas_seguintes_da_externa(repos: Repositorios) -> None:
+    """L5 — o "antes de tocar em qualquer coisa" inclui não publicar estado nenhum.
+
+    O teste acima prova que a externa continua comitando depois da recusa; este, que
+    as escritas seguintes continuam **dentro** dela. Uma recusa que publicasse estado
+    antes de levantar mandaria a escrita seguinte para uma transação própria, que
+    comitaria sozinha — e o teste acima passaria do mesmo jeito.
+    """
+    _semear(repos)
+    antes = _retrato(repos)
+
+    with pytest.raises(_Falha), repos.unidade_de_trabalho.transaction():
+        repos.sessoes.add(_sessao("2"))
+        with pytest.raises(RuntimeError, match="L5"), repos.unidade_de_trabalho.transaction():
+            pass  # pragma: no cover — a aninhada nunca abre
+        repos.tokens_de_setup.add(_token("2"))
+        raise _Falha
+
+    assert _retrato(repos) == antes
+
+
 def test_l5_unidade_fechada_libera_a_seguinte(repos: Repositorios) -> None:
     _semear(repos)
 
@@ -357,3 +401,60 @@ def test_l6_escrita_fora_da_unidade_nao_e_desfeita_por_unidade_posterior(
 
     assert repos.sessoes.find_by_fingerprint("fp::2") is not None
     assert repos.tokens_de_setup.find_by_fingerprint("tfp::2") is None
+
+
+# ---------------------------------------------------------------------------
+# Totalidade das tabelas — o "todo método" de L1 e L4 sai dos ports
+# ---------------------------------------------------------------------------
+
+# Prefixo usado nas chaves de `_ESCRITAS` e `_LEITURAS` → port que ele exercita.
+_PORT_DO_PREFIXO: dict[str, type] = {
+    "restaurantes": RestaurantRepository,
+    "unidades": UnitRepository,
+    "usuarios": UserRepository,
+    "sessoes": SessionRepository,
+    "tokens": PasswordSetupTokenRepository,
+}
+
+
+def _ports_de_repositorio_de_identity() -> set[type]:
+    """Os `Protocol` de `ports/out/*_repository.py` de identity — derivado do pacote."""
+    pasta = pathlib.Path(ports_out_de_identity.__file__).parent
+    ports: set[type] = set()
+    for arquivo in sorted(pasta.glob("*_repository.py")):
+        modulo = importlib.import_module(f"{ports_out_de_identity.__name__}.{arquivo.stem}")
+        ports |= {
+            classe
+            for _, classe in inspect.getmembers(modulo, inspect.isclass)
+            if classe.__module__ == modulo.__name__ and getattr(classe, "_is_protocol", False)
+        }
+    return ports
+
+
+def _metodos_publicos(port: type) -> set[str]:
+    return {
+        nome
+        for nome, valor in vars(port).items()
+        if inspect.isfunction(valor) and not nome.startswith("_")
+    }
+
+
+def test_as_tabelas_de_l1_e_l4_cobrem_todo_metodo_dos_ports_de_repositorio() -> None:
+    """CA2 — a L1 vale para **toda** escrita e a L4 para **toda** leitura dos cinco ports.
+
+    As duas tabelas são escritas à mão, e a parametrização só prova a lei para o que
+    está nelas. Sem este pino, apagar uma linha de `_ESCRITAS` ou de `_LEITURAS`, ou
+    acrescentar um método a um port sem linha, deixava as suítes de identity e do
+    `check_layout` inteiras verdes (mutação da auditoria da Stage 2.6). A partição
+    entre escrita e leitura continua sendo a das tabelas: cada linha de `_ESCRITAS`
+    prova que escreve, porque a L1 asserta o estado mudado dentro da unidade.
+    """
+    assert set(_PORT_DO_PREFIXO.values()) == _ports_de_repositorio_de_identity()
+
+    metodos = {
+        f"{prefixo}.{metodo}"
+        for prefixo, port in _PORT_DO_PREFIXO.items()
+        for metodo in _metodos_publicos(port)
+    }
+    assert set(_ESCRITAS).isdisjoint(_LEITURAS)
+    assert set(_ESCRITAS) | set(_LEITURAS) == metodos
