@@ -21,6 +21,7 @@ Postgres em todos esses pontos. Uma suíte verde contra SQLite valeria menos que
 suíte nenhuma, porque inspiraria confiança no que não foi verificado.
 """
 
+import ipaddress
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -28,7 +29,8 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import Engine, create_engine, text
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 
 from restaurant_hub.shared.infrastructure.config.settings import Settings
@@ -95,15 +97,93 @@ async def client() -> AsyncClient:
 # ---------------------------------------------------------------------------
 
 
+# Porta em que a libpq conecta quando a URL não declara nenhuma — medido com o
+# psycopg 3.3.4: `localhost` sem porta devolve "port 5432 failed".
+_LIBPQ_DEFAULT_PORT = 5432
+
+
+class _PublishedPostgresPort(BaseSettings):
+    """A `POSTGRES_PORT`: a porta em que o compose desta worktree publica o Postgres no host.
+
+    Lida pelas mesmas fontes e na mesma ordem do `Settings` — ambiente antes do
+    `.env` do diretório corrente, que é também a ordem do compose. Assim a guarda
+    compara a URL que a suíte vai usar com a porta que o compose publica de fato.
+    """
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    postgres_port: int | None = None
+
+
+def is_loopback(host: str | None) -> bool:
+    """`localhost`, 127.0.0.0/8 ou `::1` — o critério do `scripts/worktree-new.py`.
+
+    `tests/unit/test_database_url_guard.py` cobra que os dois lados concordam.
+    """
+    if not host:
+        return False
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def database_port_mismatch(database_url: str, postgres_port: int | None) -> str | None:
+    """Por que `database_url` não alcança o Postgres desta worktree, ou None se alcança.
+
+    A regra vale quando o ambiente declara a `POSTGRES_PORT` e a URL fala com o
+    host por loopback: aí a porta da URL tem de ser a publicada. `postgres` (o
+    service, dentro da rede do compose) e um banco remoto não passam pela porta
+    publicada, e sem `POSTGRES_PORT` declarada — o CI, um checkout sem `.env` —
+    não há porta publicada a comparar. Nos dois casos a regra não se aplica: é a
+    degradação *semântica* do ADR 1.2.0001, não um skip.
+
+    A mensagem nomeia host e portas, nunca a URL inteira — ela carrega a senha.
+    """
+    if postgres_port is None:
+        return None
+    url = make_url(database_url)
+    if not is_loopback(url.host):
+        return None
+    port = _LIBPQ_DEFAULT_PORT if url.port is None else url.port
+    if port == postgres_port:
+        return None
+    return (
+        f"A DATABASE_URL aponta para a porta {port} de {url.host}, mas a POSTGRES_PORT "
+        f"desta worktree é {postgres_port}: a suíte rodaria — e recriaria o schema — "
+        "no Postgres de outra worktree ou do checkout principal.\n"
+        "Alinhe a porta da DATABASE_URL no .env (o scripts/worktree-new.py escreve as "
+        "duas coerentes) e suba o banco desta worktree: "
+        "`docker compose up -d --wait postgres`."
+    )
+
+
+def resolve_test_database_url() -> str:
+    """A `DATABASE_URL` da suíte, recusada se não alcançar o Postgres desta worktree."""
+    database_url = Settings().database_url
+    mismatch = database_port_mismatch(database_url, _PublishedPostgresPort().postgres_port)
+    if mismatch is not None:
+        pytest.fail(mismatch, pytrace=False)
+    return database_url
+
+
 @pytest.fixture(scope="session")
 def database_url() -> str:
     """URL do banco de teste, do ambiente ou do `.env` da worktree.
 
-    Não há default embutido de propósito: um fallback silencioso para
-    `localhost:5432` faria a suíte de uma worktree paralela rodar contra o banco
-    de **outra** — e a falha apareceria como dado estranho, não como erro.
+    O `Settings` tem default (`localhost:5432`), e é ele que uma worktree sem
+    `DATABASE_URL` no `.env` recebia: a suíte rodava contra o banco de **outra**
+    frente, e a fixture `engine` tentava recriar o schema dele. Na Stage 4.1 a
+    tentativa morreu em `ResolutionError: No such revision '0004'` (629 testes em
+    `ERROR at setup`, issue #58); com as mesmas migrations, teria derrubado o
+    banco alheio. Por isso a URL passa pela guarda antes de qualquer conexão: com
+    a `POSTGRES_PORT` declarada, uma URL loopback em outra porta reprova a sessão
+    inteira, aqui, sem tocar o banco. Toda suíte que fala com o banco —
+    integração, contrato e e2e — resolve a URL por esta fixture.
     """
-    return Settings().database_url
+    return resolve_test_database_url()
 
 
 @pytest.fixture(scope="session")
