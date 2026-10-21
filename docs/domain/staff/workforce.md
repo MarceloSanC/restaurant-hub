@@ -394,10 +394,34 @@ entre unidades").
   (Stage 3.5); a mesma pessoa pode acabar com vários registros apontando para o mesmo User via
   vínculos explícitos, nunca por arrasto da cópia.
   [ADR 3.1.0001](../../adr/3_1_0001-workforce-gate-modeling-decisions.md) (decisão iii).
+- **A cópia leva o registro inteiro**, com lista de exclusão **fechada**
+  ([ADR 3.2.0003](../../adr/3_2_0003-copy-employee-full-duplication.md)): nome, perfil de jornada,
+  preferência de turno, conjunto de funções, **indisponibilidades** e **estado do ciclo de vida**
+  (§3.1) viajam como estão; só três coisas não viajam — a identidade (id novo), a unidade (a de
+  destino) e o vínculo com login (nunca, bullet acima). A indisponibilidade viaja porque é fato da
+  **pessoa** (férias, atestado), não da unidade: descartá-la deixaria o funcionário escalável na
+  unidade destino durante as próprias férias. Os instantes copiados mantêm a leitura de **relógio
+  de parede** (§3.6): entre unidades de fusos distintos, "dia 10 às 00:00" é o dia 10 local em cada
+  uma.
 - As **funções tenant-scoped** (§3.2) tornam a cópia coerente: a função referenciada já existe no
   restaurante inteiro — não é preciso recriá-la na unidade destino (overview §3; ver §3.2).
 - A cópia é sempre **dentro do mesmo tenant** (unidades do mesmo restaurante) — decorre do
   isolamento de tenant (§3.1); não existe cópia cross-tenant.
+- **Copiar para a própria unidade de origem é recusado** (ADR 3.2.0003): a operação é para *outra*
+  unidade, e o gêmeo na mesma unidade seria indistinguível do original — nomes não são únicos
+  (§3.1).
+- **Repetir a cópia para o mesmo destino é limite declarado, não guardado:** gera dois registros no
+  destino. Uma guarda exigiria registrar de onde a cópia veio — um **vínculo** entre os registros,
+  que esta seção proíbe ("não vincula") —, e a heurística "nome já existe no destino" recusaria
+  homônimos legítimos (ADR 3.2.0003;
+  [ADR 3.4.0005](../../adr/3_4_0005-repeated-copy-remains-a-declared-limit.md)).
+
+> **Nota (2026-10-21) — reconciliação com o
+> [ADR 3.2.0003](../../adr/3_2_0003-copy-employee-full-duplication.md):** esta seção nomeava uma
+> única exclusão — o `user_id` — e silenciava sobre três pontos que a Stage 3.2 teve de fixar: se
+> as indisponibilidades viajam com a cópia, o que acontece quando o destino é a própria unidade de
+> origem e o que acontece com a cópia repetida. Os três bullets acima registram o que o ADR
+> decidiu; a borda HTTP manteve o limite declarado, sem guarda de duplicidade (ADR 3.4.0005).
 
 ### 3.8 Fronteira com identity — login opcional do funcionário
 
