@@ -835,7 +835,7 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
 - **Tenant vem do token, nunca do path** — scheduling não é dono do tenant como recurso
   (ADR 0.0.0005 134–148, 159). **A unidade entra no endereço da escala** (§3.1), como no registro
   de funcionário (ADR 3.4.0007 57–70; ADR 0.0.0005 280–287); o router **nunca** infere escopo de
-  `AuthorizedScope.unit_id` (ADR 3.6.0001; `access_guard.py` 90–109).
+  `AuthorizedScope.unit_id` (ADR 3.6.0001; `access_guard.py` 108–127).
 - **Guarda de acesso**: port **próprio do BC** com tradutor no composition root (ADR 3.4.0001
   59–64). Promover a `shared/` foi adiado porque "scheduling does not exist" (128–135) — a 4.5 é
   o **segundo consumidor** (LAYOUT §4) e decide.
