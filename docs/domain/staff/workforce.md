@@ -2,21 +2,39 @@
 title: Domínio staff/workforce — equipe da unidade (teoria canônica)
 description: Camada teórica do subdomínio workforce do BC staff — fundamentos, língua ubíqua, regras canônicas e invariantes de funcionário, função, jornada, preferência, indisponibilidade, cópia entre unidades e fronteira com identity
 when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (3.1–3.5) ou de qualquer Stage futura que toque o BC staff; é a base que os concepts consomem em vez de re-derivar
-keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao]
+keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao, cadastro-minimo, homonimos, wall-clock, fuso-da-unidade, rbac]
 status: accepted
 created_at: 2026-07-23
-updated_at: 2026-10-19
+updated_at: 2026-10-21
 bounded_context: staff
 subdomain: workforce
 references:
-  - ../../adr/3_1_0001-workforce-gate-modeling-decisions.md
-  - ../../adr/3_2_0005-job-function-has-no-lifecycle-state.md
-  - ../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md
-  - ../../adr/3_2_0007-terminated-employee-remains-editable.md
+  - ../../adr/0_0_0003-formalize-domain-and-audits-doc-categories.md
   - ../../adr/2_1_0001-identity-aggregates-and-membership.md
   - ../../adr/2_3_0005-names-persisted-verbatim.md
   - ../../adr/2_5_0002-dedicated-single-use-setup-token.md
   - ../../adr/2_5_0004-unusable-hash-for-pending-accounts.md
+  - ../../adr/3_1_0001-workforce-gate-modeling-decisions.md
+  - ../../adr/3_1_0002-minimal-employee-record-attributes.md
+  - ../../adr/3_1_0003-job-function-lifecycle-soft-state.md
+  - ../../adr/3_1_0004-shift-preference-scope-and-cardinality.md
+  - ../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md
+  - ../../adr/3_1_0006-employee-function-set-cardinality.md
+  - ../../adr/3_2_0003-copy-employee-full-duplication.md
+  - ../../adr/3_2_0005-job-function-has-no-lifecycle-state.md
+  - ../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md
+  - ../../adr/3_2_0007-terminated-employee-remains-editable.md
+  - ../../adr/3_4_0005-repeated-copy-remains-a-declared-limit.md
+  - ../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md
+  - ../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md
+  - ../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md
+  - ../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md
+  - ../../adr/3_5_0003-termination-revokes-sessions-account-remains.md
+  - ../../adr/3_5_0004-user-id-as-nullable-opaque-column.md
+  - ../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md
+  - ../../adr/4_1_0004-hr-reads-schedules-in-member-units.md
+  - ../../adr/4_1_0005-unit-timezone-owned-by-identity.md
+  - ../../adr/4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md
 ---
 
 # Domínio staff/workforce — equipe da unidade
@@ -598,6 +616,16 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 - [ADR 3.1.0001](../../adr/3_1_0001-workforce-gate-modeling-decisions.md) — as três decisões de
   modelagem com alternativa real do gate de domínio do Step 3 (2026-07-23); as demais decisões do
   gate são derivações ancoradas — ver §6.
+- [ADR 3.1.0002](../../adr/3_1_0002-minimal-employee-record-attributes.md) — atributos cadastrais
+  mínimos do registro: id opaco, nome verbatim não-vazio e não-único, sem contato na v1 (§3.1).
+- [ADR 3.1.0004](../../adr/3_1_0004-shift-preference-scope-and-cardinality.md) — preferência de
+  turno do registro, declarável pelos dois perfis, como conjunto não-vazio de períodos (§3.3, §3.5).
+- [ADR 3.1.0005](../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md) — instantes de
+  indisponibilidade como relógio de parede ingênuo da unidade; conversão fora do staff (§3.6).
+- [ADR 3.1.0006](../../adr/3_1_0006-employee-function-set-cardinality.md) — o registro referencia
+  um conjunto não-vazio de funções (§3.1).
+- [ADR 3.2.0003](../../adr/3_2_0003-copy-employee-full-duplication.md) — a cópia entre unidades
+  duplica o registro inteiro, com lista de exclusão fechada (§3.7).
 - [ADR 3.2.0005](../../adr/3_2_0005-job-function-has-no-lifecycle-state.md) — função de trabalho
   **sem** ciclo de vida; remoção guardada como único caminho de saída (§3.2). Supersede o
   [ADR 3.1.0003](../../adr/3_1_0003-job-function-lifecycle-soft-state.md) (`superseded`).
@@ -606,6 +634,28 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
   definitiva guardada (§3.1).
 - [ADR 3.2.0007](../../adr/3_2_0007-terminated-employee-remains-editable.md) — o registro desligado
   permanece editável e nenhuma edição o reativa (§3.1).
+- [ADR 3.4.0005](../../adr/3_4_0005-repeated-copy-remains-a-declared-limit.md) — a cópia repetida
+  para o mesmo destino continua limite declarado, sem guarda de duplicidade (§3.7).
+- [ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md) — duas permissões
+  de staff; dentro do staff hr ≡ manager, e a divergência é de família de operação (§4).
+- [ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md) — a
+  permissão do catálogo de funções é tenant-wide, sem unidade alvo (§4).
+- [ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) — fachada de identity e
+  gateway de staff, a única aresta entre os dois bounded contexts (§3.8).
+- [ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) — conta
+  pendente e link de definição de senha entregue em mãos, sem senha provisória (§3.8).
+- [ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md) — desligar
+  revoga as sessões do login; a conta continua existindo (§3.8).
+- [ADR 3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md) — `user_id` como coluna
+  anulável e opaca, que a cópia não carrega (§3.7, §3.8).
+- [ADR 4.1.0003](../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md) — "conta para a
+  carga" é atributo da alocação, lido só pela política de carga (§3.3).
+- [ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md) — o RH lê a escala nas
+  unidades de que é membro e não a gerencia (§4).
+- [ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md) — o fuso da unidade pertence
+  ao `Unit` de identity (§3.6).
+- [ADR 4.1.0006](../../adr/4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md)
+  — desligamento reconciliado na leitura pelo scheduling; guarda de remoção por port reverso (§3.1).
 
 ### Fontes primárias — legislação trabalhista (fronteira terminológica, §3.4)
 
