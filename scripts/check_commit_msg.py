@@ -1,25 +1,32 @@
-"""Validate that the commit subject follows the project convention.
+"""Valida que o subject do commit segue a convenção do projeto.
 
-Wired as `commit-msg` hook in `.pre-commit-config.yaml`. Receives the path
-to the commit message file as the first argument; reads only the first
-line (subject) and validates against:
+Ligado como hook `commit-msg` no `.pre-commit-config.yaml`. Recebe o caminho
+do arquivo da mensagem de commit como primeiro argumento; lê só a primeira
+linha (o subject) e a confere contra:
 
-  (1) Reserved gate commits (CONVENTIONS.md §4(b)).
-  (2) Conventional Commits in Portuguese with required scope (ASCII/kebab)
-      and optional `[N.M/task-NN]` or `[N.M/--]` suffix
-      (CONVENTIONS.md §4(a)).
+  (1) Mensagens reservadas de gate (CONVENTIONS.md §4(b)).
+  (2) Conventional Commits em português com escopo obrigatório (ASCII/kebab)
+      e marca de Task opcional no fim, `[<dono>/<posição>]` (CONVENTIONS.md
+      §4(a), subseção "Marca de Task"): dono `N.M` (Stage) ou `#<num>`
+      (issue avulsa); posição `task-NN`, `task-NN-fix`, `task-NN-extra` ou
+      `--`.
 
-Subject description may contain any UTF-8 (PT-BR with accents is the
-default); only the scope is restricted to ASCII/kebab so it stays
-terminal-friendly.
+**A marca é opcional; a malformada é recusada.** Um subject que termina em `]`
+precisa terminar numa marca da gramática. Até a issue #34, o grupo da marca era
+opcional e a descrição engolia qualquer `[...]` que não casasse com ele:
+`[4.1/tsk-3]` e `[41/--]` passavam como texto livre, sem validação nenhuma.
 
-Body content is NOT validated here — the bullet-list expectation lives in
-the docs and is enforced by code review, not by the hook (avoids false
-positives on trivial commits where the body is intentionally absent).
+A descrição aceita qualquer UTF-8 (PT-BR acentuado é o padrão); só o escopo
+fica restrito a ASCII/kebab, para não exigir acento no terminal.
 
-Exit codes:
+O corpo NÃO é validado aqui — a lista de bullets é regra dos docs, cobrada no
+code review e não no hook (evita falso positivo em commit trivial, cujo corpo
+fica ausente de propósito).
+
+Códigos de saída:
   0  subject OK
-  1  subject violates convention (message printed to stderr)
+  1  subject viola a convenção (motivo impresso no stderr)
+  2  argumento ausente ou arquivo da mensagem ilegível
 """
 
 from __future__ import annotations
@@ -56,17 +63,28 @@ RESERVED_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^chore(?:\([a-z0-9._-]+\))?: bootstrap from [a-z0-9._-]+$"),
 )
 
-# Conventional Commits: <type>(<scope>): <description> [optional tag]
-# Scope is REQUIRED here (CONVENTIONS.md §4(a) "minimum scope rule").
-# Exceptions that genuinely lack a scope go through RESERVED_PATTERNS or
-# the passthrough prefixes (merge/revert).
-# Optional suffix: `[N.M/task-NN]` or `[N.M/--]`.
+# Marca de Task, `[<dono>/<posição>]` — gramática de CONVENTIONS.md §4(a),
+# subseção "Marca de Task" (mudou aqui, atualizar lá). Dono: `N.M` (número da
+# Stage) ou `#<num>` (issue avulsa). Posição: `task-NN` (Task do plano),
+# `task-NN-fix` (correção da Task NN), `task-NN-extra` (Task acrescentada acima
+# do plano) ou `--` (off-task).
+TAG_PATTERN = r"(?:\d+\.\d+|#\d+)/(?:task-\d{2}(?:-fix|-extra)?|--)"
+
+# Conventional Commits: <tipo>(<escopo>): <descrição> [marca opcional].
+# O escopo é OBRIGATÓRIO aqui (CONVENTIONS.md §4(a), "regra de escopo mínimo");
+# as exceções que de fato não têm escopo passam por RESERVED_PATTERNS ou pelos
+# prefixos de passagem (merge/revert). A marca, quando vem, fecha o subject,
+# separada da descrição por um espaço.
 CC_PATTERN = re.compile(
     r"^(?P<type>" + "|".join(ALLOWED_TYPES) + r")"
     r"\((?P<scope>[a-z0-9._-]+)\)"
     r": (?P<desc>\S.*?)"
-    r"(?: \[(?P<tag>\d+\.\d+/(?:task-\d{2}|--))\])?$"
+    r"(?: \[(?P<tag>" + TAG_PATTERN + r")\])?$"
 )
+
+# O último grupo `[...]` do subject. Só serve para a recusa mostrar o que foi
+# lido como marca — quem decide se a marca é válida é o CC_PATTERN.
+_TRAILING_GROUP = re.compile(r"\[[^\[\]]*\]$")
 
 # Allow merges and reverts without further checks.
 PASSTHROUGH_PREFIXES = ("Merge ", "Revert ")
@@ -80,13 +98,20 @@ _REQUIRED_ARGC = 2
 def _format_help() -> str:
     return (
         "\nFormato esperado (um destes):\n"
-        "  <tipo>(<escopo>): <descrição em português> [opcional N.M/task-NN]\n"
+        "  <tipo>(<escopo>): <descrição em português> [marca opcional]\n"
         f"    onde <tipo> é um de: {', '.join(ALLOWED_TYPES)}\n"
         "    escopo em ASCII/kebab (snake/kebab); descrição livre em PT-BR\n"
+        "    marca: [<dono>/<posição>] no fim, separada da descrição por um espaço\n"
+        "      dono: N.M (número da Stage) ou #<num> (issue avulsa)\n"
+        "      posição: task-NN (Task do plano), task-NN-fix (correção da Task NN),\n"
+        "               task-NN-extra (Task acrescentada acima do plano) ou -- (off-task)\n"
         "    exemplos:\n"
         "      feat(ingestion): adicionar S3 source adapter [2.3/task-01]\n"
-        "      fix(payment.retry): limitar backoff exponencial em 30s\n"
+        "      fix(ingestion): fechar o achado do Checkpoint C [2.3/task-01-fix]\n"
+        "      test(ingestion): cobrir o que a auditoria de testes pediu [2.3/task-13-extra]\n"
         "      docs(roadmap): marcar stage 2.3 como done [2.3/--]\n"
+        "      docs(conventions): documentar a marca de Task [#34/task-02]\n"
+        "      fix(payment.retry): limitar backoff exponencial em 30s\n"
         "\n  Mensagens reservadas de gate (ver docs/CONVENTIONS.md §4(b)):\n"
         "      stage N.M: conceptual draft\n"
         "      stage N.M: conceptual approved\n"
@@ -127,6 +152,31 @@ def _no_match_reason(subject: str) -> str:
     )
 
 
+def _malformed_tag_reason(subject: str) -> str:
+    trailing = _TRAILING_GROUP.search(subject)
+    read = f" (lido: `{trailing.group(0)}`)" if trailing else ""
+    return (
+        f"marca de Task inválida no fim do subject{read} — subject que termina "
+        "em `]` precisa terminar em `<descrição> [<dono>/<posição>]`: dono `N.M` "
+        "ou `#<num>`; posição `task-NN`, `task-NN-fix`, `task-NN-extra` ou `--` "
+        '(CONVENTIONS.md §4(a), subseção "Marca de Task")'
+    )
+
+
+def _conventional_commit_reason(subject: str) -> str | None:
+    """Motivo para recusar o subject como Conventional Commits, ou None se vale."""
+    match = CC_PATTERN.match(subject)
+    if match is None:
+        return _no_match_reason(subject)
+
+    # Sem esta checagem, a marca malformada vira parte da descrição e o subject
+    # passa como se não tivesse marca nenhuma (achado F9 da auditoria da 4.1).
+    if match.group("tag") is None and subject.endswith("]"):
+        return _malformed_tag_reason(subject)
+
+    return None
+
+
 def validate_subject(subject: str) -> int:
     if not subject:
         return _error(subject, "empty subject")
@@ -143,10 +193,8 @@ def validate_subject(subject: str) -> int:
     if any(pat.match(subject) for pat in RESERVED_PATTERNS):
         return 0
 
-    if CC_PATTERN.match(subject) is not None:
-        return 0
-
-    return _error(subject, _no_match_reason(subject))
+    reason = _conventional_commit_reason(subject)
+    return 0 if reason is None else _error(subject, reason)
 
 
 def main(argv: list[str]) -> int:

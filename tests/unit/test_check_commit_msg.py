@@ -1,0 +1,294 @@
+"""O hook `commit-msg` (`scripts/check_commit_msg.py`) valida a marca de Task.
+
+Issue #34. Até ela, o grupo da marca no `CC_PATTERN` era opcional e a descrição
+engolia qualquer `[...]` que não casasse com `task-NN` ou `--`. Os três subjects
+do achado F9 da auditoria da Stage 4.1 saíam com exit 0 — `[4.1/task-03-fix]`
+(forma legítima, mas que o hook nunca via), `[4.1/tsk-3]` e `[41/--]`
+(malformadas). Os commits `-fix` do histórico passaram pelo hook assim, sem
+validação nenhuma da marca.
+
+A gramática travada aqui é a de CONVENTIONS.md §4(a), subseção "Marca de Task":
+`[<dono>/<posição>]`, dono `N.M` (Stage) ou `#<num>` (issue avulsa), posição
+`task-NN`, `task-NN-fix`, `task-NN-extra` ou `--`.
+
+**Por que conferir o grupo capturado, e não só o exit code.** Antes da #34,
+`[4.1/task-03-fix]` também dava exit 0 — como texto livre. Aceitar não basta
+para provar que a marca foi validada; o teste exige que ela tenha sido lida
+como marca (`group("tag")`).
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import subprocess
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+pytestmark = pytest.mark.unit
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPT = _REPO_ROOT / "scripts" / "check_commit_msg.py"
+
+_EXIT_OK = 0
+_EXIT_REJECTED = 1
+_EXIT_USAGE = 2
+
+
+def _load() -> ModuleType:
+    """Importa `scripts/check_commit_msg.py` sem mexer no `sys.path`."""
+    spec = importlib.util.spec_from_file_location("check_commit_msg", _SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ccm = _load()
+
+
+def _accepted(subject: str) -> bool:
+    return bool(ccm.validate_subject(subject) == _EXIT_OK)
+
+
+def _captured_tag(subject: str) -> str | None:
+    match = ccm.CC_PATTERN.match(subject)
+    assert match is not None, f"nem casa Conventional Commits: {subject!r}"
+    tag: str | None = match.group("tag")
+    return tag
+
+
+# --- Os três casos do achado F9 ---------------------------------------------
+
+
+def test_f9_fix_suffix_is_read_as_a_tag_and_accepted() -> None:
+    subject = "feat(scheduling): x [4.1/task-03-fix]"
+    assert _captured_tag(subject) == "4.1/task-03-fix"
+    assert _accepted(subject)
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "feat(scheduling): x [4.1/tsk-3]",
+        "feat(scheduling): x [41/--]",
+    ],
+)
+def test_f9_malformed_tags_are_rejected(subject: str) -> None:
+    assert not _accepted(subject)
+
+
+# --- A gramática: dono x posição --------------------------------------------
+
+_WELL_FORMED_TAGS = [
+    # Stage: o dono é o número N.M.
+    "4.1/task-03",
+    "4.1/task-03-fix",
+    "4.1/task-11-extra",
+    "4.1/--",
+    "12.10/task-07",
+    # Issue avulsa: o dono é #<num> (PROMPT-issue-single-session.md, issue-audit).
+    "#34/task-01",
+    "#34/task-01-fix",
+    "#34/task-06-extra",
+    "#34/--",
+]
+
+
+@pytest.mark.parametrize("tag", _WELL_FORMED_TAGS)
+def test_well_formed_tag_is_read_as_a_tag_and_accepted(tag: str) -> None:
+    subject = f"docs(conventions): documentar a marca [{tag}]"
+    assert _captured_tag(subject) == tag
+    assert _accepted(subject)
+
+
+_MALFORMED_TAGS = [
+    "4.1/tsk-3",
+    "4.1/task-3",  # NN com um dígito
+    "4.1/task-003",  # NN com três dígitos
+    "4.1/task-03-fixx",
+    "4.1/task-03-fix2",  # ordinal: fora da gramática (CONVENTIONS §4(a))
+    "4.1/task-03-extra2",
+    "4.1/task-03-fix-extra",
+    "4.1/task-03-",
+    "4.1/task-",
+    "4.1/TASK-03",
+    "4.1/post-done",
+    "4.1/-",
+    "4.1/---",
+    "4.1/",
+    "4.1",
+    "41/--",  # dono sem o ponto
+    "4/task-03",
+    "4.1.2/task-03",
+    "v4.1/task-03",
+    "1.1-bootstrap/--",  # stage_id no lugar do número
+    "/task-03",
+    "#/task-01",
+    "#a/task-01",
+    "34/task-01",  # issue sem `#`
+    "#34",
+    " 4.1/task-03",
+    "4.1/task-03 ",
+    "4.1 /task-03",
+    "4.1/ task-03",
+    "",
+]
+
+
+@pytest.mark.parametrize("tag", _MALFORMED_TAGS)
+def test_malformed_tag_at_the_end_is_rejected(tag: str) -> None:
+    assert not _accepted(f"feat(scheduling): x [{tag}]")
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "feat(shared): tipar o retorno como list[int]",  # colchete colado à palavra
+        "feat(shared): aceitar o campo [opcional]",
+        "feat(scheduling): x[4.1/task-03]",  # marca válida, sem o espaço
+        "feat(scheduling): [4.1/task-03]",  # marca válida, sem descrição
+        "feat(scheduling): x [[4.1/task-03]]",
+        "feat(scheduling): x [4.1/task-03]]",
+        "docs(overview): approved [projects/My_Project]",  # bootstrap fora do reservado
+    ],
+)
+def test_subject_ending_in_bracket_must_end_in_a_tag(subject: str) -> None:
+    assert not _accepted(subject)
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "feat(shared): tipar o retorno como list[int] [4.1/task-03]",
+        "feat(shared): tipar list[int] no retorno",
+        "feat(scheduling): x [4.1/task-03] y [4.1/task-04]",
+    ],
+)
+def test_brackets_inside_the_description_stay_free_text(subject: str) -> None:
+    assert _accepted(subject)
+
+
+def test_only_the_last_group_is_read_as_the_tag() -> None:
+    subject = "feat(scheduling): x [4.1/task-03] y [4.1/task-04]"
+    assert _captured_tag(subject) == "4.1/task-04"
+
+
+# --- O motivo da recusa -------------------------------------------------------
+
+
+def test_rejection_names_the_group_read_as_the_tag(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert ccm.validate_subject("feat(scheduling): x [4.1/tsk-3]") == _EXIT_REJECTED
+    err = capsys.readouterr().err
+    assert "marca de Task inválida no fim do subject (lido: `[4.1/tsk-3]`)" in err
+
+
+def test_rejection_without_a_readable_group_still_explains_the_tag(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert ccm.validate_subject("feat(scheduling): x [[4.1/task-03]]") == _EXIT_REJECTED
+    err = capsys.readouterr().err
+    assert "marca de Task inválida no fim do subject —" in err
+
+
+# --- O que a #34 não mudou ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "stage 4.1: conceptual draft",
+        "stage 4.1: technical approved",
+        "stage 4.1: complete",
+        "docs(roadmap): approved",
+        "docs(overview): approved [projects/restaurant-hub]",
+        "docs(roadmap): approved [projects/restaurant-hub] (adoption)",
+        "chore(technical): revert to draft — revision-from-execution: gap no plano",
+        "chore: bootstrap from whaka-dev-project-template",
+        "Merge pull request #66 from MarceloSanC/feat/64-4-2-validation-policies",
+        "Revert [4.1/tsk-3]",
+        "chore(roadmap): fechar issue #34",
+    ],
+)
+def test_reserved_passthrough_and_untagged_subjects_are_accepted(subject: str) -> None:
+    assert _accepted(subject)
+
+
+@pytest.mark.parametrize(
+    ("subject", "reason"),
+    [
+        ("", "empty subject"),
+        ("feat: x [4.1/task-03]", "escopo ausente"),
+        ("feature(x): y [4.1/task-03]", "não bate com Conventional Commits"),
+        ("feat(x): " + "y" * 100 + " [4.1/task-03]", "subject too long"),
+    ],
+)
+def test_other_rejections_keep_their_reasons(
+    subject: str, reason: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert ccm.validate_subject(subject) == _EXIT_REJECTED
+    assert reason in capsys.readouterr().err
+
+
+# --- O hook como o git o chama -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("subject", "exit_code"),
+    [
+        ("feat(scheduling): x [4.1/task-03-fix]", _EXIT_OK),
+        ("feat(scheduling): x [4.1/tsk-3]", _EXIT_REJECTED),
+        ("feat(scheduling): x [41/--]", _EXIT_REJECTED),
+    ],
+)
+def test_hook_exit_code_on_a_commit_message_file(
+    tmp_path: Path, subject: str, exit_code: int
+) -> None:
+    message = tmp_path / "COMMIT_EDITMSG"
+    message.write_text(
+        f"# comentário do git\n{subject}\n\n- bullet\n\nRefs #34\n", encoding="utf-8"
+    )
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(message)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == exit_code, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("subject", "exit_code"),
+    [
+        ("feat(scheduling): x [4.1/task-03-fix]  \t", _EXIT_OK),
+        # O espaço no fim não esconde a marca malformada: a checagem "termina em
+        # `]`" depende do `rstrip` do main.
+        ("feat(scheduling): x [4.1/tsk-3]  \t", _EXIT_REJECTED),
+    ],
+)
+def test_main_reads_the_subject_after_git_comments_without_trailing_spaces(
+    tmp_path: Path, subject: str, exit_code: int
+) -> None:
+    message = tmp_path / "COMMIT_EDITMSG"
+    message.write_text(
+        f"# Please enter the commit message\n#\n{subject}\n\n- bullet\n", encoding="utf-8"
+    )
+    assert ccm.main(["check_commit_msg.py", str(message)]) == exit_code
+
+
+def test_main_with_only_git_comments_rejects_the_empty_subject(tmp_path: Path) -> None:
+    message = tmp_path / "COMMIT_EDITMSG"
+    message.write_text("# Please enter the commit message\n#\n", encoding="utf-8")
+    assert ccm.main(["check_commit_msg.py", str(message)]) == _EXIT_REJECTED
+
+
+def test_main_without_the_message_file_argument_exits_usage() -> None:
+    assert ccm.main(["check_commit_msg.py"]) == _EXIT_USAGE
+
+
+def test_main_with_an_unreadable_message_file_exits_usage(tmp_path: Path) -> None:
+    assert ccm.main(["check_commit_msg.py", str(tmp_path / "ausente")]) == _EXIT_USAGE
