@@ -1,4 +1,4 @@
-"""A guarda da `DATABASE_URL` da suíte contra a `POSTGRES_PORT` da worktree (issue #58).
+"""A guarda da `DATABASE_URL` da suíte contra a porta que o compose publica (issue #58).
 
 O incidente de origem (Stage 4.1, Task 01): a worktree tinha `POSTGRES_PORT=5433`
 e nenhuma `DATABASE_URL`; o `Settings` caiu no default — porta 5432, o Postgres
@@ -8,28 +8,41 @@ fixture `engine`, que recria o schema, só não o derrubou porque a migration
 `0004` não existia na branch. A guarda roda na fixture `database_url`, antes de
 qualquer conexão.
 
-Os primeiros testes fixam a regra. Os do fim leem um `.env` de verdade, pelo
-mesmo pydantic-settings da app — inclusive o `.env` que o
-`scripts/worktree-new.py` escreve, que a guarda tem de aceitar sempre: o script
-escreve, a guarda confere, e os dois têm de concordar sobre o que é loopback.
+"A porta que o compose publica" é resolvida como o compose a resolve:
+`POSTGRES_PORT` do ambiente, depois a do `.env` da raiz do checkout, e a 5432 do
+`${POSTGRES_PORT:-5432}` sem nenhuma das duas. Os primeiros testes fixam a regra;
+os do fim leem um `.env` de verdade, pelo mesmo pydantic-settings da app —
+inclusive o `.env` que o `scripts/worktree-new.py` escreve, que a guarda tem de
+aceitar sempre: o script escreve, a guarda confere, e os dois têm de concordar
+sobre o que é loopback.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+import yaml
 from sqlalchemy import make_url
 
-from tests.conftest import database_port_mismatch, is_loopback, resolve_test_database_url
+from restaurant_hub.shared.infrastructure.config.settings import get_settings
+from tests.conftest import (
+    COMPOSE_DEFAULT_POSTGRES_PORT,
+    database_port_mismatch,
+    is_loopback,
+    published_postgres_port,
+    resolve_test_database_url,
+)
 
 pytestmark = pytest.mark.unit
 pytest_plugins = ["pytester"]
 
-_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "worktree-new.py"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPT = _REPO_ROOT / "scripts" / "worktree-new.py"
 
 PUBLISHED_PORT = 5440
 LIBPQ_DEFAULT_PORT = 5432
@@ -79,7 +92,7 @@ def test_loopback_url_on_another_port_is_refused(host_port: str, reached: str) -
 
     assert mismatch is not None
     assert reached in mismatch
-    assert f"POSTGRES_PORT desta worktree é {PUBLISHED_PORT}" in mismatch
+    assert f"publica o Postgres na porta {PUBLISHED_PORT}" in mismatch
     assert "docker compose up -d --wait postgres" in mismatch
 
 
@@ -113,12 +126,6 @@ def test_hosts_off_the_published_port_are_not_bound_to_it(url: str) -> None:
     assert database_port_mismatch(url, PUBLISHED_PORT) is None
 
 
-@pytest.mark.parametrize("host_port", ["localhost:5432", "localhost:5999", "postgres:5432"])
-def test_rule_does_not_apply_without_a_declared_postgres_port(host_port: str) -> None:
-    """CI e checkout sem `.env`: não há porta publicada declarada a comparar."""
-    assert database_port_mismatch(_url(host_port), None) is None
-
-
 @pytest.mark.parametrize(
     "host",
     [
@@ -141,17 +148,69 @@ def test_guard_and_script_agree_on_what_is_loopback(host: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# A porta publicada, como o compose a resolve
+# ---------------------------------------------------------------------------
+
+
+def test_compose_default_mirrors_the_compose_file() -> None:
+    """A 5432 sem `POSTGRES_PORT` é a do `docker-compose.yml` — e a do script."""
+    compose = yaml.safe_load((_REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+
+    assert compose["services"]["postgres"]["ports"] == [
+        f"${{POSTGRES_PORT:-{COMPOSE_DEFAULT_POSTGRES_PORT}}}:5432"
+    ]
+    assert wn.PORT_DEFAULTS["POSTGRES_PORT"] == COMPOSE_DEFAULT_POSTGRES_PORT
+
+
+@pytest.fixture
+def no_port_in_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("DATABASE_URL", "POSTGRES_PORT"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.mark.usefixtures("no_port_in_environment")
+@pytest.mark.parametrize("env_lines", [None, "DEBUG=true\n", "POSTGRES_PORT=\n"])
+def test_missing_or_empty_postgres_port_means_the_compose_default(
+    tmp_path: Path, env_lines: str | None
+) -> None:
+    """Sem `.env`, sem a chave, ou com ela vazia: o `:-` do compose publica a 5432."""
+    if env_lines is not None:
+        (tmp_path / ".env").write_text(env_lines, encoding="utf-8")
+
+    assert published_postgres_port(tmp_path) == COMPOSE_DEFAULT_POSTGRES_PORT
+
+
+@pytest.mark.usefixtures("no_port_in_environment")
+def test_published_port_comes_from_the_dotenv(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text(f"POSTGRES_PORT={PUBLISHED_PORT}\n", encoding="utf-8")
+
+    assert published_postgres_port(tmp_path) == PUBLISHED_PORT
+
+
+def test_process_environment_wins_over_the_dotenv_as_in_compose(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`POSTGRES_PORT=5999 docker compose config` publica a 5999 por cima do `.env`."""
+    (tmp_path / ".env").write_text(f"POSTGRES_PORT={PUBLISHED_PORT}\n", encoding="utf-8")
+    monkeypatch.setenv("POSTGRES_PORT", str(OTHER_PORT))
+
+    assert published_postgres_port(tmp_path) == OTHER_PORT
+
+
+# ---------------------------------------------------------------------------
 # A fixture, contra um `.env` de verdade
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Diretório corrente sem ambiente herdado: só vale o `.env` que o teste escrever."""
-    for name in ("DATABASE_URL", "POSTGRES_PORT"):
-        monkeypatch.delenv(name, raising=False)
+def worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_port_in_environment: None
+) -> Iterator[Path]:
+    """Checkout falso como diretório corrente, sem ambiente nem `get_settings()` herdados."""
     monkeypatch.chdir(tmp_path)
-    return tmp_path
+    get_settings.cache_clear()
+    yield tmp_path
+    get_settings.cache_clear()
 
 
 def test_issue_58_env_is_refused(worktree: Path) -> None:
@@ -165,18 +224,56 @@ def test_issue_58_env_is_refused(worktree: Path) -> None:
     )
 
     with pytest.raises(pytest.fail.Exception, match="porta 5432 de localhost"):
-        resolve_test_database_url()
+        resolve_test_database_url(compose_dir=worktree)
 
 
-def test_process_environment_wins_over_the_dotenv_as_in_compose(
+def test_reverse_issue_58_is_refused(worktree: Path) -> None:
+    """A #58 ao contrário: sem `POSTGRES_PORT`, a URL aponta para o banco de uma worktree."""
+    (worktree / ".env").write_text(f"DATABASE_URL={_url('localhost:5440')}\n", encoding="utf-8")
+
+    with pytest.raises(pytest.fail.Exception, match="publica o Postgres na porta 5432"):
+        resolve_test_database_url(compose_dir=worktree)
+
+
+def test_ci_shape_passes(worktree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """O job de gate: `DATABASE_URL` na 5432 por `env:`, sem `.env` nem `POSTGRES_PORT`."""
+    monkeypatch.setenv("DATABASE_URL", _url("localhost:5432"))
+
+    assert resolve_test_database_url(compose_dir=worktree) == _url("localhost:5432")
+
+
+def test_pytest_from_a_subdirectory_is_refused_with_a_hint(worktree: Path) -> None:
+    """O `Settings` lê o `.env` do diretório corrente; o compose, o da raiz.
+
+    De um subdiretório, a URL cai no default (5432) enquanto o compose da worktree
+    publica a dela — a #58 de novo, pela porta do diretório corrente.
+    """
+    wn.write_worktree_env_ports(worktree, PORTS)
+    subdirectory = worktree / "tests" / "unit"
+    subdirectory.mkdir(parents=True)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(subdirectory)
+
+        with pytest.raises(pytest.fail.Exception) as refusal:
+            resolve_test_database_url(compose_dir=worktree)
+
+    assert "porta 5432 de localhost" in str(refusal.value)
+    assert "rode o pytest da raiz do checkout" in str(refusal.value)
+
+
+def test_stale_get_settings_cache_is_refused(
     worktree: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`POSTGRES_PORT=5999 docker compose config` publica a 5999 por cima do `.env`."""
+    """O Alembic lê o `get_settings()` em cache (`migrations/env.py`), não a URL conferida."""
     wn.write_worktree_env_ports(worktree, PORTS)
-    monkeypatch.setenv("POSTGRES_PORT", str(OTHER_PORT))
+    monkeypatch.setenv("DATABASE_URL", _url(f"localhost:{PUBLISHED_PORT}"))
+    get_settings()  # outro teste deixou o cache com uma URL que o ambiente já não tem
+    monkeypatch.delenv("DATABASE_URL")
 
-    with pytest.raises(pytest.fail.Exception, match=f"desta worktree é {OTHER_PORT}"):
-        resolve_test_database_url()
+    with pytest.raises(pytest.fail.Exception, match="get_settings") as refusal:
+        resolve_test_database_url(compose_dir=worktree)
+
+    assert SECRET not in str(refusal.value)
 
 
 def test_database_url_fixture_runs_the_guard(
@@ -199,12 +296,6 @@ def test_database_url_fixture_runs_the_guard(
 
     result.assert_outcomes(errors=1)
     result.stdout.fnmatch_lines(["*A DATABASE_URL aponta para a porta 5432 de localhost*"])
-
-
-def test_url_passes_through_when_no_postgres_port_is_declared(worktree: Path) -> None:
-    (worktree / ".env").write_text(f"DATABASE_URL={_url('localhost:5999')}\n", encoding="utf-8")
-
-    assert resolve_test_database_url() == _url("localhost:5999")
 
 
 @pytest.mark.parametrize(
@@ -232,7 +323,7 @@ def test_url_passes_through_when_no_postgres_port_is_declared(worktree: Path) ->
             ],
             PUBLISHED_PORT,
         ),
-        # caminho A/B: a URL fala com o service do compose, e fica como estava
+        # devcontainer ou compose direto: a URL fala com o service, e fica como estava
         (
             ["DATABASE_URL=postgresql+psycopg://user:pass@postgres:5432/restaurant_hub"],
             LIBPQ_DEFAULT_PORT,
@@ -247,4 +338,4 @@ def test_every_env_the_script_writes_passes_the_guard(
 
     wn.write_worktree_env_ports(worktree, PORTS)
 
-    assert make_url(resolve_test_database_url()).port == expected_port
+    assert make_url(resolve_test_database_url(compose_dir=worktree)).port == expected_port

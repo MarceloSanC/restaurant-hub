@@ -33,7 +33,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 
-from restaurant_hub.shared.infrastructure.config.settings import Settings
+from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -97,22 +97,36 @@ async def client() -> AsyncClient:
 # ---------------------------------------------------------------------------
 
 
+# A porta em que o compose publica o Postgres quando a `POSTGRES_PORT` falta ou
+# está vazia — o `${POSTGRES_PORT:-5432}` do docker-compose.yml, que
+# `tests/unit/test_database_url_guard.py` cobra contra o arquivo.
+COMPOSE_DEFAULT_POSTGRES_PORT = 5432
 # Porta em que a libpq conecta quando a URL não declara nenhuma — medido com o
 # psycopg 3.3.4: `localhost` sem porta devolve "port 5432 failed".
 _LIBPQ_DEFAULT_PORT = 5432
 
 
-class _PublishedPostgresPort(BaseSettings):
-    """A `POSTGRES_PORT`: a porta em que o compose desta worktree publica o Postgres no host.
+class _ComposePostgresPort(BaseSettings):
+    """A `POSTGRES_PORT` como o compose a resolve: ambiente primeiro, depois o `.env`.
 
-    Lida pelas mesmas fontes e na mesma ordem do `Settings` — ambiente antes do
-    `.env` do diretório corrente, que é também a ordem do compose. Assim a guarda
-    compara a URL que a suíte vai usar com a porta que o compose publica de fato.
+    O `.env` que conta é o do **projeto** do compose — a pasta do
+    `docker-compose.yml`, a raiz do checkout —, qualquer que seja o diretório
+    corrente: medido, `docker compose config` rodado de `tests/unit` publica a
+    porta do `.env` da raiz. O valor vazio conta como ausente, como no `:-` do
+    compose; e a ordem ambiente → `.env` é a mesma do pydantic-settings.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True
+    )
 
     postgres_port: int | None = None
+
+
+def published_postgres_port(compose_dir: Path = _REPO_ROOT) -> int:
+    """A porta em que o compose deste checkout publica o Postgres no host."""
+    declared = _ComposePostgresPort(_env_file=compose_dir / ".env").postgres_port
+    return COMPOSE_DEFAULT_POSTGRES_PORT if declared is None else declared
 
 
 def is_loopback(host: str | None) -> bool:
@@ -130,40 +144,59 @@ def is_loopback(host: str | None) -> bool:
         return False
 
 
-def database_port_mismatch(database_url: str, postgres_port: int | None) -> str | None:
-    """Por que `database_url` não alcança o Postgres desta worktree, ou None se alcança.
+def database_port_mismatch(database_url: str, published_port: int) -> str | None:
+    """Por que `database_url` não alcança o Postgres deste checkout, ou None se alcança.
 
-    A regra vale quando o ambiente declara a `POSTGRES_PORT` e a URL fala com o
-    host por loopback: aí a porta da URL tem de ser a publicada. `postgres` (o
-    service, dentro da rede do compose) e um banco remoto não passam pela porta
-    publicada, e sem `POSTGRES_PORT` declarada — o CI, um checkout sem `.env` —
-    não há porta publicada a comparar. Nos dois casos a regra não se aplica: é a
-    degradação *semântica* do ADR 1.2.0001, não um skip.
+    Com host loopback, a porta da URL tem de ser a que o compose publica. Os
+    outros hosts não passam por ela — `postgres` é o service dentro da rede do
+    compose, que responde na 5432 do contêiner, e um banco remoto não tem
+    relação com o mapeamento local —, e para eles a regra não se aplica.
 
-    A mensagem nomeia host e portas, nunca a URL inteira — ela carrega a senha.
+    A mensagem nomeia host e portas, nunca a URL inteira: ela carrega a senha.
     """
-    if postgres_port is None:
-        return None
     url = make_url(database_url)
     if not is_loopback(url.host):
         return None
     port = _LIBPQ_DEFAULT_PORT if url.port is None else url.port
-    if port == postgres_port:
+    if port == published_port:
         return None
     return (
-        f"A DATABASE_URL aponta para a porta {port} de {url.host}, mas a POSTGRES_PORT "
-        f"desta worktree é {postgres_port}: a suíte rodaria — e recriaria o schema — "
-        "no Postgres de outra worktree ou do checkout principal.\n"
+        f"A DATABASE_URL aponta para a porta {port} de {url.host}, mas o compose deste "
+        f"checkout publica o Postgres na porta {published_port} (POSTGRES_PORT, ou "
+        f"{COMPOSE_DEFAULT_POSTGRES_PORT} sem ela): a suíte rodaria — e recriaria o "
+        "schema — no Postgres de outra worktree ou do checkout principal.\n"
         "Alinhe a porta da DATABASE_URL no .env (o scripts/worktree-new.py escreve as "
         "duas coerentes) e suba o banco desta worktree: "
         "`docker compose up -d --wait postgres`."
     )
 
 
-def resolve_test_database_url() -> str:
-    """A `DATABASE_URL` da suíte, recusada se não alcançar o Postgres desta worktree."""
+def resolve_test_database_url(compose_dir: Path = _REPO_ROOT) -> str:
+    """A `DATABASE_URL` da suíte, recusada se não alcançar o Postgres deste checkout.
+
+    Duas conferências, porque a URL tem dois leitores:
+
+    1. a porta: a URL que o `Settings` lê tem de apontar para a porta que o
+       compose publica (`database_port_mismatch`);
+    2. o cache: o Alembic não usa a URL que `_recriar_schema` lhe passa —
+       `migrations/env.py` a sobrescreve com o `get_settings()`, em cache —, e é
+       ele que roda o downgrade. Um cache sujo por outro teste levaria o
+       downgrade a uma URL que a conferência 1 não viu.
+    """
     database_url = Settings().database_url
-    mismatch = database_port_mismatch(database_url, _PublishedPostgresPort().postgres_port)
+    mismatch = database_port_mismatch(database_url, published_postgres_port(compose_dir))
+    if mismatch is not None and Path.cwd().resolve() != compose_dir.resolve():
+        mismatch += (
+            f"\nO Settings lê o .env do diretório corrente ({Path.cwd()}), não da raiz "
+            f"({compose_dir}): rode o pytest da raiz do checkout."
+        )
+    if mismatch is None and get_settings().database_url != database_url:
+        mismatch = (
+            "O get_settings() em cache aponta para outra DATABASE_URL que a do ambiente "
+            "atual, e é ela que o Alembic usa (migrations/env.py) — inclusive no "
+            "downgrade que recria o schema. Algum teste deixou o cache sujo: "
+            "get_settings.cache_clear() no teardown dele."
+        )
     if mismatch is not None:
         pytest.fail(mismatch, pytrace=False)
     return database_url
@@ -178,9 +211,10 @@ def database_url() -> str:
     frente, e a fixture `engine` tentava recriar o schema dele. Na Stage 4.1 a
     tentativa morreu em `ResolutionError: No such revision '0004'` (629 testes em
     `ERROR at setup`, issue #58); com as mesmas migrations, teria derrubado o
-    banco alheio. Por isso a URL passa pela guarda antes de qualquer conexão: com
-    a `POSTGRES_PORT` declarada, uma URL loopback em outra porta reprova a sessão
-    inteira, aqui, sem tocar o banco. Toda suíte que fala com o banco —
+    banco alheio. Por isso a URL passa pela guarda antes de qualquer conexão: uma
+    URL loopback fora da porta que o compose deste checkout publica — ou um
+    `get_settings()` em cache diferente dela, que é o que o Alembic lê — reprova
+    a sessão inteira, aqui, sem tocar o banco. Toda suíte que fala com o banco —
     integração, contrato e e2e — resolve a URL por esta fixture.
     """
     return resolve_test_database_url()
