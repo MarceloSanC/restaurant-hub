@@ -413,3 +413,23 @@ def test_a_negative_example_is_really_refused_by_the_hook() -> None:
     assert negatives, "o §4(a) perdeu os exemplos negativos da marca"
     for tag in negatives:
         assert not _accepted(f"docs(conventions): exemplo {tag.group(0)}")
+
+
+def test_every_example_in_the_hook_help_is_accepted_by_the_hook() -> None:
+    """A ajuda sai em toda recusa: exemplo dela que o hook recusa ensina a forma
+    errada justamente a quem acabou de errar."""
+    starts = (*(f"{kind}(" for kind in ccm.ALLOWED_TYPES), "stage ")
+    examples = [
+        line.strip()
+        for line in ccm._format_help().splitlines()
+        if line.startswith(" " * 6)
+        and not line.startswith(" " * 7)
+        and line.strip().startswith(starts)
+    ]
+    assert examples, "a ajuda do hook perdeu os exemplos"
+    refused = [
+        example
+        for example in examples
+        if not _accepted(example.replace("N.M", "4.1").replace("<motivo>", "motivo"))
+    ]
+    assert not refused, f"exemplos da ajuda que o hook recusa: {refused}"
