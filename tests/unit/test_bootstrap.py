@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from restaurant_hub import main
 from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
 from restaurant_hub.shared.infrastructure.config.settings import Settings
+from restaurant_hub.shared.infrastructure.http import app as app_module
 
 pytestmark = pytest.mark.unit
 
@@ -141,6 +142,24 @@ def test_boot_real_configura_o_logging_uma_vez_no_nivel_do_ambiente(
     # pendurasse no root antes do boot apareceria aqui, e teria anulado a chamada.
     assert boot["handlers"] == [["StreamHandler", "<stdout>"]]
     assert boot["sqlalchemy"] == "WARNING"
+
+
+def test_create_app_configura_o_logging_com_as_settings_que_recebeu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O nível vem das settings injetadas na factory, as mesmas que montam a app.
+
+    No boot real as duas coisas são `get_settings()`, então o teste de boot não
+    distingue uma da outra: `configure_logging(get_settings().log_level)` passava em
+    toda a suíte. Aqui elas se separam. O efeito no root não aparece in-process (o
+    pytest mantém handlers nele), mas o valor que chega a `configure_logging` aparece.
+    """
+    recebidos: list[str] = []
+    monkeypatch.setattr(app_module, "configure_logging", recebidos.append)
+
+    app_module.create_app(Settings(_env_file=None, log_level="CRITICAL"))
+
+    assert recebidos == ["CRITICAL"]
 
 
 def test_python_m_entrega_ao_uvicorn_a_app_ja_montada(monkeypatch: pytest.MonkeyPatch) -> None:
