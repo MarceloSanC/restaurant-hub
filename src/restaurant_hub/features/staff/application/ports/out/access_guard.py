@@ -14,10 +14,10 @@ staff: o que entra veio de fora e não é nosso; o que sai é endereço deste BC
 os use cases o consomem tipado.
 
 **O nome da permissão é `str`** porque o vocabulário fechado mora do outro lado
-da fronteira. Os dois valores que o Step 3 usa são `"manage_staff"` e
-`"manage_job_functions"` — citados aqui como **valores**, jamais importados como
-enum. O preço está declarado no ADR 3.4.0001: um erro de digitação não é pego
-pelo type-checker; é pego pelos testes por papel e por rota da Stage 3.6.
+da fronteira. Os três valores que staff usa — `"manage_staff"`, `"manage_job_functions"` e,
+desde a Stage 3.5, `"manage_users"` — são citados como **valores**, jamais importados como
+enum, e declarados só neste módulo. O preço está no ADR 3.4.0001: um erro de digitação não é
+pego pelo type-checker; é pego pelos testes por papel e por rota e pelos alvos dos use cases.
 
 **As quatro leis** (ADR 3.4.0001 §2, concept §4). Um `Protocol` sozinho não
 carrega as propriedades de segurança de que este desenho depende: uma segunda
@@ -163,7 +163,7 @@ class AccessGuard(Protocol):
         Args:
             actor: o ator devolvido por `authenticate`, opaco para staff.
             permission: o nome da permissão exigida, como **valor**
-                (`"manage_staff"`, `"manage_job_functions"`).
+                (`"manage_staff"`, `"manage_job_functions"`, `"manage_users"`).
             tenant_id: o restaurante alvo, como string opaca. **Ausente
                 significa "o tenant do próprio ator autenticado"** — jamais
                 "qualquer tenant" nem "todos". O significado é do **contrato**,

@@ -3,9 +3,9 @@
 **Este módulo não decide acesso.** Ele declara qual permissão cada rota exige e
 qual é o alvo, e delega ao port `AccessGuard`. Não há tabela de papéis, mapa de
 permissões nem lógica de bypass aqui, e nenhum nome do vocabulário de identity é
-importado: as duas permissões atravessam a fronteira como **valores**
-(`"manage_staff"`, `"manage_job_functions"`), jamais como enum (ADR 3.4.0001,
-ADR 2.4.0003).
+importado: as três permissões atravessam a fronteira como **valores**
+(`"manage_staff"`, `"manage_job_functions"`, `"manage_users"`), jamais como enum
+(ADR 3.4.0001, ADR 2.4.0003), e vêm do módulo do port (ADR 3.7.0001 §5).
 
 ## Por que a validação de identificador é de adapter, e não de domínio
 
