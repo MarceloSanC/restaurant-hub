@@ -42,9 +42,7 @@ class Weekday(StrEnum):
     def from_date(cls, day: date) -> "Weekday":
         """Dia da semana de uma data, via `isoweekday()` (1 = segunda … 7 = domingo).
 
-        Depende da ordem de declaração dos membros, que é a ordem ISO. A lista é
-        anotada porque o mypy do hook de pre-commit infere `tuple(cls)` de um
-        `StrEnum` como tupla de `str` (versão diferente da do `make check` — issue #7).
+        Depende da ordem de declaração dos membros, que é a ordem ISO.
         """
         membros: list[Weekday] = [*cls]
         return membros[day.isoweekday() - 1]
