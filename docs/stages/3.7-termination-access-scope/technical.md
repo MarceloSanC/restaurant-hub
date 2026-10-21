@@ -378,4 +378,53 @@ O auditor independente (11 mutações reais, nenhuma sobrevivente) marcou "não 
 - **C** bloco T01–T03: 1 major (a fachada podia devolver o `Role` StrEnum sem teste notar — mutação medida sobrevivendo) e 1 minor (docstrings afirmando a regra antes da T04) — `[3.7/task-02-fix]`, `[3.7/task-03-fix]`.
 - **C** bloco T04–T06: 0 blocker/major, 12 de 12 mutações mortas; 4 minor/nit corrigidos — `[3.7/task-04-fix]`, `[3.7/task-05-fix]`, `[3.7/task-06-fix]`.
 
+### 2026-10-21 — [deviation] auditoria da Stage (`stage-audit`, agente Opus de contexto zerado) — Claude Opus 5.5 (auditor)
+
+Veredito: **aprovada com findings**, sem bloqueante depois da fase de aplicação. Gates no HEAD
+`fe3daca`, antes das correções: `make check` EXIT=0 (4196 passed, cobertura total 99,96%, os 12
+arquivos de `src/` tocados em 100%), `check_layout` sem violação, `lint-imports` com 10 contratos
+mantidos e o `.importlinter` intocado. As correções são commits `[3.7/--]`: fora de Task, depois
+do `stage 3.7: complete`. Cada uma passou por `make check` EXIT=0 antes de ser gravada.
+
+**CA21 refeito pelo auditor.** As mutações rodaram numa cópia do HEAD (`git archive`). O alvo
+foram o unit de R13, o contrato do gateway, o unit da fachada e do use case e o composition root:
+188 testes, com a linha de base verde.
+- M1 (sem a checagem da unidade) derruba 1 teste (`test_ca06…`). M2 (sem `is_employee_login`)
+  derruba 4 (`ca05`, `ca10`, `ca11`, `ca13[is_employee_login]`). M3 (sem a guarda `active`)
+  derruba 1 (`ca12`). M4 (o literal comparado vira `"manager"`) derruba 2 (`l_ig5` real: o
+  provisionado e o `manager`). M5 (o filtro ignora `user_id`) derruba 1 (`ca09`).
+- Dez mutações extras, todas mortas: `include_inactive=True` (`ca07`); sem `other.id !=
+  employee.id` (10 testes); a fachada devolve o `Role` (6); o use case devolve papel constante
+  (8); o adapter *fail-open* (1); o adapter aceita qualquer papel conhecido (4); aceita
+  `employee` ou `hr` (1); o papel é consultado antes da unidade (3); gravar antes de revogar (3);
+  conta desconhecida vira erro (3).
+- No e2e contra o Postgres da worktree (21 testes), M1 derruba o CA16. M2 derruba o CA18 e o 500
+  da consulta de papel. M3 derruba o desligamento repetido. Voltar à regra da 3.5 (revogar sempre)
+  derruba 4. O CA17 passa com a regra da 3.5, como o docstring dele declara.
+
+Disposições:
+- **F1 (bloqueante de fechamento):** os 22 CAs do concept §11 estavam com a caixa aberta, e todos
+  tinham evidência. Foram marcados `[x]`.
+- **F2 (non-blocker):** `InMemoryIdentityGateway` era o único fake de port sem `_conforms`. Por
+  isso `make typecheck` não conferia o fake contra o `IdentityGateway`, embora a tabela "As
+  totalidades" (§1) dissesse "(mypy)". Medido numa cópia: com `is_employee_login -> str` no fake,
+  o mypy passa sem a linha e reprova com ela. Corrigido em `5cd2c40`.
+- **F3 (nit):** o docstring da classe `IdentityGateway` listava três operações. O de
+  `test_desligado_recusa_login_na_guarda_e_no_link_login` dizia "desligar cortou" sem qualificar;
+  é o gêmeo do texto que o `[3.7/task-04-fix]` corrigiu em `employee.py`. Corrigidos em `8dacc75`.
+- **F4 (non-blocker):** a saída das mutações do CA21 não estava registrada em lugar nenhum, e o
+  PR só afirmava "11 mutações, nenhuma sobrevivente". Ficou registrada acima e no comentário do
+  veredito no PR #69.
+- **F5 (non-blocker, rastro):** o `[finding] shared` acima, o ADR 3.7.0001 (Alt. H e §Negative) e
+  o concept §10 dão a #46 como quem fecha a corrida de D7. Isso não se sustenta, por dois
+  motivos. (1) Com o isolamento padrão (`READ COMMITTED`; `SERIALIZABLE` foi recusado no ADR
+  3.3.0006 Alt. C), uma unidade de trabalho não fecha a corrida. Cada desligamento lê como ativa
+  a linha do outro e grava uma linha diferente — é *write skew*. Fecha um lock por `user_id`, ou
+  `SELECT … FOR UPDATE` sobre os registros do login na unidade. (2) A Stage 2.6 (#46, PR #70)
+  deixa `deactivate_employee` fora da unidade (ADR 2.6.0002 §2 e §4, no PR). **Direção
+  corrigida:** quem fecha é a Stage que implementar "vincular login existente", com lock por
+  `user_id`. É ela que torna o caso produzível. A #46 deixa de ser candidata. Pela CONVENTIONS
+  §3.2, a correção pós-Fase 4 é registrada aqui. O texto do ADR e do concept §10 se alinha no
+  retrabalho de renumeração para 3.8, que já toca os dois arquivos.
+
 <!-- END: post-execution -->

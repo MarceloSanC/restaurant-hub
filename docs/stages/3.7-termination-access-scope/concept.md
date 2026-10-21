@@ -299,70 +299,70 @@ Sem mudança de schema, migration ou índice.
 ## 11. Critérios de aceitação
 
 ### Identity
-- [ ] **CA01** — `GetAccountRoleUseCase` devolve `AccountRoleResult(role=r)`
+- [x] **CA01** — `GetAccountRoleUseCase` devolve `AccountRoleResult(role=r)`
   para uma conta de cada um dos **cinco** papéis (parametrizado sobre `Role`) e
   `None` para id desconhecido; não altera o repositório.
-- [ ] **CA02** — `IdentityFacade.account_role(user_id)` delega convertendo
+- [x] **CA02** — `IdentityFacade.account_role(user_id)` delega convertendo
   `str` → `UserId` e devolve o valor ou `None`; uma exceção do repositório
   atravessa a fachada como é (mesma instância).
 
 ### Staff — port e contrato
-- [ ] **CA03** — L-IG5 no contrato (fake **e** real, mesmo corpo): login
+- [x] **CA03** — L-IG5 no contrato (fake **e** real, mesmo corpo): login
   provisionado por `provision_employee_login` ⇒ `True`; login de cada papel
   diferente de `employee` (`owner`, `manager`, `hr`, `platform_admin`,
   parametrizado) ⇒ `False`; id desconhecido ⇒ `False`, sem exceção; falha da
   consulta em identity ⇒ sobe a **mesma instância**.
-- [ ] **CA04** — "L-IG5" está no docstring do `IdentityGateway` (o teste
+- [x] **CA04** — "L-IG5" está no docstring do `IdentityGateway` (o teste
   parametrizado de lei documentada a inclui).
 
 ### Staff — use case (fakes)
-- [ ] **CA05** — Registro ativo, login `employee`, único na unidade: a ordem no
+- [x] **CA05** — Registro ativo, login `employee`, único na unidade: a ordem no
   ledger único é `employees.find_by_id` → `employees.list_by_unit` →
   `gateway.is_employee_login` → `gateway.revoke_login_sessions` →
   `employees.update`.
-- [ ] **CA06** — Caso (a): outro registro **ativo** da mesma unidade com o mesmo
+- [x] **CA06** — Caso (a): outro registro **ativo** da mesma unidade com o mesmo
   login ⇒ **nenhuma** chamada ao gateway; o registro é gravado desligado.
-- [ ] **CA07** — O outro registro da unidade com o mesmo login está desligado ⇒
+- [x] **CA07** — O outro registro da unidade com o mesmo login está desligado ⇒
   revoga.
-- [ ] **CA08** — O outro registro ativo com o mesmo login está em **outra
+- [x] **CA08** — O outro registro ativo com o mesmo login está em **outra
   unidade** ⇒ revoga (decisão §13 Q4 travada).
-- [ ] **CA09** — A unidade tem outros registros ativos com **outro** login e
+- [x] **CA09** — A unidade tem outros registros ativos com **outro** login e
   **sem** login ⇒ revoga (o filtro é por `user_id`).
-- [ ] **CA10** — Caso (b): login de papel ≠ `employee`, registro único ⇒
+- [x] **CA10** — Caso (b): login de papel ≠ `employee`, registro único ⇒
   `is_employee_login` chamado, **sem** revogação; registro gravado desligado.
-- [ ] **CA11** — Login desconhecido de identity ⇒ sem revogação; registro gravado.
-- [ ] **CA12** — Registro já desligado, com login ⇒ nenhuma das três chamadas;
+- [x] **CA11** — Login desconhecido de identity ⇒ sem revogação; registro gravado.
+- [x] **CA12** — Registro já desligado, com login ⇒ nenhuma das três chamadas;
   `employees.update` como hoje.
-- [ ] **CA13** — Falha em `list_by_unit`, em `is_employee_login` ou em
+- [x] **CA13** — Falha em `list_by_unit`, em `is_employee_login` ou em
   `revoke_login_sessions` sobe (mesma instância) e deixa o registro **ativo**
   (nenhum `employees.update`).
-- [ ] **CA14** — Registro sem login: só `find_by_id` e `update`.
-- [ ] **CA15** — Registro inexistente: só `find_by_id` (nenhuma chamada nova).
+- [x] **CA14** — Registro sem login: só `find_by_id` e `update`.
+- [x] **CA15** — Registro inexistente: só `find_by_id` (nenhuma chamada nova).
 
 ### Fluxo (e2e contra Postgres)
-- [ ] **CA16** — Caso (a): login `employee` criado por R17 no registro A; o
+- [x] **CA16** — Caso (a): login `employee` criado por R17 no registro A; o
   registro B, da **mesma** unidade, recebe o mesmo `user_id` por `UPDATE`
   direto; o funcionário loga. Desligar A ⇒ `POST /auth/refresh` responde **200**;
   com o refresh **rotacionado** dessa resposta, desligar B ⇒ o refresh seguinte
   responde **401**.
-- [ ] **CA17** — Caso (a) entre unidades: B está em **outra** unidade; desligar A
+- [x] **CA17** — Caso (a) entre unidades: B está em **outra** unidade; desligar A
   ⇒ o refresh responde **401** (Q4 travada de ponta a ponta).
-- [ ] **CA18** — Caso (b): o gerente do cenário (logado) tem o `user_id` posto
+- [x] **CA18** — Caso (b): o gerente do cenário (logado) tem o `user_id` posto
   num registro de escala por `UPDATE` direto; desligar o registro ⇒ o refresh do
   gerente responde **200** e, com o access novo, listar funcionários da unidade
   responde **200**.
-- [ ] **CA19** — CA24 da 3.5 continua passando **sem edição**.
+- [x] **CA19** — CA24 da 3.5 continua passando **sem edição**.
 
 ### Documentação e gates
-- [ ] **CA20** — ADR 3.7.0001 `accepted`; ADR 3.5.0003 com `## Supersessão
+- [x] **CA20** — ADR 3.7.0001 `accepted`; ADR 3.5.0003 com `## Supersessão
   parcial` datada (corpo intocado, `updated_at` bumpado); nota datada no
   workforce §3.8; as docstrings de §8 não afirmam mais revogação incondicional
   nem "três operações".
-- [ ] **CA21** — Mutação real, cada uma derruba ao menos um teste (saída colada):
+- [x] **CA21** — Mutação real, cada uma derruba ao menos um teste (saída colada):
   remover a checagem da unidade; remover `is_employee_login`; remover a guarda
   `employee.active`; trocar o literal de papel comparado no adapter; ignorar o
   `user_id` no filtro da unidade.
-- [ ] **CA22** — `make check` verde; cobertura ≥ 90% em cada arquivo de `src/`
+- [x] **CA22** — `make check` verde; cobertura ≥ 90% em cada arquivo de `src/`
   tocado; `lint-imports` sem par novo em `bc-independence`.
 
 ## 12. Checklist de validação interna
