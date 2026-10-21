@@ -525,9 +525,9 @@ ainda não migrados.
 O plano inicial punha os docstrings de `employee_repository.py` e `job_function_repository.py` na T03, que é um commit `refactor(identity)`. O Checkpoint B apontou que isso fere "1 commit = 1 escopo" (CONVENTIONS §4). Os dois docstrings foram para a T13 (`docs(staff)`). Ficou abaixo do limiar de pergunta porque não muda contrato nem comportamento, só o corte dos commits.
 
 ### 2026-10-19 — [deviation] Três commits de correção vindos dos Checkpoints C — Claude (sessão única)
-- `561ee2b` [task-03-fix]: contrato de recusa conta linhas pelo port; `_conforms` do fake; detector mecânico positivo; L2 do port com a exceção do ADR; contador da classe-base sobrevive ao rollback.
-- `42fcfd9` [task-06-fix]: L5 conta checkouts **durante** a unidade aninhada; a corrida espera `wait_event_type = 'Lock'` em vez de `sleep`; CA9 com conjunto exato de atributos. O achado de deadlock entre unidades do mesmo usuário foi **refutado**, com o artefato: a linha da tabela do concept §6 "Deadlock entre duas unidades (ex.: o mesmo usuário redime convite e link de redefinição ao mesmo tempo…)".
-- `5e584c3` [task-09-fix]: o teste unitário do convite manda um vínculo, para a asserção sobre `memberships` não ser vazia; a espera de lock filtra o `UPDATE` na tabela da corrida.
+- `437f240` [task-03-fix]: contrato de recusa conta linhas pelo port; `_conforms` do fake; detector mecânico positivo; L2 do port com a exceção do ADR; contador da classe-base sobrevive ao rollback.
+- `4e95686` [task-06-fix]: L5 conta checkouts **durante** a unidade aninhada; a corrida espera `wait_event_type = 'Lock'` em vez de `sleep`; CA9 com conjunto exato de atributos. O achado de deadlock entre unidades do mesmo usuário foi **refutado**, com o artefato: a linha da tabela do concept §6 "Deadlock entre duas unidades (ex.: o mesmo usuário redime convite e link de redefinição ao mesmo tempo…)".
+- `3491e4a` [task-09-fix]: o teste unitário do convite manda um vínculo, para a asserção sobre `memberships` não ser vazia; a espera de lock filtra o `UPDATE` na tabela da corrida.
 Em todas as correções a mutação apontada pelo revisor foi rodada antes e depois da correção.
 
 ### 2026-10-19 — [deviation] Teste da regra 10 isola as tabelas globais nas árvores sintéticas — Claude (sessão única)
@@ -544,15 +544,15 @@ Nas árvores de `tmp_path`, a allowlist real e os métodos de gateway declarados
 
 ### 2026-10-19 — [deviation] Checkpoint C das Tasks 10 a 13 e duas rodadas da auditoria de testes — Claude (sessão única)
 O último Checkpoint C não trouxe blocker: 2 achados médios e 4 baixos na regra 10 e no LAYOUT, todos corrigidos. Correções:
-- `63ca1ad` [task-11-fix]: a regra 10 passa a contar cada entrada numa unidade (helper chamado duas vezes e unidade em laço reprovam), lê a condição do `while`, os cabeçalhos e os `except`, as formas `async`, o `match` e a atribuição anotada; não segue mais chamada de público para público.
-- `9cb5f6f` [task-12-fix]: o LAYOUT afirmava que a emissão de token vem antes da unidade, e o código mostra o contrário em três use cases.
-- `723ef33` [task-10-fix]: o docstring da rotação registra que logout, desligamento ou expurgo concorrentes também viram reuso; o ADR 2.6.0002 §5 explicita a unidade entrada uma vez só.
+- `234e1e7` [task-11-fix]: a regra 10 passa a contar cada entrada numa unidade (helper chamado duas vezes e unidade em laço reprovam), lê a condição do `while`, os cabeçalhos e os `except`, as formas `async`, o `match` e a atribuição anotada; não segue mais chamada de público para público.
+- `4965609` [task-12-fix]: o LAYOUT afirmava que a emissão de token vem antes da unidade, e o código mostra o contrário em três use cases.
+- `6cc0632` [task-10-fix]: o docstring da rotação registra que logout, desligamento ou expurgo concorrentes também viram reuso; o ADR 2.6.0002 §5 explicita a unidade entrada uma vez só.
 
 Auditoria independente:
-- **Rodada 1:** um sobrevivente em `para_leitura` (leitura sem savepoint) e quatro na regra 10. Fechados em `f74017c` [task-13-extra] e nas fixtures de `63ca1ad`.
-- **Rodada 2:** todos os sobreviventes da rodada 1 morrem; oito mutantes novos da regra 10 sobrevivem. Fechados em `6213d9f` [task-11-extra]. Os oito foram reaplicados e todos morrem, e a auditoria fecha "sim" nos seis itens. Um mutante de `refresh_session` (um `revoke_all` a mais dentro da unidade) foi classificado como equivalente, porque a escrita de dentro é desfeita e a de fora é refeita.
+- **Rodada 1:** um sobrevivente em `para_leitura` (leitura sem savepoint) e quatro na regra 10. Fechados em `c6fc507` [task-13-extra] e nas fixtures de `234e1e7`.
+- **Rodada 2:** todos os sobreviventes da rodada 1 morrem; oito mutantes novos da regra 10 sobrevivem. Fechados em `1876351` [task-11-extra]. Os oito foram reaplicados e todos morrem, e a auditoria fecha "sim" nos seis itens. Um mutante de `refresh_session` (um `revoke_all` a mais dentro da unidade) foi classificado como equivalente, porque a escrita de dentro é desfeita e a de fora é refeita.
 
-Os commits `63ca1ad`, `9cb5f6f`, `723ef33` e `f74017c` foram verificados por **um** `make check` sobre o estado final dos quatro (4098 passed). Eles mexem em arquivos disjuntos e foram comitados em sequência sem rodar o gate entre um e outro: os três primeiros são documentação ou mudanças que o último não altera. Abaixo do limiar de pergunta, porque não muda contrato e o estado comitado final é o verificado. Fica declarado porque foge da letra de "make check antes de todo commit".
+Os commits `234e1e7`, `4965609`, `6cc0632` e `c6fc507` foram verificados por **um** `make check` sobre o estado final dos quatro (4098 passed). Eles mexem em arquivos disjuntos e foram comitados em sequência sem rodar o gate entre um e outro: os três primeiros são documentação ou mudanças que o último não altera. Abaixo do limiar de pergunta, porque não muda contrato e o estado comitado final é o verificado. Fica declarado porque foge da letra de "make check antes de todo commit".
 
 ### 2026-10-19 — [decision] Sincronização com o develop por rebase — Claude (sessão única)
 **Contexto:** a Stage 4.2 mergeou no develop durante a execução (25 commits, PR #66).
@@ -567,5 +567,15 @@ Os commits `63ca1ad`, `9cb5f6f`, `723ef33` e `f74017c` foram verificados por **u
 **Contexto:** gate de saída "fluxo exercitado pelo entrypoint real".
 **Decisão:** app na porta 8001 da worktree com o Postgres dela; usuário semeado com o hasher argon2 real; a falha da escrita da senha forçada por um trigger temporário em `users`, removido em `finally`. Resultado: duas rotações simultâneas dão `[200, 401]` e o refresh emitido pela vencedora já está morto (401); `POST /auth/password` com a escrita falhando dá 500 e nenhum token é consumido; o mesmo link, sem a falha, dá 204, e o login com a senha nova dá 200. O roteiro ficou no scratchpad da sessão, fora do repo.
 **Razão:** os testes de integração já provam as duas propriedades no use case; aqui elas são vistas pela borda HTTP, que é o que o sponsor observa.
+
+### 2026-10-21 — [deviation] Auditoria da Stage (`stage-audit`, agente de contexto zerado) — Claude Opus 5.5 (auditor)
+Veredito: aprovada com findings, nenhum bloqueante. Gates medidos em `dfa2410`: `make check` EXIT=0, 4342 passed, coverage 99,96%, todo arquivo de `src/` da Stage em 100% de linha e ramo, import-linter 10 kept, `check_layout` verde com a regra 10. A auditoria de issue de 2026-10-19 (`issue-audit`, comentário no PR #70) fechou o achado dela em `dfa2410` (`[2.6/--]`, `_COM_UNIDADE` cobrada contra os use cases que recebem `unit_of_work`), que não tinha entrada aqui. Disposições desta auditoria, todas corrigidas no PR:
+- **F1:** os 14 CAs do concept §11 estavam com a caixa aberta, todos com evidência. Marcados `[x]`.
+- **F2:** as entradas acima citavam oito hashes de antes do rebase sobre o develop, que não existem na branch. Corrigidos no lugar: `561ee2b`→`437f240`, `42fcfd9`→`4e95686`, `5e584c3`→`3491e4a`, `63ca1ad`→`234e1e7`, `9cb5f6f`→`4965609`, `723ef33`→`6cc0632`, `f74017c`→`c6fc507`, `6213d9f`→`1876351`.
+- **F3:** `dfa2410` não tinha entrada; fica registrado nesta.
+- **F4:** três mutantes sobreviventes no contrato da unidade. `_ESCRITAS` (L1) e `_LEITURAS` (L4) eram tabelas à mão: apagar uma linha de qualquer das duas deixava as suítes de identity e do `check_layout` verdes (1223 e 1225 passed). E a L5 só provava que a externa continua comitando depois da recusa, não que as escritas seguintes continuam dentro dela: uma recusa que publicasse estado antes de levantar passava (925 passed). `d136914` deriva a totalidade das tabelas dos ports de `ports/out/*_repository.py` e acrescenta a L5 com a externa desfeita depois da recusa. Os três morrem, e também um método novo num port sem linha na tabela e um sexto port de repositório.
+- **Observação:** a nota pós-execução do roadmap fala em "7 commits de correção ou cobertura". São 8 (seis `-fix` e dois `-extra`). Não foi corrigida: não tem efeito, e mexer no roadmap agora mudaria o frontmatter, que os dois PRs da fila também editam.
+- **Verificação funcional pela borda HTTP, refeita** (uvicorn real sobre o Postgres da worktree, argon2 e emissor reais, roteiro fora do repo): 12 de 12 rodadas de duas `POST /auth/refresh` simultâneas deram `[200, 401]`, e o refresh da vencedora já estava morto. O mesmo roteiro sobre o develop (`b2e1c68`) deu `[200, 200]` em 11 de 12. Com a escrita da senha falhando (trigger temporário), `POST /auth/password` deu 500 sem consumir o token; sem a falha, o mesmo link deu 204 e o login com a senha nova, 200. No develop, o token ficava consumido e a retentativa dava 401.
+- **Mutações dirigidas** (cópia descartável da árvore), mortas desde o início: savepoint tirado de `para_escrita`, retorno do `revoke` ignorado na rotação, L5 checada depois do checkout, publicação da unidade não desfeita no `finally`, conexão não chaveada pelo engine, unidade sobre outro engine no composition root, `consume` fora da unidade no código real e fake gravando antes de validar.
 
 <!-- END: post-execution -->
