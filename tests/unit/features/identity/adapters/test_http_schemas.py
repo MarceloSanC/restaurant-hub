@@ -172,3 +172,21 @@ def test_token_response_declara_os_dois_tokens_como_credencial() -> None:
         "access_token",
         "refresh_token",
     }
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [schemas.UserResponse, schemas.RestaurantResponse, schemas.UnitResponse],
+    ids=lambda schema: schema.__name__,
+)
+def test_resposta_sem_credencial_nao_e_declarada_credencial(schema: type[BaseModel]) -> None:
+    """O non-goal da issue #61, nos schemas de hoje: dado de cadastro não é credencial.
+
+    Marcar `UserResponse.email`, por exemplo, poria `no-store` em três rotas de
+    identity e faria o OpenAPI declarar como credencial o que não é. A lista
+    nomeia os schemas existentes de propósito, em vez de varrer o módulo: uma
+    varredura "só `TokenResponse` é marcado" obrigaria a editar este teste a cada
+    schema novo que carregasse credencial — e esse schema tem de nascer com os
+    cabeçalhos sem edição (nota 4 de `schemas.py`).
+    """
+    assert declares_credential(schema) is False
