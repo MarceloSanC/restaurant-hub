@@ -142,10 +142,41 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 - Nenhuma operação de edição do registro altera o estado — só as duas transições o alteram.
 - Remoção definitiva é recusada enquanto houver referência ao registro.
 
-> **Lacuna para o concept da Stage 3.1:** os **atributos cadastrais mínimos** do registro
-> (nome, contato, o que identifica o registro dentro da unidade) não estão enumerados em nenhuma
-> fonte ratificada — o concept da 3.1 os fixa. Vale a regra transversal de dados livres persistidos
-> **verbatim**, sem normalização silenciosa ([ADR 2.3.0005](../../adr/2_3_0005-names-persisted-verbatim.md)).
+**Atributos cadastrais mínimos do registro**
+([ADR 3.1.0002](../../adr/3_1_0002-minimal-employee-record-attributes.md); conjunto de funções:
+[ADR 3.1.0006](../../adr/3_1_0006-employee-function-set-cardinality.md)):
+
+- **O que identifica o registro é o seu id**, opaco — nunca o nome. O nome **não** é chave: dois
+  registros com o mesmo nome na mesma unidade, ou no mesmo tenant, são legítimos (homônimos
+  existem — dois "João Silva" na mesma cozinha).
+- **Nome:** texto livre, **não-vazio** — ao menos um caractere que não seja espaço; a validação
+  não altera o valor guardado — e persistido **verbatim**, sem normalização silenciosa
+  ([ADR 2.3.0005](../../adr/2_3_0005-names-persisted-verbatim.md)).
+- **Sem contato, documento, data de admissão ou observações na v1.** Nenhuma feature v1 os lê (o
+  login da Stage 3.5 colhe o e-mail na hora e o guarda em identity — §3.8), e dado pessoal sem
+  consumidor é superfície de LGPD sem valor (overview §6). Acrescentar qualquer um deles depois é
+  **evolução aditiva**, não mudança de forma do registro.
+- **Funções do registro: conjunto não-vazio.** O registro referencia **ao menos uma** função
+  (§3.2), só por id; uma função só é o caso particular. No Step 4/5 o registro casa com vagas de
+  **qualquer** das suas funções; registro sem função não existe. Decisão do **sponsor**
+  (2026-07-28).
+- O restante do que o registro carrega tem casa própria neste doc: perfil de jornada (§3.3),
+  preferência de turno opcional (§3.5), indisponibilidades (§3.6), estado do ciclo de vida
+  (acima) e vínculo opcional com login (§3.8).
+
+**Invariantes:**
+- O registro é identificado só pelo id; o nome é não-vazio e **não** é único — nem na unidade, nem
+  no tenant.
+- Todo registro referencia ao menos uma função.
+
+> **Lacuna fechada (2026-10-21) —
+> [ADR 3.1.0002](../../adr/3_1_0002-minimal-employee-record-attributes.md):** os **atributos
+> cadastrais mínimos** do registro ("nome, contato, o que identifica o registro dentro da
+> unidade") eram lacuna aberta deste doc, delegada ao concept da Stage 3.1, que a fechou em
+> 2026-07-27 com o cadastro mínimo acima: só o nome, sem unicidade e sem contato; a identidade é o
+> id. A **cardinalidade das funções do registro**, que este doc nem chegou a registrar como lacuna,
+> saiu da mesma Stage como fork e foi decidida pelo sponsor em 2026-07-28
+> ([ADR 3.1.0006](../../adr/3_1_0006-employee-function-set-cardinality.md)).
 
 ### 3.2 Função de trabalho (JobFunction)
 
