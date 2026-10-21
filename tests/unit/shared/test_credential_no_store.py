@@ -12,6 +12,7 @@ middleware e a detecção, e o HTTP real das três rotas de hoje é do e2e
 """
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from http import HTTPStatus
 from typing import Annotated
 
@@ -20,6 +21,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Response
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel, ConfigDict, Field, computed_field
+from starlette.types import Message
 
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
@@ -263,3 +265,37 @@ async def test_a_fabrica_real_registra_o_middleware() -> None:
 
     assert resposta.status_code == HTTPStatus.OK
     assert _sem_cache(resposta), dict(resposta.headers)
+
+
+async def test_o_lifespan_atravessa_o_middleware() -> None:
+    """O escopo `lifespan` passa intacto: é por ele que a app sobe e desce.
+
+    O `ASGITransport` do httpx, que os testes acima usam, não envia `lifespan`; o
+    servidor de produção envia. Um middleware que só repassasse `http` passaria
+    em todos os testes acima e deixaria a app sem subir. O protocolo é dirigido à
+    mão porque o `TestClient` do Starlette 1.x com httpx é depreciado.
+    """
+    eventos: list[str] = []
+
+    @asynccontextmanager
+    async def ciclo(_: FastAPI) -> AsyncIterator[None]:
+        eventos.append("subiu")
+        yield
+        eventos.append("desceu")
+
+    app = FastAPI(lifespan=ciclo)
+    app.add_middleware(CredentialNoStoreMiddleware)
+
+    recebidas = iter([{"type": "lifespan.startup"}, {"type": "lifespan.shutdown"}])
+    enviadas: list[str] = []
+
+    async def receber() -> Message:
+        return next(recebidas)
+
+    async def enviar(mensagem: Message) -> None:
+        enviadas.append(mensagem["type"])
+
+    await app({"type": "lifespan", "asgi": {"version": "3.0"}}, receber, enviar)
+
+    assert eventos == ["subiu", "desceu"]
+    assert enviadas == ["lifespan.startup.complete", "lifespan.shutdown.complete"]
