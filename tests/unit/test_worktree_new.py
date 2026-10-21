@@ -155,7 +155,9 @@ def test_is_loopback(host: str | None, expected: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_absent_env_gets_ports_and_database_url(tmp_path: Path) -> None:
+def test_absent_env_gets_ports_and_database_url(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """O caso medido: o checkout principal não tem `.env`, então não há o que copiar.
 
     Antes, o arquivo nascia só com as três portas, e o `Settings` caía no default
@@ -168,6 +170,23 @@ def test_absent_env_gets_ports_and_database_url(tmp_path: Path) -> None:
         f"APP_PORT={APP_PORT}",
         f"POSTGRES_PORT={POSTGRES_PORT}",
         f"REDIS_PORT={REDIS_PORT}",
+        f"DATABASE_URL={URL_WORKTREE}",
+    ]
+    assert f"DATABASE_URL acrescentada na porta {POSTGRES_PORT}" in capsys.readouterr().out
+
+
+def test_commented_out_keys_are_left_alone(tmp_path: Path) -> None:
+    """Linha comentada não é chave: fica como está, e a URL real entra no bloco."""
+    commented = [f"# DATABASE_URL={URL_5432}", "#POSTGRES_PORT=5432"]
+    _write_env(tmp_path, *commented)
+
+    wn.write_worktree_env_ports(tmp_path, {"POSTGRES_PORT": POSTGRES_PORT})
+
+    assert _env_lines(tmp_path) == [
+        *commented,
+        "",
+        HEADER,
+        f"POSTGRES_PORT={POSTGRES_PORT}",
         f"DATABASE_URL={URL_WORKTREE}",
     ]
 
