@@ -527,9 +527,11 @@ A marca fecha o subject, depois de **um espaço**: `[<dono>/<posição>]`.
 | Posição | O commit… | Exemplo |
 |---|---|---|
 | `task-NN` | entrega a Task `NN` do plano (`technical.md` §2; na issue avulsa, a sub-task `NN` da decomposição) | `[2.3/task-01]`, `[#34/task-02]` |
-| `task-NN-fix` | **corrige** a Task `NN`, já commitada — achado de Checkpoint C ou regressão mid-stage de erro local | `[3.1/task-04-fix]` |
+| `task-NN-fix` | **corrige** a Task `NN`, já commitada — achado de Checkpoint C ou regressão mid-stage de erro local | `[3.1/task-04-fix]`, `[#34/task-02-fix]` |
 | `task-NN-extra` | entrega uma Task **acrescentada** durante a execução, fora do plano — tipicamente o teste que a auditoria de testes pediu | `[3.2/task-14-extra]`, `[#34/task-06-extra]` |
 | `--` | não pertence a Task nenhuma (off-task, subseção seguinte) | `[2.3/--]`, `[#34/--]` |
+
+Toda posição vale para os dois donos.
 
 Regras:
 
