@@ -39,13 +39,17 @@ def _load() -> ModuleType:
 csd = _load()
 
 _HEADER = "| Stage | Título | Camada-alvo | Status | Depende de |\n|---|---|---|---|---|\n"
+_ISSUES = (
+    "| [#45](https://x/45) | Gates de arquitetura | shared | tooling | done | — |\n"
+    "| [#46](https://x/46) | Fronteira transacional | shared | application | open | — |\n"
+)
 
 
 def _row(stage_id: str, status: str = "done", deps: str = "—") -> str:
     return f"| `{stage_id}` | Título | domain | {status} | {deps} |\n"
 
 
-def _roadmap(rows: str, header: str = _HEADER) -> str:
+def _roadmap(rows: str, header: str = _HEADER, issues: str = _ISSUES) -> str:
     """Roadmap mínimo com as vizinhas reais da Tabela de Stages: Steps antes, Issues depois."""
     return (
         "# Roadmap\n\n"
@@ -55,6 +59,7 @@ def _roadmap(rows: str, header: str = _HEADER) -> str:
         "## Tabela de Issues\n\n"
         "| Issue | Título | BC | Camada-alvo | Status | Depende de |\n|---|---|---|---|---|---|\n"
         "| [#59](https://x/59) | Achados da Stage 1.1 | staff | docs | done | — |\n"
+        f"{issues}"
     )
 
 
@@ -64,6 +69,7 @@ _CHAIN = (
     + _row("2.1-identity-domain", status="draft", deps="`1.2-ci`")
 )
 _CLOSED = frozenset({"stage 1.1: complete", "stage 1.2: complete", "stage 2.1: conceptual draft"})
+_WHERE = ("origin/develop",)
 
 
 def _rows(rows: str) -> list[Any]:
@@ -72,8 +78,14 @@ def _rows(rows: str) -> list[Any]:
     return parsed
 
 
+def _history(subjects: frozenset[str] = _CLOSED) -> Any:  # noqa: ANN401
+    return csd.History(subjects, _WHERE)
+
+
 def _check(targets: Sequence[str], rows: str, subjects: frozenset[str]) -> list[str]:
-    return list(csd.check_targets(targets, _rows(rows), subjects, "HEAD"))
+    issues = csd.parse_issue_table(_roadmap(rows))
+    verdict = csd.check_targets(targets, _rows(rows), _history(subjects), issues)
+    return list(verdict.violations)
 
 
 # --- stage_id → número --------------------------------------------------------------
@@ -113,12 +125,14 @@ def test_parse_reads_status_and_dependencies() -> None:
         _row("1.1-bootstrap")
         + _row("4.2-validation-policies", status="draft", deps="`4.1-scheduling-domain`")
         + _row("7.2-timeclock-domain", deps="`7.1-controlid-spike`, `4.5-scheduling-http`")
+        + _row("4.3-scheduling-application", deps="`4.2-validation-policies`, `#46`")
     )
 
-    assert [(r.stage_id, r.status, r.depends_on) for r in rows] == [
-        ("1.1-bootstrap", "done", ()),
-        ("4.2-validation-policies", "draft", ("4.1-scheduling-domain",)),
-        ("7.2-timeclock-domain", "done", ("7.1-controlid-spike", "4.5-scheduling-http")),
+    assert [(r.stage_id, r.status, r.depends_on, r.depends_on_issues) for r in rows] == [
+        ("1.1-bootstrap", "done", (), ()),
+        ("4.2-validation-policies", "draft", ("4.1-scheduling-domain",), ()),
+        ("7.2-timeclock-domain", "done", ("7.1-controlid-spike", "4.5-scheduling-http"), ()),
+        ("4.3-scheduling-application", "done", ("4.2-validation-policies",), (46,)),
     ]
 
 
@@ -169,8 +183,8 @@ def test_parse_fails_closed_when_the_table_is_not_readable(text: str, reason: st
     ("rows", "reason"),
     [
         ("| 1.1 | T | domain | done | — |\n", "não é um stage_id"),
-        ("| `1.1-bootstrap` | T | domain | done | 1.1 |\n", "em Depende de"),
-        ("| `1.1-bootstrap` | T | domain | done | `#45` |\n", "em Depende de"),
+        ("| `1.1-bootstrap` | T | domain | done | 1.1 |\n", "nem issue `#N`"),
+        ("| `1.1-bootstrap` | T | domain | done | issue 45 |\n", "nem issue `#N`"),
         ("| `1.1-bootstrap` | T | done | — |\n", "célula"),
         (_row("1.1-bootstrap") + _row("1.1-bootstrap", status="draft"), "mais de uma linha"),
     ],
@@ -180,6 +194,20 @@ def test_parse_reports_rows_it_cannot_trust(rows: str, reason: str) -> None:
 
     assert len(problems) == 1
     assert reason in problems[0]
+
+
+def test_issue_table_status_is_read_by_issue_number() -> None:
+    issues = (
+        "| [#45](https://x/45) | A | shared | tooling | done | — |\n"
+        "| #46 | B | shared | app | open | — |\n"
+        "| [Sem número](https://x) | C | shared | docs | done | — |\n"
+    )
+
+    assert csd.parse_issue_table(_roadmap(_row("1.1-bootstrap"), issues=issues)) == {
+        59: "done",
+        45: "done",
+        46: "open",
+    }
 
 
 # --- a checagem ---------------------------------------------------------------------
@@ -201,6 +229,13 @@ def test_dependency_not_done_in_the_roadmap_is_a_violation() -> None:
     ]
 
 
+def test_a_complete_commit_that_is_not_merged_does_not_close_a_dependency() -> None:
+    """Branch empilhada: o `complete` da dependência existe, mas fora das refs conferidas."""
+    assert _check(["1.2-ci"], _CHAIN, frozenset({"stage 1.2: complete"})) == [
+        "1.2-ci → 1.1-bootstrap: commit `stage 1.1: complete` não está mergeado em origin/develop"
+    ]
+
+
 def test_partial_gate_commits_do_not_close_a_dependency() -> None:
     """F4 do PR #11: `stage 1.1` casava `conceptual approved` — verde para quem não fechou."""
     partial = frozenset(
@@ -212,7 +247,7 @@ def test_partial_gate_commits_do_not_close_a_dependency() -> None:
     )
 
     assert _check(["1.2-ci"], _CHAIN, partial) == [
-        "1.2-ci → 1.1-bootstrap: commit `stage 1.1: complete` ausente do histórico de HEAD"
+        "1.2-ci → 1.1-bootstrap: commit `stage 1.1: complete` não está mergeado em origin/develop"
     ]
 
 
@@ -287,6 +322,48 @@ def test_homonyms_that_nobody_depends_on_do_not_fail_anyone() -> None:
     assert _check(["1.2-ci"], rows, _CLOSED) == []
 
 
+def test_issue_dependency_is_closed_by_its_status_in_the_issue_table() -> None:
+    rows = _row("4.3-scheduling-application", deps="`#45`")
+
+    assert _check(["4.3-scheduling-application"], rows, frozenset()) == []
+
+
+def test_issue_dependency_not_done_is_a_violation() -> None:
+    rows = _row("4.3-scheduling-application", deps="`#46`")
+
+    assert _check(["4.3-scheduling-application"], rows, _CLOSED) == [
+        "4.3-scheduling-application → #46: status `open` na Tabela de Issues (esperado `done`)"
+    ]
+
+
+def test_issue_outside_the_issue_table_points_to_the_stage_id_form() -> None:
+    rows = _row("4.3-scheduling-application", deps="`#43`")  # #43 é a issue da Stage 3.6
+
+    violations = _check(["4.3-scheduling-application"], rows, _CLOSED)
+
+    assert len(violations) == 1
+    assert "issue fora da Tabela de Issues" in violations[0]
+    assert "stage_id" in violations[0]
+
+
+def test_without_history_only_the_status_is_checked() -> None:
+    rows = _row("1.1-bootstrap") + _row("1.2-ci", deps="`1.1-bootstrap`")
+    draft = _row("1.1-bootstrap", status="draft") + _row("1.2-ci", deps="`1.1-bootstrap`")
+
+    assert csd.check_targets(["1.2-ci"], _rows(rows), None, {}).violations == ()
+    assert len(csd.check_targets(["1.2-ci"], _rows(draft), None, {}).violations) == 1
+
+
+def test_the_verdict_counts_what_was_actually_checked() -> None:
+    """O resumo `OK — N Stage(s), M dependência(s)` só pode afirmar o que o laço olhou."""
+    targets = ["1.1-bootstrap", "1.2-ci", "2.1-identity-domain", "9.9-unplanned"]
+
+    verdict = csd.check_targets(targets, _rows(_CHAIN), _history(), {})
+
+    assert (verdict.stages, verdict.dependencies) == (4, 2)
+    assert len(verdict.violations) == 1  # só a 9.9, sem linha
+
+
 # --- alvos --------------------------------------------------------------------------
 
 
@@ -328,16 +405,16 @@ def test_anything_else_is_refused() -> None:
 class _History:
     """Leitor de histórico injetado: registra a chamada, devolve subjects fixos."""
 
-    def __init__(self, subjects: frozenset[str] = _CLOSED, error: str | None = None) -> None:
+    def __init__(self, subjects: frozenset[str] = _CLOSED, error: Exception | None = None) -> None:
         self.subjects = subjects
         self.error = error
-        self.calls: list[tuple[str, Path]] = []
+        self.calls: list[tuple[tuple[str, ...], Path, bool]] = []
 
-    def __call__(self, ref: str, repo: Path) -> frozenset[str]:
-        self.calls.append((ref, repo))
+    def __call__(self, refs: Sequence[str], repo: Path, every_ref: bool) -> Any:  # noqa: ANN401
+        self.calls.append((tuple(refs), repo, every_ref))
         if self.error is not None:
-            raise csd.GitError(self.error)
-        return self.subjects
+            raise self.error
+        return csd.History(self.subjects, tuple(refs))
 
 
 def _repo(tmp_path: Path, rows: str = _CHAIN, folders: Sequence[str] = ()) -> Path:
@@ -350,18 +427,19 @@ def _repo(tmp_path: Path, rows: str = _CHAIN, folders: Sequence[str] = ()) -> Pa
 
 
 def _main(repo: Path, history: _History, *args: str) -> int:
-    return int(csd.main([*args, "--repo", str(repo)], read_subjects=history))
+    return int(csd.main([*args, "--repo", str(repo)], read_history=history))
 
 
-def test_main_checks_every_stage_folder_against_head(
+def test_main_checks_every_stage_folder_against_the_integration_branches(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     repo = _repo(tmp_path, folders=("1.1-bootstrap", "1.2-ci"))
     history = _History()
 
     assert _main(repo, history) == csd.EXIT_OK
-    assert history.calls == [("HEAD", repo)]
-    assert "2 Stage(s), 1 dependência(s) fechada(s) em HEAD" in capsys.readouterr().out
+    assert history.calls == [(csd.INTEGRATION_REFS, repo, False)]
+    out = capsys.readouterr().out
+    assert "2 Stage(s), 1 dependência(s) fechada(s) em origin/develop, develop" in out
 
 
 def test_main_violation_exits_1_and_explains_the_number(
@@ -371,7 +449,7 @@ def test_main_violation_exits_1_and_explains_the_number(
 
     assert _main(repo, _History(frozenset({"stage 1.1: complete"}))) == csd.EXIT_VIOLATION
     err = capsys.readouterr().err
-    assert "2.1-identity-domain → 1.2-ci: commit `stage 1.2: complete` ausente" in err
+    assert "2.1-identity-domain → 1.2-ci: commit `stage 1.2: complete` não está mergeado" in err
     assert "`1.1-bootstrap` → `stage 1.1: complete`" in err
 
 
@@ -383,12 +461,21 @@ def test_main_explicit_targets_replace_discovery(tmp_path: Path) -> None:
     assert _main(repo, _History(), "1.2-ci") == csd.EXIT_OK
 
 
-def test_main_hands_the_ref_to_the_history_reader(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("args", "refs"),
+    [
+        (("--ref", "origin/develop"), ("origin/develop",)),
+        (("--ref", "origin/develop", "--ref", "origin/main"), ("origin/develop", "origin/main")),
+    ],
+)
+def test_main_explicit_refs_must_all_resolve(
+    tmp_path: Path, args: tuple[str, ...], refs: tuple[str, ...]
+) -> None:
     repo = _repo(tmp_path)
     history = _History()
 
-    assert _main(repo, history, "1.2-ci", "--ref", "origin/develop") == csd.EXIT_OK
-    assert history.calls == [("origin/develop", repo)]
+    assert _main(repo, history, "1.2-ci", *args) == csd.EXIT_OK
+    assert history.calls == [(refs, repo, True)]
 
 
 @pytest.mark.parametrize("target", ["4.3", "bootstrap", "1.1-bootstrap/"])
@@ -402,8 +489,27 @@ def test_main_refuses_a_target_that_is_not_a_stage_id(
     assert target in capsys.readouterr().err
 
 
-def test_main_fails_closed_without_roadmap(tmp_path: Path) -> None:
+def test_main_fails_closed_without_roadmap(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     assert _main(tmp_path, _History()) == csd.EXIT_ERROR
+    assert "roadmap ausente" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("content", [b"## Tabela de Stages\n\xed\xa0\x80\n", None])
+def test_main_fails_closed_on_an_unreadable_roadmap(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], content: bytes | None
+) -> None:
+    roadmap = tmp_path / "docs" / "roadmap.md"
+    if content is None:
+        roadmap.mkdir(parents=True)  # um diretório no lugar do arquivo: OSError
+    else:
+        roadmap.parent.mkdir(parents=True)
+        roadmap.write_bytes(content)  # não é UTF-8: UnicodeDecodeError
+
+    # Exit 1 seria lido como "dependência aberta"; sem leitura, não há veredito.
+    assert _main(tmp_path, _History(), "1.2-ci") == csd.EXIT_ERROR
+    assert "roadmap ilegível" in capsys.readouterr().err
 
 
 def test_main_fails_closed_without_the_stage_table(tmp_path: Path) -> None:
@@ -413,13 +519,54 @@ def test_main_fails_closed_without_the_stage_table(tmp_path: Path) -> None:
     assert _main(repo, _History(), "1.2-ci") == csd.EXIT_ERROR
 
 
-def test_main_fails_closed_when_history_is_unreadable(
+def test_main_fails_closed_when_the_stage_folders_cannot_be_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def denied(_: Path) -> list[str]:
+        raise PermissionError("docs/stages")
+
+    monkeypatch.setattr(csd, "discover_stage_folders", denied)
+
+    assert _main(_repo(tmp_path), _History()) == csd.EXIT_ERROR
+
+
+def test_main_an_explicit_target_without_history_has_no_verdict(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """A pré-condição de quem vai abrir uma Stage não aceita verde sem ter olhado."""
+    history = _History(error=csd.HistoryUnavailable("clone raso"))
+
+    assert _main(_repo(tmp_path), history, "1.2-ci") == csd.EXIT_ERROR
+    assert "clone raso (fail closed)" in capsys.readouterr().err
+
+
+def test_main_docs_check_without_history_checks_status_and_warns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Sem alvo, o `make check` local não exige histórico (ADR 1.2.0001): status + WARN."""
+    history = _History(error=csd.HistoryUnavailable("clone raso"))
     repo = _repo(tmp_path, folders=("1.2-ci",))
 
-    assert _main(repo, _History(error="clone raso")) == csd.EXIT_ERROR
-    assert "clone raso (fail closed)" in capsys.readouterr().err
+    assert _main(repo, history) == csd.EXIT_OK
+    captured = capsys.readouterr()
+    assert "WARN — clone raso" in captured.err
+    assert "1 Stage(s), 1 dependência(s) fechada(s)\n" in captured.out
+
+
+def test_main_docs_check_without_history_still_catches_a_status(tmp_path: Path) -> None:
+    history = _History(error=csd.HistoryUnavailable("clone raso"))
+    repo = _repo(tmp_path, folders=("2.1-identity-domain", "3.1-staff-domain"))
+    rows = _CHAIN + _row("3.1-staff-domain", deps="`2.1-identity-domain`")  # a 2.1 é draft
+    (repo / "docs" / "roadmap.md").write_text(_roadmap(rows), encoding="utf-8")
+
+    assert _main(repo, history) == csd.EXIT_VIOLATION
+
+
+def test_main_docs_check_with_an_unresolvable_explicit_ref_has_no_verdict(tmp_path: Path) -> None:
+    history = _History(error=csd.GitError("ref(s) origin/nada não resolve(m)"))
+    repo = _repo(tmp_path, folders=("1.2-ci",))
+
+    assert _main(repo, history, "--ref", "origin/nada") == csd.EXIT_ERROR
 
 
 def test_main_without_stage_folders_reads_no_history(tmp_path: Path) -> None:
@@ -427,6 +574,33 @@ def test_main_without_stage_folders_reads_no_history(tmp_path: Path) -> None:
 
     assert _main(_repo(tmp_path), history) == csd.EXIT_OK
     assert history.calls == []
+
+
+def test_main_gives_a_verdict_without_history_when_no_target_has_dependencies(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Sem dependência, o histórico não é preciso: clone raso não tira o veredito."""
+    history = _History(error=csd.HistoryUnavailable("clone raso"))
+
+    assert _main(_repo(tmp_path), history, "1.1-bootstrap") == csd.EXIT_OK
+    assert history.calls == []
+    assert "1 Stage(s), 0 dependência(s)" in capsys.readouterr().out
+
+
+def test_main_checks_issue_dependencies_against_the_issue_table(tmp_path: Path) -> None:
+    rows = _row("4.3-scheduling-application", deps="`#46`")  # a #46 está open
+    repo = _repo(tmp_path, rows=rows, folders=("4.3-scheduling-application",))
+
+    assert _main(repo, _History()) == csd.EXIT_VIOLATION
+
+
+def test_main_fails_closed_without_the_issue_table_when_it_is_needed(tmp_path: Path) -> None:
+    rows = _row("4.3-scheduling-application", deps="`#45`")
+    repo = _repo(tmp_path, rows=rows, folders=("4.3-scheduling-application",))
+    text = _roadmap(rows).split("## Tabela de Issues")[0]
+    (repo / "docs" / "roadmap.md").write_text(text, encoding="utf-8")
+
+    assert _main(repo, _History()) == csd.EXIT_ERROR
 
 
 def test_main_reports_roadmap_problems_even_without_targets(tmp_path: Path) -> None:
@@ -449,11 +623,17 @@ def test_main_keeps_roadmap_problems_next_to_closed_dependencies(
 
 
 class _Git:
-    """Substituto de `subprocess.run` que responde aos três comandos que o script usa."""
+    """Substituto de `subprocess.run` para os comandos que o script usa."""
 
-    def __init__(self, *, shallow: bool = False, ref_ok: bool = True, log: bytes = b"") -> None:
+    def __init__(
+        self,
+        *,
+        shallow: bool = False,
+        resolvable: Sequence[str] = ("origin/develop", "develop"),
+        log: bytes = b"",
+    ) -> None:
         self.shallow = shallow
-        self.ref_ok = ref_ok
+        self.resolvable = set(resolvable)
         self.log = log
         self.calls: list[tuple[list[str], Any]] = []
 
@@ -462,7 +642,8 @@ class _Git:
         if cmd[1:3] == ["rev-parse", "--is-shallow-repository"]:
             return self._done(0, b"true\n" if self.shallow else b"false\n")
         if cmd[1:3] == ["rev-parse", "--verify"]:
-            return self._done(0 if self.ref_ok else 1, b"")
+            ref = cmd[-1].removesuffix("^{commit}")
+            return self._done(0 if ref in self.resolvable else 1, b"")
         if cmd[1] == "log":
             return self._done(0, self.log)
         return self._done(128, b"", b"comando inesperado")
@@ -472,32 +653,56 @@ class _Git:
         return subprocess.CompletedProcess(args=[], returncode=code, stdout=out, stderr=err)
 
 
-def test_history_is_every_subject_reachable_from_the_ref(
+def test_history_is_the_union_of_the_integration_branches_that_resolve(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     git = _Git(log="stage 1.1: complete\nfeat(x): acentuação  \n".encode())
     monkeypatch.setattr(csd.subprocess, "run", git)
 
-    subjects = csd.git_subjects("origin/develop", tmp_path)
+    history = csd.git_history(csd.INTEGRATION_REFS, tmp_path, False)
 
-    assert subjects == frozenset({"stage 1.1: complete", "feat(x): acentuação"})
+    assert history.subjects == frozenset({"stage 1.1: complete", "feat(x): acentuação"})
+    assert history.refs == ("origin/develop", "develop")
     assert all(cwd == tmp_path for _, cwd in git.calls)
-    log_cmd = git.calls[-1][0]
-    assert log_cmd == ["git", "log", "--format=%s", "origin/develop"]
+    assert git.calls[-1][0] == ["git", "log", "--format=%s", "origin/develop", "develop"]
 
 
-def test_shallow_clone_gives_no_verdict(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_an_explicit_ref_that_does_not_resolve_is_an_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(csd.subprocess, "run", _Git())
+
+    with pytest.raises(csd.GitError, match=r"origin/nada não resolve.*git fetch") as raised:
+        csd.git_history(("origin/develop", "origin/nada"), tmp_path, True)
+    assert not isinstance(raised.value, csd.HistoryUnavailable)
+
+
+def test_no_integration_branch_means_no_history(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(csd.subprocess, "run", _Git(resolvable=()))
+
+    with pytest.raises(csd.HistoryUnavailable, match="nenhuma branch de integração"):
+        csd.git_history(csd.INTEGRATION_REFS, tmp_path, False)
+
+
+def test_shallow_clone_means_no_history(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(csd.subprocess, "run", _Git(shallow=True))
 
-    with pytest.raises(csd.GitError, match="clone raso"):
-        csd.git_subjects("HEAD", tmp_path)
+    with pytest.raises(csd.HistoryUnavailable, match="clone raso"):
+        csd.git_history(csd.INTEGRATION_REFS, tmp_path, False)
 
 
-def test_unresolvable_ref_gives_no_verdict(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(csd.subprocess, "run", _Git(ref_ok=False))
+def test_git_that_cannot_run_means_no_history(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def no_git(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[bytes]:  # noqa: ANN401
+        raise FileNotFoundError(2, "No such file or directory", cmd[0])
 
-    with pytest.raises(csd.GitError, match=r"`origin/develop` não resolve .*git fetch"):
-        csd.git_subjects("origin/develop", tmp_path)
+    monkeypatch.setattr(csd.subprocess, "run", no_git)
+
+    with pytest.raises(csd.HistoryUnavailable, match="`git` não pôde ser executado"):
+        csd.git_history(csd.INTEGRATION_REFS, tmp_path, False)
 
 
 def test_git_failure_carries_the_command_and_its_stderr(
@@ -509,4 +714,17 @@ def test_git_failure_carries_the_command_and_its_stderr(
     monkeypatch.setattr(csd.subprocess, "run", broken)
 
     with pytest.raises(csd.GitError, match="not a git repository"):
-        csd.git_subjects("HEAD", tmp_path)
+        csd.git_history(csd.INTEGRATION_REFS, tmp_path, False)
+
+
+def test_main_without_git_has_no_verdict_for_an_explicit_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def no_git(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[bytes]:  # noqa: ANN401
+        raise FileNotFoundError(2, "No such file or directory", cmd[0])
+
+    monkeypatch.setattr(csd.subprocess, "run", no_git)
+    repo = _repo(tmp_path)
+
+    assert int(csd.main(["1.2-ci", "--repo", str(repo)])) == csd.EXIT_ERROR  # leitor real
+    assert "`git` não pôde ser executado" in capsys.readouterr().err
