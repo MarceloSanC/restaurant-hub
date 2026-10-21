@@ -46,6 +46,10 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     FixedSchedule,
     OnDemand,
 )
+from restaurant_hub.shared.infrastructure.http.credential_no_store import (
+    CREDENTIAL_MARK,
+    declares_credential,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -498,3 +502,27 @@ def test_employee_login_response_embrulha_o_registro_e_o_link() -> None:
     assert com_link.setup_link == "https://x/definir-senha?token=t"
     assert por_email.setup_link is None
     assert set(schemas.EmployeeLoginResponse.model_fields) == {"employee", "setup_link"}
+
+
+def test_employee_login_response_declara_o_setup_link_como_credencial() -> None:
+    """Issue #61: é a marca que tira do cache toda resposta de R17.
+
+    A primeira asserção cruza a chave escrita por extenso no schema com o
+    detector de `shared`: um erro de digitação desarmaria a regra sem mais nenhum
+    sintoma. A segunda fixa que, no topo, só `setup_link` é marcado. A terceira
+    guarda o non-goal da issue: `EmployeeResponse` é a resposta de quase toda rota
+    de funcionário, e uma marca nele poria `no-store` em todas. A última confere
+    que a marca no nível do campo não mudou a anotação.
+    """
+    assert declares_credential(schemas.EmployeeLoginResponse) is True
+
+    propriedades = schemas.EmployeeLoginResponse.model_json_schema(mode="serialization")[
+        "properties"
+    ]
+    marcados = {nome for nome, valor in propriedades.items() if valor.get(CREDENTIAL_MARK) is True}
+    assert marcados == {"setup_link"}
+
+    assert declares_credential(schemas.EmployeeResponse) is False
+    assert declares_credential(schemas.JobFunctionResponse) is False
+
+    assert schemas.EmployeeLoginResponse.model_fields["setup_link"].annotation == (str | None)
