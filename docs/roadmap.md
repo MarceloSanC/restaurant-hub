@@ -169,7 +169,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | done | — |
 | [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | open | — |
-| [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | open | — |
+| [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
 | [#60](https://github.com/MarceloSanC/restaurant-hub/issues/60) | Desligar registro revoga todas as sessões da conta — rever antes de um login ter mais de um vínculo | staff | application | open | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
