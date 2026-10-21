@@ -1,32 +1,53 @@
-# Hooks mínimos que espelham `make check` (ruff + mypy) e validam a
-# mensagem de commit contra docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
+# Hooks mínimos que espelham `make check` (ruff, mypy e import-linter) e validam
+# a mensagem de commit contra docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
 #
 # Instalação (uma vez por clone — automatizada em `make setup`):
 #     uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
+#
+# Nenhum hook traz a própria versão da ferramenta (issue #7). Todos são `local` e
+# chamam a ferramenta pelo `uv run`: o mesmo binário, na versão do `uv.lock`, que
+# os targets do Makefile usam. Um repositório remoto pinado por `rev`
+# (ruff-pre-commit, mirrors-mypy) é uma segunda fonte de versão, que se afasta da
+# do lock sem aviso: o ruff do hook aprovou o que o `make lint` rejeitava (Stage
+# 1.1), e o mypy do hook, num ambiente isolado sem PyJWT nem argon2, reprovou o
+# que o `make typecheck` aprovava (Stage 2.4). O
+# `tests/unit/test_precommit_config.py` reprova a volta de um `rev` ou de
+# `additional_dependencies` e cobra que cada hook rode o comando do seu target.
 
 repos:
-  # rev alinhado à versão que o uv resolve para a dep `ruff` do projeto —
-  # drift entre os dois faz hook e `make lint` divergirem (finding da 1.1).
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.21
+  - repo: local
     hooks:
+      # Formata os arquivos do commit. Não tem contrapartida no `make check`: o
+      # target `fmt` aplica a formatação, não a confere
+      # (docs/runbooks/validate-ci-gate.md §Class 2).
       - id: ruff-format
-      - id: ruff
-        args: [--fix]
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
+      # O `make lint` sobre os arquivos do commit, corrigindo o que for seguro.
+      - id: ruff
+        name: ruff check
+        entry: uv run ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+
+      # Exatamente o `make typecheck`: o programa inteiro, não os arquivos do
+      # commit (`pass_filenames: false`). Com a lista de arquivos, o mypy não
+      # olha para quem importa o que mudou — trocar a assinatura de um port
+      # passava no hook e quebrava os implementadores e chamadores em outros
+      # arquivos. Dispara quando muda o que decide o veredito: o código checado,
+      # a configuração (`[tool.mypy]` do pyproject) e o lock (versão do mypy e
+      # dos pacotes tipados).
       - id: mypy
-        files: ^src/
-        args: [--strict]
-        additional_dependencies:
-          - fastapi>=0.111
-          - uvicorn[standard]>=0.29
-          - sqlalchemy>=2.0
-          - alembic>=1.13
-          - pydantic>=2.7
-          - pydantic-settings>=2.3
+        name: mypy (make typecheck)
+        entry: uv run mypy src/ tests/fakes/
+        language: system
+        pass_filenames: false
+        files: ^(src/|tests/fakes/|pyproject\.toml$|uv\.lock$)
 
   - repo: local
     hooks:
