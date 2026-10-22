@@ -88,3 +88,85 @@ PRs EM VOO (já tinham PR aberto contra develop; auditados nesta sessão):
 
 ## Mitigação já aplicada nesta sessão
 - Os hooks git compartilhados apontavam para o venv da worktree feat-60; `make setup` no checkout principal religou-os para `/home/marcelo/Code/restaurant-hub/.venv`.
+
+---
+
+# >>> EXECUTOR DA #12 — progresso detalhado (append 2026-10-21, não apagar) <<<
+
+O executor da #12 NÃO morreu no ADR: a revisão do ADR 0.0.0007 foi commitada (`3d0b6c0`) e
+o executor seguiu. Estado real abaixo. Working tree limpo; nada pendente de `git add`.
+
+## Commits da #12 (origin/develop..HEAD, ordem cronológica)
+- `4d3d512` docs(adr): decidir a checagem por script [#12/task-01]
+- `adc1e6e` chore(tooling): validador check_stage_deps por stage_id + testes [#12/task-02]
+- `474fe1c` chore(tooling): ligar no docs-check [#12/task-03]
+- `53c0ecc` docs(conventions): tabela das formas do identificador §1 [#12/task-04]
+- `5c29a0b` docs(pipeline): glosa nos PROMPT-* + chamada do validador [#12/task-05]
+- `328df9d` docs(pipeline): dependência e verificação do runbook pela forma certa [#12/task-06]
+- `694db05` fix(tooling): exigir dependência MERGEADA + fail-closed [#12/task-02-fix]
+- `e424332` test(tooling): sobreviventes da auditoria (44 mutações mortas) [#12/task-06-extra]
+- `3d0b6c0` docs(adr): rever ADR 0.0.0007 após revisão de completude [#12/task-01-fix]
+
+## Decomposição entregue (7 sub-tasks + 3 extras de fix/cobertura)
+Padronizar os placeholders de Stage que viram comando (stage_id com slug × número). Entregue:
+1. ADR 0.0.0007 (fork C: vale um validador; resolvido pela evidência — issue-first já é mecânico,
+   a prosa errou duas vezes no PR #11).
+2. `scripts/check_stage_deps.py` + `tests/unit/test_check_stage_deps.py` (114 testes). Recebe o
+   stage_id, deriva o número do commit reservado; confere, por dependência: linha na Tabela de
+   Stages, número único, status `done`, e `stage N.M: complete` MERGEADO numa branch de integração
+   (origin/develop, develop, origin/main, main — as mesmas do check_technical_postexec). Dependência
+   de issue (`#N`) conferida pela Tabela de Issues. Alvo = stage_id (número nu recusado, exit 2).
+   Sem argumento = docs-check sobre toda pasta. Sem histórico: alvo explícito → exit 2; docs-check →
+   status + WARN (força do ADR 1.2.0001: make check local não exige histórico completo).
+3. Ligado no `docs-check` (Makefile) + Class 5c no `validate-ci-gate.md` (§Maintenance).
+4. CONVENTIONS §1 "Identificador da Stage": tabela stage_id/número/N-M/N_M/adr_id + issue.
+5. Glosa em PROMPT-stage/autonomous/step/issue: `<N.M>` é número; `<dep>` é stage_id;
+   `<slug-do-adr>` separado de `<slug>` (a substituição ingênua gerava adr com slug da Stage).
+6. RUNBOOK: pré-req chama o validador; verificação de roadmap casa a LINHA da Stage pelo stage_id
+   (`$N\.$M.*done` casava 2 linhas e ficava verde com a Stage em review); verificação de branch
+   pelo nome inteiro (`$N-$M` casava branch de outra Stage).
+
+## FALTA para fechar a #12 (ordem)
+1. **Auditoria de Testes do PROMPT-issue §** (6 itens, por escrito) — a cobertura já foi exercida
+   por 44 mutações reais mortas (log em scratchpad `tools/mutate2.py`); falta redigir as respostas.
+2. **Gates de saída:** `make check` verde (o último rodou em 474fe1c, EXIT=0, 4210 passed, cov
+   99.96% — rodar de novo após os commits de fix); coverage ≥90% no diff (check_stage_deps 99%).
+3. **Comentar [finding]s na issue #12** (lista abaixo) antes de fechar.
+4. **Commit de fechamento:** `docs/roadmap.md` linha #12 open→done + `updated_at`/`last_reviewed_at`
+   = 2026-10-21; `git commit -m "chore(roadmap): fechar issue #12 ... Refs #12"`.
+5. **REMOVER este HANDOFF** antes do PR.
+6. Relatório + recomendação de PR. NÃO abrir PR / merge (regra do prompt).
+
+## Decisões ([decision], para o corpo do PR)
+- D1 (C): vale o validador; recebe stage_id, deriva o número. Ancorado em check_stage_issue (gate
+  irmão), F4/F-C do PR #11, verificação do runbook verde-falsa. Reversível.
+- Fechada = MERGEADA em branch de integração (não HEAD) — revisão de completude mostrou que HEAD
+  deixa passar branch empilhada, contra RUNBOOK/PIPELINE/GIT-WORKFLOW. A versão HEAD virou a
+  Alternativa C rejeitada no ADR (nenhuma versão chegou ao develop).
+- Fonte do depends_on/status = Tabela de Stages (não frontmatter: template em 3A).
+
+## Achados ([finding], comentar na issue #12 — NÃO abrir issue nova, orquestrador decide)
+- F1: o caminho de ADR `N_M_NNNN-<slug>.md` ainda usa `<slug>` no doc dono (CONVENTIONS §1 L98/108),
+  no PIPELINE (L132/337), no template `stage-concept.md` (L89/102) e na skill stage-audit (L180).
+  A glosa `<slug-do-adr>` só entrou nos PROMPT-* e no RUNBOOK; quem preenche o template segue sujeito
+  à colisão. Fora do escopo mínimo desta issue (6 sub-tasks); classe do problema, candidata a
+  follow-up de docs.
+- F2: RUNBOOK Passo 1 usa `$issue` antes de defini-lo (Passo 2 define). Bug pré-existente de doc.
+- F3: `validate-ci-gate.md` §Purpose listava 3 scripts do docs-check; o Makefile tem 6 — corrigido
+  nesta issue (task-03), mas check_docs_claims/check_harness tinham entrado sem atualizar o runbook.
+
+## Revisão de completude (decision-reviewer) — já tratada
+Rodou e apontou: (a) HEAD deixa passar branch empilhada → corrigido (fechada=mergeada, task-02-fix);
+(b) exit 2 em clone raso feria "make check local sem histórico" → corrigido (docs-check degrada p/
+WARN, alvo explícito mantém exit 2); (c) fail-closed escapava por traceback (git ausente, roadmap
+não-UTF-8) → corrigido p/ exit 2; (d) dependência de issue `#N` virava erro de forma → agora
+conferida na Tabela de Issues. Resto = ajustes de texto, aplicados ou registrados como finding.
+
+## Auditoria de testes independente — já tratada
+Subagente adversarial achou 2 verdes-falsos sobreviventes (alvo não-primeiro S10; dependência
+aberta antes de fechada M1) + fail-closed furado. Todos cobertos no task-06-extra; re-mutação de
+44 mutantes (incl. os 2) = 44 mortos. Script e testes restaurados byte a byte (git status limpo).
+
+## Pré-condições (todas verdes no início)
+Working tree limpo; branch docs/12-stage-placeholders; issue #12 OPEN; linha #12 no roadmap `open`;
+sem depends_on. Nenhuma contradição com fonte superior. Nenhuma bifurcação P (só E/C, resolvidas).
