@@ -977,3 +977,15 @@ overview §3/§5/§6; roadmap Stage 4.3 e blocos 4.4–4.6; shift-scheduling.md 
 > LAYOUT, overview, ADRs 0.0.0005/0.0.0006/2.2.0002/2.6.0001/3.4.0001/3.4.0007/3.5.0001/3.6.0001 nem
 > check_layout.py; leu 3.7.0001 e 2.6.0002 dos worktrees locais refactor-49/refactor-46 (confirmar que
 > batem com origin). D-NOW/D-PAST/D-NOOP/D-TERM/D-ERRWRAP só parcialmente cruzados.
+
+---
+
+## DECISÃO DO ORQUESTRADOR sobre D1/D3 (2026-10-21, por delegação do sponsor — revogável pelo sponsor)
+
+Com base na triagem por evidência (apêndice acima) e nas recomendações do agente evidence-resolution:
+
+- **D1 → (a) mostrar e corrigir.** Nada muda em staff. A escala vigente pode conter a violação (inclusive `block` de indisponibilidade) até a gerente desalocar; os invariantes do doc §3.5/§3.6.6/§3.6.7 passam a valer só para o que a ESCALA introduz (nota datada). A nota datada do doc de domínio deve incluir, além de férias e função, a **edição de carga** (workload_policy) e a **recontratação** (ADR 4.1.0006) como origens da violação pré-existente.
+- **D2 → (b) no-op no domínio** (já fechada como C pela evidência; `Schedule.change_demand_quantity` devolve `self` com o mesmo N; errata no concept 4.1 §5.16 + ADR da 4.3).
+- **D3 → (b) recusar revelando contagem + ids das alocações de desligados** (sem nomes), para desalocação explícita no mesmo lote, auditada como ato da gerente; UX na 4.5. (c) auto-remover está EXCLUÍDA por evidência (reintroduz a cascata recusada em Q1 e desarma L-E5). Se o produto julgar que expor ids fere F7, reavaliar — mas (b)-sem-ids reabre o beco sem saída.
+
+Essas três decisões fecham a §7 do concept-draft (§D acima). Próximo passo no Windows: gravar o concept com elas, Checkpoint A, technical, execução.
