@@ -5,7 +5,7 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-10-19
+updated_at: 2026-10-21
 last_reviewed_at: 2026-10-19
 ---
 
@@ -1325,14 +1325,14 @@ skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin
 >   não derivado do escopo (ADR 0.0.0005 cl. 1). Supersessão parcial datada nos ADRs 3.2.0002 ("use
 >   cases sem ator"), 3.4.0001 §4 (só para `authorize`) e 3.6.0004 (a regra da checagem mais barata
 >   vale depois da autorização), e errata no concept 3.2 §5.16.
-> - **File-scope real:** os arquivos do bloco, mais `test_application_authorization_chain.py` (CA14,
->   cadeia de produção sem banco), as suítes de borda unitárias que montam use case por reflexão e as
->   sequências exatas de chamada ao guard. `tests/e2e/` **intocado** e verde — nenhuma faixa HTTP mudou.
+> - **File-scope real:** os arquivos do bloco (os dois dublês num módulo só, `stub_access_guards.py`), mais `test_application_authorization_chain.py`
+>   (CA14, cadeia de produção sem banco), as suítes de borda unitárias que montam use case por reflexão, as sequências exatas de chamada ao guard
+>   e 178 citações por linha deste roadmap remapeadas em sete docs de scheduling (technical §7). `tests/e2e/` **intocado** e verde — nenhuma faixa HTTP mudou.
 > - **7 Tasks + 3 `fix` + 1 `extra`.** Os Checkpoints C acharam três classes de buraco que um caminho
 >   feliz não pega: o ator não registrado pelos dublês (autorizar `None` passava), tabela e código
 >   errando juntos (a cópia autorizando a origem duas vezes) e recusa por motivo errado no CA14; a
 >   auditoria independente aplicou **13 mutações reais, todas mortas**, e apontou dois testes de efeito
->   faltantes. **4220 testes**, arquivos da Stage a **100%**.
+>   faltantes. **+307 testes** sobre a base, arquivos da Stage a **100%**.
 > - **Findings abertos** (technical §7): autenticidade do ator e validação de identificador fora da
 >   borda HTTP (Stage do primeiro driver não-HTTP), staff como provedor do `StaffReadPort` e a adoção do
 >   padrão na 4.3, ponteiros `(#49)` do lado de identity, custo da dupla autorização (6.3).
