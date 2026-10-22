@@ -88,3 +88,41 @@ PRs EM VOO (já tinham PR aberto contra develop; auditados nesta sessão):
 
 ## Mitigação já aplicada nesta sessão
 - Os hooks git compartilhados apontavam para o venv da worktree feat-60; `make setup` no checkout principal religou-os para `/home/marcelo/Code/restaurant-hub/.venv`.
+
+---
+
+## Auditoria do PR #70 (Stage 2.6-identity-unit-of-work) — CONCLUÍDA (2026-10-21, auditor Opus)
+
+**Veredito: aprovada com findings, sem bloqueante.** Tudo aplicado e no remoto; label `audit-status` = `complete`; `mergeStateStatus: CLEAN`; CI `lint-and-test` verde no HEAD `c32be94`. NÃO foi feito merge (é passo da fila do orquestrador). A auditoria está FECHADA — não falta nada; o que segue é registro.
+
+### Commits de fix empurrados (push feito, `dfa2410..c32be94`)
+- `d136914` test(identity): cobrir os sobreviventes da auditoria da Stage no contrato da unidade [2.6/--]
+- `c32be94` docs(identity): marcar os CAs da 2.6 e registrar a auditoria da Stage [2.6/--]
+
+### Gates verificados
+- `make check` EXIT=0 em `dfa2410` (4342 passed, cov 99,96%), em `d136914` (4345) e em `c32be94` (4345). 100% de linha/ramo em todo arquivo novo. import-linter 10 kept. check_layout regra 10 verde. check_technical_postexec OK. roadmap 2.6 `done`. ADRs 2.6.0001/0002 `accepted`.
+- Postgres da worktree na 5442; baseline sincronizado com `uv sync --extra dev`.
+
+### Findings (todos non-blocker, dentro da Stage) — corrigidos no PR
+- F1: 14 CAs do concept §11 com caixa aberta (com evidência) → marcados em `c32be94`.
+- F2: §7 citava 8 hashes de antes do rebase (561ee2b, 42fcfd9, 5e584c3, 63ca1ad, 9cb5f6f, 723ef33, f74017c, 6213d9f), inexistentes na branch → trocados pelos reais (437f240, 4e95686, 3491e4a, 234e1e7, 4965609, 6cc0632, c6fc507, 1876351) em `c32be94`.
+- F3: `dfa2410` (`[2.6/--]`) sem entrada na §7 → registrado em `c32be94`.
+- F4: 3 mutantes sobreviventes no contrato da unidade (`test_unit_of_work_contract.py`): apagar linha de `_ESCRITAS`/`_LEITURAS` ficava verde (1223/1225 passed); L5 não provava "nenhum estado publicado" (925 passed) → `d136914` deriva a totalidade das tabelas dos ports de `ports/out/*_repository.py` e acrescenta L5 com a externa desfeita depois da recusa. Mortos.
+
+### Verificação pela borda HTTP (uvicorn real, Postgres, argon2/emissor reais) — refeita
+- 2× POST /auth/refresh simultâneos: `[200,401]` em 12/12 nesta branch (vencedora morta); develop `b2e1c68` deu `[200,200]` em 11/12.
+- POST /auth/password com escrita falhando (trigger temp): 500, token NÃO consumido; sem falha: 204 e login 200. Develop: token consumido, retentativa 401.
+- Mutações dirigidas (cópia descartável): 8 mortas desde o início (savepoint, retorno do revoke, L5-após-checkout, publicação não desfeita, conexão não chaveada pelo engine, unidade sobre outro engine, consume fora da unidade, fake grava antes de validar).
+
+### Observações registradas no comentário do veredito (sem ação nesta Stage)
+- `# type: ignore` inertes em testes (mypy só cobre src/ e tests/fakes/).
+- Corpo do ADR 2.6.0002 §5 editado após `accepted` (`6cc0632`, pré-merge, declarado na §7) — CONVENTIONS não abre exceção explícita; merece esclarecimento. [classe: doc/convenção — orquestrador decide se abre issue]
+- Regra 10 tem pontos cegos não declarados no ADR: anotação não-nome (`X | None`, `Optional[X]`), atributo vindo de expressão, `posonlyargs`. Nada ocorre hoje. [classe: tooling — issue separada possível]
+- Nota do roadmap diz "7 commits de correção"; são 8. Não corrigido (cosmético; evita tocar frontmatter com #71/#69 na fila).
+
+### ALERTA para a fila de merge (#70 → #71 → #69) — após rebaixar sobre develop já com #70
+- #69 adiciona `IdentityGateway.is_employee_login` (LEITURA): o teste `test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado` (pinado em `tests/unit/test_check_layout.py`) fixa o conjunto EXATO de métodos de `IdentityGateway` → ficará VERMELHO até `is_employee_login` ser acrescentado à asserção. Não é bug de #70; é o pino de totalidade funcionando.
+- #69 e #71 mexem em `deactivate_employee.py` / `create_login_for_employee.py`, ambos na `MULTI_WRITE_ALLOWLIST` da regra 10 (ADR 2.6.0002 §2). Entrada de allowlist que deixe de violar também reprova — reconferir a regra 10 após cada rebase.
+
+### Artefatos de auditoria (scratchpad, fora do repo)
+`/tmp/claude-1000/-home-marcelo-Code-restaurant-hub/d9052cc8-6c1a-4aeb-8f85-45b87c5bf93d/scratchpad/audit70/` — logs de make check, mutate.py (mutações), e2e_audit.py (verificação HTTP), comentario_veredito.md, pr70_body_after.md.
