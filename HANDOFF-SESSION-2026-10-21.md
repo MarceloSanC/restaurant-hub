@@ -88,3 +88,55 @@ PRs EM VOO (já tinham PR aberto contra develop; auditados nesta sessão):
 
 ## Mitigação já aplicada nesta sessão
 - Os hooks git compartilhados apontavam para o venv da worktree feat-60; `make setup` no checkout principal religou-os para `/home/marcelo/Code/restaurant-hub/.venv`.
+
+---
+
+# Auditoria do PR #71 (Stage 3.7-application-authorization) — progresso do auditor (2026-10-21)
+
+**Veredito formado: APROVADA COM FINDINGS, nenhum bloqueante.** A passada read-only (Fases A–D-bis) terminou; os fixes dos findings já estão commitados na branch. O que falta é só a aplicação no lado do GitHub (corpo do PR, comentário do veredito, label) — ver "O QUE FALTA".
+
+## Gates medidos (verdes), HEAD auditado e commits de fix
+- Branch antes dos meus fixes estava em `21ba10e` (`docs(roadmap): manter as citações … [3.7/--]`). Fixes aplicados nesta sessão, cada um com `make check` EXIT=0 verde antes do commit (logs em `/tmp/.../scratchpad/audit71/make_check_{A,B,C,D}.log`):
+  - `06e164e` docs(staff): contar as três permissões nos docstrings do vocabulário [3.7/--]  (F5)
+  - `bd67851` docs(staff): marcar os CAs da 3.7 e registrar a auditoria da Stage [3.7/--]  (F1 + F2 + F3 + registro da auditoria na §7 do technical, com V1/V2 e as 12 mutações)
+  - `0686dd6` docs(scheduling): manter a citação do doc de domínio ao AuthorizedScope de staff [3.7/--]  (F6)
+  - `942e22e` docs(scheduling): … nota da 3.7 no roadmap [3.7/--]  (F3 roadmap — **minha edição WIP, preservada pelo orquestrador**; conteúdo confere com o que eu tinha editado: file-scope cita stub único + 178 citações, "+307 testes", updated_at 2026-10-21; contagem de linhas do roadmap intacta, Step 4+ idêntico)
+- `make check` no HEAD da branch (antes dos fixes e re-rodado após cada fix): **4454 passed** (4147 do develop + 307 da Stage), cobertura total **99,96%**, **100% em cada um dos 25 arquivos de `src/` tocados** (`coverage report --fail-under=90 --include=<arquivos do diff>` → 863 stmts, 0 miss, exit 0). mypy strict OK (216 arquivos); ruff OK; `check_layout`/`check_dead_shared` OK; import-linter **10 contratos mantidos** (bc-independence staff↔identity com zero ignore_imports); `check_technical_postexec` OK; `check_stage_issue` OK (issue #49); `check_docs_claims` OK; `check_harness` 0 achados. Lock sincronizado.
+- Baseline de contagem confirmada: develop coleta 3913 testes antes do merge da 4.2, 4147 após (b2e1c68); branch coleta 4454 (+307).
+- ADR 3.7.0001 em `status: accepted`. Supersessões parciais datadas em 3.2.0002, 3.4.0001 §4 e 3.6.0004, e errata no concept 3.2 §5.16 — todas conferidas contra o texto citado (as citações batem literalmente).
+- CA09/CA10/CA11/CA12 pelos comandos do technical §3: `git diff origin/develop -- tests/e2e` vazio; `test_http_boundary_sweeps.py` intocado; `git grep '= "manage_'` em staff só acha `access_guard.py`; as três frases que a Stage deveria remover não existem mais; os dois `(#49)` restantes são só do lado de identity (legítimos).
+
+## Verificações funcionais do §3 (rodadas pelo auditor FORA do repo, sobre cópias da árvore + Postgres da worktree :5443)
+Script salvo em `/tmp/.../scratchpad/audit71/test_zz_audit71_functional.py` (NÃO versionar).
+- **V1 (API real, app de produção):** gerente cria função (201), cria funcionário (201), lista (200), copia (201); gerente só da unidade A → 403 ao listar B e 403 ao copiar p/ B; dono de outro tenant → 403 ao listar A e 200 (lista vazia) no próprio catálogo. **Os mesmos status rodando sobre o develop** (regressão zero).
+- **V2 (driver em processo sobre `wire_dependencies`, atores emitidos pela app via login+authenticate reais):** dono de outro tenant recusado com `TenantNotVisibleError` ao listar/criar funcionário/criar função/copiar/criar login; gerente só de A recusado com `UnitNotVisibleError` ao listar B e copiar p/ B; contagens de A, B e catálogo iguais antes/depois; controle positivo (dono de A cria função pelo driver) passa. No develop V2 nem compila (commands sem `actor`) — é a capacidade nova da Stage.
+
+## Mutações do auditor (12, todas mortas pela suíte unitária de staff; nº de testes que cada uma mata)
+cópia autoriza origem 2× =4 · ordem login invertida =4 · autorização condicional =1 (só CA15) · checagem pura antes da autz =1 (só CA15) · lê o escopo devolvido =17 · traduz a exceção do guard =9 · omite unidade =6 · omite tenant no catálogo =11 · permissão errada =32 · outro guard no composition_root =1 (só CA08) · ator trocado por object() =38 · leitura da origem entre as 2 autz da cópia =2. Nenhuma sobreviveu.
+
+## Findings (todos NÃO bloqueantes; disposição aplicada)
+- **F1** 15 CAs do concept §11 com caixa aberta, todos com evidência → marcados `[x]` em `bd67851`.
+- **F2** hashes `6cc72e0`/`12b895a`/`706753b` citados na §7 do technical não existem (reescritos pelo rebase) → trocados pela tag do commit (`[3.7/task-03-fix]` etc.) em `bd67851`.
+- **F3** commit do remapeamento de 178 citações sem entrada na §7, e nota do roadmap omitia os 7 docs + repetia nome de dublê previsto → entrada nova na §7 + nota do roadmap corrigida (`bd67851` + `942e22e`).
+- **F4** verificações funcionais do §3 não registradas → rodadas (V1/V2 acima) e registradas na §7 (`bd67851`).
+- **F5** docstrings do vocabulário diziam "duas permissões/dois valores" (port e borda), hoje são 3 → corrigido em `06e164e` (contagem de linhas do port preservada).
+- **F6** `shift-scheduling.md` citava `access_guard.py` 90–109, deslocado p/ 108–127 pelo bloco de constantes → remapeado em `0686dd6`.
+- **Observações sem ação:** 3 `type: ignore` novos em tests/unit repetem idioma de test_dtos (inertes — typecheck só cobre src/ e tests/fakes); test_application_authorization_chain importa CENARIOS/_montar de outro módulo de teste (acoplamento deliberado, uma fonte só); ADR 3.7.0001 cita em EN entre aspas o princípio que o 3.6.0004 escreve em PT (mesmo sentido).
+
+## Classificação de escopo dos findings (D-bis #1)
+Todos F1–F6 são **dentro da Stage** (documentação/rastreabilidade da própria 3.7) e foram corrigidos. Nenhum vira issue separada. Os `[finding]` da §7 do technical (autenticidade do ator fora da borda HTTP; validação de identificador fora da borda; staff como provedor do StaffReadPort/4.3; padrão 3.7.0001 em scheduling/4.3; ponteiros (#49) de identity; custo da dupla autz/6.3) são **issues pós-Stage** já com Stage candidata nomeada — orquestrador decide se abre; NÃO abri nenhuma.
+- **[P] nenhum fork de produto nesta auditoria** — todos os forks da Stage são C/E (o comportamento visível ao usuário não muda; §6 do concept).
+
+## O QUE FALTA (fase de aplicação da stage-audit — só lado GitHub, nada de código)
+1. **Corpo do PR #71**: marcar o checklist — `concept.md não precisa de retoque retrospectivo` deve ficar `[x]` (os CAs foram marcados, não é retoque de conteúdo); `Runbooks` fica `[ ]` (n/a). Opcional: acrescentar 1 linha no "Decisões e achados" citando a auditoria.
+2. **Trocar o label de auditoria** no corpo do PR de `> **Auditoria:** \`review\`` para `> **Auditoria:** \`complete\`` (CONVENTIONS §3.6; o check `audit-status` fica verde). NÃO editar à mão em outra sessão — é a sessão de auditoria que grava.
+3. **Publicar comentário do veredito** no PR #71: `VERDICT: aprovada-com-findings`; gates numéricos (4454 passed, 99,96%, 100% por arquivo, 10 contratos, ADR accepted); F1–F6 com disposição e hash; V1/V2; 12 mutações mortas; findings pós-Stage listados (sem abrir issue).
+4. **Push** dos commits `06e164e bd67851 0686dd6 942e22e` (+ handoff) para `origin/refactor/49-3-7-application-authorization`. **SEM rebase** (o rebase é da fila de merge #70→#71→#69, do orquestrador). **NUNCA merge.**
+5. Rascunho do comentário do veredito ainda não escrito em arquivo; reconstituir desta seção.
+
+## Riscos/notas para quem retomar
+- Rate limit possível até 22:20 America/Sao_Paulo.
+- A fila de merge é #70→#71→#69; após #70 esta branch rebaseia (conflitos esperados em composition_root.py e roadmap.md) — é passo do orquestrador, não do auditor.
+- Colisão de número com #69 (também "3.7"): decidido que #71 fica com 3.7 e #69 vira 3.8 no rebase — não é achado desta auditoria.
+- Postgres da worktree: `localhost:5443`, container `refactor-49-3-7-application-authorization-postgres-1`, DATABASE_URL no `.env` da worktree.
+- Scratchpad do auditor: `/tmp/claude-1000/-home-marcelo-Code-restaurant-hub/<uuid>/scratchpad/audit71/` (logs de make check, scripts de mutação e de verificação de citações, cópias base/branch da árvore).
