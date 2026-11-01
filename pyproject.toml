@@ -187,6 +187,9 @@ also_copy = [
     ".github/",
     ".importlinter",
     ".env.example",
+    # `test_database_url_guard.py` cobra o default de porta do compose contra o
+    # arquivo (issue #58).
+    "docker-compose.yml",
 ]
 # `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
 # conveniência.

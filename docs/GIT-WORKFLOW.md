@@ -539,7 +539,10 @@ O script, num único comando:
 - copia `.env`/`.env.local` do checkout principal;
 - **gera portas livres no `.env` da worktree** (`APP_PORT`,
   `POSTGRES_PORT`, `REDIS_PORT`) para o devcontainer/docker compose da
-  paralela não brigar com o da principal por bind no host;
+  paralela não brigar com o da principal por bind no host, e **leva a
+  `DATABASE_URL` para a mesma `POSTGRES_PORT`** (acrescentada se faltar; só
+  com host `localhost`/`127.0.0.1`/`::1` — o host `postgres` fala na porta do
+  contêiner e fica como está);
 - roda `make setup` (uv venv + deps + pre-commit hooks);
 - abre uma nova janela do VS Code na worktree.
 
@@ -570,22 +573,37 @@ O `docker-compose.yml` do template foi desenhado para ser
 Se adicionar um serviço novo ao compose com porta exposta no host
 (ex.: mailhog), inclua a variável correspondente em `PORT_DEFAULTS`
 dentro de `scripts/worktree-new.py` para entrar na rotação de
-auto-atribuição.
+auto-atribuição. Se a app ler uma URL dele, a chave da URL vai em
+`URL_PORT_KEYS` (a porta da URL acompanha) e o default dela, o do
+`Settings`, em `URL_DEFAULTS` — sem ele, a worktree cujo `.env` copiado
+não traz a chave fica no default, na porta do checkout principal, e a
+issue #58 se repete nesse serviço. A guarda da suíte confere só a
+`DATABASE_URL`.
 
 #### Banco e containers da worktree
 
-Duas armadilhas que a suíte verde não denuncia:
+Cada worktree tem o **seu** Postgres, publicado na `POSTGRES_PORT` do
+`.env` dela. O script já escreve a `DATABASE_URL` nessa porta (issue #58),
+e a fixture `database_url` (`tests/conftest.py`) **recusa** a sessão de
+testes quando a URL, com host loopback, não aponta para a porta que o
+compose do checkout publica — a `POSTGRES_PORT` do ambiente ou do `.env`
+da raiz, ou 5432 sem ela. Recusa antes de conectar, porque a fixture
+`engine` recria o schema e derrubaria o banco de outra frente; e o
+`Settings` lê o `.env` do diretório corrente, então o `pytest` roda da
+raiz da worktree. Cabe a quem usa a worktree subir e derrubar esse banco:
 
-- **O `.env` gerado não traz `DATABASE_URL`.** Sem ela, `Settings()`
-  cai no default (porta 5432, o banco do checkout principal), e a
-  fixture que recria o schema derruba o banco de outra frente. Ao abrir
-  a worktree: `docker compose up -d postgres` dentro dela e acrescentar
-  `DATABASE_URL=...@localhost:<POSTGRES_PORT>/...` ao `.env` antes do
-  primeiro `pytest`.
-- **`worktree-rm.py` só remove containers com label de devcontainer.**
-  O `postgres` subido por `docker compose up` fica órfão segurando a
-  porta. Rodar `docker compose down -v` dentro da worktree **antes** de
-  removê-la; conferir com `docker ps -a --filter name=<pasta-da-worktree>`.
+- **Ao abrir a worktree:** `docker compose up -d --wait postgres` dentro
+  dela, antes do primeiro `pytest`. Se o `up` falhar com a porta
+  ocupada, algo já a segura — tipicamente o Postgres órfão de uma
+  worktree removida sem o passo abaixo, que o script não enxerga (ele só
+  lê as portas do `.env` das worktrees registradas). Liberar a porta, ou
+  trocar `POSTGRES_PORT` e `DATABASE_URL` juntas; nunca rodar a suíte
+  contra o que responde nela — a guarda confere portas, não de quem é o
+  banco.
+- **Antes de remover a worktree:** `docker compose down -v` dentro dela.
+  `worktree-rm.py` só remove containers com label de devcontainer; o
+  `postgres` subido por `docker compose up` ficaria órfão segurando a
+  porta. Conferir com `docker ps -a --filter name=<pasta-da-worktree>`.
 
 Quando o PR daquela worktree mergear, remover worktree + branch local:
 

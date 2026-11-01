@@ -169,12 +169,17 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | done | — |
 | [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | open | — |
+| [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
 | [#60](https://github.com/MarceloSanC/restaurant-hub/issues/60) | Desligar registro revoga todas as sessões da conta — rever antes de um login ter mais de um vínculo | staff | application | open | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
 | [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | open | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | open | — |
 | [#82](https://github.com/MarceloSanC/restaurant-hub/issues/82) | Tripwire para campo de credencial em resposta que nasça sem a marca `x-credential` (especulativa; disparo: rota de reemissão do link ou primeiro frontend do Step 3) | shared | tests (e2e) | open | #61 |
+| [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | open | #58 |
+| [#85](https://github.com/MarceloSanC/restaurant-hub/issues/85) | `make migrate` e `make run` sem a guarda da `DATABASE_URL` da worktree | shared | tooling | open | #58 |
+| [#86](https://github.com/MarceloSanC/restaurant-hub/issues/86) | `migrations/env.py` ignora a `sqlalchemy.url` passada pelo chamador | shared | migrations + tests | open | #58 |
+| [#87](https://github.com/MarceloSanC/restaurant-hub/issues/87) | Mutação noturna morre na coleta — `.claude/` fora do `also_copy` | shared | tooling + ci | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
