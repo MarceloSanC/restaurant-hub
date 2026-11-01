@@ -9,7 +9,7 @@ montado a partir de `EmployeeResult`, não de `Employee` — e a propriedade é
 verificável como **ausência de import**: nenhum módulo deste pacote importa
 símbolo de `staff.domain.entities` (CA05).
 
-Cinco decisões deste módulo valem explicação, e nenhuma é cosmética.
+Seis decisões deste módulo valem explicação, e nenhuma é cosmética.
 
 **1. Nenhum request tem `tenant_id`, e a ausência é a defesa.** O tenant vem do
 token e é resolvido no `composition_root` (ADR 0.0.0005); em staff ele não
@@ -56,6 +56,16 @@ tarde, noite, madrugada —, que é a sequência que a língua ubíqua já carre
 a ordem alfabética embaralharia. "Ordenado" sozinho deixaria duas leituras
 defensáveis para o segundo campo.
 
+**6. O segredo de R17 é declarado credencial no campo, e é isso que tira a
+resposta do cache** (issue #61). `setup_link` é `SetupLink`: a marca
+`x-credential` no JSON Schema do campo faz o middleware de
+`shared/infrastructure/http/credential_no_store.py` gravar `Cache-Control:
+no-store` e `Pragma: no-cache` em toda resposta de R17 — nos dois canais, porque
+a política é da rota, não do valor. A chave vai por extenso porque adapter não
+importa `shared.infrastructure` (LAYOUT §3); o teste deste schema a confere contra
+o detector de `shared`. A marca fica no nível do campo, e não dentro da união,
+para que a anotação continue `str | None`.
+
 **A conversão de texto para value object acontece no router, não no schema.** É
 o que faz a falha ser erro de **domínio** — e cair no mapa de status de
 `error_handlers.py` — em vez de virar `RequestValidationError` do FastAPI, que
@@ -94,6 +104,11 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 _ORDEM_DO_PERIODO: Final[dict[DayPeriod, int]] = {
     periodo: posicao for posicao, periodo in enumerate(DayPeriod.__members__.values())
 }
+
+# O link de definição de senha numa resposta (decisão 6 do módulo). A rota irmã de
+# R17 que vai reemitir o link (concept 3.5 §10) devolve este mesmo valor: o schema
+# dela usa este alias, e é a marca — não o nome do schema — que lhe dá `no-store`.
+SetupLink = Annotated[str | None, Field(json_schema_extra={"x-credential": True})]
 
 
 # ---------------------------------------------------------------------------
@@ -309,11 +324,12 @@ class EmployeeLoginResponse(BaseModel):
     `setup_link` é `null` no canal `email` — o link foi por e-mail e a API não o
     repete. No canal `link` é o único ponto em que o valor de um token de
     definição de senha sai por API (carve-out do ADR 3.5.0002), para quem acabou
-    de provar `manage_staff` **e** `manage_users` sobre a unidade.
+    de provar `manage_staff` **e** `manage_users` sobre a unidade. É `SetupLink`, e
+    a marca dele mantém a resposta fora de cache (decisão 6 do módulo).
     """
 
     employee: EmployeeResponse
-    setup_link: str | None
+    setup_link: SetupLink
 
     @classmethod
     def from_result(cls, result: EmployeeLoginResult) -> "EmployeeLoginResponse":
