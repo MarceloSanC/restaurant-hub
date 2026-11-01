@@ -79,6 +79,11 @@ nunca o relatório nem o raciocínio do implementador. Roda a skill `stage-audit
    reporta o que travou.
 5. Devolve ao orquestrador: veredito, hash do merge (ou o bloqueio), issues abertas, aprendizados.
 
+> **Override consciente da skill.** `stage-audit`/`issue-audit` dizem "nunca faz merge — é do
+> usuário, salvo pedido explícito". Aqui o **pedido explícito é esta seção**, ratificada no
+> [ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md): o auditor
+> despachado por este prompt mergeia, e só com as condições do passo 3.
+
 ## 4. Relatório ao humano
 
 A cada item mergeado, uma linha (PR, hash, o que entrega). Forks P e itens estacionados vão juntos,

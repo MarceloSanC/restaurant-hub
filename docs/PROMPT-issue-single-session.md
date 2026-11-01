@@ -229,7 +229,8 @@ do fluxo — sem ele, o resto dos gates dá falso positivo.
 
 Todos OBRIGATÓRIOS antes do commit de fechamento:
 
-- [ ] `make check` verde localmente.
+- [ ] `make check` verde localmente (sob orquestração autônoma: verde no
+      run do Actions do head do PR — exceção em §REGRA DE PR).
 - [ ] `make test-cov` mostra coverage ≥ 90% no código novo da issue
       (não na média do repo — no diff da branch).
 - [ ] Auditoria de Testes (acima) com todos os itens "sim".
