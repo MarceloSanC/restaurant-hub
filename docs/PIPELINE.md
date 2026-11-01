@@ -796,10 +796,18 @@ e [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
    - **registra a auditoria no PR** — comentário com o veredito + o label
      de auditoria gravado como `complete` (procedimento completo na skill
      de auditoria);
-   - **o merge é do usuário** (salvo pedido explícito, ou corrida autônoma
-     autorizada — exceção registrada no
-     [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md), cuja regra
+   - **o merge é do usuário** (salvo pedido explícito, corrida autônoma
+     autorizada — [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md)
+     — ou orquestração de Step —
+     [ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md); a regra
      de aprovação vive em [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §Gates de PR).
+
+**Orquestração autônoma** ([`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md),
+[ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)):
+as duas sessões acima viram subagentes de contexto zerado despachados por
+uma sessão mestra, cada Stage/issue na sua worktree (até três ao mesmo
+tempo); o `make check` completo roda no GitHub Actions do PR (draft desde o
+primeiro push) e o **auditor**, validado o PR, faz rebase, merge e limpeza.
 
 O fluxo multi-sessão por fase (3A/3B/4 em sessões separadas, seguindo o
 RUNBOOK passo a passo com gate textual em cada transição) permanece o

@@ -5,7 +5,7 @@ when-use: Issue avulsa da tabela de issues do roadmap com escopo delimitado, sob
 keywords: [prompt, issue, single-session, execucao, lifecycle]
 status: draft
 created_at: 2026-06-10
-updated_at: 2026-06-10
+updated_at: 2026-11-01
 ---
 
 # Prompt — Execução de Issue Avulsa em Sessão Única
@@ -229,7 +229,8 @@ do fluxo — sem ele, o resto dos gates dá falso positivo.
 
 Todos OBRIGATÓRIOS antes do commit de fechamento:
 
-- [ ] `make check` verde localmente.
+- [ ] `make check` verde localmente (sob orquestração autônoma: verde no
+      run do Actions do head do PR — exceção em §REGRA DE PR).
 - [ ] `make test-cov` mostra coverage ≥ 90% no código novo da issue
       (não na média do repo — no diff da branch).
 - [ ] Auditoria de Testes (acima) com todos os itens "sim".
@@ -273,6 +274,18 @@ Refs #<issue>"
 - Uma marcada como **(Recomendada)** + razão de 1 linha.
 
 # REGRA DE PR (CRÍTICA — NÃO VIOLAR)
+
+> **Exceção — orquestração autônoma.** Despachado pelo
+> [`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)
+> ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)),
+> o parágrafo abaixo **não** vale: você trabalha só na worktree recebida,
+> faz `git push` e abre o PR como **draft no primeiro push** (corpo do
+> template `.github/PULL_REQUEST_TEMPLATE.md`, label de auditoria em
+> `review` preservado), empurra a cada sub-task — o `make check` completo
+> roda no GitHub Actions do PR; localmente, só checks focados — e fecha com
+> `gh pr ready` + o relatório. A evidência de `make check`/coverage é o run
+> do Actions. Fork que pediria `AskUserQuestion` volta ao orquestrador.
+> Merge **nunca** é seu: é do auditor despachado depois.
 
 **VOCÊ NUNCA ABRE PR.** Não execute `gh pr create`. Não execute `git push`.
 Não execute `gh pr merge`.

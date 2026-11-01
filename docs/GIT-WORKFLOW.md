@@ -5,7 +5,7 @@ when-use: Consultar antes de qualquer mudança de código. Todos os membros do t
 keywords: [git, github, workflow, ci-cd, pr, code-review, deploy]
 status: done
 created_at: 2026-05-12
-updated_at: 2026-05-15
+updated_at: 2026-11-01
 ---
 
 # Git Workflow Padrão
@@ -36,6 +36,9 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
    `develop`, limpo** — nunca se cria nem se troca de branch nele (o hook
    `.claude/hooks/git_guard.py` recusa). Ver §"Branches em execução" para
    critérios, comando, limpeza e o procedimento de PR parcial.
+   **Na orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md))
+   o teto é outro: **três worktrees de implementação**, contando as com
+   PR aberto ainda não mergeado (§"Branches em execução").
 
 ---
 
@@ -84,9 +87,24 @@ referenciam esta seção em vez de duplicar a lista:
   accepted` **e** a Stage dentro do recorte em "Authorized runs"), a
   aprovação humana é substituída por **auditoria de contexto limpo**
   (`stage-audit` por sessão fresca, que grava o label `complete` —
-  CONVENTIONS §3.6). Fora de corrida autorizada, a aprovação continua
-  obrigatória. Esta é a exceção **registrada no dono**, como manda
-  CONVENTIONS §0 — sem ela o ADR seria letra morta.
+  CONVENTIONS §3.6).
+  **Exceção — orquestração de Step:** na sessão mestra do
+  [`PROMPT-step-single-session.md`](./PROMPT-step-single-session.md)
+  ([ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md)), a
+  aprovação humana também é substituída pela auditoria de contexto limpo:
+  a mestra mergeia sozinha quando valem as condições de §3.4 daquele
+  prompt (label `complete` gravado pelo auditor, sem blocker, CI verde,
+  branch atualizada, nenhum fork P/HALT pendente).
+  **Exceção — orquestração autônoma:** com o
+  [`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)
+  ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)),
+  quem mergeia é o **auditor de contexto limpo** que auditou o PR, e só
+  quando valem as condições de merge da §3 daquele prompt (label
+  `complete`, sem blocker, Actions verde no head inclusive `audit-gate`,
+  branch rebaseada sem carona, nenhum fork P pendente).
+  Fora dessas três exceções, a aprovação continua obrigatória. Elas são
+  **registradas no dono**, como manda CONVENTIONS §0 — sem isso os ADRs
+  seriam letra morta.
 - **Branch atualizada:** PR precisa estar à frente da base (`Require
   branches to be up to date`).
 - **Conversas resolvidas:** todos os comentários do code review devem
@@ -469,6 +487,15 @@ isolamento costuma:
 A worktree resolve o primeiro; o teto de duas e o critério de conflito
 resolvem os outros dois.
 
+**Orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md),
+[`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)):
+o teto passa a ser de **três worktrees de implementação existindo ao
+mesmo tempo**, contando as com PR aberto ainda não mergeado (cada uma
+segura uma sessão viva — o teto é de custo). Uma nova só abre quando
+outra é removida pelo auditor, e só se não conflitar com as em voo
+(critérios abaixo). A branch de docs de processo do próprio orquestrador
+não conta.
+
 **Duas branches só voam juntas se não conflitam** — todas as condições:
 
 - nenhuma depende da outra (roadmap "Depende de", issue, ou uma consome
@@ -710,8 +737,10 @@ Exemplo de feedback construtivo:
 - Tentativa de push direto em `main` ou `develop`
 - Tentativa de merge **sem** CI verde
 - Tentativa de merge **sem** ≥ 1 aprovação — **exceto** em corrida autônoma
-  autorizada pelo ADR 0.0.0004, onde a aprovação é substituída por auditoria
-  de contexto limpo (ver §Gates de PR, o ponto único)
+  autorizada pelo ADR 0.0.0004, na orquestração de Step (ADR 0.0.0007) ou
+  na orquestração autônoma (ADR 0.0.0008),
+  onde a aprovação é substituída por auditoria de contexto limpo (ver
+  §Gates de PR, o ponto único)
 - Coverage < 90% em código novo
 - Branch errada para a operação (ex: `feat/x` em vez de branch de feature)
 - Squash ou rebase no merge (deve ser merge commit)
@@ -719,7 +748,7 @@ Exemplo de feedback construtivo:
 - Push de branch com carona de outro escopo: `git log origin/<base>..HEAD` mostra commits que não pertencem ao escopo declarado do branch (ver Etapa 4)
 - Mensagem de commit fora do padrão Conventional Commits **em português** (descrição em PT, escopo em snake/kebab ASCII) ou sem `Refs #<num-issue>` no rodapé quando há issue associada
 - Nome de branch **fora de inglês ASCII kebab-case** (ex.: `feat/42-adicionar-login` ou `feat/42-Add-Login` — deve ser `feat/42-add-google-login`; ver §Princípios fundamentais #3 e [`./CONVENTIONS.md`](./CONVENTIONS.md) §1)
-- Branch criada ou trocada **no checkout principal**, terceira branch em execução, ou duas branches em execução que **conflitam** (critérios em §"Branches em execução"). Exceção: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em execução" → §Quando precisar trocar de escopo no meio)
+- Branch criada ou trocada **no checkout principal**, terceira branch em execução, ou duas branches em execução que **conflitam** (critérios em §"Branches em execução"). Exceções: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em execução" → §Quando precisar trocar de escopo no meio); na orquestração autônoma (ADR 0.0.0008) o teto é de **três** worktrees de implementação, contando as com PR aberto — bloqueia a **quarta**
 - Body de commit de Task sem bullets, ou commit agrupando vários escopos diferentes (deve quebrar em commits separados por escopo mínimo)
 - Iniciar uma Stage (criar branch da Stage, pasta `docs/stages/N.M-<slug>/`, ou rodar prompt da Fase 3A) **sem que a issue correspondente já exista** no backlog do GitHub. Verificação: `gh issue view <num>` deve retornar a issue. Issue-first é Princípio fundamental #1; sem issue verificável, parar e criar a issue primeiro (ver [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passo 1 + `scripts/check_stage_issue.py` em `make docs-check`)
 
