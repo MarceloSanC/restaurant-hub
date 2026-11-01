@@ -6,11 +6,12 @@ pontas — escrita **e** leitura.
 
 **Fronteira transacional** (D8; precedente literal do concept 2.3 §7 Decisão 6):
 o repositório recebe um `Engine` e abre a própria transação por método público.
-A skill `repository-pattern` recomenda o oposto — transação controlada por um
-unit-of-work externo —, e o desvio é o mesmo que identity assumiu, pela mesma
-razão: os ports da 3.2 são síncronos e sem UoW, `application` está proibida de
-importar SQLAlchemy (contrato `staff-application-purity`) e nenhum use case
-desta Stage precisa de atomicidade **entre** repositórios. O núcleo reusado
+A skill `repository-pattern` recomenda transação controlada de fora; staff não a
+tem porque nenhum use case de staff escreve duas vezes em staff (ADR 2.6.0002
+§2) — identity, que tem, ganhou a unidade de trabalho na Stage 2.6 (ADR
+2.6.0001). As leituras daqui rodam em `REPEATABLE READ` (ADR 3.3.0006 §c), e uma
+unidade aberta no nível default as perderia: mais um motivo para staff não
+compartilhar a de identity. O núcleo reusado
 opera sobre `Connection`, que é o ponto de troca quando esse consumidor existir.
 
 Seis decisões deste arquivo carregam lei e não são estilo:

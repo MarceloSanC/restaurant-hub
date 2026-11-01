@@ -28,6 +28,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import ColumnElement
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
+from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
+    para_escrita,
+    para_leitura,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
     nome_da_constraint,
     traduzir,
@@ -46,7 +50,7 @@ class PostgresSessionRepository:
 
     def add(self, session: Session) -> None:
         try:
-            with self._engine.begin() as conexao:
+            with para_escrita(self._engine) as conexao:
                 conexao.execute(sessions.insert().values(**mappers.sessao_para_linha(session)))
         except IntegrityError as erro:
             detalhe = (
@@ -58,37 +62,39 @@ class PostgresSessionRepository:
 
     def find_by_fingerprint(self, fingerprint: str) -> Session | None:
         """Devolve a sessão **sem filtrar** revogada nem expirada (regra 1)."""
-        with self._engine.connect() as conexao:
+        with para_leitura(self._engine) as conexao:
             linha = conexao.execute(
                 select(sessions).where(sessions.c.refresh_token_fingerprint == fingerprint)
             ).one_or_none()
             return mappers.linha_para_sessao(linha) if linha is not None else None
 
-    def revoke(self, session_id: SessionId, revoked_at: datetime) -> None:
-        """Revoga uma sessão. Id inexistente é no-op; já revogada preserva o original."""
-        with self._engine.begin() as conexao:
-            self._revoke(conexao, sessions.c.id == session_id, revoked_at)
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
+        """Revoga uma sessão. `True` só se esta chamada revogou (`rowcount == 1`)."""
+        with para_escrita(self._engine) as conexao:
+            return self._revoke(conexao, sessions.c.id == session_id, revoked_at) == 1
 
     def revoke_all_for_user(self, user_id: UserId, revoked_at: datetime) -> None:
         """Revoga todas as sessões do usuário (demissão). Mesmas regras."""
-        with self._engine.begin() as conexao:
+        with para_escrita(self._engine) as conexao:
             self._revoke(conexao, sessions.c.user_id == user_id, revoked_at)
 
     def purge_expired(self, before: datetime) -> int:
         """Remove as sessões já expiradas em `before` (`expires_at <= before`)."""
-        with self._engine.begin() as conexao:
+        with para_escrita(self._engine) as conexao:
             resultado = conexao.execute(delete(sessions).where(sessions.c.expires_at <= before))
             return resultado.rowcount
 
-    # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) ----
+    # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
     def _revoke(
         self, conexao: Connection, criterio: ColumnElement[bool], revoked_at: datetime
-    ) -> None:
-        conexao.execute(
+    ) -> int:
+        """Devolve quantas sessões esta chamada revogou — já revogadas não contam."""
+        resultado = conexao.execute(
             update(sessions)
             # `revoked_at IS NULL` é o que torna a idempotência forte: sessão já
             # revogada não é tocada, e o instante da PRIMEIRA revogação sobrevive.
             .where(criterio, sessions.c.revoked_at.is_(None))
             .values(revoked_at=revoked_at)
         )
+        return int(resultado.rowcount)

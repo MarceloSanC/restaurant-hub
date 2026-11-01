@@ -108,6 +108,7 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.features.staff.in_memory_identity_gateway import (
@@ -420,6 +421,7 @@ def _gateway_real() -> GatewaySobContrato:
             invitation_ttl=_TTL_CONVITE,
             handover_ttl=_TTL_EM_MAOS,
             base_url=_BASE_URL,
+            unit_of_work=InMemoryUnitOfWork(users, tokens),
         ),
         send_invitation=SendInvitationUseCase(sender),
         revoke_all_sessions=RevokeAllSessionsUseCase(sessoes, clock),

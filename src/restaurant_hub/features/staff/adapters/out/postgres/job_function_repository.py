@@ -1,14 +1,13 @@
 """Adapter Postgres de `JobFunctionRepository` — L-JF1…L-JF5 e a metade de `L-ORD`.
 
-**Fronteira transacional** (D8; precedente literal do concept 2.3 §7 Decisão 6):
-o repositório recebe um `Engine` e abre a própria transação por método público,
-via `engine.begin()`. A skill `repository-pattern` recomenda o oposto —
-transação controlada por um unit-of-work externo —, e o desvio é o mesmo que
-identity já assumiu, pela mesma razão: os ports da 3.2 são **síncronos e sem
-UoW**, a camada `application` está proibida de importar SQLAlchemy (contrato
-`staff-application-purity`), e nenhum use case desta Stage precisa de
-atomicidade **entre** repositórios. Inventar um port de UoW agora seria contrato
-novo sem consumidor.
+**Fronteira transacional** (D8; precedente do concept 2.3 §7 Decisão 6): o
+repositório recebe um `Engine` e abre a própria transação por método público,
+via `engine.begin()`. A skill `repository-pattern` recomenda transação
+controlada de fora; staff não a tem porque nenhum use case de staff escreve duas
+vezes em staff — cada um escreve uma vez, e a travessia para identity não é
+transação (ADR 2.6.0002 §2). Identity ganhou unidade de trabalho na Stage 2.6
+(ADR 2.6.0001); quando um use case de staff precisar escrever duas vezes, a
+regra 10 do `check_layout` o obriga a decidir.
 
 Para manter a troca barata quando esse consumidor existir, o núcleo reusado
 opera sobre `Connection` — as três escritas e o lookup de `delete`, que é o

@@ -3,7 +3,7 @@
 **Por que na raiz de `tests/unit/`.** O sujeito é um script do repositório, não
 uma camada de um bounded context — o mesmo raciocínio de `test_ci_workflow.py`,
 que testa `.github/workflows/ci.yml` daqui. Pô-lo dentro de
-`features/<bc>/` afirmaria que a regra é de um BC, o que é falso: as nove regras
+`features/<bc>/` afirmaria que a regra é de um BC, o que é falso: as dez regras
 são do repositório inteiro.
 
 **Por que cada detector precisa de um violador plantado.** Todos eles são
@@ -466,3 +466,481 @@ def test_regra9_um_reexport_no_marcador_de_pacote_reprova(tmp_path: pathlib.Path
 
     assert len(violacoes) == 1, violacoes
     assert "ImportFrom" in violacoes[0]
+
+
+# ---------------------------------------------------------------------------
+# Regra 10 — escrita múltipla só dentro de uma unidade (Stage 2.6, ADR 2.6.0002 §5)
+# ---------------------------------------------------------------------------
+
+_PORT_DE_REPOSITORIO = (
+    "from typing import Protocol\n\n\n"
+    "class CoisaRepository(Protocol):\n"
+    "    def add(self, x: str) -> None: ...\n"
+    "    def remove(self, x: str) -> None: ...\n"
+    "    def find_by_id(self, x: str) -> str | None: ...\n"
+)
+_PORT_DA_UNIDADE = (
+    "from typing import Protocol\n\n\n"
+    "class UnitOfWork(Protocol):\n"
+    "    def transaction(self) -> object: ...\n"
+)
+_CABECALHO_DO_USE_CASE = (
+    "class Fazer:\n"
+    "    def __init__(self, coisas: CoisaRepository, unit_of_work: UnitOfWork) -> None:\n"
+    "        self._coisas = coisas\n"
+    "        self._unit_of_work = unit_of_work\n\n"
+)
+
+
+@pytest.fixture
+def regra10_isolada(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Esvazia as tabelas globais da regra 10 para a árvore sintética.
+
+    A allowlist e os métodos de gateway declarados apontam para o `src/` real; numa
+    árvore de três arquivos eles apareceriam como entradas mortas e afogariam a
+    violação que o teste planta.
+    """
+    monkeypatch.setattr(check_layout, "MULTI_WRITE_ALLOWLIST", {})
+    monkeypatch.setattr(check_layout, "GATEWAY_WRITE_METHODS", {})
+
+
+def _src_com_use_case(tmp_path: pathlib.Path, corpo: str) -> pathlib.Path:
+    return _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/use_cases/fazer.py": _CABECALHO_DO_USE_CASE + corpo,
+        },
+    )
+
+
+_DUAS_DENTRO = (
+    "    def execute(self) -> None:\n"
+    "        with self._unit_of_work.transaction():\n"
+    "            self._coisas.add('a')\n"
+    "            self._coisas.remove('b')\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("corpo", "esperado"),
+    [
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.remove('b')\n",
+            "fora de unidade: self._coisas.add",
+            id="uma-escrita-movida-para-fora",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.remove('b')\n",
+            "2 blocos de unidade",
+            id="duas-unidades",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        for x in xs:\n"
+            "            self._coisas.add(x)\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-em-laco-fora-de-unidade",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        self._gravar()\n\n"
+            "    def _gravar(self) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        self._coisas.remove('b')\n",
+            "fora de unidade",
+            id="escritas-num-helper-sem-unidade",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        self._coisas.remove('b')\n",
+            "fora de unidade",
+            id="duas-escritas-sem-unidade",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        if not self._coisas.remove('x'):\n"
+            "            raise ValueError('perdeu')\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-no-teste-de-um-if-fora-da-unidade",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        try:\n"
+            "            self._coisas.find_by_id('a')\n"
+            "        except KeyError:\n"
+            "            self._coisas.remove('a')\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-num-except-fora-da-unidade",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        for x in xs:\n"
+            "            with self._unit_of_work.transaction():\n"
+            "                self._coisas.add(x)\n",
+            "2 blocos de unidade",
+            id="unidade-dentro-de-laco",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        self._gravar('a')\n"
+            "        self._gravar('b')\n\n"
+            "    def _gravar(self, x: str) -> None:\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add(x)\n",
+            "2 blocos de unidade",
+            id="helper-que-abre-unidade-chamado-duas-vezes",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        while self._coisas.remove('lote'):\n"
+            "            pass\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-na-condicao-de-um-while",
+        ),
+        pytest.param(
+            "    async def execute(self) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        self._coisas.remove('b')\n",
+            "fora de unidade",
+            id="metodo-async",
+        ),
+        pytest.param(
+            "    def execute(self, x: str) -> None:\n"
+            "        match x:\n"
+            "            case 'a':\n"
+            "                self._coisas.add('a')\n"
+            "                self._coisas.remove('b')\n",
+            "fora de unidade",
+            id="escritas-dentro-de-match",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        while self._continuar():\n"
+            "            self._coisas.add('a')\n\n"
+            "    def _continuar(self) -> bool:\n"
+            "        return False\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-no-corpo-de-um-while-fora-de-unidade",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        [self._coisas.add(x) for x in xs]\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-dentro-de-compreensao-fora-de-unidade",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        any(self._coisas.add(x) for x in xs)\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-dentro-de-genexp-fora-de-unidade",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        {self._coisas.add(x) for x in xs}\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-dentro-de-setcomp-fora-de-unidade",
+        ),
+        pytest.param(
+            "    async def execute(self, xs: object) -> None:\n"
+            "        async for x in xs:\n"
+            "            self._coisas.add(x)\n",
+            "fora de unidade: self._coisas.add",
+            id="escrita-em-async-for-fora-de-unidade",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        match self._coisas.remove('x'):\n"
+            "            case _:\n"
+            "                pass\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-no-subject-de-um-match",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        for _ in [self._coisas.remove('x')]:\n"
+            "            pass\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-no-iter-de-um-for",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        with self._ctx(self._coisas.remove('x')):\n"
+            "            pass\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n\n"
+            "    def _ctx(self, x: object) -> object:\n"
+            "        return x\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-nos-itens-de-um-with",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        for x in xs:\n"
+            "            pass\n"
+            "        else:\n"
+            "            self._coisas.remove('x')\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n",
+            "fora de unidade: self._coisas.remove",
+            id="escrita-no-else-de-um-for",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        self._gravar(3)\n\n"
+            "    def _gravar(self, n: int) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        if n:\n"
+            "            self._gravar(n - 1)\n"
+            "        self._coisas.remove('b')\n",
+            "fora de unidade",
+            id="helper-recursivo-nao-trava-o-detector",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_o_detector_reprova_cada_forma(
+    tmp_path: pathlib.Path, corpo: str, esperado: str
+) -> None:
+    """CA11 — as formas que a regra existe para barrar, uma a uma.
+
+    A primeira é a do achado do Checkpoint A: o `consume` movido para fora da
+    unidade de `set_password_with_token`, com o resto dentro — uma regra de
+    "no máximo uma escrita fora" a deixaria passar.
+    """
+    violacoes = check_layout.check_multi_write_unit_of_work(_src_com_use_case(tmp_path, corpo))
+
+    assert len(violacoes) == 1, violacoes
+    assert "'Fazer'" in violacoes[0]
+    assert esperado in violacoes[0]
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        pytest.param(_DUAS_DENTRO, id="duas-dentro-de-uma-unidade"),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._gravar()\n\n"
+            "    def _gravar(self) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        self._coisas.remove('b')\n",
+            id="helper-chamado-de-dentro-da-unidade",
+        ),
+        pytest.param(
+            "    def execute(self, reuso: bool) -> None:\n"
+            "        if reuso:\n"
+            "            self._coisas.remove('todas')\n"
+            "            raise ValueError('reuso')\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            self._coisas.remove('a')\n"
+            "            self._coisas.add('b')\n",
+            id="grava-e-recusa-fora-da-unidade",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        if self._coisas.find_by_id('a') is None:\n"
+            "            self._coisas.add('a')\n",
+            id="leitura-mais-uma-escrita",
+        ),
+        pytest.param(
+            "    def execute(self, xs: list[str]) -> None:\n"
+            "        self._coisas.add(','.join(x for x in xs))\n",
+            id="uma-escrita-com-compreensao-no-argumento",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        self.outro()\n\n"
+            "    def outro(self) -> None:\n"
+            "        self._coisas.add('a')\n",
+            id="publico-chamando-publico-nao-conta-duas-vezes",
+        ),
+        pytest.param(
+            "    def execute(self) -> None:\n"
+            "        with self._unit_of_work.transaction():\n"
+            "            with open('x') as f:\n"
+            "                self._coisas.add(f.read())\n"
+            "                self._coisas.remove('b')\n",
+            id="with-aninhado-dentro-da-unidade",
+        ),
+        pytest.param(
+            "    async def execute(self) -> None:\n"
+            "        async with self._unit_of_work.transaction():\n"
+            "            self._coisas.add('a')\n"
+            "            self._coisas.remove('b')\n",
+            id="async-with-da-unidade",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_o_detector_aceita_o_que_o_adr_permite(tmp_path: pathlib.Path, corpo: str) -> None:
+    assert check_layout.check_multi_write_unit_of_work(_src_com_use_case(tmp_path, corpo)) == []
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_unidade_de_atributo_que_nao_e_unit_of_work_nao_conta(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`with self._coisas.transaction()` não é unidade: o atributo não é `UnitOfWork`."""
+    corpo = (
+        "    def execute(self) -> None:\n"
+        "        with self._coisas.transaction():\n"
+        "            self._coisas.add('a')\n"
+        "            self._coisas.remove('b')\n"
+    )
+    violacoes = check_layout.check_multi_write_unit_of_work(_src_com_use_case(tmp_path, corpo))
+
+    assert len(violacoes) == 1, violacoes
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_entrada_da_allowlist_sem_violacao_reprova(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(check_layout, "MULTI_WRITE_ALLOWLIST", {"Fazer": "motivo de teste"})
+
+    violacoes = check_layout.check_multi_write_unit_of_work(
+        _src_com_use_case(tmp_path, _DUAS_DENTRO)
+    )
+
+    assert any("'Fazer' está na allowlist mas não viola" in v for v in violacoes), violacoes
+
+
+def test_regra10_os_use_cases_reais_cumprem_a_regra() -> None:
+    """O gate nasce verde, com exatamente as duas travessias de staff na allowlist."""
+    assert check_layout.check_multi_write_unit_of_work(_SRC) == []
+
+
+def test_regra10_a_allowlist_nao_cresceu() -> None:
+    assert set(check_layout.MULTI_WRITE_ALLOWLIST) == {
+        "CreateLoginForEmployeeUseCase",
+        "DeactivateEmployeeUseCase",
+    }
+
+
+def test_regra10_cada_entrada_da_allowlist_cita_o_adr() -> None:
+    sem_adr = [
+        classe
+        for classe, motivo in check_layout.MULTI_WRITE_ALLOWLIST.items()
+        if "ADR 2.6.0002" not in motivo
+    ]
+    assert sem_adr == []
+
+
+def test_regra10_o_classificador_bate_com_os_ports_reais() -> None:
+    """A classificação por nome, fixada sobre os ports de verdade.
+
+    Um método de repositório novo que escreva com nome de leitura (`find_*`), ou
+    que leia com nome de escrita, muda este conjunto e reprova aqui — é o preço de
+    classificar por convenção, cobrado no lugar onde ela pode falhar.
+    """
+    portas = check_layout.repository_port_names(_SRC)
+    metodos = check_layout.port_methods(_SRC)
+
+    escritas = {
+        f"{porta}.{metodo}"
+        for porta in portas
+        for metodo in metodos[porta]
+        if check_layout.is_write(porta, metodo, portas)
+    }
+
+    assert escritas == {
+        "RestaurantRepository.add",
+        "UnitRepository.add",
+        "UserRepository.add",
+        "UserRepository.set_password_hash",
+        "SessionRepository.add",
+        "SessionRepository.revoke",
+        "SessionRepository.revoke_all_for_user",
+        "SessionRepository.purge_expired",
+        "PasswordSetupTokenRepository.add",
+        "PasswordSetupTokenRepository.consume",
+        "PasswordSetupTokenRepository.invalidate_all_for_user",
+        "PasswordSetupTokenRepository.purge_expired",
+        "JobFunctionRepository.add",
+        "JobFunctionRepository.update",
+        "JobFunctionRepository.delete",
+        "EmployeeRepository.add",
+        "EmployeeRepository.update",
+        "EmployeeRepository.delete",
+    }
+    assert check_layout.is_write("IdentityGateway", "provision_employee_login", portas)
+    assert check_layout.is_write("IdentityGateway", "revoke_login_sessions", portas)
+    assert not check_layout.is_write("IdentityGateway", "send_login_invitation", portas)
+
+
+def test_regra10_tem_ancora_de_cobertura() -> None:
+    assert check_layout.USE_CASES_ANCHOR in check_layout.coverage_anchors()
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_metodo_de_gateway_declarado_que_nao_existe_reprova(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        check_layout, "GATEWAY_WRITE_METHODS", {"OutroGateway": frozenset({"gravar"})}
+    )
+
+    violacoes = check_layout.check_multi_write_unit_of_work(
+        _src_com_use_case(tmp_path, _DUAS_DENTRO)
+    )
+
+    assert violacoes == [
+        "ESCRITA MÚLTIPLA: GATEWAY_WRITE_METHODS declara 'OutroGateway.gravar', que não "
+        "existe em ports/out — a classificação de escrita está desatualizada."
+    ]
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_construtor_com_atribuicao_anotada_tambem_e_lido(tmp_path: pathlib.Path) -> None:
+    """`self._coisas: CoisaRepository = coisas` não pode esconder as escritas da classe."""
+    cabecalho = _CABECALHO_DO_USE_CASE.replace(
+        "        self._coisas = coisas\n", "        self._coisas: CoisaRepository = coisas\n"
+    )
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/use_cases/fazer.py": cabecalho
+            + "    def execute(self) -> None:\n"
+            "        self._coisas.add('a')\n"
+            "        self._coisas.remove('b')\n",
+        },
+    )
+
+    assert len(check_layout.check_multi_write_unit_of_work(raiz)) == 1
+
+
+def test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado() -> None:
+    """Um método novo num gateway declarado precisa ser classificado aqui.
+
+    Para repositório, a classificação sai do nome; para gateway, de uma lista. Sem
+    este pino, um `unlink_login` novo em `IdentityGateway` — que grava em identity —
+    seria lido como leitura em silêncio.
+    """
+    metodos = check_layout.port_methods(_SRC)
+
+    assert metodos["IdentityGateway"] == {
+        "provision_employee_login",
+        "revoke_login_sessions",
+        "send_login_invitation",
+    }

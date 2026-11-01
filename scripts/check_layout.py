@@ -17,6 +17,8 @@ Verifica:
 7. Classe de `application/dtos/` não tem comportamento.
 8. Cada classe de `application/dtos/results.py` é construída em **um** sítio.
 9. `__init__.py` é marcador de pacote — docstring e nada mais.
+10. Use case com duas ou mais escritas escreve todas dentro de **uma** unidade de
+    trabalho (ADR 2.6.0002 §5), salvo allowlist contável.
 
 Cada feature também precisa dos diretórios obrigatórios (`domain/`,
 `application/`, `adapters/`).
@@ -58,6 +60,7 @@ Retorna código de saída 0 se tudo OK, 1 se houver violações.
 import argparse
 import ast
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Um padrão com wildcard único tem exatamente 2 partes após split("*").
@@ -303,6 +306,7 @@ def coverage_anchors() -> dict[str, str]:
     anchors[DTOS_ANCHOR] = "regra 7 — DTO sem comportamento"
     anchors[RESULTS_ANCHOR] = "regra 8 — um sítio de construção por result"
     anchors[PACKAGE_MARKER_ANCHOR] = "regra 9 — marcador de pacote"
+    anchors[USE_CASES_ANCHOR] = "regra 10 — escrita múltipla só dentro de uma unidade"
     return anchors
 
 
@@ -553,6 +557,360 @@ def check_coverage(src_root: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Regra 10 — escrita múltipla só dentro de uma unidade de trabalho (ADR 2.6.0002 §5)
+# ---------------------------------------------------------------------------
+
+USE_CASES_ANCHOR = "/application/use_cases/"
+PORTS_OUT_ANCHOR = "/application/ports/out/"
+REPOSITORY_PORT_SUFFIX = "_repository.py"
+UNIT_OF_WORK_PORT = "UnitOfWork"
+
+# Método de port de repositório que NÃO começa com estes prefixos é escrita. A
+# classificação por nome é deliberada: é a convenção que os ports já seguem, e o
+# teste `test_regra10_o_classificador_bate_com_os_ports_reais` fixa o resultado
+# sobre os ports reais — um método novo que fuja da convenção reprova lá.
+READ_PREFIXES = ("find_", "exists_", "list_")
+
+# Escritas que atravessam bounded context por gateway — port que não é
+# repositório, mas cujo método grava no outro BC. Cada nome é conferido contra o
+# port real (entrada que não existe reprova).
+GATEWAY_WRITE_METHODS: dict[str, frozenset[str]] = {
+    "IdentityGateway": frozenset({"provision_employee_login", "revoke_login_sessions"}),
+}
+
+# Use cases tolerados com escrita múltipla fora de unidade, cada um com o motivo.
+# A allowlist é contável como a do charter (regra 6): entrada nova reprova até ser
+# justificada no teste de não-crescimento, e entrada que já não corresponde a um
+# use case que violaria a regra reprova também.
+MULTI_WRITE_ALLOWLIST: dict[str, str] = {
+    "CreateLoginForEmployeeUseCase": (
+        "ADR 2.6.0002 §2 — travessia staff → identity (conta pela fachada, depois o "
+        "vínculo em staff); transação entre BCs rejeitada pelo ADR 4.1.0006 Alt. A"
+    ),
+    "DeactivateEmployeeUseCase": (
+        "ADR 2.6.0002 §2 — revoga as sessões em identity antes de gravar o "
+        "desligamento em staff (ADR 3.5.0003); transação entre BCs rejeitada"
+    ),
+}
+
+
+@dataclass(frozen=True)
+class _Escrita:
+    linha: int
+    alvo: str
+    dentro_da_unidade: bool
+    em_laco: bool
+    seguida_de_raise: bool
+
+
+@dataclass
+class _Varredura:
+    escritas: list[_Escrita]
+    unidades: list[int]
+
+
+def _anotacao(no: ast.expr | None) -> str | None:
+    if isinstance(no, ast.Name):
+        return no.id
+    if isinstance(no, ast.Attribute):
+        return no.attr
+    if isinstance(no, ast.Constant) and isinstance(no.value, str):
+        return no.value
+    return None
+
+
+def repository_port_names(src_root: Path) -> set[str]:
+    """Classes declaradas em `ports/out/*_repository.py` — derivado, nunca escrito à mão."""
+    nomes: set[str] = set()
+    for arquivo in src_root.rglob(f"*{REPOSITORY_PORT_SUFFIX}"):
+        if PORTS_OUT_ANCHOR not in posix(arquivo):
+            continue
+        tree = parse(arquivo)
+        if tree is not None:
+            nomes |= {n.name for n in tree.body if isinstance(n, ast.ClassDef)}
+    return nomes
+
+
+def port_methods(src_root: Path) -> dict[str, set[str]]:
+    """Port de saída → nomes dos métodos, para conferir as entradas de gateway."""
+    metodos: dict[str, set[str]] = {}
+    for arquivo in src_root.rglob("*.py"):
+        if PORTS_OUT_ANCHOR not in posix(arquivo):
+            continue
+        tree = parse(arquivo)
+        if tree is None:
+            continue
+        for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
+            metodos[classe.name] = {m.name for m in classe.body if isinstance(m, _FUNCOES)}
+    return metodos
+
+
+def is_write(port: str, method: str, repository_ports: set[str]) -> bool:
+    """A classificação da regra 10: escrita de repositório ou de gateway."""
+    if port in repository_ports:
+        return not method.startswith(READ_PREFIXES)
+    return method in GATEWAY_WRITE_METHODS.get(port, frozenset())
+
+
+_FUNCOES = (ast.FunctionDef, ast.AsyncFunctionDef)
+_COMPREENSOES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
+def _tipos_dos_atributos(classe: ast.ClassDef) -> dict[str, str]:
+    """`self._x = x` (ou `self._x: T = x`) no `__init__`, com `x` anotado — atributo → tipo."""
+    init = next(
+        (m for m in classe.body if isinstance(m, _FUNCOES) and m.name == "__init__"),
+        None,
+    )
+    if init is None:
+        return {}
+    parametros = {
+        a.arg: tipo
+        for a in [*init.args.args, *init.args.kwonlyargs]
+        if (tipo := _anotacao(a.annotation)) is not None
+    }
+    tipos: dict[str, str] = {}
+    for no in ast.walk(init):
+        if isinstance(no, ast.Assign) and len(no.targets) == 1:
+            alvo, valor = no.targets[0], no.value
+        elif isinstance(no, ast.AnnAssign) and no.value is not None:
+            alvo, valor = no.target, no.value
+        else:
+            continue
+        atributo = _atributo_de_self(alvo) if isinstance(alvo, ast.expr) else None
+        if atributo is not None and isinstance(valor, ast.Name) and valor.id in parametros:
+            tipos[atributo] = parametros[valor.id]
+    return tipos
+
+
+def _atributo_de_self(no: ast.expr) -> str | None:
+    if isinstance(no, ast.Attribute) and isinstance(no.value, ast.Name) and no.value.id == "self":
+        return no.attr
+    return None
+
+
+def _dentro_de_compreensao(no: ast.AST) -> set[int]:
+    """Ids dos nós avaliados a cada iteração de alguma compreensão contida em `no`."""
+    ids: set[int] = set()
+    for interno in ast.walk(no):
+        if isinstance(interno, _COMPREENSOES):
+            ids |= {id(n) for n in ast.walk(interno) if n is not interno}
+    return ids
+
+
+class _Varredor:
+    """Percorre os métodos de uma classe de use case coletando escritas e unidades.
+
+    Entradas são os métodos públicos; helpers (`self._x()`) entram pelo fecho
+    transitivo de quem os chama, no contexto de quem chama (dentro ou fora de
+    unidade, em laço ou não). Chamada de público para público não é seguida — o
+    chamado já é entrada, e segui-lo contaria a mesma escrita duas vezes.
+
+    Cada **entrada** num bloco de unidade conta: um helper que abre unidade,
+    chamado duas vezes, são duas transações; uma unidade dentro de laço conta como
+    duas (são N).
+    """
+
+    def __init__(self, classe: ast.ClassDef, repository_ports: set[str]) -> None:
+        self._metodos = {m.name: m for m in classe.body if isinstance(m, _FUNCOES)}
+        self._tipos = _tipos_dos_atributos(classe)
+        self._repository_ports = repository_ports
+
+    def varrer(self) -> _Varredura:
+        resultado = _Varredura(escritas=[], unidades=[])
+        for nome, metodo in self._metodos.items():
+            if nome.startswith("_"):
+                continue
+            self._bloco(metodo.body, resultado, unidade=False, laco=False, pilha=(nome,))
+        return resultado
+
+    def _e_unidade(self, item: ast.withitem) -> bool:
+        chamada = item.context_expr
+        return (
+            isinstance(chamada, ast.Call)
+            and isinstance(chamada.func, ast.Attribute)
+            and chamada.func.attr == "transaction"
+            and self._tipos.get(_atributo_de_self(chamada.func.value) or "") == UNIT_OF_WORK_PORT
+        )
+
+    def _bloco(
+        self,
+        corpo: list[ast.stmt],
+        resultado: _Varredura,
+        *,
+        unidade: bool,
+        laco: bool,
+        pilha: tuple[str, ...],
+    ) -> None:
+        for i, instrucao in enumerate(corpo):
+            seguida_de_raise = i + 1 < len(corpo) and isinstance(corpo[i + 1], ast.Raise)
+            self._instrucao(instrucao, resultado, unidade, laco, seguida_de_raise, pilha)
+
+    def _instrucao(  # noqa: PLR0913 — o contexto da varredura é o estado do percurso
+        self,
+        instrucao: ast.stmt,
+        resultado: _Varredura,
+        unidade: bool,
+        laco: bool,
+        seguida_de_raise: bool,
+        pilha: tuple[str, ...],
+    ) -> None:
+        if isinstance(instrucao, ast.With | ast.AsyncWith):
+            abre = any(self._e_unidade(item) for item in instrucao.items)
+            if abre:
+                # Unidade em laço são N transações: conta como duas entradas.
+                resultado.unidades.extend([instrucao.lineno] * (2 if laco else 1))
+            for item in instrucao.items:
+                self._expressao(item.context_expr, resultado, unidade, laco, False, pilha)
+            self._bloco(instrucao.body, resultado, unidade=unidade or abre, laco=laco, pilha=pilha)
+            return
+        if isinstance(instrucao, ast.For | ast.AsyncFor):
+            self._expressao(instrucao.iter, resultado, unidade, laco, False, pilha)
+            self._bloco(instrucao.body, resultado, unidade=unidade, laco=True, pilha=pilha)
+            self._bloco(instrucao.orelse, resultado, unidade=unidade, laco=laco, pilha=pilha)
+            return
+        if isinstance(instrucao, ast.While):
+            # A condição roda a cada volta: escrita nela é escrita em laço.
+            self._expressao(instrucao.test, resultado, unidade, True, False, pilha)
+            self._bloco(instrucao.body, resultado, unidade=unidade, laco=True, pilha=pilha)
+            self._bloco(instrucao.orelse, resultado, unidade=unidade, laco=laco, pilha=pilha)
+            return
+        if isinstance(instrucao, ast.Match):
+            self._expressao(instrucao.subject, resultado, unidade, laco, False, pilha)
+            for caso in instrucao.cases:
+                self._bloco(caso.body, resultado, unidade=unidade, laco=laco, pilha=pilha)
+            return
+        blocos = [
+            getattr(instrucao, campo)
+            for campo in ("body", "orelse", "finalbody")
+            if isinstance(getattr(instrucao, campo, None), list)
+        ]
+        if blocos:
+            # As expressões do próprio cabeçalho (o `test` de um `if`, por exemplo)
+            # também escrevem: `if not self._tokens.consume(...)` é uma escrita.
+            for campo, valor in ast.iter_fields(instrucao):
+                if campo not in {"body", "orelse", "finalbody", "handlers"} and isinstance(
+                    valor, ast.expr
+                ):
+                    self._expressao(valor, resultado, unidade, laco, False, pilha)
+            for bloco in blocos:
+                self._bloco(bloco, resultado, unidade=unidade, laco=laco, pilha=pilha)
+            for tratador in getattr(instrucao, "handlers", []):
+                self._bloco(tratador.body, resultado, unidade=unidade, laco=laco, pilha=pilha)
+            return
+        self._expressao(instrucao, resultado, unidade, laco, seguida_de_raise, pilha)
+
+    def _expressao(  # noqa: PLR0913 — idem
+        self,
+        no: ast.AST,
+        resultado: _Varredura,
+        unidade: bool,
+        laco: bool,
+        seguida_de_raise: bool,
+        pilha: tuple[str, ...],
+    ) -> None:
+        em_compreensao = _dentro_de_compreensao(no)
+        for interno in ast.walk(no):
+            if not (isinstance(interno, ast.Call) and isinstance(interno.func, ast.Attribute)):
+                continue
+            laco_aqui = laco or id(interno) in em_compreensao
+            metodo = interno.func.attr
+            dono = interno.func.value
+            atributo = _atributo_de_self(dono)
+            if isinstance(dono, ast.Name) and dono.id == "self" and metodo in self._metodos:
+                if metodo.startswith("_") and metodo not in pilha:
+                    self._bloco(
+                        self._metodos[metodo].body,
+                        resultado,
+                        unidade=unidade,
+                        laco=laco_aqui,
+                        pilha=(*pilha, metodo),
+                    )
+                continue
+            if atributo is None:
+                continue
+            tipo = self._tipos.get(atributo)
+            if tipo is not None and is_write(tipo, metodo, self._repository_ports):
+                resultado.escritas.append(
+                    _Escrita(
+                        linha=interno.lineno,
+                        alvo=f"self.{atributo}.{metodo}",
+                        dentro_da_unidade=unidade,
+                        em_laco=laco_aqui,
+                        seguida_de_raise=seguida_de_raise,
+                    )
+                )
+
+
+def _violacao_de_escrita_multipla(varredura: _Varredura) -> str | None:
+    """Motivo da violação, ou `None` — a regra do ADR 2.6.0002 §5, literal."""
+    total = sum(2 if e.em_laco else 1 for e in varredura.escritas)
+    if total < 2:  # noqa: PLR2004 — "duas ou mais escritas" é o enunciado da regra
+        return None
+    if len(varredura.unidades) > 1:
+        return f"{len(varredura.unidades)} blocos de unidade — são transações distintas"
+    fora = [e for e in varredura.escritas if not e.dentro_da_unidade and not e.seguida_de_raise]
+    if fora:
+        lista = ", ".join(f"{e.alvo} (linha {e.linha})" for e in fora)
+        return f"{total} escritas e estas fora de unidade: {lista}"
+    return None
+
+
+def scan_multi_write_use_cases(src_root: Path) -> dict[str, tuple[str, int, str]]:
+    """Use case → (arquivo, linha, motivo) para cada classe que viola a regra 10."""
+    repository_ports = repository_port_names(src_root)
+    achados: dict[str, tuple[str, int, str]] = {}
+    for arquivo in sorted(src_root.rglob("*.py")):
+        if USE_CASES_ANCHOR not in posix(arquivo):
+            continue
+        tree = parse(arquivo)
+        if tree is None:
+            continue
+        for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
+            motivo = _violacao_de_escrita_multipla(_Varredor(classe, repository_ports).varrer())
+            if motivo is not None:
+                achados[classe.name] = (
+                    str(arquivo.relative_to(src_root.parent)),
+                    classe.lineno,
+                    motivo,
+                )
+    return achados
+
+
+def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
+    """Regra 10 — use case que escreve duas vezes escreve dentro de **uma** unidade.
+
+    A prova do que ela fecha está no ADR 2.6.0002 §5: sem ela, mover o `consume`
+    de `set_password_with_token` para fora da unidade, partir a unidade em duas
+    ou acrescentar uma escrita nova fora dela deixaria a suíte verde e a
+    atomicidade perdida. A allowlist só aceita o que o ADR justifica — hoje, as
+    duas travessias de staff para identity.
+    """
+    violacoes: list[str] = []
+    achados = scan_multi_write_use_cases(src_root)
+    for classe, (arquivo, linha, motivo) in sorted(achados.items()):
+        if classe in MULTI_WRITE_ALLOWLIST:
+            continue
+        violacoes.append(
+            f"ESCRITA MÚLTIPLA: {arquivo}:{linha} — '{classe}': {motivo}. Abra uma "
+            f"unidade de trabalho em volta das escritas (ADR 2.6.0002 §5)."
+        )
+    for classe in sorted(set(MULTI_WRITE_ALLOWLIST) - set(achados)):
+        violacoes.append(
+            f"ESCRITA MÚLTIPLA: '{classe}' está na allowlist mas não viola mais a regra "
+            f"10 — tire a entrada (allowlist morta documenta dívida já paga)."
+        )
+    metodos = port_methods(src_root)
+    for port, nomes in sorted(GATEWAY_WRITE_METHODS.items()):
+        for nome in sorted(nomes - metodos.get(port, set())):
+            violacoes.append(
+                f"ESCRITA MÚLTIPLA: GATEWAY_WRITE_METHODS declara '{port}.{nome}', que não "
+                f"existe em ports/out — a classificação de escrita está desatualizada."
+            )
+    return violacoes
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -585,6 +943,7 @@ def main() -> int:
         *check_dto_behaviour(src_root),
         *check_result_construction_sites(src_root),
         *check_package_markers(src_root),
+        *check_multi_write_unit_of_work(src_root),
     ]
 
     if all_violations:

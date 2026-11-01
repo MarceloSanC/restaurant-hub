@@ -13,11 +13,17 @@ mecânica é deliberado nesta Stage: extrair um passo compartilhado agora acopla
 dois fluxos que ainda podem divergir — o convite não tem senha, e a criação
 direta não tem token nem e-mail.
 
+**Conta e token são uma unidade de trabalho** (Stage 2.6, ADR 2.6.0001): se o
+`tokens.add` falha, o `users.add` é desfeito — nunca nasce conta sem link que a
+abra (o `[finding]` de atomicidade escalado pela 3.5).
+
 **A falha do `EmailSender` propaga** (concept §5 regra 13). Reportar sucesso sem
 que o e-mail tenha saído deixaria uma conta inacessível e um administrador
-convencido de que convidou. O usuário fica criado — a transação de `add` já
-fechou —, e o caminho de recuperação é o **pedido público de redefinição de
-senha**, não reconvidar: reconvidar responde 409, porque o e-mail já existe.
+convencido de que convidou. O envio vem **depois** de a unidade comitar (ADR
+2.6.0002 §3) — um rollback não desenvia e-mail, e um e-mail enviado de dentro de
+uma unidade que depois desfizesse levaria um link para token inexistente. Então a
+conta fica criada, e o caminho de recuperação é o **pedido público de redefinição
+de senha**, não reconvidar: reconvidar responde 409, porque o e-mail já existe.
 
 **Não invalida tokens anteriores**, e a ausência é correta: um usuário recém
 criado não tem token anterior, e um segundo convite ao mesmo e-mail nunca chega
@@ -51,6 +57,7 @@ from restaurant_hub.features.identity.application.ports.out.restaurant_repositor
 from restaurant_hub.features.identity.application.ports.out.setup_token_issuer import (
     SetupTokenIssuer,
 )
+from restaurant_hub.features.identity.application.ports.out.unit_of_work import UnitOfWork
 from restaurant_hub.features.identity.application.ports.out.unit_repository import (
     UnitRepository,
 )
@@ -94,6 +101,7 @@ class InviteUserUseCase:
         clock: Clock,
         invitation_ttl: timedelta,
         base_url: str,
+        unit_of_work: UnitOfWork,
     ) -> None:
         self._users = users
         self._restaurants = restaurants
@@ -106,6 +114,7 @@ class InviteUserUseCase:
         self._clock = clock
         self._invitation_ttl = invitation_ttl
         self._base_url = base_url
+        self._unit_of_work = unit_of_work
 
     def execute(self, command: InviteUserCommand) -> UserResult:
         """Convida a pessoa.
@@ -145,9 +154,11 @@ class InviteUserUseCase:
         # O hash inutilizável, e não `dummy_hash()` — ADR 2.5.0004. O dummy é
         # derivado de um literal deste repositório; gravá-lo aqui faria a senha
         # dessa string abrir a conta da pessoa convidada.
-        self._users.add(user, self._hasher.unusable_hash(), memberships)
+        with self._unit_of_work.transaction():
+            self._users.add(user, self._hasher.unusable_hash(), memberships)
+            valor_do_token = self._emitir_token(user.id)
 
-        valor_do_token = self._emitir_token(user.id)
+        # Depois do commit — ver o docstring do módulo (ADR 2.6.0002 §3).
         self._enviar_convite(command.email.value, valor_do_token)
 
         return to_user_result(user, memberships)

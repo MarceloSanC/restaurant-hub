@@ -58,6 +58,9 @@ from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repositor
 from restaurant_hub.features.identity.adapters.out.postgres.session_repository import (
     PostgresSessionRepository,
 )
+from restaurant_hub.features.identity.adapters.out.postgres.unit_of_work import (
+    PostgresUnitOfWork,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.unit_repository import (
     PostgresUnitRepository,
 )
@@ -513,6 +516,10 @@ def wire_dependencies(
     sessions = PostgresSessionRepository(engine)
 
     setup_tokens = PostgresPasswordSetupTokenRepository(engine)
+    # Stage 2.6 — a unidade de trabalho de identity sobre o MESMO `Engine` dos
+    # repositórios acima: é chaveada por ele, e um repositório de outro engine
+    # escreveria fora dela em silêncio (ADR 2.6.0001, concept 2.6 R7).
+    identity_unit_of_work = PostgresUnitOfWork(engine)
 
     # Staff (Stage 3.3), sobre o **mesmo** `Engine` — não um novo. Os dois ports
     # se cruzam (L-JF3 consulta funcionário, L-E4 consulta função), e dois
@@ -577,6 +584,7 @@ def wire_dependencies(
             invitation_ttl=invitation_ttl,
             handover_ttl=handover_ttl,
             base_url=cfg.app_base_url,
+            unit_of_work=identity_unit_of_work,
         ),
         send_invitation=SendInvitationUseCase(email_sender=sender),
         revoke_all_sessions=RevokeAllSessionsUseCase(sessions=sessions, clock=clock),
@@ -602,6 +610,7 @@ def wire_dependencies(
             clock=clock,
             access_token_ttl=access_ttl,
             refresh_token_ttl=refresh_ttl,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_revoke_session=RevokeSessionUseCase(
             sessions=sessions, token_issuer=token_issuer, clock=clock
@@ -631,6 +640,7 @@ def wire_dependencies(
             clock=clock,
             invitation_ttl=invitation_ttl,
             base_url=cfg.app_base_url,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_request_password_reset=RequestPasswordResetUseCase(
             users=users,
@@ -641,6 +651,7 @@ def wire_dependencies(
             clock=clock,
             reset_ttl=reset_ttl,
             base_url=cfg.app_base_url,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_set_password_with_token=SetPasswordWithTokenUseCase(
             users=users,
@@ -649,6 +660,7 @@ def wire_dependencies(
             token_issuer=setup_token_issuer,
             hasher=hasher,
             clock=clock,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_authorize_action=authorize_action,
         identity_guard=guard,

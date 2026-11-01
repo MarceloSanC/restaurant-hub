@@ -14,16 +14,23 @@ o caminho indireto; este teste fecha essa lacuna pelo lado do consumidor.
 import ast
 import io
 import pathlib
+from collections.abc import Callable
 from datetime import timedelta
 
 import pytest
 
 from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
+from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
+    PostgresPasswordSetupTokenRepository,
+)
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.session_repository import (
     PostgresSessionRepository,
+)
+from restaurant_hub.features.identity.adapters.out.postgres.unit_of_work import (
+    PostgresUnitOfWork,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.unit_repository import (
     PostgresUnitRepository,
@@ -140,6 +147,92 @@ def test_os_adapters_concretos_continuam_sendo_os_do_postgres() -> None:
     assert isinstance(use_case._sessions, PostgresSessionRepository)
     assert isinstance(deps.identity_create_unit._units, PostgresUnitRepository)
     assert isinstance(deps.identity_create_unit._restaurants, PostgresRestaurantRepository)
+
+
+# Stage 2.6 — os use cases com unidade de trabalho e, para cada um, o conjunto
+# EXATO de atributos que guardam repositório. Exato de propósito: um filtro por
+# `isinstance` pularia em silêncio um embrulho (cache, métrica) montado sobre outro
+# engine, e o teste continuaria verde.
+_COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[str]]] = {
+    "set_password_with_token": (
+        lambda d: d.identity_set_password_with_token,
+        {"_users", "_sessions", "_tokens"},
+    ),
+    "invite_user": (
+        lambda d: d.identity_invite_user,
+        {"_users", "_restaurants", "_units", "_tokens"},
+    ),
+    # O da fachada, dentro do gateway de staff — o caminho da travessia entre BCs.
+    "provision_account": (
+        lambda d: d.staff_identity_gateway._facade._provision_account,
+        {"_users", "_restaurants", "_units", "_tokens"},
+    ),
+    "request_password_reset": (
+        lambda d: d.identity_request_password_reset,
+        {"_users", "_tokens"},
+    ),
+    "refresh_session": (
+        lambda d: d.identity_refresh_session,
+        {"_users", "_sessions"},
+    ),
+}
+_REPOSITORIOS_POSTGRES = (
+    PostgresRestaurantRepository,
+    PostgresUnitRepository,
+    PostgresUserRepository,
+    PostgresSessionRepository,
+    PostgresPasswordSetupTokenRepository,
+)
+
+
+@pytest.mark.parametrize("nome", sorted(_COM_UNIDADE))
+def test_unidade_e_repositorios_do_use_case_compartilham_o_engine(nome: str) -> None:
+    """CA9 (concept 2.6 R7) — a unidade é chaveada pelo `Engine`.
+
+    Um repositório montado sobre outro engine escreveria fora da unidade em
+    silêncio: a suíte inteira continuaria verde e a atomicidade sumiria em
+    produção. Aqui a fiação real é conferida repositório a repositório.
+    """
+    obter, esperados = _COM_UNIDADE[nome]
+    atributos = vars(obter(wire_dependencies(Settings(_env_file=None))))
+    unidade = atributos["_unit_of_work"]
+    com_engine = {k for k, v in atributos.items() if hasattr(v, "_engine")} - {"_unit_of_work"}
+
+    assert isinstance(unidade, PostgresUnitOfWork)
+    assert com_engine == esperados
+    for atributo in esperados:
+        repositorio = atributos[atributo]
+        assert isinstance(repositorio, _REPOSITORIOS_POSTGRES), atributo
+        assert repositorio._engine is unidade._engine, atributo
+
+
+def _use_cases_que_recebem_unidade() -> set[str]:
+    """Classes de `use_cases/` cujo `__init__` recebe `unit_of_work` — derivado do código."""
+    pasta = _SRC / "features" / "identity" / "application" / "use_cases"
+    nomes: set[str] = set()
+    for arquivo in sorted(pasta.glob("*.py")):
+        arvore = ast.parse(arquivo.read_text("utf-8"))
+        for classe in (n for n in arvore.body if isinstance(n, ast.ClassDef)):
+            parametros = {
+                a.arg
+                for m in classe.body
+                if isinstance(m, ast.FunctionDef) and m.name == "__init__"
+                for a in m.args.args + m.args.kwonlyargs
+            }
+            if "unit_of_work" in parametros:
+                nomes.add(classe.name)
+    return nomes
+
+
+def test_todo_use_case_com_unidade_esta_na_conferencia_do_engine() -> None:
+    """A totalidade de `_COM_UNIDADE`: a conferência acima é por caso, e um sexto use
+    case que ganhasse unidade (a regra 10 obriga quem escreve duas vezes) ficaria fora
+    dela em silêncio — com um repositório de outro engine escrevendo fora da unidade.
+    """
+    deps = wire_dependencies(Settings(_env_file=None))
+    conferidos = {type(obter(deps)).__name__ for obter, _ in _COM_UNIDADE.values()}
+
+    assert conferidos == _use_cases_que_recebem_unidade()
 
 
 def test_ttl_dos_tokens_vem_da_configuracao() -> None:

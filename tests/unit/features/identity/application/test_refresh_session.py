@@ -43,6 +43,7 @@ from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_user_repository import (
     InMemoryUserRepository,
 )
@@ -73,6 +74,7 @@ class _SessionRepositoryInstrumentado(InMemorySessionRepository):
         super().__init__()
         self.chamadas: list[str] = []
         self.add_deve_falhar = False
+        self.revoke_deve_falhar = False
 
     def add(self, session: Session) -> None:
         self.chamadas.append("add")
@@ -80,9 +82,24 @@ class _SessionRepositoryInstrumentado(InMemorySessionRepository):
             raise _FalhaDeEscrita()
         super().add(session)
 
-    def revoke(self, session_id: SessionId, revoked_at: datetime) -> None:
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
         self.chamadas.append("revoke")
-        super().revoke(session_id, revoked_at)
+        revogou = super().revoke(session_id, revoked_at)
+        if self.revoke_deve_falhar:
+            raise _FalhaDeEscrita()
+        return revogou
+
+
+class _SessoesQuePerdemACorrida(InMemorySessionRepository):
+    """`find` vê a sessão ativa, `revoke` diz que não revogou: a corrida perdida.
+
+    No caminho sequencial a linha é inalcançável — quem rotaciona de novo já
+    encontra a sessão revogada no passo 3. Só duas rotações simultâneas chegam aqui;
+    o teste com duas threads contra o Postgres cobre o lado do adapter.
+    """
+
+    def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
+        return False
 
 
 class _Fixture:
@@ -93,6 +110,7 @@ class _Fixture:
         self.sessions = sessions if sessions is not None else InMemorySessionRepository()
         self.issuer = FakeTokenIssuer()
         self.clock = FakeClock(_NOW)
+        self.unidade = InMemoryUnitOfWork(self.sessions)
         self.use_case = RefreshSessionUseCase(
             users=self.users,
             sessions=self.sessions,
@@ -101,6 +119,7 @@ class _Fixture:
             clock=self.clock,
             access_token_ttl=_ACCESS_TTL,
             refresh_token_ttl=_REFRESH_TTL,
+            unit_of_work=self.unidade,
         )
         self.logout_use_case = RevokeSessionUseCase(
             sessions=self.sessions,
@@ -243,33 +262,63 @@ def test_precedencia_revogado_vence_expirado() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_revoke_da_antiga_precede_o_add_da_nova() -> None:
-    """A ordem das escritas do passo 6 é contrato, e este teste é o que a segura.
+def test_revoke_da_antiga_precede_o_add_da_nova_dentro_de_uma_unidade() -> None:
+    """A ordem das escritas do passo 6 continua contrato — agora dentro da unidade.
 
     Irmão de `test_precedencia_revogado_vence_expirado`: lá a precedência é das
-    **checagens** (passos 3 e 4), aqui é das **escritas**. As duas são invisíveis
-    numa revisão de diff e nenhuma outra asserção da suíte as alcança — ao fim de
-    uma rotação bem-sucedida o estado final é idêntico nas duas ordens.
+    **checagens** (passos 3 e 4), aqui é das **escritas**. É o `revoke` que decide
+    a corrida (devolve se revogou), então ele tem de vir antes do `add`.
+    """
+    sessions = _SessionRepositoryInstrumentado()
+    fixture = _Fixture(sessions=sessions).com_usuario()
+    fixture.com_sessao()
+    sessions.chamadas.clear()  # descarta o `add` da própria montagem
 
-    O cenário é literalmente o que o concept §6 declara aceito sob o nome
-    "rotação não-atômica": `revoke` confirma, `add` falha. Com a ordem correta, o
-    token antigo já está morto e o cliente cai em detecção de reuso no retry —
-    erra para o lado seguro. Invertida, a falha deixaria a sessão antiga **viva**,
-    abrindo a janela em que dois refresh valem ao mesmo tempo — o pior trade num
-    sistema cuja principal defesa é detectar reuso.
+    _rotacionar(fixture)
+
+    assert sessions.chamadas == ["revoke", "add"]
+    assert (fixture.unidade.aberturas, fixture.unidade.commits) == (1, 1)
+
+
+def test_falha_no_add_da_nova_deixa_a_antiga_valida() -> None:
+    """Stage 2.6 CA4/CA6 — o cenário que o concept 2.4 §6 chamava "rotação não-atômica".
+
+    Antes da unidade, `revoke` confirmava e `add` falhava: o cliente ficava sem
+    refresh válido e a retentativa caía na detecção de reuso, revogando todas as
+    sessões. Agora a falha desfaz a revogação, e a mesma rotação funciona de novo.
     """
     sessions = _SessionRepositoryInstrumentado()
     fixture = _Fixture(sessions=sessions).com_usuario()
     antiga = fixture.com_sessao()
-    sessions.chamadas.clear()  # descarta o `add` da própria montagem
+    sessions.chamadas.clear()
     sessions.add_deve_falhar = True
 
     with pytest.raises(_FalhaDeEscrita):
         _rotacionar(fixture)
 
     assert sessions.chamadas == ["revoke", "add"]
-    # E a consequência que dá sentido à ordem: a antiga não sobrevive à falha.
-    assert fixture.sessions.sessions[antiga.id].revoked_at == _NOW
+    assert fixture.sessions.sessions[antiga.id].revoked_at is None
+    assert fixture.unidade.rollbacks == 1
+
+    sessions.add_deve_falhar = False
+    resultado = _rotacionar(fixture)
+    assert resultado.refresh_token
+
+
+def test_corrida_perdida_e_reuso_e_revoga_todas_as_sessoes() -> None:
+    """R6b — `revoke` devolvendo `False` dentro da unidade é a corrida perdida."""
+    fixture = _Fixture(sessions=_SessoesQuePerdemACorrida()).com_usuario()
+    fixture.com_sessao()
+    fixture.com_sessao(refresh_value="outro-dispositivo", session_id="sess-2")
+
+    with pytest.raises(RefreshTokenReuseError):
+        _rotacionar(fixture)
+
+    # Nenhuma sessão nova; as duas existentes revogadas pela revogação em massa,
+    # que acontece fora da unidade desfeita e por isso fica gravada.
+    assert set(fixture.sessions.sessions) == {SessionId("sess-1"), SessionId("sess-2")}
+    assert all(s.revoked_at == _NOW for s in fixture.sessions.sessions.values())
+    assert (fixture.unidade.commits, fixture.unidade.rollbacks) == (0, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -350,3 +399,20 @@ def test_refresh_apos_logout_e_tratado_como_reuso() -> None:
         _rotacionar(fixture, "refresh-do-celular")
 
     assert fixture.sessions.sessions[desktop.id].revoked_at == _NOW
+
+
+def test_falha_no_revoke_da_antiga_nao_grava_nada() -> None:
+    """Stage 2.6 CA4, escrita N = 1 da rotação: o injetor falha depois de revogar."""
+    sessions = _SessionRepositoryInstrumentado()
+    fixture = _Fixture(sessions=sessions).com_usuario()
+    antiga = fixture.com_sessao()
+    sessions.chamadas.clear()
+    sessions.revoke_deve_falhar = True
+
+    with pytest.raises(_FalhaDeEscrita):
+        _rotacionar(fixture)
+
+    assert sessions.chamadas == ["revoke"]
+    assert set(fixture.sessions.sessions) == {antiga.id}
+    assert fixture.sessions.sessions[antiga.id].revoked_at is None
+    assert fixture.unidade.rollbacks == 1
