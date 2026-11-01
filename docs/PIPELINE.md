@@ -796,9 +796,10 @@ e [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
    - **registra a auditoria no PR** — comentário com o veredito + o label
      de auditoria gravado como `complete` (procedimento completo na skill
      de auditoria);
-   - **o merge é do usuário** (salvo pedido explícito, ou corrida autônoma
-     autorizada — exceção registrada no
-     [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md), cuja regra
+   - **o merge é do usuário** (salvo pedido explícito, corrida autônoma
+     autorizada — [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md)
+     — ou orquestração de Step —
+     [ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md); a regra
      de aprovação vive em [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §Gates de PR).
 
 O fluxo multi-sessão por fase (3A/3B/4 em sessões separadas, seguindo o

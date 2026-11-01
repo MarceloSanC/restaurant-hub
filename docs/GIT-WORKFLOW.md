@@ -84,9 +84,17 @@ referenciam esta seção em vez de duplicar a lista:
   accepted` **e** a Stage dentro do recorte em "Authorized runs"), a
   aprovação humana é substituída por **auditoria de contexto limpo**
   (`stage-audit` por sessão fresca, que grava o label `complete` —
-  CONVENTIONS §3.6). Fora de corrida autorizada, a aprovação continua
-  obrigatória. Esta é a exceção **registrada no dono**, como manda
-  CONVENTIONS §0 — sem ela o ADR seria letra morta.
+  CONVENTIONS §3.6).
+  **Exceção — orquestração de Step:** na sessão mestra do
+  [`PROMPT-step-single-session.md`](./PROMPT-step-single-session.md)
+  ([ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md)), a
+  aprovação humana também é substituída pela auditoria de contexto limpo:
+  a mestra mergeia sozinha quando valem as condições de §3.4 daquele
+  prompt (label `complete` gravado pelo auditor, sem blocker, CI verde,
+  branch atualizada, nenhum fork P/HALT pendente).
+  Fora dessas duas exceções, a aprovação continua obrigatória. Elas são
+  **registradas no dono**, como manda CONVENTIONS §0 — sem isso os ADRs
+  seriam letra morta.
 - **Branch atualizada:** PR precisa estar à frente da base (`Require
   branches to be up to date`).
 - **Conversas resolvidas:** todos os comentários do code review devem
@@ -710,8 +718,9 @@ Exemplo de feedback construtivo:
 - Tentativa de push direto em `main` ou `develop`
 - Tentativa de merge **sem** CI verde
 - Tentativa de merge **sem** ≥ 1 aprovação — **exceto** em corrida autônoma
-  autorizada pelo ADR 0.0.0004, onde a aprovação é substituída por auditoria
-  de contexto limpo (ver §Gates de PR, o ponto único)
+  autorizada pelo ADR 0.0.0004 ou na orquestração de Step (ADR 0.0.0007),
+  onde a aprovação é substituída por auditoria de contexto limpo (ver
+  §Gates de PR, o ponto único)
 - Coverage < 90% em código novo
 - Branch errada para a operação (ex: `feat/x` em vez de branch de feature)
 - Squash ou rebase no merge (deve ser merge commit)

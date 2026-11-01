@@ -1,11 +1,11 @@
 ---
 title: Prompt — Orquestração de Step em Sessão Mestra (subagentes de contexto zerado + gate de domínio + decisão assistida rica)
-description: Sessão mestra human-in-the-loop que conduz um Step inteiro (grupo de Stages) do roadmap sem escrever artefato próprio — despacha subagentes de contexto zerado para cada fase do PROMPT-stage-single-session (Concept, Technical, Execução e os Checkpoints), resolve cada fork de decisão (pesquisa abordagens → decide sozinho via docs+skills ou por evidência verificada na triagem E/C da skill evidence-resolution; só fork P vai ao humano; sempre registrando ADR), roda a auditoria de Stage em subagente separado com tratamento de findings, e — ao OK do humano — faz o merge, limpa a branch/worktree e inicia a próxima Stage.
+description: Sessão mestra human-in-the-loop que conduz um Step inteiro (grupo de Stages) do roadmap sem escrever artefato próprio — despacha subagentes de contexto zerado para cada fase do PROMPT-stage-single-session (Concept, Technical, Execução e os Checkpoints), resolve cada fork de decisão (pesquisa abordagens → decide sozinho via docs+skills ou por evidência verificada na triagem E/C da skill evidence-resolution; só fork P vai ao humano; sempre registrando ADR), roda a auditoria de Stage em subagente separado com tratamento de findings, e — com a re-auditoria validada e os gates verdes, sem esperar o humano — faz o merge, limpa a branch/worktree e inicia a próxima Stage.
 when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) travar as regras de negócio em fonte oficial antes de codar, (b) isolar cada fase e cada revisão em um subagente de contexto zerado para reduzir viés, (c) manter o humano decidindo só o que os docs não resolvem, com explicação didática, e (d) que o próprio orquestrador conduza cada Stage até o merge, encadeando as Stages do Step.
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
 created_at: 2026-07-05
-updated_at: 2026-07-12
+updated_at: 2026-10-19
 ---
 
 # Prompt — Orquestração de Step em Sessão Mestra
@@ -21,8 +21,8 @@ prompt de nível Stage já existente — não o reimplementa. Uma sessão mestra
   não respondem (§2);
 - **audita cada Stage** em subagente separado, trata os findings, re-audita e fecha a auditoria
   no PR (§3);
-- ao **OK do humano** no relatório, **faz o merge**, limpa branch/worktree e **inicia a próxima
-  Stage** (§3.5).
+- com a **re-auditoria validada** e os gates verdes, **faz o merge sozinha** (sem esperar OK do
+  humano), limpa branch/worktree, entrega o relatório e **inicia a próxima Stage** (§3.4–§3.5).
 
 Sucede a antiga variante INTERATIVA (que operava em nível Stage): herda o DNA *human-in-the-loop
 com disciplina de decisão rica* e o eleva ao Step, adicionando o **gate de domínio** e a
@@ -255,7 +255,7 @@ pré-condições passam em vez de travar.
 
 ---
 
-## 3. Fechamento da Stage — auditoria → tratamento → re-auditoria → relatório → merge
+## 3. Fechamento da Stage — auditoria → tratamento → re-auditoria → merge → relatório
 
 Ao fim da execução de uma Stage (Tasks commitadas, gates de saída verdes, **PR aberto** pelo
 subagente executor conforme o canônico), a mestra conduz o ciclo de fechamento.
@@ -297,34 +297,52 @@ Depois do tratamento, o subagente refaz a análise: **está tudo validado para f
   não for `complete`. Ele **sinaliza**, mas **não trava** o merge (sem branch protection, nenhum
   check é *Required* — CONVENTIONS §3.6): quem não mergeia Stage não auditada é **você**.
 
-### 3.4 Relatório ao humano (formato da stage-audit)
+### 3.4 Merge automático, limpeza e próxima Stage
 
-Com a auditoria `complete`, a mestra entrega ao humano um **relatório completo e didático do que foi
-implementado na Stage**, no **mesmo formato do relatório da skill `stage-audit`** (as 6 seções da
-Fase E + status global + conclusão): linguagem clara para quem não acompanhou, jargão glosado, fato
-com `arquivo:linha`/comando→resultado, e a lente de **valor entregue + qualidade de design**. Este
-relatório **é o gate de aprovação humana** e **abre com o bloco "Valide você"** da execução
-(PROMPT-stage §0 do relatório): o humano valida pelos passos antes de ler o resto.
+A **auditoria validada substitui a aprovação humana** (exceção registrada em
+[`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §Gates de PR;
+[ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md)). A mestra **não espera OK** — ao
+fim da re-auditoria (§3.3), confere as **condições de merge** e, se todas valem, mergeia sozinha:
 
-### 3.5 Merge, limpeza e próxima Stage
+1. Label de auditoria `complete` + comentário de veredito no PR, **gravados pelo subagente
+   auditor/re-auditor** — nunca pela mestra nem pelo executor (CONVENTIONS §3.6).
+2. Status global da re-auditoria **sem blocker aberto**; todo finding tratado na Stage ou
+   convertido em issue (§3.2).
+3. **CI verde** no último commit do PR (`gh pr checks <num>`), inclusive `audit-gate`.
+4. Branch **à frente de `origin/develop`** e sem carona de outro escopo (GIT-WORKFLOW §Etapa 4).
+5. **Nenhum fork P pendente** de resposta humana e nenhum HALT aberto (§2).
 
-Ao **OK do humano** no relatório, a mestra executa o fechamento (invocar `git-versioning-pointer`
-antes das operações git):
+**Qualquer condição falhando → não mergeia:** HALT-and-park (§2), relatório ao humano explicando o
+que travou, e espera. Não force progresso nem “conserte” a condição gravando o label à mão.
+
+Com as condições valendo, executar o fechamento (invocar `git-versioning-pointer` antes das
+operações git):
 
 ```bash
-gh pr merge <num> --merge --delete-branch          # merge + apaga a branch remota
+gh pr merge <num> --merge --delete-branch          # merge commit (nunca squash/rebase) + apaga a branch remota
 docker compose down -v                             # DENTRO da worktree: o worktree-rm não pega o postgres do compose
 python scripts/worktree-rm.py <branch>             # worktree + branch local + prune
 git pull origin develop                            # no checkout principal (sempre em develop)
 ```
 
+> **Override consciente da skill.** A `stage-audit` diz "nunca faz merge — é do usuário, salvo
+> pedido explícito". Aqui o **pedido explícito é este prompt**, ratificado pelo humano no
+> [ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md): o auditor continua sem mão no
+> merge (só julga e grava o label); quem mergeia é a **mestra**, e só com as condições acima.
+
+### 3.5 Relatório ao humano (formato da stage-audit) — informativo, não bloqueia
+
+Depois do merge, a mestra entrega ao humano um **relatório completo e didático do que foi
+implementado na Stage**, no **mesmo formato do relatório da skill `stage-audit`** (as 6 seções da
+Fase E + status global + conclusão + **PR mergeado e hash do merge**): linguagem clara para quem não
+acompanhou, jargão glosado, fato com `arquivo:linha`/comando→resultado, e a lente de **valor
+entregue + qualidade de design**. Abre com o bloco **"Valide você"** da execução (PROMPT-stage §0
+do relatório). O relatório **não é gate**: a mestra o entrega e **segue para a próxima Stage** sem
+esperar resposta. Se o humano, ao ler, apontar defeito, ele vira **revisão pós-Stage** (issue nova,
+branch genérica sem `<N-M>` — GIT-WORKFLOW §"Revisões pós-Stage").
+
 Depois: **inicia a próxima Stage** do Step (volta ao Princípio central, despachando os subagentes de
 fase). O ciclo se repete até a última Stage.
-
-> **Override consciente da skill.** A `stage-audit` diz "nunca faz merge — é do usuário, salvo
-> pedido explícito". Aqui o **OK do humano no relatório (§3.4) É o pedido explícito**: a decisão
-> irreversível continua sendo do humano (ele aprova); o orquestrador só **executa** o merge que ele
-> autorizou. Sem o OK, não há merge.
 
 ### Fechamento do Step
 
@@ -353,8 +371,10 @@ de domínio que passou a `accepted` (ou, no Step 1, a **dispensa do gate** com a
       decisão de fork vira **ADR**. A execução fecha os gates de saída e **abre o PR** (canônico).
    3. **Auditoria (§3.1)** em subagente → **tratamento de findings (§3.2)** em subagente →
       **re-auditoria (§3.3)** em loop → **auditoria `complete` no PR**.
-   4. **Relatório ao humano (§3.4).** Humano dá **OK** → **merge + limpeza (§3.5)**.
-   5. Inicia a **próxima Stage**.
+   4. **Condições de merge (§3.4)** valendo → **merge automático + limpeza**, sem esperar o
+      humano. Alguma falhando → HALT e relatório explicando o bloqueio.
+   5. **Relatório ao humano (§3.5)** — informativo, não bloqueia.
+   6. Inicia a **próxima Stage**.
 4. **Fechamento do Step (§ acima).** Todas as Stages mergeadas → Step `done` no roadmap + relatório
    do Step.
 
