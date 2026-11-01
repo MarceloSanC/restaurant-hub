@@ -1,6 +1,6 @@
 """Use case: consultar o papel de uma conta.
 
-Nasce na Stage 3.7 para a fachada (ADR 3.7.0001 §3). O ADR decide que desligar
+Nasce na Stage 3.8 para a fachada (ADR 3.8.0001 §3). O ADR decide que desligar
 um registro de funcionário em staff só corta as sessões do login vinculado
 quando o acesso dele vem **do registro**; uma das condições é a conta ser de
 funcionário — gerente e dono que também trabalham na escala tiram a autoridade

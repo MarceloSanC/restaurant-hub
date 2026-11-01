@@ -122,7 +122,7 @@ class AuthorizeActionCommand:
 
 @dataclass(frozen=True)
 class GetAccountRoleCommand:
-    """Consulta do papel de uma conta (Stage 3.7, ADR 3.7.0001 §3).
+    """Consulta do papel de uma conta (Stage 3.8, ADR 3.8.0001 §3).
 
     Consulta com nome de command pelo mesmo motivo de `AuthorizeActionCommand`:
     a entrada de todo use case de identity é um command. Quem pergunta é a

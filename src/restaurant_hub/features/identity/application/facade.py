@@ -31,7 +31,7 @@ Três propriedades definem a fachada:
 A fachada é montada **uma vez**, no `composition_root`, sobre os **mesmos
 repositórios, `EmailSender` e `Clock`** que servem as rotas de identity — um
 grafo, não dois. Os três primeiros use cases por baixo dela nasceram na Stage
-3.5; o quarto, `GetAccountRoleUseCase`, na 3.7 (ADR 3.7.0001 §3) — o único de
+3.5; o quarto, `GetAccountRoleUseCase`, na 3.8 (ADR 3.8.0001 §3) — o único de
 leitura. Todos têm a fachada como único consumidor (ADR 3.5.0001 §Consequences).
 """
 
@@ -144,7 +144,7 @@ class IdentityFacade:
     def account_role(self, user_id: str) -> str | None:
         """O papel da conta em texto (`Role.value`), ou `None` se ela não existe.
 
-        Só leitura (Stage 3.7, ADR 3.7.0001 §3). Devolve o **valor** do papel,
+        Só leitura (Stage 3.8, ADR 3.8.0001 §3). Devolve o **valor** do papel,
         não o `Role`: o consumidor não nomeia tipos de identity (propriedade 1).
         A falha do repositório sobe como é (propriedade 2).
         """

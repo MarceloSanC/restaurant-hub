@@ -4,7 +4,7 @@ Nasce na Stage 3.5 para o desligamento de funcionário (ADR 3.5.0003): quando o
 desligamento em staff decide cortar o acesso, o gateway corta as sessões vivas do
 login vinculado **antes** de gravar — a pessoa perde o acesso agora, não quando o
 access token expirar. **Quando** cortar é decisão do consumidor, não deste use
-case (ADR 3.7.0001: só o login de funcionário, e só se o registro desligado é a
+case (ADR 3.8.0001: só o login de funcionário, e só se o registro desligado é a
 fonte do acesso dele). A conta continua existindo e continua podendo logar; o que
 ela deixa de alcançar é decidido pela autorização, não por este use case.
 

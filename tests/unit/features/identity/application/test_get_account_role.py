@@ -1,4 +1,4 @@
-"""Testes do use case `get_account_role` — Stage 3.7, CA01 (ADR 3.7.0001 §3).
+"""Testes do use case `get_account_role` — Stage 3.8, CA01 (ADR 3.8.0001 §3).
 
 O que se protege: o papel devolvido é o da conta pedida, para **cada** papel —
 não um representante, porque é sobre esse valor que staff decide se revoga as

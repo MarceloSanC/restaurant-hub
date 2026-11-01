@@ -86,7 +86,7 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # 21 até a 2.5; a Stage 3.5 acrescenta `ProvisionAccountCommand`,
 # `SendInvitationCommand`, `RevokeAllSessionsCommand` e `ProvisionedAccountResult`.
 #
-# 25 até a 3.5; a Stage 3.7 acrescenta `GetAccountRoleCommand` e `AccountRoleResult`.
+# 25 até a 3.5; a Stage 3.8 acrescenta `GetAccountRoleCommand` e `AccountRoleResult`.
 _TOTAL_DE_DTOS = 27
 
 
@@ -321,7 +321,7 @@ def test_modulo_de_results_declara_exatamente_os_esperados() -> None:
     Cinco até a 2.5; a 3.5 acrescenta `ProvisionedAccountResult` — cujo
     `setup_link: str` passa na varredura de nome/tipo-folha abaixo por desenho:
     o que o contém é o `repr=False`, asserido em `test_results_carregam_os_campos_declarados`
-    e nos testes do use case, não esta varredura. A 3.7 acrescenta
+    e nos testes do use case, não esta varredura. A 3.8 acrescenta
     `AccountRoleResult` (só o `Role`).
 
     O filtro por `__module__` é necessário — `vars(results)` também enxerga os VOs
