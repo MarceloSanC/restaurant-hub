@@ -67,8 +67,9 @@ RESERVED_PATTERNS: tuple[re.Pattern[str], ...] = (
 # subseção "Marca de Task" (mudou aqui, atualizar lá). Dono: `N.M` (número da
 # Stage) ou `#<num>` (issue avulsa). Posição: `task-NN` (Task do plano),
 # `task-NN-fix` (correção da Task NN), `task-NN-extra` (Task acrescentada acima
-# do plano) ou `--` (off-task).
-TAG_PATTERN = r"(?:\d+\.\d+|#\d+)/(?:task-\d{2}(?:-fix|-extra)?|--)"
+# do plano) ou `--` (off-task). Dígito é `[0-9]`, não `\d`: em `str`, `\d` casa
+# qualquer dígito Unicode (ARABIC-INDIC, FULLWIDTH), que a gramática não prevê.
+TAG_PATTERN = r"(?:[0-9]+\.[0-9]+|#[0-9]+)/(?:task-[0-9]{2}(?:-fix|-extra)?|--)"
 
 # Conventional Commits: <tipo>(<escopo>): <descrição> [marca opcional].
 # O escopo é OBRIGATÓRIO aqui (CONVENTIONS.md §4(a), "regra de escopo mínimo");
@@ -172,6 +173,11 @@ def _conventional_commit_reason(subject: str) -> str | None:
     # Sem esta checagem, a marca malformada vira parte da descrição e o subject
     # passa como se não tivesse marca nenhuma (achado F9 da auditoria da 4.1).
     if match.group("tag") is None and subject.endswith("]"):
+        return _malformed_tag_reason(subject)
+
+    # A marca vem depois de UM espaço. Sem esta checagem, o espaço a mais fica
+    # no fim da descrição (`\S.*?`) e `x  [4.1/task-03]` passa.
+    if match.group("tag") is not None and match.group("desc")[-1].isspace():
         return _malformed_tag_reason(subject)
 
     return None

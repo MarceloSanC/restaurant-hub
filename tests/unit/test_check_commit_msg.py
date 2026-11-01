@@ -136,6 +136,11 @@ _MALFORMED_TAGS = [
     "4.1 /task-03",
     "4.1/ task-03",
     "",
+    # Dígito não-ASCII: em `str`, `\d` casa qualquer dígito Unicode.
+    "\u0664.\u0661/task-03",
+    "4.1/task-\u0660\u0663",
+    "4.1/task-\uff10\uff13",
+    "#\uff13\uff14/--",
 ]
 
 
@@ -150,6 +155,9 @@ def test_malformed_tag_at_the_end_is_rejected(tag: str) -> None:
         "feat(shared): tipar o retorno como list[int]",  # colchete colado à palavra
         "feat(shared): aceitar o campo [opcional]",
         "feat(scheduling): x[4.1/task-03]",  # marca válida, sem o espaço
+        "feat(scheduling): x  [4.1/task-03]",  # marca válida, dois espaços
+        "feat(scheduling): x \u00a0[4.1/task-03]",  # espaço + espaço não separável
+        "feat(scheduling): x\t[4.1/task-03]",  # tab no lugar do espaço
         "feat(scheduling): [4.1/task-03]",  # marca válida, sem descrição
         "feat(scheduling): x [[4.1/task-03]]",
         "feat(scheduling): x [4.1/task-03]]",
