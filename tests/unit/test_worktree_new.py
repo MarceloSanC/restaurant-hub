@@ -23,6 +23,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from dotenv import dotenv_values
 
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 
@@ -295,6 +296,34 @@ def test_every_occurrence_of_a_duplicated_key_is_rewritten(tmp_path: Path) -> No
     assert [entry for entry in lines if entry.startswith("DATABASE_URL")] == [
         f"DATABASE_URL={URL_WORKTREE}"
     ] * 2
+
+
+def test_export_prefixed_entries_are_rewritten_in_place(tmp_path: Path) -> None:
+    """O python-dotenv lê `export CHAVE=valor` como `CHAVE`.
+
+    Sem reconhecer o prefixo, o script não achava a URL, acrescentava o default
+    do Settings no fim — que vencia por ser o último — e trocava usuário, senha
+    e banco da worktree em silêncio.
+    """
+    _write_env(
+        tmp_path,
+        "export DATABASE_URL=postgresql+psycopg://app:s3cr3t@localhost:5432/mydb",
+        "export	POSTGRES_PORT=5432",
+        "exported_KEY=1",
+    )
+
+    wn.write_worktree_env_ports(tmp_path, PORTS)
+
+    lines = _env_lines(tmp_path)
+    assert lines[:3] == [
+        f"export DATABASE_URL=postgresql+psycopg://app:s3cr3t@localhost:{POSTGRES_PORT}/mydb",
+        f"export POSTGRES_PORT={POSTGRES_PORT}",
+        "exported_KEY=1",
+    ]
+    assert not any("user:pass" in line for line in lines)
+    assert dotenv_values(tmp_path / ".env")["DATABASE_URL"] == (
+        f"postgresql+psycopg://app:s3cr3t@localhost:{POSTGRES_PORT}/mydb"
+    )
 
 
 def test_redis_url_is_rewritten_when_present(tmp_path: Path) -> None:

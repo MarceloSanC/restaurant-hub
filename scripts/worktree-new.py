@@ -529,13 +529,22 @@ def url_with_port(url: str, port: int) -> str | None:
     return f"{url[:start]}{userinfo}{at}{host}:{port}{url[start + len(parts.netloc) :]}"
 
 
-def _env_entry(line: str) -> tuple[str | None, str]:
-    """`(chave, valor cru)` de uma linha `CHAVE=valor`; `(None, "")` se não for uma."""
+def _env_entry(line: str) -> tuple[str | None, str, str]:
+    """`(chave, valor cru, prefixo)` de uma linha `CHAVE=valor`; `(None, "", "")` se não for uma.
+
+    O prefixo é `export ` quando a linha o traz: o python-dotenv o aceita e lê a
+    chave sem ele. Sem reconhecê-lo, a URL do `.env` não era achada, o default do
+    Settings era acrescentado no fim e vencia — trocando usuário, senha e banco em
+    silêncio.
+    """
     stripped = line.strip()
     if not stripped or stripped.startswith("#") or "=" not in stripped:
-        return None, ""
+        return None, "", ""
+    prefix = ""
+    if stripped.startswith("export") and stripped[6:7].isspace():
+        prefix, stripped = "export ", stripped[6:].lstrip()
     key, _, raw = stripped.partition("=")
-    return key.strip(), raw
+    return key.strip(), raw, prefix
 
 
 def _env_value(raw: str) -> str:
@@ -564,9 +573,9 @@ def write_worktree_env_ports(wt_path: Path, ports: dict[str, int]) -> None:
     notes: list[str] = []
     out_lines: list[str] = []
     for line in existing.splitlines():
-        key, raw = _env_entry(line)
+        key, raw, prefix = _env_entry(line)
         if key is not None and key in ports:
-            out_lines.append(f"{key}={ports[key]}")
+            out_lines.append(f"{prefix}{key}={ports[key]}")
             seen.add(key)
         elif key is not None and URL_PORT_KEYS.get(key) in ports:
             port = ports[URL_PORT_KEYS[key]]
@@ -575,7 +584,7 @@ def write_worktree_env_ports(wt_path: Path, ports: dict[str, int]) -> None:
                 out_lines.append(line)
                 notes.append(f"{key} mantida: não aponta para localhost/127.0.0.1/::1")
             else:
-                out_lines.append(f"{key}={new_url}")
+                out_lines.append(f"{prefix}{key}={new_url}")
                 notes.append(f"{key} reescrita na porta {port}")
             seen.add(key)
         else:
