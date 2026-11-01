@@ -24,8 +24,9 @@ outro papel, porque não existe onde pedir. Quem responde pela autorização é
 o **use case consumidor**, antes de chamar este port (Stage 3.7, ADR 3.7.0001):
 o de **provisionar** (`create_login_for_employee`) autoriza `manage_staff` **e**
 `manage_users` (concept 3.5 §5.3), e a rota R17 autoriza as mesmas duas antes
-dele; o de **revogar sessões** (`deactivate_employee`) autoriza `manage_staff`.
-A fachada de identity não autoriza (#49).
+dele; o de **perguntar o papel e revogar sessões** (`deactivate_employee`, que
+chama `is_employee_login` antes de `revoke_login_sessions`) autoriza
+`manage_staff`. A fachada de identity não autoriza (#49).
 
 **As cinco leis** (concept 3.5 §4; L-IG5 do concept 3.8 §4). Texto normativo
 deste módulo, pareado com a suíte de contrato

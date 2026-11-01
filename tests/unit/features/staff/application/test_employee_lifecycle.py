@@ -63,7 +63,12 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 from tests.fakes.features.staff.in_memory_employee_repository import InMemoryEmployeeRepository
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
+from tests.fakes.features.staff.stub_access_guards import (
+    TEST_ACTOR,
+    DenyingAccessGuard,
+    PermissiveAccessGuard,
+    StubAuthorizationDenied,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -646,6 +651,32 @@ def test_ca15_vinculado_em_endereco_alheio_so_faz_o_lookup() -> None:
 
     assert gateway.calls == []
     assert fakes.store.calls[antes:] == ["employees.find_by_id"]
+
+
+def test_recusa_do_guard_nao_chama_list_by_unit_nem_is_employee_login() -> None:
+    """A autorização vem antes de tudo (ADR 3.7.0001 §4): as consultas da 3.8 também.
+
+    Com o registro no caminho em que **as duas** consultas aconteceriam (login de
+    funcionário, sem outro registro ativo), a recusa sai crua e nem a unidade é
+    listada nem identity é perguntada — nada é revogado nem gravado.
+    """
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    _vincular(fakes, gateway)
+    guard = DenyingAccessGuard()
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StubAuthorizationDenied) as excinfo:
+        DeactivateEmployeeUseCase(fakes.employees, gateway, guard=guard).execute(
+            DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
+
+    assert excinfo.value is guard.denial
+    assert fakes.store.calls[antes:] == []
+    assert gateway.calls == []
+    relido = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.active is True
 
 
 def test_recontratar_nao_toca_o_gateway_e_o_login_continua_vinculado() -> None:

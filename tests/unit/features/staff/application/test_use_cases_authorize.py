@@ -252,6 +252,9 @@ def _montar(classe: type, guard: AccessGuard) -> Montagem:
     """Constrói o use case pelo construtor, preenchendo cada parâmetro pelo nome."""
     fakes = _semear()
     gateway = InMemoryIdentityGateway()
+    # O login do registro é de funcionário (L-IG5): sem isso, desligar não revogaria
+    # e o efeito do outro lado da fronteira sumiria do caminho feliz.
+    gateway.seed_employee_login(_LOGIN, tenant_id=_A, unit_id=_U1)
     ids = FakeIdGenerator()
     disponiveis: dict[str, object] = {
         "employees": fakes.employees,
@@ -408,8 +411,9 @@ def _copia_na_unidade_destino(montagem: Montagem, resultado: object) -> None:
 def _login_vinculado_no_endereco(montagem: Montagem, resultado: object) -> None:
     funcionario = resultado.employee
     assert (funcionario.tenant_id, funcionario.unit_id, funcionario.id) == (_A, _U1, _E_ATIVO)
-    assert _relido(montagem).user_id is not None
-    [registro] = montagem.gateway.logins.values()
+    login = _relido(montagem).user_id
+    assert login is not None
+    registro = montagem.gateway.logins[login]
     assert (registro.tenant_id, registro.unit_id) == (_A, _U1)
 
 

@@ -25,9 +25,9 @@ Não autoriza: a fachada não autoriza (#49) e este adapter tampouco. Quem
 responde pela autorização é o use case que o chama, antes de chegar aqui (Stage
 3.7, ADR 3.7.0001), e cada operação tem o seu: **provisionar e enviar o convite**
 vêm de `create_login_for_employee`, que autoriza `manage_staff` **e**
-`manage_users` (a rota R17 autoriza as mesmas duas antes dele); **revogar as
-sessões** vem de `deactivate_employee`, que autoriza só `manage_staff` (a rota R13
-também).
+`manage_users` (a rota R17 autoriza as mesmas duas antes dele); **perguntar se o
+login é de funcionário e revogar as sessões** vêm de `deactivate_employee`, que
+autoriza só `manage_staff` (a rota R13 também).
 """
 
 from restaurant_hub.features.identity.application.facade import (

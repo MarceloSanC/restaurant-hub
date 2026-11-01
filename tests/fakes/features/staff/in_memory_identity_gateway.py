@@ -197,6 +197,22 @@ class InMemoryIdentityGateway:
 
     # ---- ganchos de teste (não fazem parte do port) ----
 
+    def seed_employee_login(self, user_id: UserId, *, tenant_id: TenantId, unit_id: UnitId) -> None:
+        """Um login **conhecido** de funcionário, com um id escolhido pelo teste.
+
+        Para o arranjo que fixa o `user_id` do registro antes de montar o use case
+        (o `provision_employee_login` numera os ids). Sem ele, o login seria o caso
+        "desconhecido" de L-IG5 e desligar não revogaria. Não registra em `calls`:
+        é arranjo, não chamada recebida.
+        """
+        self.logins[user_id] = ProvisionedLoginRecord(
+            email=f"{user_id}@funcionario.invalid",
+            tenant_id=tenant_id,
+            unit_id=unit_id,
+            delivery=LoginDelivery.EMAIL,
+            setup_link="",
+        )
+
     def seed_login_of_other_role(
         self, user_id: UserId, *, tenant_id: TenantId, unit_id: UnitId
     ) -> None:
