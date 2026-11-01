@@ -665,37 +665,58 @@ def wire_dependencies(
         identity_authorize_action=authorize_action,
         identity_guard=guard,
         staff_create_job_function=CreateJobFunctionUseCase(
-            job_functions=staff_job_functions, id_generator=id_generator
+            job_functions=staff_job_functions, id_generator=id_generator, guard=staff_access_guard
         ),
-        staff_rename_job_function=RenameJobFunctionUseCase(job_functions=staff_job_functions),
+        staff_rename_job_function=RenameJobFunctionUseCase(
+            job_functions=staff_job_functions, guard=staff_access_guard
+        ),
         staff_delete_job_function=DeleteJobFunctionUseCase(
-            job_functions=staff_job_functions, employees=staff_employees
+            job_functions=staff_job_functions, employees=staff_employees, guard=staff_access_guard
         ),
-        staff_list_job_functions=ListJobFunctionsUseCase(job_functions=staff_job_functions),
+        staff_list_job_functions=ListJobFunctionsUseCase(
+            job_functions=staff_job_functions, guard=staff_access_guard
+        ),
         staff_create_employee=CreateEmployeeUseCase(
             employees=staff_employees,
             job_functions=staff_job_functions,
             id_generator=id_generator,
+            guard=staff_access_guard,
         ),
-        staff_rename_employee=RenameEmployeeUseCase(employees=staff_employees),
-        staff_list_employees=ListEmployeesUseCase(employees=staff_employees),
-        staff_delete_employee=DeleteEmployeeUseCase(employees=staff_employees),
+        staff_rename_employee=RenameEmployeeUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_list_employees=ListEmployeesUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_delete_employee=DeleteEmployeeUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
         staff_assign_job_functions=AssignJobFunctionsUseCase(
-            employees=staff_employees, job_functions=staff_job_functions
+            employees=staff_employees, job_functions=staff_job_functions, guard=staff_access_guard
         ),
-        staff_change_workload_profile=ChangeWorkloadProfileUseCase(employees=staff_employees),
-        staff_declare_shift_preference=DeclareShiftPreferenceUseCase(employees=staff_employees),
-        staff_register_unavailability=RegisterUnavailabilityUseCase(employees=staff_employees),
-        staff_remove_unavailability=RemoveUnavailabilityUseCase(employees=staff_employees),
+        staff_change_workload_profile=ChangeWorkloadProfileUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_declare_shift_preference=DeclareShiftPreferenceUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_register_unavailability=RegisterUnavailabilityUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
+        staff_remove_unavailability=RemoveUnavailabilityUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
         staff_deactivate_employee=DeactivateEmployeeUseCase(
-            employees=staff_employees, gateway=staff_identity_gateway
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
         ),
-        staff_reactivate_employee=ReactivateEmployeeUseCase(employees=staff_employees),
+        staff_reactivate_employee=ReactivateEmployeeUseCase(
+            employees=staff_employees, guard=staff_access_guard
+        ),
         staff_copy_employee_to_unit=CopyEmployeeToUnitUseCase(
-            employees=staff_employees, id_generator=id_generator
+            employees=staff_employees, id_generator=id_generator, guard=staff_access_guard
         ),
         staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
-            employees=staff_employees, gateway=staff_identity_gateway
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
         ),
         staff_access_guard=staff_access_guard,
         staff_identity_gateway=staff_identity_gateway,

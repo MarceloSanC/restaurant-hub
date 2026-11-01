@@ -23,6 +23,10 @@ from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     JobFunctionNotFoundError,
 )
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_STAFF,
+    AccessGuard,
+)
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
 )
@@ -34,9 +38,15 @@ from restaurant_hub.features.staff.application.ports.out.job_function_repository
 class AssignJobFunctionsUseCase:
     """Substitui o conjunto de funções de um funcionário."""
 
-    def __init__(self, employees: EmployeeRepository, job_functions: JobFunctionRepository) -> None:
+    def __init__(
+        self,
+        employees: EmployeeRepository,
+        job_functions: JobFunctionRepository,
+        guard: AccessGuard,
+    ) -> None:
         self._employees = employees
         self._job_functions = job_functions
+        self._guard = guard
 
     def execute(self, command: AssignJobFunctionsCommand) -> EmployeeResult:
         """Substitui o conjunto.
@@ -47,7 +57,16 @@ class AssignJobFunctionsUseCase:
                 tenant (ou existe em outro).
             EmptyJobFunctionsError: conjunto vazio (domínio, 3.1).
         """
-        # (1) Existência do registro — antes de qualquer coisa (§5.4).
+        # (0) Autorização do alvo do command, antes de qualquer outra instrução
+        # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
+        self._guard.authorize(
+            command.actor,
+            PERMISSION_MANAGE_STAFF,
+            tenant_id=command.tenant_id,
+            unit_id=command.unit_id,
+        )
+        # (1) Existência do registro — antes de toda checagem de negócio (§5.4);
+        # depois só da autorização, que precede tudo (ADR 3.7.0001).
         employee = self._employees.find_by_id(
             command.tenant_id, command.unit_id, command.employee_id
         )

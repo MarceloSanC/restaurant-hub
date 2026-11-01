@@ -5,7 +5,7 @@ when-use: Reference before letting any staff module import from features.identit
 keywords: [adr, bounded-context, independence, port, adapter, authorization, import-linter, composition-root, staff, identity]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-09-26
+updated_at: 2026-10-19
 adr_id: 3.4.0001
 decision: The staff HTTP adapter depends on an AccessGuard Protocol owned by staff (opaque string identifiers, permission named as str, four published laws), whose implementation is assembled in composition_root.py — the module that already imports both bounded contexts — so bc-independence stays absolute with zero ignore_imports
 context_stage: 3.4-staff-access-scope
@@ -255,3 +255,11 @@ decisão continua em vigor — o port `AccessGuard` de staff, as quatro leis, a 
 `application/ports/out/` e a montagem do tradutor de autorização no `composition_root` (que o
 ADR 3.5.0001 §5 reafirma). Nota *append-only*; o corpo acima não foi editado (CONVENTIONS §5,
 terceira forma).
+
+**2026-10-19 — §4, a ressalva *"LAYOUT §5 … is therefore not yet literally true here"*, superada
+por [ADR 3.7.0001](./3_7_0001-every-staff-use-case-authorizes-its-own-target.md) — só para
+`authorize`.** A partir da Stage 3.7 os 17 use cases de staff recebem o `AccessGuard` por
+construtor e chamam `authorize` antes de qualquer outra instrução: a operação passa a ter o
+consumidor que LAYOUT §5 descreve. `authenticate` **não** muda — continua com um único
+consumidor, o adapter de entrada, e recebe a requisição HTTP; para ela a ressalva segue
+verdadeira (finding da 3.7). Nota *append-only*; o corpo acima não foi editado (CONVENTIONS §5).

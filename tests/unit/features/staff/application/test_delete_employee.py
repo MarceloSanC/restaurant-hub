@@ -50,6 +50,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -97,13 +98,15 @@ def _grava(
 
 
 def _apagar(fakes: StaffFakes) -> DeleteEmployeeUseCase:
-    return DeleteEmployeeUseCase(fakes.employees)
+    return DeleteEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
 
 def test_remove_o_registro_definitivamente() -> None:
     fakes = _fakes()
     _grava(fakes)
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    _apagar(fakes).execute(
+        DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
     assert fakes.employees.find_by_id(_A, _U1, _E1) is None
 
 
@@ -111,11 +114,16 @@ def test_o_removido_some_das_duas_listagens() -> None:
     """Diferente do desligado, que só some de uma."""
     fakes = _fakes()
     _grava(fakes)
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
-    listar = ListEmployeesUseCase(fakes.employees)
-    assert listar.execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1)) == ()
+    _apagar(fakes).execute(
+        DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
+    listar = ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard())
+    assert listar.execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)) == ()
     assert (
-        listar.execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1, include_inactive=True)) == ()
+        listar.execute(
+            ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, include_inactive=True)
+        )
+        == ()
     )
 
 
@@ -123,10 +131,14 @@ def test_remover_desligado_tambem_funciona() -> None:
     """Apagar é ortogonal a desligar: o desligado é removível como qualquer um."""
     fakes = _fakes()
     _grava(fakes)
-    DeactivateEmployeeUseCase(fakes.employees, InMemoryIdentityGateway()).execute(
-        DeactivateEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    DeactivateEmployeeUseCase(
+        fakes.employees, InMemoryIdentityGateway(), guard=PermissiveAccessGuard()
+    ).execute(
+        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    _apagar(fakes).execute(
+        DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
     assert fakes.employees.find_by_id(_A, _U1, _E1) is None
 
 
@@ -134,7 +146,9 @@ def test_remover_libera_a_funcao_que_o_registro_bloqueava() -> None:
     """O contrapositivo da guarda de L-JF3: sem referenciador, a função sai."""
     fakes = _fakes()
     _grava(fakes)
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    _apagar(fakes).execute(
+        DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
     assert fakes.employees.exists_by_job_function(_A, _F1) is False
 
 
@@ -143,7 +157,9 @@ def test_registro_inexistente_e_not_found_sem_tentar_apagar() -> None:
     antes = len(fakes.store.calls)
     with pytest.raises(EmployeeNotFoundError):
         _apagar(fakes).execute(
-            DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("fantasma"))
+            DeleteEmployeeCommand(
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("fantasma")
+            )
         )
     assert "employees.delete" not in fakes.store.calls[antes:]
 
@@ -154,7 +170,9 @@ def test_registro_de_outro_tenant_e_not_found_e_nao_e_removido() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(EmployeeNotFoundError):
-        _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_B, unit_id=_U1, employee_id=_E1))
+        _apagar(fakes).execute(
+            DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_B, unit_id=_U1, employee_id=_E1)
+        )
 
     assert "employees.delete" not in fakes.store.calls[antes:]
     assert fakes.employees.find_by_id(_A, _U1, _E1) is not None
@@ -190,7 +208,9 @@ def test_nenhum_cenario_construivel_de_v1_produz_employee_in_use_error(cenario: 
     }
     _grava(fakes, **configuracoes[cenario])  # type: ignore[arg-type]
 
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    _apagar(fakes).execute(
+        DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
     assert fakes.employees.find_by_id(_A, _U1, _E1) is None
 
 
@@ -221,7 +241,9 @@ def test_ca11_remocao_com_unidade_alheia_nao_alcanca_o_registro() -> None:
     antes = len(fakes.store.calls)
 
     with pytest.raises(StaffError) as excecao:
-        _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=_E1))
+        _apagar(fakes).execute(
+            DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=_E1)
+        )
     assert type(excecao.value) is EmployeeNotFoundError
 
     assert fakes.store.calls[antes:] == ["employees.find_by_id"]
@@ -255,7 +277,9 @@ def test_remover_vinculado_e_recusado_antes_de_qualquer_delete(active: bool) -> 
     antes = len(fakes.store.calls)
 
     with pytest.raises(EmployeeHasLoginError) as excinfo:
-        _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+        _apagar(fakes).execute(
+            DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
 
     assert type(excinfo.value) is EmployeeHasLoginError
     assert "desligue-o" in str(excinfo.value)
@@ -272,7 +296,9 @@ def test_remover_sem_login_continua_removendo() -> None:
     fakes = _fakes()
     _grava(fakes)
 
-    _apagar(fakes).execute(DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    _apagar(fakes).execute(
+        DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
 
     assert fakes.employees.find_by_id(_A, _U1, _E1) is None
 
@@ -283,5 +309,7 @@ def test_inexistente_precede_a_guarda_de_login() -> None:
 
     with pytest.raises(EmployeeNotFoundError):
         _apagar(fakes).execute(
-            DeleteEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("nao-existe"))
+            DeleteEmployeeCommand(
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("nao-existe")
+            )
         )

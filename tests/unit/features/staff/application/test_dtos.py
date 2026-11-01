@@ -68,6 +68,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     FixedSchedule,
     OnDemand,
 )
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 
 pytestmark = pytest.mark.unit
 
@@ -97,10 +98,13 @@ _RESULTADO_BASE = EmployeeResult(
 # Uma instância de CADA um dos 18 DTOs — construir todos é critério de aceite,
 # e é a lista que os testes de imutabilidade percorrem.
 _TODOS_OS_DTOS: tuple[object, ...] = (
-    CreateJobFunctionCommand(tenant_id=_TENANT, name="Cozinheiro"),
-    RenameJobFunctionCommand(tenant_id=_TENANT, job_function_id=_FUNCAO, name="Chapeiro"),
-    DeleteJobFunctionCommand(tenant_id=_TENANT, job_function_id=_FUNCAO),
+    CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, name="Cozinheiro"),
+    RenameJobFunctionCommand(
+        actor=TEST_ACTOR, tenant_id=_TENANT, job_function_id=_FUNCAO, name="Chapeiro"
+    ),
+    DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, job_function_id=_FUNCAO),
     CreateEmployeeCommand(
+        actor=TEST_ACTOR,
         tenant_id=_TENANT,
         unit_id=_UNIDADE,
         name="Maria",
@@ -108,41 +112,73 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
         job_function_ids=frozenset({_FUNCAO}),
     ),
     RenameEmployeeCommand(
-        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, name="Joana"
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        name="Joana",
     ),
     AssignJobFunctionsCommand(
+        actor=TEST_ACTOR,
         tenant_id=_TENANT,
         unit_id=_UNIDADE,
         employee_id=_FUNCIONARIO,
         job_function_ids=frozenset({_FUNCAO}),
     ),
     ChangeWorkloadProfileCommand(
-        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, workload_profile=OnDemand()
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        workload_profile=OnDemand(),
     ),
     DeclareShiftPreferenceCommand(
-        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, shift_preference=_PREFERENCIA
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        shift_preference=_PREFERENCIA,
     ),
     RegisterUnavailabilityCommand(
-        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, period=_PERIODO
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        period=_PERIODO,
     ),
     RemoveUnavailabilityCommand(
-        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, period=_PERIODO
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        period=_PERIODO,
     ),
-    DeactivateEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO),
-    ReactivateEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO),
-    DeleteEmployeeCommand(tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO),
+    DeactivateEmployeeCommand(
+        actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO
+    ),
+    ReactivateEmployeeCommand(
+        actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO
+    ),
+    DeleteEmployeeCommand(
+        actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO
+    ),
     CopyEmployeeToUnitCommand(
-        tenant_id=_TENANT, unit_id=_UNIDADE, employee_id=_FUNCIONARIO, target_unit_id=UnitId("u2")
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+        target_unit_id=UnitId("u2"),
     ),
     CreateLoginForEmployeeCommand(
+        actor=TEST_ACTOR,
         tenant_id=_TENANT,
         unit_id=_UNIDADE,
         employee_id=_FUNCIONARIO,
         email="maria@cantina.com",
         delivery=LoginDelivery.LINK,
     ),
-    ListJobFunctionsQuery(tenant_id=_TENANT),
-    ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE),
+    ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_TENANT),
+    ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE),
     JobFunctionResult(id=_FUNCAO, tenant_id=_TENANT, name="Cozinheiro"),
     _RESULTADO_BASE,
     EmployeeLoginResult(employee=_RESULTADO_BASE, setup_link="https://x/definir-senha?token=t"),
@@ -223,9 +259,85 @@ def test_todo_dto_tem_igualdade_por_valor(dto: object) -> None:
     assert dataclasses.replace(dto) == dto  # type: ignore[type-var]
 
 
+# 15 commands + 2 queries — a entrada de cada um dos 17 use cases.
+_COMMANDS_E_QUERIES_ESPERADOS = 17
+
+
+def _commands_e_queries() -> list[type]:
+    """Todo command e query declarado — derivado dos dois módulos, não listado."""
+    return sorted(
+        (
+            obj
+            for modulo in (commands, queries)
+            for _, obj in inspect.getmembers(modulo, inspect.isclass)
+            if obj.__module__ == modulo.__name__
+        ),
+        key=lambda cls: cls.__name__,
+    )
+
+
+def test_a_varredura_de_entrada_alcanca_os_17_dtos() -> None:
+    """Sem a contagem, uma varredura vazia passaria por ausência de casos."""
+    assert len(_commands_e_queries()) == _COMMANDS_E_QUERIES_ESPERADOS
+
+
+@pytest.mark.parametrize("dto_class", _commands_e_queries(), ids=lambda cls: cls.__name__)
+def test_ca02_o_ator_e_o_primeiro_campo_obrigatorio_e_fora_do_repr(dto_class: type) -> None:
+    """Stage 3.7 (ADR 3.7.0001 §2, concept R6).
+
+    **Primeiro**, para que o command leia *quem pede* antes de *o que pede*;
+    **sem default**, para que esquecer o ator seja `TypeError` e não um pedido
+    anônimo; **fora do `repr`**, porque staff não sabe o que a credencial opaca
+    imprime e o command chega a traceback e log.
+    """
+    primeiro = dataclasses.fields(dto_class)[0]
+
+    assert primeiro.name == "actor"
+    assert primeiro.default is dataclasses.MISSING
+    assert primeiro.default_factory is dataclasses.MISSING
+    assert primeiro.repr is False
+
+
+@pytest.mark.parametrize(
+    "dto", [d for d in _TODOS_OS_DTOS if hasattr(d, "actor")], ids=lambda d: type(d).__name__
+)
+def test_ca02_construir_sem_o_ator_e_type_error(dto: object) -> None:
+    """O efeito da declaração: todos os outros campos presentes, só o ator ausente.
+
+    A varredura acima prova `default is MISSING`; esta prova que a omissão
+    **não constrói** — um `__init__` escrito à mão poderia declarar o campo sem
+    default e aceitar a omissão mesmo assim (concept 3.7 §6).
+    """
+    sem_ator = {
+        campo.name: getattr(dto, campo.name)
+        for campo in dataclasses.fields(dto)  # type: ignore[arg-type]
+        if campo.name != "actor"
+    }
+
+    with pytest.raises(TypeError, match="actor"):
+        type(dto)(**sem_ator)
+
+
+@pytest.mark.parametrize(
+    "dto", [d for d in _TODOS_OS_DTOS if hasattr(d, "actor")], ids=lambda d: type(d).__name__
+)
+def test_ca02_o_repr_do_command_nao_imprime_o_ator(dto: object) -> None:
+    """O efeito, e não só a declaração: um ator cujo `repr` é um segredo não aparece."""
+
+    class _CredencialSecreta:
+        def __repr__(self) -> str:
+            return "SEGREDO-DO-ATOR"
+
+    com_segredo = dataclasses.replace(dto, actor=_CredencialSecreta())  # type: ignore[type-var]
+
+    assert "SEGREDO-DO-ATOR" not in repr(com_segredo)
+    assert "actor" not in repr(com_segredo)
+
+
 def test_criar_funcionario_sem_preferencia_usa_o_default_none() -> None:
     """`None` = sem preferência declarada (ADR 3.1.0004) — o default do cadastro novo."""
     comando = CreateEmployeeCommand(
+        actor=TEST_ACTOR,
         tenant_id=_TENANT,
         unit_id=_UNIDADE,
         name="Maria",
@@ -238,7 +350,7 @@ def test_criar_funcionario_sem_preferencia_usa_o_default_none() -> None:
 def test_declarar_preferencia_nao_tem_default() -> None:
     """Aqui `None` significa "LIMPE", não "não mexa" — por isso é obrigatório.
 
-    Um default silencioso faria `DeclareShiftPreferenceCommand(tenant, id)`
+    Um default silencioso faria `DeclareShiftPreferenceCommand(actor=TEST_ACTOR, tenant, id)`
     limpar a preferência sem que ninguém tivesse pedido — exatamente a
     ambiguidade que o ADR 3.2.0004 evitou ao recusar o update parcial.
     """
@@ -248,8 +360,13 @@ def test_declarar_preferencia_nao_tem_default() -> None:
 
 def test_listagem_de_funcionarios_esconde_inativos_por_default() -> None:
     """Incluir desligado é opt-in explícito (L-E6)."""
-    assert ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE).include_inactive is False
-    incluindo = ListEmployeesQuery(tenant_id=_TENANT, unit_id=_UNIDADE, include_inactive=True)
+    assert (
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE).include_inactive
+        is False
+    )
+    incluindo = ListEmployeesQuery(
+        actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE, include_inactive=True
+    )
     assert incluindo.include_inactive is True
 
 
@@ -569,6 +686,7 @@ def test_construir_sem_a_unidade_e_type_error(command_class: type) -> None:
     o campo sem default e ainda assim aceitar a omissao.
     """
     argumentos: dict[str, object] = {
+        "actor": TEST_ACTOR,
         "tenant_id": _TENANT,
         "employee_id": _FUNCIONARIO,
         "name": "Joana",
@@ -598,6 +716,7 @@ def test_copiar_distingue_a_unidade_de_origem_da_de_destino() -> None:
     destino = UnitId("u-destino")
 
     comando = CopyEmployeeToUnitCommand(
+        actor=TEST_ACTOR,
         tenant_id=_TENANT,
         unit_id=origem,
         employee_id=_FUNCIONARIO,

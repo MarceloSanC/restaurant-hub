@@ -678,6 +678,18 @@ em que o primeiro `test_l_ord_*` foi escrito.
     > e não mais sobre `create_job_function` como único representante — que é como
     > o desvio sobreviveu às Stages 3.2, 3.3 e 3.4 com a suíte verde.
 
+    > ⚠️ **Errata (2026-10-19) — toda linha da tabela ganha um passo (0) antes do
+    > (1): autorizar o alvo do command.** Ver
+    > [ADR 3.7.0001](../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md).
+    > Desde a Stage 3.7, cada use case chama `AccessGuard.authorize` — com a
+    > permissão e o alvo (tenant e, quando há, unidade) do próprio command — antes
+    > de qualquer outra instrução; a cópia autoriza origem e destino, o login
+    > autoriza `manage_staff` e `manage_users`, todos antes da primeira porta. A
+    > ordem (1)…(n) acima e a coluna "par duplo" **não mudam**: valem depois do
+    > passo (0), entre as checagens de negócio. O que a emenda acrescenta é o
+    > vencedor de todo par que envolva acesso: **negado vence tudo**, e sem
+    > nenhuma porta tocada.
+
 17. **Escrita do agregado inteiro.** Toda edição é read-modify-write do
     `Employee` completo, sem controle de concorrência nesta Stage — duas edições
     simultâneas do mesmo registro têm semântica de "última escrita vence". Fica

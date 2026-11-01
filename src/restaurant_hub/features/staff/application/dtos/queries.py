@@ -5,10 +5,14 @@ funcionário carrega também `unit_id`, e **isso é o contrato**, não conveniê
 não existe listagem tenant-wide de funcionário nesta camada, e a ausência dela é
 o que torna impossível **por assinatura** a consulta que vazaria unidades
 (L-E6; workforce §3.1).
+
+As duas carregam também `actor`, primeiro campo, pela mesma razão dos commands
+(Stage 3.7, ADR 3.7.0001 §2): leitura escopada também se autoriza.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from restaurant_hub.features.staff.application.ports.out.access_guard import Actor
 from restaurant_hub.features.staff.domain.value_objects.identifiers import TenantId, UnitId
 
 
@@ -20,6 +24,7 @@ class ListJobFunctionsQuery:
     ciclo de vida (ADR 3.2.0005, L-JF5).
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
 
 
@@ -35,6 +40,7 @@ class ListEmployeesQuery:
             para a guarda de remoção de função) — só somem desta lista.
     """
 
+    actor: Actor = field(repr=False)
     tenant_id: TenantId
     unit_id: UnitId
     include_inactive: bool = False

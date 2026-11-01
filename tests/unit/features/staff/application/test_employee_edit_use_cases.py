@@ -55,6 +55,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     OnDemand,
 )
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -126,8 +127,10 @@ def test_renomear_troca_o_nome_verbatim_e_a_releitura_confirma() -> None:
     fakes = _com_funcionario()
     antes = _result(fakes)
 
-    resultado = RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="  Joana ")
+    resultado = RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+        RenameEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="  Joana "
+        )
     )
 
     assert resultado.name == "  Joana "
@@ -141,8 +144,10 @@ def test_renomear_troca_o_nome_verbatim_e_a_releitura_confirma() -> None:
 def test_renomear_nao_altera_tenant_nem_unidade() -> None:
     """§5.12: a localização do registro é imutável; nenhum use case a toca."""
     fakes = _com_funcionario()
-    resultado = RenameEmployeeUseCase(fakes.employees).execute(
-        RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana")
+    resultado = RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+        RenameEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
+        )
     )
     assert (resultado.tenant_id, resultado.unit_id) == (_A, _U1)
 
@@ -152,12 +157,16 @@ def test_renomear_nao_altera_tenant_nem_unidade() -> None:
 
 def test_troca_de_jornada_fixa_para_sob_demanda_e_de_volta() -> None:
     fakes = _com_funcionario()
-    trocar = ChangeWorkloadProfileUseCase(fakes.employees)
+    trocar = ChangeWorkloadProfileUseCase(fakes.employees, guard=PermissiveAccessGuard())
     antes = _result(fakes)
 
     sob_demanda = trocar.execute(
         ChangeWorkloadProfileCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, workload_profile=OnDemand()
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E1,
+            workload_profile=OnDemand(),
         )
     )
     assert sob_demanda.workload_profile == OnDemand()
@@ -166,6 +175,7 @@ def test_troca_de_jornada_fixa_para_sob_demanda_e_de_volta() -> None:
 
     de_volta = trocar.execute(
         ChangeWorkloadProfileCommand(
+            actor=TEST_ACTOR,
             tenant_id=_A,
             unit_id=_U1,
             employee_id=_E1,
@@ -183,9 +193,15 @@ def test_declarar_preferencia_quando_nao_havia() -> None:
     fakes = _com_funcionario(preferencia=None)
     antes = _result(fakes)
 
-    resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
+    resultado = DeclareShiftPreferenceUseCase(
+        fakes.employees, guard=PermissiveAccessGuard()
+    ).execute(
         DeclareShiftPreferenceCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=_PREFERENCIA
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E1,
+            shift_preference=_PREFERENCIA,
         )
     )
 
@@ -205,9 +221,11 @@ def test_declarar_none_limpa_a_preferencia() -> None:
     fakes = _com_funcionario(preferencia=_PREFERENCIA)
     antes = _result(fakes)
 
-    resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
+    resultado = DeclareShiftPreferenceUseCase(
+        fakes.employees, guard=PermissiveAccessGuard()
+    ).execute(
         DeclareShiftPreferenceCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=None
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=None
         )
     )
 
@@ -220,9 +238,11 @@ def test_declarar_none_limpa_a_preferencia() -> None:
 def test_substituir_uma_preferencia_por_outra() -> None:
     fakes = _com_funcionario(preferencia=_PREFERENCIA)
     outra = ShiftPreference(periods=frozenset({DayPeriod.MORNING, DayPeriod.AFTERNOON}))
-    resultado = DeclareShiftPreferenceUseCase(fakes.employees).execute(
+    resultado = DeclareShiftPreferenceUseCase(
+        fakes.employees, guard=PermissiveAccessGuard()
+    ).execute(
         DeclareShiftPreferenceCommand(
-            tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=outra
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, shift_preference=outra
         )
     )
     assert resultado.shift_preference == outra
@@ -234,23 +254,39 @@ def test_substituir_uma_preferencia_por_outra() -> None:
 
 def _comandos_dos_tres(tenant: TenantId, employee_id: EmployeeId) -> list[object]:
     return [
-        RenameEmployeeCommand(tenant_id=tenant, unit_id=_U1, employee_id=employee_id, name="Joana"),
+        RenameEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=tenant, unit_id=_U1, employee_id=employee_id, name="Joana"
+        ),
         ChangeWorkloadProfileCommand(
-            tenant_id=tenant, unit_id=_U1, employee_id=employee_id, workload_profile=OnDemand()
+            actor=TEST_ACTOR,
+            tenant_id=tenant,
+            unit_id=_U1,
+            employee_id=employee_id,
+            workload_profile=OnDemand(),
         ),
         DeclareShiftPreferenceCommand(
-            tenant_id=tenant, unit_id=_U1, employee_id=employee_id, shift_preference=_PREFERENCIA
+            actor=TEST_ACTOR,
+            tenant_id=tenant,
+            unit_id=_U1,
+            employee_id=employee_id,
+            shift_preference=_PREFERENCIA,
         ),
     ]
 
 
 def _executar(fakes: StaffFakes, comando: object) -> object:
     if isinstance(comando, RenameEmployeeCommand):
-        return RenameEmployeeUseCase(fakes.employees).execute(comando)
+        return RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+            comando
+        )
     if isinstance(comando, ChangeWorkloadProfileCommand):
-        return ChangeWorkloadProfileUseCase(fakes.employees).execute(comando)
+        return ChangeWorkloadProfileUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+            comando
+        )
     assert isinstance(comando, DeclareShiftPreferenceCommand)
-    return DeclareShiftPreferenceUseCase(fakes.employees).execute(comando)
+    return DeclareShiftPreferenceUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+        comando
+    )
 
 
 @pytest.mark.parametrize("indice", range(3))
@@ -291,9 +327,13 @@ def test_precedencia_registro_inexistente_vence_nome_vazio() -> None:
     """
     fakes = _com_funcionario()
     with pytest.raises(StaffError) as excecao:
-        RenameEmployeeUseCase(fakes.employees).execute(
+        RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
             RenameEmployeeCommand(
-                tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("fantasma"), name=""
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=EmployeeId("fantasma"),
+                name="",
             )
         )
     assert type(excecao.value) is EmployeeNotFoundError
@@ -306,8 +346,10 @@ def test_nome_vazio_em_registro_existente_e_erro_do_dominio_sem_gravar() -> None
     antes_calls = len(fakes.store.calls)
 
     with pytest.raises(InvalidNameError):
-        RenameEmployeeUseCase(fakes.employees).execute(
-            RenameEmployeeCommand(tenant_id=_A, unit_id=_U1, employee_id=_E1, name="   ")
+        RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
+            RenameEmployeeCommand(
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="   "
+            )
         )
 
     assert "employees.update" not in fakes.store.calls[antes_calls:]
@@ -334,23 +376,39 @@ def _edicoes_com_unidade_alheia() -> list[tuple[str, Callable[[StaffFakes], obje
     return [
         (
             "rename_employee",
-            lambda fakes: RenameEmployeeUseCase(fakes.employees).execute(
-                RenameEmployeeCommand(tenant_id=_A, unit_id=_U2, employee_id=_E1, name="Joana")
+            lambda fakes: RenameEmployeeUseCase(
+                fakes.employees, guard=PermissiveAccessGuard()
+            ).execute(
+                RenameEmployeeCommand(
+                    actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=_E1, name="Joana"
+                )
             ),
         ),
         (
             "change_workload_profile",
-            lambda fakes: ChangeWorkloadProfileUseCase(fakes.employees).execute(
+            lambda fakes: ChangeWorkloadProfileUseCase(
+                fakes.employees, guard=PermissiveAccessGuard()
+            ).execute(
                 ChangeWorkloadProfileCommand(
-                    tenant_id=_A, unit_id=_U2, employee_id=_E1, workload_profile=OnDemand()
+                    actor=TEST_ACTOR,
+                    tenant_id=_A,
+                    unit_id=_U2,
+                    employee_id=_E1,
+                    workload_profile=OnDemand(),
                 )
             ),
         ),
         (
             "declare_shift_preference",
-            lambda fakes: DeclareShiftPreferenceUseCase(fakes.employees).execute(
+            lambda fakes: DeclareShiftPreferenceUseCase(
+                fakes.employees, guard=PermissiveAccessGuard()
+            ).execute(
                 DeclareShiftPreferenceCommand(
-                    tenant_id=_A, unit_id=_U2, employee_id=_E1, shift_preference=None
+                    actor=TEST_ACTOR,
+                    tenant_id=_A,
+                    unit_id=_U2,
+                    employee_id=_E1,
+                    shift_preference=None,
                 )
             ),
         ),

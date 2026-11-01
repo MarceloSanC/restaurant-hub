@@ -172,9 +172,13 @@ async def test_ca16_a_copia_chama_o_guard_duas_vezes_com_alvos_distintos(
 
     assert resposta.status_code == HTTPStatus.CREATED
     autorizacoes = [c for c in ambiente.guard.calls if c.startswith("authorize(")]
+    # Origem e destino pela rota (tenant omitido) e de novo pelo use case
+    # (tenant nomeado, ADR 3.7.0001) — L-AG4 nas duas camadas.
     assert autorizacoes == [
         f"authorize(manage_staff,None,{_UNIDADE})",
         f"authorize(manage_staff,None,{_DESTINO})",
+        f"authorize(manage_staff,{_TENANT},{_UNIDADE})",
+        f"authorize(manage_staff,{_TENANT},{_DESTINO})",
     ]
 
 

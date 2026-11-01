@@ -23,6 +23,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = pytest.mark.unit
 
@@ -64,14 +65,16 @@ def _grava(
 
 
 def _listar(fakes: StaffFakes) -> ListEmployeesUseCase:
-    return ListEmployeesUseCase(fakes.employees)
+    return ListEmployeesUseCase(fakes.employees, guard=PermissiveAccessGuard())
 
 
 def test_lista_os_registros_da_unidade_pedida() -> None:
     fakes = _com_funcoes()
     _grava(fakes, "e1")
     _grava(fakes, "e2")
-    resultados = _listar(fakes).execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1))
+    resultados = _listar(fakes).execute(
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)
+    )
     assert {resultado.id for resultado in resultados} == {"e1", "e2"}
     assert all(resultado.unit_id == _U1 for resultado in resultados)
 
@@ -82,10 +85,10 @@ def test_nao_vaza_registro_de_outra_unidade_nos_dois_sentidos() -> None:
     _grava(fakes, "e1", unit=_U1)
     _grava(fakes, "e2", unit=_U2)
 
-    da_u1 = _listar(fakes).execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1))
+    da_u1 = _listar(fakes).execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1))
     assert {resultado.id for resultado in da_u1} == {"e1"}
 
-    da_u2 = _listar(fakes).execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U2))
+    da_u2 = _listar(fakes).execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2))
     assert {resultado.id for resultado in da_u2} == {"e2"}
 
 
@@ -93,14 +96,19 @@ def test_listar_com_tenant_de_outro_restaurante_devolve_vazio() -> None:
     """Nem erro, nem dado: a unidade simplesmente não tem registros para o B."""
     fakes = _com_funcoes()
     _grava(fakes, "e1")
-    assert _listar(fakes).execute(ListEmployeesQuery(tenant_id=_B, unit_id=_U1)) == ()
+    assert (
+        _listar(fakes).execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_B, unit_id=_U1))
+        == ()
+    )
 
 
 def test_esconde_desligados_por_default() -> None:
     fakes = _com_funcoes()
     _grava(fakes, "e1")
     _grava(fakes, "e2", active=False)
-    resultados = _listar(fakes).execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1))
+    resultados = _listar(fakes).execute(
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)
+    )
     assert {resultado.id for resultado in resultados} == {"e1"}
 
 
@@ -110,7 +118,7 @@ def test_inclui_desligados_com_include_inactive() -> None:
     _grava(fakes, "e1")
     _grava(fakes, "e2", active=False)
     resultados = _listar(fakes).execute(
-        ListEmployeesQuery(tenant_id=_A, unit_id=_U1, include_inactive=True)
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, include_inactive=True)
     )
     assert {resultado.id for resultado in resultados} == {"e1", "e2"}
     assert {resultado.id for resultado in resultados if not resultado.active} == {"e2"}
@@ -128,21 +136,26 @@ def test_include_inactive_nao_atravessa_unidade_nem_tenant() -> None:
     _grava(fakes, "e3", tenant=_B, unit=_U1, active=False)
 
     resultados = _listar(fakes).execute(
-        ListEmployeesQuery(tenant_id=_A, unit_id=_U1, include_inactive=True)
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, include_inactive=True)
     )
     assert {resultado.id for resultado in resultados} == {"e1"}
 
 
 def test_unidade_sem_registros_devolve_vazio() -> None:
     fakes = _com_funcoes()
-    assert _listar(fakes).execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1)) == ()
+    assert (
+        _listar(fakes).execute(ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1))
+        == ()
+    )
 
 
 def test_o_result_carrega_o_registro_campo_a_campo() -> None:
     """A listagem devolve **DTO**, não entidade — e com o conteúdo certo."""
     fakes = _com_funcoes()
     _grava(fakes, "e1")
-    (resultado,) = _listar(fakes).execute(ListEmployeesQuery(tenant_id=_A, unit_id=_U1))
+    (resultado,) = _listar(fakes).execute(
+        ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)
+    )
     gravado = fakes.employees.find_by_id(_A, _U1, EmployeeId("e1"))
     assert gravado is not None
     assert (

@@ -14,10 +14,10 @@ staff: o que entra veio de fora e não é nosso; o que sai é endereço deste BC
 os use cases o consomem tipado.
 
 **O nome da permissão é `str`** porque o vocabulário fechado mora do outro lado
-da fronteira. Os dois valores que o Step 3 usa são `"manage_staff"` e
-`"manage_job_functions"` — citados aqui como **valores**, jamais importados como
-enum. O preço está declarado no ADR 3.4.0001: um erro de digitação não é pego
-pelo type-checker; é pego pelos testes por papel e por rota da Stage 3.6.
+da fronteira. Os três valores que staff usa — `"manage_staff"`, `"manage_job_functions"` e,
+desde a Stage 3.5, `"manage_users"` — são citados como **valores**, jamais importados como
+enum, e declarados só neste módulo. O preço está no ADR 3.4.0001: um erro de digitação não é
+pego pelo type-checker; é pego pelos testes por papel e por rota e pelos alvos dos use cases.
 
 **As quatro leis** (ADR 3.4.0001 §2, concept §4). Um `Protocol` sozinho não
 carrega as propriedades de segurança de que este desenho depende: uma segunda
@@ -46,19 +46,23 @@ obedece — lei que só a implementação de produção cumpre não é lei, é d
   obtido para alcançar uma segunda unidade é escalada de escopo, não economia de
   chamada.
 
-**Onde este port mora, e por quê** (ADR 3.4.0001 §4). Ele fica em
-`application/ports/out/`, e **não** dentro do adapter HTTP. O único consumidor
-previsto é o router da Stage 3.6, o que argumentaria por `adapters/inbound/http/`. A
-colocação **antecipa a Stage 3.5**, cujo `IdentityGateway` é consumido por **use
-case** e cuja pasta o roadmap já nomeia. A justificativa é o critério de
-escalabilidade progressiva do projeto, **não** LAYOUT §5 — que descreve port de
-saída como consumido por use case e, portanto, **ainda não é literalmente
-verdade aqui**. Fica dito em vez de glosado: esta Stage não afirma conformidade
-que não tem.
+**Onde este port mora, e por quê** (ADR 3.4.0001 §4; ADR 3.7.0001). Ele fica em
+`application/ports/out/`, e **não** dentro do adapter HTTP. Quando nasceu, o único
+consumidor era o router da Stage 3.6, e a colocação **antecipava** um consumidor de
+use case — o ADR 3.4.0001 declarou, então, que LAYOUT §5 ("port de saída é o que o
+use case consome") ainda não era literalmente verdade aqui.
+
+**Desde a Stage 3.7, para `authorize`, é.** Os use cases de staff recebem este port
+por construtor e autorizam o alvo do próprio command antes de qualquer outra
+instrução; o router continua autorizando, como defesa em profundidade. **Para
+`authenticate`, não**: o único consumidor segue sendo o adapter de entrada, e o
+argumento é a requisição HTTP. Uma autenticação independente de driver fica para a
+Stage que criar o primeiro driver não-HTTP. Dito em vez de glosado: este módulo não
+afirma conformidade que não tem.
 """
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Final, Protocol
 
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
@@ -70,6 +74,20 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 # dele. Tipá-lo exigiria conhecer a forma que identity dá ao ator autenticado, e
 # conhecê-la é o começo de reimplementar a decisão de acesso aqui.
 Actor = object
+
+# As permissões que staff cita, como **valores** (ADR 3.4.0001). Citadas, jamais
+# importadas: o vocabulário fechado mora do outro lado da fronteira, e o contrato
+# `bc-independence` proíbe as duas direções. O preço está declarado — um erro de
+# digitação aqui não é pego pelo type-checker, e sim pelos testes por papel e por
+# rota. Moram neste módulo, e não na borda, desde a Stage 3.7: os **use cases**
+# autorizam com elas (ADR 3.7.0001 §5), e application não importa adapter.
+PERMISSION_MANAGE_STAFF: Final = "manage_staff"
+PERMISSION_MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
+# Stage 3.5 — a terceira permissão citada por staff, e a primeira que **não é de
+# staff**: criar o login de um funcionário cria uma conta em identity, e a
+# permissão que governa contas é `manage_users` (concept 3.5 §5.3). R17 a exige
+# **junto** com `manage_staff`, as duas sobre a unidade do alvo.
+PERMISSION_MANAGE_USERS: Final = "manage_users"
 
 
 @dataclass(frozen=True)
@@ -145,7 +163,7 @@ class AccessGuard(Protocol):
         Args:
             actor: o ator devolvido por `authenticate`, opaco para staff.
             permission: o nome da permissão exigida, como **valor**
-                (`"manage_staff"`, `"manage_job_functions"`).
+                (`"manage_staff"`, `"manage_job_functions"`, `"manage_users"`).
             tenant_id: o restaurante alvo, como string opaca. **Ausente
                 significa "o tenant do próprio ator autenticado"** — jamais
                 "qualquer tenant" nem "todos". O significado é do **contrato**,
