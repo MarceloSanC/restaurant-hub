@@ -4,7 +4,7 @@
 `AccessGuard` (Stage 3.4) — e a primeira consumida por **use case**, que é o
 caso para o qual `ports/out/` foi antecipado (ADR 3.4.0001 §4). Quatro operações:
 provisionar o login **pendente** de um funcionário, enviar o convite, revogar
-as sessões de um login e — desde a Stage 3.7 — perguntar se um login é de
+as sessões de um login e — desde a Stage 3.8 — perguntar se um login é de
 funcionário. Nada aqui nomeia `User`, `Role`, `Email` ou qualquer
 tipo de identity: identificadores atravessam a fronteira como strings opacas
 (`identifiers.py`), o e-mail chega como `str` cru e é a implementação quem o
@@ -27,7 +27,7 @@ o de **provisionar** (`create_login_for_employee`) autoriza `manage_staff` **e**
 dele; o de **revogar sessões** (`deactivate_employee`) autoriza `manage_staff`.
 A fachada de identity não autoriza (#49).
 
-**As cinco leis** (concept 3.5 §4; L-IG5 do concept 3.7 §4). Texto normativo
+**As cinco leis** (concept 3.5 §4; L-IG5 do concept 3.8 §4). Texto normativo
 deste módulo, pareado com a suíte de contrato
 `tests/contract/features/staff/test_identity_gateway_laws.py`, que roda o
 **mesmo** corpo contra as duas implementações:
@@ -60,7 +60,7 @@ deste módulo, pareado com a suíte de contrato
   desconhecido ⇒ `False`, não erro: não tem sessão a revogar. Qualquer outra
   falha sobe **como a implementação a levantou** (mesma instância): responder
   `False` numa falha seria *fail-open* — o desligamento gravaria e a sessão
-  ficaria viva (ADR 3.7.0001 §3). O port responde booleano, nunca o papel: staff
+  ficaria viva (ADR 3.8.0001 §3). O port responde booleano, nunca o papel: staff
   não nomeia o vocabulário de papéis de identity.
 
 **Por que `delivery` é parâmetro de `provision_employee_login`, e não só do use
@@ -116,7 +116,7 @@ class ProvisionedLogin:
 class IdentityGateway(Protocol):
     """Provisiona logins pendentes, envia convites e revoga sessões — em identity.
 
-    E, desde a Stage 3.7, diz se um login é de funcionário (L-IG5).
+    E, desde a Stage 3.8, diz se um login é de funcionário (L-IG5).
     """
 
     def provision_employee_login(
@@ -163,14 +163,14 @@ class IdentityGateway(Protocol):
         **L-IG4** — idempotente e total: sem sessão, ou id desconhecido, não é
         erro. A conta permanece; o que cai é o refresh (o access em curso vive
         até expirar — kickoff #13). **Quando** chamar é decisão do desligamento
-        (ADR 3.7.0001 §1), não deste port.
+        (ADR 3.8.0001 §1), não deste port.
         """
         ...
 
     def is_employee_login(self, user_id: UserId) -> bool:
-        """Diz se o login é de funcionário (L-IG5 — ADR 3.7.0001 §3).
+        """Diz se o login é de funcionário (L-IG5 — ADR 3.8.0001 §3).
 
-        É uma das condições com que o ADR 3.7.0001 §1 decide se desligar um
+        É uma das condições com que o ADR 3.8.0001 §1 decide se desligar um
         registro corta as sessões do login: login de gerente ou dono vinculado a
         um registro de escala tira a autoridade do papel, e revogar não
         protegeria nada.

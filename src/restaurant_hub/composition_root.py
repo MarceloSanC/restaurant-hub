@@ -570,8 +570,8 @@ def wire_dependencies(
     staff_access_guard = _IdentityAccessGuard(guard)
 
     # Stage 3.5 — a fachada de identity e o gateway de staff sobre ela (ADR
-    # 3.5.0001). Os quatro use cases da fachada (o quarto, de leitura, é da 3.7 —
-    # ADR 3.7.0001 §3) recebem **os mesmos** `users`,
+    # 3.5.0001). Os quatro use cases da fachada (o quarto, de leitura, é da 3.8 —
+    # ADR 3.8.0001 §3) recebem **os mesmos** `users`,
     # `restaurants`, `units`, `hasher`, `setup_tokens`, `sessions`, `sender` e
     # `clock` que servem as rotas de identity: um grafo, um `Engine`. O gateway
     # é o único módulo de staff que importa identity, e importa só a fachada.

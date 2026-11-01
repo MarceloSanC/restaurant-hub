@@ -374,8 +374,8 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
 >   cópia entre unidades **não o carrega** (§3.7)
 >   ([ADR 3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md)).
 >
-> **Nota (2026-10-19): alcance do corte no desligamento (Stage 3.7).** O bullet "Desligar corta
-> o acesso" acima vale quando o registro é o único ativo do login na unidade. Desde a Stage 3.7 o
+> **Nota (2026-10-19): alcance do corte no desligamento (Stage 3.8).** O bullet "Desligar corta
+> o acesso" acima vale quando o registro é o único ativo do login na unidade. Desde a Stage 3.8 o
 > desligamento revoga as sessões **só quando o registro é a fonte do acesso**:
 >
 > - o registro desligado **estava ativo** (desligar de novo não derruba sessões abertas depois);
@@ -387,7 +387,7 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
 >   autoridade do papel, não do registro, e não perde as sessões.
 >
 > O desligamento **nunca** desativa a conta, nem quando a desativação de conta existir
-> ([ADR 3.7.0001](../../adr/3_7_0001-termination-revokes-only-access-the-record-grants.md)).
+> ([ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md)).
 
 ---
 

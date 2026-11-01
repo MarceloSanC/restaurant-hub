@@ -1,4 +1,4 @@
-"""As cinco leis do `IdentityGateway` — L-IG1…L-IG5 — como contrato (Stages 3.5 e 3.7).
+"""As cinco leis do `IdentityGateway` — L-IG1…L-IG5 — como contrato (Stages 3.5 e 3.8).
 
 Nasce **já** em `tests/contract/`, na forma que o ADR 3.3.0007 fixou para os
 repositórios: um corpo de teste só, parametrizado pela fixture `gateway` sobre
@@ -287,7 +287,7 @@ def test_l_ig4_revogar_id_desconhecido_nao_e_erro(gateway: GatewaySobContrato) -
 
 
 # ---------------------------------------------------------------------------
-# L-IG5 — `is_employee_login` responde se o login é de funcionário (Stage 3.7)
+# L-IG5 — `is_employee_login` responde se o login é de funcionário (Stage 3.8)
 # ---------------------------------------------------------------------------
 
 # Todo papel que **não** é o de funcionário, por valor: o corpo do contrato é de

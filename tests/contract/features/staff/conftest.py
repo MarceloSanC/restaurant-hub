@@ -265,7 +265,7 @@ class GatewaySobContrato:
             **arranjo** — devolvem o valor que produz a falha crua e o tipo que
             sobe deste lado.
         envio_falha: **arranjo** — faz o próximo envio levantar a instância dada.
-        login_de_outro_papel: **arranjo** (Stage 3.7, L-IG5) — cria deste lado um
+        login_de_outro_papel: **arranjo** (Stage 3.8, L-IG5) — cria deste lado um
             login **conhecido** do papel dado como **valor** (`"owner"`,
             `"manager"`, `"hr"`, `"platform_admin"`) e devolve o id dele.
         consulta_de_papel_falha: **arranjo** (L-IG5) — faz a próxima consulta de

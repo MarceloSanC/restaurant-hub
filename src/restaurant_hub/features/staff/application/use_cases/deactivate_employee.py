@@ -12,7 +12,7 @@ O desligamento **não é datado**: o campo é booleano, e nenhum `Clock` é
 injetado (ADR 3.2.0006). Se o produto pedir "desde quando", é campo aditivo.
 
 **Desligar corta o acesso que o registro concede — e só esse** (Stage 3.5, ADR
-3.5.0003; alcance fixado pela Stage 3.7, ADR 3.7.0001). Se o registro tem login
+3.5.0003; alcance fixado pela Stage 3.8, ADR 3.8.0001). Se o registro tem login
 vinculado, as sessões vivas da conta são revogadas pelo `IdentityGateway`
 **antes** de o desligamento ser gravado, quando as três condições valem:
 
@@ -36,7 +36,7 @@ chamada falhar, o registro continua ativo e a operação falha inteira; o invers
 estivesse fora. A conta **continua existindo** e continua podendo logar (ADR
 3.5.0003 §3): o que ela deixa de alcançar é decidido pela autorização, e o
 `user_id` permanece no registro — desligar não é desvincular. Desligar **nunca**
-desativa a conta (ADR 3.7.0001 §4). Registro sem login não toca o gateway.
+desativa a conta (ADR 3.8.0001 §4). Registro sem login não toca o gateway.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import DeactivateEmployeeCommand
@@ -104,7 +104,7 @@ class DeactivateEmployeeUseCase:
         return to_employee_result(deactivated)
 
     def _grants_the_login_access(self, employee: Employee, user_id: UserId) -> bool:
-        """Condições 2 e 3 do docstring do módulo, nessa ordem (ADR 3.7.0001 §1 e §2).
+        """Condições 2 e 3 do docstring do módulo, nessa ordem (ADR 3.8.0001 §1 e §2).
 
         `list_by_unit` devolve só ativos (L-E6), então "outro registro ativo"
         é "outro registro da listagem". A consulta a identity só acontece se a

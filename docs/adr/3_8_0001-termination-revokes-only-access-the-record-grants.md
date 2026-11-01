@@ -1,24 +1,24 @@
 ---
-title: ADR 3.7.0001 — Terminating an employee record revokes the login's sessions only when the login is an `employee` account with no other active record in the same unit; termination never deactivates the account
+title: ADR 3.8.0001 — Terminating an employee record revokes the login's sessions only when the login is an `employee` account with no other active record in the same unit; termination never deactivates the account
 description: Architecture Decision Record
 when-use: Reference before changing what `deactivate_employee` (R13) does with a linked login, before implementing "link an existing login" or "unlink a login", before adding `User.is_active` or account deactivation, or when a login may hold more than one staff record or a role other than `employee`
 keywords: [adr, termination, deactivate, revoke-sessions, is_active, employee-login, manager-login, identity-gateway, staff, identity]
 status: accepted
 created_at: 2026-10-19
 updated_at: 2026-10-19
-adr_id: 3.7.0001
+adr_id: 3.8.0001
 decision: R13 revokes the linked login's sessions only when (1) no other **active** record of the **same unit** carries that login and (2) the login's role in identity is `employee`, and only when the record being terminated is still active; otherwise it writes the termination and leaves sessions alone. Condition 1 is read from `EmployeeRepository.list_by_unit` (no new repository method); condition 2 through a new `IdentityGateway.is_employee_login` (L-IG5), backed by a read-only `IdentityFacade.account_role`. Termination never deactivates the account, now or when account deactivation exists
-context_stage: 3.7-termination-access-scope
+context_stage: 3.8-termination-access-scope
 bounded_context: staff
 ---
 
-# ADR 3.7.0001 — Termination revokes only the access the record grants
+# ADR 3.8.0001 — Termination revokes only the access the record grants
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
 
-`accepted` — decided by the sponsor on 2026-10-19 (Stage 3.7 concept §13 Q1–Q4).
+`accepted` — decided by the sponsor on 2026-10-19 (Stage 3.8 concept §13 Q1–Q4).
 
 **Partially supersedes ADR 3.5.0003**, by dated note in that ADR's
 `## Supersessão parcial` (CONVENTIONS §5):
@@ -45,7 +45,7 @@ permission at all, so the revocation is the whole cut.
 The premise does not survive two cases the domain already admits (issue #60,
 finding F2 of the post-merge audit of Stage 3.5):
 
-- **(a) A login with two records.** Workforce §3.1 and §3.7: the same person may
+- **(a) A login with two records.** Workforce §3.1 and §3.8: the same person may
   have several records, all pointing at the same `User` (ADR 3.1.0001 iii).
 - **(b) A manager or owner who also works the schedule.** Concept 3.5 §4 and
   §10: the link does not require the `employee` role, and "link an existing
@@ -62,7 +62,7 @@ record or a non-`employee` role.
 Two constraints shaped the answer:
 
 - Workforce §3.1: *"no staff operation crosses units implicitly — only the
-  explicit copy (§3.7)"*. The sponsor kept it literally (concept §13 Q4): the
+  explicit copy (§3.8)"*. The sponsor kept it literally (concept §13 Q4): the
   "other active record" check looks at the **same unit** only.
 - The sponsor's intent about the account, already on record (ADR 3.5.0003
   Context): a terminated person *"can still log in … perhaps leaving only
@@ -226,7 +226,7 @@ record, the copy never carries `user_id`). Any future operation that ends one �
   (`User.role`), so it cannot change between the check and the revocation.
 - `is_employee_login` takes no tenant: today a login only reaches records of its
   own tenant because R17 provisions inside the record's tenant. "Link an
-  existing login" must check that tenant (finding in the Stage 3.7 technical §7).
+  existing login" must check that tenant (finding in the Stage 3.8 technical §7).
 
 ## Implementation notes
 
@@ -245,9 +245,9 @@ record, the copy never carries `user_id`). Any future operation that ends one �
   a 401 that proves nothing).
 
 ## References
-- Issue #60; Stage 3.7 concept §5, §7, §11, §13
+- Issue #60; Stage 3.8 concept §5, §7, §11, §13
 - ADR 3.5.0003 (partially superseded here), ADR 3.5.0001 (facade), ADR 3.5.0004
   (`user_id` column), ADR 3.1.0001 iii (several records per person), ADR 0.0.0006
   (use cases return result DTOs)
-- `docs/domain/staff/workforce.md` §3.1, §3.7, §3.8; concept 3.5 §4, §10, CA07
+- `docs/domain/staff/workforce.md` §3.1, §3.8, §3.8; concept 3.5 §4, §10, CA07
 - Kickoff decision #13 (memory `loop-kickoff-decisions-2026-07`)

@@ -337,14 +337,14 @@ def test_ca11_transicao_com_unidade_alheia_nao_alcanca_o_registro(
 
 # ---------------------------------------------------------------------------
 # R13 corta o acesso que o registro concede — e só esse
-# (Stage 3.5, ADR 3.5.0003 §1 e §2; alcance da Stage 3.7, ADR 3.7.0001 §1 e §2)
+# (Stage 3.5, ADR 3.5.0003 §1 e §2; alcance da Stage 3.8, ADR 3.8.0001 §1 e §2)
 # ---------------------------------------------------------------------------
 #
 # Os testes da 3.5 vinculavam um `UserId("login-1")` que o fake não conhecia; com
 # L-IG5 ("desconhecido ⇒ False") eles deixariam de revogar. O login agora nasce
 # pelo **próprio** fake (`provision_employee_login`) — é ele quem diz que o login
 # é de funcionário. Uma expectativa da 3.5 se inverte: desligar duas vezes revoga
-# **uma** vez (CA12 da 3.7).
+# **uma** vez (CA12 da 3.8).
 #
 # Todas as asserções de ordem usam um **ledger único**: as chamadas ao gateway são
 # espelhadas em `store.calls` (`mirror`), porque dois ledgers separados não têm
@@ -399,7 +399,9 @@ def _outro_registro(
 
 
 def _desligar_e1(use_case: DeactivateEmployeeUseCase) -> EmployeeResult:
-    return use_case.execute(DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1))
+    return use_case.execute(
+        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
 
 
 def test_ca05_registro_unico_de_funcionario_revoga_antes_de_gravar_na_ordem() -> None:

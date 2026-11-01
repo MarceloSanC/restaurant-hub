@@ -218,16 +218,16 @@ implementation agree, and makes a double termination harmless.
 
 ## Supersessão parcial
 
-**2026-10-19 — §1 e metade do §5 superadas por ADR 3.7.0001.**
+**2026-10-19 — §1 e metade do §5 superadas por ADR 3.8.0001.**
 
 - §1, *"if `employee.user_id is not None` it calls `revoke_login_sessions(user_id)`"*:
   a chamada passa a exigir também que o registro esteja ativo, que nenhum outro registro
   **ativo da mesma unidade** aponte para o login e que o papel da conta seja `employee`
-  (ADR 3.7.0001 §1). A premissa deste ADR — toda
+  (ADR 3.8.0001 §1). A premissa deste ADR — toda
   conta vinculada é `employee` com um registro — não vale para "vincular login existente"
   (issue #60).
 - §5, *"must add account deactivation (and decide whether termination calls it)"*: a metade
-  *"decide whether termination calls it"* está decidida — **nunca chama** (ADR 3.7.0001 §4).
+  *"decide whether termination calls it"* está decidida — **nunca chama** (ADR 3.8.0001 §4).
   Acrescentar a desativação de conta, com o gatilho daqui, continua valendo.
 
 O resto deste ADR (§1b, §2, §3, §4, §6) continua em vigor.

@@ -1,12 +1,12 @@
 ---
 title: Technical — Desligamento corta só o acesso que o registro concede
-description: Plano de execução da Stage 3.7 — 6 Tasks (1 Task = 1 commit) que tornam a revogação de sessões do R13 condicional ao registro ser a fonte do acesso, com uma consulta somente-leitura nova na fachada de identity e a lei L-IG5 no gateway de staff
+description: Plano de execução da Stage 3.8 — 6 Tasks (1 Task = 1 commit) que tornam a revogação de sessões do R13 condicional ao registro ser a fonte do acesso, com uma consulta somente-leitura nova na fachada de identity e a lei L-IG5 no gateway de staff
 when-use: Consultar durante a Fase 4 (execução) desta Stage; cada Task tem arquivos, critério de aceite e comando de verificação; consultar a §7 para o que aconteceu de fato
 keywords: [technical, plano de execução, termination-access-scope, desligamento, revogacao, identity-gateway, facade, staff, identity]
 status: done
 created_at: 2026-10-19
 updated_at: 2026-10-19
-stage_id: 3.7-termination-access-scope
+stage_id: 3.8-termination-access-scope
 stage_title: Desligamento corta só o acesso que o registro concede
 step_id: 3
 step_title: Equipe da unidade
@@ -17,7 +17,7 @@ branch: feat/60-3-7-termination-access-scope
 tasks_count: 6
 ---
 
-# Technical — Stage 3.7 — Desligamento corta só o acesso que o registro concede
+# Technical — Stage 3.8 — Desligamento corta só o acesso que o registro concede
 
 > **Como usar este documento (para code assistant):**
 > 1. Ler primeiro a §1, em especial **"As totalidades ditam o recorte"**.
@@ -120,7 +120,7 @@ docs/domain/staff/workforce.md                            (T06)
 - **O que fazer:** use case `GetAccountRoleUseCase(users: UserRepository)` com
   `execute(command) -> AccountRoleResult | None`: `users.find_by_id`; `None` se
   ausente, senão `AccountRoleResult(role=user.role)`. Docstring do módulo: nasce
-  para a fachada (ADR 3.7.0001 §3), só leitura, "não existe" não é erro.
+  para a fachada (ADR 3.8.0001 §3), só leitura, "não existe" não é erro.
 - **Critério de aceite:** CA01 — parametrizado sobre os 5 membros de `Role`
   (platform_admin com `tenant_id=None`); id desconhecido ⇒ `None`; o repositório
   fake não muda (contas e memberships iguais antes/depois); exceção do
@@ -139,7 +139,7 @@ docs/domain/staff/workforce.md                            (T06)
 - **Arquivos a modificar:**
   - `src/restaurant_hub/features/identity/application/facade.py` (4º colaborador `get_account_role`; método `account_role(user_id: str) -> str | None`, devolve `result.role.value`; docstrings "três" → "quatro")
   - `src/restaurant_hub/composition_root.py` (constrói `GetAccountRoleUseCase(users=users)`; comentário "Os três use cases da fachada")
-  - `src/restaurant_hub/features/identity/application/use_cases/revoke_all_sessions.py` (docstring do módulo: **o consumidor decide quando chamar** — ver ADR 3.7.0001; redação válida antes e depois da T04)
+  - `src/restaurant_hub/features/identity/application/use_cases/revoke_all_sessions.py` (docstring do módulo: **o consumidor decide quando chamar** — ver ADR 3.8.0001; redação válida antes e depois da T04)
   - `tests/unit/features/identity/application/test_facade.py` (espião do 4º use case para a delegação e o `None`; e, em `_fachada_real`, um `InMemoryUserRepository` armado em `find_by_id` para provar que a exceção **do repositório** atravessa use case e fachada na mesma instância)
   - `tests/contract/features/staff/conftest.py` (`_gateway_real` constrói a fachada com o 4º use case — sem lei nova ainda)
   - `tests/unit/features/staff/adapters/test_composition_root_staff.py` (o use case da fachada usa o **mesmo** `users` das rotas de identity)
@@ -260,7 +260,7 @@ docs/domain/staff/workforce.md                            (T06)
 ```bash
 make check
 uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
-python scripts/check_technical_postexec.py docs/stages/3.7-termination-access-scope/technical.md
+python scripts/check_technical_postexec.py docs/stages/3.8-termination-access-scope/technical.md
 ```
 
 Cobertura por arquivo (CA22): conferir no `term-missing` cada arquivo de `src/`
@@ -295,7 +295,7 @@ de cada uma vai para o relatório final (§4 da auditoria de testes).
 - [ ] Checkpoints A, B e C com achados dispostos; auditoria de testes por subagente
 - [ ] Commit final `stage 3.7: complete`
 - [ ] `roadmap.md`: Stage `done`, `updated_at` e `last_reviewed_at`
-- [ ] ADR 3.7.0001 `accepted`
+- [ ] ADR 3.8.0001 `accepted`
 - [ ] `concept.md` sem retoque retrospectivo
 
 ## 4. Ordem de dependência entre Tasks
@@ -318,7 +318,7 @@ T03 depende da T02 porque o `LocalIdentityGateway` chama `account_role`.
 ## 6. Referências
 
 - [`./concept.md`](./concept.md)
-- [ADR 3.7.0001](../../adr/3_7_0001-termination-revokes-only-access-the-record-grants.md)
+- [ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md)
 - [`../../roadmap.md`](../../roadmap.md)
 - [`../../CONVENTIONS.md`](../../CONVENTIONS.md)
 - Skills: `hex-arch-python`, `pytest-with-fakes`, `composition-root`, `task-ordering-hex`
@@ -337,7 +337,7 @@ T03 depende da T02 porque o `LocalIdentityGateway` chama `account_role`.
 
 ### 2026-10-19 — [decision] Fase 3A — guarda `employee.active` antes da regra — Claude (Opus 5.5)
 **Contexto:** Checkpoint A (domínio #2): reavaliar a regra ao desligar de novo um desligado derrubaria sessões que a pessoa abriu depois do primeiro desligamento (a conta permanece).
-**Decisão:** só registro ativo dispara a regra (concept D3, ADR 3.7.0001 §1). A nova tentativa depois de falha na gravação continua segura — o registro segue ativo; travado por `test_nova_tentativa_depois_de_falha_na_gravacao_revoga_de_novo`.
+**Decisão:** só registro ativo dispara a regra (concept D3, ADR 3.8.0001 §1). A nova tentativa depois de falha na gravação continua segura — o registro segue ativo; travado por `test_nova_tentativa_depois_de_falha_na_gravacao_revoga_de_novo`.
 **Razão:** ADR 3.5.0003 §3 (a conta permanece) + intenção do sponsor (D6).
 
 ### 2026-10-19 — [decision] Fase 3A — corrida entre dois desligamentos simultâneos fica declarada — Claude (Opus 5.5)
@@ -346,13 +346,13 @@ T03 depende da T02 porque o `LocalIdentityGateway` chama `account_role`.
 - A — re-checar depois da escrita e revogar se preciso
 - B — declarar como residual ✅
 **Decisão:** B — `[decision:C]`, degrau 4.
-**Razão:** A reintroduz o sucesso parcial atrás de 500 que o ADR 3.5.0003 §2 evita e, com a guarda `active`, a nova tentativa não revogaria. O caso não é produzível hoje e as sessões vivas não alcançam nada (registro desligado). ADR 3.7.0001 Alt. H.
+**Razão:** A reintroduz o sucesso parcial atrás de 500 que o ADR 3.5.0003 §2 evita e, com a guarda `active`, a nova tentativa não revogaria. O caso não é produzível hoje e as sessões vivas não alcançam nada (registro desligado). ADR 3.8.0001 Alt. H.
 
 ### 2026-10-19 — [deviation] Task 04 — teste extra de nova tentativa — Claude (Opus 5.5)
 `test_nova_tentativa_depois_de_falha_na_gravacao_revoga_de_novo` não estava na lista CA05–CA15; cobre a última linha da tabela do concept §6. Mesmo arquivo da Task, sem contrato novo.
 
 ### 2026-10-19 — [deviation] Checkpoint C — duas docstrings fora da lista do concept §8 — Claude (Opus 5.5)
-`employee.py` (`TerminatedEmployeeLoginError`) e o comentário do mapa em `error_handlers.py` diziam "desligar cortou" sem qualificar. No bloco T01–T03 marquei como refutado (falam do **registro**); o revisor do bloco T04–T06 mostrou que a leitura pós-3.7 sugere corte incondicional — disposição revertida para corrigido (`[3.7/task-04-fix]`).
+`employee.py` (`TerminatedEmployeeLoginError`) e o comentário do mapa em `error_handlers.py` diziam "desligar cortou" sem qualificar. No bloco T01–T03 marquei como refutado (falam do **registro**); o revisor do bloco T04–T06 mostrou que a leitura pós-3.8 sugere corte incondicional — disposição revertida para corrigido (`[3.7/task-04-fix]`).
 
 ### 2026-10-19 — [finding] staff — "vincular login existente" precisa checar o tenant do `User` — Claude (Opus 5.5)
 **Contexto:** `is_employee_login` não recebe tenant; hoje um login só alcança registros do próprio tenant porque R17 provisiona no tenant do registro e a cópia não carrega `user_id`. Não há guarda que imponha isso a um vínculo futuro (`employees.user_id` sem FK — ADR 3.5.0004).
@@ -360,7 +360,7 @@ T03 depende da T02 porque o `LocalIdentityGateway` chama `account_role`.
 **Stage candidata:** a que implementar "vincular login existente" (concept 3.5 §10; `4.3-scheduling-application` ou Stage de gestão de acesso anterior).
 
 ### 2026-10-19 — [finding] staff — toda operação que encerra um vínculo ativo herda a regra — Claude (Opus 5.5)
-**Contexto:** ADR 3.7.0001 §5: hoje R13 é o único caminho que encerra o vínculo ativo de um registro. "Desvincular" / "trocar login" criarão outro.
+**Contexto:** ADR 3.8.0001 §5: hoje R13 é o único caminho que encerra o vínculo ativo de um registro. "Desvincular" / "trocar login" criarão outro.
 **Direção sugerida:** extrair a regra (unidade + papel) para um ponto único quando o segundo caminho nascer, em vez de duplicar.
 **Stage candidata:** a mesma do finding anterior.
 
@@ -381,7 +381,7 @@ O auditor independente (11 mutações reais, nenhuma sobrevivente) marcou "não 
 ### 2026-10-21 — [deviation] auditoria da Stage (`stage-audit`, agente Opus de contexto zerado) — Claude Opus 5.5 (auditor)
 
 Veredito: **aprovada com findings**, sem bloqueante depois da fase de aplicação. Gates no HEAD
-`fe3daca`, antes das correções: `make check` EXIT=0 (4196 passed, cobertura total 99,96%, os 12
+`f0487a3` (era `fe3daca` antes do rebase de 2026-11-01), antes das correções: `make check` EXIT=0 (4196 passed, cobertura total 99,96%, os 12
 arquivos de `src/` tocados em 100%), `check_layout` sem violação, `lint-imports` com 10 contratos
 mantidos e o `.importlinter` intocado. As correções são commits `[3.7/--]`: fora de Task, depois
 do `stage 3.7: complete`. Cada uma passou por `make check` EXIT=0 antes de ser gravada.
@@ -408,14 +408,14 @@ Disposições:
 - **F2 (non-blocker):** `InMemoryIdentityGateway` era o único fake de port sem `_conforms`. Por
   isso `make typecheck` não conferia o fake contra o `IdentityGateway`, embora a tabela "As
   totalidades" (§1) dissesse "(mypy)". Medido numa cópia: com `is_employee_login -> str` no fake,
-  o mypy passa sem a linha e reprova com ela. Corrigido em `5cd2c40`.
+  o mypy passa sem a linha e reprova com ela. Corrigido em `7a08ff4` (era `5cd2c40`).
 - **F3 (nit):** o docstring da classe `IdentityGateway` listava três operações. O de
   `test_desligado_recusa_login_na_guarda_e_no_link_login` dizia "desligar cortou" sem qualificar;
-  é o gêmeo do texto que o `[3.7/task-04-fix]` corrigiu em `employee.py`. Corrigidos em `8dacc75`.
+  é o gêmeo do texto que o `[3.7/task-04-fix]` corrigiu em `employee.py`. Corrigidos em `c3dfb7e` (era `8dacc75`).
 - **F4 (non-blocker):** a saída das mutações do CA21 não estava registrada em lugar nenhum, e o
   PR só afirmava "11 mutações, nenhuma sobrevivente". Ficou registrada acima e no comentário do
   veredito no PR #69.
-- **F5 (non-blocker, rastro):** o `[finding] shared` acima, o ADR 3.7.0001 (Alt. H e §Negative) e
+- **F5 (non-blocker, rastro):** o `[finding] shared` acima, o ADR 3.8.0001 (Alt. H e §Negative) e
   o concept §10 dão a #46 como quem fecha a corrida de D7. Isso não se sustenta, por dois
   motivos. (1) Com o isolamento padrão (`READ COMMITTED`; `SERIALIZABLE` foi recusado no ADR
   3.3.0006 Alt. C), uma unidade de trabalho não fecha a corrida. Cada desligamento lê como ativa

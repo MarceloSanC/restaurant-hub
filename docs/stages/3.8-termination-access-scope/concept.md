@@ -6,14 +6,14 @@ keywords: [concept, termination-access-scope, desligamento, revogacao, sessoes, 
 status: done
 created_at: 2026-10-19
 updated_at: 2026-10-19
-stage_id: 3.7-termination-access-scope
+stage_id: 3.8-termination-access-scope
 stage_title: Desligamento corta só o acesso que o registro concede
 step_id: 3
 step_title: Equipe da unidade
 depends_on: [3.5-employee-login-link]
 ---
 
-# Concept — Stage 3.7 — Desligamento corta só o acesso que o registro concede
+# Concept — Stage 3.8 — Desligamento corta só o acesso que o registro concede
 
 > **Escopo deste documento:** o que será feito nesta Stage, por quê, e
 > decisões técnicas relevantes para entender o "porquê". O plano executável
@@ -27,7 +27,7 @@ depends_on: [3.5-employee-login-link]
   vinculado só quando o registro é a fonte do acesso**: o registro está ativo, a
   conta tem papel `employee` **e** nenhum outro registro **ativo da mesma
   unidade** aponta para ela
-  ([ADR 3.7.0001](../../adr/3_7_0001-termination-revokes-only-access-the-record-grants.md)).
+  ([ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md)).
 - **Staff:** lei nova **L-IG5** no `IdentityGateway` (`is_employee_login`), com
   as duas implementações (fake e `LocalIdentityGateway`) e o contrato fake × real.
   O "outro registro ativo da unidade" sai de `EmployeeRepository.list_by_unit`
@@ -35,7 +35,7 @@ depends_on: [3.5-employee-login-link]
 - **Identity:** uma consulta **somente-leitura** atrás da fachada —
   `GetAccountRoleCommand`, `AccountRoleResult`, `GetAccountRoleUseCase` e
   `IdentityFacade.account_role` — e o wiring no `composition_root`.
-- **Registro da decisão:** ADR 3.7.0001 (supersessão parcial do ADR 3.5.0003 §1
+- **Registro da decisão:** ADR 3.8.0001 (supersessão parcial do ADR 3.5.0003 §1
   e da metade "decidir se o desligamento a chama" do §5), com nota datada no
   3.5.0003 e no workforce §3.8; docstrings que ficariam falsas atualizadas
   (§8).
@@ -50,11 +50,11 @@ depends_on: [3.5-employee-login-link]
 
 - **Vincular / desvincular login existente** (concept 3.5 §10). Os casos (a) e
   (b) só são produzíveis hoje por arranjo direto no banco.
-- **`User.is_active` / desativação de conta.** A 3.7 só decide que o desligamento
-  **nunca** a chama (ADR 3.7.0001 §4); criá-la continua com o gatilho do ADR
+- **`User.is_active` / desativação de conta.** A 3.8 só decide que o desligamento
+  **nunca** a chama (ADR 3.8.0001 §4); criá-la continua com o gatilho do ADR
   3.5.0003 §5.
 - **Olhar registros de outras unidades** (sponsor, §13 Q4) e **revogação por
-  escopo de unidade** (ADR 3.7.0001 Alt. C e D).
+  escopo de unidade** (ADR 3.8.0001 Alt. C e D).
 - **R15** (`DeleteEmployeeUseCase`) — inalterado.
 - **Unit of Work** (#46).
 
@@ -65,14 +65,14 @@ depends_on: [3.5-employee-login-link]
   em identity. **Autorizada pelo sponsor** (§13 Q3). O custo evitado é um ciclo
   de PR a mais para um use case sem consumidor até a Stage seguinte — o mesmo
   argumento da 3.5 (concept 3.5 §13 Q6).
-- **Mais uma expansão de camada para trás no BC staff.** A 3.7 altera o use case
+- **Mais uma expansão de camada para trás no BC staff.** A 3.8 altera o use case
   R13 (3.2) e o port `IdentityGateway` (3.5). A série já é `[finding]` da 3.6 para
   a retrospectiva do Step 3; esta entra nela, declarada.
 
 ### Vínculo com o roadmap
 
 Step 3 — Equipe da unidade. A 3.5 entregou "criar login para o funcionário" e o
-corte de acesso no desligamento; a 3.7 corrige o alcance desse corte **antes**
+corte de acesso no desligamento; a 3.8 corrige o alcance desse corte **antes**
 de a primeira conta ter mais de um vínculo ou um vínculo de papel diferente de
 `employee` (condição de disparo da issue #60). Promovida da issue #60 pelo
 critério de PIPELINE §4.5 (contrato de port novo + trade-off que pede ADR).
@@ -94,7 +94,7 @@ isso está travado por teste nos cenários da issue #60 e no de um registro só.
   → `RevokeAllSessionsUseCase`.
 - A premissa daquele ADR — toda conta vinculada é `employee` com um registro —
   deixa de valer com "vincular login existente": **(a)** conta `employee` com
-  dois registros (workforce §3.1, §3.7; ADR 3.1.0001 iii); **(b)** login de
+  dois registros (workforce §3.1, §3.8; ADR 3.1.0001 iii); **(b)** login de
   gerente/dono vinculado a um registro de escala (concept 3.5 §4, §10).
 - **Revogar não tranca ninguém do lado de fora:** a conta permanece e a pessoa
   pode logar de novo (ADR 3.5.0003 §3). O custo de uma revogação indevida é uma
@@ -168,11 +168,11 @@ isso está travado por teste nos cenários da issue #60 e no de um registro só.
 
 ## 5. Invariantes e regras
 
-1. **Regra de revogação do R13** (ADR 3.7.0001 §1). Com `u = employee.user_id`:
+1. **Regra de revogação do R13** (ADR 3.8.0001 §1). Com `u = employee.user_id`:
    revoga se e somente se `employee.active` **e** `u is not None` **e** nenhum
    registro de `list_by_unit(tenant, unit)` (só ativos) tem `user_id == u` e id
    diferente de `employee.id` **e** `is_employee_login(u)`.
-2. **Ordem** (ADR 3.7.0001 §2): `find_by_id` → `list_by_unit` →
+2. **Ordem** (ADR 3.8.0001 §2): `find_by_id` → `list_by_unit` →
    `is_employee_login` → `revoke_login_sessions` → `update`. Cada passo só roda
    se o anterior pedir: registro já desligado ou sem login ⇒ nenhuma das três
    chamadas; outro registro ativo do login na unidade ⇒ nenhuma chamada ao
@@ -181,7 +181,7 @@ isso está travado por teste nos cenários da issue #60 e no de um registro só.
    das três chamadas deixa o registro **ativo** e a requisição falha inteira.
 4. **Desligar de novo um desligado** não toca identity (o `update` idempotente da
    3.2 continua).
-5. **O desligamento nunca desativa a conta** (ADR 3.7.0001 §4). Não tem critério
+5. **O desligamento nunca desativa a conta** (ADR 3.8.0001 §4). Não tem critério
    de aceite próprio: a desativação ainda não existe; o que se trava é a ausência
    de qualquer chamada além das três de §5.2.
 6. **A conta permanece** e o `user_id` permanece no registro (ADR 3.5.0003 §3).
@@ -211,7 +211,7 @@ Nenhuma exceção nova; o mapa `STAFF_ERROR_STATUS` não muda.
   revogar" e "por escopo" deixam um dos casos aberto ou custam uma Stage de
   identity.
 - **Fonte:** sponsor, §13 Q1; issue #60 §Incerteza.
-- **ADR:** 3.7.0001 §1, Alt. A, B, D.
+- **ADR:** 3.8.0001 §1, Alt. A, B, D.
 
 ### D2 — "Outro registro ativo" só na mesma unidade, via `list_by_unit`
 - **O quê:** a checagem lê `list_by_unit(tenant, unit)`; nenhum método novo no
@@ -221,7 +221,7 @@ Nenhuma exceção nova; o mapa `STAFF_ERROR_STATUS` não muda.
   devolve só ativos (L-E6) e já tem as duas implementações sob contrato; um
   método dedicado repetiria a lei sem ganho.
 - **Fonte:** sponsor, §13 Q4; `employee_repository.py` (L-E6).
-- **ADR:** 3.7.0001 §1, Alt. C.
+- **ADR:** 3.8.0001 §1, Alt. C.
 
 ### D3 — Só registro ativo dispara a regra
 - **O quê:** `employee.active` é a primeira condição.
@@ -229,24 +229,24 @@ Nenhuma exceção nova; o mapa `STAFF_ERROR_STATUS` não muda.
   primeiro desligamento; um duplo clique não deve derrubar essas sessões. A nova
   tentativa depois de falha continua segura (revogar vem antes de gravar).
 - **Fonte:** achado do Checkpoint A (domínio #2); ADR 3.5.0003 §2–§3.
-- **ADR:** 3.7.0001 §1.
+- **ADR:** 3.8.0001 §1.
 
 ### D4 — Cada BC responde pelo fato que detém; a política fica no R13
 - **O quê:** staff lê a unidade e pergunta "conta `employee`?" ao gateway; a
   decisão de revogar é do use case.
 - **Por quê:** a regra do papel dentro da revogação de identity esconderia uma
   política de staff numa operação "idempotente e total" (L-IG4).
-- **Fonte:** ADR 3.7.0001 §3, Alt. E.
+- **Fonte:** ADR 3.8.0001 §3, Alt. E.
 
 ### D5 — O port devolve booleano, não o papel
 - **O quê:** `is_employee_login -> bool`; o literal `"employee"` fica no adapter.
 - **Por quê:** mantém `Role` fora de staff (CA07 da 3.5 / CA12 da 3.4).
-- **Fonte:** ADR 3.7.0001 Alt. F; `local_identity_gateway.py` (`_EMPLOYEE_ROLE`).
+- **Fonte:** ADR 3.8.0001 Alt. F; `local_identity_gateway.py` (`_EMPLOYEE_ROLE`).
 
 ### D6 — Desligar nunca desativa a conta
 - **O quê:** quando a desativação de conta existir, é ato separado de identity.
 - **Fonte:** sponsor, §13 Q2.
-- **ADR:** 3.7.0001 §4, Alt. G.
+- **ADR:** 3.8.0001 §4, Alt. G.
 
 ### D7 — A corrida entre dois desligamentos simultâneos fica declarada, não fechada
 - **O quê:** sem re-checagem depois da escrita.
@@ -255,7 +255,7 @@ Nenhuma exceção nova; o mapa `STAFF_ERROR_STATUS` não muda.
   quando ocorrer, as sessões vivas não alcançam nada (o registro está
   desligado).
 - **Fonte:** `[decision:C]`, degrau 4 (reversível, não fecha o caminho da #46).
-- **ADR:** 3.7.0001 Alt. H, §Negative.
+- **ADR:** 3.8.0001 Alt. H, §Negative.
 
 ### D8 — Sem `gate_mode: batch`
 - **O quê:** `strict` — mexe num port com contrato e numa regra de acesso.
@@ -354,7 +354,7 @@ Sem mudança de schema, migration ou índice.
 - [x] **CA19** — CA24 da 3.5 continua passando **sem edição**.
 
 ### Documentação e gates
-- [x] **CA20** — ADR 3.7.0001 `accepted`; ADR 3.5.0003 com `## Supersessão
+- [x] **CA20** — ADR 3.8.0001 `accepted`; ADR 3.5.0003 com `## Supersessão
   parcial` datada (corpo intocado, `updated_at` bumpado); nota datada no
   workforce §3.8; as docstrings de §8 não afirmam mais revogação incondicional
   nem "três operações".
@@ -370,7 +370,7 @@ Sem mudança de schema, migration ou índice.
 - [x] Todos os contratos introduzidos têm assinatura definida? (§4)
 - [x] Toda decisão em §7 tem fonte rastreável?
 - [x] Toda integração externa tem contrato definido? (não há)
-- [x] Decisões com alternativa real descartada têm ADR escrito? (3.7.0001)
+- [x] Decisões com alternativa real descartada têm ADR escrito? (3.8.0001)
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? (3.5 done)
 - [x] Stage cabe em ~3–12 Tasks? (estimativa: 6)
 - [x] Riscos críticos têm mitigação plausível?
@@ -383,28 +383,28 @@ Todas decididas pelo sponsor em 2026-10-19.
 
 ### Q1 — Em que caso o desligamento revoga as sessões? — **DECIDIDA**
 **Papel `employee` + último vínculo ativo** (contra "só último vínculo" e "nunca
-revogar"). ADR 3.7.0001 §1.
+revogar"). ADR 3.8.0001 §1.
 
 ### Q2 — O desligamento chama a desativação de conta quando ela existir? — **DECIDIDA**
 **Nunca** (contra "mesma condição da revogação" e "deixar para o Step 4"). ADR
-3.7.0001 §4. Levada ao sponsor como P depois do Checkpoint A (conformidade #1),
+3.8.0001 §4. Levada ao sponsor como P depois do Checkpoint A (conformidade #1),
 que contestou fechá-la por evidência.
 
-### Q3 — A 3.7 pode entregar nos dois BCs? — **DECIDIDA**
+### Q3 — A 3.8 pode entregar nos dois BCs? — **DECIDIDA**
 **Sim**, na própria Stage (contra "issue de identity antes"). §1 Divergências.
 
 ### Q4 — "Outro registro ativo" olha outras unidades do tenant? — **DECIDIDA**
 **Só a mesma unidade** (contra "exceção ao workforce §3.1"). Consequência
-aceita: caso (a) entre unidades revoga e custa um login. ADR 3.7.0001 §1, Alt. C.
+aceita: caso (a) entre unidades revoga e custa um login. ADR 3.8.0001 §1, Alt. C.
 
 ## 14. Referências
 
-- [`../../roadmap.md`](../../roadmap.md) — Stage `3.7-termination-access-scope`
-- [ADR 3.7.0001](../../adr/3_7_0001-termination-revokes-only-access-the-record-grants.md)
+- [`../../roadmap.md`](../../roadmap.md) — Stage `3.8-termination-access-scope`
+- [ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md)
 - [ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md),
   [3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md),
   [3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md),
   [0.0.0006](../../adr/0_0_0006-primary-ports-are-the-use-case-classes.md)
 - [`../3.5-employee-login-link/concept.md`](../3.5-employee-login-link/concept.md) §4, §10, §13 Q6, CA07
-- [`../../domain/staff/workforce.md`](../../domain/staff/workforce.md) §3.1, §3.7, §3.8
+- [`../../domain/staff/workforce.md`](../../domain/staff/workforce.md) §3.1, §3.8, §3.8
 - Issue #60

@@ -1,4 +1,4 @@
-"""E2E do login do funcionário — Stages 3.5 (CA13, CA14, CA22-26, CA30-32) e 3.7 (CA16-18).
+"""E2E do login do funcionário — Stages 3.5 (CA13, CA14, CA22-26, CA30-32) e 3.8 (CA16-18).
 
 O fluxo inteiro pelo entrypoint real, contra Postgres: o `manager` cria o
 funcionário e o login; o link sai pelo canal escolhido; o funcionário define a
@@ -656,7 +656,7 @@ async def test_ca31_email_com_byte_nul_e_422_de_staff(
 
 
 # ---------------------------------------------------------------------------
-# Stage 3.7 — desligar corta só o acesso que o registro concede (ADR 3.7.0001)
+# Stage 3.8 — desligar corta só o acesso que o registro concede (ADR 3.8.0001)
 # ---------------------------------------------------------------------------
 #
 # Os casos (a) e (b) da issue #60 não são produzíveis pela API ainda: a cópia não
@@ -730,7 +730,7 @@ async def test_ca17_registro_ativo_em_outra_unidade_nao_impede_o_corte(
 ) -> None:
     """Decisão do sponsor (concept §13 Q4): só a unidade conta — a pessoa loga de novo.
 
-    Este teste fixa Q4 contra a checagem entre unidades (ADR 3.7.0001 Alt. C); ele
+    Este teste fixa Q4 contra a checagem entre unidades (ADR 3.8.0001 Alt. C); ele
     passaria também com a regra da 3.5 (revogar sempre). A regra nova é provada
     por CA16 e CA18.
     """
@@ -771,7 +771,7 @@ async def test_ca18_gerente_vinculado_a_registro_de_escala_nao_perde_a_sessao(
 async def test_desligar_de_novo_nao_derruba_a_sessao_aberta_depois_do_primeiro_desligamento(
     client: AsyncClient, cenario: Cenario
 ) -> None:
-    """CA12 da 3.7 na ponta: a conta permanece, e o duplo clique não derruba quem relogou."""
+    """CA12 da 3.8 na ponta: a conta permanece, e o duplo clique não derruba quem relogou."""
     cabecalho = auth(cenario.manager)
     employee_id = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Duda")
     corpo = await _criar_login(
@@ -792,7 +792,7 @@ async def test_desligar_de_novo_nao_derruba_a_sessao_aberta_depois_do_primeiro_d
 async def test_falha_antes_de_gravar_e_500_e_registro_e_sessao_ficam(
     client_500: AsyncClient, cenario: Cenario, monkeypatch: pytest.MonkeyPatch, metodo: str
 ) -> None:
-    """Concept 3.7 §6: falha da consulta de papel (3.7) ou da revogação (3.5) ⇒ 500.
+    """Concept 3.8 §6: falha da consulta de papel (3.8) ou da revogação (3.5) ⇒ 500.
 
     Tudo acontece antes de gravar (ADR 3.5.0003 §2): o registro continua **ativo** e a
     sessão continua **viva** — a operação falhou inteira, não pela metade. A falha é

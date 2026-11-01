@@ -20,7 +20,7 @@ segredo. Um teste que quisesse o link o lê pelo ledger ou por `sent`.
 `make typecheck` é `mypy src/ tests/fakes/`, e nenhum outro sítio que o mypy
 checa passa este fake como `IdentityGateway` — sem ela, um método divergente do
 port (assinatura ou retorno) passaria no gate e só apareceria, se aparecesse, em
-runtime (auditoria da Stage 3.7).
+runtime (auditoria da Stage 3.8).
 
 **Ordem das recusas**, espelhando o lado real (fachada + use case): e-mail
 inválido primeiro (o VO `Email` é construído na fachada, antes de tudo), depois
@@ -112,7 +112,7 @@ class InMemoryIdentityGateway:
             posição relativa.
         other_role_logins: logins do ledger cujo papel **não** é o de
             funcionário (gerente/dono vinculado a um registro de escala —
-            ADR 3.7.0001). É **este** conjunto que faz `is_employee_login`
+            ADR 3.8.0001). É **este** conjunto que faz `is_employee_login`
             responder `False` para um login conhecido; um id fora de `logins` é
             o caso "desconhecido", que também responde `False` (L-IG5). Semear
             por `seed_login_of_other_role`, que grava nos dois.

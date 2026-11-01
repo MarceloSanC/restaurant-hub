@@ -184,7 +184,7 @@ class EmployeeHasLoginError(StaffError):
     deixaria em identity uma conta que ninguém aponta — e-mail tomado
     globalmente, membership viva, irrecuperável até existir "desvincular". O
     caminho é **desligar** (R13), que preserva o registro e corta o acesso que
-    ele concede (as sessões do login de funcionário — ADR 3.7.0001).
+    ele concede (as sessões do login de funcionário — ADR 3.8.0001).
     Vale também para o desligado com login: o vínculo é história (concept 3.5
     §5.5). 409: conflito com estado já gravado.
     """
