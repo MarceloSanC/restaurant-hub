@@ -802,6 +802,13 @@ e [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
      [ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md); a regra
      de aprovação vive em [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §Gates de PR).
 
+**Orquestração autônoma** ([`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md),
+[ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)):
+as duas sessões acima viram subagentes de contexto zerado despachados por
+uma sessão mestra, cada Stage/issue na sua worktree (até três ao mesmo
+tempo); o `make check` completo roda no GitHub Actions do PR (draft desde o
+primeiro push) e o **auditor**, validado o PR, faz rebase, merge e limpeza.
+
 O fluxo multi-sessão por fase (3A/3B/4 em sessões separadas, seguindo o
 RUNBOOK passo a passo com gate textual em cada transição) permanece o
 **procedimento de referência** — e a escolha certa para Stage com

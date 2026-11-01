@@ -5,7 +5,7 @@ when-use: Fluxo padrão de execução de Stage (PIPELINE §11.1, implementa → 
 keywords: [prompt, stage, single-session, concept, technical, execucao, lifecycle, review, subagents, gates]
 status: done
 created_at: 2026-05-21
-updated_at: 2026-07-03
+updated_at: 2026-11-01
 ---
 
 # Prompt — Execução de Stage em Sessão Única
@@ -517,6 +517,18 @@ pedido explícito. Não execute `gh pr merge`.
 > §3. A regra de aprovação vive em [`./GIT-WORKFLOW.md`](./GIT-WORKFLOW.md)
 > §Gates de PR (CONVENTIONS §0 — o dono vence); esta página só aponta.
 > **Fora de corrida autorizada, o parágrafo acima vale literalmente.**
+
+> **Exceção — orquestração autônoma.** Despachado pelo
+> [`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)
+> ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)):
+> você trabalha **só na worktree recebida**; abre o PR como **draft no
+> primeiro push** e empurra a cada Task, porque o `make check` completo
+> roda no GitHub Actions do PR — localmente, só checks focados (ruff/mypy
+> nos arquivos tocados, testes afetados contra o Postgres da worktree). A
+> evidência de `make check`/coverage nos gates é o run do Actions
+> (`gh pr checks`, `gh run view --log`). Fork que pediria `AskUserQuestion`
+> volta ao orquestrador no relatório (você não tem canal com o humano).
+> Fecha com `gh pr ready`; **quem mergeia é o auditor** despachado depois.
 
 **O checklist do PR é um handoff.** Marque **apenas** as caixinhas que você
 **validou com certeza**; deixe as demais **desmarcadas**. O corpo do PR

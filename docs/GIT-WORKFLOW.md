@@ -5,7 +5,7 @@ when-use: Consultar antes de qualquer mudança de código. Todos os membros do t
 keywords: [git, github, workflow, ci-cd, pr, code-review, deploy]
 status: done
 created_at: 2026-05-12
-updated_at: 2026-05-15
+updated_at: 2026-11-01
 ---
 
 # Git Workflow Padrão
@@ -36,6 +36,9 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
    `develop`, limpo** — nunca se cria nem se troca de branch nele (o hook
    `.claude/hooks/git_guard.py` recusa). Ver §"Branches em execução" para
    critérios, comando, limpeza e o procedimento de PR parcial.
+   **Na orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md))
+   o teto é outro: **três worktrees de implementação**, contando as com
+   PR aberto ainda não mergeado (§"Branches em execução").
 
 ---
 
@@ -92,7 +95,14 @@ referenciam esta seção em vez de duplicar a lista:
   a mestra mergeia sozinha quando valem as condições de §3.4 daquele
   prompt (label `complete` gravado pelo auditor, sem blocker, CI verde,
   branch atualizada, nenhum fork P/HALT pendente).
-  Fora dessas duas exceções, a aprovação continua obrigatória. Elas são
+  **Exceção — orquestração autônoma:** com o
+  [`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)
+  ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)),
+  quem mergeia é o **auditor de contexto limpo** que auditou o PR, e só
+  quando valem as condições de merge da §3 daquele prompt (label
+  `complete`, sem blocker, Actions verde no head inclusive `audit-gate`,
+  branch rebaseada sem carona, nenhum fork P pendente).
+  Fora dessas três exceções, a aprovação continua obrigatória. Elas são
   **registradas no dono**, como manda CONVENTIONS §0 — sem isso os ADRs
   seriam letra morta.
 - **Branch atualizada:** PR precisa estar à frente da base (`Require
@@ -477,6 +487,15 @@ isolamento costuma:
 A worktree resolve o primeiro; o teto de duas e o critério de conflito
 resolvem os outros dois.
 
+**Orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md),
+[`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)):
+o teto passa a ser de **três worktrees de implementação existindo ao
+mesmo tempo**, contando as com PR aberto ainda não mergeado (cada uma
+segura uma sessão viva — o teto é de custo). Uma nova só abre quando
+outra é removida pelo auditor, e só se não conflitar com as em voo
+(critérios abaixo). A branch de docs de processo do próprio orquestrador
+não conta.
+
 **Duas branches só voam juntas se não conflitam** — todas as condições:
 
 - nenhuma depende da outra (roadmap "Depende de", issue, ou uma consome
@@ -718,7 +737,8 @@ Exemplo de feedback construtivo:
 - Tentativa de push direto em `main` ou `develop`
 - Tentativa de merge **sem** CI verde
 - Tentativa de merge **sem** ≥ 1 aprovação — **exceto** em corrida autônoma
-  autorizada pelo ADR 0.0.0004 ou na orquestração de Step (ADR 0.0.0007),
+  autorizada pelo ADR 0.0.0004, na orquestração de Step (ADR 0.0.0007) ou
+  na orquestração autônoma (ADR 0.0.0008),
   onde a aprovação é substituída por auditoria de contexto limpo (ver
   §Gates de PR, o ponto único)
 - Coverage < 90% em código novo
