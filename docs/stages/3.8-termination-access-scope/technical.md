@@ -427,4 +427,21 @@ Disposições:
   §3.2, a correção pós-Fase 4 é registrada aqui. O texto do ADR e do concept §10 se alinha no
   retrabalho de renumeração para 3.8, que já toca os dois arquivos.
 
+### 2026-11-01 — [deviation] renumeração 3.7 → 3.8 e rebase sobre #70 e #71 — Claude Opus 5.5 (implementador do retrabalho)
+**Contexto:** esta Stage foi executada como `3.7` em paralelo à #49, que promoveu a mesma `3.7` (`3.7-application-authorization`, PR #71). Decisão do orquestrador (2026-10-21, por delegação do sponsor): o #71 fica com 3.7, este PR vira **3.8**; ordem de merge #70 → #71 → #69.
+**O que mudou:**
+- Rebase sobre `origin/develop` em `1d1953d` (#70 e #71 mergeados). Conflitos: `docs/roadmap.md` (três commits — grafo, tabela de Steps, tabela de Stages, bloco do Step 3: as duas Stages preservadas lado a lado) e `tests/unit/features/staff/application/test_employee_lifecycle.py` (a versão desta Stage, mais o `actor`/`guard` da 3.7). Os hashes citados acima mudaram: `fe3daca` → `f0487a3`, `5cd2c40` → `7a08ff4`, `8dacc75` → `c3dfb7e`, `809f0e3` → `c5b4bf6`.
+- Renumeração (`git mv`): pasta `docs/stages/3.8-termination-access-scope/`, ADR `3_8_0001-termination-revokes-only-access-the-record-grants.md` (`adr_id`, `context_stage`), frontmatter e corpo do concept e deste technical, roadmap, nota do workforce §3.8, nota de supersessão no ADR 3.5.0003, docstrings e testes que citavam a Stage. O ADR 3.7.0001 do #71 e as citações a ele ficaram intactos. Os sufixos dos commits já gravados continuam `[3.7/...]` (história não reescrita) e são citados assim neste arquivo; os commits do retrabalho usam `[3.8/--]`.
+- **Fora da janela §7, só renumeração:** `check_technical_postexec` é *fail-open* aqui, porque o commit reservado de aprovação se chama `stage 3.7: technical approved` (`8649b15`) e o arquivo mudou de pasta. Conferido à mão contra `8649b15:docs/stages/3.7-termination-access-scope/technical.md`: fora de `BEGIN..END` mudam só oito linhas (`description`, `stage_id`, título, duas citações ao ADR, o comando de verificação, o checklist do ADR e o link do ADR), todas `3.7` → `3.8`. Nenhuma mudança de plano.
+- Roadmap: a aresta do grafo vai na mesma linha da 3.7 (técnica do #71); o bloco desloca o Step 4 em +48 e a tabela de Stages em +1, e as 178 citações por linha que o #71 remapeou pelo mesmo ponto de inserção andaram o mesmo tanto. O deslocamento herdado do #70 (+65) fica com a #79.
+
+### 2026-11-01 — [deviation] integração com a autorização da application (#71) e com a regra 10 (#70) — Claude Opus 5.5 (implementador do retrabalho)
+- Os testes que constroem `DeactivateEmployeeUseCase` passam o `guard` e o `actor`. Teste novo `test_recusa_do_guard_nao_chama_list_by_unit_nem_is_employee_login`: com o registro no caminho em que as duas consultas desta Stage aconteceriam, a recusa sobe crua (mesma instância), sem chamada ao repositório nem ao gateway, e o registro continua ativo.
+- A montagem por reflexão da 3.7 (`test_use_cases_authorize.py`, reusada pela cadeia real do CA14) desligava um registro cujo login o fake não conhecia — com L-IG5, "desconhecido" ⇒ não revoga, e o CA07 dela ficou vermelho. O fake ganhou o gancho `seed_employee_login` (gêmeo de `seed_login_of_other_role`, não registra em `calls`); o cenário de `create_login_for_employee` passou a achar o login pelo `user_id` do registro, não por ser o único do ledger.
+- Docstrings de "quem autoriza cada operação" no port e no adapter do `IdentityGateway` incluem `is_employee_login` (chamado por `deactivate_employee`, sob `manage_staff`).
+- Regra 10 do `check_layout` (2.6): `is_employee_login` classificado como **leitura** — fora de `GATEWAY_WRITE_METHODS`; o pino de totalidade dos métodos dos gateways e o teste do classificador acompanham.
+
+### 2026-11-01 — [decision] F5 aplicado ao ADR e ao concept — Claude Opus 5.5 (implementador do retrabalho)
+O ADR 3.8.0001 (Alt. H e §Negative) e o concept (D7 e §10) dão como dono da corrida de D7 a Stage que implementar "vincular login existente", com lock por `user_id`; a #46 deixa de ser citada como quem fecha. A correção é datada no próprio texto. O `[finding] shared` acima fica como registro histórico, corrigido pela disposição F5. Nenhum fork P surgiu no retrabalho.
+
 <!-- END: post-execution -->
