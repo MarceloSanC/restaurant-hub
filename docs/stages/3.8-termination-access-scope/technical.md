@@ -5,7 +5,7 @@ when-use: Consultar durante a Fase 4 (execução) desta Stage; cada Task tem arq
 keywords: [technical, plano de execução, termination-access-scope, desligamento, revogacao, identity-gateway, facade, staff, identity]
 status: done
 created_at: 2026-10-19
-updated_at: 2026-10-19
+updated_at: 2026-11-01
 stage_id: 3.8-termination-access-scope
 stage_title: Desligamento corta só o acesso que o registro concede
 step_id: 3
@@ -381,7 +381,7 @@ O auditor independente (11 mutações reais, nenhuma sobrevivente) marcou "não 
 ### 2026-10-21 — [deviation] auditoria da Stage (`stage-audit`, agente Opus de contexto zerado) — Claude Opus 5.5 (auditor)
 
 Veredito: **aprovada com findings**, sem bloqueante depois da fase de aplicação. Gates no HEAD
-`f0487a3` (era `fe3daca` antes do rebase de 2026-11-01), antes das correções: `make check` EXIT=0 (4196 passed, cobertura total 99,96%, os 12
+`4c5ef92` (era `fe3daca` antes do rebase de 2026-11-01), antes das correções: `make check` EXIT=0 (4196 passed, cobertura total 99,96%, os 12
 arquivos de `src/` tocados em 100%), `check_layout` sem violação, `lint-imports` com 10 contratos
 mantidos e o `.importlinter` intocado. As correções são commits `[3.7/--]`: fora de Task, depois
 do `stage 3.7: complete`. Cada uma passou por `make check` EXIT=0 antes de ser gravada.
@@ -408,10 +408,10 @@ Disposições:
 - **F2 (non-blocker):** `InMemoryIdentityGateway` era o único fake de port sem `_conforms`. Por
   isso `make typecheck` não conferia o fake contra o `IdentityGateway`, embora a tabela "As
   totalidades" (§1) dissesse "(mypy)". Medido numa cópia: com `is_employee_login -> str` no fake,
-  o mypy passa sem a linha e reprova com ela. Corrigido em `7a08ff4` (era `5cd2c40`).
+  o mypy passa sem a linha e reprova com ela. Corrigido em `8c8f5e7` (era `5cd2c40`).
 - **F3 (nit):** o docstring da classe `IdentityGateway` listava três operações. O de
   `test_desligado_recusa_login_na_guarda_e_no_link_login` dizia "desligar cortou" sem qualificar;
-  é o gêmeo do texto que o `[3.7/task-04-fix]` corrigiu em `employee.py`. Corrigidos em `c3dfb7e` (era `8dacc75`).
+  é o gêmeo do texto que o `[3.7/task-04-fix]` corrigiu em `employee.py`. Corrigidos em `1139fd0` (era `8dacc75`).
 - **F4 (non-blocker):** a saída das mutações do CA21 não estava registrada em lugar nenhum, e o
   PR só afirmava "11 mutações, nenhuma sobrevivente". Ficou registrada acima e no comentário do
   veredito no PR #69.
@@ -430,9 +430,9 @@ Disposições:
 ### 2026-11-01 — [deviation] renumeração 3.7 → 3.8 e rebase sobre #70 e #71 — Claude Opus 5.5 (implementador do retrabalho)
 **Contexto:** esta Stage foi executada como `3.7` em paralelo à #49, que promoveu a mesma `3.7` (`3.7-application-authorization`, PR #71). Decisão do orquestrador (2026-10-21, por delegação do sponsor): o #71 fica com 3.7, este PR vira **3.8**; ordem de merge #70 → #71 → #69.
 **O que mudou:**
-- Rebase sobre `origin/develop` em `1d1953d` (#70 e #71 mergeados). Conflitos: `docs/roadmap.md` (três commits — grafo, tabela de Steps, tabela de Stages, bloco do Step 3: as duas Stages preservadas lado a lado) e `tests/unit/features/staff/application/test_employee_lifecycle.py` (a versão desta Stage, mais o `actor`/`guard` da 3.7). Os hashes citados acima mudaram: `fe3daca` → `f0487a3`, `5cd2c40` → `7a08ff4`, `8dacc75` → `c3dfb7e`, `809f0e3` → `c5b4bf6`.
+- Rebase sobre `origin/develop` em `1d1953d` (#70 e #71 mergeados). Conflitos: `docs/roadmap.md` (três commits — grafo, tabela de Steps, tabela de Stages, bloco do Step 3: as duas Stages preservadas lado a lado) e `tests/unit/features/staff/application/test_employee_lifecycle.py` (a versão desta Stage, mais o `actor`/`guard` da 3.7). Os hashes citados acima mudaram: `fe3daca` → `4c5ef92`, `5cd2c40` → `8c8f5e7`, `8dacc75` → `1139fd0`, `809f0e3` → `00b5c9a`. Na auditoria de 2026-11-01, um segundo rebase, sobre `44be5ef` (#80, #83 e #88), trouxe o conflito só na Tabela de Issues do roadmap (a linha da #60 sai; a #61 `done` e a #82 do `develop` ficam) e tirou da história o par de commits do handoff de sessão (adição e remoção do mesmo arquivo temporário); os hashes deste arquivo são os de depois desse rebase.
 - Renumeração (`git mv`): pasta `docs/stages/3.8-termination-access-scope/`, ADR `3_8_0001-termination-revokes-only-access-the-record-grants.md` (`adr_id`, `context_stage`), frontmatter e corpo do concept e deste technical, roadmap, nota do workforce §3.8, nota de supersessão no ADR 3.5.0003, docstrings e testes que citavam a Stage. O ADR 3.7.0001 do #71 e as citações a ele ficaram intactos. Os sufixos dos commits já gravados continuam `[3.7/...]` (história não reescrita) e são citados assim neste arquivo; os commits do retrabalho usam `[3.8/--]`.
-- **Fora da janela §7, só renumeração:** `check_technical_postexec` é *fail-open* aqui, porque o commit reservado de aprovação se chama `stage 3.7: technical approved` (`8649b15`) e o arquivo mudou de pasta. Conferido à mão contra `8649b15:docs/stages/3.7-termination-access-scope/technical.md`: fora de `BEGIN..END` mudam só oito linhas (`description`, `stage_id`, título, duas citações ao ADR, o comando de verificação, o checklist do ADR e o link do ADR), todas `3.7` → `3.8`. Nenhuma mudança de plano.
+- **Fora da janela §7, só renumeração:** `check_technical_postexec` é *fail-open* aqui, porque o commit reservado de aprovação se chama `stage 3.7: technical approved` (`b3ddae6`) e o arquivo mudou de pasta. Conferido à mão contra `b3ddae6:docs/stages/3.7-termination-access-scope/technical.md`: fora de `BEGIN..END` mudam só oito linhas (`description`, `stage_id`, título, duas citações ao ADR, o comando de verificação, o checklist do ADR e o link do ADR), todas `3.7` → `3.8`. Nenhuma mudança de plano.
 - Roadmap: a aresta do grafo vai na mesma linha da 3.7 (técnica do #71); o bloco desloca o Step 4 em +48 e a tabela de Stages em +1, e as 178 citações por linha que o #71 remapeou pelo mesmo ponto de inserção andaram o mesmo tanto. O deslocamento herdado do #70 (+65) fica com a #79.
 
 ### 2026-11-01 — [deviation] integração com a autorização da application (#71) e com a regra 10 (#70) — Claude Opus 5.5 (implementador do retrabalho)
