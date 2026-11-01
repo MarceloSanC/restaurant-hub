@@ -126,6 +126,10 @@ _MALFORMED_TAGS = [
     "4.1.2/task-03",
     "v4.1/task-03",
     "1.1-bootstrap/--",  # stage_id no lugar do número
+    ".1/task-03",  # componente do N.M vazio
+    "4./task-03",
+    "#4.1/task-01",  # número de Stage com `#`
+    "#34.1/--",
     "/task-03",
     "#/task-01",
     "#a/task-01",
@@ -183,6 +187,14 @@ def test_brackets_inside_the_description_stay_free_text(subject: str) -> None:
 def test_only_the_last_group_is_read_as_the_tag() -> None:
     subject = "feat(scheduling): x [4.1/task-03] y [4.1/task-04]"
     assert _captured_tag(subject) == "4.1/task-04"
+
+
+def test_a_tag_in_the_middle_of_the_subject_is_free_text() -> None:
+    """A marca fecha o subject; no meio, é descrição (CONVENTIONS §4(a), regra 4:
+    o hook só recusa o subject que termina em `]`)."""
+    subject = "feat(scheduling): x [4.1/task-03] y"
+    assert _captured_tag(subject) is None
+    assert _accepted(subject)
 
 
 # --- O motivo da recusa -------------------------------------------------------
@@ -361,6 +373,7 @@ _OWNER_EXAMPLE = {
     "#<num>": "#34",
 }
 _NEGATIVE_EXAMPLE = "❌"
+_ANY_SLASHED_GROUP = re.compile(r"\[[^\]\s`/]+/[^\]\s`]+\]")
 _ELLIPSIS = frozenset({"...", "…"})
 
 
@@ -427,15 +440,19 @@ def test_a_negative_example_is_really_refused_by_the_hook() -> None:
     """O ❌ tira a linha da varredura; o exemplo negativo do §4(a) tem de ser
     mesmo recusado, senão a marca de negativo esconde uma forma válida."""
     conventions = (_REPO_ROOT / "docs" / "CONVENTIONS.md").read_text(encoding="utf-8")
+    # Padrão mais largo que o `_DOC_TAG`: o negativo existe justamente para ter
+    # dono fora da gramática (`[41/--]`, `[4.1-scheduling-domain/--]`).
     negatives = [
-        tag
+        tag.group(0)
         for line in conventions.splitlines()
         if _NEGATIVE_EXAMPLE in line
-        for tag in _DOC_TAG.finditer(line)
+        for tag in _ANY_SLASHED_GROUP.finditer(line)
     ]
-    assert negatives, "o §4(a) perdeu os exemplos negativos da marca"
-    for tag in negatives:
-        assert not _accepted(f"docs(conventions): exemplo {tag.group(0)}")
+    assert {"[41/--]", "[4.1-scheduling-domain/--]"} <= set(negatives), (
+        "o §4(a) perdeu os exemplos negativos de dono da marca"
+    )
+    accepted = [tag for tag in negatives if _accepted(f"docs(conventions): exemplo {tag}")]
+    assert not accepted, f"negativo (❌) que o hook aceita: {accepted}"
 
 
 def test_every_example_in_the_hook_help_is_accepted_by_the_hook() -> None:
@@ -456,3 +473,14 @@ def test_every_example_in_the_hook_help_is_accepted_by_the_hook() -> None:
         if not _accepted(example.replace("N.M", "4.1").replace("<motivo>", "motivo"))
     ]
     assert not refused, f"exemplos da ajuda que o hook recusa: {refused}"
+
+
+@pytest.mark.parametrize(
+    "ending",
+    ["/task-01]", "/task-01-fix]", "/task-13-extra]", "/--]", "#34/task-02]"],
+)
+def test_the_hook_help_shows_every_position_of_the_tag(ending: str) -> None:
+    """Quem teve a marca recusada aprende a forma pela ajuda: sem exemplo de cada
+    posição (e do dono de issue), a ajuda deixa de ensinar o `-fix`/`-extra`."""
+    examples = [line.strip() for line in ccm._format_help().splitlines()]
+    assert any(line.endswith(ending) for line in examples), ending
