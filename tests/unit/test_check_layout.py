@@ -885,6 +885,7 @@ def test_regra10_o_classificador_bate_com_os_ports_reais() -> None:
     assert check_layout.is_write("IdentityGateway", "provision_employee_login", portas)
     assert check_layout.is_write("IdentityGateway", "revoke_login_sessions", portas)
     assert not check_layout.is_write("IdentityGateway", "send_login_invitation", portas)
+    assert not check_layout.is_write("IdentityGateway", "is_employee_login", portas)
 
 
 def test_regra10_tem_ancora_de_cobertura() -> None:
@@ -940,6 +941,8 @@ def test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado() -> None
     metodos = check_layout.port_methods(_SRC)
 
     assert metodos["IdentityGateway"] == {
+        # Leitura (L-IG5, Stage 3.8): fica fora de `GATEWAY_WRITE_METHODS`.
+        "is_employee_login",
         "provision_employee_login",
         "revoke_login_sessions",
         "send_login_invitation",
