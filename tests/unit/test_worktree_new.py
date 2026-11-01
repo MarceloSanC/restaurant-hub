@@ -326,6 +326,38 @@ def test_export_prefixed_entries_are_rewritten_in_place(tmp_path: Path) -> None:
     )
 
 
+def test_crlf_env_is_rewritten_without_carriage_returns(tmp_path: Path) -> None:
+    """`.env` salvo no Windows: o `\\r` não pode vazar para o valor da URL."""
+    (tmp_path / ".env").write_bytes(f"DATABASE_URL={URL_5432}\r\nPOSTGRES_PORT=5432\r\n".encode())
+
+    wn.write_worktree_env_ports(tmp_path, PORTS)
+
+    raw = (tmp_path / ".env").read_bytes().decode("utf-8")
+    assert "\r\r" not in raw
+    assert _env_lines(tmp_path)[:2] == [
+        f"DATABASE_URL={URL_WORKTREE}",
+        f"POSTGRES_PORT={POSTGRES_PORT}",
+    ]
+    assert dotenv_values(tmp_path / ".env")["DATABASE_URL"] == URL_WORKTREE
+
+
+def test_bom_first_line_leaves_the_url_dotenv_reads_coherent(tmp_path: Path) -> None:
+    """Com BOM, o python-dotenv lê a 1ª chave como `\\ufeffDATABASE_URL` — outra chave.
+
+    O script a trata igual (não a reescreve) e acrescenta a `DATABASE_URL` no fim:
+    a URL que a app de fato lê fica na porta da worktree.
+    """
+    (tmp_path / ".env").write_bytes(
+        ("﻿" + f"DATABASE_URL={URL_5432}\nPOSTGRES_PORT=5432\n").encode()
+    )
+
+    wn.write_worktree_env_ports(tmp_path, PORTS)
+
+    values = dotenv_values(tmp_path / ".env")
+    assert values["DATABASE_URL"] == URL_WORKTREE
+    assert values["POSTGRES_PORT"] == str(POSTGRES_PORT)
+
+
 def test_redis_url_is_rewritten_when_present(tmp_path: Path) -> None:
     _write_env(tmp_path, "REDIS_URL=redis://localhost:6379/0")
 
