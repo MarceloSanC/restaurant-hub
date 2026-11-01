@@ -18,7 +18,8 @@ from typing import Annotated
 
 import httpx
 import pytest
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Response
+from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from starlette.types import Message
@@ -174,6 +175,19 @@ def _app_plantada() -> FastAPI:
         response.headers["Cache-Control"] = "public, max-age=3600"
         return Comprovante(chave="s3gr3do", rotulo="r")
 
+    @app.post("/segredo-cru", response_model=Comprovante)
+    def segredo_cru() -> JSONResponse:
+        return JSONResponse({"chave": "s3gr3do", "rotulo": "r"})
+
+    # O formato de produção: a rota mora num `APIRouter` incluído com prefixo.
+    roteador = APIRouter()
+
+    @roteador.post("/segredo", response_model=Comprovante)
+    def segredo_no_roteador() -> Comprovante:
+        return Comprovante(chave="s3gr3do", rotulo="r")
+
+    app.include_router(roteador, prefix="/api/v1")
+
     return app
 
 
@@ -234,6 +248,27 @@ async def test_no_store_substitui_o_cache_que_o_handler_pediu(client: AsyncClien
     `no-store` — um par contraditório para quem lê a resposta.
     """
     resposta = await client.post("/segredo-com-cache")
+
+    assert resposta.status_code == HTTPStatus.OK
+    assert _sem_cache(resposta), dict(resposta.headers)
+
+
+async def test_handler_que_devolve_response_cru_tambem_sai_sem_cache(client: AsyncClient) -> None:
+    """Um handler que devolve `Response` próprio continua sem cache.
+
+    É o caso que justifica middleware em vez de dependência por rota: o FastAPI
+    descarta os cabeçalhos da sub-resposta quando o handler devolve um `Response`.
+    Trocar o middleware por `Depends` reprovaria aqui.
+    """
+    resposta = await client.post("/segredo-cru")
+
+    assert resposta.status_code == HTTPStatus.OK
+    assert _sem_cache(resposta), dict(resposta.headers)
+
+
+async def test_rota_marcada_em_router_incluido_sai_sem_cache(client: AsyncClient) -> None:
+    """A rota de produção vem de um `APIRouter` incluído com prefixo, e a regra vale nela."""
+    resposta = await client.post("/api/v1/segredo")
 
     assert resposta.status_code == HTTPStatus.OK
     assert _sem_cache(resposta), dict(resposta.headers)
