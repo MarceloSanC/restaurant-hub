@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de
 keywords: [concept, termination-access-scope, desligamento, revogacao, sessoes, is_active, identity-gateway, staff, identity]
 status: done
 created_at: 2026-10-19
-updated_at: 2026-10-19
+updated_at: 2026-11-01
 stage_id: 3.8-termination-access-scope
 stage_title: Desligamento corta só o acesso que o registro concede
 step_id: 3
@@ -254,7 +254,12 @@ Nenhuma exceção nova; o mapa `STAFF_ERROR_STATUS` não muda.
   500 que o ADR 3.5.0003 §2 existe para evitar; o caso não é produzível hoje e,
   quando ocorrer, as sessões vivas não alcançam nada (o registro está
   desligado).
-- **Fonte:** `[decision:C]`, degrau 4 (reversível, não fecha o caminho da #46).
+- **Fonte:** `[decision:C]`, degrau 4 (reversível).
+- **Dono:** a Stage que implementar "vincular login existente" — a que torna o
+  caso produzível —, com lock por `user_id`. Uma unidade de trabalho sozinha não
+  fecha (*write skew* sob `READ COMMITTED`), e a 2.6 (#46) deixa
+  `deactivate_employee` fora da unidade. *Corrigido em 2026-11-01 (auditoria da
+  Stage, F5 — technical §7): a versão anterior apontava a #46.*
 - **ADR:** 3.8.0001 Alt. H, §Negative.
 
 ### D8 — Sem `gate_mode: batch`
@@ -293,7 +298,7 @@ Sem mudança de schema, migration ou índice.
 | e2e passar por reuso de refresh, não pela revogação | A | A | e2e apresenta sempre o refresh **rotacionado** (CA16–CA18) |
 | e2e não alcançar (a)/(b) sem a rota de vínculo | A | M | Arranjo por `UPDATE` direto, declarado no teste e no ADR |
 | **Residual:** caso (a) entre unidades revoga | — | B | Aceito pelo sponsor (§13 Q4); custa um login |
-| **Residual:** corrida entre dois desligamentos da mesma unidade | B | B | Declarada (D7); fecha com #46 ou com a Stage de vínculo |
+| **Residual:** corrida entre dois desligamentos da mesma unidade | B | B | Declarada (D7); fecha a Stage de "vincular login existente", com lock por `user_id` (não a #46 — F5, technical §7) |
 | Conflito de `roadmap.md` com a 4.2 em paralelo | A | B | Rebase em `origin/develop` antes do push |
 
 ## 11. Critérios de aceitação

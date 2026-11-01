@@ -5,7 +5,7 @@ when-use: Reference before changing what `deactivate_employee` (R13) does with a
 keywords: [adr, termination, deactivate, revoke-sessions, is_active, employee-login, manager-login, identity-gateway, staff, identity]
 status: accepted
 created_at: 2026-10-19
-updated_at: 2026-10-19
+updated_at: 2026-11-01
 adr_id: 3.8.0001
 decision: R13 revokes the linked login's sessions only when (1) no other **active** record of the **same unit** carries that login and (2) the login's role in identity is `employee`, and only when the record being terminated is still active; otherwise it writes the termination and leaves sessions alone. Condition 1 is read from `EmployeeRepository.list_by_unit` (no new repository method); condition 2 through a new `IdentityGateway.is_employee_login` (L-IG5), backed by a read-only `IdentityFacade.account_role`. Termination never deactivates the account, now or when account deactivation exists
 context_stage: 3.8-termination-access-scope
@@ -190,8 +190,8 @@ record, the copy never carries `user_id`). Any future operation that ends one �
   prevent — and, with Decision 1's `employee.active` guard, a retry would no
   longer revoke.
 - **Why rejected:** trades a rare, low-impact race for a guaranteed class of
-  hidden partial success. `[decision:C]`, degree 4 (the reversible option that
-  does not close the Unit of Work path, #46).
+  hidden partial success. `[decision:C]`, degree 4 (the reversible option; it
+  leaves the race to the Stage that makes it producible — see Negative).
 
 ## Consequences
 
@@ -212,8 +212,15 @@ record, the copy never carries `user_id`). Any future operation that ends one �
   may read the other as still active, and neither revokes. The login keeps live
   sessions that reach nothing in staff (`employee` has no permission; Step 4
   self-service goes through the record, now `active=False`) until the refresh
-  expires. Closed by a Unit of Work (#46) or by the Stage that makes two
-  same-unit links possible ("link an existing login").
+  expires. **Owner: the Stage that implements "link an existing login"** — the
+  one that makes two same-unit links of one login possible — with a lock per
+  `user_id` (or `SELECT … FOR UPDATE` over the login's records in the unit). A
+  Unit of Work alone does not close it: under the default `READ COMMITTED`
+  (`SERIALIZABLE` rejected in ADR 3.3.0006 Alt. C) each termination reads the
+  other's row as active and writes a different row — write skew; and Stage 2.6
+  (#46) leaves `deactivate_employee` outside the unit (ADR 2.6.0002 §2).
+  *Corrected 2026-11-01 (Stage 3.8 audit, F5): this bullet first named #46 as
+  an owner.*
 - R13 now reads the whole unit listing before terminating a linked record — tens
   to hundreds of aggregates, once per termination.
 - Identity gains a fourth facade operation and a use case whose only consumer is
