@@ -176,6 +176,10 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | open | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | open | — |
 | [#82](https://github.com/MarceloSanC/restaurant-hub/issues/82) | Tripwire para campo de credencial em resposta que nasça sem a marca `x-credential` (especulativa; disparo: rota de reemissão do link ou primeiro frontend do Step 3) | shared | tests (e2e) | open | #61 |
+| [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | open | #58 |
+| [#85](https://github.com/MarceloSanC/restaurant-hub/issues/85) | `make migrate` e `make run` sem a guarda da `DATABASE_URL` da worktree | shared | tooling | open | #58 |
+| [#86](https://github.com/MarceloSanC/restaurant-hub/issues/86) | `migrations/env.py` ignora a `sqlalchemy.url` passada pelo chamador | shared | migrations + tests | open | #58 |
+| [#87](https://github.com/MarceloSanC/restaurant-hub/issues/87) | Mutação noturna morre na coleta — `.claude/` fora do `also_copy` | shared | tooling + ci | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
