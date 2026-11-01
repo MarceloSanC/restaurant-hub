@@ -6,6 +6,7 @@ import runpy
 import subprocess
 import sys
 import textwrap
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -160,6 +161,33 @@ def test_create_app_configura_o_logging_com_as_settings_que_recebeu(
     app_module.create_app(Settings(_env_file=None, log_level="CRITICAL"))
 
     assert recebidos == ["CRITICAL"]
+
+
+def test_create_app_configura_o_logging_antes_de_montar_a_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ordem que o docstring de `create_app` afirma: o logging vem antes de tudo.
+
+    É o que garante que um registro emitido durante a montagem (middlewares, error
+    handlers, wiring) já saia no formato e no nível configurados. Medido na auditoria
+    de testes da issue #6: mover a chamada para logo antes do `return app` passava
+    em toda a suíte, porque nenhum outro teste olha a ordem.
+    """
+    eventos: list[str] = []
+
+    def espiar(nome: str, original: Callable[..., object]) -> Callable[..., object]:
+        def espia(*args: object, **kwargs: object) -> object:
+            eventos.append(nome)
+            return original(*args, **kwargs)
+
+        return espia
+
+    for nome in ("configure_logging", "FastAPI", "register_middlewares", "wire_dependencies"):
+        monkeypatch.setattr(app_module, nome, espiar(nome, getattr(app_module, nome)))
+
+    app_module.create_app(Settings(_env_file=None))
+
+    assert eventos == ["configure_logging", "FastAPI", "register_middlewares", "wire_dependencies"]
 
 
 def test_python_m_entrega_ao_uvicorn_a_app_ja_montada(monkeypatch: pytest.MonkeyPatch) -> None:
