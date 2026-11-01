@@ -147,8 +147,8 @@ Primeira Stage do **Step 4 — Escala manual publicável** e primeiro código do
 `scheduling`. Entrega as entidades/VOs que a 4.2 (políticas) avalia, a 4.3 (use
 cases) orquestra, a 4.4 persiste com auditoria e versão, a 4.5 expõe, e que o
 Step 5 (auto-fill), o Step 7 (previsto × realizado) e o Step 8 (hub) consomem por
-DTO. Ver `roadmap.md` §"Stage 4.1 — `4.1-scheduling-domain`" (1306–1336), a nota
-datada do Step 4 (1283–1304) e `overview.md` §3 (41, 44), §9 (130–141).
+DTO. Ver `roadmap.md` §"Stage 4.1 — `4.1-scheduling-domain`" (1354–1384), a nota
+datada do Step 4 (1331–1352) e `overview.md` §3 (41, 44), §9 (130–141).
 
 ### Divergências declaradas em relação ao bloco 4.1 do roadmap
 
@@ -181,8 +181,8 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    seu **intervalo declarado** — e o intervalo é da faixa (ADR 4.1.0002 §3), de
    onde sai a contagem de horas de todos os alocados. Ver ADR 4.1.0010.
 4. **A "descrição humana" do bloco está superada em um ponto.** `roadmap.md`
-   1314 pede *"o evento de publicação (salvar=publicar, com registro de
-   quem/quando)"* e o DoD (1330) fala em *"montagem e publicação"*; o
+   1362 pede *"o evento de publicação (salvar=publicar, com registro de
+   quem/quando)"* e o DoD (1378) fala em *"montagem e publicação"*; o
    **ADR 4.1.0001 §1** (posterior e `accepted`) aboliu rascunho e versão
    publicada — *"There is **no draft on the server** and **no published version
    separate from the schedule being edited**"* (linha 58) — e mandou o histórico
@@ -207,7 +207,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    importada. O único contrato consumido de fora do BC é `DomainError`
    (`shared/domain`).
 7. **`depends_on` é `3.1-staff-domain`**, corrigido de `3.5-employee-login-link`
-   pela nota de 2026-09-26 (`roadmap.md` 1308–1312; tabela de Stages 124 e grafo
+   pela nota de 2026-09-26 (`roadmap.md` 1356–1360; tabela de Stages 125 e grafo
    `S31 --> S41`, linha 77). E é dependência **de ordenação com consumo por
    valor**: nem um import, nem um contrato de código.
 8. **Nota de glosa pendente no doc de domínio.** `ShiftBand` é glosa EN nova para
@@ -726,7 +726,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
 9. **Faixa dentro do período:**
    `period.contains(calendar.operational_day_of(band.time_range.start))` — a
    contenção é medida no **início** (ADR 4.1.0008). É a leitura estrutural de
-   "toda alocação está **dentro do período** da escala" (`roadmap.md` 1314, a
+   "toda alocação está **dentro do período** da escala" (`roadmap.md` 1362, a
    mesma linha que o doc de domínio cita — `shift-scheduling.md` 171), já que a
    alocação herda a faixa por contenção. Corolário **aceito**, não tolerado: a
    faixa que começa no último dia operacional e **termina depois** dele é válida
@@ -1049,7 +1049,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **O quê:** `N` é um VO frozen que valida `>= 0`.
 - **Por quê:** o roadmap já nomeia o contrato; com `int` cru a validação se
   espalharia por `declare_demand`, `change_demand_quantity` e pela reidratação.
-- **Fonte:** `roadmap.md` 1322; doc §3.3; skill `ddd-tactical-patterns`.
+- **Fonte:** `roadmap.md` 1370; doc §3.3; skill `ddd-tactical-patterns`.
 
 ### Nada de publicação, auditoria ou carimbo no domínio
 - **O quê:** sem `publish()`, sem estado rascunho/publicado, sem ator, sem
@@ -1693,8 +1693,8 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
 - [`../../overview.md`](../../overview.md) §3 (41, 44, 46), §6 (111),
   §9 (130–141).
 - [`../../roadmap.md`](../../roadmap.md) — Stage `4.1-scheduling-domain`
-  (1306–1336), nota do Step 4 (1283–1304), nota do `depends_on` (1308–1312),
-  tabela de Stages (124), grafo (77), ROADMAP-1/ROADMAP-3.
+  (1354–1384), nota do Step 4 (1331–1352), nota do `depends_on` (1356–1360),
+  tabela de Stages (125), grafo (77), ROADMAP-1/ROADMAP-3.
 - ADRs desta Stage: [`../../adr/`](../../adr/) (prefixo `4_1_`) — do **gate**:
   4.1.0001 (salvar = publicar + concorrência), 4.1.0002 (período, dia
   operacional, horas), 4.1.0003 (oito políticas e as duas marcas), 4.1.0004 (hr

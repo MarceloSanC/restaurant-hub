@@ -34,9 +34,9 @@ The ratified sources pulled in two directions:
 - `overview.md` §3 (line 44) fixes **"salvar = publicar"**, and the glossary (line 137) defines
   *publicar* as "salvar a escala tornando-a visível". Overview outranks roadmap.
 - `roadmap.md` describes the editor flow as "editar → avaliar → aceitar violações warn → publicar"
-  (Stages 4.3/4.5, lines 1399, 1466), and Stage 5.2 (line 1560) says the auto-fill "grava
+  (Stages 4.3/4.5, lines 1447, 1514), and Stage 5.2 (line 1608) says the auto-fill "grava
   alocações como **rascunho de edição**", with the non-goal "aplicar+publicar num passo só"
-  (line 1577). Those phrases presuppose a working copy that is not yet visible.
+  (line 1625). Those phrases presuppose a working copy that is not yet visible.
 
 The triage's recommended option was a **draft + explicit publish with numbered immutable
 versions** (the version would serve audit, "affected employees" diffs for e-mail, the printed
@@ -66,7 +66,7 @@ Sponsor, verbatim: *"toda alteracao salva é a escala vigente, simple e direto"*
   evaluate live, then save **with** the acknowledgement of the warnings the change introduces.
 - **"Version" is not an immutable snapshot.** The history of the schedule is the **audit log**
   that Stage 4.4 creates ("histórico de edições — quem alterou o quê e quando", `roadmap.md`
-  1425, 1442). The only "version" that exists is the concurrency counter of §2.
+  1473, 1490). The only "version" that exists is the concurrency counter of §2.
 - `overview.md` "salvar = publicar" stays **literal** — no reconciliation note is needed there.
 
 ### 2. Concurrency: optimistic check on the schedule version, reload-or-cancel (F8)
@@ -136,7 +136,7 @@ the fork into four Stage concepts.
 ### Positive
 - One state to understand: what is saved is what everybody sees. Matches the overview literally.
 - The live schedule is never invalid (`block` refuses the mutation); the Step 5 rule "proposal is
-  born without block violations" (`roadmap.md` 1548) reuses the same semantics.
+  born without block violations" (`roadmap.md` 1596) reuses the same semantics.
 - No silent overwrite between editors; the fix is one column, one check and one refusal status.
 
 ### Negative
@@ -174,8 +174,8 @@ the fork into four Stage concepts.
   (block/warn policy set).
 - [`overview.md`](../overview.md) — §3 line 43 ("o editor corrige ou aceita conscientemente"),
   line 44 ("salvar = publicar"), line 38 (audit trail); §9 line 137 (*publicar*).
-- [`roadmap.md`](../roadmap.md) — Stage 4.3 (1399), 4.4 (1425, 1442), 4.5 (1466); Stage 5.2
-  (1560, 1577); Step 5 (1548); optimistic control gap (820–824).
+- [`roadmap.md`](../roadmap.md) — Stage 4.3 (1447), 4.4 (1473, 1490), 4.5 (1514); Stage 5.2
+  (1608, 1625); Step 5 (1596); optimistic control gap (820–824).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.5,
   §3.8, §3.10.3, §6.
 - `src/restaurant_hub/shared/application/ports/out/clock.py` line 17 (absolute "when").
