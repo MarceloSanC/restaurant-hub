@@ -219,7 +219,10 @@ responda **por escrito**, em ordem:
 - Não é overengineering — é cobertura faltante de gap legítimo.
 - Proponha testes faltantes (sem pedir aprovação prévia se óbvio).
 - Implemente como sub-task extra com commit dedicado:
-  `test(<scope>): cobrir <X> [#<issue>/task-NN-extra]`
+  `test(<scope>): cobrir <X> [#<issue>/task-NN-extra]`, com `NN` acima da
+  última sub-task da decomposição — com 5 sub-tasks, a primeira extra é
+  `task-06-extra`, e cada rodada nova pega o próximo `NN`, sem ordinal
+  (CONVENTIONS §4(a), "Marca de Task").
 - Re-execute a auditoria a partir do item 1.
 
 **Loop até todas as respostas serem "sim".** Este é o único loop legítimo

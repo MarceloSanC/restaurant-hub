@@ -410,7 +410,10 @@ questionário). O autor não se autoaudita — responder "sim" de memória
 - Não é overengineering — é cobertura faltante de gap legítimo.
 - Proponha testes faltantes ao humano (sem pedir aprovação prévia se óbvio).
 - Implemente como Task extra com commit dedicado:
-  `test(<scope>): cobrir <X> [<N.M>/task-NN-extra]`
+  `test(<scope>): cobrir <X> [<N.M>/task-NN-extra]`, com `NN` acima do
+  `tasks_count` — num plano de 10 Tasks, a primeira extra é `task-11-extra`, e
+  cada rodada nova pega o próximo `NN`, sem ordinal (CONVENTIONS §4(a), "Marca
+  de Task").
 - Re-execute a auditoria a partir do item 1.
 
 **Loop até todas as respostas serem "sim".** Este é o único loop legítimo
