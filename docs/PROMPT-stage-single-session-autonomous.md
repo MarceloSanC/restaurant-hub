@@ -5,7 +5,7 @@ when-use: Apenas em corrida autônoma overnight autorizada pelo ADR 0.0.0004 (st
 keywords: [prompt, stage, autonomous, overnight, auto-merge, adr-0004, audit-gate]
 status: done
 created_at: 2026-07-12
-updated_at: 2026-11-01
+updated_at: 2026-11-02
 ---
 
 # Prompt — Execução de Stage em Sessão Única (variante AUTÔNOMA)
@@ -106,18 +106,15 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
    > merge de uma Stage não auditada é **você** — não conte com a plataforma para isso.
 2. Esperar CI verde (`gh pr checks <num> --watch`). Check vermelho → corrigir e re-passar
    pelo passo 1 se a correção tocar código/docs auditados.
-3. Mergear com **merge commit** (NUNCA squash/rebase — GIT-WORKFLOW §Gates):
-   ```bash
-   gh pr merge <num> --merge --delete-branch
-   ```
+3. Mergear com **merge commit** (NUNCA squash/rebase — GIT-WORKFLOW §Gates) pela sequência de
+   GIT-WORKFLOW §"Merge e limpeza da worktree", passos 3–4: base reconferida **depois** do CI
+   (`develop` anda durante a espera) e `gh pr merge <num> --merge` do checkout principal,
+   **sem** `--delete-branch` (com a branch presa à worktree ele não apaga a remota).
    Se o merge for recusado por branch protection (aprovação obrigatória), **HALT** — não
    burlar nem se auto-aprovar.
-4. Cleanup e sync para a próxima Stage:
-   ```bash
-   docker compose down -v                   # dentro da worktree da Stage
-   python scripts/worktree-rm.py <branch>   # worktree + branch local + prune
-   git pull origin develop                  # no checkout principal (sempre em develop)
-   ```
+4. Cleanup e sync para a próxima Stage: passos 4–7 da mesma seção — `git pull origin develop`
+   no principal **antes** do `worktree-rm`, `docker compose down -v` dentro da worktree,
+   `python scripts/worktree-rm.py <branch> --delete-remote` e a verificação.
 5. **Nunca** force-push em `develop`/`main`; **nunca** reescrever história já mergeada.
 
 > O que torna o auto-merge seguro é a **auditoria imparcial** (passo 1) somada aos **gates
