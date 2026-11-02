@@ -8,6 +8,8 @@ branch e o `make run` leria e escreveria nele. A regra mora aqui, e os pontos
 que a aplicam importam daqui:
 
 - a fixture `database_url` de `tests/conftest.py`, antes de qualquer conexão;
+- o `scripts/worktree-new.py`, que importa daqui o `is_loopback` — o critério de
+  quais URLs ele reescreve é o de quais URLs a guarda confere.
 
 **Por que fora do `Settings`.** O `Settings` é contrato de produção, onde
 `POSTGRES_PORT` não existe: a guarda só vale para quem sobe o banco pelo compose
@@ -15,7 +17,8 @@ deste checkout. O CI (URL por `env:`, sem `.env` nem `POSTGRES_PORT`) e a
 produção (sem `make`) passam por ela sem mudar de comportamento.
 
 **Por que os imports de terceiros ficam dentro das funções.** O topo do módulo
-é biblioteca padrão, para que o `is_loopback` sirva também a quem roda sem o venv.
+é biblioteca padrão: o `worktree-new.py` roda sem o venv
+(`python scripts/worktree-new.py`) e importa daqui o `is_loopback`.
 O SQLAlchemy, o pydantic-settings e o `Settings` só entram quando a guarda de
 fato roda, sempre dentro do venv.
 """

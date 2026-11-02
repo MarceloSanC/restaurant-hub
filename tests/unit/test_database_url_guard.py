@@ -13,13 +13,14 @@ qualquer conexão; a regra é a de `scripts/database_url_guard.py` (issue #85).
 `${POSTGRES_PORT:-5432}` sem nenhuma das duas. Os primeiros testes fixam a regra;
 os do fim leem um `.env` de verdade, pelo mesmo pydantic-settings da app —
 inclusive o `.env` que o `scripts/worktree-new.py` escreve, que a guarda tem de
-aceitar sempre: o script escreve, a guarda confere, e os dois têm de concordar
-sobre o que é loopback.
+aceitar sempre: o script escreve, a guarda confere, e o critério de loopback dos
+dois é um só (o script importa o da guarda, issue #85).
 """
 
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -43,6 +44,7 @@ pytest_plugins = ["pytester"]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "worktree-new.py"
+_GUARD = _REPO_ROOT / "scripts" / "database_url_guard.py"
 
 PUBLISHED_PORT = 5440
 LIBPQ_DEFAULT_PORT = 5432
@@ -127,24 +129,52 @@ def test_hosts_off_the_published_port_are_not_bound_to_it(url: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "host",
+    ("host", "expected"),
     [
-        "localhost",
-        "LocalHost",
-        "127.0.0.1",
-        "127.255.255.254",
-        "::1",
-        "postgres",
-        "0.0.0.0",
-        "10.0.0.5",
-        "localhost.example.com",
-        "",
-        None,
+        ("localhost", True),
+        ("LocalHost", True),
+        ("127.0.0.1", True),
+        ("127.255.255.254", True),
+        ("::1", True),
+        ("postgres", False),
+        ("0.0.0.0", False),
+        ("10.0.0.5", False),
+        ("localhost.example.com", False),
+        ("", False),
+        (None, False),
     ],
 )
-def test_guard_and_script_agree_on_what_is_loopback(host: str | None) -> None:
-    """O script só reescreve o que a guarda confere — um critério só, em dois lugares."""
-    assert is_loopback(host) is wn.is_loopback(host)
+def test_is_loopback(host: str | None, expected: bool) -> None:
+    assert is_loopback(host) is expected
+
+
+def test_script_rewrites_by_the_guard_criterion() -> None:
+    """O script só reescreve o que a guarda confere: o `is_loopback` dele é o da guarda.
+
+    Até a #85 eram duas cópias com um teste de concordância; agora a cópia não
+    existe, e o que se cobra é que ela não volte.
+    """
+    assert Path(wn.is_loopback.__code__.co_filename).resolve() == _GUARD.resolve()
+
+
+def test_guard_module_top_is_standard_library() -> None:
+    """O `worktree-new.py` roda sem o venv e importa a guarda.
+
+    O topo dela não pode puxar SQLAlchemy, pydantic nem o pacote da app.
+    """
+    probe = (
+        "import sys; sys.path.insert(0, sys.argv[1]); import database_url_guard; "
+        "print(sorted({m.split('.')[0] for m in sys.modules} & "
+        "{'sqlalchemy', 'pydantic', 'pydantic_settings', 'restaurant_hub'}))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", probe, str(_GUARD.parent)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.strip() == "[]"
 
 
 # ---------------------------------------------------------------------------
