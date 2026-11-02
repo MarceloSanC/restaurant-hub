@@ -38,8 +38,10 @@ _MODULOS_DE_ACESSO = frozenset(
         "src/restaurant_hub/features/identity/application/use_cases/authorize_action.py",
         # A visibilidade de unidade — o eixo B do acesso.
         "src/restaurant_hub/features/identity/domain/entities/user.py",
-        # Só pelo `_IdentityAccessGuard`, que impõe L-AG3 num `raise` (sai na #47).
-        "src/restaurant_hub/composition_root.py",
+        # O `AccessGuard` de staff: resolve o tenant omitido e impõe L-AG3 num
+        # `raise`. Substituiu o `composition_root.py` na issue #47, que moveu
+        # para cá o `_IdentityAccessGuard` — o critério de entrada é o mesmo.
+        "src/restaurant_hub/features/staff/adapters/out/identity/local_access_guard.py",
         # A borda que extrai o Bearer e delega ao use case.
         "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
     }
@@ -102,8 +104,10 @@ def test_todo_caminho_do_also_copy_existe() -> None:
 def test_o_gate_estrutural_do_check_layout_fica_fora_da_corrida() -> None:
     """A exclusão de `test_check_layout.py` é deliberada e continua declarada.
 
-    Dentro de `mutants/` o `composition_root.py` tem centenas de funções geradas
-    pela ferramenta, e o Gate 1 reprova sobre um arquivo que o mutmut escreveu.
+    Dentro de `mutants/`, `authorize_action.py` tem uma cópia por mutante, e o
+    Gate 8 (um sítio de construção por result) reprova sobre um arquivo que o
+    mutmut escreveu. (Até a issue #47 o Gate 1 também, pelo `composition_root.py`
+    mutado.)
     Se alguém tirar o `--ignore` por achar que é sobra, a corrida volta a morrer
     na coleta de estatísticas — e este teste diz o porquê antes disso.
     """

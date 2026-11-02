@@ -150,8 +150,11 @@ skip_covered = false
 #
 #   - `authorize_action.py`  — os quatro passos do guard (ADR 2.2.0002)
 #   - `user.py`              — a visibilidade de unidade, o eixo B do acesso
-#   - `composition_root.py`  — só por causa do `_IdentityAccessGuard`, que impõe
-#                              a lei L-AG3 (isolamento de tenant) num `raise`
+#   - `local_access_guard.py` — o `AccessGuard` de staff, que resolve o tenant
+#                              omitido e impõe a lei L-AG3 (isolamento de
+#                              tenant) num `raise`. Até a issue #47 a mesma
+#                              lógica era o `_IdentityAccessGuard`, e o arquivo
+#                              mutado era o `composition_root.py`
 #   - `dependencies.py`      — a borda que extrai o Bearer e delega ao use case
 #
 # **Por que mutação aqui e cobertura em todo o resto.** Cobertura mede que a
@@ -159,7 +162,7 @@ skip_covered = false
 # quatro arquivos a diferença é a que importa: `if not actor_tenant_id` virando
 # `if actor_tenant_id is None` mantém 100% de cobertura, passa mypy strict e
 # reabre o balde de tenant vazio. Um caso desses já foi medido sobrevivendo à
-# suíte (ver `test_composition_root_staff.py`, comentário de `_ALVOS`) — a
+# suíte (ver `test_local_access_guard.py`, comentário de `_ALVOS`) — a
 # mutação não é hipótese aqui, é histórico.
 #
 # **`also_copy` é o que faz a corrida medir alguma coisa.** O mutmut executa a
@@ -183,7 +186,7 @@ source_paths = ["src/restaurant_hub"]
 only_mutate = [
     "src/restaurant_hub/features/identity/application/use_cases/authorize_action.py",
     "src/restaurant_hub/features/identity/domain/entities/user.py",
-    "src/restaurant_hub/composition_root.py",
+    "src/restaurant_hub/features/staff/adapters/out/identity/local_access_guard.py",
     "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
 ]
 also_copy = [
@@ -202,13 +205,13 @@ also_copy = [
 # `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
 # conveniência.
 #
-# O mutmut reescreve cada arquivo mutado trocando `def wire_dependencies(...)`
-# por um despachante mais **uma cópia por mutante** —
-# `x_wire_dependencies__mutmut_1`, `__mutmut_2`, … Dentro de `mutants/`, o
-# `composition_root.py` tem então centenas de funções de módulo, e o Gate 1
-# (charter: só `@dataclass` e as duas funções de wiring) reprova — corretamente,
-# sobre um arquivo que a **ferramenta** escreveu. O mesmo vale para o Gate 8:
-# `AuthorizedActor` aparece construído uma vez por cópia de `authorize_action`.
+# O mutmut reescreve cada função mutada trocando-a por um despachante mais **uma
+# cópia por mutante** (sufixos `__mutmut_1`, `__mutmut_2`, …). Dentro de
+# `mutants/`, `AuthorizedActor` aparece construído uma vez por cópia de
+# `authorize_action`, e o Gate 8 (um sítio de construção por result) reprova —
+# corretamente, sobre um arquivo que a **ferramenta** escreveu. Até a issue #47 o
+# Gate 1 reprovava também, pelo `composition_root.py` mutado; ele saiu do escopo
+# com o tradutor, e o Gate 8 basta para manter a exclusão.
 #
 # Excluí-lo não enfraquece nada, e é a única leitura correta da pergunta que a
 # mutação faz. Ele é um gate **estrutural sobre o texto do fonte**: mudar um
