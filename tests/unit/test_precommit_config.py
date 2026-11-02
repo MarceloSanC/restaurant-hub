@@ -76,6 +76,12 @@ _COMMIT_STAGES = frozenset({"pre-commit", "commit"})
 # Os hooks que espelham um target do Makefile.
 _MIRRORED_HOOKS = ("ruff-format", "ruff", "mypy", "lint-imports")
 
+# Hooks que rodam um script do repositório, e não uma ferramenta de terceiros: o
+# `check_commit_msg.py` só importa a biblioteca padrão, então não há versão de
+# pacote a derivar do lock, e rodá-lo sem o `uv run` o mantém utilizável antes do
+# `uv sync`. Hook novo entra aqui por decisão, editando o teste, nunca por deriva.
+_REPO_SCRIPT_HOOKS = frozenset({"check-commit-msg"})
+
 
 @pytest.fixture(scope="module")
 def config() -> dict[str, Any]:
@@ -123,25 +129,35 @@ def _positional(command: list[str], prefix_len: int) -> list[str]:
     return [token for token in command[prefix_len:] if not token.startswith("-")]
 
 
-def _receives(hook: dict[str, Any], path: str) -> bool:
-    """O pre-commit entregaria `path` a este hook pelos filtros `files` e `exclude`?
+def _passes_filters(filters: dict[str, Any], path: str) -> bool:
+    """`path` passa pelos `files` e `exclude` de `filters` (um hook ou o arquivo)?
 
     Os defaults são os do pre-commit: `files` vazio casa tudo, `exclude` `^$` não
     exclui nada.
     """
-    files = hook.get("files", "")
-    exclude = hook.get("exclude", "^$")
+    files = filters.get("files", "")
+    exclude = filters.get("exclude", "^$")
     return re.search(files, path) is not None and re.search(exclude, path) is None
 
 
-def _receives_python(hook: dict[str, Any], path: str) -> bool:
+def _receives(config: dict[str, Any], hook: dict[str, Any], path: str) -> bool:
+    """O pre-commit entregaria `path` a este hook?
+
+    Valem os dois níveis de filtro: o `files`/`exclude` do topo do arquivo, que o
+    pre-commit aplica antes de todos os hooks, e o do próprio hook. Um
+    `exclude: ^tests/` no topo tira `tests/` de todo hook sem tocar em nenhum deles.
+    """
+    return _passes_filters(config, path) and _passes_filters(hook, path)
+
+
+def _receives_python(config: dict[str, Any], hook: dict[str, Any], path: str) -> bool:
     """Como `_receives`, para um arquivo `.py`: inclui os filtros por tipo."""
     types_ok = set(hook.get("types", [])) <= _PYTHON_FILE_TAGS
     types_or_ok = "python" in hook.get("types_or", ["python"])
-    return _receives(hook, path) and types_ok and types_or_ok
+    return _receives(config, hook, path) and types_ok and types_or_ok
 
 
-def _assert_triggered_by(hook: dict[str, Any], paths: list[str]) -> None:
+def _assert_triggered_by(config: dict[str, Any], hook: dict[str, Any], paths: list[str]) -> None:
     """O hook dispara quando o commit traz qualquer um de `paths`.
 
     O filtro tem de ser só por caminho: um filtro por tipo deixaria de fora os
@@ -153,7 +169,7 @@ def _assert_triggered_by(hook: dict[str, Any], paths: list[str]) -> None:
         f"o hook `{hook['id']}` filtra por tipo ({type_filters}): arquivos que não são "
         f"Python e decidem o veredito deixariam de disparar o hook"
     )
-    ignored = [path for path in paths if not _receives(hook, path)]
+    ignored = [path for path in paths if not _receives(config, hook, path)]
     assert ignored == [], (
         f"um commit só com {ignored} não dispara o hook `{hook['id']}`, mas muda o "
         f"veredito do target que ele espelha"
@@ -258,7 +274,7 @@ def test_mypy_hook_runs_exactly_make_typecheck(hooks: dict[str, dict[str, Any]])
 
 
 def test_mypy_hook_triggers_on_every_input_of_its_verdict(
-    hooks: dict[str, dict[str, Any]],
+    config: dict[str, Any], hooks: dict[str, dict[str, Any]]
 ) -> None:
     """O hook dispara sempre que muda algo que decide o veredito do `make typecheck`.
 
@@ -273,7 +289,7 @@ def test_mypy_hook_triggers_on_every_input_of_its_verdict(
     checked = _positional(typecheck, _TOOL_PREFIX_LEN)
     assert checked, f"o `make typecheck` não nomeia caminho nenhum: {typecheck}"
     inputs = [f"{path.rstrip('/')}/module.py" for path in checked]
-    _assert_triggered_by(hook, [*inputs, "pyproject.toml", "uv.lock"])
+    _assert_triggered_by(config, hook, [*inputs, "pyproject.toml", "uv.lock"])
 
 
 @pytest.mark.parametrize(
@@ -284,6 +300,7 @@ def test_mypy_hook_triggers_on_every_input_of_its_verdict(
     ],
 )
 def test_ruff_hooks_run_the_ruff_of_their_make_target(
+    config: dict[str, Any],
     hooks: dict[str, dict[str, Any]],
     hook_id: str,
     target: str,
@@ -325,7 +342,9 @@ def test_ruff_hooks_run_the_ruff_of_their_make_target(
     directories = _positional(matching[0], _RUFF_PREFIX_LEN)
     assert directories, f"o `make {target}` não nomeia caminho nenhum: {matching[0]}"
     uncovered = [
-        path for path in directories if not _receives_python(hook, f"{path.rstrip('/')}/m.py")
+        path
+        for path in directories
+        if not _receives_python(config, hook, f"{path.rstrip('/')}/m.py")
     ]
     assert uncovered == [], (
         f"o hook `{hook_id}` não recebe arquivos de {uncovered}, que o `make {target}` "
@@ -334,7 +353,7 @@ def test_ruff_hooks_run_the_ruff_of_their_make_target(
 
 
 def test_lint_imports_hook_runs_exactly_make_import_check(
-    hooks: dict[str, dict[str, Any]],
+    config: dict[str, Any], hooks: dict[str, dict[str, Any]]
 ) -> None:
     """O hook de import-linter roda o comando do `make import-check`.
 
@@ -354,4 +373,26 @@ def test_lint_imports_hook_runs_exactly_make_import_check(
         "o lint-imports analisa o grafo inteiro e não aceita lista de arquivos: o hook "
         "precisa de `pass_filenames: false`"
     )
-    _assert_triggered_by(hook, ["src/restaurant_hub/module.py", ".importlinter"])
+    _assert_triggered_by(config, hook, ["src/restaurant_hub/module.py", ".importlinter"])
+
+
+def test_every_tool_hook_runs_through_uv_run(config: dict[str, Any]) -> None:
+    """Todo hook, e não só os que espelham um target, roda a ferramenta pelo `uv run`.
+
+    Os testes de espelho cobram os hooks de `_MIRRORED_HOOKS`. Um hook novo fora dessa
+    lista (um segundo ruff com `entry: ruff check`, por exemplo) traria a ferramenta
+    do PATH de quem commita, numa versão que o lock não controla, sem reprovar nada:
+    medido na auditoria de testes da issue #7. `language: system` é o que faz o
+    `entry` rodar no ambiente do projeto; outra linguagem monta um ambiente próprio.
+    """
+    outside_lock = sorted(
+        f"{hook['id']}: language={hook.get('language')!r}, entry={hook['entry']!r}"
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+        if hook["id"] not in _REPO_SCRIPT_HOOKS
+        and (hook.get("language") != "system" or shlex.split(hook["entry"])[:2] != ["uv", "run"])
+    )
+    assert outside_lock == [], (
+        f"hook que não roda a ferramenta pelo `uv run` em `language: system`: "
+        f"{outside_lock}. A versão dele vem de fora do uv.lock (issue #7)."
+    )
