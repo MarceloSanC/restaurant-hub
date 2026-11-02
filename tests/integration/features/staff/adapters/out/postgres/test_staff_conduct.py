@@ -15,6 +15,7 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | `user_id` fora do `SET` do `update` (#68) | nada, sem vínculo concorrente | #68, aqui |
 | `FOR UPDATE` no lookup de `link_login` (#68) | nada, sem vínculo concorrente | #68, aqui |
 | `FOR UPDATE` + guarda do vínculo no `delete` (#108) | nada, sem vínculo concorrente | #108, aqui |
+| `tenant_id` no `WHERE` do `DELETE` (#108) | nada, o lookup sob lock já o conferiu | #108, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -1131,4 +1132,32 @@ def test_issue_108_delete_que_espera_um_vinculo_em_curso_o_rele_e_recusa(
     assert isinstance(erros[0], EmployeeHasLoginError), erros
     assert _registro_e_vinculo(motor_observador) == (True, _LOGIN), (
         "a remoção apagou o registro vinculado por um R17 em curso"
+    )
+
+
+def test_issue_108_delete_escreve_com_o_tenant_no_where(
+    motores: Callable[[], Engine],
+) -> None:
+    """O `DELETE` reescrito na #108 mantém o `tenant_id` no predicado da escrita.
+
+    Tirá-lo não muda resultado nenhum: o `id` é PK global e a linha já foi
+    conferida no endereço de três partes sob o lock. Por isso nenhum teste de
+    estado o distingue, e a mutação sobrevivia. Mas as escritas de staff no
+    registro filtram por tenant mesmo depois do lookup sob lock (o `UPDATE` de
+    `link_login` e o de `update` também): se o lookup um dia deixar de preceder
+    a escrita, o `DELETE` sem tenant alcançaria a linha de outro tenant. O
+    objeto da asserção é o SQL emitido, como na CA6b.
+    """
+    motor = motores()
+    _semear(motor)
+
+    with _statements_de(motor) as (tentados, _):
+        PostgresEmployeeRepository(motor).delete(_A, _U1, _E1)
+
+    remocoes = [s for s in tentados if s.lstrip().startswith("DELETE FROM employees ")]
+    assert len(remocoes) == 1, tentados
+    _, _, predicado = remocoes[0].partition(" WHERE ")
+    assert "employees.id = " in predicado, remocoes[0]
+    assert "employees.tenant_id = " in predicado, (
+        f"o DELETE de employees perdeu o filtro de tenant: {remocoes[0]!r}"
     )
