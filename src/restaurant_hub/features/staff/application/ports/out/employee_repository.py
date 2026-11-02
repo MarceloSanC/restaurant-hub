@@ -196,6 +196,19 @@ class EmployeeRepository(Protocol):
         **Step 4** (alocação) é quem os preenche, e publicá-los agora evita que
         a 3.4/Step 4 retroajam o contrato do port. Declarado, não fingido — a
         suíte da Task 06 fixa a **ausência** de produtor em v1.
+
+        **`L-DEL-LINK` — registro com login não se apaga, no gravado** (issue
+        #108, ADR 0.0.0013). Vinculado **no gravado** ⇒ `EmployeeHasLoginError`,
+        e nada é removido — ativo **ou** desligado (o vínculo é história). A
+        recusa do use case (ADR 3.5.0003 §1b) decide sobre a entidade que ele
+        leu; esta lei a repete sobre o estado gravado, **na mesma operação**
+        que remove, para que um R17 que vincule entre a leitura e a remoção não
+        termine com o registro apagado e a conta de login órfã — a mesma forma
+        de `L-LINK`.
+
+        Ordem de checagem normativa: inexistente **no endereço** ⇒
+        `EmployeeNotFoundError`; depois vinculado ⇒ `EmployeeHasLoginError`;
+        depois referências ⇒ `EmployeeInUseError`.
         """
         ...
 

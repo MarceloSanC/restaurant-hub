@@ -94,6 +94,7 @@ from restaurant_hub.features.staff.adapters.out.postgres.tables import (
 )
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
+    EmployeeHasLoginError,
     EmployeeNotFoundError,
     EmployeeRelocationError,
     JobFunctionNotFoundError,
@@ -223,13 +224,22 @@ class PostgresEmployeeRepository:
         """L-E5 — remoção definitiva; as filhas somem por `CASCADE` (§5.10).
 
         O `WHERE` traz o endereço de **três** partes (ADR 3.4.0007): registro de
-        outra unidade do mesmo tenant não é alcançado, e o `rowcount` zero o
+        outra unidade do mesmo tenant não é alcançado, e o lookup vazio o
         reporta como `EmployeeNotFoundError` — o mesmo erro do registro de outro
         tenant, sem distinção observável.
 
-        O `rowcount` do próprio `DELETE` é a checagem: um `SELECT` antes tornaria
-        checagem e escrita duas operações, e entre elas o registro poderia sumir
-        (precedente literal do `set_password_hash` de identity).
+        **`L-DEL-LINK` — a guarda do vínculo decide sob o lock** (issue #108,
+        ADR 0.0.0013). O lookup é `SELECT user_id … FOR UPDATE` no endereço, e
+        só depois vêm a guarda e o `DELETE`, na mesma transação — a forma de
+        `link_login` e do `update` (nota 2 do módulo). Um R17 que vincula antes
+        do lock é visto (o `FOR UPDATE` espera o commit dele e relê a linha);
+        um que chega depois espera esta remoção e encontra o registro sumido.
+        Sem o lock, o `DELETE` apagaria um registro vinculado entre a leitura do
+        use case e a escrita, e a conta criada em identity ficaria órfã.
+
+        Antes da #108 o `rowcount` do `DELETE` era a checagem de existência; sob
+        o lock a linha não some entre o lookup e a escrita, e o `rowcount` deixou
+        de carregar informação.
 
         **`EmployeeInUseError` não tem produtor em v1** e isso é declarado, não
         esquecido: nada no escopo atual referencia o registro de funcionário.
@@ -239,15 +249,25 @@ class PostgresEmployeeRepository:
         é bug, e vesti-la de erro de negócio esconderia o defeito.
         """
         with self._engine.begin() as conexao:
-            resultado = conexao.execute(
-                employees.delete().where(
+            linha = conexao.execute(
+                select(employees.c.user_id)
+                .where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
                     employees.c.unit_id == unit_id,
                 )
-            )
-            if resultado.rowcount == 0:
+                .with_for_update()
+            ).one_or_none()
+            if linha is None:
                 raise EmployeeNotFoundError(employee_id)
+            if linha.user_id is not None:
+                raise EmployeeHasLoginError(employee_id)
+            conexao.execute(
+                employees.delete().where(
+                    employees.c.id == employee_id,
+                    employees.c.tenant_id == tenant_id,
+                )
+            )
 
     # ---- leitura ----------------------------------------------------------
 
