@@ -142,7 +142,8 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
   referenciando suas funções e **continua bloqueando a remoção delas** (§3.2). É o que o hub de
   análise lê (previsto × realizado por unidade).
 - **A remoção definitiva existe e é guardada**, para o cadastro criado por engano: só é aceita
-  na ausência de referências ao registro. Desligamento e remoção são atos **distintos** — um
+  na ausência de referências ao registro e de login vinculado a ele (§3.8;
+  [ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md) §1b). Desligamento e remoção são atos **distintos** — um
   preserva a história, o outro a apaga.
 - **O desligado permanece editável, e nenhuma edição o reativa** (ADR 3.2.0007): corrigir o
   cadastro de quem saiu não é o mesmo ato que recontratá-lo, e o sistema não obriga um para
@@ -161,7 +162,7 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 **Invariantes:**
 - Todo registro está em exatamente um dos dois estados; nasce **ativo**.
 - Nenhuma operação de edição do registro altera o estado — só as duas transições o alteram.
-- Remoção definitiva é recusada enquanto houver referência ao registro.
+- Remoção definitiva é recusada enquanto houver referência ao registro ou login vinculado a ele.
 
 **Atributos cadastrais mínimos do registro**
 ([ADR 3.1.0002](../../adr/3_1_0002-minimal-employee-record-attributes.md); conjunto de funções:
@@ -469,12 +470,21 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
   roadmap 3.5.
 - **Criar login significa**: criar User com papel **employee** no tenant + vínculo à unidade
   (membership) + gravar o `user_id` no registro de funcionário — via port `IdentityGateway`
-  (in-process). O vínculo é escopo da **Stage 3.5**, não da 3.1. Roadmap 3.5;
+  (in-process). O vínculo foi entregue pela **Stage 3.5**. Roadmap 3.5;
   [ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md) (membership;
   `link_to_unit` barra platform_admin e cross-tenant).
-- **Dois caminhos, o gerente escolhe por funcionário**: (a) **convite por e-mail** ou (b) **senha
-  provisória entregue em mãos, com troca obrigatória** no primeiro acesso. Overview §3; decisão
-  derivada do kickoff.
+- **Dois caminhos, o gerente escolhe por funcionário**: (a) **convite por e-mail** ou (b) o
+  **mesmo link de definição de senha, entregue em mãos**. Não existe senha provisória: o gestor
+  nunca conhece a senha da pessoa, e a troca é estrutural, porque o segredo entregue só serve para
+  definir a senha. Overview §3; decisão derivada do kickoff, com a forma fixada pelo
+  [ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) (nota
+  de 2026-09-26 abaixo).
+- **O vínculo é definido uma única vez e só num registro ativo:** registro já vinculado recusa um
+  segundo login, e registro desligado recusa criar login — criar login é conceder acesso, e o
+  desligamento cortou o acesso que o registro concede. É o único ato que o desligado editável
+  (§3.1) não aceita. Não há "desvincular" nem "vincular login existente" na v1
+  ([ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md);
+  [ADR 3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md)).
 - **Conta pendente de senha usa hash inutilizável** (`unusable_hash`, nunca hash de literal do
   repositório) e a senha só é definida via **token de setup dedicado e de uso único** — teoria em
   [ADR 2.5.0004](../../adr/2_5_0004-unusable-hash-for-pending-accounts.md) e
@@ -489,7 +499,10 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
 >   próprio e mais longo (`handover_link_ttl_hours`, 168h contra 72h do e-mail) — o gestor
 >   nunca conhece nem transporta a senha da pessoa
 >   ([ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md)).
->   Link perdido é recuperado pelo pedido público de redefinição de senha, como qualquer convite.
+>   Link perdido só é recuperável pelo pedido público de redefinição de senha, que exige e-mail
+>   funcional; para quem não tem e-mail, link perdido ou vencido é **beco sem saída declarado** —
+>   o reenvio seguro depende de identity distinguir conta pendente de conta ativa, o que ainda não
+>   existe (ADR 3.5.0002, §Negative).
 > - **"Via port `IdentityGateway`" passou a ter forma:** identity expõe uma **fachada** in-process
 >   e o gateway de staff a consome — a única aresta entre os dois bounded contexts, nomeada no
 >   contrato de import ([ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md)).
@@ -504,19 +517,22 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
 >   ([ADR 3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md)).
 >
 > **Nota (2026-10-19): alcance do corte no desligamento (Stage 3.8).** O bullet "Desligar corta
-> o acesso" acima vale quando o registro é o único ativo do login na unidade. Desde a Stage 3.8 o
-> desligamento revoga as sessões **só quando o registro é a fonte do acesso**:
+> o acesso" acima vale quando o registro é a fonte do acesso do login. Desde a Stage 3.8 o
+> desligamento revoga as sessões **só quando valem as três condições**:
 >
 > - o registro desligado **estava ativo** (desligar de novo não derruba sessões abertas depois);
 > - **nenhum outro registro ativo da mesma unidade** aponta para o login — se houver, é ele que
 >   ainda concede o acesso. Só a unidade: a regra de §3.1 ("nenhuma operação de staff atravessa
 >   unidades implicitamente") foi mantida literal, e a pessoa com registro em outra unidade loga
 >   de novo;
-> - o login é **de funcionário** — gerente ou dono vinculado a um registro de escala tira a
+> - o login é **de funcionário** — gerente, dono ou RH vinculado a um registro de escala tira a
 >   autoridade do papel, não do registro, e não perde as sessões.
 >
-> O desligamento **nunca** desativa a conta, nem quando a desativação de conta existir
-> ([ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md)).
+> O desligamento **nunca** desativa a conta, nem quando a desativação de conta existir. A regra é
+> de "o vínculo ativo de um registro termina", não só do desligamento: qualquer operação futura que
+> encerre o vínculo (desvincular, revincular a outro login) aplica o mesmo corte
+> ([ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md),
+> decisão 5).
 
 ---
 
