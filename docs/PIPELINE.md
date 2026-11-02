@@ -244,8 +244,10 @@ desvios.
 - **mypy --strict** em `domain/` e `application/`.
 - **ruff** para style.
 - **pytest** com pastas separadas (`unit`, `integration`, `contract`, `e2e`).
-- **pre-commit hook** rodando os quatro acima.
-- **CI local (`make check`)** que reproduz o pre-commit.
+- **pre-commit hook** rodando ruff, mypy e import-linter na versão do
+  `uv.lock` (`uv run`) — espelho parcial do `make check`, sem o pytest.
+- **CI local (`make check`)**, o gate: o que o pre-commit espelha, mais
+  os testes e os checks de layout, lock e docs.
 
 ### 3.5 Skills
 
