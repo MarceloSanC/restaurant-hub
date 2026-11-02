@@ -755,7 +755,7 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
         router_module._get_authenticate_user: lambda: deps.identity_authenticate_user,
         router_module._get_refresh_session: lambda: deps.identity_refresh_session,
         router_module._get_revoke_session: lambda: deps.identity_revoke_session,
-        router_module._get_create_restaurant: lambda: deps.identity_create_restaurant,
+        router_module._get_provision_restaurant: lambda: deps.identity_provision_restaurant,
         router_module._get_create_unit: lambda: deps.identity_create_unit,
         router_module._get_create_user: lambda: deps.identity_create_user,
         router_module._get_invite_user: lambda: deps.identity_invite_user,

@@ -176,7 +176,7 @@ def test_token_response_declara_os_dois_tokens_como_credencial() -> None:
 
 @pytest.mark.parametrize(
     "schema",
-    [schemas.UserResponse, schemas.RestaurantResponse, schemas.UnitResponse],
+    [schemas.UserResponse, schemas.ProvisionedRestaurantResponse, schemas.UnitResponse],
     ids=lambda schema: schema.__name__,
 )
 def test_resposta_sem_credencial_nao_e_declarada_credencial(schema: type[BaseModel]) -> None:

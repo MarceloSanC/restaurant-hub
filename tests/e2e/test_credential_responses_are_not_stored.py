@@ -60,7 +60,14 @@ from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import API_PREFIX, create_app
 from restaurant_hub.shared.infrastructure.http.credential_no_store import declares_credential
 from tests.conftest import truncar_tudo
-from tests.e2e.features.identity.conftest import ADMIN_EMAIL, API, SENHA_PADRAO, auth, fazer_login
+from tests.e2e.features.identity.conftest import (
+    ADMIN_EMAIL,
+    API,
+    SENHA_PADRAO,
+    auth,
+    corpo_tenant,
+    fazer_login,
+)
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.e2e
@@ -175,12 +182,8 @@ async def cenario(client: AsyncClient, admin_semeado: User) -> Cenario:
     unidade, que não é o que este arquivo mede.
     """
     admin = await fazer_login(client, ADMIN_EMAIL)
-    restaurante = await _criar(client, "/restaurants", {"name": "Cantina sem cache"}, admin)
-    await _criar(
-        client,
-        f"/restaurants/{restaurante}/owners",
-        {"email": "dono-no-store@x.com", "password": SENHA_PADRAO},
-        admin,
+    restaurante = await _criar(
+        client, "/restaurants", corpo_tenant("Cantina sem cache", "dono-no-store@x.com"), admin
     )
     owner = await fazer_login(client, "dono-no-store@x.com")
     unidade = await _criar(client, f"/restaurants/{restaurante}/units", {"name": "Centro"}, owner)

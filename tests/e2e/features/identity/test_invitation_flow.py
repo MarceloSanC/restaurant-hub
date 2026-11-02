@@ -38,6 +38,7 @@ from tests.e2e.features.identity.conftest import (
     API,
     SENHA_PADRAO,
     auth,
+    corpo_tenant,
     fazer_login,
 )
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
@@ -108,17 +109,12 @@ async def _montar_restaurante_com_owner(
     tokens_admin = await fazer_login(client, ADMIN_EMAIL)
 
     resposta = await client.post(
-        f"{API}/restaurants", json={"name": "Cantina"}, headers=auth(tokens_admin)
-    )
-    assert resposta.status_code == HTTPStatus.CREATED, resposta.text
-    restaurant_id = resposta.json()["id"]
-
-    resposta = await client.post(
-        f"{API}/restaurants/{restaurant_id}/owners",
-        json={"email": email_do_owner, "password": SENHA_PADRAO},
+        f"{API}/restaurants",
+        json=corpo_tenant("Cantina", email_do_owner),
         headers=auth(tokens_admin),
     )
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
+    restaurant_id = resposta.json()["id"]
 
     tokens_owner = await fazer_login(client, email_do_owner)
     return restaurant_id, tokens_owner

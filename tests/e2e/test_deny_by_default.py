@@ -509,16 +509,14 @@ async def token_sem_permissao(client_gate: AsyncClient, admin_gate: User) -> dic
     rota consegue produzir.
     """
     admin = await fazer_login(client_gate, ADMIN_EMAIL)
-    restaurante = (
-        await client_gate.post(f"{API}/restaurants", json={"name": "Gate 2"}, headers=auth(admin))
-    ).json()["id"]
-
     email_owner = "dono-gate2@x.com"
-    await client_gate.post(
-        f"{API}/restaurants/{restaurante}/owners",
-        json={"email": email_owner, "password": SENHA_PADRAO},
-        headers=auth(admin),
-    )
+    restaurante = (
+        await client_gate.post(
+            f"{API}/restaurants",
+            json={"name": "Gate 2", "owner": {"email": email_owner, "password": SENHA_PADRAO}},
+            headers=auth(admin),
+        )
+    ).json()["id"]
     owner = await fazer_login(client_gate, email_owner)
 
     unidade = (

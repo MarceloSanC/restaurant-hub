@@ -32,9 +32,6 @@ from restaurant_hub.features.identity.application.dtos.tokens import AccessToken
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
-from restaurant_hub.features.identity.application.use_cases.create_restaurant import (
-    CreateRestaurantUseCase,
-)
 from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
 )
@@ -43,6 +40,9 @@ from restaurant_hub.features.identity.application.use_cases.create_user import (
 )
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
+    ProvisionRestaurantUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
@@ -116,8 +116,12 @@ class _Ambiente:
         self.app.dependency_overrides.update(
             {
                 router_module._get_guard: lambda: guard,
-                router_module._get_create_restaurant: lambda: CreateRestaurantUseCase(
-                    restaurants=self.restaurants, id_generator=FakeIdGenerator()
+                router_module._get_provision_restaurant: lambda: ProvisionRestaurantUseCase(
+                    restaurants=self.restaurants,
+                    users=self.users,
+                    hasher=self.hasher,
+                    id_generator=FakeIdGenerator(),
+                    unit_of_work=InMemoryUnitOfWork(self.restaurants, self.users),
                 ),
                 router_module._get_create_unit: lambda: CreateUnitUseCase(
                     units=self.units,
@@ -205,15 +209,103 @@ async def client(ambiente: _Ambiente) -> Iterator[AsyncClient]:
 # ---------------------------------------------------------------------------
 
 
-async def test_platform_admin_cria_restaurante(ambiente: _Ambiente, client: AsyncClient) -> None:
+def _tenant(nome: str = "Cantina", email: str = "dono@cantina.com") -> dict[str, object]:
+    """Corpo de `POST /restaurants`: o restaurante e o seu primeiro dono (issue #67)."""
+    return {"name": nome, "owner": {"email": email, "password": _SENHA}}
+
+
+async def test_platform_admin_provisiona_restaurante_com_dono(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """Issue #67 — o restaurante nasce com o dono, numa chamada."""
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+
+    resposta = await client.post(
+        "/api/v1/restaurants", json=_tenant(), headers=ambiente.auth(admin)
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    corpo = resposta.json()
+    assert corpo["name"] == "Cantina"
+    assert corpo["owner"]["email"] == "dono@cantina.com"
+    assert corpo["owner"]["role"] == "owner"
+    assert corpo["owner"]["tenant_id"] == corpo["id"]
+    assert corpo["owner"]["unit_ids"] == []
+    assert RestaurantId(corpo["id"]) in ambiente.restaurants.restaurants
+    dono = ambiente.users.users[UserId(corpo["owner"]["id"])]
+    assert (dono.role, dono.tenant_id) == (Role.OWNER, corpo["id"])
+    assert ambiente.users.password_hashes[dono.id] == ambiente.hasher.hash(_SENHA)
+
+
+async def test_resposta_do_provisionamento_nao_carrega_a_senha(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+
+    resposta = await client.post(
+        "/api/v1/restaurants", json=_tenant(), headers=ambiente.auth(admin)
+    )
+
+    assert _SENHA not in resposta.text
+    assert "password" not in resposta.json()["owner"]
+
+
+async def test_email_do_dono_ocupado_devolve_409_sem_criar_restaurante(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+
+    resposta = await client.post(
+        "/api/v1/restaurants", json=_tenant(email="admin@x.com"), headers=ambiente.auth(admin)
+    )
+
+    assert resposta.status_code == HTTPStatus.CONFLICT
+    assert ambiente.restaurants.restaurants == {}
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        _tenant(email="sem-arroba"),
+        _tenant(nome="   "),
+    ],
+    ids=["email-invalido", "nome-vazio"],
+)
+async def test_corpo_invalido_devolve_422_sem_gravar_nada(
+    ambiente: _Ambiente, client: AsyncClient, corpo: dict[str, object]
+) -> None:
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+    usuarios_antes = set(ambiente.users.users)
+
+    resposta = await client.post("/api/v1/restaurants", json=corpo, headers=ambiente.auth(admin))
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert ambiente.restaurants.restaurants == {}
+    assert set(ambiente.users.users) == usuarios_antes
+
+
+async def test_provisionamento_sem_dono_e_422(ambiente: _Ambiente, client: AsyncClient) -> None:
+    """O dono é obrigatório: não há caminho na API que crie restaurante sem dono."""
     admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
 
     resposta = await client.post(
         "/api/v1/restaurants", json={"name": "Cantina"}, headers=ambiente.auth(admin)
     )
 
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert ambiente.restaurants.restaurants == {}
+
+
+async def test_papel_no_corpo_do_dono_e_ignorado(ambiente: _Ambiente, client: AsyncClient) -> None:
+    """ADR 2.4.0003 §2b — nenhuma rota emite `platform_admin`: o papel não vem do request."""
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+    corpo = _tenant()
+    corpo["owner"] = {"email": "dono@cantina.com", "password": _SENHA, "role": "platform_admin"}
+
+    resposta = await client.post("/api/v1/restaurants", json=corpo, headers=ambiente.auth(admin))
+
     assert resposta.status_code == HTTPStatus.CREATED
-    assert resposta.json()["name"] == "Cantina"
+    assert resposta.json()["owner"]["role"] == "owner"
 
 
 async def test_owner_nao_cria_restaurante(ambiente: _Ambiente, client: AsyncClient) -> None:
@@ -222,14 +314,18 @@ async def test_owner_nao_cria_restaurante(ambiente: _Ambiente, client: AsyncClie
     owner = ambiente.com_usuario(user_id="owner", role=Role.OWNER, tenant_id=_TENANT)
 
     resposta = await client.post(
-        "/api/v1/restaurants", json={"name": "Outra"}, headers=ambiente.auth(owner)
+        "/api/v1/restaurants",
+        json=_tenant(nome="Outra", email="novo@x.com"),
+        headers=ambiente.auth(owner),
     )
 
     assert resposta.status_code == HTTPStatus.FORBIDDEN
+    assert set(ambiente.restaurants.restaurants) == {_TENANT}
+    assert not ambiente.users.exists_by_email(Email("novo@x.com"))
 
 
 async def test_sem_token_e_401_com_www_authenticate(client: AsyncClient) -> None:
-    resposta = await client.post("/api/v1/restaurants", json={"name": "X"})
+    resposta = await client.post("/api/v1/restaurants", json=_tenant(nome="X"))
 
     assert resposta.status_code == HTTPStatus.UNAUTHORIZED
     assert resposta.headers["WWW-Authenticate"] == "Bearer"
@@ -238,13 +334,13 @@ async def test_sem_token_e_401_com_www_authenticate(client: AsyncClient) -> None
 @pytest.mark.parametrize(
     ("corpo", "cenario"),
     [
-        ({"name": "X"}, "corpo-valido"),
+        (_tenant(nome="X"), "corpo-valido"),
         ({"campo": "errado"}, "corpo-malformado"),
         ({}, "corpo-vazio"),
     ],
 )
 async def test_sem_credencial_o_401_vem_antes_da_validacao_do_corpo(
-    client: AsyncClient, corpo: dict[str, str], cenario: str
+    client: AsyncClient, corpo: dict[str, object], cenario: str
 ) -> None:
     """A autenticação é `Depends`, então roda ANTES da validação do corpo.
 
@@ -557,7 +653,7 @@ async def test_papel_desconhecido_e_422(ambiente: _Ambiente, client: AsyncClient
         "_get_authenticate_user",
         "_get_refresh_session",
         "_get_revoke_session",
-        "_get_create_restaurant",
+        "_get_provision_restaurant",
         "_get_create_unit",
         "_get_create_user",
         "_get_invite_user",

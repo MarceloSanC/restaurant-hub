@@ -21,6 +21,7 @@ from tests.e2e.features.identity.conftest import (
     API,
     SENHA_PADRAO,
     auth,
+    corpo_tenant,
     fazer_login,
 )
 
@@ -29,15 +30,14 @@ pytestmark = pytest.mark.e2e
 
 async def _montar_tenant(client: AsyncClient, admin_tokens: dict, nome: str) -> dict:
     """Cria restaurante + owner + unidade, e devolve os ids e o login do owner."""
-    restaurante_id = (
-        await client.post(f"{API}/restaurants", json={"name": nome}, headers=auth(admin_tokens))
-    ).json()["id"]
     email_owner = f"dono-{nome.lower()}@x.com"
-    await client.post(
-        f"{API}/restaurants/{restaurante_id}/owners",
-        json={"email": email_owner, "password": SENHA_PADRAO},
-        headers=auth(admin_tokens),
-    )
+    restaurante_id = (
+        await client.post(
+            f"{API}/restaurants",
+            json=corpo_tenant(nome, email_owner),
+            headers=auth(admin_tokens),
+        )
+    ).json()["id"]
     owner = await fazer_login(client, email_owner)
     unidade_id = (
         await client.post(
@@ -256,7 +256,9 @@ async def test_token_valido_de_usuario_removido_e_401(
         conexao.execute(text("DELETE FROM users WHERE email = :e"), {"e": ADMIN_EMAIL})
 
     resposta = await client.post(
-        f"{API}/restaurants", json={"name": "Fantasma"}, headers=auth(admin)
+        f"{API}/restaurants",
+        json=corpo_tenant("Fantasma", "dono-fantasma@x.com"),
+        headers=auth(admin),
     )
 
     assert resposta.status_code == HTTPStatus.UNAUTHORIZED
@@ -282,7 +284,9 @@ async def test_corpos_de_403_sao_constantes_entre_causas_diferentes(
     tenant_b = await _montar_tenant(client, admin, "Beta")
 
     sem_permissao = await client.post(
-        f"{API}/restaurants", json={"name": "X"}, headers=auth(tenant_a["owner"])
+        f"{API}/restaurants",
+        json=corpo_tenant("X", "dono-x@x.com"),
+        headers=auth(tenant_a["owner"]),
     )
     tenant_alheio = await client.post(
         f"{API}/restaurants/{tenant_a['restaurante']}/units",
@@ -328,7 +332,7 @@ async def test_corpos_de_401_sao_constantes_entre_causas_diferentes(
     )
     token_forjado = await client.post(
         f"{API}/restaurants",
-        json={"name": "X"},
+        json=corpo_tenant("X", "dono-x@x.com"),
         headers={"Authorization": f"Bearer {tokens['access_token']}adulterado"},
     )
     refresh_desconhecido = await client.post(
