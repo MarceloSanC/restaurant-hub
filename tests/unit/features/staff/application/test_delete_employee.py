@@ -48,6 +48,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
     UnavailabilityPeriod,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.fakes.features.staff.in_memory_employee_repository import InMemoryEmployeeRepository
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
@@ -314,3 +315,58 @@ def test_inexistente_precede_a_guarda_de_login() -> None:
                 actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=EmployeeId("nao-existe")
             )
         )
+
+
+# ---------------------------------------------------------------------------
+# Issue #108 — R17 entre a leitura e a remoção não deixa conta órfã
+# ---------------------------------------------------------------------------
+
+
+class _R17VinculaDepoisDaLeitura(InMemoryEmployeeRepository):
+    """Fake do mesmo store cuja leitura é seguida, uma vez, de um R17 concorrente.
+
+    É o entrelace da issue em memória: o use case lê o registro **sem** vínculo,
+    e o vínculo é gravado antes de ele chamar `delete`. Sobre o mesmo store do
+    par (`fakes.store`), então não abre a divergência de stores que
+    `staff_repositories` existe para impedir.
+    """
+
+    def __init__(self, fakes: StaffFakes, login: UserId) -> None:
+        super().__init__(fakes.store)
+        self._login: UserId | None = login
+
+    def find_by_id(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId
+    ) -> Employee | None:
+        lido = super().find_by_id(tenant_id, unit_id, employee_id)
+        if self._login is not None:
+            self.link_login(tenant_id, unit_id, employee_id, self._login)
+            self._login = None
+        return lido
+
+
+def test_issue_108_vinculo_gravado_depois_da_leitura_recusa_a_remocao() -> None:
+    """A recusa do port (`L-DEL-LINK`) sobe crua, e o registro e o vínculo ficam.
+
+    O use case decidiu "sem login" pela entidade lida e chamou `delete`; quem
+    recusa é o port, sobre o gravado. Antes da #108 o registro sumia e a conta
+    criada pelo R17 ficava órfã.
+    """
+    fakes = _fakes()
+    _grava(fakes)
+    repositorio = _R17VinculaDepoisDaLeitura(fakes, UserId("login-do-r17"))
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(EmployeeHasLoginError):
+        DeleteEmployeeUseCase(repositorio, guard=PermissiveAccessGuard()).execute(
+            DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
+
+    assert fakes.store.calls[antes:] == [
+        "employees.find_by_id",
+        "employees.link_login",
+        "employees.delete",
+    ], "o entrelace não aconteceu na ordem da corrida"
+    relido = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None, "o registro vinculado foi removido — conta órfã"
+    assert relido.user_id == UserId("login-do-r17")

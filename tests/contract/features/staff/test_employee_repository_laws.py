@@ -23,6 +23,7 @@ import pytest
 
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
+    EmployeeHasLoginError,
     EmployeeInUseError,
     EmployeeNotFoundError,
     EmployeeRelocationError,
@@ -1109,3 +1110,101 @@ def test_l_link_vincula_so_o_registro_do_endereco_e_nenhum_vizinho(
         vizinho = repos.employees.find_by_id(tenant, unidade, funcionario)
         assert vizinho is not None
         assert vizinho.user_id is None, f"o vínculo vazou para {funcionario!r}"
+
+
+# --- L-DEL-LINK: registro com login não se apaga, no gravado (issue #108) ----
+#
+# A recusa "registro com login não é removido" (ADR 3.5.0003 §1b) era só do use
+# case, sobre a entidade que ele leu. Estes testes a travam no port, sobre o
+# **gravado**, nas duas implementações: o vinculado — ativo ou desligado — é
+# recusado e fica intacto; o endereço vem antes da guarda; e a remoção do
+# registro sem vínculo continua levando só ele. A metade concorrente (R17 entre
+# a leitura e o `DELETE`) é conduta, e vive em `test_staff_conduct.py`.
+
+
+@pytest.mark.parametrize("active", [True, False], ids=["ativo", "desligado"])
+def test_l_del_link_registro_vinculado_e_recusado_e_fica_intacto(
+    repos: RepositoriosDeStaff, active: bool
+) -> None:
+    """Vale para ativo **e** desligado: o vínculo permanece no desligamento."""
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_registro_completo())
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+    if not active:
+        vinculado = repos.employees.find_by_id(_A, _U1, _E1)
+        assert vinculado is not None
+        repos.employees.update(vinculado.deactivate())
+
+    with pytest.raises(EmployeeHasLoginError):
+        repos.employees.delete(_A, _U1, _E1)
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None, "o registro vinculado foi removido"
+    assert relido.user_id == _LOGIN
+    esperado = dataclasses.replace(_registro_completo(), user_id=_LOGIN, active=active)
+    assert _campos(relido) == _campos(esperado), "a recusa tocou as filhas do registro"
+
+
+@pytest.mark.parametrize(
+    ("tenant", "unidade", "funcionario"),
+    [(_A, _U1, EmployeeId("fantasma")), (_A, _U2, _E1), (_B, _U1, _E1)],
+    ids=["inexistente", "outra_unidade", "outro_tenant"],
+)
+def test_l_del_link_endereco_precede_a_guarda_do_vinculo(
+    repos: RepositoriosDeStaff, tenant: TenantId, unidade: UnitId, funcionario: EmployeeId
+) -> None:
+    """Fora do endereço é `EmployeeNotFoundError` mesmo com o registro vinculado.
+
+    Responder `EmployeeHasLoginError` aqui confirmaria a existência — e o
+    vínculo — de um registro que o chamador não pode endereçar (ADR 3.4.0007 §4).
+    """
+    _com_funcionario_gravado(repos)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    with pytest.raises(EmployeeNotFoundError):
+        repos.employees.delete(tenant, unidade, funcionario)
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == _LOGIN
+
+
+def test_l_del_link_vizinho_vinculado_nao_bloqueia_a_remocao_do_registro_sem_vinculo(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """A guarda lê o vínculo do registro **do endereço**, não o de outro."""
+    vizinhos = _com_vizinhos_do_e1(repos)
+    for tenant, unidade, funcionario in vizinhos:
+        repos.employees.link_login(tenant, unidade, funcionario, _LOGIN)
+
+    repos.employees.delete(_A, _U1, _E1)
+
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
+    for tenant, unidade, funcionario in vizinhos:
+        vizinho = repos.employees.find_by_id(tenant, unidade, funcionario)
+        assert vizinho is not None, f"a remoção levou junto {funcionario!r}"
+        assert vizinho.user_id == _LOGIN
+
+
+def test_l_del_link_remocao_sem_vinculo_leva_so_o_registro_do_endereco(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Uma linha só: o `DELETE` reescrito na #108 não perde o predicado de id."""
+    vizinhos = _com_vizinhos_do_e1(repos)
+
+    repos.employees.delete(_A, _U1, _E1)
+
+    assert repos.employees.find_by_id(_A, _U1, _E1) is None
+    for tenant, unidade, funcionario in vizinhos:
+        assert repos.employees.find_by_id(tenant, unidade, funcionario) is not None, (
+            f"a remoção levou junto {funcionario!r}"
+        )
+
+
+def test_l_del_link_esta_declarada_no_port_com_a_ancora_da_issue(
+    repos: RepositoriosDeStaff,
+) -> None:
+    documentacao = EmployeeRepository.delete.__doc__ or ""
+    assert "L-DEL-LINK" in documentacao
+    assert "EmployeeHasLoginError" in documentacao
+    assert "ADR 0.0.0013" in documentacao

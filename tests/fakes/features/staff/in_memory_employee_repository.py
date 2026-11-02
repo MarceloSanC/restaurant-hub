@@ -37,6 +37,7 @@ import dataclasses
 
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
+    EmployeeHasLoginError,
     EmployeeNotFoundError,
     EmployeeRelocationError,
     JobFunctionNotFoundError,
@@ -134,10 +135,16 @@ class InMemoryEmployeeRepository:
         registro de funcionário no escopo atual. Quem a preenche é o Step 4
         (alocação), pela FK da 3.3 — a lei e o `EmployeeInUseError` existem
         agora para que a 3.4/Step 4 não precisem retroagir o contrato do port.
+
+        `L-DEL-LINK` (issue #108): vinculado **no gravado** ⇒
+        `EmployeeHasLoginError`, depois do endereço e antes de remover.
         """
         self._store.record("employees.delete")
-        if self._find_no_endereco(tenant_id, unit_id, employee_id) is None:
+        gravado = self._find_no_endereco(tenant_id, unit_id, employee_id)
+        if gravado is None:
             raise EmployeeNotFoundError(employee_id)
+        if gravado.user_id is not None:
+            raise EmployeeHasLoginError(employee_id)
         del self._store.employees[employee_id]
 
     # --- leitura -------------------------------------------------------------
