@@ -5,7 +5,7 @@ when-use: Reference before writing `employees.user_id`, before changing `Employe
 keywords: [adr, user_id, employee, login-link, lost-update, conditional-write, for-update, staff, port, issue-68]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-01
+updated_at: 2026-11-02
 adr_id: "0.0.0010"
 decision: `EmployeeRepository` gains `link_login(tenant_id, unit_id, employee_id, user_id)` — the only writer of `employees.user_id` after the record exists — which locks the row, re-runs the domain guards of `Employee.link_login` on the stored record and writes only `user_id`; `update` ignores the entity's `user_id` and keeps the stored one; `CreateLoginForEmployeeUseCase` links through `link_login`
 context_stage: 0.0-global
@@ -169,3 +169,13 @@ rest of ADR 3.5.0004 — nullable opaque column, no FK, no UNIQUE, no index, nev
   `docs/stages/3.8-termination-access-scope/concept.md` D7
 - `src/restaurant_hub/features/staff/application/ports/out/employee_repository.py` (`update`,
   `link_login`)
+
+## Supersessão parcial
+
+**2026-11-02 — o quarto item de `### Negative` (*"Delete has the same check-then-act shape …
+escalated as a finding on issue #68"*) foi superado por
+[ADR 0.0.0013](./0_0_0013-employee-delete-refuses-a-stored-login-link.md) (issue #108).**
+`EmployeeRepository.delete` ganhou a lei `L-DEL-LINK`: o registro vinculado **no gravado** é
+recusado com `EmployeeHasLoginError`, e o adapter Postgres prende a linha com `SELECT … FOR UPDATE`
+antes da guarda e do `DELETE`. Um R17 que vincula entre a leitura do R15 e a remoção não deixa mais
+conta órfã. O resto deste ADR continua valendo. Nota *append-only*; o corpo acima não foi editado.
