@@ -35,18 +35,20 @@ _SCRIPT = _REPO_ROOT / "scripts" / "check_dead_shared.py"
 # O que `shared/domain/` e `shared/application/` expõem hoje. Cada um tem
 # consumidor real, e é isso que a asserção seguinte cobra:
 #
-# - `DomainError`/`NotFoundError` — raízes da hierarquia de erro dos dois BCs;
+# - `DomainError` — raiz da hierarquia de erro de domínio dos BCs;
+# - `ApplicationError` — raiz das falhas que não são regra de negócio, de volta na
+#   Stage 3.9 com uma subclasse-raiz por BC (ADR 3.9.0001);
 # - `Clock`/`IdGenerator` — ports consumidos por use case de identity e staff;
 # - `EmailSender`/`EmailMessage` — port promovido na 2.5 com o segundo
 #   consumidor já nomeado (Stage 4.6), o critério do ADR 2.5.0001.
 _NOMES_PUBLICOS_DE_SHARED = frozenset(
     {
+        "ApplicationError",
         "Clock",
         "DomainError",
         "EmailMessage",
         "EmailSender",
         "IdGenerator",
-        "NotFoundError",
     }
 )
 

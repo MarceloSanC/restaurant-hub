@@ -28,6 +28,7 @@ import pytest
 from restaurant_hub.features.staff.application.errors import (
     InvalidLoginEmailError,
     LoginEmailAlreadyInUseError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.ports.out import identity_gateway
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
@@ -147,7 +148,9 @@ def _assert_traduzida_sem_apagar_a_causa(excecao: Exception) -> None:
         "a tradução perdeu a causa: use `raise ... from exc` (L-IG2), senão o "
         "traceback deixa de mostrar quem recusou do outro lado da fronteira"
     )
-    assert not isinstance(causa, StaffError), f"a causa é um erro de staff: {causa!r}"
+    assert not isinstance(causa, StaffError | StaffApplicationError), (
+        f"a causa é um erro de staff: {causa!r}"
+    )
 
 
 def test_l_ig2_email_ja_usado_vira_o_erro_de_staff(gateway: GatewaySobContrato) -> None:

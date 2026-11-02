@@ -44,7 +44,7 @@ def create_app(
     1. Configura o logging do processo com o `log_level` das settings
     2. Cria o app FastAPI com metadados das settings
     3. Registra middlewares (CORS, etc.)
-    4. Registra os error handlers genéricos (NotFoundError → 404, DomainError → 422)
+    4. Registra os error handlers genéricos (DomainError → 422, validação → 422)
     5. Faz o wiring das dependências via composition_root
     6. Registra router, handlers de feature e dependency_overrides
 
@@ -73,8 +73,8 @@ def create_app(
 
     **Os handlers genéricos são registrados antes dos de feature de propósito.**
     Starlette resolve o handler pelo `__mro__` da exceção, não pela ordem de
-    registro, e como `IdentityError` precede `DomainError`/`NotFoundError` em todas
-    as MROs do BC, o handler específico vence de qualquer forma. Registrar o
+    registro, e como a raiz de cada BC precede `DomainError` em todas as MROs do BC,
+    o handler específico vence de qualquer forma. Registrar o
     genérico primeiro deixa claro que ele é a rede de segurança, não o principal.
     """
     cfg = settings or get_settings()

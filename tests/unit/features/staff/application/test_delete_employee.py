@@ -24,6 +24,7 @@ from restaurant_hub.features.staff.application.errors import (
     EmployeeHasLoginError,
     EmployeeInUseError,
     EmployeeNotFoundError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
     DeactivateEmployeeUseCase,
@@ -241,7 +242,7 @@ def test_ca11_remocao_com_unidade_alheia_nao_alcanca_o_registro() -> None:
     _grava(fakes)
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _apagar(fakes).execute(
             DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=_E1)
         )

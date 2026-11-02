@@ -24,7 +24,10 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     RenameEmployeeCommand,
 )
 from restaurant_hub.features.staff.application.dtos.results import EmployeeResult
-from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
+from restaurant_hub.features.staff.application.errors import (
+    EmployeeNotFoundError,
+    StaffApplicationError,
+)
 from restaurant_hub.features.staff.application.use_cases.change_workload_profile import (
     ChangeWorkloadProfileUseCase,
 )
@@ -326,7 +329,7 @@ def test_precedencia_registro_inexistente_vence_nome_vazio() -> None:
     um recurso que não existe. Asserção por **tipo exato**.
     """
     fakes = _com_funcionario()
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         RenameEmployeeUseCase(fakes.employees, guard=PermissiveAccessGuard()).execute(
             RenameEmployeeCommand(
                 actor=TEST_ACTOR,
@@ -427,7 +430,7 @@ def test_ca11_edicao_com_unidade_alheia_nao_alcanca_o_registro(
     antes_estado = _result(fakes)
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         executar(fakes)
     assert type(excecao.value) is EmployeeNotFoundError, nome
 

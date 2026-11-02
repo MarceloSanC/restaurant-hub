@@ -21,7 +21,10 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     RegisterUnavailabilityCommand,
     RemoveUnavailabilityCommand,
 )
-from restaurant_hub.features.staff.application.errors import EmployeeNotFoundError
+from restaurant_hub.features.staff.application.errors import (
+    EmployeeNotFoundError,
+    StaffApplicationError,
+)
 from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
     RegisterUnavailabilityUseCase,
 )
@@ -179,7 +182,7 @@ def test_registrar_em_registro_de_outro_tenant_e_not_found() -> None:
 def test_precedencia_registro_inexistente_vence_periodo_sobreposto() -> None:
     """Par duplo de §5.16, asserido por tipo exato."""
     fakes = _fakes(_periodo(8, 12))
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _registrar(fakes).execute(
             RegisterUnavailabilityCommand(
                 actor=TEST_ACTOR,
@@ -259,7 +262,7 @@ def test_precedencia_registro_inexistente_vence_periodo_ausente() -> None:
     (concept §4). Trocar a ordem trocaria a resposta da API.
     """
     fakes = _fakes(_periodo(8, 12))
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _remover(fakes).execute(
             RemoveUnavailabilityCommand(
                 actor=TEST_ACTOR,
@@ -342,7 +345,7 @@ def test_ca11_movimento_com_unidade_alheia_nao_alcanca_o_registro(
     fakes = _fakes(_periodo(8, 12))
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         executar(fakes)
     assert type(excecao.value) is EmployeeNotFoundError, nome
 

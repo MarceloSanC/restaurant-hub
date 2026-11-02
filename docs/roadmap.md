@@ -49,6 +49,7 @@ graph LR
     S33 --> S34[3.4-staff-access-scope]
     S34 --> S36[3.6-staff-http]
     S36 --> S35[3.5-employee-login-link] --> S37[3.7-application-authorization] & S38[3.8-termination-access-scope]
+    S36 --> S39[3.9-error-hierarchy]
   end
   subgraph Step4[Step 4 — Escala manual]
     S41[4.1-scheduling-domain] --> S42[4.2-validation-policies]
@@ -83,6 +84,7 @@ graph LR
   S45 --> S72
   S74 --> S81
   S52 --> S81
+  S43 --> S39
 ```
 
 ## Tabela de Steps
@@ -91,7 +93,7 @@ graph LR
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.6 |
-| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.8 |
+| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.9 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
 | 6 | Implantação piloto | Sistema no ar para o restaurante piloto usar no dia a dia | not_started | 6.1 → 6.3 |
@@ -125,6 +127,7 @@ graph LR
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
 | `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
 | `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
+| `3.9-error-hierarchy` | Hierarquia de exceções sem protocolo HTTP | shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) | done | `3.6-staff-http`, `4.3-scheduling-application`, #45 |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
@@ -170,7 +173,6 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#41](https://github.com/MarceloSanC/restaurant-hub/issues/41) | Habilitação de função de trabalho por unidade (função segue do restaurante; gerente cria para a sua unidade, alcance extra-unidade para todas) | staff | domain + application + adapters/out | open | `3.4-staff-access-scope` |
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
-| [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | done | — |
 | [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | done | — |
 | [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
@@ -1417,6 +1419,53 @@ skills_hint: [hex-arch-python, pytest-with-fakes, composition-root]
 >   borda para falha antes da escrita, lacuna herdada da 3.5). Findings na §7 do technical.
 
 
+#### Stage 3.9 — `3.9-error-hierarchy`
+
+**Descrição humana:** tirar o protocolo HTTP de dentro da hierarquia de exceções. Hoje a ordem das classes-base de um erro "não encontrado" é escolhida para que o lookup de handler do Starlette (que percorre o `__mro__`) chegue ao 404 antes do 422, e a docstring de `shared/domain/exceptions/base.py` define as classes pelo status HTTP. A Stage desfaz a herança dupla, recria `ApplicationError` para os erros que não são violação de regra de negócio (cada um com entrada própria no mapa de status do BC) e põe um detector de vocabulário de protocolo nos módulos da hierarquia. Neutra em comportamento observável: as faixas 401/403/404/409/422 e os corpos ficam byte-idênticos. Promovida da issue #48 (supersede o ADR 2.2.0003 — PIPELINE §4.5: ADR que supera outro + regra sobre a camada inteira).
+
+```yaml
+stage_id: 3.9-error-hierarchy
+bounded_context: shared
+camada_alvo: shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) + tooling
+depends_on: [3.6-staff-http, 4.3-scheduling-application]
+arquivos_a_criar:
+  - shared/application/errors.py
+  - docs/adr/3_9_0001-*.md
+arquivos_a_modificar:
+  - shared/domain/exceptions/base.py; shared/infrastructure/http/{error_handlers.py,app.py}
+  - features/{identity,staff,scheduling}/application/errors.py
+  - features/{identity,staff,scheduling}/domain/exceptions/errors.py (docstrings)
+  - features/{identity,staff}/adapters/inbound/http/error_handlers.py
+  - scripts/check_layout.py (regra nova); tests/unit/test_status_map.py
+  - docs/adr/{2_2_0003,2_4_0001,3_4_0002}; docs/LAYOUT.md
+contratos_introduzidos:
+  - ApplicationError (shared/application) e uma raiz de aplicação por BC
+contratos_consumidos:
+  - mapa exaustivo erro -> status (Gate 3 da #45); ADR 2.4.0001 e 3.4.0002 (faixas e corpos)
+definition_of_done:
+  - "nenhuma classe de erro herda de duas raizes; erros que nao sao regra de negocio herdam de ApplicationError com entrada propria no mapa; modulos da hierarquia sem vocabulario de protocolo, travado por gate; e2e de faixas intocados e verdes"
+non_goals:
+  - mudar status ou corpo de qualquer resposta
+  - mexer nas conversoes do guard que fecham oraculo de enumeracao (ADR 2.4.0001 §5)
+  - mapa de status de scheduling (Stage 4.5)
+complexidade_estimada: M
+gate_mode: strict
+skills_hint: [hex-arch-python, fastapi-thin-adapter, pytest-with-fakes]
+```
+
+> **Nota (2026-11-02): fechamento da Stage 3.9** (issue #48; concept e technical em
+> `docs/stages/3.9-error-hierarchy/`; ADR 3.9.0001, que supera o 2.2.0003). O que a execução fixou:
+>
+> - **Partição por significado:** 14 erros de identity, 4 de staff e 6 de scheduling migram para a
+>   raiz de aplicação do BC; `ScheduleVersionConflictError` fica no domínio (regra canônica de
+>   concorrência, decisão do sponsor F8). Erro levantado por objeto de domínio é domínio por construção.
+> - **`NotFoundError` e o handler genérico 404 saíram**; não há rede genérica para `ApplicationError`.
+>   O Gate 3 cobra raiz única do BC, mapa total sobre as duas raízes e handler em cada raiz.
+> - **Regra 11 de `check_layout.py`** reprova vocabulário de protocolo nos módulos de exceção.
+> - **8 Tasks + 5 commits de correção** (Checkpoints C) **+ 2 extras** (auditoria de testes, 3 rodadas).
+>   Oráculos e2e de faixa intocados. Findings para a 4.5 na §7 do technical.
+
+
 ---
 
 ### Step 4 — Escala manual publicável (BC `scheduling`)
@@ -2035,6 +2084,8 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-10-19 | Issue **#49** promovida a **Stage `3.7-application-authorization`** (Step 3, BC staff; `depends_on: 3.5-employee-login-link`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. O corpo da issue já se declarava candidato a Stage — exige ADR (forma do guard na application e destino do `AuthorizedScope`), toca os 17 use cases e pede uma propriedade sobre a camada inteira — o litmus de PIPELINE §4.5. Step 3 passa a `3.1 → 3.7` | Promoção da issue #49 |
 | 2026-10-19 | Stage 3.7-application-authorization concluída (`done`); bloco acrescido de nota datada de reconciliação pós-execução. Os 17 use cases de staff autorizam o alvo do próprio command pelo `AccessGuard` injetado antes de qualquer outra instrução; a borda HTTP segue autorizando (defesa em profundidade) e nenhuma faixa muda (`tests/e2e/` intocado). ADR 3.7.0001; supersessão parcial datada em 3.2.0002, 3.4.0001 e 3.6.0004; errata no concept 3.2 §5.16. 13 mutações reais na auditoria independente, todas mortas | Execução da Stage 3.7 — issue #49 |
 | 2026-11-01 | Issue **#60** promovida a **Stage `3.8-termination-access-scope`** (Step 3, BC staff; `depends_on: 3.5-employee-login-link`) e concluída (`done`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio e nota datada de fechamento. Executada como `3.7` em paralelo à #49; **renumerada para 3.8** no rebase sobre o #71, que ficou com o número (pasta, ADR 3.8.0001, workforce §3.8, nota no ADR 3.5.0003). A aresta do grafo vai na mesma linha da 3.7; as citações por linha deslocadas pelo bloco (+48 a partir do Step 4, +1 na tabela de Stages) acompanham — as do #70 seguem com a #79. Step 3 passa a `3.1 → 3.8` | Execução da Stage 3.8 — issue #60 |
+| 2026-11-02 | Issue **#48** promovida a **Stage `3.9-error-hierarchy`** (Step 3, BC shared; `depends_on: 3.6-staff-http, 4.3-scheduling-application`, #45): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. Supersede o ADR 2.2.0003 e pede uma propriedade sobre a hierarquia inteira dos três BCs (detector de protocolo) — o litmus de PIPELINE §4.5. Step 3 passa a `3.1 → 3.9` | Promoção da issue #48 |
+| 2026-11-02 | Stage 3.9-error-hierarchy concluída (`done`); bloco acrescido de nota datada de fechamento. Uma raiz por significado (`DomainError` × `ApplicationError`, de volta em `shared/application`), status só pelo mapa do adapter, `NotFoundError` removida, regra 11 do `check_layout.py`. ADR 3.9.0001 supera o 2.2.0003, com supersessão parcial datada em 2.3.0003, 2.4.0001 e 3.4.0002; `LAYOUT.md` §2–§4 emendado. Nenhuma faixa nem corpo muda (`tests/e2e/` só perde a sonda 404 do smoke) | Execução da Stage 3.9 — issue #48 |
 
 ## Próxima revisão de roadmap
 

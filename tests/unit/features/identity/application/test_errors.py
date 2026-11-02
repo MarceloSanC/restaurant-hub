@@ -1,10 +1,10 @@
-"""Testes da hierarquia de erros da camada de aplicação (concept CA13).
+"""Testes da hierarquia de erros da camada de aplicação (concept 2.2 CA13; Stage 3.9).
 
-A invariante que estes testes protegem é de **segurança operacional**, não de
-estética: se um erro desta camada escapar de `DomainError`, ele vira HTTP 500 na
-Stage 2.4 em vez de um 4xx (ADR 2.2.0003). O teste percorre o módulo inteiro por
-introspecção, então uma classe nova que esqueça a base certa quebra a suíte —
-em vez de falhar em silêncio meses depois, na API.
+Cada erro desta camada tem **uma** raiz, escolhida pelo significado (ADR 3.9.0001,
+que supera o 2.2.0003): `IdentityError` (domínio) quando nomeia regra do produto,
+`IdentityApplicationError` quando o caso de uso não pôde ser atendido por motivo que
+não é regra. A partição é travada aqui por **igualdade de conjuntos**: uma classe
+nova que não entrar numa das duas listas reprova, e uma que mudar de lado também.
 """
 
 import inspect
@@ -12,17 +12,44 @@ import inspect
 import pytest
 
 from restaurant_hub.features.identity.application import errors
+from restaurant_hub.features.identity.application.errors import IdentityApplicationError
 from restaurant_hub.features.identity.domain.exceptions.errors import IdentityError
-from restaurant_hub.shared.domain.exceptions.base import DomainError, NotFoundError
+from restaurant_hub.shared.application.errors import ApplicationError
+from restaurant_hub.shared.domain.exceptions.base import DomainError
 
 pytestmark = pytest.mark.unit
 
-# Erros que representam "recurso inexistente" e, por isso, devem alcançar o
-# handler 404 antes do 422.
-_NOT_FOUND_ERRORS = (
-    errors.RestaurantNotFoundError,
-    errors.UnitNotFoundError,
-    errors.UserNotFoundError,
+# Regras que o produto enuncia (concept 3.9 §4): unicidade global do e-mail
+# (kickoff #2) e as cinco recusas de autorização (ADR 2.2.0002).
+_DE_DOMINIO = frozenset(
+    {
+        "EmailAlreadyRegisteredError",
+        "PermissionDeniedError",
+        "TenantScopeRequiredError",
+        "TenantNotVisibleError",
+        "UnitScopeRequiredError",
+        "UnitNotVisibleError",
+    }
+)
+
+# Falhas que não são regra: autenticação, lookup, colisão de identificador técnico.
+_DE_APLICACAO = frozenset(
+    {
+        "InvalidCredentialsError",
+        "InvalidAccessTokenError",
+        "InvalidRefreshTokenError",
+        "RefreshTokenReuseError",
+        "InvalidSetupTokenError",
+        "RestaurantNotFoundError",
+        "UnitNotFoundError",
+        "UserNotFoundError",
+        "RestaurantAlreadyExistsError",
+        "UnitAlreadyExistsError",
+        "UserAlreadyExistsError",
+        "UnitMembershipAlreadyExistsError",
+        "SessionAlreadyExistsError",
+        "SessionFingerprintAlreadyExistsError",
+    }
 )
 
 
@@ -38,7 +65,9 @@ def _application_error_classes() -> list[type]:
     return [
         obj
         for _, obj in inspect.getmembers(errors, inspect.isclass)
-        if obj.__module__ == errors.__name__
+        # A raiz de aplicação (Stage 3.9, ADR 3.9.0001) não é um erro: é o tipo
+        # sobre o qual o handler é registrado, e tem testes próprios.
+        if obj.__module__ == errors.__name__ and obj is not errors.IdentityApplicationError
     ]
 
 
@@ -80,25 +109,28 @@ def test_modulo_declara_as_vinte_excecoes_esperadas() -> None:
     }
 
 
-def test_erros_de_chave_duplicada_nao_sao_not_found() -> None:
-    """`*AlreadyExists` é conflito, não ausência — não pode cair no handler 404.
+def test_a_particao_dominio_aplicacao_e_exata() -> None:
+    """Concept 3.9 CA3 — as duas listas cobrem o módulo, sem sobra nem interseção."""
+    nomes = {cls.__name__ for cls in _application_error_classes()}
 
-    Os dois grupos são simétricos no nome e opostos no significado; herdar
-    `NotFoundError` por simetria descuidada faria a 2.4 responder 404 a um
-    conflito de chave.
-    """
-    duplicados = (
-        errors.RestaurantAlreadyExistsError,
-        errors.UnitAlreadyExistsError,
-        errors.UserAlreadyExistsError,
-        errors.UnitMembershipAlreadyExistsError,
-        errors.SessionAlreadyExistsError,
-        errors.SessionFingerprintAlreadyExistsError,
-    )
-    for cls in duplicados:
-        assert issubclass(cls, IdentityError)
-        assert issubclass(cls, DomainError)
-        assert not issubclass(cls, NotFoundError)
+    assert not _DE_DOMINIO & _DE_APLICACAO
+    assert nomes == _DE_DOMINIO | _DE_APLICACAO
+
+
+@pytest.mark.parametrize("error_class", _application_error_classes(), ids=lambda c: c.__name__)
+def test_cada_erro_esta_sob_a_raiz_da_sua_lista_e_so_nela(error_class: type) -> None:
+    """Uma raiz só: quem está numa lista não descende da raiz da outra."""
+    if error_class.__name__ in _DE_DOMINIO:
+        assert issubclass(error_class, IdentityError)
+        assert not issubclass(error_class, ApplicationError)
+    else:
+        assert issubclass(error_class, IdentityApplicationError)
+        assert not issubclass(error_class, DomainError)
+    assert len(error_class.__bases__) == 1
+
+
+def test_a_raiz_de_aplicacao_e_filha_direta_de_application_error() -> None:
+    assert IdentityApplicationError.__bases__ == (ApplicationError,)
 
 
 @pytest.mark.parametrize(
@@ -138,35 +170,13 @@ def test_erros_de_chave_duplicada_citam_a_chave() -> None:
     assert "sess-1" in str(errors.SessionAlreadyExistsError("sess-1"))
 
 
-@pytest.mark.parametrize("error_class", _application_error_classes())
-def test_todo_erro_de_aplicacao_e_identity_error_e_domain_error(
-    error_class: type,
-) -> None:
-    """Nenhum erro de negócio desta camada pode escapar para 500 na 2.4.
+@pytest.mark.parametrize("error_class", _application_error_classes(), ids=lambda c: c.__name__)
+def test_todo_erro_da_camada_e_levantavel(error_class: type) -> None:
+    """`BaseException` primeiro: uma classe sem base de exceção não é levantável.
 
-    `BaseException` primeiro: uma classe sem base de exceção não é levantável, e
-    `raise` dela dá `TypeError` — 500 garantido, que é exatamente o que o
-    ADR 2.2.0003 existe para impedir.
+    `raise` dela daria `TypeError`, e nenhum handler do BC a alcançaria.
     """
     assert issubclass(error_class, BaseException)
-    assert issubclass(error_class, IdentityError)
-    assert issubclass(error_class, DomainError)
-
-
-@pytest.mark.parametrize("error_class", _NOT_FOUND_ERRORS)
-def test_erros_de_nao_encontrado_alcancam_o_handler_404_antes_do_422(
-    error_class: type[Exception],
-) -> None:
-    """A ORDEM na MRO é o que decide o status HTTP.
-
-    O Starlette resolve o handler percorrendo `type(exc).__mro__` e parando na
-    primeira classe registrada. Como `NotFoundError` (404) e `DomainError` (422)
-    estão ambos registrados, `NotFoundError` precisa vir antes — caso contrário
-    um recurso inexistente responderia 422.
-    """
-    assert issubclass(error_class, NotFoundError)
-    mro = error_class.__mro__
-    assert mro.index(NotFoundError) < mro.index(DomainError)
 
 
 def test_mensagens_identificam_o_recurso_ou_a_regra_violada() -> None:

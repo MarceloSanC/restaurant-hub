@@ -1,9 +1,10 @@
 """Exceções de domínio do bounded context scheduling.
 
 Todas herdam de `SchedulingError`, que por sua vez herda de `DomainError`
-(`shared/domain`) — o error handler HTTP converte a hierarquia `DomainError` em
-resposta 4xx; o mapa de status deste BC é da Stage 4.5. Aqui garante-se apenas a
-hierarquia e a mensagem; nenhuma exceção carrega estado além do texto.
+(`shared/domain`): cada uma nomeia uma regra do domínio violada (ADR 3.9.0001). O que
+cada uma vira para quem chamou é decidido pelo adapter de entrada — o mapa deste BC
+é da Stage 4.5. Aqui garante-se apenas a hierarquia e a mensagem; nenhuma exceção
+carrega estado além do texto.
 
 **As 20 da Stage 4.1 nasceram juntas, antes de terem consumidor.** O mapa de erros do concept
 §6 é uma **totalidade** (21 linhas para 20 exceções), e a varredura que o cobra
@@ -58,7 +59,8 @@ class InvalidWeekdayError(SchedulingError):
 
     Espelha `InvalidDayPeriodError` de staff: a conversão de texto para o enum
     falha como **erro de domínio**, e não como o `ValueError` cru do `StrEnum`
-    (que não é `SchedulingError`, não tem handler, e viraria 500 na borda).
+    (que não é `SchedulingError`: nenhuma borda saberia classificá-lo, e ele chegaria
+    a quem chamou como falha do servidor).
     """
 
     def __init__(self, value: str) -> None:

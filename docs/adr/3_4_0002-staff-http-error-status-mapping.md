@@ -5,7 +5,7 @@ when-use: Reference when adding an error to the staff hierarchy, when a staff er
 keywords: [adr, http, error-handling, status-code, fastapi, mro, totality, staff]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-09-14
+updated_at: 2026-11-02
 adr_id: 3.4.0002
 decision: Register one FastAPI exception handler on StaffError that resolves status by walking the exception MRO against an explicit total map, guarded by a test enumerating every concrete subclass; UnavailabilityNotFoundError stays 422 because it names a value inside the aggregate, and the 409 band is reserved for conflicts with already-stored identity or references
 context_stage: 3.4-staff-access-scope
@@ -234,3 +234,22 @@ A lição, e é por isso que fica escrito: **errata que descreve a correção n�
 correção**. Uma tabela "Dizia → Diz" cujo "Diz" nunca chegou ao corpo deixa o
 documento com as duas versões vivas, e a errata passa a parecer conformidade que
 o arquivo não tem.
+
+## Supersessão parcial
+
+**2026-11-02 — a decisão 2 (*"A **single** handler is registered on `StaffError`"*), a decisão 3
+(totalidade sobre *"every concrete subclass of `StaffError`"*), a regra do Context de que todo
+erro de aplicação de staff herda de `StaffError`, *"never from `ApplicationError`"*, com os dois
+"não encontrado" herdando `(StaffError, NotFoundError)` nesta ordem, a premissa da decisão 6
+(*"Those errors are `IdentityError` subclasses"*) e a frase *"The generic `shared` handlers stay
+as the safety net."* foram superadas por [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)**
+(Stage 3.9, issue #48). `JobFunctionNotFoundError`, `EmployeeNotFoundError`,
+`JobFunctionAlreadyExistsError` e `EmployeeAlreadyExistsError` descendem agora só de
+`StaffApplicationError`; o handler único é registrado sobre as duas raízes, e a totalidade é
+cobrada sobre as subclasses das duas. `InvalidAccessTokenError` é hoje `IdentityApplicationError`
+— a conclusão da decisão 6 continua valendo porque o handler de identity está registrado sobre as
+duas raízes de identity. Da rede genérica de `shared` para a hierarquia de erros fica só
+`DomainError → 422`. As faixas, as classificações da Decision 4, o discriminador
+`"type": "staff_error"` e a contagem do mapa (18 quando este ADR foi escrito, 23 hoje, sem
+mudança pela 3.9) continuam valendo, byte a byte. Nota *append-only*; o corpo acima não foi
+editado.

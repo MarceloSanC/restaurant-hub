@@ -1,13 +1,18 @@
 """Erros da camada de aplicação do BC scheduling (Stage 4.3, concept §4 e §6).
 
-Todos herdam de `SchedulingError` (domínio, Stage 4.1) e, por consequência, de
-`DomainError` — a única raiz com handler HTTP registrado (ADR 2.2.0003). O mapa de
-status deste BC é da Stage 4.5.
+Duas raízes, uma por significado (ADR 3.9.0001, que supera o 2.2.0003):
 
-Os **três** erros de "não encontrado" herdam também de `NotFoundError`, **nesta
-ordem**: a MRO fica `… -> SchedulingError -> NotFoundError -> DomainError`, e o
-lookup de handler (que percorre `type(exc).__mro__`) alcança o handler da raiz do BC
-antes do genérico — o mesmo arranjo de `staff/application/errors.py`.
+- `SchedulingError` (domínio, Stage 4.1) — uma regra que o produto enuncia foi
+  violada: escalas da unidade não se sobrepõem (L-SC2), a versão vista pelo editor é
+  a vigente (decisão do sponsor F8, ADR 4.1.0001), violações bloqueantes e avisos sem
+  aceite, registro desligado.
+- `SchedulingApplicationError` (abaixo, sobre `ApplicationError`) — o caso de uso não
+  pôde ser atendido por motivo que não é regra: o recurso endereçado não existe, um id
+  enviado pelo cliente colide (ADR 4.3.0004), o pedido está malformado, ou o insumo
+  que staff devolve está incompleto.
+
+Cada classe tem **uma** base. O que cada erro vira para quem chamou é decidido pelo
+adapter de entrada, num mapa explícito — o deste BC é da Stage 4.5.
 
 **Ao contrário dos de domínio, alguns carregam estado**, porque a recusa só serve à
 borda se disser o que recusou: a versão atual (conflito), as violações (recusa e
@@ -25,10 +30,18 @@ Erros de invariante do domínio (`ShiftBandInUseError`, `DuplicateEntityIdError`
 from restaurant_hub.features.scheduling.domain.exceptions.errors import SchedulingError
 from restaurant_hub.features.scheduling.domain.value_objects.identifiers import AssignmentId
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
-from restaurant_hub.shared.domain.exceptions.base import NotFoundError
+from restaurant_hub.shared.application.errors import ApplicationError
 
 
-class ScheduleNotFoundError(SchedulingError, NotFoundError):
+class SchedulingApplicationError(ApplicationError):
+    """Raiz das falhas de caso de uso de scheduling que não são regra de negócio.
+
+    Par de `SchedulingError` (domínio): todo erro deste BC descende de exatamente
+    uma das duas (ADR 3.9.0001 §2).
+    """
+
+
+class ScheduleNotFoundError(SchedulingApplicationError):
     """Escala inexistente **no endereço** (tenant, unidade, escala) — ADR 3.4.0007.
 
     Escala de outra unidade ou de outro tenant cai aqui: id alheio é indistinguível
@@ -61,7 +74,7 @@ class SchedulePeriodTakenError(SchedulingError):
         super().__init__("a unidade já tem escala para um dos dias do período")
 
 
-class IdentifierInUseError(SchedulingError):
+class IdentifierInUseError(SchedulingApplicationError):
     """Id de escala ou de entidade interna já usado na unidade (ADR 4.3.0004)."""
 
     def __init__(self, id_type: str, value: str) -> None:
@@ -86,7 +99,7 @@ class UnacknowledgedViolationsError(SchedulingError):
         self.violations = violations
 
 
-class StaffMemberNotFoundError(SchedulingError, NotFoundError):
+class StaffMemberNotFoundError(SchedulingApplicationError):
     """Registro de funcionário que staff não devolve **na unidade** (alvo de alocação)."""
 
     def __init__(self, employee_id: str) -> None:
@@ -100,7 +113,7 @@ class InactiveStaffMemberError(SchedulingError):
         super().__init__(f"funcionário inativo não pode ser alocado: {employee_id!r}")
 
 
-class JobFunctionNotFoundError(SchedulingError, NotFoundError):
+class JobFunctionNotFoundError(SchedulingApplicationError):
     """Função de trabalho fora do catálogo do tenant."""
 
     def __init__(self, job_function_id: str) -> None:
@@ -126,7 +139,7 @@ class InactiveAllocationsInUseError(SchedulingError):
         return len(self.assignment_ids)
 
 
-class MissingStaffRecordsError(SchedulingError):
+class MissingStaffRecordsError(SchedulingApplicationError):
     """Registro alocado que staff não devolve — insumo incompleto, fail-closed (§5.12).
 
     Não vira "inativo" (ADR 4.2.0002 Alt D): a leitura e a edição recusam, com os
@@ -138,7 +151,7 @@ class MissingStaffRecordsError(SchedulingError):
         self.assignment_ids = assignment_ids
 
 
-class InvalidScheduleRequestError(SchedulingError):
+class InvalidScheduleRequestError(SchedulingApplicationError):
     """Pedido malformado: dia que não é `date`, recorte inválido, limite fora da faixa."""
 
     def __init__(self, reason: str) -> None:

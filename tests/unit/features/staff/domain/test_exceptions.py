@@ -17,7 +17,7 @@ from restaurant_hub.features.staff.domain.exceptions.errors import (
     TerminatedEmployeeLoginError,
     UnavailabilityNotFoundError,
 )
-from restaurant_hub.shared.domain.exceptions.base import DomainError, NotFoundError
+from restaurant_hub.shared.domain.exceptions.base import DomainError
 
 pytestmark = pytest.mark.unit
 
@@ -129,14 +129,12 @@ def test_remocao_inexistente_explica_o_erro() -> None:
 
 @pytest.mark.parametrize("exc_type", [EmployeeAlreadyHasLoginError, TerminatedEmployeeLoginError])
 def test_as_guardas_de_login_sao_conflito_e_nao_ausencia(exc_type: type[StaffError]) -> None:
-    """409 na borda, e por isso **fora** de `NotFoundError`.
+    """Regra do domínio, com uma raiz só (ADR 3.9.0001).
 
     As duas falam de um registro que **foi** encontrado e cujo estado gravado
-    (já vinculado; desligado) recusa a transição — o oposto de ausência. Herdar
-    `NotFoundError` por descuido as levaria ao 404 pela MRO (ADR 3.4.0002).
+    (já vinculado; desligado) recusa a transição — o oposto de ausência.
     """
-    assert issubclass(exc_type, StaffError)
-    assert not issubclass(exc_type, NotFoundError)
+    assert exc_type.__bases__ == (StaffError,)
 
 
 def test_ja_vinculado_cita_o_registro() -> None:

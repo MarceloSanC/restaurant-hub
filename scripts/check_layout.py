@@ -59,6 +59,7 @@ Retorna código de saída 0 se tudo OK, 1 se houver violações.
 
 import argparse
 import ast
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -226,6 +227,31 @@ EXPECTED_CONSTRUCTION_SITES = 1
 
 PACKAGE_MARKER_ANCHOR = "/__init__.py"
 
+# ---------------------------------------------------------------------------
+# Regra 11 — a hierarquia de exceções não fala de protocolo (ADR 3.9.0001 §6)
+# ---------------------------------------------------------------------------
+
+# Os módulos que **definem** a hierarquia de erro: as duas raízes de `shared` e os
+# módulos de erro de domínio e de aplicação de cada bounded context.
+ERROR_HIERARCHY_ANCHORS = ("/domain/exceptions/", "/application/errors.py")
+
+# O vocabulário do transporte, sem distinção de caixa. "status" e "borda" ficam de fora
+# de propósito: têm uso legítimo no domínio (status de escala; bordas inclusivas de um
+# período). As fronteiras não usam `\b`, porque `_` é caractere de palavra e as grafias
+# idiomáticas do framework vêm compostas — `exception_handler`, `HTTPException`,
+# `Http404`, `HTTP_404_NOT_FOUND`, `__mro__`. Número de status é só `4xx`/`5xx`, sem
+# letra, dígito ou ponto colado: `2.3.0003`, `R13` e `600` não casam. Limite conhecido:
+# um número de 400 a 599 que não é status (uma quantidade de minutos) também reprova —
+# o fallback é estreitar o padrão, nunca uma allowlist.
+PROTOCOL_VOCABULARY = re.compile(
+    r"(?<![a-z0-9])http"
+    r"|fastapi|starlette|handler"
+    r"|(?<![a-z0-9])mro(?![a-z0-9])"
+    r"|method[- ]resolution order|resolução de métodos"
+    r"|(?<![a-z0-9.])[45](?:\d\d|xx)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -307,6 +333,8 @@ def coverage_anchors() -> dict[str, str]:
     anchors[RESULTS_ANCHOR] = "regra 8 — um sítio de construção por result"
     anchors[PACKAGE_MARKER_ANCHOR] = "regra 9 — marcador de pacote"
     anchors[USE_CASES_ANCHOR] = "regra 10 — escrita múltipla só dentro de uma unidade"
+    for anchor in ERROR_HIERARCHY_ANCHORS:
+        anchors[anchor] = "regra 11 — a hierarquia de exceções não fala de protocolo"
     return anchors
 
 
@@ -527,6 +555,41 @@ def check_package_markers(src_root: Path) -> list[str]:
                     f"PACOTE: {rel}:{node.lineno} — marcador de pacote com código "
                     f"({type(node).__name__}). Re-exportar daqui abre um caminho de "
                     f"import que nenhuma regra de camada inspeciona."
+                )
+
+    return violations
+
+
+def error_hierarchy_files(src_root: Path) -> list[Path]:
+    """Os arquivos que a regra 11 varre — os que definem a hierarquia de exceções."""
+    return [
+        py_file
+        for py_file in sorted(src_root.rglob("*.py"))
+        if any(anchor in posix(py_file) for anchor in ERROR_HIERARCHY_ANCHORS)
+    ]
+
+
+def check_error_hierarchy_protocol(src_root: Path) -> list[str]:
+    """Regra 11 — módulo da hierarquia de exceções não menciona o transporte.
+
+    A herança de um erro diz o que ele **é**; o que ele vira para quem chamou é do
+    adapter de entrada, num mapa explícito (ADR 3.9.0001). Até a Stage 3.9 a ordem
+    das bases de um erro era escolhida para o lookup de handler do framework web, e
+    a docstring da raiz definia as classes pelo status — a inversão da Dependency
+    Rule escrita no próprio código. A varredura é **textual**, e não por `ast`, de
+    propósito: docstring e comentário são exatamente onde a inversão morava.
+    """
+    violations: list[str] = []
+
+    for py_file in error_hierarchy_files(src_root):
+        rel = py_file.relative_to(src_root.parent)
+        for numero, linha in enumerate(py_file.read_text(encoding="utf-8").splitlines(), 1):
+            achado = PROTOCOL_VOCABULARY.search(linha)
+            if achado:
+                violations.append(
+                    f"PROTOCOLO: {rel}:{numero} — {achado.group(0)!r} num módulo da "
+                    f"hierarquia de exceções. O que o erro vira para quem chamou é do "
+                    f"adapter de entrada (ADR 3.9.0001); descreva-o lá."
                 )
 
     return violations
@@ -944,6 +1007,7 @@ def main() -> int:
         *check_result_construction_sites(src_root),
         *check_package_markers(src_root),
         *check_multi_write_unit_of_work(src_root),
+        *check_error_hierarchy_protocol(src_root),
     ]
 
     if all_violations:

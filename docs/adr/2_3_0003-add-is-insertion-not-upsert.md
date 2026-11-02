@@ -5,7 +5,7 @@ when-use: Reference when a fake and a real adapter disagree, before relaxing a f
 keywords: [adr, contract-test, fake, upsert, insertion, repository, integrity-error, primary-key, identity]
 status: accepted
 created_at: 2026-07-19
-updated_at: 2026-07-19
+updated_at: 2026-11-02
 adr_id: 2.3.0003
 decision: All four in-memory identity repository fakes stop silently overwriting an existing key and instead raise a dedicated AlreadyExists error mirroring what the Postgres primary key enforces (with a separate error for refresh-token fingerprint reuse), and the Stage 2.2 test asserting the opposite is inverted because it encoded a behaviour its own port forbids
 context_stage: 2.3-identity-persistence
@@ -209,3 +209,17 @@ accidental 500 — ADR 2.2.0003).
   constraints enabling the translation)
 - Port contracts: `src/restaurant_hub/features/identity/application/ports/out/`
 - Superseded expectation: `tests/unit/features/identity/application/test_repository_fakes.py::test_regravar_o_mesmo_usuario_nao_e_conflito_de_email`
+
+## Supersessão parcial
+
+**2026-11-02 — a Decisão 2 (*"Five new errors join `application/errors.py`, all subclasses of
+`IdentityError`"*) e o parágrafo *"All four errors subclass `IdentityError`, preserving Stage
+2.2's invariant #16"* foram superados por [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)** (Stage 3.9, issue #48). As cinco colisões
+de chave (`RestaurantAlreadyExistsError`, `UnitAlreadyExistsError`, `UserAlreadyExistsError`,
+`SessionAlreadyExistsError`, `SessionFingerprintAlreadyExistsError`) — e
+`UnitMembershipAlreadyExistsError` — descendem agora de `IdentityApplicationError`: colisão de
+identificador técnico não é regra de negócio. A garantia que a invariante #16 comprava (nada
+vira 500 por descuido) passou a ser dos gates de `tests/unit/test_status_map.py` (raiz única do
+BC, mapa total, handler registrado em cada raiz). A regra desta decisão — `add` é inserção, não
+upsert, com um erro por violação — continua valendo. Nota *append-only*; o corpo acima não foi
+editado.
