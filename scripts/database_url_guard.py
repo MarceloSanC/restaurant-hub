@@ -8,6 +8,8 @@ branch e o `make run` leria e escreveria nele. A regra mora aqui, e os pontos
 que a aplicam importam daqui:
 
 - a fixture `database_url` de `tests/conftest.py`, antes de qualquer conexão;
+- `make migrate` e `make run`, que passam por `main()` antes de chamar o Alembic
+  e o uvicorn — com a guarda recusando, nenhum dos dois roda;
 - o `scripts/worktree-new.py`, que importa daqui o `is_loopback` — o critério de
   quais URLs ele reescreve é o de quais URLs a guarda confere.
 
@@ -21,11 +23,22 @@ produção (sem `make`) passam por ela sem mudar de comportamento.
 (`python scripts/worktree-new.py`) e importa daqui o `is_loopback`.
 O SQLAlchemy, o pydantic-settings e o `Settings` só entram quando a guarda de
 fato roda, sempre dentro do venv.
+
+Uso (pelos alvos do Makefile, da raiz do checkout):
+    uv run python scripts/database_url_guard.py migrate
+    uv run python scripts/database_url_guard.py run
+
+Exit codes:
+  1  a `DATABASE_URL` não alcança o Postgres deste checkout (nada roda)
+  *  o do Alembic / uvicorn, quando a guarda passa
 """
 
 from __future__ import annotations
 
+import argparse
 import ipaddress
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -132,3 +145,49 @@ def checkout_database_url(compose_dir: Path = ROOT) -> tuple[str, str | None]:
             f"({compose_dir}): rode o pytest e o make da raiz do checkout."
         )
     return database_url, mismatch
+
+
+# O que cada alvo do Makefile roda depois da guarda — os comandos de antes da
+# #85, pelo python do venv que roda a guarda.
+TARGET_COMMANDS: dict[str, list[str]] = {
+    # O `-c` é obrigatório: o alembic.ini vive em migrations/, e o alembic só
+    # procura `alembic.ini` no diretório corrente (Stage 2.3).
+    "migrate": ["-m", "alembic", "-c", "migrations/alembic.ini", "upgrade", "head"],
+    "run": [
+        "-m",
+        "uvicorn",
+        "restaurant_hub.main:app",
+        "--reload",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+    ],
+}
+
+
+def main(argv: list[str] | None = None, compose_dir: Path = ROOT) -> int:
+    """Confere a `DATABASE_URL` e, se ela alcança o Postgres deste checkout, roda o alvo.
+
+    O comando roda no diretório corrente, como rodava direto do Makefile: o
+    Alembic e a app leem o mesmo `.env` que a guarda acabou de conferir.
+    """
+    parser = argparse.ArgumentParser(
+        description="Confere a DATABASE_URL deste checkout e roda o alvo do Makefile."
+    )
+    parser.add_argument("target", choices=sorted(TARGET_COMMANDS))
+    args = parser.parse_args(argv)
+
+    _, mismatch = checkout_database_url(compose_dir)
+    if mismatch is not None:
+        print(mismatch, file=sys.stderr)
+        return 1
+    command = [sys.executable, *TARGET_COMMANDS[args.target]]
+    try:
+        return subprocess.run(command, check=False).returncode
+    except KeyboardInterrupt:  # Ctrl+C no `make run`: o filho recebe o mesmo sinal
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

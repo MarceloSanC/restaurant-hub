@@ -20,6 +20,7 @@ dois é um só (o script importa o da guarda, issue #85).
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -31,6 +32,7 @@ import yaml
 from sqlalchemy import make_url
 
 from restaurant_hub.shared.infrastructure.config.settings import get_settings
+from scripts import database_url_guard as guard
 from scripts.database_url_guard import (
     COMPOSE_DEFAULT_POSTGRES_PORT,
     database_port_mismatch,
@@ -51,6 +53,9 @@ LIBPQ_DEFAULT_PORT = 5432
 OTHER_PORT = 5999
 SECRET = "s3gr3d0"
 PORTS = {"APP_PORT": 8008, "POSTGRES_PORT": PUBLISHED_PORT, "REDIS_PORT": 6387}
+COMMAND_FAILED = 3
+SIGINT_EXIT = 130
+ARGPARSE_USAGE_EXIT = 2
 
 
 def _load_script() -> ModuleType:
@@ -371,3 +376,151 @@ def test_every_env_the_script_writes_passes_the_guard(
     wn.write_worktree_env_ports(worktree, PORTS)
 
     assert make_url(resolve_test_database_url(compose_dir=worktree)).port == expected_port
+
+
+# ---------------------------------------------------------------------------
+# `make migrate` e `make run` (issue #85)
+# ---------------------------------------------------------------------------
+
+
+class _Ran:
+    """O `subprocess.run` trocado: guarda o comando e devolve o exit code pedido."""
+
+    def __init__(self, returncode: int = 0) -> None:
+        self.commands: list[list[str]] = []
+        self.returncode = returncode
+
+    def __call__(self, command: list[str], *, check: bool) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        self.commands.append(command)
+        return subprocess.CompletedProcess(command, self.returncode)
+
+
+@pytest.fixture
+def ran(monkeypatch: pytest.MonkeyPatch) -> _Ran:
+    fake = _Ran()
+    monkeypatch.setattr(guard.subprocess, "run", fake)
+    return fake
+
+
+@pytest.mark.parametrize("target", ["migrate", "run"])
+def test_make_target_refuses_with_the_suite_message(
+    worktree: Path, ran: _Ran, capsys: pytest.CaptureFixture[str], target: str
+) -> None:
+    """O `.env` da #58: o alvo sai com 1, a mensagem é a da suíte e nada roda."""
+    (worktree / ".env").write_text(f"POSTGRES_PORT={PUBLISHED_PORT}\n", encoding="utf-8")
+
+    assert guard.main([target], compose_dir=worktree) == 1
+
+    assert ran.commands == []
+    with pytest.raises(pytest.fail.Exception) as refusal:
+        resolve_test_database_url(compose_dir=worktree)
+    assert capsys.readouterr().err.strip() == str(refusal.value).strip()
+
+
+@pytest.mark.parametrize(
+    ("target", "tail"),
+    [
+        ("migrate", ["-m", "alembic", "-c", "migrations/alembic.ini", "upgrade", "head"]),
+        ("run", ["-m", "uvicorn", "restaurant_hub.main:app", "--reload", "--host", "0.0.0.0"]),
+    ],
+)
+def test_make_target_runs_its_command_when_the_url_matches(
+    worktree: Path, ran: _Ran, target: str, tail: list[str]
+) -> None:
+    wn.write_worktree_env_ports(worktree, PORTS)
+
+    assert guard.main([target], compose_dir=worktree) == 0
+
+    [command] = ran.commands
+    assert command[0] == sys.executable
+    assert command[1 : 1 + len(tail)] == tail
+
+
+def test_make_target_returns_the_command_exit_code(worktree: Path, ran: _Ran) -> None:
+    """Migration que falha reprova o `make migrate` — o exit code do Alembic passa adiante."""
+    ran.returncode = COMMAND_FAILED
+
+    assert guard.main(["migrate"], compose_dir=worktree) == COMMAND_FAILED
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        # CI: URL por `env:` na 5432, sem `.env` nem `POSTGRES_PORT`
+        _url("localhost:5432"),
+        # devcontainer/compose: o service, que a regra não amarra
+        _url("postgres:5432"),
+        # produção: banco remoto
+        _url("db.example.com:5432"),
+    ],
+)
+def test_ci_compose_and_production_shapes_pass(
+    worktree: Path, ran: _Ran, monkeypatch: pytest.MonkeyPatch, database_url: str
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", database_url)
+
+    assert guard.main(["migrate"], compose_dir=worktree) == 0
+    assert len(ran.commands) == 1
+
+
+def test_ctrl_c_on_make_run_exits_quietly(worktree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def interrupted(command: list[str], *, check: bool) -> subprocess.CompletedProcess[str]:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(guard.subprocess, "run", interrupted)
+
+    assert guard.main(["run"], compose_dir=worktree) == SIGINT_EXIT
+
+
+def test_unknown_target_is_a_usage_error(worktree: Path, ran: _Ran) -> None:
+    with pytest.raises(SystemExit) as usage:
+        guard.main(["upgrade"], compose_dir=worktree)
+
+    assert usage.value.code == ARGPARSE_USAGE_EXIT
+    assert ran.commands == []
+
+
+def test_makefile_routes_migrate_and_run_through_the_guard() -> None:
+    """Sem isto, a guarda existiria e o Makefile a contornaria."""
+    makefile = (_REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    recipes: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in makefile.splitlines():
+        if line.startswith("\t") and current is not None:
+            recipes[current].append(line.strip())
+        elif line and not line.startswith(("#", " ")) and ":" in line:
+            current = line.split(":", 1)[0]
+            recipes[current] = []
+        elif not line.startswith("\t"):
+            current = None
+
+    assert recipes["migrate"] == ["uv run python scripts/database_url_guard.py migrate"]
+    assert recipes["run"] == ["uv run python scripts/database_url_guard.py run"]
+
+
+def test_guard_script_refuses_end_to_end(tmp_path: Path) -> None:
+    """O `make migrate` de verdade, sem o `make`: o processo sai com 1 antes do Alembic."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"DATABASE_URL", "POSTGRES_PORT"}
+    }
+    env["POSTGRES_PORT"] = str(PUBLISHED_PORT)
+    env["DATABASE_URL"] = _url("localhost:5999")
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    result = subprocess.run(
+        [sys.executable, str(_GUARD), "migrate"],
+        cwd=_REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "A DATABASE_URL aponta para a porta 5999 de localhost" in result.stderr
+    assert SECRET not in result.stderr
+    assert "alembic" not in result.stdout.lower()

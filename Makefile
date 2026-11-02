@@ -66,9 +66,14 @@ install:
 
 # ---------------------------------------------------------------------------
 # run — servidor de desenvolvimento
+#
+# Passa pela guarda da DATABASE_URL (issue #85): numa worktree, uma URL loopback
+# fora da POSTGRES_PORT dela faria a app ler e escrever no banco de outra
+# frente. A guarda recusa e o uvicorn nem sobe; o comando está em
+# scripts/database_url_guard.py (TARGET_COMMANDS).
 # ---------------------------------------------------------------------------
 run:
-	uv run uvicorn restaurant_hub.main:app --reload --host 0.0.0.0 --port 8000
+	uv run python scripts/database_url_guard.py run
 
 # ---------------------------------------------------------------------------
 # migrate — aplica todas as migrations pendentes
@@ -76,9 +81,14 @@ run:
 # O `-c` é obrigatório: o alembic.ini deste projeto vive em migrations/, e o
 # alembic só procura por `alembic.ini` no diretório corrente. Sem a flag o alvo
 # falha com "No 'script_location' key found in configuration" (Stage 2.3).
+#
+# Passa pela guarda da DATABASE_URL (issue #85), como a suíte: uma URL loopback
+# fora da POSTGRES_PORT da worktree aplicaria as migrations desta branch no
+# banco de outra frente. O comando (com o `-c`) está em
+# scripts/database_url_guard.py (TARGET_COMMANDS).
 # ---------------------------------------------------------------------------
 migrate:
-	uv run alembic -c migrations/alembic.ini upgrade head
+	uv run python scripts/database_url_guard.py migrate
 
 # ---------------------------------------------------------------------------
 # check — gate completo, bloqueante no CI (lint + types + layout + lock + docs
