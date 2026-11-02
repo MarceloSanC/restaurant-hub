@@ -102,6 +102,11 @@ def _recipe(target: str) -> list[list[str]]:
     header = f"{target}:"
     if header not in lines:
         pytest.fail(f"o Makefile não tem mais o target `{target}`")
+    # Uma segunda regra com o mesmo alvo troca a receita (o make avisa "overriding
+    # recipe" e roda a última); comparar o hook com a primeira seria cobrar a morta.
+    assert lines.count(header) == 1, (
+        f"o Makefile declara o target `{target}` {lines.count(header)} vezes"
+    )
     commands: list[list[str]] = []
     for line in lines[lines.index(header) + 1 :]:
         if not line.startswith("\t"):
