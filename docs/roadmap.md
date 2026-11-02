@@ -184,7 +184,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#77](https://github.com/MarceloSanC/restaurant-hub/issues/77) | Trocar o ponteiro `(#49)` da fachada de identity e do ADR 3.5.0001 pelo ADR 3.7.0001 | identity | docs + application (fachada) | open | `3.7-application-authorization` |
 | [#78](https://github.com/MarceloSanC/restaurant-hub/issues/78) | Medir sob carga o custo da dupla autorização de staff (borda + use case) | staff | ops (medição) | blocked | `6.3-ops-baseline` |
 | [#79](https://github.com/MarceloSanC/restaurant-hub/issues/79) | Citar o roadmap por âncora estável em vez de número de linha (gate no `docs-check`) | shared | docs + tooling | done | — |
-| [#81](https://github.com/MarceloSanC/restaurant-hub/issues/81) | Merge do auditor de dentro da worktree não apaga a branch remota | shared | docs | open | — |
+| [#81](https://github.com/MarceloSanC/restaurant-hub/issues/81) | Merge do auditor de dentro da worktree não apaga a branch remota | shared | docs + tooling | done | — |
 | [#82](https://github.com/MarceloSanC/restaurant-hub/issues/82) | Tripwire para campo de credencial em resposta que nasça sem a marca `x-credential` (especulativa; disparo: rota de reemissão do link ou primeiro frontend do Step 3) | shared | tests (e2e) | open | #61 |
 | [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | open | #58 |
 | [#85](https://github.com/MarceloSanC/restaurant-hub/issues/85) | `make migrate` e `make run` sem a guarda da `DATABASE_URL` da worktree | shared | tooling | open | #58 |
