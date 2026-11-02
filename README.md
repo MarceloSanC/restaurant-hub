@@ -101,8 +101,8 @@ make docker-down             # derruba a stack
 |---------|-----------|
 | `make setup` | `uv sync --extra dev` (gera/usa `uv.lock`) + instala hooks `pre-commit` e `commit-msg` pelo `scripts/install_hooks.py` — só no checkout principal; numa worktree, não toca neles (GIT-WORKFLOW §"Hooks do git") |
 | `make install` | Reinstala dependências (após mudança no `pyproject.toml`) |
-| `make run` | Sobe o servidor de desenvolvimento com hot-reload |
-| `make migrate` | Aplica migrations pendentes (`alembic upgrade head`) |
+| `make run` | Sobe o servidor de desenvolvimento com hot-reload, na `APP_PORT` (8000 sem ela), depois da guarda da `DATABASE_URL` |
+| `make migrate` | Aplica migrations pendentes (`alembic upgrade head`), depois da guarda da `DATABASE_URL` |
 | `make check` | Gate completo: lint + typecheck + layout + import-linter + lock + docs + testes com cobertura ≥ 90% |
 | `make lint` | Roda `ruff check` — apenas reporta |
 | `make fmt` | Roda `ruff format` + `ruff check --fix` |
