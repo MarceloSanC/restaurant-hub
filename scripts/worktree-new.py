@@ -53,7 +53,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import ipaddress
 import json
 import re
 import shutil
@@ -63,6 +62,15 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# O critério de loopback é o da guarda da `DATABASE_URL` (issue #85): o script só
+# reescreve a URL que a guarda confere. `python scripts/worktree-new.py` já põe
+# `scripts/` no `sys.path`; carregado pelo caminho (os testes), não — daí a linha.
+# O topo de `database_url_guard` é biblioteca padrão: o script segue rodando sem
+# o venv.
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))
+from database_url_guard import is_loopback  # noqa: E402
 
 # Tipos aceitos no prefixo do branch — espelha CONVENTIONS.md §4.
 BRANCH_TYPES = {
@@ -472,31 +480,13 @@ def assign_worktree_ports(new_wt: Path) -> dict[str, int]:
     return chosen
 
 
-def is_loopback(host: str | None) -> bool:
-    """Host que alcança a porta publicada no host: `localhost`, 127.0.0.0/8 ou `::1`.
-
-    Os demais não passam por ela: `postgres` é o service dentro da rede do
-    compose, que responde na porta do contêiner (5432), e um banco remoto não
-    tem relação com o mapeamento local. `0.0.0.0` também fica de fora: não é
-    endereço de destino (RFC 1122 §3.2.1.3).
-    """
-    if not host:
-        return False
-    if host.lower() == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
 def url_with_port(url: str, port: int) -> str | None:
     """`url` com a porta trocada por `port`, ou None quando não aponta para loopback.
 
     Só o trecho `host:porta` muda — usuário, senha, banco e query ficam byte a
     byte. URL sem porta ganha a porta. URL ilegível (porta não numérica, sem
-    host) também volta None: fica como está, e a guarda da suíte
-    (`tests/conftest.py`) é quem recusa a divergência que sobrar.
+    host) também volta None: fica como está, e a guarda
+    (`scripts/database_url_guard.py`) é quem recusa a divergência que sobrar.
     """
     try:
         parts = urlsplit(url)  # colchete de IPv6 sem par levanta ValueError

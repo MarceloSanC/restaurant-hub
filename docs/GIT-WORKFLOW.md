@@ -596,20 +596,23 @@ auto-atribuição. Se a app ler uma URL dele, a chave da URL vai em
 `URL_PORT_KEYS` (a porta da URL acompanha) e o default dela, o do
 `Settings`, em `URL_DEFAULTS` — sem ele, a worktree cujo `.env` copiado
 não traz a chave fica no default, na porta do checkout principal, e a
-issue #58 se repete nesse serviço. A guarda da suíte confere só a
-`DATABASE_URL`.
+issue #58 se repete nesse serviço. A guarda
+(`scripts/database_url_guard.py`) confere só a `DATABASE_URL`.
 
 #### Banco e containers da worktree
 
 Cada worktree tem o **seu** Postgres, publicado na `POSTGRES_PORT` do
 `.env` dela. O script já escreve a `DATABASE_URL` nessa porta (issue #58),
-e a fixture `database_url` (`tests/conftest.py`) **recusa** a sessão de
-testes quando a URL, com host loopback, não aponta para a porta que o
-compose do checkout publica — a `POSTGRES_PORT` do ambiente ou do `.env`
-da raiz, ou 5432 sem ela. Recusa antes de conectar, porque a fixture
-`engine` recria o schema e derrubaria o banco de outra frente; e o
-`Settings` lê o `.env` do diretório corrente, então o `pytest` roda da
-raiz da worktree. Cabe a quem usa a worktree subir e derrubar esse banco:
+e a guarda `scripts/database_url_guard.py` **recusa** a URL que, com host
+loopback, não aponta para a porta que o compose do checkout publica — a
+`POSTGRES_PORT` do ambiente ou do `.env` da raiz, ou 5432 sem ela. Três
+pontos a aplicam, com a mesma mensagem: a fixture `database_url`
+(`tests/conftest.py`), antes de conectar, porque a fixture `engine` recria
+o schema e derrubaria o banco de outra frente; o `make migrate`, antes do
+Alembic; e o `make run`, antes do uvicorn (issue #85). O `Settings` lê o
+`.env` do diretório corrente, então `pytest` e `make` rodam da raiz da
+worktree. O `make run` sobe na `APP_PORT` do checkout (8000 sem ela), a
+mesma em que o compose publicaria a app. Cabe a quem usa a worktree subir e derrubar esse banco:
 
 - **Ao abrir a worktree:** `docker compose up -d --wait postgres` dentro
   dela, antes do primeiro `pytest`. Se o `up` falhar com a porta
