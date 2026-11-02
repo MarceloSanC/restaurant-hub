@@ -24,7 +24,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.schedule_period imp
     SchedulePeriod,
 )
 
-_UM_DIA = timedelta(days=1)
+_ONE_DAY = timedelta(days=1)
 
 
 class Weekday(StrEnum):
@@ -44,8 +44,8 @@ class Weekday(StrEnum):
 
         Depende da ordem de declaração dos membros, que é a ordem ISO.
         """
-        membros: list[Weekday] = [*cls]
-        return membros[day.isoweekday() - 1]
+        members: list[Weekday] = [*cls]
+        return members[day.isoweekday() - 1]
 
     @classmethod
     def from_string(cls, value: str) -> "Weekday":
@@ -91,7 +91,7 @@ class DayCutoff:
         especial (ADR 4.1.0002 §2; ADR 4.1.0008).
         """
         if instant.time() < self.at:
-            return instant.date() - _UM_DIA
+            return instant.date() - _ONE_DAY
         return instant.date()
 
 

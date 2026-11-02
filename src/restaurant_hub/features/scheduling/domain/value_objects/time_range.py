@@ -22,8 +22,8 @@ from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidTimeRangeError,
 )
 
-_UM_MINUTO = timedelta(minutes=1)
-_DURACAO_MAXIMA = timedelta(hours=24)
+_ONE_MINUTE = timedelta(minutes=1)
+_MAX_DURATION = timedelta(hours=24)
 
 
 @dataclass(frozen=True)
@@ -49,14 +49,14 @@ class TimeRange:
             raise InvalidTimeRangeError(
                 "instantes devem ser ingênuos (wall-clock do fuso da unidade, sem tzinfo)"
             )
-        for instante in (self.start, self.end):
-            if instante.second != 0 or instante.microsecond != 0:
+        for instant in (self.start, self.end):
+            if instant.second != 0 or instant.microsecond != 0:
                 raise InvalidTimeRangeError(
                     "instantes devem ser de minuto inteiro (segundo e microssegundo zero)"
                 )
         if self.start >= self.end:
             raise InvalidTimeRangeError("início deve anteceder o fim")
-        if self.end - self.start > _DURACAO_MAXIMA:
+        if self.end - self.start > _MAX_DURATION:
             raise InvalidTimeRangeError("duração nominal não pode passar de 24h")
         # nominal_minutes só é lido depois de o par ser válido: antes disso a
         # checagem do intervalo rodaria sobre duração negativa.
@@ -68,7 +68,7 @@ class TimeRange:
     @property
     def nominal_minutes(self) -> int:
         """Duração de relógio da faixa, em minutos inteiros (`end - start`)."""
-        return (self.end - self.start) // _UM_MINUTO
+        return (self.end - self.start) // _ONE_MINUTE
 
     def worked_minutes(self, break_minutes: int | None = None) -> int:
         """Minutos trabalhados — `horas(a)`, o sítio único da aritmética de horas.
@@ -78,8 +78,8 @@ class TimeRange:
         do intervalo da alocação são impostos por quem o conhece junto com a
         faixa (`ShiftBand`), não aqui: este método é só a expressão.
         """
-        desconto = self.break_minutes if break_minutes is None else break_minutes
-        return self.nominal_minutes - desconto
+        deducted_break = self.break_minutes if break_minutes is None else break_minutes
+        return self.nominal_minutes - deducted_break
 
     @property
     def hours_key(self) -> tuple[datetime, datetime]:

@@ -75,13 +75,13 @@ class EmployeeFacts:
     unavailabilities: tuple[UnavailabilityWindow, ...]
 
     def __post_init__(self) -> None:
-        horas = self.contracted_weekly_hours
-        if horas is not None and not isinstance(horas, Decimal):
+        hours = self.contracted_weekly_hours
+        if hours is not None and not isinstance(hours, Decimal):
             raise InvalidEvaluationInputError(
-                f"carga semanal contratada deve ser Decimal (recebido: {horas!r})"
+                f"carga semanal contratada deve ser Decimal (recebido: {hours!r})"
             )
         # is_finite() ANTES de comparar: comparar NaN com 0 levantaria InvalidOperation.
-        if horas is not None and (not horas.is_finite() or horas <= 0):
+        if hours is not None and (not hours.is_finite() or hours <= 0):
             raise InvalidEvaluationInputError(
-                f"carga semanal contratada deve ser finita e > 0 (recebido: {horas})"
+                f"carga semanal contratada deve ser finita e > 0 (recebido: {hours})"
             )
