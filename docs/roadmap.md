@@ -172,7 +172,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37) | Varrer `workforce.md` contra os ADRs 3.1.x — três lacunas declaradas abertas já foram fechadas | staff | docs | done | — |
 | [#41](https://github.com/MarceloSanC/restaurant-hub/issues/41) | Habilitação de função de trabalho por unidade (função segue do restaurante; gerente cria para a sua unidade, alcance extra-unidade para todas) | staff | domain + application + adapters/out | open | `3.4-staff-access-scope` |
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
-| [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
+| [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | done | #43, #45 |
 | [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | done | — |
 | [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | done | — |
 | [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
