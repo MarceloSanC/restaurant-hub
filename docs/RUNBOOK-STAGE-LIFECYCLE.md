@@ -5,7 +5,7 @@ when-use: Toda vez que iniciar uma nova Stage no projeto destino
 keywords: [runbook, stage, concept, technical, execucao, lifecycle]
 status: draft
 created_at: 2026-05-14
-updated_at: 2026-05-14
+updated_at: 2026-11-02
 runbook_id: stage-lifecycle
 triggers:
   - Stage anterior foi mergeada e a próxima está pronta para iniciar
@@ -635,20 +635,17 @@ Ver \`docs/stages/$N.$M-$slug/concept.md\` e \`technical.md\`.
 "@
 ```
 
-Aguardar gates do GIT-WORKFLOW (CI verde, +1 aprovação). Após aprovação:
-
-```powershell
-gh pr merge <num-pr> --merge --delete-branch
-```
+Aguardar gates do GIT-WORKFLOW (CI verde, +1 aprovação). Após aprovação, mergear pela
+sequência de `docs/GIT-WORKFLOW.md` §"Merge e limpeza da worktree", passos 3–4: base
+reconferida depois do CI e `gh pr merge <num-pr> --merge` do checkout principal, **sem**
+`--delete-branch` (com a branch presa à worktree ele não apaga a remota).
 
 ### Passo 12 — Cleanup
 
-```powershell
-docker compose down -v                    # dentro da worktree da Stage
-Set-Location ../../restaurant-hub         # volta ao checkout principal (sempre em develop)
-python scripts/worktree-rm.py <branch>    # worktree + branch local + prune
-git pull origin develop
-```
+Passos 4–7 da mesma seção, do checkout principal: `git pull origin develop` **antes** do
+`worktree-rm` (o `git branch -d` dele precisa do merge no `develop` local),
+`docker compose down -v` dentro da worktree, `python scripts/worktree-rm.py <branch>
+--delete-remote` e a verificação (remota, local, worktree, containers, hooks).
 
 Próxima Stage: voltar ao Passo 1 com a próxima `N.M` do roadmap.
 

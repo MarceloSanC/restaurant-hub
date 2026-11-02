@@ -96,13 +96,13 @@ seção correspondente. Cada uma traz três blocos:
 
 ## 🔀 `gh pr merge`
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Gates de PR + §Etapa 6 + §Comportamento bloqueante
+- **LER:** `docs/GIT-WORKFLOW.md` §Gates de PR + §Etapa 6 + §"Merge e limpeza da worktree" + §Comportamento bloqueante
 - **CHECK:**
   ```bash
   gh pr view --json mergeable,statusCheckRollup,reviewDecision
   gh pr checks
   ```
-- **GOTCHA:** merge commit obrigatório. **NUNCA** `--squash`, **NUNCA** `--rebase`. Comando: `gh pr merge <num> --merge --delete-branch`.
+- **GOTCHA:** merge commit obrigatório. **NUNCA** `--squash`, **NUNCA** `--rebase`. Comando: `gh pr merge <num> --merge`, do checkout principal — **sem** `--delete-branch`, que não apaga a remota com a branch presa a uma worktree. A remota sai no `worktree-rm.py <branch> --delete-remote`, rodado **depois** do `git pull` no principal (GIT-WORKFLOW §"Merge e limpeza da worktree").
 
 ## 🩹 hotfix
 

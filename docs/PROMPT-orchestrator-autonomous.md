@@ -5,7 +5,7 @@ when-use: Avançar o backlog aberto do roadmap (Stages e issues) sem acompanhame
 keywords: [prompt, orchestrator, autonomous, worktree, parallel, subagents, audit, auto-merge, github-actions]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-01
+updated_at: 2026-11-02
 ---
 
 # Prompt — Orquestrador Autônomo de Stages e Issues
@@ -17,9 +17,11 @@ subagentes de contexto zerado e responde aos forks deles.
 ## 1. Regras
 
 1. **Nenhuma implementação no checkout principal.** Ele fica em `develop`, limpo. Toda Stage/issue
-   começa com `python scripts/worktree-new.py <branch> --no-vscode` (issue-first; o script cria a
-   issue com `--create-issue` se faltar). Isso vale também para docs de processo do próprio
-   orquestrador.
+   começa com `python scripts/worktree-new.py <branch> --no-vscode --no-setup` e
+   `uv sync --extra dev` dentro da worktree (issue-first; o script cria a issue com
+   `--create-issue` se faltar). O `--no-setup` evita que a worktree religue os hooks do git,
+   compartilhados, no venv dela ([`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Criar a worktree";
+   issue #100). Isso vale também para docs de processo do próprio orquestrador.
 2. **Teto: 3 worktrees de implementação** existindo ao mesmo tempo, **contando as com PR aberto
    ainda não mergeado**. Abrir uma nova só quando outra for removida e só se ela **não conflitar**
    com as em voo (critérios em [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Branches em execução":
@@ -64,19 +66,21 @@ nunca o relatório nem o raciocínio do implementador. Roda a skill `stage-audit
 
 1. Julga; aplica na própria branch as correções dentro do escopo (commits no padrão da Stage/issue);
    achado fora do escopo vira issue nova.
-2. Grava no PR o comentário de veredito e o label de auditoria `complete` (CONVENTIONS §3.6) **depois**
-   do run do último push (corrida push × edit no `audit-gate`).
+2. Grava no PR o comentário de veredito e o label de auditoria `complete` (CONVENTIONS §3.6) com a
+   branch já rebaseada e **depois** do run do último push, e confere que a edição gerou run novo do
+   `audit-gate` — [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Merge e limpeza da worktree" passos 1–2
+   (PR em conflito não roda workflow; `gh run rerun` reusa o corpo antigo).
 3. Confere as **condições de merge**, cada uma com saída de comando colada:
    - label `complete` gravado; nenhum blocker aberto;
    - Actions verde no head do PR, inclusive `audit-gate` (`gh pr checks <num>`);
-   - branch rebaseada em `origin/develop` e sem carona de outro escopo
-     (`git log origin/develop..HEAD`); se precisou rebasear, `git push --force-with-lease` e esperar
-     o Actions de novo;
+   - sem carona de outro escopo (`git log origin/develop..HEAD`) e **0 commits atrás de
+     `origin/develop` medido depois do CI verde, logo antes do merge** (passo 3 da seção acima —
+     `develop` anda durante a espera); atrás → rebase, push e esperar o Actions de novo;
    - nenhum fork P pendente.
-4. Tudo valendo → `gh pr merge <num> --merge --delete-branch` (merge commit; nunca squash/rebase),
-   `docker compose down -v` dentro da worktree, `python scripts/worktree-rm.py <branch>` (remove
-   worktree e branch local; `git branch -d <branch>` se sobrar). Alguma falhando → **não mergeia**;
-   reporta o que travou.
+4. Tudo valendo → executa os passos 4–7 da mesma seção, **do checkout principal**: merge commit sem
+   `--delete-branch`, `git pull`, `docker compose down -v` na worktree,
+   `worktree-rm.py <branch> --delete-remote`, e cola a saída da verificação (remota, local,
+   worktree, containers, hooks). Alguma condição falhando → **não mergeia**; reporta o que travou.
 5. Devolve ao orquestrador: veredito, hash do merge (ou o bloqueio), issues abertas, aprendizados.
 
 > **Override consciente da skill.** `stage-audit`/`issue-audit` dizem "nunca faz merge — é do

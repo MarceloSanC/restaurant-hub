@@ -5,7 +5,7 @@ when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) trav
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
 created_at: 2026-07-05
-updated_at: 2026-11-01
+updated_at: 2026-11-02
 ---
 
 # Prompt — Orquestração de Step em Sessão Mestra
@@ -319,21 +319,22 @@ fim da re-auditoria (§3.3), confere as **condições de merge** e, se todas val
 2. Status global da re-auditoria **sem blocker aberto**; todo finding tratado na Stage ou
    convertido em issue (§3.2).
 3. **CI verde** no último commit do PR (`gh pr checks <num>`), inclusive `audit-gate`.
-4. Branch **à frente de `origin/develop`** e sem carona de outro escopo (GIT-WORKFLOW §Etapa 4).
+4. Branch **à frente de `origin/develop`**, sem carona de outro escopo (GIT-WORKFLOW §Etapa 4) e
+   **0 commits atrás** de `origin/develop`, medido depois do CI verde, logo antes do merge
+   (`develop` anda durante a espera).
 5. **Nenhum fork P pendente** de resposta humana e nenhum HALT aberto (§2).
 
 **Qualquer condição falhando → não mergeia:** HALT-and-park (§2), relatório ao humano explicando o
 que travou, e espera. Não force progresso nem “conserte” a condição gravando o label à mão.
 
 Com as condições valendo, executar o fechamento (invocar `git-versioning-pointer` antes das
-operações git):
-
-```bash
-gh pr merge <num> --merge --delete-branch          # merge commit (nunca squash/rebase) + apaga a branch remota
-docker compose down -v                             # DENTRO da worktree: o worktree-rm não pega o postgres do compose
-python scripts/worktree-rm.py <branch>             # worktree + branch local + prune
-git pull origin develop                            # no checkout principal (sempre em develop)
-```
+operações git) pela sequência de [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Merge e limpeza da
+worktree", passos 3–7, **do checkout principal**: base reconferida, `gh pr merge <num> --merge`
+**sem** `--delete-branch` (com a branch presa à worktree ele não apaga a remota), `git pull`,
+`docker compose down -v` dentro da worktree, `worktree-rm.py <branch> --delete-remote` e a
+verificação (remota, local, worktree, containers, hooks). O label `complete` do re-auditor (§3.3)
+segue os passos 1–2 da mesma seção: gravado com a branch sem conflito, e conferido o run novo do
+`audit-gate`.
 
 > **Override consciente da skill.** A `stage-audit` diz "nunca faz merge — é do usuário, salvo
 > pedido explícito". Aqui o **pedido explícito é este prompt**, ratificado pelo humano no

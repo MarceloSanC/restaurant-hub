@@ -5,7 +5,7 @@ when-use: Reference before running docs/PROMPT-orchestrator-autonomous.md, when 
 keywords: [adr, process, orchestrator, autonomous, worktree, parallel, auditor, auto-merge, github-actions, git]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-01
+updated_at: 2026-11-02
 adr_id: "0.0.0008"
 decision: An orchestrator session dispatches one fresh implementer session per stage or issue (PROMPT-stage-single-session / PROMPT-issue-single-session), each in its own worktree, at most three worktrees at once; the full CI gate runs on GitHub Actions; when the implementation ends, a fresh clean-context auditor audits the PR and, if it validates, rebases, merges and cleans up the branch and worktree.
 context_stage: 0.0-global
@@ -13,6 +13,8 @@ bounded_context: transversal
 ---
 
 # ADR 0.0.0008 — An autonomous orchestrator runs stages and issues in up to three worktrees, and the clean-context auditor merges
+
+> ⚠️ **Errata (2026-11-02):** §Decision item 4 — the cleanup commands quoted there (`gh pr merge --merge --delete-branch`, then `worktree-rm.py <branch>` and a manual local-branch delete) do not hold with worktrees: `--delete-branch` leaves the remote branch behind when the local branch is checked out in a worktree, and `git branch -d` fails before `develop` is pulled. The decision (the auditor merges with a merge commit and cleans up) is unchanged; the operational sequence is `gh pr merge --merge` without `--delete-branch`, `git pull`, `docker compose down -v`, `worktree-rm.py <branch> --delete-remote` and a verification step — ver `docs/GIT-WORKFLOW.md` §"Merge e limpeza da worktree" (issue #81)
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

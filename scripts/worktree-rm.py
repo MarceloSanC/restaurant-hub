@@ -15,6 +15,16 @@ Em seguida, em ordem segura:
 A imagem Docker (`restaurant_hub-app:dev`) é compartilhada entre worktrees.
 O script pergunta interativamente se deseja removê-la.
 
+A worktree é achada pela branch checada nela (`git worktree list --porcelain`),
+não pelo nome da pasta: pasta criada com slug diferente do da branch não exige
+`--path` (issue #81). Sem worktree com a branch, cai no caminho-padrão
+`../<repo>-worktrees/<slug>`; `--path` continua forçando o caminho.
+
+Rode do checkout principal, depois do `git pull origin develop`: o `git branch -d`
+só apaga a branch que já está mergeada no `develop` local (ou no upstream dela).
+Sequência completa de merge e limpeza: docs/GIT-WORKFLOW.md §"Merge e limpeza
+da worktree".
+
 Uso:
     uv run python scripts/worktree-rm.py feat/42-add-google-login
     uv run python scripts/worktree-rm.py feat/42-add-google-login --dry-run
@@ -112,6 +122,45 @@ def compute_worktree_path(repo_root: Path, branch: str, override: str | None) ->
     slug = branch.replace("/", "-")
     parent = repo_root.parent / f"{repo_root.name}-worktrees"
     return (parent / slug).resolve()
+
+
+def worktree_list_porcelain() -> str:
+    cp = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return cp.stdout
+
+
+def find_worktree_by_branch(porcelain: str, branch: str) -> Path | None:
+    """Caminho da worktree que tem `branch` checada, lido do `--porcelain`.
+
+    Cada bloco do porcelain abre com `worktree <path>` e, se houver branch checada,
+    traz `branch refs/heads/<nome>`. A comparação é pelo nome inteiro: `feat/4-x`
+    não casa `feat/4-x-y`.
+    """
+    current: str | None = None
+    wanted = f"branch refs/heads/{branch}"
+    for line in porcelain.splitlines():
+        if line.startswith("worktree "):
+            current = line.split(" ", 1)[1]
+        elif line == wanted and current is not None:
+            return Path(current).resolve()
+    return None
+
+
+def resolve_worktree_path(
+    repo_root: Path, branch: str, override: str | None, porcelain: str
+) -> Path:
+    """`--path` vence; senão a worktree da branch; senão o caminho-padrão do slug."""
+    if override:
+        return Path(override).resolve()
+    found = find_worktree_by_branch(porcelain, branch)
+    if found is not None:
+        return found
+    return compute_worktree_path(repo_root, branch, None)
 
 
 def check_worktree_registered(wt_path: Path) -> bool:
@@ -467,7 +516,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--path",
         default=None,
-        help="Override do path da worktree (default: ../<repo>-worktrees/<slug>).",
+        help=(
+            "Override do path da worktree (default: a worktree com a branch checada; "
+            "sem ela, ../<repo>-worktrees/<slug>)."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -497,7 +549,7 @@ def main() -> int:
     args = _build_parser().parse_args()
 
     repo_root = git_top()
-    wt_path = compute_worktree_path(repo_root, args.branch, args.path)
+    wt_path = resolve_worktree_path(repo_root, args.branch, args.path, worktree_list_porcelain())
 
     _section("1. Localizando worktree")
     if not check_worktree_registered(wt_path):
