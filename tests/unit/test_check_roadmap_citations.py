@@ -163,6 +163,8 @@ def test_numero_de_linha_depois_do_roadmap_reprova(tmp_path: pathlib.Path, texto
         "`roadmap.md` §Step 4; `overview.md` 46, 130.",
         'a premissa (`roadmap.md` §"Lacunas conhecidas" › "Formato da imagem da escala")',
         "cabe no roadmap, §12 100% sim, cabe em 3–12 Tasks.",
+        "Ver `roadmap.md` §Step 4. Em 2025 eram 120, hoje 130.",
+        "Ver `roadmap.md` §Step 4\n\nNo parágrafo seguinte, 120, 130.",
     ],
     ids=[
         "ancora",
@@ -177,6 +179,8 @@ def test_numero_de_linha_depois_do_roadmap_reprova(tmp_path: pathlib.Path, texto
         "overview-encerra-o-trecho",
         "secao-entre-aspas",
         "porcentagem-e-faixa-pequena",
+        "fim-de-frase-encerra-o-trecho",
+        "paragrafo-encerra-o-trecho",
     ],
 )
 def test_citacao_por_ancora_e_numeros_que_nao_sao_linha_passam(
