@@ -98,7 +98,7 @@ por esta Stage. Use blocos de código Python quando aplicável.>
 ### <Decisão 1>
 - **O quê:** <a decisão tomada>
 - **Por quê:** <razão>
-- **Fonte:** <Overview §X / Roadmap §Stage N.M / arquivo path:linha / pergunta>
+- **Fonte:** <Overview §X / Roadmap §Stage N.M › "Rótulo" (nunca linha — CONVENTIONS §5) / arquivo path:linha / pergunta>
 - **ADR:** [`../../adr/N_M_NNNN-<slug-do-adr>.md`](../../adr/N_M_NNNN-<slug-do-adr>.md) (se aplicável)
 
 ### <Decisão 2>

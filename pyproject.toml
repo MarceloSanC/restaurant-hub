@@ -94,6 +94,10 @@ select = [
     "PL",  # pylint (subconjunto portado)
     "TID", # flake8-tidy-imports — proíbe imports relativos implícitos
 ]
+# `›` e `–` são gramática, não confusão: o `›` separa seção de rótulo na âncora de
+# citação ao roadmap e o `–` é o travessão de faixa dos docs em PT (issue #79,
+# `scripts/check_roadmap_citations.py`).
+allowed-confusables = ["›", "–"]
 [tool.ruff.lint.isort]
 # Garante que imports do pacote local aparecem após libs de terceiros
 known-first-party = ["restaurant_hub"]
