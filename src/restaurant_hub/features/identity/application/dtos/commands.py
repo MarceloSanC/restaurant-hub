@@ -36,7 +36,7 @@ class ProvisionRestaurantCommand:
 
     Sem campo de papel: o papel é `Role.OWNER`, fixado no use case — é o que
     sustenta "nenhuma rota emite `platform_admin`" para este caminho (ADR
-    0.0.0013 §3, ADR 2.4.0003 §2b). Sem `tenant_id`: o tenant do dono é o
+    0.0.0012 §3, ADR 2.4.0003 §2b). Sem `tenant_id`: o tenant do dono é o
     restaurante que nasce junto com ele.
 
     Attributes:

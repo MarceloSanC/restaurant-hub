@@ -600,7 +600,7 @@ class TestProvisaoAtomica:
 
 
 # ---------------------------------------------------------------------------
-# provision_restaurant — o tenant e o seu primeiro owner (issue #67, ADR 0.0.0013)
+# provision_restaurant — o tenant e o seu primeiro owner (issue #67, ADR 0.0.0012)
 # ---------------------------------------------------------------------------
 
 _ESCRITAS_DO_TENANT = ("restaurants.add", "users.add")

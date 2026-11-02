@@ -1,4 +1,4 @@
-"""Testes do use case `provision_restaurant` — issue #67, ADR 0.0.0013.
+"""Testes do use case `provision_restaurant` — issue #67, ADR 0.0.0012.
 
 O que estes testes protegem: o restaurante e o seu `owner` nascem **juntos** —
 nenhuma falha deixa um restaurante sem dono —, o papel emitido é sempre `owner`
