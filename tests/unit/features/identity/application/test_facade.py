@@ -601,3 +601,37 @@ class TestFachadaDeAcesso:
     def test_permission_denied_e_re_exportado_da_application(self) -> None:
         """O adapter de staff levanta L-AG3 com esta classe — e ela tem de ser a de identity."""
         assert modulo_facade.PermissionDeniedError is erros_de_application.PermissionDeniedError
+
+    # --- Auditoria de testes da issue #47 — mutantes que sobreviviam -------
+
+    def test_actor_tenant_id_e_o_do_ator_no_banco_e_nao_o_alvo_pedido(self) -> None:
+        """Sobrevivia: devolver o tenant **pedido** como `actor_tenant_id`.
+
+        É o campo sobre o qual o adapter de staff impõe L-AG3. `platform_admin`
+        pula o passo 3, então nomear um tenant passa — e o grant tem de voltar
+        **sem** tenant, para que staff o negue. Com o tenant pedido no lugar, o
+        ator sem tenant sairia com escopo do restaurante que quisesse.
+        """
+        fachada, _ = self._montar()
+
+        grant = fachada.authorize(
+            self._principal("admin", None), "manage_platform", tenant_id=self._TENANT, unit_id=None
+        )
+
+        assert grant.actor_tenant_id is None
+
+    @pytest.mark.parametrize(
+        ("valor", "campo"),
+        [
+            (AccessPrincipal(user_id="u", tenant_id="t"), "tenant_id"),
+            (
+                AccessGrant(role="manager", actor_tenant_id="t", scope_unit_id=None),
+                "actor_tenant_id",
+            ),
+        ],
+        ids=["principal", "grant"],
+    )
+    def test_principal_e_grant_sao_imutaveis(self, valor: object, campo: str) -> None:
+        """Sobrevivia: tirar `frozen` — o ator que decide acesso não pode ter o tenant reescrito."""
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(valor, campo, "outro")

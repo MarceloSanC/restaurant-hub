@@ -444,3 +444,39 @@ def test_o_escopo_carrega_o_tenant_do_ator_e_nao_o_do_pedido() -> None:
     )
 
     assert scope.tenant_id == "t-do-banco"
+
+
+# ---------------------------------------------------------------------------
+# Auditoria de testes da issue #47 — mutantes que sobreviviam
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("permission", "unit"), _ALVOS)
+def test_a_permissao_pedida_e_a_que_chega_a_identity_nas_duas_capacidades(
+    permission: str,
+    unit: str | None,
+) -> None:
+    """Sobrevivia: fixar `"manage_staff"` no repasse — só ela era asserida."""
+    facade = _SpyAccessFacade(_grant(scope_unit_id=unit))
+
+    _guard(facade).authorize(_ator(), permission, tenant_id="t1", unit_id=unit)
+
+    assert facade.received["permission"] == permission
+
+
+def test_a_unidade_do_escopo_e_a_concedida_e_nao_a_pedida() -> None:
+    """Sobrevivia: montar o escopo com o `unit_id` do pedido — os dublês ecoavam o pedido."""
+    facade = _SpyAccessFacade(_grant(scope_unit_id="u-concedida"))
+
+    scope = _guard(facade).authorize(_ator(), "manage_staff", tenant_id="t1", unit_id="u1")
+
+    assert scope.unit_id == "u-concedida"
+
+
+def test_unidade_concedida_vazia_atravessa_como_e_sem_virar_ausente() -> None:
+    """Sobrevivia: truthiness em `scope_unit_id` — `""` viraria "sem unidade" (ADR 2.3.0005)."""
+    facade = _SpyAccessFacade(_grant(scope_unit_id=""))
+
+    scope = _guard(facade).authorize(_ator(), "manage_staff", tenant_id="t1", unit_id="")
+
+    assert scope.unit_id == ""
