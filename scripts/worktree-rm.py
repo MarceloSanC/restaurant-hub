@@ -38,7 +38,8 @@ Uso:
 Exit codes:
   0  limpeza concluída com sucesso
   1  verificação falhou (não sincronizado, worktree não encontrada, etc.)
-  2  erro de subprocess (docker/git), ou hooks do git sem python depois do religamento
+  2  erro de subprocess (docker/git), worktree que o `--force` não conseguiu remover,
+     ou hooks do git sem python depois do religamento
 """
 
 from __future__ import annotations
@@ -441,6 +442,40 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
 # ---------------------------------------------------------------------------
 
 
+def _remove_worktree_dir(wt_path: Path, *, force: bool) -> bool:
+    """`git worktree remove` (e, com `force`, a segunda tentativa com `--force`).
+
+    True se a worktree saiu. Sem `force`, a falha aborta o script (exit 1). Com
+    `force`, a segunda tentativa pode falhar também — no Windows, "Filename too
+    long" apaga a pasta só em parte (medido na prova da issue #100) — e então
+    devolve False, para o `main()` não anunciar sucesso.
+    """
+    cp = subprocess.run(
+        ["git", "worktree", "remove", str(wt_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if cp.returncode == 0:
+        _info(f"worktree removida: {wt_path}")
+        return True
+    if not force:
+        _fail(
+            f"git worktree remove falhou: {cp.stderr.strip()}\nUse --force para forçar a remoção."
+        )
+    _warn(f"git worktree remove falhou — tentando --force: {cp.stderr.strip()}")
+    forced = subprocess.run(["git", "worktree", "remove", "--force", str(wt_path)], check=False)
+    if forced.returncode == 0 and not wt_path.exists():
+        _info(f"worktree removida (--force): {wt_path}")
+        return True
+    _warn(
+        f"git worktree remove --force falhou; a pasta ficou no disco: {wt_path}\n"
+        "  Caminho longo no Windows: `git config --global core.longpaths true` e\n"
+        "  rode de novo, ou apague a pasta à mão e rode `git worktree prune`."
+    )
+    return False
+
+
 def remove_worktree_git(
     wt_path: Path,
     branch: str,
@@ -448,36 +483,21 @@ def remove_worktree_git(
     dry_run: bool,
     delete_remote: bool,
     force: bool,
-) -> None:
+) -> bool:
+    """Remove a worktree e a branch; False se a pasta da worktree ficou no disco.
+
+    Mesmo com a pasta no disco, segue para a branch e o prune; o `main()` confere
+    os hooks e sai com 2.
+    """
     if dry_run:
         _info(f"[dry-run] git worktree remove {wt_path}")
         _info(f"[dry-run] git branch -d {branch}")
         if delete_remote:
             _info(f"[dry-run] git push origin --delete {branch}")
         _info("[dry-run] git remote prune origin")
-        return
+        return True
 
-    # Remove worktree.
-    cp = subprocess.run(
-        ["git", "worktree", "remove", str(wt_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if cp.returncode != 0:
-        if force:
-            _warn(f"git worktree remove falhou — tentando --force: {cp.stderr.strip()}")
-            subprocess.run(
-                ["git", "worktree", "remove", "--force", str(wt_path)],
-                check=False,
-            )
-        else:
-            _fail(
-                f"git worktree remove falhou: {cp.stderr.strip()}\n"
-                "Use --force para forçar a remoção."
-            )
-    else:
-        _info(f"worktree removida: {wt_path}")
+    removed = _remove_worktree_dir(wt_path, force=force)
 
     # Deleta branch local (safe: -d não remove branch não mergeada).
     cp = subprocess.run(
@@ -516,6 +536,7 @@ def remove_worktree_git(
         check=False,
     )
     _info("refs remotas obsoletas prunadas")
+    return removed
 
 
 # ---------------------------------------------------------------------------
@@ -668,7 +689,7 @@ def main() -> int:
     hooks_in_worktree = hooks_inside(common_dir, wt_path)
 
     _section("4. Removendo worktree e branch git")
-    remove_worktree_git(
+    removed = remove_worktree_git(
         wt_path,
         args.branch,
         dry_run=args.dry_run,
@@ -684,12 +705,15 @@ def main() -> int:
     if args.dry_run:
         print("  [dry-run] nenhuma alteração foi feita")
         print("  Revise acima e rode sem --dry-run quando estiver pronto.")
-    else:
+    elif removed:
         print(f"  ✓ Worktree {args.branch} removida")
         print(f"  ✓ Path: {wt_path}")
+    else:
+        print(f"  ✗ Worktree {args.branch} NÃO removida — a pasta ficou no disco")
+        print(f"  ✗ Path: {wt_path}")
     print("=" * 60)
     print()
-    return 0 if hooks_ok else 2
+    return 0 if hooks_ok and removed else 2
 
 
 if __name__ == "__main__":

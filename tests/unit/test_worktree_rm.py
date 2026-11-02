@@ -372,12 +372,51 @@ def test_main_relinks_when_the_removal_leaves_the_venv_behind(
     common = (principal / ".git").resolve()
     hook = _write_hook(common, "pre-commit", _venv_python(wt))
     main_python = _venv_python(principal)
-    monkeypatch.setattr(wr, "remove_worktree_git", lambda *_a, **_kw: None)
+    monkeypatch.setattr(wr, "remove_worktree_git", lambda *_a, **_kw: False)
     monkeypatch.setattr(
         wr, "run_install_hooks", lambda _cwd: _write_hook(common, "pre-commit", main_python)
     )
 
-    assert wr.main() == 0
+    assert wr.main() == 2  # noqa: PLR2004 — remoção que falhou não sai com 0
 
     assert wt.exists()
     assert wr.install_hooks.hook_python(hook) == main_python
+
+
+def test_forced_removal_that_fails_is_reported_and_exits_2(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--force` cuja segunda tentativa também falha: a pasta fica, e o script não
+    anuncia sucesso nem sai com 0 (finding da #100, "Filename too long" no Windows).
+    """
+    _, wt = real_repo
+    (wt / "sujo.txt").write_text("x", encoding="utf-8")  # 1ª tentativa recusa: arquivo novo
+    real_run = subprocess.run
+
+    def _run(cmd: list[str], *a: object, **kw: object) -> object:
+        if cmd[:4] == ["git", "worktree", "remove", "--force"]:
+            return subprocess.CompletedProcess(cmd, 1)  # "Filename too long"
+        return real_run(cmd, *a, **kw)  # type: ignore[call-overload]
+
+    monkeypatch.setattr(wr.subprocess, "run", _run)
+    monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
+
+    assert wr.main() == 2  # noqa: PLR2004 — o exit code documentado do script
+    assert wt.exists()
+    captured = capsys.readouterr()
+    assert "a pasta ficou no disco" in captured.err
+    assert "NÃO removida" in captured.out
+    assert "✓ Worktree" not in captured.out
+
+
+def test_forced_removal_that_succeeds_exits_0(
+    real_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, wt = real_repo
+    (wt / "sujo.txt").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
+
+    assert wr.main() == 0
+    assert not wt.exists()
