@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-11-02
 updated_at: 2026-11-02
 adr_id: "0.0.0014"
-decision: `POST /restaurants` takes the restaurant name and its first owner's e-mail and password and runs `ProvisionRestaurantUseCase`, which writes `restaurants.add` + `users.add` inside one identity `UnitOfWork` with the role fixed to `owner` in the use case; `CreateRestaurantUseCase` is removed, so no API path creates a restaurant without an owner; `POST /restaurants/{id}/owners` stays, re-scoped to adding an owner to an existing restaurant; authorization stays at the HTTP boundary as for every identity use case
+decision: "`POST /restaurants` takes the restaurant name and its first owner's e-mail and password and runs `ProvisionRestaurantUseCase`, which writes `restaurants.add` + `users.add` inside one identity `UnitOfWork` with the role fixed to `owner` in the use case; `CreateRestaurantUseCase` is removed, so no API path creates a restaurant without an owner; `POST /restaurants/{id}/owners` stays, re-scoped to adding an owner to an existing restaurant; authorization stays at the HTTP boundary as for every identity use case"
 context_stage: 0.0-global
 bounded_context: transversal
 ---
