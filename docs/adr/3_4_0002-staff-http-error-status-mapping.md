@@ -5,7 +5,7 @@ when-use: Reference when adding an error to the staff hierarchy, when a staff er
 keywords: [adr, http, error-handling, status-code, fastapi, mro, totality, staff]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-09-14
+updated_at: 2026-11-02
 adr_id: 3.4.0002
 decision: Register one FastAPI exception handler on StaffError that resolves status by walking the exception MRO against an explicit total map, guarded by a test enumerating every concrete subclass; UnavailabilityNotFoundError stays 422 because it names a value inside the aggregate, and the 409 band is reserved for conflicts with already-stored identity or references
 context_stage: 3.4-staff-access-scope
@@ -194,6 +194,19 @@ correct only by accident. Not acceptable.
 - ADR 2.4.0001, ADR 2.3.0003, ADR 3.2.0006
 - `docs/stages/3.2-staff-application/concept.md` §4 (the note on
   `UnavailabilityNotFoundError`), §6
+
+## Supersessão parcial
+
+**2026-11-02 — a decisão 2 (*"A **single** handler is registered on `StaffError`"*), a decisão 3
+(totalidade sobre *"every concrete subclass of `StaffError`"*) e a regra do Context de que todo
+erro de aplicação de staff herda de `StaffError`, *"never from `ApplicationError`"*, com os dois
+"não encontrado" herdando `(StaffError, NotFoundError)` nesta ordem, foram superadas por [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)**
+(Stage 3.9, issue #48). `JobFunctionNotFoundError`, `EmployeeNotFoundError`,
+`JobFunctionAlreadyExistsError` e `EmployeeAlreadyExistsError` descendem agora só de
+`StaffApplicationError`; o handler único é registrado sobre as duas raízes, e a totalidade é
+cobrada sobre as subclasses das duas. As faixas, as classificações de §4, o discriminador
+`"type": "staff_error"` e a contagem de 23 entradas continuam valendo, byte a byte. Nota
+*append-only*; o corpo acima não foi editado.
 
 ## Errata
 

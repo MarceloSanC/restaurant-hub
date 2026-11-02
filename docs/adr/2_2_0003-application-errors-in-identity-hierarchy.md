@@ -3,10 +3,11 @@ title: ADR 2.2.0003 — Application errors inherit from IdentityError, not Appli
 description: Architecture Decision Record
 when-use: Reference whenever adding an error to the identity application layer, or before introducing an ApplicationError subclass anywhere
 keywords: [adr, identity, errors, exceptions, http-mapping, domain-error, not-found]
-status: accepted
+status: superseded
 created_at: 2026-07-18
-updated_at: 2026-07-18
+updated_at: 2026-11-02
 adr_id: "2.2.0003"
+superseded_by: "3.9.0001"
 decision: Errors raised by identity use cases subclass IdentityError (hence DomainError), and not-found errors additionally subclass NotFoundError, so no business path can escape to HTTP 500.
 context_stage: 2.2-identity-application
 bounded_context: identity
@@ -18,7 +19,15 @@ bounded_context: identity
 
 ## Status
 
-`accepted`
+`superseded`
+
+> **Superseded (2026-11-02) by [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)** (Stage 3.9, issue #48). The status no
+> longer comes from the inheritance: each bounded context resolves it from an explicit,
+> test-guarded map in its inbound adapter, registered on both of its roots. Errors that are
+> not business-rule violations now descend from `ApplicationError` (back, in
+> `shared/application/errors.py`) through the BC's application root; `NotFoundError` and the
+> `(IdentityError, NotFoundError)` multiple inheritance are gone. The body below is the
+> historical record of the 2026-07-18 decision and was not edited.
 
 ## Context
 
