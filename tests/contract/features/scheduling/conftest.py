@@ -6,10 +6,18 @@ staff, `tests/contract/features/staff/conftest.py`): a 4.4 acrescenta o adapter 
 """
 
 from collections.abc import Iterator
+from datetime import time
 from decimal import Decimal
 
 import pytest
 
+from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
+    ScheduleConfigRepository,
+    SchedulingSettings,
+)
+from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ScheduleRepository,
+)
 from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
     JobFunctionEntry,
     StaffMember,
@@ -20,6 +28,20 @@ from restaurant_hub.features.scheduling.domain.value_objects.identifiers import 
     JobFunctionId,
     TenantId,
     UnitId,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.operational_calendar import (
+    DayCutoff,
+    OperationalCalendar,
+    Weekday,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
+    ValidationConfig,
+)
+from tests.fakes.features.scheduling.in_memory_schedule_config_repository import (
+    InMemoryScheduleConfigRepository,
+)
+from tests.fakes.features.scheduling.in_memory_schedule_repository import (
+    InMemoryScheduleRepository,
 )
 from tests.fakes.features.scheduling.in_memory_staff_read import InMemoryStaffRead
 
@@ -56,3 +78,24 @@ def mundo(request: pytest.FixtureRequest) -> Iterator[StaffReadPort]:
     fake = InMemoryStaffRead()
     _semear(fake)
     yield fake
+
+
+@pytest.fixture(params=["fake"])
+def schedule_repo(request: pytest.FixtureRequest) -> Iterator[ScheduleRepository]:
+    assert request.param == "fake"
+    yield InMemoryScheduleRepository()
+
+
+@pytest.fixture(params=["fake"])
+def config_world(
+    request: pytest.FixtureRequest,
+) -> Iterator[tuple[ScheduleConfigRepository, SchedulingSettings]]:
+    """O port e a configuração gravada para o tenant `t1` (o `t2` não tem nenhuma)."""
+    assert request.param == "fake"
+    fake = InMemoryScheduleConfigRepository()
+    gravada = SchedulingSettings(
+        calendar=OperationalCalendar(week_start=Weekday.SUNDAY, day_cutoff=DayCutoff(at=time(4))),
+        validation=ValidationConfig.default(),
+    )
+    fake.set_settings(T1, gravada)
+    yield fake, gravada
