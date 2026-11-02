@@ -311,15 +311,17 @@ async def test_ca14_o_valor_do_token_nao_aparece_em_staff_nem_em_log(  # noqa: P
 
     assert not _valor_aparece_em_alguma_tabela_de_staff(engine, valor)
 
-    # **A app não loga nada hoje, e a ausência de log é medida, não suposta.**
-    # O logging é configurado no boot desde a issue #6, mas nenhum módulo de `src/`
-    # emite registro: `getLogger` só aparece em `configure_logging`, para ajustar o
-    # nível de `sqlalchemy.engine` e `uvicorn.access`. Então "o token não está no
-    # log" seria verdade por vacuidade. Esta sentinela é o que impede a vacuidade de
-    # passar por prova: no dia em que a app começar a logar, ela falha e obriga a
-    # reconferir o token nos registros novos, em vez de o teste seguir verde sem
-    # medir nada. Filtra por `restaurant_hub` porque `httpx`/`sqlalchemy` podem
-    # aparecer conforme a configuração de captura, e o que se guarda é o nosso log.
+    # **Este fluxo não loga nada, e a ausência de log é medida, não suposta.**
+    # Desde a issue #26 a app registra em dois pontos só: a causa de um 401/403
+    # (`identity/adapters/inbound/http/error_handlers.py`) e a falha absorvida do
+    # pedido de redefinição de senha — nenhum dos dois acontece aqui. Então "o
+    # token não está no log" seria verdade por vacuidade. Esta sentinela é o que
+    # impede a vacuidade de passar por prova: no dia em que este fluxo começar a
+    # logar, ela falha e obriga a reconferir o token nos registros novos, em vez de
+    # o teste seguir verde sem medir nada. Ela só enxerga o log porque o Alembic da
+    # fixture `engine` deixou de desligar os loggers de módulo (#26, finding F1 da
+    # #6). Filtra por `restaurant_hub` porque `httpx`/`sqlalchemy` podem aparecer
+    # conforme a configuração de captura, e o que se guarda é o nosso log.
     de_producao = [
         registro for registro in caplog.records if registro.name.startswith("restaurant_hub")
     ]
