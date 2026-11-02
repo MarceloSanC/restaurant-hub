@@ -51,10 +51,6 @@ class JwtTokenIssuer:
             "sid": str(claims.session_id),
             "exp": claims.expires_at,
         }
-        # Local anotado, e não `return` direto: o hook de pre-commit roda o mypy
-        # sobre um conjunto estreito de arquivos, onde o PyJWT não resolve stubs
-        # e `encode` volta como `Any`. A anotação faz o type-checker verificar em
-        # vez de acreditar — e mantém o gate estreito e o `make check` de acordo.
         token: str = jwt.encode(payload, self._secret_key, algorithm=self._algorithm)
         return token
 

@@ -160,11 +160,13 @@ skip_covered = false
 #
 # **`also_copy` é o que faz a corrida medir alguma coisa.** O mutmut executa a
 # suíte a partir de uma cópia da árvore em `mutants/`, e copia por default só o
-# código e `tests/`. Esta suíte, porém, lê o **repositório** de dentro dos
-# testes — é o idioma mecânico deste projeto: `test_ci_workflow.py` lê
+# código, `tests/` e os arquivos de projeto (`pyproject.toml`, `uv.lock` —
+# `configuration.py` do mutmut 3.7). Esta suíte, porém, lê o **repositório** de
+# dentro dos testes — é o idioma mecânico deste projeto: `test_ci_workflow.py` lê
 # `.github/workflows/ci.yml`, `test_bc_independence.py` lê `.importlinter`, os
-# testes de contrato de staff leem `docs/stages/…/concept.md`, e os gates da #45
-# leem `scripts/` e `docs/LAYOUT.md`.
+# testes de contrato de staff leem `docs/stages/…/concept.md`, os gates da #45
+# leem `scripts/` e `docs/LAYOUT.md`, e o `test_precommit_config.py` (issue #7)
+# lê o `.pre-commit-config.yaml` e o `Makefile`.
 #
 # Sem esses arquivos, o primeiro teste que os procura levanta `FileNotFoundError`
 # e a corrida morre antes de matar um mutante sequer — medido na primeira
@@ -190,6 +192,8 @@ also_copy = [
     # `test_database_url_guard.py` cobra o default de porta do compose contra o
     # arquivo (issue #58).
     "docker-compose.yml",
+    ".pre-commit-config.yaml",
+    "Makefile",
 ]
 # `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
 # conveniência.

@@ -65,9 +65,7 @@ class Argon2PasswordHasher:
         500 em vez de recusá-lo com 401.
 
         `argon2-cffi` **nunca devolve `False`**: ou devolve `True`, ou levanta.
-        Por isso o retorno é construído aqui em vez de repassado — repassar
-        devolveria o `Any` da lib como se fosse `bool`, e o type-checker teria de
-        acreditar sem verificar.
+        Por isso o `False` deste método nasce do `except`, nunca da lib.
         """
         try:
             self._backend.verify(password_hash, plain_password)

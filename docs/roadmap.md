@@ -157,7 +157,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 |---|---|---|---|---|---|
 | [#2](https://github.com/MarceloSanC/restaurant-hub/issues/2) | Adaptar fluxo de Step (prompt, ADR e gates) ao restaurant-hub | shared | docs + scripts | done | — |
 | [#6](https://github.com/MarceloSanC/restaurant-hub/issues/6) | Plugar `configure_logging` no boot da aplicação | shared | shared/infrastructure + bootstrap | done | — |
-| [#7](https://github.com/MarceloSanC/restaurant-hub/issues/7) | Alinhar hook mirrors-mypy e prevenir drift de versão dos hooks pre-commit | shared | tooling | open | — |
+| [#7](https://github.com/MarceloSanC/restaurant-hub/issues/7) | Alinhar hook mirrors-mypy e prevenir drift de versão dos hooks pre-commit | shared | tooling | done | — |
 | [#8](https://github.com/MarceloSanC/restaurant-hub/issues/8) | Definir política de fim de linha com `.gitattributes` e renormalizar | shared | repo | done | — |
 | [#10](https://github.com/MarceloSanC/restaurant-hub/issues/10) | Ativar modo autônomo para as stages 1.2→3.5 (ADR 0.0.0004 accepted) | shared | docs | open | — |
 | [#12](https://github.com/MarceloSanC/restaurant-hub/issues/12) | Padronizar placeholders de Stage que viram comando (stage_id × número) | shared | docs + tooling | done | — |
@@ -185,6 +185,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#93](https://github.com/MarceloSanC/restaurant-hub/issues/93) | Política de fim de linha do editor — VS Code grava CRLF em arquivo novo (especulativa; disparo: aviso no uso diário ou primeiro colaborador externo) | shared | repo | open | #8 |
 | [#97](https://github.com/MarceloSanC/restaurant-hub/issues/97) | Nenhum teste trava a ligação dos validadores de docs no target `docs-check` do `Makefile` | shared | tooling + tests | open | #12 |
 | [#98](https://github.com/MarceloSanC/restaurant-hub/issues/98) | Passo 1 do RUNBOOK usa `$issue` antes de defini-la | shared | docs | open | — |
+| [#99](https://github.com/MarceloSanC/restaurant-hub/issues/99) | `make check` sem conferência de formatação e lint fora de `migrations/` | shared | tooling | open | #7 |
+| [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | open | #7 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
