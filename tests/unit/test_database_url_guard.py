@@ -6,7 +6,7 @@ do checkout principal —, e 629 testes deram `ERROR at setup` com
 `ResolutionError: No such revision '0004'`. O banco era o de outra sessão, e a
 fixture `engine`, que recria o schema, só não o derrubou porque a migration
 `0004` não existia na branch. A guarda roda na fixture `database_url`, antes de
-qualquer conexão.
+qualquer conexão; a regra é a de `scripts/database_url_guard.py` (issue #85).
 
 "A porta que o compose publica" é resolvida como o compose a resolve:
 `POSTGRES_PORT` do ambiente, depois a do `.env` da raiz do checkout, e a 5432 do
@@ -30,13 +30,13 @@ import yaml
 from sqlalchemy import make_url
 
 from restaurant_hub.shared.infrastructure.config.settings import get_settings
-from tests.conftest import (
+from scripts.database_url_guard import (
     COMPOSE_DEFAULT_POSTGRES_PORT,
     database_port_mismatch,
     is_loopback,
     published_postgres_port,
-    resolve_test_database_url,
 )
+from tests.conftest import resolve_test_database_url
 
 pytestmark = pytest.mark.unit
 pytest_plugins = ["pytester"]
@@ -258,7 +258,7 @@ def test_pytest_from_a_subdirectory_is_refused_with_a_hint(worktree: Path) -> No
             resolve_test_database_url(compose_dir=worktree)
 
     assert "porta 5432 de localhost" in str(refusal.value)
-    assert "rode o pytest da raiz do checkout" in str(refusal.value)
+    assert "rode o pytest e o make da raiz do checkout" in str(refusal.value)
 
 
 def test_stale_get_settings_cache_does_not_decide_the_url(
