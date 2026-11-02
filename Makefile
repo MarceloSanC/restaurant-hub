@@ -24,7 +24,7 @@ help:
 	@echo Restaurant Hub - comandos disponiveis
 	@echo   make setup            Cria .venv via uv sync, gera uv.lock e instala hooks
 	@echo   make install          Reinstala dependencias apos mudar pyproject.toml
-	@echo   make run              Sobe o servidor de desenvolvimento com hot-reload
+	@echo   make run              Sobe o servidor de desenvolvimento com hot-reload na APP_PORT
 	@echo   make migrate          Aplica migrations pendentes - alembic upgrade head
 	@echo   make check            Gate completo - lint + types + layout + lock + docs + testes com cobertura
 	@echo   make test-gate        Suite com gate de cobertura 90 - usado pelo check
@@ -70,7 +70,8 @@ install:
 # Passa pela guarda da DATABASE_URL (issue #85): numa worktree, uma URL loopback
 # fora da POSTGRES_PORT dela faria a app ler e escrever no banco de outra
 # frente. A guarda recusa e o uvicorn nem sobe; o comando está em
-# scripts/database_url_guard.py (TARGET_COMMANDS).
+# scripts/database_url_guard.py (command_for). A porta é a APP_PORT do
+# checkout (8000 sem ela), a mesma em que o compose publicaria a app.
 # ---------------------------------------------------------------------------
 run:
 	uv run python scripts/database_url_guard.py run

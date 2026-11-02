@@ -437,6 +437,54 @@ def test_make_target_runs_its_command_when_the_url_matches(
     assert command[1 : 1 + len(tail)] == tail
 
 
+@pytest.mark.parametrize(
+    ("dotenv", "expected_port"),
+    [
+        (None, guard.COMPOSE_DEFAULT_APP_PORT),  # checkout principal: sem `.env`
+        ("APP_PORT=\n", guard.COMPOSE_DEFAULT_APP_PORT),  # vazio é ausente, como no `:-`
+        (f"APP_PORT={PORTS['APP_PORT']}\n", PORTS["APP_PORT"]),  # worktree paralela
+    ],
+)
+def test_make_run_serves_on_the_checkout_app_port(
+    worktree: Path,
+    ran: _Ran,
+    monkeypatch: pytest.MonkeyPatch,
+    dotenv: str | None,
+    expected_port: int,
+) -> None:
+    """A porta do `make run` é a `APP_PORT` do checkout, não a 8000 fixa."""
+    monkeypatch.delenv("APP_PORT", raising=False)
+    if dotenv is not None:
+        (worktree / ".env").write_text(dotenv, encoding="utf-8")
+
+    assert guard.main(["run"], compose_dir=worktree) == 0
+
+    [command] = ran.commands
+    assert command[-2:] == ["--port", str(expected_port)]
+
+
+def test_app_port_from_the_environment_wins_over_the_dotenv(
+    worktree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (worktree / ".env").write_text(f"APP_PORT={PORTS['APP_PORT']}\n", encoding="utf-8")
+    monkeypatch.setenv("APP_PORT", "8999")
+
+    assert guard.command_for("run", compose_dir=worktree)[-2:] == ["--port", "8999"]
+
+
+def test_migrate_has_no_port(worktree: Path) -> None:
+    assert "--port" not in guard.command_for("migrate", compose_dir=worktree)
+
+
+def test_compose_default_app_port_mirrors_the_compose_file() -> None:
+    compose = yaml.safe_load((_REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+
+    assert compose["services"]["app"]["ports"] == [
+        f"${{APP_PORT:-{guard.COMPOSE_DEFAULT_APP_PORT}}}:8000"
+    ]
+    assert wn.PORT_DEFAULTS["APP_PORT"] == guard.COMPOSE_DEFAULT_APP_PORT
+
+
 def test_make_target_returns_the_command_exit_code(worktree: Path, ran: _Ran) -> None:
     """Migration que falha reprova o `make migrate` — o exit code do Alembic passa adiante."""
     ran.returncode = COMMAND_FAILED

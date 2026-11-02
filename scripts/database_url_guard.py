@@ -47,6 +47,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # está vazia — o `${POSTGRES_PORT:-5432}` do docker-compose.yml, que
 # `tests/unit/test_database_url_guard.py` cobra contra o arquivo.
 COMPOSE_DEFAULT_POSTGRES_PORT = 5432
+# Idem para a app: o `${APP_PORT:-8000}` do docker-compose.yml.
+COMPOSE_DEFAULT_APP_PORT = 8000
 # Porta em que a libpq conecta quando a URL não declara nenhuma — medido com o
 # psycopg 3.3.4: `localhost` sem porta devolve "port 5432 failed".
 LIBPQ_DEFAULT_PORT = 5432
@@ -87,6 +89,7 @@ def _compose_port(name: str, default: int, compose_dir: Path) -> int:
         )
 
         postgres_port: int | None = None
+        app_port: int | None = None
 
     declared: int | None = getattr(_ComposePorts(_env_file=compose_dir / ".env"), name)
     return default if declared is None else declared
@@ -95,6 +98,11 @@ def _compose_port(name: str, default: int, compose_dir: Path) -> int:
 def published_postgres_port(compose_dir: Path = ROOT) -> int:
     """A porta em que o compose deste checkout publica o Postgres no host."""
     return _compose_port("postgres_port", COMPOSE_DEFAULT_POSTGRES_PORT, compose_dir)
+
+
+def published_app_port(compose_dir: Path = ROOT) -> int:
+    """A porta em que o compose deste checkout publica a app no host."""
+    return _compose_port("app_port", COMPOSE_DEFAULT_APP_PORT, compose_dir)
 
 
 def database_port_mismatch(database_url: str, published_port: int) -> str | None:
@@ -148,7 +156,8 @@ def checkout_database_url(compose_dir: Path = ROOT) -> tuple[str, str | None]:
 
 
 # O que cada alvo do Makefile roda depois da guarda — os comandos de antes da
-# #85, pelo python do venv que roda a guarda.
+# #85, pelo python do venv que roda a guarda. O `run` recebe a porta em
+# `command_for`.
 TARGET_COMMANDS: dict[str, list[str]] = {
     # O `-c` é obrigatório: o alembic.ini vive em migrations/, e o alembic só
     # procura `alembic.ini` no diretório corrente (Stage 2.3).
@@ -160,10 +169,22 @@ TARGET_COMMANDS: dict[str, list[str]] = {
         "--reload",
         "--host",
         "0.0.0.0",
-        "--port",
-        "8000",
     ],
 }
+
+
+def command_for(target: str, compose_dir: Path = ROOT) -> list[str]:
+    """O comando completo do alvo `target`.
+
+    O `run` sobe o uvicorn na porta em que o compose deste checkout publica a
+    app (`APP_PORT`, 8000 sem ela) — a mesma em que o `make docker-up` a
+    serviria. Fixa em 8000, a app de uma worktree brigava pela porta com a do
+    checkout principal.
+    """
+    command = [sys.executable, *TARGET_COMMANDS[target]]
+    if target == "run":
+        command += ["--port", str(published_app_port(compose_dir))]
+    return command
 
 
 def main(argv: list[str] | None = None, compose_dir: Path = ROOT) -> int:
@@ -182,9 +203,8 @@ def main(argv: list[str] | None = None, compose_dir: Path = ROOT) -> int:
     if mismatch is not None:
         print(mismatch, file=sys.stderr)
         return 1
-    command = [sys.executable, *TARGET_COMMANDS[args.target]]
     try:
-        return subprocess.run(command, check=False).returncode
+        return subprocess.run(command_for(args.target, compose_dir), check=False).returncode
     except KeyboardInterrupt:  # Ctrl+C no `make run`: o filho recebe o mesmo sinal
         return 130
 
