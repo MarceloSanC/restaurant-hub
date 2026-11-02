@@ -635,9 +635,13 @@ mesma em que o compose publicaria a app. Cabe a quem usa a worktree subir e derr
 - **Órfãos:** `make worktree-orphans` (do checkout principal) lista os
   projetos compose de worktrees que não existem mais — `working_dir`
   dentro de `../<repo>-worktrees/`, ou só volume/rede com nome de pasta de
-  branch — e `make worktree-orphans ARGS=--prune` os derruba. Sai com 1 se
-  o Docker estiver parado (nada foi conferido). O projeto do checkout
-  principal nunca entra; o `worktree-rm.py` recusa a branch dele.
+  branch — e `make worktree-orphans ARGS=--prune` derruba os provados pelo
+  `working_dir`. O que sobrou só como volume/rede fica listado e não sai:
+  o nome não prova que é deste repositório (outro repo com a mesma
+  convenção de pasta tem nomes iguais); conferido, sai com `docker volume
+  rm`. Sai com 1 se o Docker estiver parado (nada foi conferido). O projeto
+  do checkout principal nunca entra; o `worktree-rm.py` recusa a branch
+  dele e a worktree cuja pasta dá o mesmo nome de projeto que a dele.
 
 Quando o PR daquela worktree mergear, a remoção segue a sequência de
 §"Merge e limpeza da worktree", logo abaixo.
