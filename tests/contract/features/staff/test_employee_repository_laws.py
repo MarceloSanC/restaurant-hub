@@ -1068,3 +1068,44 @@ def test_l_link_user_id_vazio_e_recusado_e_nada_e_gravado(
     relido = repos.employees.find_by_id(_A, _U1, _E1)
     assert relido is not None
     assert relido.user_id is None
+
+
+def _com_vizinhos_do_e1(
+    repos: RepositoriosDeStaff,
+) -> tuple[tuple[TenantId, UnitId, EmployeeId], ...]:
+    """`e1` e três vizinhos sem vínculo: mesma unidade, outra unidade, outro tenant."""
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_funcionario())
+    repos.employees.add(_funcionario(id=_E2, name="Bruno"))
+    repos.employees.add(_funcionario(id=EmployeeId("e-u2"), unit_id=_U2))
+    repos.employees.add(
+        _funcionario(
+            id=EmployeeId("e-b"), tenant_id=_B, job_function_ids=frozenset({JobFunctionId("f-b")})
+        )
+    )
+    return ((_A, _U1, _E2), (_A, _U2, EmployeeId("e-u2")), (_B, _U1, EmployeeId("e-b")))
+
+
+def test_l_link_vincula_so_o_registro_do_endereco_e_nenhum_vizinho(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Uma linha só: o vínculo não vaza para outro registro (auditoria de testes da #68).
+
+    `employees.user_id` não tem UNIQUE (ADR 3.5.0004 §3), então um `UPDATE` que
+    perdesse o predicado de id vincularia a **mesma** conta a todo registro do
+    tenant — ou do banco — sem erro nenhum. Os demais testes de `L-LINK` gravam
+    um registro só e não enxergariam isso.
+    """
+    vizinhos = _com_vizinhos_do_e1(repos)
+
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+    with pytest.raises(EmployeeAlreadyHasLoginError):
+        repos.employees.link_login(_A, _U1, _E1, UserId("login-2"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == _LOGIN
+    for tenant, unidade, funcionario in vizinhos:
+        vizinho = repos.employees.find_by_id(tenant, unidade, funcionario)
+        assert vizinho is not None
+        assert vizinho.user_id is None, f"o vínculo vazou para {funcionario!r}"
