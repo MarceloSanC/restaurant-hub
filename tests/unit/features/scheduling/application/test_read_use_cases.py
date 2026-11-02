@@ -40,6 +40,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.identifiers import 
     ScheduleId,
     ShiftBandId,
     ShiftDemandId,
+    TenantId,
     UnitId,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
@@ -50,6 +51,7 @@ from tests.unit.features.scheduling.application.conftest import (
     COOK,
     MONDAY,
     T1,
+    T2,
     U1,
     U2,
     World,
@@ -116,8 +118,12 @@ def test_get_traz_as_violacoes_atuais_inclusive_as_induzidas_por_staff(world: Wo
     assert "save" not in world.schedules.calls
 
 
-def test_ca26_get_de_outra_unidade_nao_e_encontrada(world: World) -> None:
-    world.schedules.add(_semana("s1", MONDAY, unit=U2), blank_change())
+@pytest.mark.parametrize("endereco", [(T1, U2), (T2, U1)], ids=["outra-unidade", "outro-tenant"])
+def test_ca26_get_de_outra_unidade_ou_tenant_nao_e_encontrada(
+    world: World, endereco: tuple[TenantId, UnitId]
+) -> None:
+    escala = dataclasses.replace(_semana("s1", MONDAY), tenant_id=endereco[0], unit_id=endereco[1])
+    world.schedules.add(escala, blank_change())
     with pytest.raises(ScheduleNotFoundError):
         _get_uc(world).execute(_get(world))
 

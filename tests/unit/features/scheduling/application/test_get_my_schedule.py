@@ -88,9 +88,15 @@ def test_ca17_outra_unidade_nao_entra(world: World) -> None:
     world.guard.grant("view_own_schedule", tenant_id=T1, unit_id=U2)
     world.staff.add_member(T1, member("ana-u2", unit=U2), user_id="user-ana")
     world.schedules.add(_escala(), blank_change())
-    world.schedules.add(_escala("s9", U2), blank_change())
+    na_u2 = (
+        schedule("s9", unit=U2)
+        .enable_band(ShiftBandId("g1"), TimeRange(start=at(MONDAY, 8), end=at(MONDAY, 9)))
+        .declare_demand(ShiftDemandId("e1"), ShiftBandId("g1"), COOK, DemandQuantity(1))
+        .assign(AssignmentId("b-ana"), ShiftDemandId("e1"), EmployeeId("ana-u2"))
+    )
+    world.schedules.add(dataclasses.replace(na_u2, version=1), blank_change())
     minha = _uc(world).execute(GetMyScheduleQuery(world.employee, T1, U2, MONDAY, MONDAY))
-    assert minha.shifts == ()
+    assert [t.assignment_id for t in minha.shifts] == ["b-ana"]
 
 
 def test_ca17_sem_registro_ativo_e_vazia_sem_ler_escalas(world: World) -> None:

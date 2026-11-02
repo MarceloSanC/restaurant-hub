@@ -221,12 +221,14 @@ def test_ca13_ca27_minha_escala_ordena_e_omite_inativo() -> None:
 def test_ca27_minha_escala_desempata_turnos_de_mesmo_inicio_pelo_id() -> None:
     escala = (
         schedule()
+        # m-1 em f9 (termina 12h) e m-2 em f5 (termina 11h): ids de faixa e fins dariam
+        # m-2 primeiro — só o id da alocação explica ["m-1", "m-2"].
         .enable_band(ShiftBandId("f9"), TimeRange(start=at(MONDAY, 10), end=at(MONDAY, 12)))
         .enable_band(ShiftBandId("f5"), TimeRange(start=at(MONDAY, 10), end=at(MONDAY, 11)))
         .declare_demand(ShiftDemandId("d9"), ShiftBandId("f9"), COOK, DemandQuantity(1))
         .declare_demand(ShiftDemandId("d5"), ShiftBandId("f5"), COOK, DemandQuantity(1))
-        .assign(AssignmentId("m-2"), ShiftDemandId("d9"), EmployeeId("ana"))
-        .assign(AssignmentId("m-1"), ShiftDemandId("d5"), EmployeeId("ana"))
+        .assign(AssignmentId("m-2"), ShiftDemandId("d5"), EmployeeId("ana"))
+        .assign(AssignmentId("m-1"), ShiftDemandId("d9"), EmployeeId("ana"))
     )
     minha = results.to_my_schedule_result(
         MONDAY, MONDAY, (escala,), frozenset({EmployeeId("ana")}), _staff(), _NOMES

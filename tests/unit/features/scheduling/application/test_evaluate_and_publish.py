@@ -22,6 +22,7 @@ from restaurant_hub.features.scheduling.application.dtos.commands import (
 from restaurant_hub.features.scheduling.application.dtos.queries import EvaluateScheduleQuery
 from restaurant_hub.features.scheduling.application.errors import (
     BlockingViolationsError,
+    IdentifierInUseError,
     MissingStaffRecordsError,
     ScheduleNotFoundError,
     ScheduleVersionConflictError,
@@ -49,6 +50,8 @@ from restaurant_hub.features.scheduling.domain.value_objects.identifiers import 
     ScheduleId,
     ShiftBandId,
     ShiftDemandId,
+    TenantId,
+    UnitId,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.operational_calendar import (
     OperationalCalendar,
@@ -65,6 +68,7 @@ from tests.unit.features.scheduling.application.conftest import (
     MONDAY,
     NOW,
     T1,
+    T2,
     U1,
     U2,
     World,
@@ -165,8 +169,11 @@ def test_ca02_versao_vencida_recusa_com_a_atual_sem_gravar(world: World, caso: s
 
 
 @pytest.mark.parametrize("caso", ["avaliar", "publicar"])
-def test_ca26_escala_de_outra_unidade_nao_e_encontrada(world: World, caso: str) -> None:
-    _seed(world, schedule("s1", unit=U2))
+@pytest.mark.parametrize("endereco", [(T1, U2), (T2, U1)], ids=["outra-unidade", "outro-tenant"])
+def test_ca26_escala_de_outra_unidade_ou_tenant_nao_e_encontrada(
+    world: World, caso: str, endereco: tuple[TenantId, UnitId]
+) -> None:
+    _seed(world, schedule("s1", tenant=endereco[0], unit=endereco[1]))
     with pytest.raises(ScheduleNotFoundError):
         if caso == "avaliar":
             _evaluate(world).execute(_q(world, ()))
@@ -190,6 +197,20 @@ def test_ca26_config_gravada_do_tenant_vale_no_avaliador(world: World) -> None:
     assert resultado.warnings == ()
 
 
+def test_ca26_config_de_outro_tenant_nao_e_lida(world: World) -> None:
+    _seed(world)
+    silenciosa = PolicyRule(enabled=False, mode=EnforcementMode.WARN)
+    world.config.set_settings(
+        T2,
+        SchedulingSettings(
+            calendar=OperationalCalendar.default(),
+            validation=dataclasses.replace(ValidationConfig.default(), over_coverage=silenciosa),
+        ),
+    )
+    resultado = _evaluate(world).execute(_q(world, _EXCEDENTE))
+    assert [v.policy for v in resultado.warnings] == [PolicyKind.OVER_COVERAGE]
+
+
 # --- CA06 — block --------------------------------------------------------------------------
 
 
@@ -199,6 +220,28 @@ def test_ca06_publicar_recusa_block_introduzida_sem_gravar(world: World) -> None
         _publish(world).execute(_c(world, _SOBREPOSICAO))
     assert [v.policy for v in excinfo.value.violations] == [PolicyKind.OVERLAP]
     assert "save" not in world.schedules.calls
+
+
+def test_ca06_todas_as_block_introduzidas_sobem_no_erro(world: World) -> None:
+    _seed(world)
+    # Indisponibilidade de Ana só na janela da faixa nova (16-18h; f1 termina às 16h).
+    janela = UnavailabilityWindow(start=at(MONDAY, 16), end=at(MONDAY, 18))
+    world.staff.add_member(T1, member("ana", unavailabilities=(janela,)), user_id="user-ana")
+    with pytest.raises(BlockingViolationsError) as excinfo:
+        _publish(world).execute(_c(world, _SOBREPOSICAO))
+    assert {v.policy for v in excinfo.value.violations} == {
+        PolicyKind.OVERLAP,
+        PolicyKind.UNAVAILABILITY,
+    }
+    assert len(excinfo.value.violations) == 2  # noqa: PLR2004
+
+
+def test_ids_de_criacao_sao_conferidos_antes_da_leitura_de_staff(world: World) -> None:
+    _seed(world)
+    world.staff.remove_member(T1, U1, "ana")
+    reuso = (EnableBand(_F1, TimeRange(start=at(MONDAY, 18), end=at(MONDAY, 20))),)
+    with pytest.raises(IdentifierInUseError):
+        _evaluate(world).execute(_q(world, reuso))
 
 
 def test_ca06_block_e_checado_antes_do_warn(world: World) -> None:
