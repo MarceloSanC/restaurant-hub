@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-11-01
-last_reviewed_at: 2026-11-01
+updated_at: 2026-11-02
+last_reviewed_at: 2026-11-02
 ---
 
 # Roadmap — restaurant-hub
@@ -159,24 +159,32 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#6](https://github.com/MarceloSanC/restaurant-hub/issues/6) | Plugar `configure_logging` no boot da aplicação | shared | shared/infrastructure + bootstrap | done | — |
 | [#7](https://github.com/MarceloSanC/restaurant-hub/issues/7) | Alinhar hook mirrors-mypy e prevenir drift de versão dos hooks pre-commit | shared | tooling | done | — |
 | [#8](https://github.com/MarceloSanC/restaurant-hub/issues/8) | Definir política de fim de linha com `.gitattributes` e renormalizar | shared | repo | done | — |
-| [#10](https://github.com/MarceloSanC/restaurant-hub/issues/10) | Ativar modo autônomo para as stages 1.2→3.5 (ADR 0.0.0004 accepted) | shared | docs | open | — |
+| [#10](https://github.com/MarceloSanC/restaurant-hub/issues/10) | Ativar modo autônomo para as stages 1.2→3.5 (ADR 0.0.0004 accepted) | shared | docs | done | — |
 | [#12](https://github.com/MarceloSanC/restaurant-hub/issues/12) | Padronizar placeholders de Stage que viram comando (stage_id × número) | shared | docs + tooling | done | — |
-| [#16](https://github.com/MarceloSanC/restaurant-hub/issues/16) | `check_stage_issue.py` aprova issue CLOSED (busca state mas não usa) | shared | tooling | open | — |
+| [#16](https://github.com/MarceloSanC/restaurant-hub/issues/16) | `check_stage_issue.py` aprova issue CLOSED (busca state mas não usa) | shared | tooling | done | — |
 | [#26](https://github.com/MarceloSanC/restaurant-hub/issues/26) | Registrar no log a causa suprimida dos 401/403 | identity | adapters/inbound/http | done | #6 |
 | [#29](https://github.com/MarceloSanC/restaurant-hub/issues/29) | Doc de domínio do BC staff — gate do Step 3 | staff | docs | done | — |
 | [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | open | — |
 | [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34) | Promover o sufixo `[N.M/task-NN-fix]` de commits de correção de checkpoint a convenção | shared | docs + tooling | done | — |
 | [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37) | Varrer `workforce.md` contra os ADRs 3.1.x — três lacunas declaradas abertas já foram fechadas | staff | docs | done | — |
+| [#41](https://github.com/MarceloSanC/restaurant-hub/issues/41) | Habilitação de função de trabalho por unidade (função segue do restaurante; gerente cria para a sua unidade, alcance extra-unidade para todas) | staff | domain + application + adapters/out | open | `3.4-staff-access-scope` |
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
 | [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | done | — |
-| [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | open | — |
+| [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | done | — |
 | [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
+| [#65](https://github.com/MarceloSanC/restaurant-hub/issues/65) | Trazer do financial-forecasting o harness posterior à #56 | shared | tooling + docs | open | #56 |
 | [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | open | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | done | — |
+| [#75](https://github.com/MarceloSanC/restaurant-hub/issues/75) | Negar na application de staff ator que o guard não emitiu (drivers fora da borda HTTP) | staff | application | open | `3.7-application-authorization` |
+| [#76](https://github.com/MarceloSanC/restaurant-hub/issues/76) | Validar identificador fora da borda HTTP antes de autorizar | staff | application | open | `3.7-application-authorization` |
+| [#77](https://github.com/MarceloSanC/restaurant-hub/issues/77) | Trocar o ponteiro `(#49)` da fachada de identity e do ADR 3.5.0001 pelo ADR 3.7.0001 | identity | docs + application (fachada) | open | `3.7-application-authorization` |
+| [#78](https://github.com/MarceloSanC/restaurant-hub/issues/78) | Medir sob carga o custo da dupla autorização de staff (borda + use case) | staff | ops (medição) | blocked | `6.3-ops-baseline` |
+| [#79](https://github.com/MarceloSanC/restaurant-hub/issues/79) | Citar o roadmap por âncora estável em vez de número de linha (gate no `docs-check`) | shared | docs + tooling | open | — |
+| [#81](https://github.com/MarceloSanC/restaurant-hub/issues/81) | Merge do auditor de dentro da worktree não apaga a branch remota | shared | docs | open | — |
 | [#82](https://github.com/MarceloSanC/restaurant-hub/issues/82) | Tripwire para campo de credencial em resposta que nasça sem a marca `x-credential` (especulativa; disparo: rota de reemissão do link ou primeiro frontend do Step 3) | shared | tests (e2e) | open | #61 |
 | [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | open | #58 |
 | [#85](https://github.com/MarceloSanC/restaurant-hub/issues/85) | `make migrate` e `make run` sem a guarda da `DATABASE_URL` da worktree | shared | tooling | open | #58 |
