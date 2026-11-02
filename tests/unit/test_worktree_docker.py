@@ -309,6 +309,19 @@ def test_command_error_with_daemon_up_goes_back_to_the_caller(
     assert wd.docker("volume", "rm", "x").returncode == 1
 
 
+def test_published_ports_with_an_unknown_daemon_error_raise_instead_of_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`permission denied` no socket não está nos marcadores de `_daemon_down`: o `ps`
+    sairia com 1 e lista vazia, e o picker perderia as portas dos containers parados
+    sem avisar (achado da auditoria de testes).
+    """
+    denied = "permission denied while trying to connect to the Docker daemon socket"
+    _patch_run(monkeypatch, _cp(returncode=1, stderr=denied))
+    with pytest.raises(wd.DockerUnavailable, match="permission denied"):
+        wd.published_host_ports()
+
+
 def test_ensure_daemon_fails_on_any_info_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_run(monkeypatch, _cp(returncode=1, stderr="permission denied"))
     with pytest.raises(wd.DockerUnavailable, match="permission denied"):

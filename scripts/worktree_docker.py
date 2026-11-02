@@ -185,7 +185,12 @@ def published_host_ports() -> set[int]:
 
     O `docker ps` não mostra as portas do container parado, mas o `start` dele
     as toma de volta; a fonte é o `HostConfig.PortBindings` do `inspect`.
+
+    O `docker ps` que falha por motivo fora dos marcadores de `_daemon_down`
+    (`permission denied` no socket, sem o grupo docker) sairia com a lista
+    vazia: o `ensure_daemon` antes faz dele `DockerUnavailable`, não "sem portas".
     """
+    ensure_daemon()
     ids = _lines(docker("ps", "-aq"))
     if not ids:
         return set()
