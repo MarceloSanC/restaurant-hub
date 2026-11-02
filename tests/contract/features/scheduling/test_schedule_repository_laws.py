@@ -4,6 +4,7 @@ Parametrizada pela fixture `schedule_repo` (conftest): só o fake nesta Stage; a
 acrescenta o adapter Postgres. A semeadura usa o próprio port (`add`/`save`).
 """
 
+from collections.abc import Callable
 from datetime import date, datetime, time, timedelta
 
 import pytest
@@ -128,7 +129,9 @@ def test_l_sc2_adjacente_e_outra_unidade_passam(schedule_repo: ScheduleRepositor
     schedule_repo.add(_escala("s1"), _mudanca())
     schedule_repo.add(_escala("s2", _SEG + _SEMANA), _mudanca())
     schedule_repo.add(_escala("s3", unit="u2"), _mudanca())
+    schedule_repo.add(_escala("s4", tenant="t2"), _mudanca())  # mesma unit_id, outro tenant
     assert schedule_repo.find_by_id(_T, UnitId("u2"), ScheduleId("s3")) is not None
+    assert schedule_repo.find_by_id(TenantId("t2"), _U, ScheduleId("s4")) is not None
 
 
 def test_l_sc4_save_otimista(schedule_repo: ScheduleRepository) -> None:
@@ -142,6 +145,25 @@ def test_l_sc4_save_otimista(schedule_repo: ScheduleRepository) -> None:
     with pytest.raises(ScheduleVersionConflictError) as excinfo:
         schedule_repo.save(_com_faixa(escala, "f9"), 1, _mudanca(1))
     assert excinfo.value.current_version == 2  # noqa: PLR2004
+    # Manter os próprios ids internos (f1) não é colisão: a escala não colide consigo.
+    v3 = v2.redeclare_band_break(ShiftBandId("f1"), 30)
+    schedule_repo.save(v3, 2, _mudanca(2))
+    relida = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
+    assert relida is not None
+    assert relida.version == 3  # noqa: PLR2004
+
+
+def test_l_sc4_ordem_endereco_versao_ids(schedule_repo: ScheduleRepository) -> None:
+    s1 = _com_faixa(_escala("s1"), "f1")
+    schedule_repo.add(s1, _mudanca())
+    s2 = _escala("s2", _SEG + _SEMANA)
+    schedule_repo.add(s2, _mudanca())
+    # versão vencida E id de outra escala ⇒ a versão vem antes dos ids
+    with pytest.raises(ScheduleVersionConflictError):
+        schedule_repo.save(_com_faixa(s2, "f1"), 7, _mudanca(7))
+    # endereço inexistente E versão errada ⇒ o endereço vem antes da versão
+    with pytest.raises(ScheduleNotFoundError):
+        schedule_repo.save(_escala("s2", _SEG + _SEMANA, unit="u2"), 7, _mudanca(7))
 
 
 def test_l_sc4_save_de_inexistente_ou_de_outro_endereco_recusa(
@@ -168,6 +190,10 @@ def test_l_sc4_id_interno_de_outra_escala_da_unidade_recusa(
     s3 = _escala("s3", unit="u2")
     schedule_repo.add(s3, _mudanca())
     schedule_repo.save(_com_faixa(s3, "f1"), 1, _mudanca(1))
+    # Nem em outro tenant com a mesma unit_id.
+    s4 = _escala("s4", tenant="t2")
+    schedule_repo.add(s4, _mudanca())
+    schedule_repo.save(_com_faixa(s4, "f1"), 1, _mudanca(1))
 
 
 def test_l_sc5_endereco_de_tres_partes(schedule_repo: ScheduleRepository) -> None:
@@ -175,6 +201,7 @@ def test_l_sc5_endereco_de_tres_partes(schedule_repo: ScheduleRepository) -> Non
     assert schedule_repo.find_by_id(TenantId("t2"), _U, ScheduleId("s1")) is None
     assert schedule_repo.find_by_id(_T, UnitId("u2"), ScheduleId("s1")) is None
     assert schedule_repo.list_in_range(_T, UnitId("u2"), _SEG, _SEG) == ()
+    assert schedule_repo.list_in_range(TenantId("t2"), _U, _SEG, _SEG) == ()
     assert schedule_repo.list_ending_before(TenantId("t2"), _U, _SEG + 5 * _SEMANA, 10) == ()
 
 
@@ -198,7 +225,10 @@ def test_l_sc7_anteriores_da_mais_recente_ate_o_limite(schedule_repo: ScheduleRe
     assert [e.id for e in schedule_repo.list_ending_before(_T, _U, s2_fim, 10)] == ["s1"]
 
 
-def test_l_sc3_a_mudanca_e_gravada_com_o_estado(schedule_repo: ScheduleRepository) -> None:
+def test_l_sc3_a_mudanca_e_gravada_com_o_estado(
+    schedule_repo: ScheduleRepository,
+    trail_of: Callable[[str], tuple[ScheduleChange, ...]],
+) -> None:
     escala = _escala("s1")
     criacao = _mudanca()
     schedule_repo.add(escala, criacao)
@@ -214,9 +244,8 @@ def test_l_sc3_a_mudanca_e_gravada_com_o_estado(schedule_repo: ScheduleRepositor
         acknowledged=(),
     )
     schedule_repo.save(_com_faixa(escala), 1, edicao)
-    trilha = getattr(schedule_repo, "changes_of")(ScheduleId("s1"))  # noqa: B009
-    assert trilha == (criacao, edicao)
+    assert trail_of("s1") == (criacao, edicao)
     # Recusa não grava a mudança.
     with pytest.raises(ScheduleVersionConflictError):
         schedule_repo.save(_com_faixa(escala, "f9"), 1, _mudanca(1))
-    assert getattr(schedule_repo, "changes_of")(ScheduleId("s1")) == (criacao, edicao)  # noqa: B009
+    assert trail_of("s1") == (criacao, edicao)

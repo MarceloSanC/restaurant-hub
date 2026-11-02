@@ -122,6 +122,35 @@ def test_ca11_marca_de_excecao_nasce_pela_nao_detencao(registro: str, excecao: b
     assert alocacao.counts_toward_workload is False
 
 
+def test_ca11_demanda_de_funcao_do_catalogo_e_aplicada() -> None:
+    lote = apply_operations(
+        _base(), (DeclareDemand(ShiftDemandId("d2"), _F1, WAITER, DemandQuantity(1)),), _VIEW
+    )
+    _, demanda = lote.schedule.locate_demand(ShiftDemandId("d2"))
+    assert demanda.job_function_id == WAITER
+
+
+def test_pre_checagens_da_application_vem_antes_do_dominio() -> None:
+    # Alvo ausente E demanda inexistente: a recusa é a da application.
+    with pytest.raises(StaffMemberNotFoundError):
+        apply_operations(
+            _base(),
+            (AssignEmployee(AssignmentId("a1"), ShiftDemandId("nao"), EmployeeId("zé")),),
+            _VIEW,
+        )
+    # Função fora do catálogo E faixa inexistente: idem.
+    with pytest.raises(JobFunctionNotFoundError):
+        apply_operations(
+            _base(),
+            (
+                DeclareDemand(
+                    ShiftDemandId("d2"), ShiftBandId("nao"), JobFunctionId("x"), DemandQuantity(1)
+                ),
+            ),
+            _VIEW,
+        )
+
+
 def test_ca11_demanda_de_funcao_fora_do_catalogo_recusa() -> None:
     with pytest.raises(JobFunctionNotFoundError):
         apply_operations(
@@ -185,13 +214,26 @@ def test_ca12_lote_misto_so_lista_as_efetivas_e_a_versao_conta_so_elas() -> None
 
 
 @pytest.mark.parametrize(
-    "inicio",
-    [at(MONDAY, 11).replace(tzinfo=UTC), at(MONDAY, 11).replace(second=30)],
-    ids=["tz-aware", "com-segundos"],
+    ("inicio", "fim"),
+    [
+        # Outro dia: sem a pré-checagem o domínio diria ShiftBandDayChangeError.
+        (
+            at(MONDAY + timedelta(days=1), 11).replace(tzinfo=UTC),
+            at(MONDAY + timedelta(days=1), 17),
+        ),
+        # Fora do período: sem a pré-checagem, TimeRangeOutsidePeriodError.
+        (
+            at(MONDAY + timedelta(days=30), 11).replace(second=30),
+            at(MONDAY + timedelta(days=30), 17),
+        ),
+    ],
+    ids=["tz-aware-outro-dia", "com-segundos-fora-do-periodo"],
 )
-def test_ca19_limites_de_reagendamento_validados_antes_do_dia_operacional(inicio: datetime) -> None:
+def test_ca19_limites_de_reagendamento_validados_antes_do_dia_operacional(
+    inicio: datetime, fim: datetime
+) -> None:
     with pytest.raises(InvalidTimeRangeError):
-        apply_operations(_base(), (RescheduleBand(_F1, inicio, at(MONDAY, 17)),), _VIEW)
+        apply_operations(_base(), (RescheduleBand(_F1, inicio, fim),), _VIEW)
 
 
 # --- CA14 — D3 ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ staff, `tests/contract/features/staff/conftest.py`): a 4.4 acrescenta o adapter 
 `params` e a sua semeadura, e as leis não mudam.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import time
 from decimal import Decimal
 
@@ -16,6 +16,7 @@ from restaurant_hub.features.scheduling.application.ports.out.schedule_config_re
     SchedulingSettings,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ScheduleChange,
     ScheduleRepository,
 )
 from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
@@ -84,6 +85,15 @@ def mundo(request: pytest.FixtureRequest) -> Iterator[StaffReadPort]:
 def schedule_repo(request: pytest.FixtureRequest) -> Iterator[ScheduleRepository]:
     assert request.param == "fake"
     yield InMemoryScheduleRepository()
+
+
+@pytest.fixture
+def trail_of(
+    schedule_repo: ScheduleRepository,
+) -> Callable[[str], tuple[ScheduleChange, ...]]:
+    """Leitor da trilha gravada (L-SC3), por implementação — a 4.4 lê a sua tabela."""
+    assert isinstance(schedule_repo, InMemoryScheduleRepository)
+    return schedule_repo.changes_of
 
 
 @pytest.fixture(params=["fake"])
