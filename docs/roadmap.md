@@ -192,6 +192,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | open | — |
 | [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
 | [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário | staff | application + identity (fachada) | open | — |
+| [#108](https://github.com/MarceloSanC/restaurant-hub/issues/108) | Remoção concorrente com R17 não pode apagar registro já vinculado (conta órfã) | staff | application + adapters/out | open | #68 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
