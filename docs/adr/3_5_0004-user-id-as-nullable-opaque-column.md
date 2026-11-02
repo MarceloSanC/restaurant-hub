@@ -5,7 +5,7 @@ when-use: Reference before touching `employees.user_id`, before adding a constra
 keywords: [adr, user_id, employee, login-link, schema, nullable, opaque, no-fk, no-unique, copy, staff]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-09-13
+updated_at: 2026-11-01
 adr_id: 3.5.0004
 decision: `Employee.user_id: UserId | None` (default `None`) persisted as `employees.user_id TEXT NULL` — opaque (no FK to identity, ADR 3.3.0002), not unique (workforce §3.7 allows several records per person), not indexed (no access path by `user_id` yet, ADR 3.3.0005); set only through `Employee.link_login`, which refuses a record that is already linked or terminated; never carried by the copy, by construction (explicit field-by-field clone with the default left untouched)
 context_stage: 3.5-employee-login-link
@@ -187,3 +187,15 @@ every route that embeds an employee shows the link (concept §5.12, CA06, CA13).
   ADR 3.3.0002 (no cross-BC FK), ADR 3.3.0005 (indexing follows access),
   ADR 3.5.0003 (termination cuts access)
 - `src/restaurant_hub/features/staff/application/use_cases/copy_employee_to_unit.py:71`
+
+## Supersessão parcial
+
+**2026-11-01 — a frase de `## Decision` §4 *"The column is **not** in `_COLUNAS_IMUTAVEIS`: it is
+set by `update`"* e o primeiro item de `### Negative` (*"'Set once' holds on the in-memory entity,
+not on the row …"*) foram superados por
+[ADR 0.0.0010](./0_0_0010-employee-login-link-has-its-own-conditional-write.md) (issue #68).**
+O vínculo passou a ter escrita própria e condicional no port (`EmployeeRepository.link_login`,
+lei `L-LINK`), que prende a linha e aplica as guardas do domínio sobre o **gravado**; o `update`
+deixou de gravar `user_id`. "Definido uma vez" agora vale também na linha, não só na entidade em
+memória. Tudo o mais deste ADR — coluna anulável e opaca, sem FK, sem UNIQUE, sem índice, nunca
+copiada — continua valendo. Nota *append-only*; o corpo acima não foi editado.
