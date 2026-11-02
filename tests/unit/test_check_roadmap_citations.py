@@ -126,6 +126,9 @@ def test_o_repositorio_real_cita_o_roadmap_so_por_ancora_que_resolve() -> None:
         "delegado pelo roadmap 1902 (§3.8)",
         "`roadmap.md` 1362 pede o evento de publicação",
         "the roadmap (lines 820–824).",
+        "`roadmap.md` (l. 1362) diz",
+        "ver [roadmap](../roadmap.md#L1362)",
+        "ver roadmap.md#L1362-L1370 no GitHub",
     ],
     ids=[
         "simples",
@@ -139,6 +142,9 @@ def test_o_repositorio_real_cita_o_roadmap_so_por_ancora_que_resolve() -> None:
         "sem-extensao",
         "seguido-de-palavra",
         "lines-em-ingles",
+        "l-ponto-abreviado",
+        "fragmento-de-linha-no-link",
+        "fragmento-de-linha-solto",
     ],
 )
 def test_numero_de_linha_depois_do_roadmap_reprova(tmp_path: pathlib.Path, texto: str) -> None:
@@ -229,6 +235,7 @@ def test_ancora_que_existe_no_roadmap_passa(tmp_path: pathlib.Path, ancora: str)
         ('§"Tabela de Issues" › #57', "rótulo #57 não existe"),
         ('§"Tabela Inexistente" › "x"', 'seção §"Tabela Inexistente" não existe'),
         ('§"Stage 4.9 — `4.9-x`"', "não existe no roadmap"),
+        ('§Stage 4.1 › "modelar Escala"', 'rótulo "modelar Escala" não existe em §Stage 4.1'),
     ],
 )
 def test_ancora_que_nao_resolve_reprova(tmp_path: pathlib.Path, ancora: str, motivo: str) -> None:
@@ -247,6 +254,15 @@ def test_o_rotulo_e_procurado_so_dentro_da_secao(tmp_path: pathlib.Path) -> None
 
 def test_o_step_engloba_os_blocos_das_suas_stages(tmp_path: pathlib.Path) -> None:
     assert _problemas(tmp_path, 'Ver §Step 4 › "Escopo exclusivo".') == []
+
+
+def test_stage_n_m_nao_casa_com_o_prefixo_de_stage_n_mm(tmp_path: pathlib.Path) -> None:
+    """`§Stage 4.2` não resolve em `Stage 4.20`: o número da Stage é inteiro, não prefixo."""
+    roadmap = _ROADMAP.replace("#### Stage 4.2 — `4.2-", "#### Stage 4.20 — `4.20-")
+    repo = _repo(tmp_path, {"docs/x.md": "Ver `roadmap.md` §Stage 4.2."}, roadmap=roadmap)
+    achados = gate.problemas(repo)
+    assert len(achados) == 1
+    assert "seção §Stage 4.2 não existe" in achados[0]
 
 
 def test_um_rotulo_errado_na_lista_reprova_sozinho(tmp_path: pathlib.Path) -> None:

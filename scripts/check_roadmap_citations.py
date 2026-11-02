@@ -106,6 +106,10 @@ _NUMERO_IMEDIATO = re.compile(
     r"^\s*:?\s*\(?\s*(?:(?:linhas?|lines?|l\.)\s*)?\d{2,4}\b", re.IGNORECASE
 )
 
+# Fragmento de linha do GitHub (`roadmap.md#L1362`, `[roadmap](../roadmap.md#L1362)`)
+# é número de linha com outra roupa.
+_FRAGMENTO_DE_LINHA = re.compile(r"roadmap\.md#L\d", re.IGNORECASE)
+
 # --- Regra 2: âncora ----------------------------------------------------------
 
 _ROTULO = r'(?:"[^"\n]+"|`[^`\n]+`|nota \d{4}-\d{2}-\d{2}|#\d+)'
@@ -183,7 +187,13 @@ def citacoes_por_linha(texto: str) -> list[tuple[int, str]]:
         limpo = trecho
         for neutro in _NEUTROS:
             limpo = neutro.sub(" ", limpo)
-        if _NUMERO_IMEDIATO.match(trecho) or _NUMERO_DE_LINHA.search(limpo):
+        # O número imediato é procurado no `resto`, não no `trecho`: o `.` de
+        # `(l. 1362)` encerraria o trecho antes do número.
+        if (
+            _NUMERO_IMEDIATO.match(resto)
+            or _NUMERO_DE_LINHA.search(limpo)
+            or _FRAGMENTO_DE_LINHA.search(texto, ref.start(), ref.end() + len("#L0"))
+        ):
             achados.append(
                 (_linha_de(texto, ref.start()), (ref.group(0) + trecho).replace("\n", " ").strip())
             )
