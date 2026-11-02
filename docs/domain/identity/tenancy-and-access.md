@@ -117,7 +117,7 @@ alcança**:
 | **Provisionar** | Criar o restaurante com o seu primeiro dono (ato de plataforma — [ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md)); por extensão, criar a conta pendente de um funcionário ([ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) §3). |
 | **Sessão** | Registro revogável de um login, guardado pela impressão (fingerprint) do refresh token, nunca pelo valor ([ADR 2.2.0001](../../adr/2_2_0001-revocable-refresh-session-port.md) §Decision). |
 | **Access token** | Credencial curta e assinada que carrega usuário, papel, tenant e sessão (concept 2.4; `AccessTokenClaims`). Não é revogável antes de expirar ([ADR 2.5.0003](../../adr/2_5_0003-password-change-revokes-sessions.md) §Decision). |
-| **Refresh token** | Credencial opaca que renova o par; **rotaciona** a cada uso ([ADR 2.2.0001](../../adr/2_2_0001-revocable-refresh-session-port.md) §Decision). |
+| **Refresh token** | Credencial opaca que renova o par; **rotaciona** a cada uso ([ADR 2.2.0001](../../adr/2_2_0001-revocable-refresh-session-port.md) §Context, "persisted and rotated"; concept 2.4 §5 regra 5). |
 | **Reuso** | Reapresentação de um refresh cuja sessão já foi revogada — sinal de roubo; derruba todas as sessões do usuário (concept 2.4 §5 regra 5). |
 | **Token de setup** | Token dedicado, de uso único e com propósito (convite ou redefinição), que só serve para **definir a senha** ([ADR 2.5.0002](../../adr/2_5_0002-dedicated-single-use-setup-token.md)). |
 | **Conta pendente** | Conta criada sem senha utilizável (hash inutilizável), que só se torna usável pelo link de definição de senha ([ADR 2.5.0004](../../adr/2_5_0004-unusable-hash-for-pending-accounts.md); [ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) §1). |
@@ -213,8 +213,8 @@ alcança**:
 
 **Regras canônicas:**
 
-- **O vínculo é mínimo**: usuário + unidade, sem papel por unidade; o papel é **único no tenant**
-  ([ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md) §Decision). Papel por
+- **O vínculo é mínimo**: usuário + unidade, sem papel por unidade ([ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md)
+  §Decision); o papel é **único no tenant** (idem, §Context). Papel por
   unidade é evolução prevista que cabe como atributo do vínculo sem refazer a forma (concept 2.1
   §7 "Fronteiras de agregado e esqueleto de membership").
 - **Os dois eixos são ortogonais** — o papel diz o que se faz; o vínculo diz onde
@@ -249,8 +249,8 @@ esquecer de checar ([ADR 2.2.0002](../../adr/2_2_0002-authorization-two-axes-fai
    exerce uma permissão tenant-wide
    ([ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md) §2). Fecha
    a escalada por omissão: um gerente não ganha alcance de tenant por deixar de nomear a unidade.
-5. **Eixo B** — com unidade alvo, ela existe, pertence ao tenant alvo (coerência que vale também
-   para o `platform_admin`) e o ator a enxerga.
+5. **Eixo B** — com unidade alvo, ela existe, pertence ao tenant alvo quando um tenant alvo foi
+   declarado (coerência que vale também para o `platform_admin`) e o ator a enxerga.
 
 A ordem é contrato: um ator que falha em várias checagens recebe o erro da primeira, e há teste que
 quebra se ela for reordenada ([ADR 2.2.0002](../../adr/2_2_0002-authorization-two-axes-fail-closed.md)
@@ -286,7 +286,8 @@ universal do sistema**: vale para essas rotas (ADR 2.4.0003 §2).
 - O tenant que decide o acesso **sempre deriva do token**; tenant que chega na requisição é
   declaração conferida contra ele, nunca fonte.
 - O tenant aparece no caminho da requisição **só** quando o BC é dono do restaurante como recurso
-  endereçável (identity é; staff e scheduling não) ou quando o ator age fora do próprio tenant
+  endereçável (identity é; staff não — os dois BCs que o ADR mede;
+  [`shift-scheduling.md`](../scheduling/shift-scheduling.md) §3.10.2 aplica a mesma leitura a scheduling) ou quando o ator age fora do próprio tenant
   (`platform_admin`).
 - O tenant do usuário criado **nunca** vem do corpo: nas rotas de tenant é o do ator; na rota de
   plataforma é o restaurante do caminho, resolvido contra o banco
@@ -393,13 +394,16 @@ id nem papel do dono) — fechar isso exigiria rever a unicidade global (idem, �
   pendente. Tentar logar nela é indistinguível de senha errada
   ([ADR 2.5.0004](../../adr/2_5_0004-unusable-hash-for-pending-accounts.md) §Decision; concept 2.5
   §5 regra 9).
-- **O token de setup é dedicado, persistido só por impressão, de uso único e com propósito**
-  (convite × redefinição). O uso único é uma transição atômica condicional: o segundo uso perde
-  ([ADR 2.5.0002](../../adr/2_5_0002-dedicated-single-use-setup-token.md) §1–§3).
-- **Emitir invalida só os do mesmo propósito; redimir invalida todos.** Reconvidar deixa um convite
-  vivo e repedir redefinição deixa uma redefinição viva; uma redefinição pública **não** mata um
-  convite pendente — senão qualquer um derrubaria o convite de qualquer vítima em loop
-  ([ADR 2.5.0002](../../adr/2_5_0002-dedicated-single-use-setup-token.md) §5).
+- **O token de setup é dedicado, persistido só por impressão e de uso único**; o uso único é uma
+  transição atômica condicional: o segundo uso perde
+  ([ADR 2.5.0002](../../adr/2_5_0002-dedicated-single-use-setup-token.md) §1–§3). Cada token tem um
+  **propósito** — convite ou redefinição (idem, §5).
+- **Emitir invalida só os do mesmo propósito; redimir invalida todos.** Repedir redefinição deixa
+  uma redefinição viva; uma redefinição pública **não** mata um convite pendente — senão qualquer um
+  derrubaria o convite de qualquer vítima em loop
+  ([ADR 2.5.0002](../../adr/2_5_0002-dedicated-single-use-setup-token.md) §5). Na prática só a
+  redefinição emite duas vezes: convidar de novo o mesmo e-mail é recusado como e-mail já
+  cadastrado e não emite token (concept 2.5 §5 regra 6; achado C5).
 - **O alvo vem só do token.** Quem define a senha é o usuário que o servidor gravou no token; nem o
   pedido nem o corpo nomeiam usuário (concept 2.5 §5 regra 10).
 - **Definir a senha expulsa o acesso anterior:** revoga todas as sessões do usuário e invalida todos
@@ -501,12 +505,14 @@ Pontos em que os insumos ratificados **não fixam** a regra. Nenhum é decidido 
 sua âncora de origem.
 
 - **Credencial inicial do dono** — a plataforma escolhe a senha do dono provisionado e nada obriga a
-  troca. Convite, troca obrigatória ou senha mantida é decisão P do sponsor — issue #114
+  troca. Convite, troca obrigatória ou senha mantida é decisão P do sponsor — issue #114, aberta
+  a partir do achado F1 da issue #67
   ([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md),
-  Alternativa E e Consequências).
+  Alternative E e §Negative).
 - **Autorização dentro dos use cases de identity** — hoje só na borda HTTP; um segundo driver (CLI,
-  job, console) não herdaria a checagem. Decisão para o BC inteiro — issue #115
-  ([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) §4).
+  job, console) não herdaria a checagem. "A decision for the whole bounded
+  context" ([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) §4)
+  — issue #115, aberta a partir do achado F2 da issue #67.
 - **Gestão de vínculo depois da criação** — acrescentar, retirar ou trocar unidade de um usuário,
   e vincular login existente a registro de staff (o gerente ou dono que também trabalha na escala)
   — issue #107; a regra de fim de vínculo a aplicar é a do
@@ -530,7 +536,7 @@ sua âncora de origem.
 - **Link perdido sem e-mail** — para quem não tem e-mail, link em mãos perdido ou vencido é beco sem
   saída declarado; o reenvio seguro depende de identity distinguir conta pendente de ativa
   ([ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md),
-  §Negative).
+  §Neutral / trade-offs accepted).
 - **Conta órfã de identity** quando a gravação de staff falha depois de provisionar o login —
   janela declarada; a recuperação depende de "vincular login existente"
   ([ADR 2.6.0002](../../adr/2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md)
@@ -576,11 +582,13 @@ virou lacuna (§5).
 **Achados — contradições e desatualizações nas fontes** (registrados na issue #30, não corrigidos
 aqui, porque o texto de ADR e de concept não se edita por este doc):
 
-- **C1 — numeração das decisões de kickoff diverge entre as fontes.** O concept 2.1 cita "kickoff
-  #4" para "papel fixo → conjunto de permissões" (§7) e o concept 2.2 cita "kickoff #1" para o
-  refresh persistido; o registro do kickoff na memória do projeto numera o refresh como #4 e o
-  vínculo como #1, e é essa numeração que `workforce.md`, `shift-scheduling.md` e o ADR 3.5.0003
-  (#13) seguem. A lista do kickoff não vive no repositório, então o número não é âncora estável.
+- **C1 — numeração das decisões de kickoff diverge entre as fontes.** O mesmo número e a mesma
+  data nomeiam coisas diferentes dentro do repo: o ADR 2.1.0001 §Context diz "Kickoff decision #1
+  (2026-07-16): a user has a single role" e o ADR 2.2.0001 §Context diz "Kickoff decision #1
+  (2026-07-16 …) settled … refresh token persisted and rotated"; o ADR 3.5.0003 chama o mesmo
+  refresh de "Kickoff decision #4", e o concept 2.1 §7 usa "kickoff #4" para "papel fixo →
+  conjunto de permissões". A lista do kickoff não vive no repositório, então o número não é âncora
+  estável.
   Este doc não cita kickoff por número; cita o concept ou o ADR que registrou a decisão.
 - **C2 — comentário do mapa de papéis desatualizado.** `role.py` diz que a Stage 4.x "não pode
   conceder a `hr` nenhuma permissão sobre a escala" (ADR 3.4.0006 §3), restrição superada em parte
@@ -595,6 +603,10 @@ aqui, porque o texto de ADR e de concept não se edita por este doc):
   valendo.
 - **C4 — a fachada de identity ainda aponta para a #49** como a razão de não autorizar, quando a
   decisão vigente é o ADR 0.0.0014 §4 / issue #115 — já rastreado pela issue #77.
+- **C5 — ADR 2.5.0002 §5 descreve um reconvite que não existe.** "Re-inviting leaves exactly one
+  live invitation" supõe que convidar de novo emite token; o concept 2.5 §5 regra 6 (e a regra 13)
+  fixa que convidar o mesmo e-mail responde como e-mail já cadastrado e não emite nada. A regra
+  de invalidação por propósito vale; o exemplo do ADR é que não tem caminho.
 
 ---
 
