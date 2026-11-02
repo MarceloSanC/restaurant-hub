@@ -20,10 +20,9 @@ import logging
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from sqlalchemy import Engine, text
 
-from tests.conftest import _ALEMBIC_INI, _REPO_ROOT
+from tests.conftest import alembic_config
 
 pytestmark = [pytest.mark.integration]
 
@@ -153,9 +152,7 @@ def test_downgrade_remove_o_que_o_upgrade_criou(engine: Engine, database_url: st
     O teste devolve o banco ao estado anterior no `finally`, inclusive se a asserção
     falhar — o `engine` é de escopo de sessão e compartilhado com o resto da suíte.
     """
-    config = Config(str(_ALEMBIC_INI))
-    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    config = alembic_config(database_url)
 
     try:
         command.downgrade(config, "base")
@@ -189,9 +186,7 @@ def test_downgrade_da_0004_remove_so_a_coluna_user_id(engine: Engine, database_u
     é observável isoladamente é o estado `0003`: a tabela **existe** e a coluna
     **não**. É isso que este teste mede, e devolve o banco a `head` no `finally`.
     """
-    config = Config(str(_ALEMBIC_INI))
-    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    config = alembic_config(database_url)
 
     assert "user_id" in _colunas_de_employees(engine)
     try:
@@ -217,13 +212,24 @@ def test_rodar_as_migrations_nao_desliga_logger_que_ja_existe(
     `caplog` só passava se rodasse antes do primeiro uso de `engine`. Aqui o
     logger nasce **antes** de um comando do Alembic e é conferido depois dele, no
     mesmo teste: o resultado não depende da ordem da suíte.
+
+    Desde a #86 o `alembic_config` da suíte pula o `fileConfig`
+    (`configure_logger=False`); este teste tira a chave para que o `fileConfig`
+    rode de fato — é o caminho de um chamador in-process que não a passa. O
+    `fileConfig` troca handlers e nível do root, devolvidos no `finally`.
     """
     logger = logging.getLogger("restaurant_hub.tests.sentinela_do_alembic")
     logger.disabled = False
-    config = Config(str(_ALEMBIC_INI))
-    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    config = alembic_config(database_url)
+    del config.attributes["configure_logger"]
+    root = logging.getLogger()
+    handlers, nivel = list(root.handlers), root.level
 
-    command.upgrade(config, "head")
+    try:
+        command.upgrade(config, "head")
+        assert root.level == logging.WARNING, "o fileConfig não rodou: o teste perdeu o objeto"
+    finally:
+        root.handlers[:] = handlers
+        root.setLevel(nivel)
 
     assert not logger.disabled

@@ -188,7 +188,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#82](https://github.com/MarceloSanC/restaurant-hub/issues/82) | Tripwire para campo de credencial em resposta que nasça sem a marca `x-credential` (especulativa; disparo: rota de reemissão do link ou primeiro frontend do Step 3) | shared | tests (e2e) | open | #61 |
 | [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | open | #58 |
 | [#85](https://github.com/MarceloSanC/restaurant-hub/issues/85) | `make migrate` e `make run` sem a guarda da `DATABASE_URL` da worktree | shared | tooling | open | #58 |
-| [#86](https://github.com/MarceloSanC/restaurant-hub/issues/86) | `migrations/env.py` ignora a `sqlalchemy.url` passada pelo chamador | shared | migrations + tests | open | #58 |
+| [#86](https://github.com/MarceloSanC/restaurant-hub/issues/86) | `migrations/env.py` ignora a `sqlalchemy.url` passada pelo chamador | shared | migrations + tests | done | #58 |
 | [#87](https://github.com/MarceloSanC/restaurant-hub/issues/87) | Mutação noturna morre na coleta — `.claude/` fora do `also_copy` | shared | tooling + ci | open | — |
 | [#90](https://github.com/MarceloSanC/restaurant-hub/issues/90) | Hook `commit-msg` aceita a Stage como escopo de commit | shared | tooling | open | — |
 | [#91](https://github.com/MarceloSanC/restaurant-hub/issues/91) | `scripts/` fora do `mypy --strict` e do gate de cobertura | shared | tooling | open | — |
