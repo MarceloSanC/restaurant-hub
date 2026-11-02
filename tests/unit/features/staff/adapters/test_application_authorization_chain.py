@@ -5,13 +5,16 @@ staff **pede** ao guard o alvo do próprio command, com o tenant nomeado. Ela n�
 prova que alguém **recusa** um tenant alheio: os dois dublês de lá não confirmam
 nada, e o `InMemoryAccessGuard` consulta só o mapa de concessões que o teste
 montou. A recusa é de identity — passo 2 (RBAC) e passo 3 (`_assert_tenant_scope`)
-de `AuthorizeActionUseCase`, mais L-AG3 no tradutor —, e uma implementação do port
+de `AuthorizeActionUseCase`, mais L-AG3 no adapter de staff —, e uma implementação do port
 que cumprisse as quatro leis e não confirmasse o tenant nomeado deixaria passar
 exatamente o command que a issue #49 descreve (Checkpoint A da 3.7, achado 1).
 
-Por isso aqui a cadeia é a de **produção**, inteira, sem banco:
-`_IdentityAccessGuard` → `IdentityGuard` → `AuthorizeActionUseCase` sobre os
-repositórios de identity em memória. O mundo tem dois restaurantes: `tenant-a`,
+Por isso aqui a cadeia é a de **produção**, inteira, sem banco — e, desde a issue
+#47, com as duas metades do guard: o ator nasce de um Bearer **assinado** passado
+por `LocalAccessGuard.authenticate` → `IdentityGuard.authenticate_principal`, e a
+recusa vem de `LocalAccessGuard.authorize` → `IdentityAccessFacade` →
+`authorize_at_boundary` → `AuthorizeActionUseCase`, sobre os repositórios de
+identity em memória. O mundo tem dois restaurantes: `tenant-a`,
 dono dos registros de staff que os cenários endereçam (unidades `u1` e `u2`), e
 `tenant-x`, de onde vêm os atores. Para **todo** cenário x **todo** papel, um ator
 de `tenant-x` (ou o `platform_admin`, sem tenant) executando o command de
@@ -27,12 +30,10 @@ import datetime
 from typing import Final
 
 import pytest
+from fastapi import Request
+from starlette.datastructures import Headers
 
-from restaurant_hub.composition_root import _IdentityAccessGuard
-from restaurant_hub.features.identity.adapters.inbound.http.dependencies import (
-    AuthenticatedActor,
-    IdentityGuard,
-)
+from restaurant_hub.features.identity.adapters.inbound.http.dependencies import IdentityGuard
 from restaurant_hub.features.identity.application.dtos.identifiers import (
     PasswordHash,
     SessionId,
@@ -42,6 +43,7 @@ from restaurant_hub.features.identity.application.errors import (
     PermissionDeniedError,
     TenantNotVisibleError,
 )
+from restaurant_hub.features.identity.application.facade import IdentityAccessFacade
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
@@ -56,6 +58,9 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 from restaurant_hub.features.identity.domain.value_objects.unit_membership import (
     UnitMembership,
+)
+from restaurant_hub.features.staff.adapters.out.identity.local_access_guard import (
+    LocalAccessGuard,
 )
 from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
 from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
@@ -100,6 +105,7 @@ class Identidade:
     users: InMemoryUserRepository
     units: InMemoryUnitRepository
     guard: AccessGuard
+    tokens: FakeTokenIssuer
 
 
 def _identidade() -> Identidade:
@@ -108,14 +114,19 @@ def _identidade() -> Identidade:
     units.add(Unit(id=_U1, restaurant_id=_VITIMA, name="Centro"))
     units.add(Unit(id=_U2, restaurant_id=_VITIMA, name="Praia"))
     units.add(Unit(id=_X1, restaurant_id=_ATACANTE, name="Outra"))
-    guard = _IdentityAccessGuard(
-        IdentityGuard(FakeTokenIssuer(), AuthorizeActionUseCase(users=users, units=units))
+    tokens = FakeTokenIssuer()
+    authorize_action = AuthorizeActionUseCase(users=users, units=units)
+    # A montagem do `composition_root`, sem o resto do grafo: o mesmo use case
+    # sob a fachada e sob o guard HTTP que autentica.
+    guard = LocalAccessGuard(
+        access=IdentityAccessFacade(authorize_action=authorize_action),
+        authenticate_request=IdentityGuard(tokens, authorize_action).authenticate_principal,
     )
-    return Identidade(users=users, units=units, guard=guard)
+    return Identidade(users=users, units=units, guard=guard, tokens=tokens)
 
 
 def _ator(identidade: Identidade, papel: Role, tenant: RestaurantId | None) -> object:
-    """Um usuário **gravado** em identity e o `AuthenticatedActor` real que o representa.
+    """Um usuário **gravado** em identity e o ator que o guard real devolve para o seu token.
 
     `manager`/`hr`/`employee` são membros de uma unidade do **próprio** tenant —
     para que a recusa de `manager`/`hr` seja pelo tenant e não por falta de vínculo,
@@ -139,8 +150,8 @@ def _ator(identidade: Identidade, papel: Role, tenant: RestaurantId | None) -> o
         _HASH,
         vinculos,
     )
-    ator: object = AuthenticatedActor(
-        claims=AccessTokenClaims(
+    token = identidade.tokens.issue_access_token(
+        AccessTokenClaims(
             subject=user_id,
             role=papel,
             tenant_id=tenant_do_papel,
@@ -148,7 +159,15 @@ def _ator(identidade: Identidade, papel: Role, tenant: RestaurantId | None) -> o
             expires_at=datetime.datetime(2030, 1, 1, tzinfo=datetime.UTC),
         )
     )
-    return ator
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/staff",
+            "headers": Headers({"Authorization": f"Bearer {token}"}).raw,
+        }
+    )
+    return identidade.guard.authenticate(request)
 
 
 def _executar(montagem: Montagem, nome: str, ator: object) -> object:
@@ -193,17 +212,20 @@ def test_ca14_controle_positivo_o_dono_do_tenant_executa_o_mesmo_command(nome: s
 def test_ator_que_nao_e_ator_falha_fechado_sem_efeito(nome: str, ator_invalido: object) -> None:
     """Concept 3.7 §6 — `actor=None` (ou um objeto qualquer) vindo de um driver não-HTTP.
 
-    `Actor = object`, então o command constrói. Quem recusa é a cadeia de produção:
-    `IdentityGuard.authorize` lê `actor.claims.subject` e levanta `AttributeError`
-    — **fail-closed, mas não tipado** (finding da §7). O teste trava as duas
-    metades: que recusa, e que nada acontece antes. Uma mudança que passasse a
-    aceitar `None` como "ator anônimo" reprova aqui.
+    `Actor = object`, então o command constrói. Quem recusa é a cadeia de produção.
+    Até a issue #47 a recusa era o `AttributeError` de `actor.claims.subject` —
+    **fail-closed, mas não tipado** (finding da §7 da 3.7). Desde a #47 o ator é
+    o `AccessPrincipal` da fachada, e `LocalAccessGuard.authorize` recusa
+    qualquer outro com um `TypeError` que nomeia o tipo recebido, **antes** de
+    chegar a identity. O teste trava as duas metades: que recusa, e que nada
+    acontece antes. Uma mudança que passasse a aceitar `None` como "ator
+    anônimo" reprova aqui.
     """
     identidade = _identidade()
     montagem = _montar(CENARIOS[nome].classe, identidade.guard)
     chamadas_ao_store = len(montagem.fakes.store.calls)
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(TypeError, match="ator não autenticado por este guard"):
         _executar(montagem, nome, ator_invalido)
 
     assert montagem.fakes.store.calls[chamadas_ao_store:] == []

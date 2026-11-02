@@ -7,8 +7,8 @@ do path e o `AuthorizedScope.unit_id` devolvido pelo guard. Independência só s
 prova fazendo as duas fontes **discordarem** — e as duas implementações do port
 que o sistema tem **ecoam** a unidade pedida:
 
-- `_IdentityAccessGuard` devolve `scope_unit_id`, que `AuthorizeActionUseCase`
-  monta com `scope_unit_id=command.unit_id`;
+- `LocalAccessGuard` (o `_IdentityAccessGuard` até a issue #47) devolve
+  `scope_unit_id`, que `AuthorizeActionUseCase` monta com `scope_unit_id=command.unit_id`;
 - `InMemoryAccessGuard` devolve literalmente o `unit_id` que recebeu.
 
 Com qualquer uma delas, *"o router usou o path"* e *"o router usou o escopo"* são

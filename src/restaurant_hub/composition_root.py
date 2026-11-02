@@ -76,8 +76,10 @@ from restaurant_hub.features.identity.adapters.out.security.jwt_issuer import (
 from restaurant_hub.features.identity.adapters.out.security.setup_token_issuer import (
     Sha256SetupTokenIssuer,
 )
-from restaurant_hub.features.identity.application.errors import PermissionDeniedError
-from restaurant_hub.features.identity.application.facade import IdentityFacade
+from restaurant_hub.features.identity.application.facade import (
+    IdentityAccessFacade,
+    IdentityFacade,
+)
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
 )
@@ -120,13 +122,6 @@ from restaurant_hub.features.identity.application.use_cases.send_invitation impo
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
 )
-from restaurant_hub.features.identity.domain.value_objects.identifiers import (
-    RestaurantId,
-)
-from restaurant_hub.features.identity.domain.value_objects.identifiers import (
-    UnitId as IdentityUnitId,
-)
-from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.staff.adapters.inbound.http import (
     dependencies as staff_dependencies_module,
 )
@@ -135,6 +130,9 @@ from restaurant_hub.features.staff.adapters.inbound.http import (
 )
 from restaurant_hub.features.staff.adapters.inbound.http import (
     router as staff_router_module,
+)
+from restaurant_hub.features.staff.adapters.out.identity.local_access_guard import (
+    LocalAccessGuard,
 )
 from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway import (
     LocalIdentityGateway,
@@ -145,11 +143,7 @@ from restaurant_hub.features.staff.adapters.out.postgres.employee_repository imp
 from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
     PostgresJobFunctionRepository,
 )
-from restaurant_hub.features.staff.application.ports.out.access_guard import (
-    AccessGuard,
-    Actor,
-    AuthorizedScope,
-)
+from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
     IdentityGateway,
 )
@@ -204,12 +198,6 @@ from restaurant_hub.features.staff.application.use_cases.rename_employee import 
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
 )
-from restaurant_hub.features.staff.domain.value_objects.identifiers import (
-    TenantId as StaffTenantId,
-)
-from restaurant_hub.features.staff.domain.value_objects.identifiers import (
-    UnitId as StaffUnitId,
-)
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
@@ -218,161 +206,6 @@ from restaurant_hub.shared.infrastructure.email.console_sender import ConsoleSen
 from restaurant_hub.shared.infrastructure.uuid_generator.uuid4_generator import (
     Uuid4Generator,
 )
-
-
-def _tenant_id_do_ator(actor: Actor) -> str | None:
-    """Lê o tenant do ator autenticado — a cláusula 3 do ADR 0.0.0005 aplicada.
-
-    **Este módulo é a camada confiável, e a leitura acontece aqui por medição,
-    não por conveniência.** O ator é o `AuthenticatedActor` de identity, cujo
-    módulo é o adapter de entrada de identity, e o port declara `Actor = object`
-    justamente para que staff **não** leia atributo de ator. `actor.claims.tenant_id` é erro de
-    tipo em `strict` sobre `object`; o caminho já usado neste módulo para o mesmo
-    problema (o campo `identity_guard: Any` do contêiner) é a leitura por
-    **variável intermediária anotada**, sem `cast` de conveniência e sem mudar a
-    assinatura do port.
-
-    **Falha fechado, e é isso que torna a ausência segura.** Um ator sem
-    `claims` — ou com `claims` sem tenant — devolve `None`, e `None` viaja como
-    "não declarei tenant" até o passo 3 de `AuthorizeActionUseCase`, que **nega**
-    um ator escopado que não nomeia o tenant alvo. Nenhuma leitura malsucedida
-    alarga o alcance de ninguém.
-
-    **Há um terceiro caso, e ele não devolve `None`:** `claims.tenant_id == ""`
-    devolve `""`, porque o atributo **existe** e o `getattr` não cai no default.
-    A distinção é deliberada, não descuido — colapsar vazio e ausente no mesmo
-    valor aqui é o primeiro passo do caminho que L-AG3 fecha
-    (`StaffTenantId(actor_tenant_id or "")`, o balde de falso isolamento). Quem
-    nega o tenant vazio é `_IdentityAccessGuard`, um passo adiante, e o nega
-    **por ser vazio** e não por ser ausente. Os dois casos estão parametrizados
-    lado a lado em `_ATOR_SEM_TENANT` (ids `ausente` e `vazio`).
-    """
-    claims = getattr(actor, "claims", None)
-    tenant_id: str | None = getattr(claims, "tenant_id", None)
-    return tenant_id
-
-
-class _IdentityAccessGuard:
-    """Implementação de produção do `AccessGuard` de staff, sobre o `IdentityGuard`.
-
-    **Por que ela mora aqui, e não em `features/staff/adapters/out/identity/`**
-    (ADR 3.4.0001 §3 e alternativa A, medida e revertida no Checkpoint A): o
-    objeto embrulhado é o `IdentityGuard`. O que um adapter dentro de staff
-    importaria de verdade são `Permission`,
-    `RestaurantId` e `UnitId` de identity: **três** pares de `ignore_imports` em
-    `bc-independence`, não um. Aqui são **zero**, e há teste que lê o
-    `.importlinter` para provar que continuam zero
-    (`tests/unit/features/staff/test_bc_independence.py`).
-
-    **Isto é tradução de vocabulário, e tradução não é wiring.** O charter deste
-    módulo (LAYOUT §6) é instanciar e injetar; esta classe o estica, e o custo
-    está declarado no ADR 3.4.0001 §Consequences como finding a revisitar na
-    Stage 3.5 — quando houver um consumidor real do `IdentityGateway` e a
-    pergunta "onde mora o tradutor" puder ser respondida com o caso em mãos.
-
-    **Sem `try/except`, de propósito** — L-AG1 e L-AG2. Toda exceção de identity
-    sobe **crua**, e é isso que fará a faixa 401/403 da Stage 3.6 ser
-    byte-idêntica à de identity: `InvalidAccessTokenError`,
-    `PermissionDeniedError` e `UnitNotVisibleError` — inclusive a conversão de
-    `UnitNotFoundError`, que é o que fecha o oráculo de enumeração cross-tenant
-    (ADR 2.4.0001 §5) — chegam ao handler exatamente como identity as levantou.
-
-    **O `ValueError` de `Permission(permission)` é o preço declarado do `str`**
-    (ADR 3.4.0001 §Trade-offs): o nome da permissão atravessa a fronteira como
-    valor, então um erro de digitação não é pego pelo type-checker. Ele também
-    **não** é traduzido — nome de permissão inválido é defeito de programação da
-    borda, não decisão de acesso, e mascará-lo como 403 esconderia a rota
-    quebrada atrás de um erro de negação plausível.
-    """
-
-    def __init__(self, identity_guard: Any) -> None:  # noqa: ANN401
-        """Recebe o `IdentityGuard` já construído.
-
-        **O `Any` deixou de ser obrigatório na #45 e continua aqui de
-        propósito.** Até o rename de `adapters/in/` para `adapters/inbound/`, o
-        tipo real era inalcançável por import estático — `in` é keyword Python — e
-        `Any` era a única anotação possível. Hoje `IdentityGuard` é importável, e
-        anotá-lo seria correto.
-
-        Não é feito aqui porque tipar este construtor é trabalho da **#47**, que
-        move a classe inteira para `features/staff/adapters/out/identity/`:
-        anotá-la agora produziria um diff em código de decisão de acesso dentro
-        de um PR de ferramentas, e a #45 tem como não-objetivo declarado não
-        mexer nessa borda. O que mudou é o **motivo** — de impossível para
-        adiado —, e isso está escrito aqui em vez de continuar afirmando uma
-        restrição que já não existe.
-        """
-        self._guard = identity_guard
-
-    def authenticate(self, request: object) -> Actor:
-        """L-AG1 — repassa e não captura."""
-        # A variável intermediária existe para o type-checker, não para o
-        # runtime: `_guard` é `Any` (ver o construtor) e `strict` reprova
-        # devolver `Any` de função anotada. Nenhuma conversão
-        # acontece aqui — é o mesmo objeto que identity devolveu.
-        actor: Actor = self._guard.authenticate(request)
-        return actor
-
-    def authorize(
-        self,
-        actor: Actor,
-        permission: str,
-        *,
-        tenant_id: str | None = None,
-        unit_id: str | None = None,
-    ) -> AuthorizedScope:
-        """Traduz o pedido para identity, e a resposta de volta para staff.
-
-        **L-AG3 é imposta AQUI**, e não delegada à matriz de papéis
-        (ADR 3.4.0001 §Implementation notes). Confiar em *"`platform_admin` é
-        negado antes, no passo 2, por não deter as permissões de staff"* faria o
-        isolamento de tenant refém do mapa RBAC, que é editável e cuja edição
-        nenhum teste desta lei observaria. Ator sem tenant é **negado**:
-        `StaffTenantId(actor_tenant_id or "")` compilaria, passaria mypy strict
-        e produziria consultas de tenant vazio — e é precisamente o que as
-        linhas abaixo não fazem.
-
-        **`tenant_id` ausente significa "o tenant do próprio ator", e é aqui que
-        ele é resolvido** (ADR 0.0.0005, cláusula 3). Sem isto as rotas de
-        staff são inalcançáveis por **todos** os papéis: o inventário de rotas
-        não carrega tenant (cláusula 2), então nada o nomeia, e o passo 3 de
-        `AuthorizeActionUseCase` recusa com `TenantScopeRequiredError` qualquer
-        ator escopado que não declare o alvo.
-
-        **A resolução acontece ANTES de delegar, e L-AG3 continua DEPOIS.** Quem
-        monta o `AuthorizeActionCommand` é o `IdentityGuard`, não este tradutor:
-        o que se resolve aqui é o argumento que ele recebe. Resolver depois seria
-        resolver um valor que a decisão de acesso já não usa. E a guarda de
-        L-AG3 permanece onde está, sobre o `actor_tenant_id` que **identity**
-        devolve: ator sem tenant é negado, jamais coagido para `""`.
-        """
-        # Só a **ausência** carrega significado. Um `tenant_id=""` explícito é o
-        # chamador nomeando um tenant vazio, e segue para a decisão de acesso
-        # como qualquer outro alvo — que o negará. Trocar por truthiness aqui
-        # reescreveria o pedido em silêncio (ADR 2.3.0005).
-        target_tenant_id = tenant_id if tenant_id is not None else _tenant_id_do_ator(actor)
-
-        authorized = self._guard.authorize(
-            actor,
-            Permission(permission),
-            tenant_id=RestaurantId(target_tenant_id) if target_tenant_id is not None else None,
-            unit_id=IdentityUnitId(unit_id) if unit_id is not None else None,
-        )
-
-        actor_tenant_id = authorized.actor_tenant_id
-        if not actor_tenant_id:
-            # `PermissionDeniedError` de identity, e não uma exceção nova de
-            # staff: o caminho é, semanticamente, "este ator não pode agir sobre
-            # este alvo", e uma exceção nova produziria uma faixa de erro
-            # distinta para ele, contra o corpo constante que L-AG2 protege
-            # (technical §7, decisão de 2026-08-17).
-            raise PermissionDeniedError(authorized.role.value, permission)
-
-        scope_unit_id = authorized.scope_unit_id
-        return AuthorizedScope(
-            tenant_id=StaffTenantId(actor_tenant_id),
-            unit_id=StaffUnitId(scope_unit_id) if scope_unit_id is not None else None,
-        )
 
 
 @dataclass
@@ -396,10 +229,10 @@ class ApplicationDependencies:
     identity_request_password_reset: RequestPasswordResetUseCase
     identity_set_password_with_token: SetPasswordWithTokenUseCase
     identity_authorize_action: AuthorizeActionUseCase
-    # `Any` herdado da época em que o pacote de entrada se chamava `in` e o tipo
-    # real era inalcançável por import estático. Depois do rename da #45 ele é
-    # importável; tipar o campo sai junto com a #47, que move o consumidor.
-    identity_guard: Any
+    # Tipado desde a #47. Era `Any` desde a época em que o pacote de entrada se
+    # chamava `in` (inalcançável por import estático); a #45 o tornou importável
+    # e a #47, que moveu o consumidor, o anotou.
+    identity_guard: dependencies_module.IdentityGuard
 
     # --- staff (Stage 3.3) ---------------------------------------------------
     #
@@ -438,8 +271,9 @@ class ApplicationDependencies:
     # campos de use case levam a classe concreta porque use case é código nosso,
     # e o que precisa ser abstrato é o que ele **consome**. Aqui o campo **é** o
     # consumido: quem o recebe (o router da Stage 3.6) não pode ter de mudar
-    # quando a implementação mudar, e a implementação concreta é
-    # `_IdentityAccessGuard`, privada deste módulo.
+    # quando a implementação mudar — e ela mudou: era `_IdentityAccessGuard`,
+    # privada deste módulo, e é `LocalAccessGuard`, de
+    # `staff/adapters/out/identity/`, desde a issue #47 (ADR 0.0.0016).
     #
     # Nasce **sem consumidor**, como os 16 acima e pela mesma razão declarada:
     # nenhuma rota de staff existe até a Stage 3.6 (CA21).
@@ -562,12 +396,18 @@ def wire_dependencies(
         authorize_action=authorize_action,
     )
 
-    # O tradutor embrulha o **mesmo** `IdentityGuard` que serve as rotas de
-    # identity — não um segundo grafo, não um segundo `Engine`
-    # (ADR 3.4.0001 §Implementation notes). CA15 assere a identidade do objeto,
-    # porque um segundo guard passaria em qualquer teste de tipo e faria as duas
-    # bordas decidirem acesso sobre estados diferentes.
-    staff_access_guard = _IdentityAccessGuard(guard)
+    # O `AccessGuard` de staff (issue #47, ADR 0.0.0016): autoriza pela fachada
+    # de acesso sobre o **mesmo** `AuthorizeActionUseCase` do guard das rotas de
+    # identity, e autentica pelo **mesmo** `IdentityGuard` — não um segundo
+    # grafo, não um segundo `Engine` (ADR 3.4.0001 §Implementation notes). CA15
+    # assere as duas identidades de objeto: um segundo guard passaria em
+    # qualquer teste de tipo e faria as duas bordas decidirem acesso sobre
+    # estados diferentes. Este módulo só liga as peças — a tradução e a lei
+    # L-AG3 moram no adapter.
+    staff_access_guard = LocalAccessGuard(
+        access=IdentityAccessFacade(authorize_action=authorize_action),
+        authenticate_request=guard.authenticate_principal,
+    )
 
     # Stage 3.5 — a fachada de identity e o gateway de staff sobre ela (ADR
     # 3.5.0001). Os quatro use cases da fachada (o quarto, de leitura, é da 3.8 —

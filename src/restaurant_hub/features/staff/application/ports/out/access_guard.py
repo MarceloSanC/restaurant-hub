@@ -1,11 +1,13 @@
 """Port de saída: autorização de acesso, dita no **vocabulário de staff**.
 
-**O port nomeia o que staff precisa, nunca como identity decide.** Nenhum módulo
-sob `features/staff/` importa `features/identity/`: o contrato `bc-independence`
-do `.importlinter` é de **independência** — proíbe as duas direções — e vale
-**sem nenhum `ignore_imports`**. Quem traduz este vocabulário para o de identity
-é o `composition_root`, o único módulo que já importa os dois bounded contexts
-por desenho (ADR 3.4.0001 §3).
+**O port nomeia o que staff precisa, nunca como identity decide.** O contrato
+`bc-independence` do `.importlinter` é de **independência** — proíbe as duas
+direções — com **uma** aresta nomeada: `staff.adapters.out.identity.*` pode
+importar `identity.application.facade` e nada mais (ADR 3.5.0001 §3). Quem traduz
+este vocabulário para o de identity é o adapter dessa aresta,
+`adapters/out/identity/local_access_guard.py`, sobre a fachada de acesso de
+identity — desde a issue #47 (ADR 0.0.0016); até ali era uma classe privada do
+`composition_root` (ADR 3.4.0001 §3, agora supersedido nesse ponto).
 
 **Identificadores atravessam a fronteira entre BCs como strings opacas** — regra
 literal do `identifiers.py` deste BC. Por isso as **entradas** de `authorize` são
@@ -180,8 +182,11 @@ class AccessGuard(Protocol):
                 staff**, e por isso nenhuma rota o carrega; (3) onde vem do
                 token, é resolvido numa **camada confiável única**, cujo lugar
                 segue a **opacidade do ator** — e como este port declara
-                `Actor = object` de propósito, essa camada é o
-                `composition_root`, nunca o router de staff.
+                `Actor = object` de propósito, essa camada é a
+                implementação que **produziu** o ator, a única que o conhece:
+                o `LocalAccessGuard` de `adapters/out/identity/` (ADR
+                0.0.0016, que move para lá a camada que ficava no
+                `composition_root`), nunca o router de staff.
             unit_id: a unidade alvo, como string opaca. Ausente quando a ação
                 não nomeia unidade — seja por a permissão ser tenant-wide, seja
                 por o papel do ator dispensar o escopo de unidade. Ver
