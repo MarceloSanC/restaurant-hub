@@ -371,9 +371,7 @@ def _vincular(fakes: StaffFakes, gateway: InMemoryIdentityGateway) -> UserId:
     login = gateway.provision_employee_login(
         email=_EMAIL, tenant_id=_A, unit_id=_U1, delivery=LoginDelivery.LINK
     )
-    vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
-    assert vinculado is not None
-    fakes.employees.update(vinculado.link_login(login.user_id))
+    fakes.employees.link_login(_A, _U1, _E1, login.user_id)
     gateway.calls.clear()
     return login.user_id
 
@@ -397,10 +395,9 @@ def _outro_registro(
     )
     fakes.employees.add(registro)
     if user_id is not None:
-        registro = registro.link_login(user_id)
+        fakes.employees.link_login(_A, unit_id, registro.id, user_id)
     if not active:
-        registro = registro.deactivate()
-    fakes.employees.update(registro)
+        fakes.employees.update(registro.deactivate())
 
 
 def _desligar_e1(use_case: DeactivateEmployeeUseCase) -> EmployeeResult:
@@ -503,9 +500,7 @@ def test_ca10_login_de_outro_papel_nao_e_revogado() -> None:
     gateway = _gateway_espelhado(fakes)
     gerente = UserId("login-do-gerente")
     gateway.seed_login_of_other_role(gerente, tenant_id=_A, unit_id=_U1)
-    vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
-    assert vinculado is not None
-    fakes.employees.update(vinculado.link_login(gerente))
+    fakes.employees.link_login(_A, _U1, _E1, gerente)
     antes = len(fakes.store.calls)
 
     resultado = _desligar_e1(_desligar(fakes, gateway))
@@ -523,9 +518,7 @@ def test_ca10_login_de_outro_papel_nao_e_revogado() -> None:
 def test_ca11_login_desconhecido_de_identity_nao_e_revogado_e_o_registro_grava() -> None:
     fakes = _fakes()
     gateway = _gateway_espelhado(fakes)
-    vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
-    assert vinculado is not None
-    fakes.employees.update(vinculado.link_login(UserId("login-que-identity-nao-conhece")))
+    fakes.employees.link_login(_A, _U1, _E1, UserId("login-que-identity-nao-conhece"))
 
     resultado = _desligar_e1(_desligar(fakes, gateway))
 

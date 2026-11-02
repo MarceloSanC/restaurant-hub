@@ -121,6 +121,14 @@ _ORDEM_TOTAL = (
 # que se parece com uma edição de cadastro.
 _COLUNAS_IMUTAVEIS = frozenset({"id", "tenant_id", "unit_id"})
 
+# Colunas que o `update` também não grava, mas por outro motivo: têm escrita
+# **própria** no port. `user_id` é escrito só por `link_login` (`L-LINK`, issue
+# #68): no `SET` do `update`, uma entidade lida antes de um vínculo concorrente
+# apagaria o vínculo gravado depois dela — e a conta criada em identity ficaria
+# órfã. Não é imutável (nasce `NULL` e é definido uma vez); só não é deste
+# método.
+_COLUNAS_COM_ESCRITA_PROPRIA = frozenset({"user_id"})
+
 # `REPEATABLE READ` nas leituras de agregado (§5.18) — ver a nota 4 do docstring.
 _SNAPSHOT_UNICO = "REPEATABLE READ"
 
@@ -331,7 +339,7 @@ class PostgresEmployeeRepository:
         mutaveis = {
             coluna: valor
             for coluna, valor in mappers.employee_to_row(employee).items()
-            if coluna not in _COLUNAS_IMUTAVEIS
+            if coluna not in _COLUNAS_IMUTAVEIS | _COLUNAS_COM_ESCRITA_PROPRIA
         }
         conexao.execute(
             employees.update()

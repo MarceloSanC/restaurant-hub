@@ -344,16 +344,19 @@ def test_l_e2_update_grava_o_agregado_inteiro(
     assert gravado.active is False
 
 
-def test_user_id_faz_round_trip_pelo_add_e_pelo_update(
+def test_user_id_faz_round_trip_pelo_add_e_pelo_link_login(
     repositorio: PostgresEmployeeRepository, funcoes: PostgresJobFunctionRepository
 ) -> None:
-    """Stage 3.5 (CA19): sem login ⇒ `None`; vinculado ⇒ o mesmo id, verbatim."""
+    """Stage 3.5 (CA19): sem login ⇒ `None`; vinculado ⇒ o mesmo id, verbatim.
+
+    Desde a issue #68 o vínculo é gravado por `link_login`, não pelo `update`.
+    """
     repositorio.add(_funcionario())
     sem_login = repositorio.find_by_id(_A, _U1, _E1)
     assert sem_login is not None
     assert sem_login.user_id is None
 
-    repositorio.update(sem_login.link_login(UserId("login-1")))
+    repositorio.link_login(_A, _U1, _E1, UserId("login-1"))
 
     vinculado = repositorio.find_by_id(_A, _U1, _E1)
     assert vinculado is not None

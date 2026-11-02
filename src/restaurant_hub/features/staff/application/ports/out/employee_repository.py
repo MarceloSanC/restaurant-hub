@@ -110,6 +110,15 @@ class EmployeeRepository(Protocol):
         entidades são `frozen` e as transições devolvem nova instância, então
         não há mutação in-place que a persistência pudesse observar.
 
+        **`update` não grava o vínculo de login** (issue #68, ADR 0.0.0010). O
+        `user_id` da entidade recebida é **ignorado**, e o gravado fica como
+        está: a única escrita do vínculo é `link_login` (`L-LINK`). Sem isso, um
+        R07 que leu o registro **antes** de um R17 concorrente e grava
+        **depois** apagaria o vínculo em silêncio — a janela "última escrita
+        vence sobre `user_id`" do concept 3.5 §6.4 —, e a conta criada ficaria
+        órfã com o e-mail tomado. "Última escrita vence" (ADR 3.3.0006) segue
+        valendo para os **demais** campos.
+
         **L-E3 — localização imutável.** `unit_id` divergente do gravado,
         **no mesmo tenant** ⇒ `EmployeeRelocationError`. A lei tem erro nomeado
         de propósito: sem ele a saída seria gravar o que veio (mover o registro
@@ -150,7 +159,8 @@ class EmployeeRepository(Protocol):
         antes: a checagem e a escrita são **uma** operação atômica. É o que
         impede que um segundo R17 concorrente troque o vínculo em silêncio — a
         metade "dois R17" da janela "última escrita vence sobre `user_id`" do
-        concept 3.5 §6.4.
+        concept 3.5 §6.4; a outra metade (a edição concorrente) fecha porque
+        `update` não grava o vínculo.
 
         Endereço de **três** partes (ADR 3.4.0007) e ordem de checagem
         normativa, a mesma de `Employee.assert_can_link_login`:

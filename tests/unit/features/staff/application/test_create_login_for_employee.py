@@ -85,7 +85,7 @@ def _gateway(fakes: StaffFakes) -> InMemoryIdentityGateway:
     """O fake do gateway com as chamadas **espelhadas** no ledger do store.
 
     Os dois ledgers separados não respondem "o vínculo foi gravado **antes** do
-    envio?" — a ordem entre `employees.update` e `send_login_invitation` só é
+    envio?" — a ordem entre `employees.link_login` e `send_login_invitation` só é
     observável num ledger único. Espelhar é o que torna a asserção de CA30
     literal, em vez de inferida.
     """
@@ -291,7 +291,7 @@ def test_email_ja_usado_sobe_traduzido_e_nada_e_gravado() -> None:
         ).execute(_comando())
 
     assert _relido(fakes).user_id is None
-    assert "employees.update" not in fakes.store.calls
+    assert "employees.link_login" not in fakes.store.calls
     assert gateway.sent == []
 
 
@@ -306,7 +306,7 @@ def test_email_invalido_sobe_traduzido_e_nada_e_gravado() -> None:
         ).execute(_comando(email="nao-e-email"))
 
     assert _relido(fakes).user_id is None
-    assert "employees.update" not in fakes.store.calls
+    assert "employees.link_login" not in fakes.store.calls
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +315,11 @@ def test_email_invalido_sobe_traduzido_e_nada_e_gravado() -> None:
 
 
 def test_o_vinculo_e_gravado_antes_do_envio() -> None:
-    """A ordem literal no ledger único: `employees.update` precede o envio."""
+    """A ordem literal no ledger único: `employees.link_login` precede o envio.
+
+    E o vínculo sai **só** por `link_login`: nenhum `employees.update` no ledger
+    (issue #68 — a escrita do vínculo tem um escritor só).
+    """
     fakes = _fakes()
     gateway = _gateway(fakes)
 
@@ -324,7 +328,8 @@ def test_o_vinculo_e_gravado_antes_do_envio() -> None:
     )
 
     calls = fakes.store.calls
-    posicao_update = calls.index("employees.update")
+    assert "employees.update" not in calls
+    posicao_update = calls.index("employees.link_login")
     posicao_envio = next(
         i for i, c in enumerate(calls) if c.startswith("gateway.send_login_invitation(")
     )
@@ -368,3 +373,55 @@ def test_segundo_pedido_apos_falha_do_envio_e_ja_vinculado() -> None:
         ).execute(_comando(delivery=LoginDelivery.EMAIL))
 
     assert len(gateway.logins) == 1
+
+
+# ---------------------------------------------------------------------------
+# Issue #68 — a guarda roda de novo sobre o gravado
+# ---------------------------------------------------------------------------
+
+
+def test_r17_concorrente_que_vinculou_primeiro_vence_e_este_e_recusado() -> None:
+    """Outro R17 vincula **entre** a leitura e a escrita deste: 409, sem trocar o vínculo.
+
+    O entrelace é forçado pelo espelho do gateway: no instante em que este R17
+    provisiona a conta, o "concorrente" grava o vínculo dele. A guarda do passo
+    2 já passou sobre a leitura antiga; quem recusa é `L-LINK`, sobre o gravado.
+    Antes da #68 o `update` gravava por cima, e o vínculo do concorrente sumia.
+    """
+    fakes = _fakes()
+    concorrente = UserId("login-do-r17-concorrente")
+
+    def _espelho(call: str) -> None:
+        fakes.store.record(f"gateway.{call}")
+        if call.startswith("provision_employee_login("):
+            fakes.employees.link_login(_A, _U1, _E1, concorrente)
+
+    gateway = InMemoryIdentityGateway(mirror=_espelho)
+
+    with pytest.raises(EmployeeAlreadyHasLoginError):
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando(delivery=LoginDelivery.EMAIL))
+
+    assert _relido(fakes).user_id == concorrente
+    assert gateway.sent == []
+
+
+def test_desligamento_concorrente_antes_do_vinculo_faz_o_r17_ser_recusado() -> None:
+    """Um R13 grava o desligamento entre a leitura e o vínculo: 409, nada vinculado."""
+    fakes = _fakes()
+
+    def _espelho(call: str) -> None:
+        fakes.store.record(f"gateway.{call}")
+        if call.startswith("provision_employee_login("):
+            fakes.employees.update(_relido(fakes).deactivate())
+
+    gateway = InMemoryIdentityGateway(mirror=_espelho)
+
+    with pytest.raises(TerminatedEmployeeLoginError):
+        CreateLoginForEmployeeUseCase(
+            fakes.employees, gateway, guard=PermissiveAccessGuard()
+        ).execute(_comando())
+
+    relido = _relido(fakes)
+    assert (relido.active, relido.user_id) == (False, None)

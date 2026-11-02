@@ -262,10 +262,11 @@ def _vincula(fakes: StaffFakes, *, depois_desliga: bool) -> None:
     vinculado e desligado só existe por vínculo seguido de desligamento, que é
     justamente o estado em que R15 continua recusando.
     """
-    registro = fakes.employees.find_by_id(_A, _U1, _E1)
-    assert registro is not None
-    vinculado = registro.link_login(UserId("login-1"))
-    fakes.employees.update(vinculado.deactivate() if depois_desliga else vinculado)
+    fakes.employees.link_login(_A, _U1, _E1, UserId("login-1"))
+    if depois_desliga:
+        vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
+        assert vinculado is not None
+        fakes.employees.update(vinculado.deactivate())
 
 
 @pytest.mark.parametrize("active", [True, False], ids=["ativo", "desligado"])

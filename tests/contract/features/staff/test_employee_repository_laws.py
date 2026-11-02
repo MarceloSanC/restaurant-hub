@@ -290,15 +290,14 @@ def test_l_e2_update_de_inexistente_no_tenant_nao_grava_nada(repos: Repositorios
 
 
 def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: RepositoriosDeStaff) -> None:
-    """Nome, perfil, preferência, conjunto, indisponibilidades, estado **e login**.
+    """Nome, perfil, preferência, conjunto, indisponibilidades e estado.
 
-    `user_id` entrou na Stage 3.5 e é gravado pelo `update` como qualquer campo
-    do agregado — nas **duas** implementações (CA19).
+    O vínculo de login **não** entra: tem escrita própria (`L-LINK`, issue #68),
+    e o teste irmão abaixo trava que o `update` o ignora.
     """
     _com_funcionario_gravado(repos)
     editado = _funcionario(name="Joana", job_function_ids=frozenset({_F2}), active=False)
     editado = editado.change_workload_profile(OnDemand()).add_unavailability(_PERIODO)
-    editado = editado.reactivate().link_login(UserId("login-1")).deactivate()
     repos.employees.update(editado)
     gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
@@ -308,22 +307,53 @@ def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: Repositori
         gravado.job_function_ids,
         gravado.unavailabilities,
         gravado.active,
-        gravado.user_id,
-    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False, UserId("login-1"))
+    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False)
 
 
-def test_l_e2_update_de_outro_campo_preserva_o_login_gravado(repos: RepositoriosDeStaff) -> None:
-    """O agregado é gravado inteiro — e inteiro inclui o vínculo (Stage 3.5).
+def test_l_e2_update_nao_grava_o_vinculo_que_a_entidade_traz(repos: RepositoriosDeStaff) -> None:
+    """`update` ignora o `user_id` da entidade: o vínculo só nasce por `link_login`.
 
-    É a metade "nenhum outro campo mudou" para `user_id`: renomear um registro
-    vinculado, pela entidade **relida**, não apaga o login. (O caso em que a
-    entidade em mãos está desatualizada é "última escrita vence" — ADR 3.3.0006,
-    declarado no concept 3.5 §6.4, e não é o que se testa aqui.)
+    É a metade "um só escritor" da issue #68. Se o `update` gravasse o vínculo
+    quando o gravado é `NULL`, a metade concorrente (dois R17) voltaria a ter um
+    caminho que não passa pela checagem atômica de `L-LINK`.
     """
     _com_funcionario_gravado(repos)
     gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
-    repos.employees.update(gravado.link_login(UserId("login-1")))
+
+    repos.employees.update(gravado.link_login(UserId("login-1")).rename("Joana"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.name, relido.user_id) == ("Joana", None)
+
+
+def test_l_e2_update_com_entidade_lida_antes_do_vinculo_nao_o_apaga(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """O cenário da issue #68, serializado: R07 lê, R17 vincula, R07 grava.
+
+    A entidade do R07 foi lida **antes** do vínculo e carrega `user_id=None`.
+    Gravá-la não pode apagar o vínculo — antes da #68, "última escrita vence"
+    (ADR 3.3.0006) apagava, e a conta criada ficava órfã. A versão com duas
+    conexões de verdade, entrelaçadas, é conduta e vive em `test_staff_conduct.py`.
+    """
+    _com_funcionario_gravado(repos)
+    lido_antes = repos.employees.find_by_id(_A, _U1, _E1)
+    assert lido_antes is not None
+    repos.employees.link_login(_A, _U1, _E1, UserId("login-1"))
+
+    repos.employees.update(lido_antes.rename("Joana"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.name, relido.user_id) == ("Joana", UserId("login-1"))
+
+
+def test_l_e2_update_de_outro_campo_preserva_o_login_gravado(repos: RepositoriosDeStaff) -> None:
+    """Renomear um registro vinculado, pela entidade **relida**, não apaga o login."""
+    _com_funcionario_gravado(repos)
+    repos.employees.link_login(_A, _U1, _E1, UserId("login-1"))
 
     vinculado = repos.employees.find_by_id(_A, _U1, _E1)
     assert vinculado is not None
