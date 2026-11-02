@@ -29,7 +29,8 @@ Stage `done` (issue #37).
 
 5. O frontmatter existe e é um mapeamento YAML; `references`, se presente, é lista
    de caminhos, e cada um resolve.
-6. Todo link relativo do corpo resolve (o fragmento `#...` é ignorado).
+6. Todo link relativo do corpo resolve (o fragmento `#...` é ignorado). Bloco de
+   código cercado não conta, nesta regra nem na 7 e na 8: é exemplo citado.
 7. Todo ADR linkado no corpo está no `references` — salvo a válvula abaixo.
 8. Nenhuma "Lacuna para o concept da Stage N.M" fica aberta com uma Stage listada
    (`N.M`, `N.M/P.Q`) `done` na Tabela de Stages do roadmap. Lacuna fechada se
@@ -201,16 +202,22 @@ def stages_done(roadmap: str) -> set[str]:
     return feitas
 
 
-def links_relativos(corpo: str, primeira_linha: int) -> list[tuple[int, str]]:
-    """(linha, alvo) de cada link relativo do corpo, fora de blocos de código cercados."""
-    achados: list[tuple[int, str]] = []
+def linhas_de_prosa(corpo: str) -> list[tuple[int, str]]:
+    """(índice, linha) do corpo fora de blocos de código cercados — exemplo citado não conta."""
+    prosa: list[tuple[int, str]] = []
     dentro_de_cerca = False
     for i, linha in enumerate(corpo.splitlines()):
         if _CERCA.match(linha):
             dentro_de_cerca = not dentro_de_cerca
-            continue
-        if dentro_de_cerca:
-            continue
+        elif not dentro_de_cerca:
+            prosa.append((i, linha))
+    return prosa
+
+
+def links_relativos(corpo: str, primeira_linha: int) -> list[tuple[int, str]]:
+    """(linha, alvo) de cada link relativo do corpo, fora de código cercado ou inline."""
+    achados: list[tuple[int, str]] = []
+    for i, linha in linhas_de_prosa(corpo):
         sem_codigo = re.sub(r"`[^`\n]*`", "", linha)
         for m in _LINK.finditer(sem_codigo):
             alvo = m.group(1)
@@ -265,7 +272,7 @@ def _links(
 def _lacunas(rel: str, fm: Frontmatter, feitas: set[str]) -> list[str]:
     """Regra 8: lacuna aberta endereçada a (alguma) Stage `done`."""
     saida: list[str] = []
-    for i, texto_linha in enumerate(fm.corpo.splitlines()):
+    for i, texto_linha in linhas_de_prosa(fm.corpo):
         for m in _LACUNA.finditer(texto_linha):
             listadas = [s.strip() for s in m.group(1).split("/")]
             fechadas = [s for s in listadas if s in feitas]

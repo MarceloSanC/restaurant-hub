@@ -479,3 +479,114 @@ def test_main_fatal(
 ) -> None:
     assert _main(monkeypatch, tmp_path) == _SAIDA_FATAL
     assert "FATAL: docs/roadmap.md não existe" in capsys.readouterr().err
+
+
+# --- auditoria de testes (mutação real): o que os casos acima não travavam --------
+
+
+def test_lacuna_no_meio_do_doc_reprova_com_a_linha(tmp_path: pathlib.Path) -> None:
+    corpo = "\n" * 20 + "> **Lacuna para o concept da Stage 4.1:** x\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f"{_DOMINIO}:26: lacuna para a Stage 4.1")
+
+
+def test_duas_lacunas_na_mesma_linha_sao_lidas_as_duas(tmp_path: pathlib.Path) -> None:
+    corpo = "Lacuna para o concept da Stage 4.4 e Lacuna para o concept da Stage 4.1.\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    [achado] = gate.problemas(repo)
+    assert "mas 4.1 já está done" in achado
+
+
+def test_lacuna_e_link_dentro_de_bloco_cercado_sao_exemplo(tmp_path: pathlib.Path) -> None:
+    corpo = "```markdown\n> **Lacuna para o concept da Stage 4.1:** x\n[a](../x.md)\n```\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    assert gate.problemas(repo) == []
+
+
+def test_arquivo_com_bom_e_lido(tmp_path: pathlib.Path) -> None:
+    repo = _repo(
+        tmp_path,
+        {
+            "docs/adr/0_0_0001-a.md": "﻿" + _adr('"0.0.0001"'),
+            _DOMINIO: "﻿" + _dominio("corpo\n"),
+        },
+    )
+    assert gate.problemas(repo) == []
+
+
+def test_cercas_do_frontmatter_com_espaco_no_fim_valem(tmp_path: pathlib.Path) -> None:
+    texto = "--- \ntitle: x\nadr_id: '0.0.0001'\n---  \n"
+    repo = _repo(tmp_path, {"docs/adr/0_0_0001-a.md": texto})
+    assert gate.problemas(repo) == []
+
+
+def test_stages_done_para_na_tabela_de_stages() -> None:
+    roadmap = _ROADMAP.replace(
+        "| `9.9-falsa` | done |", "| `9.9-falsa` | x | y | done | — |"
+    ).replace("| Issue | Status |", "| Issue | a | b | Status | c |")
+    assert gate.stages_done(roadmap) == {"4.1", "4.2"}
+
+
+def test_stages_done_exige_a_celula_de_stage_com_slug() -> None:
+    roadmap = _ROADMAP.replace(
+        "## Tabela de Issues", "| 4.6 nota | x | y | done | — |\n\n## Tabela de Issues"
+    )
+    assert "4.6" not in gate.stages_done(roadmap)
+
+
+def test_erro_de_adr_nao_esconde_erro_de_dominio(tmp_path: pathlib.Path) -> None:
+    repo = _repo(
+        tmp_path,
+        {"docs/adr/0_0_0001-a.md": _adr('"0.0.0002"'), _DOMINIO: _dominio("[x](../x.md)\n")},
+    )
+    adr, dominio = gate.problemas(repo)
+    assert adr.startswith("docs/adr/")
+    assert dominio.startswith(_DOMINIO)
+
+
+def test_adr_linkado_fora_do_references_aponta_a_primeira_linha(tmp_path: pathlib.Path) -> None:
+    corpo = f"\n\n{_LINK_B}\n\n{_LINK_B}\n"
+    repo = _repo(tmp_path, _com_adrs(corpo, "references: []\n"))
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f"{_DOMINIO}:8: ADR 4_1_0002-b.md")
+
+
+def test_so_docs_adr_na_raiz_sao_adr(tmp_path: pathlib.Path) -> None:
+    """Um `adr/` noutra pasta não é a pasta de ADRs; subpasta de `docs/adr/` não é varrida."""
+    repo = _repo(
+        tmp_path,
+        {
+            "docs/archive/adr/x.md": "# velho\n",
+            "docs/adr/template/README.md": "sem frontmatter\n",
+            _DOMINIO: _dominio("[velho](../../archive/adr/x.md)\n"),
+        },
+    )
+    assert gate.problemas(repo) == []
+
+
+def test_valvula_de_um_doc_nao_vale_para_outro(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gate, "VALVULA_REFERENCES", {_DOMINIO: frozenset({"4_1_0001-a.md"})})
+    arquivos = _com_adrs(_LINK_A, "references: []\n")
+    arquivos["docs/domain/staff/b.md"] = _dominio(f"{_LINK_A.replace('../../', '../../')}\n")
+    repo = _repo(tmp_path, arquivos)
+    [achado] = gate.problemas(repo)
+    assert achado.startswith("docs/domain/staff/b.md:6: ADR 4_1_0001-a.md linkado")
+
+
+@pytest.mark.parametrize(
+    ("texto", "motivo"),
+    [
+        ("---\n- a\n---\n", "não é um mapeamento YAML"),
+        ("---\ntitle: x\n", "sem o `---` de fechamento"),
+    ],
+)
+def test_dominio_sem_frontmatter_mapeado_reprova(
+    tmp_path: pathlib.Path, texto: str, motivo: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: texto + "[x](../x.md)\n"})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f"{_DOMINIO}: ")
+    assert motivo in achado
