@@ -47,7 +47,7 @@ DEFAULT_POLICIES: tuple[ValidationPolicy, ...] = (
     break_divergence_policy.BreakDivergencePolicy(),
 )
 
-_POSICAO = {kind: posicao for posicao, kind in enumerate(PolicyKind)}
+_POSITION = {kind: position for position, kind in enumerate(PolicyKind)}
 
 
 @dataclass(frozen=True)
@@ -71,13 +71,13 @@ class Evaluation:
         return tuple(v for v in self.violations if v.mode is EnforcementMode.WARN)
 
 
-def _ordem(violacao: Violation) -> tuple[int, tuple[object, ...], str, str, tuple[str, ...]]:
+def _sort_key(violation: Violation) -> tuple[int, tuple[object, ...], str, str, tuple[str, ...]]:
     return (
-        _POSICAO[violacao.policy],
-        violacao.operational_days,
-        violacao.employee_id or "",
-        violacao.demand_id or "",
-        tuple(sorted(violacao.assignment_ids)),
+        _POSITION[violation.policy],
+        violation.operational_days,
+        violation.employee_id or "",
+        violation.demand_id or "",
+        tuple(sorted(violation.assignment_ids)),
     )
 
 
@@ -87,10 +87,10 @@ def evaluate(
     policies: tuple[ValidationPolicy, ...] = DEFAULT_POLICIES,
 ) -> Evaluation:
     """As violações da escala avaliada, só das políticas habilitadas na config."""
-    violacoes = [
-        violacao
-        for politica in policies
-        if config.rule_for(politica.kind).enabled
-        for violacao in politica.evaluate(context, config)
+    violations = [
+        violation
+        for policy in policies
+        if config.rule_for(policy.kind).enabled
+        for violation in policy.evaluate(context, config)
     ]
-    return Evaluation(violations=tuple(sorted(violacoes, key=_ordem)))
+    return Evaluation(violations=tuple(sorted(violations, key=_sort_key)))

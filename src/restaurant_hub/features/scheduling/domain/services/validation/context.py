@@ -32,8 +32,8 @@ from restaurant_hub.features.scheduling.domain.value_objects.identifiers import 
 )
 from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
 
-_DIAS_DA_SEMANA_DE_APURACAO = 7
-_UM_DIA = timedelta(days=1)
+_ASSESSMENT_WEEK_DAYS = 7
+_ONE_DAY = timedelta(days=1)
 
 
 @dataclass(frozen=True)
@@ -69,27 +69,27 @@ class AllocationView:
     in_evaluated: bool
 
 
-def _projetar(schedule: Schedule, *, in_evaluated: bool) -> tuple[AllocationView, ...]:
+def _project(schedule: Schedule, *, in_evaluated: bool) -> tuple[AllocationView, ...]:
     return tuple(
         AllocationView(
-            assignment_id=alocacao.id,
-            employee_id=alocacao.employee_id,
-            demand_id=demanda.id,
-            job_function_id=demanda.job_function_id,
-            band_id=faixa.id,
-            time_range=faixa.time_range,
-            operational_day=schedule.operational_day_of(faixa),
-            worked_minutes=schedule.worked_minutes_of(alocacao.id),
-            effective_break_minutes=schedule.effective_break_minutes_of(alocacao.id),
-            band_break_minutes=faixa.time_range.break_minutes,
-            counts_toward_workload=alocacao.counts_toward_workload,
-            break_divergence=schedule.has_break_divergence(alocacao.id),
+            assignment_id=assignment.id,
+            employee_id=assignment.employee_id,
+            demand_id=demand.id,
+            job_function_id=demand.job_function_id,
+            band_id=band.id,
+            time_range=band.time_range,
+            operational_day=schedule.operational_day_of(band),
+            worked_minutes=schedule.worked_minutes_of(assignment.id),
+            effective_break_minutes=schedule.effective_break_minutes_of(assignment.id),
+            band_break_minutes=band.time_range.break_minutes,
+            counts_toward_workload=assignment.counts_toward_workload,
+            break_divergence=schedule.has_break_divergence(assignment.id),
             schedule_id=schedule.id,
             in_evaluated=in_evaluated,
         )
-        for faixa in schedule.bands
-        for demanda in faixa.demands
-        for alocacao in demanda.assignments
+        for band in schedule.bands
+        for demand in band.demands
+        for assignment in demand.assignments
     )
 
 
@@ -108,88 +108,92 @@ class EvaluationContext:
     facts: tuple[EmployeeFacts, ...]
     previous: Schedule | None = None
     next: Schedule | None = None
-    _por_registro: dict[EmployeeId, EmployeeFacts] = field(init=False, repr=False, compare=False)
-    _vistas: tuple[AllocationView, ...] = field(init=False, repr=False, compare=False)
+    _facts_by_employee: dict[EmployeeId, EmployeeFacts] = field(
+        init=False, repr=False, compare=False
+    )
+    _views: tuple[AllocationView, ...] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        self._validar_periodos()
-        self._validar_vizinhas()
-        vistas = tuple(
-            vista
-            for escala in self._escalas()
-            for vista in _projetar(escala, in_evaluated=escala is self.schedule)
+        self._validate_periods()
+        self._validate_neighbors()
+        views = tuple(
+            view
+            for schedule in self._schedules()
+            for view in _project(schedule, in_evaluated=schedule is self.schedule)
         )
-        ids = [vista.assignment_id for vista in vistas]
+        ids = [view.assignment_id for view in views]
         if len(set(ids)) != len(ids):
             raise InvalidEvaluationInputError(
                 "AssignmentId repetido entre a escala avaliada e as vizinhas"
             )
-        por_registro: dict[EmployeeId, EmployeeFacts] = {}
-        for fatos in self.facts:
-            if fatos.employee_id in por_registro:
-                raise InvalidEvaluationInputError(f"fatos repetidos para {fatos.employee_id!r}")
-            por_registro[fatos.employee_id] = fatos
-        for vista in vistas:
-            if vista.employee_id not in por_registro:
+        facts_by_employee: dict[EmployeeId, EmployeeFacts] = {}
+        for facts in self.facts:
+            if facts.employee_id in facts_by_employee:
+                raise InvalidEvaluationInputError(f"fatos repetidos para {facts.employee_id!r}")
+            facts_by_employee[facts.employee_id] = facts
+        for view in views:
+            if view.employee_id not in facts_by_employee:
                 raise InvalidEvaluationInputError(
-                    f"registro alocado {vista.employee_id!r} sem fatos"
+                    f"registro alocado {view.employee_id!r} sem fatos"
                 )
-        object.__setattr__(self, "_por_registro", por_registro)
-        object.__setattr__(self, "_vistas", vistas)
+        object.__setattr__(self, "_facts_by_employee", facts_by_employee)
+        object.__setattr__(self, "_views", views)
 
-    def _escalas(self) -> tuple[Schedule, ...]:
+    def _schedules(self) -> tuple[Schedule, ...]:
         return tuple(
-            escala for escala in (self.previous, self.schedule, self.next) if escala is not None
+            schedule
+            for schedule in (self.previous, self.schedule, self.next)
+            if schedule is not None
         )
 
-    def _validar_periodos(self) -> None:
-        for escala in self._escalas():
-            if escala.period.days != _DIAS_DA_SEMANA_DE_APURACAO:
+    def _validate_periods(self) -> None:
+        for schedule in self._schedules():
+            if schedule.period.days != _ASSESSMENT_WEEK_DAYS:
                 raise InvalidEvaluationInputError(
-                    f"o período da escala {escala.id!r} deve ter "
-                    f"{_DIAS_DA_SEMANA_DE_APURACAO} dias (recebido: {escala.period.days})"
+                    f"o período da escala {schedule.id!r} deve ter "
+                    f"{_ASSESSMENT_WEEK_DAYS} dias (recebido: {schedule.period.days})"
                 )
 
-    def _validar_vizinhas(self) -> None:
-        avaliada = self.schedule
-        ids = [escala.id for escala in self._escalas()]
+    def _validate_neighbors(self) -> None:
+        evaluated = self.schedule
+        ids = [schedule.id for schedule in self._schedules()]
         if len(set(ids)) != len(ids):
             raise InvalidEvaluationInputError("escala vizinha com o id da avaliada ou da outra")
-        for vizinha in (self.previous, self.next):
-            if vizinha is None:
+        for neighbor in (self.previous, self.next):
+            if neighbor is None:
                 continue
-            if (vizinha.tenant_id, vizinha.unit_id) != (avaliada.tenant_id, avaliada.unit_id):
+            if (neighbor.tenant_id, neighbor.unit_id) != (evaluated.tenant_id, evaluated.unit_id):
                 raise InvalidEvaluationInputError(
-                    f"escala vizinha {vizinha.id!r} de outro tenant ou unidade"
+                    f"escala vizinha {neighbor.id!r} de outro tenant ou unidade"
                 )
         if (
             self.previous is not None
-            and self.previous.period.last_day + _UM_DIA != avaliada.period.first_day
+            and self.previous.period.last_day + _ONE_DAY != evaluated.period.first_day
         ):
             raise InvalidEvaluationInputError("a escala anterior não é adjacente à avaliada")
         if (
             self.next is not None
-            and avaliada.period.last_day + _UM_DIA != self.next.period.first_day
+            and evaluated.period.last_day + _ONE_DAY != self.next.period.first_day
         ):
             raise InvalidEvaluationInputError("a escala seguinte não é adjacente à avaliada")
 
     def facts_of(self, employee_id: EmployeeId) -> EmployeeFacts:
         """Os fatos do registro — presentes para todo alocado, por construção."""
-        return self._por_registro[employee_id]
+        return self._facts_by_employee[employee_id]
 
     @property
     def active_facts(self) -> tuple[EmployeeFacts, ...]:
         """Os fatos dos registros ativos, na ordem recebida."""
-        return tuple(fatos for fatos in self.facts if fatos.active)
+        return tuple(facts for facts in self.facts if facts.active)
 
     @property
     def allocations(self) -> tuple[AllocationView, ...]:
         """As alocações de registros ativos da escala **avaliada**."""
-        return tuple(vista for vista in self.all_allocations if vista.in_evaluated)
+        return tuple(view for view in self.all_allocations if view.in_evaluated)
 
     @property
     def all_allocations(self) -> tuple[AllocationView, ...]:
         """As alocações de registros ativos da avaliada **e** das vizinhas."""
         return tuple(
-            vista for vista in self._vistas if self._por_registro[vista.employee_id].active
+            view for view in self._views if self._facts_by_employee[view.employee_id].active
         )
