@@ -110,9 +110,9 @@ class Employee:
             raise InvalidIdentifierError("login do funcionário")
         # Par a par sobre a coleção inteira: cobre a reidratação da 3.3 e as
         # transições (add_unavailability revalida por aqui via replace).
-        for indice, periodo in enumerate(self.unavailabilities):
-            for outro in self.unavailabilities[indice + 1 :]:
-                if periodo.overlaps(outro):
+        for index, unavailability in enumerate(self.unavailabilities):
+            for other in self.unavailabilities[index + 1 :]:
+                if unavailability.overlaps(other):
                     raise OverlappingUnavailabilityError()
 
     def rename(self, name: str) -> "Employee":
@@ -141,8 +141,8 @@ class Employee:
         """Remove um período por igualdade de valor — inexistente é erro."""
         if period not in self.unavailabilities:
             raise UnavailabilityNotFoundError()
-        restantes = tuple(existente for existente in self.unavailabilities if existente != period)
-        return dataclasses.replace(self, unavailabilities=restantes)
+        remaining = tuple(existing for existing in self.unavailabilities if existing != period)
+        return dataclasses.replace(self, unavailabilities=remaining)
 
     def deactivate(self) -> "Employee":
         """Desliga o registro — idempotente no valor (já desligado não é erro).

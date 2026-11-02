@@ -59,34 +59,34 @@ class ShiftBand:
     def __post_init__(self) -> None:
         if not self.id.strip():
             raise InvalidIdentifierError("faixa")
-        for indice, demanda in enumerate(self.demands):
-            for outra_demanda in self.demands[indice + 1 :]:
-                if demanda.id == outra_demanda.id:
+        for index, demand in enumerate(self.demands):
+            for other_demand in self.demands[index + 1 :]:
+                if demand.id == other_demand.id:
                     raise DuplicateEntityIdError("ShiftDemandId")
-                if demanda.job_function_id == outra_demanda.job_function_id:
+                if demand.job_function_id == other_demand.job_function_id:
                     raise DuplicateShiftDemandError()
         nominal = self.time_range.nominal_minutes
-        alocacoes = self._assignments()
-        for alocacao in alocacoes:
-            if alocacao.break_minutes is not None and alocacao.break_minutes >= nominal:
+        assignments = self._assignments()
+        for assignment in assignments:
+            if assignment.break_minutes is not None and assignment.break_minutes >= nominal:
                 raise InvalidAssignmentBreakError(
                     "intervalo deve ser menor que a duração nominal da faixa"
                 )
         # Entre demandas: dentro de uma mesma demanda a ShiftDemand já recusou
         # (DuplicateAssignmentError), logo todo par que chega aqui é de demandas
         # distintas. Par a par sobre a coleção inteira, não só vizinhos.
-        for posicao, alocacao in enumerate(alocacoes):
-            for outra_alocacao in alocacoes[posicao + 1 :]:
-                if alocacao.employee_id == outra_alocacao.employee_id:
+        for position, assignment in enumerate(assignments):
+            for other_assignment in assignments[position + 1 :]:
+                if assignment.employee_id == other_assignment.employee_id:
                     raise DuplicateAssignmentInBandError()
 
     def _assignments(self) -> tuple[Assignment, ...]:
-        return tuple(alocacao for demanda in self.demands for alocacao in demanda.assignments)
+        return tuple(assignment for demand in self.demands for assignment in demand.assignments)
 
     @property
     def assignment_count(self) -> int:
         """Quantas alocações a faixa tem, somadas sobre todas as demandas."""
-        return sum(demanda.allocated for demanda in self.demands)
+        return sum(demand.allocated for demand in self.demands)
 
     def effective_break_of(self, assignment: Assignment) -> int:
         """Intervalo efetivo da alocação: o dela, se declarado; senão o da faixa."""
@@ -122,8 +122,8 @@ class ShiftBand:
 
         A recusa `ShiftDemandNotFoundError` é da raiz, que é quem localiza.
         """
-        restantes = tuple(demanda for demanda in self.demands if demanda.id != demand_id)
-        return dataclasses.replace(self, demands=restantes)
+        remaining = tuple(demand for demand in self.demands if demand.id != demand_id)
+        return dataclasses.replace(self, demands=remaining)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ShiftBand):

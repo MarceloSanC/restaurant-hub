@@ -35,27 +35,27 @@ class OverCoveragePolicy:
         self, context: EvaluationContext, config: ValidationConfig
     ) -> tuple[Violation, ...]:
         mode = config.rule_for(self.kind).mode
-        escala = context.schedule
-        violacoes: list[Violation] = []
-        for faixa in escala.bands:
-            for demanda in faixa.demands:
-                ativas = frozenset(
-                    alocacao.id
-                    for alocacao in demanda.assignments
-                    if context.facts_of(alocacao.employee_id).active
+        schedule = context.schedule
+        violations: list[Violation] = []
+        for band in schedule.bands:
+            for demand in band.demands:
+                active_ids = frozenset(
+                    assignment.id
+                    for assignment in demand.assignments
+                    if context.facts_of(assignment.employee_id).active
                 )
-                if len(ativas) <= demanda.quantity.value:
+                if len(active_ids) <= demand.quantity.value:
                     continue
-                violacoes.append(
+                violations.append(
                     Violation(
                         policy=self.kind,
                         mode=mode,
                         employee_id=None,
-                        demand_id=demanda.id,
-                        operational_days=(escala.operational_day_of(faixa),),
-                        assignment_ids=ativas,
-                        observed=Decimal(len(ativas)),
-                        limit=Decimal(demanda.quantity.value),
+                        demand_id=demand.id,
+                        operational_days=(schedule.operational_day_of(band),),
+                        assignment_ids=active_ids,
+                        observed=Decimal(len(active_ids)),
+                        limit=Decimal(demand.quantity.value),
                     )
                 )
-        return tuple(violacoes)
+        return tuple(violations)

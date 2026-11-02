@@ -76,7 +76,7 @@ class PolicyRule:
             )
 
 
-_REGRA_DA_INDISPONIBILIDADE = PolicyRule(enabled=True, mode=EnforcementMode.BLOCK)
+_UNAVAILABILITY_RULE = PolicyRule(enabled=True, mode=EnforcementMode.BLOCK)
 
 
 @dataclass(frozen=True)
@@ -109,45 +109,45 @@ class ValidationConfig:
     def __post_init__(self) -> None:
         # Derivado dos campos anotados como PolicyRule: uma política configurável nova tem o tipo
         # checado sem precisar entrar numa terceira lista escrita à mão.
-        for campo in dataclasses.fields(self):
-            if campo.type is not PolicyRule:
+        for config_field in dataclasses.fields(self):
+            if config_field.type is not PolicyRule:
                 continue
-            nome, regra = campo.name, getattr(self, campo.name)
-            if not isinstance(regra, PolicyRule):
+            name, rule = config_field.name, getattr(self, config_field.name)
+            if not isinstance(rule, PolicyRule):
                 raise InvalidValidationConfigError(
-                    f"{nome} deve ser um PolicyRule (recebido: {regra!r})"
+                    f"{name} deve ser um PolicyRule (recebido: {rule!r})"
                 )
         if not isinstance(self.workload_direction, WorkloadDirection):
             raise InvalidValidationConfigError(
                 "workload_direction deve ser um WorkloadDirection "
                 f"(recebido: {self.workload_direction!r})"
             )
-        inteiros = {
+        integers = {
             "min_rest_minutes": self.min_rest_minutes,
             "daily_cap_minutes": self.daily_cap_minutes,
             "weekly_cap_minutes": self.weekly_cap_minutes,
             "workload_tolerance_minutes": self.workload_tolerance_minutes,
         }
-        for nome, valor in inteiros.items():
+        for name, value in integers.items():
             # `type is int`, não `isinstance`: `bool` é `int` e passaria como 0/1 minuto.
-            if type(valor) is not int:
+            if type(value) is not int:
                 raise InvalidValidationConfigError(
-                    f"{nome} deve ser um número inteiro de minutos (recebido: {valor!r})"
+                    f"{name} deve ser um número inteiro de minutos (recebido: {value!r})"
                 )
-        nao_negativos = {
+        non_negatives = {
             "min_rest_minutes": self.min_rest_minutes,
             "workload_tolerance_minutes": self.workload_tolerance_minutes,
         }
-        for nome, valor in nao_negativos.items():
-            if valor < 0:
-                raise InvalidValidationConfigError(f"{nome} deve ser >= 0 (recebido: {valor})")
-        positivos = {
+        for name, value in non_negatives.items():
+            if value < 0:
+                raise InvalidValidationConfigError(f"{name} deve ser >= 0 (recebido: {value})")
+        positives = {
             "daily_cap_minutes": self.daily_cap_minutes,
             "weekly_cap_minutes": self.weekly_cap_minutes,
         }
-        for nome, valor in positivos.items():
-            if valor <= 0:
-                raise InvalidValidationConfigError(f"{nome} deve ser > 0 (recebido: {valor})")
+        for name, value in positives.items():
+            if value <= 0:
+                raise InvalidValidationConfigError(f"{name} deve ser > 0 (recebido: {value})")
 
     @classmethod
     def default(cls) -> "ValidationConfig":
@@ -157,16 +157,16 @@ class ValidationConfig:
         `warn` (a lei admite exceção); descanso 11h, teto diário 10h, teto semanal 44h,
         tolerância 0 e direção "excesso".
         """
-        aviso = PolicyRule(enabled=True, mode=EnforcementMode.WARN)
+        warn_rule = PolicyRule(enabled=True, mode=EnforcementMode.WARN)
         return cls(
             overlap=PolicyRule(enabled=True, mode=EnforcementMode.BLOCK),
-            rest_between_shifts=aviso,
-            daily_cap=aviso,
-            weekly_cap=aviso,
-            workload=aviso,
-            function_mismatch=aviso,
-            over_coverage=aviso,
-            break_divergence=aviso,
+            rest_between_shifts=warn_rule,
+            daily_cap=warn_rule,
+            weekly_cap=warn_rule,
+            workload=warn_rule,
+            function_mismatch=warn_rule,
+            over_coverage=warn_rule,
+            break_divergence=warn_rule,
             min_rest_minutes=660,
             daily_cap_minutes=600,
             weekly_cap_minutes=2640,
@@ -176,9 +176,9 @@ class ValidationConfig:
 
     def rule_for(self, kind: PolicyKind) -> PolicyRule:
         """A regra da política — a da indisponibilidade é fixa, `block` e habilitada."""
-        regras = {
+        rules = {
             PolicyKind.OVERLAP: self.overlap,
-            PolicyKind.UNAVAILABILITY: _REGRA_DA_INDISPONIBILIDADE,
+            PolicyKind.UNAVAILABILITY: _UNAVAILABILITY_RULE,
             PolicyKind.REST_BETWEEN_SHIFTS: self.rest_between_shifts,
             PolicyKind.DAILY_CAP: self.daily_cap,
             PolicyKind.WEEKLY_CAP: self.weekly_cap,
@@ -187,4 +187,4 @@ class ValidationConfig:
             PolicyKind.OVER_COVERAGE: self.over_coverage,
             PolicyKind.BREAK_DIVERGENCE: self.break_divergence,
         }
-        return regras[kind]
+        return rules[kind]

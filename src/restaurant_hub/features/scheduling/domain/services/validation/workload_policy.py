@@ -28,7 +28,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
 )
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
 
-_MINUTOS_POR_HORA = 60
+_MINUTES_PER_HOUR = 60
 
 
 class WorkloadPolicy:
@@ -42,34 +42,36 @@ class WorkloadPolicy:
         self, context: EvaluationContext, config: ValidationConfig
     ) -> tuple[Violation, ...]:
         mode = config.rule_for(self.kind).mode
-        que_contam: dict[EmployeeId, list[AllocationView]] = defaultdict(list)
-        for alocacao in context.allocations:
-            if alocacao.counts_toward_workload:
-                que_contam[alocacao.employee_id].append(alocacao)
-        tolerancia = Decimal(config.workload_tolerance_minutes)
-        violacoes: list[Violation] = []
-        for fatos in context.active_facts:
-            carga = fatos.contracted_weekly_hours
-            if carga is None:
+        counted_by_employee: dict[EmployeeId, list[AllocationView]] = defaultdict(list)
+        for allocation in context.allocations:
+            if allocation.counts_toward_workload:
+                counted_by_employee[allocation.employee_id].append(allocation)
+        tolerance = Decimal(config.workload_tolerance_minutes)
+        violations: list[Violation] = []
+        for facts in context.active_facts:
+            contracted_hours = facts.contracted_weekly_hours
+            if contracted_hours is None:
                 continue
-            alocacoes = que_contam[fatos.employee_id]
-            minutos = Decimal(sum(alocacao.worked_minutes for alocacao in alocacoes))
-            contratado = carga * _MINUTOS_POR_HORA
-            desvio = minutos - contratado
+            allocations = counted_by_employee[facts.employee_id]
+            minutes = Decimal(sum(allocation.worked_minutes for allocation in allocations))
+            contracted_minutes = contracted_hours * _MINUTES_PER_HOUR
+            deviation = minutes - contracted_minutes
             if config.workload_direction is WorkloadDirection.BOTH:
-                desvio = abs(desvio)
-            if desvio <= tolerancia:
+                deviation = abs(deviation)
+            if deviation <= tolerance:
                 continue
-            violacoes.append(
+            violations.append(
                 Violation(
                     policy=self.kind,
                     mode=mode,
-                    employee_id=fatos.employee_id,
+                    employee_id=facts.employee_id,
                     demand_id=None,
                     operational_days=context.schedule.period.operational_days,
-                    assignment_ids=frozenset(alocacao.assignment_id for alocacao in alocacoes),
-                    observed=minutos,
-                    limit=contratado,
+                    assignment_ids=frozenset(
+                        allocation.assignment_id for allocation in allocations
+                    ),
+                    observed=minutes,
+                    limit=contracted_minutes,
                 )
             )
-        return tuple(violacoes)
+        return tuple(violations)

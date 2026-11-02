@@ -695,7 +695,7 @@ def _base_com_intervalo_na_faixa() -> Schedule:
     ],
 )
 def test_mutacoes_de_demanda_e_alocacao_preservam_o_intervalo_da_faixa(mutacao: str) -> None:
-    # As 5 reconstroem a faixa por `_com_demanda`. Valor ABSOLUTO, e não "igual ao
+    # As 5 reconstroem a faixa por `_replacing_demand`. Valor ABSOLUTO, e não "igual ao
     # antes": uma reconstrução que zerasse o intervalo da faixa passaria numa
     # comparação com um arranjo que também passou por ela (auditoria, R34/R36).
     depois = _MUTACOES[mutacao](_base_com_intervalo_na_faixa())

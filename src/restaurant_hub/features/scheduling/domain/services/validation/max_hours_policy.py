@@ -42,27 +42,29 @@ class DailyCapPolicy:
         self, context: EvaluationContext, config: ValidationConfig
     ) -> tuple[Violation, ...]:
         mode = config.rule_for(self.kind).mode
-        por_dia: dict[tuple[EmployeeId, date], list[AllocationView]] = defaultdict(list)
-        for alocacao in context.allocations:
-            por_dia[(alocacao.employee_id, alocacao.operational_day)].append(alocacao)
-        violacoes: list[Violation] = []
-        for (registro, _), alocacoes in por_dia.items():
-            minutos = sum(alocacao.worked_minutes for alocacao in alocacoes)
-            if minutos <= config.daily_cap_minutes:
+        by_day: dict[tuple[EmployeeId, date], list[AllocationView]] = defaultdict(list)
+        for allocation in context.allocations:
+            by_day[(allocation.employee_id, allocation.operational_day)].append(allocation)
+        violations: list[Violation] = []
+        for (employee_id, _), allocations in by_day.items():
+            minutes = sum(allocation.worked_minutes for allocation in allocations)
+            if minutes <= config.daily_cap_minutes:
                 continue
-            violacoes.append(
+            violations.append(
                 Violation(
                     policy=self.kind,
                     mode=mode,
-                    employee_id=registro,
+                    employee_id=employee_id,
                     demand_id=None,
-                    operational_days=(alocacoes[0].operational_day,),
-                    assignment_ids=frozenset(alocacao.assignment_id for alocacao in alocacoes),
-                    observed=Decimal(minutos),
+                    operational_days=(allocations[0].operational_day,),
+                    assignment_ids=frozenset(
+                        allocation.assignment_id for allocation in allocations
+                    ),
+                    observed=Decimal(minutes),
                     limit=Decimal(config.daily_cap_minutes),
                 )
             )
-        return tuple(violacoes)
+        return tuple(violations)
 
 
 class WeeklyCapPolicy:
@@ -76,25 +78,27 @@ class WeeklyCapPolicy:
         self, context: EvaluationContext, config: ValidationConfig
     ) -> tuple[Violation, ...]:
         mode = config.rule_for(self.kind).mode
-        por_registro: dict[EmployeeId, list[AllocationView]] = defaultdict(list)
-        for alocacao in context.allocations:
-            por_registro[alocacao.employee_id].append(alocacao)
-        dias = context.schedule.period.operational_days
-        violacoes: list[Violation] = []
-        for registro, alocacoes in por_registro.items():
-            minutos = sum(alocacao.worked_minutes for alocacao in alocacoes)
-            if minutos <= config.weekly_cap_minutes:
+        by_employee: dict[EmployeeId, list[AllocationView]] = defaultdict(list)
+        for allocation in context.allocations:
+            by_employee[allocation.employee_id].append(allocation)
+        days = context.schedule.period.operational_days
+        violations: list[Violation] = []
+        for employee_id, allocations in by_employee.items():
+            minutes = sum(allocation.worked_minutes for allocation in allocations)
+            if minutes <= config.weekly_cap_minutes:
                 continue
-            violacoes.append(
+            violations.append(
                 Violation(
                     policy=self.kind,
                     mode=mode,
-                    employee_id=registro,
+                    employee_id=employee_id,
                     demand_id=None,
-                    operational_days=dias,
-                    assignment_ids=frozenset(alocacao.assignment_id for alocacao in alocacoes),
-                    observed=Decimal(minutos),
+                    operational_days=days,
+                    assignment_ids=frozenset(
+                        allocation.assignment_id for allocation in allocations
+                    ),
+                    observed=Decimal(minutes),
                     limit=Decimal(config.weekly_cap_minutes),
                 )
             )
-        return tuple(violacoes)
+        return tuple(violations)

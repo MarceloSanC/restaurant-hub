@@ -20,7 +20,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
 )
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
 
-_UM_MINUTO = timedelta(minutes=1)
+_ONE_MINUTE = timedelta(minutes=1)
 
 
 class OverlapPolicy:
@@ -34,30 +34,30 @@ class OverlapPolicy:
         self, context: EvaluationContext, config: ValidationConfig
     ) -> tuple[Violation, ...]:
         mode = config.rule_for(self.kind).mode
-        alocacoes = context.all_allocations
-        violacoes: list[Violation] = []
-        for indice, uma in enumerate(alocacoes):
-            for outra in alocacoes[indice + 1 :]:
-                if uma.employee_id != outra.employee_id:
+        allocations = context.all_allocations
+        violations: list[Violation] = []
+        for index, first in enumerate(allocations):
+            for second in allocations[index + 1 :]:
+                if first.employee_id != second.employee_id:
                     continue
-                if not (uma.in_evaluated or outra.in_evaluated):
+                if not (first.in_evaluated or second.in_evaluated):
                     continue
-                if not uma.time_range.overlaps(outra.time_range):
+                if not first.time_range.overlaps(second.time_range):
                     continue
-                inicio = max(uma.time_range.start, outra.time_range.start)
-                fim = min(uma.time_range.end, outra.time_range.end)
-                violacoes.append(
+                start = max(first.time_range.start, second.time_range.start)
+                end = min(first.time_range.end, second.time_range.end)
+                violations.append(
                     Violation(
                         policy=self.kind,
                         mode=mode,
-                        employee_id=uma.employee_id,
+                        employee_id=first.employee_id,
                         demand_id=None,
                         operational_days=tuple(
-                            sorted({uma.operational_day, outra.operational_day})
+                            sorted({first.operational_day, second.operational_day})
                         ),
-                        assignment_ids=frozenset({uma.assignment_id, outra.assignment_id}),
-                        observed=Decimal((fim - inicio) // _UM_MINUTO),
+                        assignment_ids=frozenset({first.assignment_id, second.assignment_id}),
+                        observed=Decimal((end - start) // _ONE_MINUTE),
                         limit=Decimal(0),
                     )
                 )
-        return tuple(violacoes)
+        return tuple(violations)

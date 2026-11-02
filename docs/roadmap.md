@@ -200,7 +200,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#99](https://github.com/MarceloSanC/restaurant-hub/issues/99) | `make check` sem conferência de formatação e lint fora de `migrations/` | shared | tooling | done | #7 |
 | [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | done | #7 |
 | [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | done | — |
-| [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | open | — |
+| [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | done | — |
 | [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
 | [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário | staff | application + identity (fachada) | open | — |
 | [#108](https://github.com/MarceloSanC/restaurant-hub/issues/108) | Remoção concorrente com R17 não pode apagar registro já vinculado (conta órfã) | staff | application + adapters/out | done | #68 |
@@ -211,6 +211,10 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#127](https://github.com/MarceloSanC/restaurant-hub/issues/127) | Comentário de `role.py` ainda proíbe toda permissão de escala ao `hr` — superado pelo ADR 4.1.0004 | identity | domain (comentário) | open | #30 |
 | [#128](https://github.com/MarceloSanC/restaurant-hub/issues/128) | ADR 2.5.0002 §5 descreve um reconvite que o concept 2.5 recusa com 409 | identity | docs | open | #30 |
 | [#129](https://github.com/MarceloSanC/restaurant-hub/issues/129) | Numeração das decisões de kickoff diverge entre ADRs, concepts e código | shared | docs | open | #30 |
+| [#134](https://github.com/MarceloSanC/restaurant-hub/issues/134) | Identificadores locais em português na application de scheduling (`_UM_DIA`) | scheduling | application + adapters | open | #105 |
+| [#135](https://github.com/MarceloSanC/restaurant-hub/issues/135) | Identificadores em português na application e nos adapters de staff | staff | application + adapters | open | #105 |
+| [#136](https://github.com/MarceloSanC/restaurant-hub/issues/136) | Identificadores em português no BC identity | identity | todas as camadas | open | #105 |
+| [#137](https://github.com/MarceloSanC/restaurant-hub/issues/137) | Identificadores em português no kernel compartilhado | shared | infrastructure | open | #105 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

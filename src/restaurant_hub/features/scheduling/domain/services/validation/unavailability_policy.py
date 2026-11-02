@@ -23,19 +23,19 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
 )
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
 
-_UM_MICROSSEGUNDO = timedelta(microseconds=1)
-_MICROSSEGUNDOS_POR_MINUTO = Decimal(60_000_000)
+_ONE_MICROSECOND = timedelta(microseconds=1)
+_MICROSECONDS_PER_MINUTE = Decimal(60_000_000)
 
 
-def _microssegundos_cobertos(intervalos: list[tuple[datetime, datetime]]) -> int:
+def _covered_microseconds(intervals: list[tuple[datetime, datetime]]) -> int:
     """Duração da união dos intervalos semi-abertos, em microssegundos."""
     total = 0
-    fim_corrente: datetime | None = None
-    for inicio, fim in sorted(intervalos):
-        efetivo = inicio if fim_corrente is None else max(inicio, fim_corrente)
-        if fim > efetivo:
-            total += (fim - efetivo) // _UM_MICROSSEGUNDO
-        fim_corrente = fim if fim_corrente is None else max(fim_corrente, fim)
+    current_end: datetime | None = None
+    for start, end in sorted(intervals):
+        effective_start = start if current_end is None else max(start, current_end)
+        if end > effective_start:
+            total += (end - effective_start) // _ONE_MICROSECOND
+        current_end = end if current_end is None else max(current_end, end)
     return total
 
 
@@ -50,27 +50,26 @@ class UnavailabilityPolicy:
         self, context: EvaluationContext, config: ValidationConfig
     ) -> tuple[Violation, ...]:
         mode = config.rule_for(self.kind).mode
-        violacoes: list[Violation] = []
-        for alocacao in context.allocations:
-            faixa = alocacao.time_range
-            recortes = [
-                (max(faixa.start, janela.start), min(faixa.end, janela.end))
-                for janela in context.facts_of(alocacao.employee_id).unavailabilities
-                if faixa.start < janela.end and janela.start < faixa.end
+        violations: list[Violation] = []
+        for allocation in context.allocations:
+            band_range = allocation.time_range
+            clipped = [
+                (max(band_range.start, window.start), min(band_range.end, window.end))
+                for window in context.facts_of(allocation.employee_id).unavailabilities
+                if band_range.start < window.end and window.start < band_range.end
             ]
-            if not recortes:
+            if not clipped:
                 continue
-            violacoes.append(
+            violations.append(
                 Violation(
                     policy=self.kind,
                     mode=mode,
-                    employee_id=alocacao.employee_id,
+                    employee_id=allocation.employee_id,
                     demand_id=None,
-                    operational_days=(alocacao.operational_day,),
-                    assignment_ids=frozenset({alocacao.assignment_id}),
-                    observed=Decimal(_microssegundos_cobertos(recortes))
-                    / _MICROSSEGUNDOS_POR_MINUTO,
+                    operational_days=(allocation.operational_day,),
+                    assignment_ids=frozenset({allocation.assignment_id}),
+                    observed=Decimal(_covered_microseconds(clipped)) / _MICROSECONDS_PER_MINUTE,
                     limit=Decimal(0),
                 )
             )
-        return tuple(violacoes)
+        return tuple(violations)

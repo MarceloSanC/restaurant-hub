@@ -18,8 +18,8 @@ from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidSchedulePeriodError,
 )
 
-_MINIMO_DE_DIAS = 1
-_MAXIMO_DE_DIAS = 31
+_MIN_DAYS = 1
+_MAX_DAYS = 31
 
 
 @dataclass(frozen=True)
@@ -35,10 +35,9 @@ class SchedulePeriod:
     days: int = 7
 
     def __post_init__(self) -> None:
-        if not _MINIMO_DE_DIAS <= self.days <= _MAXIMO_DE_DIAS:
+        if not _MIN_DAYS <= self.days <= _MAX_DAYS:
             raise InvalidSchedulePeriodError(
-                f"o período deve ter de {_MINIMO_DE_DIAS} a {_MAXIMO_DE_DIAS} dias "
-                f"(recebido: {self.days})"
+                f"o período deve ter de {_MIN_DAYS} a {_MAX_DAYS} dias (recebido: {self.days})"
             )
 
     @property
@@ -49,7 +48,7 @@ class SchedulePeriod:
     @property
     def operational_days(self) -> tuple[date, ...]:
         """Os `days` dias operacionais do período, em ordem."""
-        return tuple(self.first_day + timedelta(days=indice) for indice in range(self.days))
+        return tuple(self.first_day + timedelta(days=offset) for offset in range(self.days))
 
     def contains(self, operational_day: date) -> bool:
         """Se o dia operacional pertence ao período (bordas inclusivas)."""

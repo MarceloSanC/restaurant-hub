@@ -29,7 +29,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
 )
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
 
-_UM_MINUTO = timedelta(minutes=1)
+_ONE_MINUTE = timedelta(minutes=1)
 
 
 class RestBetweenShiftsPolicy:
@@ -43,41 +43,41 @@ class RestBetweenShiftsPolicy:
         self, context: EvaluationContext, config: ValidationConfig
     ) -> tuple[Violation, ...]:
         mode = config.rule_for(self.kind).mode
-        periodo = context.schedule.period
-        por_registro: dict[EmployeeId, dict[date, list[AllocationView]]] = defaultdict(
+        period = context.schedule.period
+        by_employee: dict[EmployeeId, dict[date, list[AllocationView]]] = defaultdict(
             lambda: defaultdict(list)
         )
-        for alocacao in context.all_allocations:
-            por_registro[alocacao.employee_id][alocacao.operational_day].append(alocacao)
-        violacoes: list[Violation] = []
-        for registro, por_dia in por_registro.items():
-            for anterior, seguinte in pairwise(sorted(por_dia)):
-                if not (periodo.contains(anterior) or periodo.contains(seguinte)):
+        for allocation in context.all_allocations:
+            by_employee[allocation.employee_id][allocation.operational_day].append(allocation)
+        violations: list[Violation] = []
+        for employee_id, by_day in by_employee.items():
+            for earlier_day, later_day in pairwise(sorted(by_day)):
+                if not (period.contains(earlier_day) or period.contains(later_day)):
                     continue
-                fim = max(alocacao.time_range.end for alocacao in por_dia[anterior])
-                inicio = min(alocacao.time_range.start for alocacao in por_dia[seguinte])
-                descanso = (inicio - fim) // _UM_MINUTO
-                if descanso >= config.min_rest_minutes:
+                end = max(allocation.time_range.end for allocation in by_day[earlier_day])
+                start = min(allocation.time_range.start for allocation in by_day[later_day])
+                rest_minutes = (start - end) // _ONE_MINUTE
+                if rest_minutes >= config.min_rest_minutes:
                     continue
-                envolvidas = {
-                    alocacao.assignment_id
-                    for alocacao in por_dia[anterior]
-                    if alocacao.time_range.end == fim
+                involved = {
+                    allocation.assignment_id
+                    for allocation in by_day[earlier_day]
+                    if allocation.time_range.end == end
                 } | {
-                    alocacao.assignment_id
-                    for alocacao in por_dia[seguinte]
-                    if alocacao.time_range.start == inicio
+                    allocation.assignment_id
+                    for allocation in by_day[later_day]
+                    if allocation.time_range.start == start
                 }
-                violacoes.append(
+                violations.append(
                     Violation(
                         policy=self.kind,
                         mode=mode,
-                        employee_id=registro,
+                        employee_id=employee_id,
                         demand_id=None,
-                        operational_days=(anterior, seguinte),
-                        assignment_ids=frozenset(envolvidas),
-                        observed=Decimal(descanso),
+                        operational_days=(earlier_day, later_day),
+                        assignment_ids=frozenset(involved),
+                        observed=Decimal(rest_minutes),
                         limit=Decimal(config.min_rest_minutes),
                     )
                 )
-        return tuple(violacoes)
+        return tuple(violations)
