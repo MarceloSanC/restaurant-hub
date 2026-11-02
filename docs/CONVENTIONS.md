@@ -505,8 +505,23 @@ acentuado:
 - ✅ `fix(payment.retry): limitar backoff exponencial em 30s` —
   escopo pode ser sub-módulo (`payment.retry`) quando isso desambigua.
 - ❌ `feat(stage-2.3): adicionar S3 source adapter` — Stage não é escopo.
+  Nem o número ou o `stage_id` dela: ❌ `2.3`, ❌ `4.1-scheduling-domain`.
+  O número da Stage vai na marca (`[2.3/task-01]`), nunca no escopo.
 - ❌ `chore(repo): um monte de fixes` — escopo amplo demais; quebrar
   em vários commits com escopos mínimos diferentes.
+
+**O hook `commit-msg` cobra a proibição da Stage** — `STAGE_SCOPE_PATTERN`
+de `scripts/check_commit_msg.py` (o hook é o gate; mudou lá, atualizar
+aqui). Recusa `stage` sozinho, `stage` seguido de número e o número ou
+o `stage_id` da Stage como escopo inteiro; aceita escopo que só contém a
+palavra (`prompt-stage`, `stage-audit`, `staging`). O "menor recorte"
+ele não confere — fica com o review. Os gates reservados (§4(b),
+`stage N.M: ...`) não são Conventional Commits e não passam por esta
+regra. **O histórico não se reescreve:** o
+`docs(stage-1-1): registrar findings de follow-up...` da Stage 1.1,
+anterior ao gate (§7 do [`technical.md`](./stages/1.2-ci/technical.md)
+da 1.2), fica como está — aceito sem ação retroativa, como a regra 5
+da "Marca de Task".
 
 Se a mudança realmente toca vários escopos independentes (cross-cut),
 quebre em **vários commits** — um por escopo. "Sou preguiçoso, deixa
