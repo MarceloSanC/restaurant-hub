@@ -17,11 +17,11 @@ subagentes de contexto zerado e responde aos forks deles.
 ## 1. Regras
 
 1. **Nenhuma implementação no checkout principal.** Ele fica em `develop`, limpo. Toda Stage/issue
-   começa com `python scripts/worktree-new.py <branch> --no-vscode --no-setup` e
-   `uv sync --extra dev` dentro da worktree (issue-first; o script cria a issue com
-   `--create-issue` se faltar). O `--no-setup` evita que a worktree religue os hooks do git,
-   compartilhados, no venv dela ([`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Criar a worktree";
-   issue #100). Isso vale também para docs de processo do próprio orquestrador.
+   começa com `python scripts/worktree-new.py <branch> --no-vscode` (issue-first; o script
+   cria a issue com `--create-issue` se faltar, e o venv da worktree com `uv sync`). Os hooks
+   do git são do checkout principal; a worktree não os toca
+   ([`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Hooks do git"). Isso vale também para docs de
+   processo do próprio orquestrador.
 2. **Teto: 3 worktrees de implementação** existindo ao mesmo tempo, **contando as com PR aberto
    ainda não mergeado**. Abrir uma nova só quando outra for removida e só se ela **não conflitar**
    com as em voo (critérios em [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Branches em execução":

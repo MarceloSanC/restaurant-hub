@@ -311,7 +311,8 @@ make worktree BRANCH=feat/42-add-google-login                         # humano (
      são 3 commits. Subject e body em **português** (ver §Princípios
      fundamentais #3); body em bullet points (≥ 1 bullet). Padrão
      detalhado em [`./CONVENTIONS.md`](./CONVENTIONS.md) §4(a).
-   - O hook `commit-msg` (instalado em `make setup`) valida o
+   - O hook `commit-msg` (instalado pelo `make setup` do checkout
+     principal, §"Hooks do git") valida o
      subject contra o padrão antes de aceitar o commit. Se rejeitar,
      ler a mensagem e ajustar — não tem como "passar por cima".
 
@@ -532,31 +533,44 @@ O script, num único comando:
   `DATABASE_URL` para a mesma `POSTGRES_PORT`** (acrescentada se faltar; só
   com host `localhost`/`127.0.0.1`/`::1` — o host `postgres` fala na porta do
   contêiner e fica como está);
-- roda `make setup` (uv venv + deps + pre-commit hooks);
+- roda `uv sync --extra dev` (o venv da worktree) e **não** toca nos hooks
+  do git (§"Hooks do git", logo abaixo);
 - abre uma nova janela do VS Code na worktree.
 
 Flags úteis (passar via `ARGS='...'`):
 
 - `--create-issue --issue-title "feat: ..."` — cria a issue antes
   (substitui o `<num>` por placeholder `-`, ex.: `feat/-add-foo`).
-- `--no-setup` / `--no-vscode` / `--no-env` / `--no-port-assign` — opt-outs.
+- `--no-setup` (pula o `uv sync`) / `--no-vscode` / `--no-env` /
+  `--no-port-assign` — opt-outs.
 - `--base main` — força base remota (default já cuida de hotfix).
 
-**Hooks compartilhados — use `--no-setup` enquanto a issue #100 não
-fecha.** Os hooks do git moram no diretório comum do repositório
-(`git rev-parse --git-common-dir`), um só para todas as worktrees. O
-`make setup` da worktree nova reinstala esses hooks com
-`INSTALL_PYTHON` no venv **dela**; quando ela é removida, o
-`pre-commit`/`commit-msg` de todas as outras quebra. Contorno:
+#### Hooks do git
 
-```bash
-python scripts/worktree-new.py <branch> --no-vscode --no-setup
-cd <worktree> && uv sync --extra dev        # venv da worktree, sem tocar nos hooks
-```
+Fonte única da regra; os prompts, o RUNBOOK e o `CLAUDE.md` apontam para
+cá. Os hooks `pre-commit` e `commit-msg` moram no diretório comum do
+repositório (`git rev-parse --git-common-dir`), **um só para todas as
+worktrees**, e o `pre-commit install` grava neles o caminho absoluto do
+python que o rodou (`INSTALL_PYTHON`). Instalados de dentro de uma
+worktree, passavam a depender do venv dela; removida a worktree, o
+commit de todas as outras quebrava (issue #100).
 
-Os hooks continuam apontando para o venv do checkout principal. A
-conferência e o religamento estão no passo 7 de §"Merge e limpeza da
-worktree".
+- **Só o checkout principal instala os hooks**, porque ele nunca é
+  removido. Quem instala é o `scripts/install_hooks.py`, chamado pelo
+  `make setup`: no principal, roda o `pre-commit install` com o `.venv`
+  dele; numa worktree, não toca nos hooks e sai com 1 se o python deles
+  não existir mais, dizendo como religar.
+- **Um venv serve a todas as worktrees.** Esse python roda só o framework
+  do pre-commit. Cada hook do `.pre-commit-config.yaml` chama `uv run`, que
+  usa o venv da worktree que commita, então o `make setup` dentro de uma
+  worktree é inofensivo, e o `worktree-new.py` faz só o `uv sync`.
+- **O `worktree-rm.py` religa** (passo 5 dele): se um hook apontava para
+  dentro da worktree que saiu, ou para um python que não existe mais,
+  roda o `install_hooks.py` no principal. Esse é o estado de quem rodou
+  `pre-commit install` à mão numa worktree, ou de antes da #100.
+- **Religar à mão:** no checkout principal,
+  `uv run python scripts/install_hooks.py`. Nunca rode `pre-commit install`
+  dentro de uma worktree.
 
 #### Por que o devcontainer não conflita entre worktrees
 
@@ -709,11 +723,10 @@ docker ps -a --filter name=<pasta-da-worktree>
 grep INSTALL_PYTHON .git/hooks/pre-commit   # tem de apontar para o .venv do principal
 ```
 
-Se o `INSTALL_PYTHON` apontar para o venv de uma worktree (a removida
-ou outra), os commits de todas as worktrees quebram: religar no
-principal com `uv run pre-commit install -t pre-commit -t commit-msg`
-(§"Criar a worktree" → hooks compartilhados; correção estrutural na
-issue #100).
+O `worktree-rm.py` já religa o hook que apontava para a worktree
+removida (§"Hooks do git"). Se o `grep` ainda mostrar outro venv, ou o
+script sair com 2, religar no principal com
+`uv run python scripts/install_hooks.py`.
 
 ### Quando precisar trocar de escopo no meio (com PR parcial)
 
