@@ -26,6 +26,11 @@ ADR 2.4.0003).
   por desenho, porque quem casa tenant e vínculo é o domínio — então a unidade de
   outro tenant é encontrada e só depois recusada. Para quem não enxerga a unidade,
   "não existe" e "existe e não é sua" precisam ser a mesma resposta.
+
+**O ator autenticado fica anotado na requisição** (issue #26): o handler de
+erros registra no log a causa de cada 401/403, e "quem tentou" é metade do
+diagnóstico. A anotação é só o **sujeito** do token já verificado — nunca o
+token — e só existe depois de `decode_access_token` aceitar a credencial.
 """
 
 from dataclasses import dataclass
@@ -55,6 +60,22 @@ from restaurant_hub.features.identity.domain.value_objects.permission import Per
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 _ESQUEMA_BEARER = "bearer"
+
+# Atributo de `request.state` onde o guard anota o sujeito do token aceito.
+# `request.state` vive no `scope` ASGI, então o handler de exceção enxerga a
+# anotação feita pela dependência, mesmo recebendo outro objeto `Request`.
+_ATOR_NA_REQUISICAO = "identity_actor_id"
+
+
+def authenticated_actor_id(request: Request) -> str | None:
+    """Sujeito do token aceito nesta requisição, ou `None` se ninguém autenticou.
+
+    `None` é o caso de todo 401 que nasce **antes** da verificação (header
+    ausente, esquema errado, token inválido) e o de toda rota pública, como o
+    login — onde o "ator" seria o e-mail digitado, que não entra no log.
+    """
+    valor = getattr(request.state, _ATOR_NA_REQUISICAO, None)
+    return valor if isinstance(valor, str) else None
 
 
 def extract_bearer_token(request: Request) -> str:
@@ -116,9 +137,16 @@ class IdentityGuard:
         self._authorize_action = authorize_action
 
     def authenticate(self, request: Request) -> AuthenticatedActor:
-        """Verifica o Bearer e devolve as claims. Não consulta o banco."""
+        """Verifica o Bearer e devolve as claims. Não consulta o banco.
+
+        Anota o sujeito na requisição **depois** da verificação: um token
+        recusado não deixa rastro de ator, e o log não atribui a tentativa a
+        quem o token forjado alega ser.
+        """
         token = extract_bearer_token(request)
-        return AuthenticatedActor(claims=self._token_issuer.decode_access_token(token))
+        claims = self._token_issuer.decode_access_token(token)
+        setattr(request.state, _ATOR_NA_REQUISICAO, claims.subject)
+        return AuthenticatedActor(claims=claims)
 
     def authorize(
         self,
@@ -145,7 +173,8 @@ class IdentityGuard:
             # módulo. É o fechamento do oráculo de enumeração cross-tenant.
             #
             # A mensagem construída aqui nunca chega ao cliente: a faixa 403 tem
-            # corpo constante (error_handlers). Ela existe para o log.
+            # corpo constante (error_handlers). Ela existe para o log, que o
+            # handler grava junto com a causa encadeada (`from exc`).
             raise UnitNotVisibleError(actor.claims.subject, unit_id or "<sem unidade>") from exc
 
     def authorize_all(
