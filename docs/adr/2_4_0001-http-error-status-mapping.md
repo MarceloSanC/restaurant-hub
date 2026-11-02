@@ -180,7 +180,8 @@ generic `shared` handlers stay as the safety net for non-identity `DomainError`s
 bounded contexts"*, o plural, foram superados por [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)** (Stage 3.9, issue #48). O handler
 único passa a ser registrado sobre as **duas** raízes de identity — `IdentityError` e
 `IdentityApplicationError` —, e a totalidade é cobrada sobre as subclasses das duas
-(`tests/unit/test_status_map.py`). Da rede genérica de `shared` fica só `DomainError → 422`:
+(`tests/unit/test_status_map.py`). Da rede genérica de `shared` para a hierarquia de erros fica
+só `DomainError → 422` (a de `RequestValidationError` não muda):
 `NotFoundError → 404` saiu com a classe, e não há rede para `ApplicationError`. O Context deste
 ADR descreve a regra "never from `ApplicationError`" do ADR 2.2.0003, também superada. Mapa,
 faixas, corpos constantes 401/403, `WWW-Authenticate` e as conversões do guard (decisão 5)

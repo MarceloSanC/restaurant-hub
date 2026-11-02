@@ -195,19 +195,6 @@ correct only by accident. Not acceptable.
 - `docs/stages/3.2-staff-application/concept.md` §4 (the note on
   `UnavailabilityNotFoundError`), §6
 
-## Supersessão parcial
-
-**2026-11-02 — a decisão 2 (*"A **single** handler is registered on `StaffError`"*), a decisão 3
-(totalidade sobre *"every concrete subclass of `StaffError`"*) e a regra do Context de que todo
-erro de aplicação de staff herda de `StaffError`, *"never from `ApplicationError`"*, com os dois
-"não encontrado" herdando `(StaffError, NotFoundError)` nesta ordem, foram superadas por [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)**
-(Stage 3.9, issue #48). `JobFunctionNotFoundError`, `EmployeeNotFoundError`,
-`JobFunctionAlreadyExistsError` e `EmployeeAlreadyExistsError` descendem agora só de
-`StaffApplicationError`; o handler único é registrado sobre as duas raízes, e a totalidade é
-cobrada sobre as subclasses das duas. As faixas, as classificações de §4, o discriminador
-`"type": "staff_error"` e a contagem de 23 entradas continuam valendo, byte a byte. Nota
-*append-only*; o corpo acima não foi editado.
-
 ## Errata
 
 **2026-08-18 — contagem e atribuição corrigidas; decisão inalterada.** Achado na
@@ -247,3 +234,22 @@ A lição, e é por isso que fica escrito: **errata que descreve a correção n�
 correção**. Uma tabela "Dizia → Diz" cujo "Diz" nunca chegou ao corpo deixa o
 documento com as duas versões vivas, e a errata passa a parecer conformidade que
 o arquivo não tem.
+
+## Supersessão parcial
+
+**2026-11-02 — a decisão 2 (*"A **single** handler is registered on `StaffError`"*), a decisão 3
+(totalidade sobre *"every concrete subclass of `StaffError`"*), a regra do Context de que todo
+erro de aplicação de staff herda de `StaffError`, *"never from `ApplicationError`"*, com os dois
+"não encontrado" herdando `(StaffError, NotFoundError)` nesta ordem, a premissa da decisão 6
+(*"Those errors are `IdentityError` subclasses"*) e a frase *"The generic `shared` handlers stay
+as the safety net."* foram superadas por [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)**
+(Stage 3.9, issue #48). `JobFunctionNotFoundError`, `EmployeeNotFoundError`,
+`JobFunctionAlreadyExistsError` e `EmployeeAlreadyExistsError` descendem agora só de
+`StaffApplicationError`; o handler único é registrado sobre as duas raízes, e a totalidade é
+cobrada sobre as subclasses das duas. `InvalidAccessTokenError` é hoje `IdentityApplicationError`
+— a conclusão da decisão 6 continua valendo porque o handler de identity está registrado sobre as
+duas raízes de identity. Da rede genérica de `shared` para a hierarquia de erros fica só
+`DomainError → 422`. As faixas, as classificações da Decision 4, o discriminador
+`"type": "staff_error"` e a contagem do mapa (18 quando este ADR foi escrito, 23 hoje, sem
+mudança pela 3.9) continuam valendo, byte a byte. Nota *append-only*; o corpo acima não foi
+editado.

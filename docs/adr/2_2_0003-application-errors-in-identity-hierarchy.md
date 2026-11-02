@@ -22,7 +22,8 @@ bounded_context: identity
 `superseded`
 
 > **Superseded (2026-11-02) by [ADR 3.9.0001](./3_9_0001-error-roots-by-meaning-status-by-map.md)** (Stage 3.9, issue #48). The status no
-> longer comes from the inheritance: each bounded context resolves it from an explicit,
+> longer comes from the inheritance: each bounded context with an HTTP edge resolves it
+> from an explicit,
 > test-guarded map in its inbound adapter, registered on both of its roots. Errors that are
 > not business-rule violations now descend from `ApplicationError` (back, in
 > `shared/application/errors.py`) through the BC's application root; `NotFoundError` and the
