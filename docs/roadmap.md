@@ -165,6 +165,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#29](https://github.com/MarceloSanC/restaurant-hub/issues/29) | Doc de domínio do BC staff — gate do Step 3 | staff | docs | done | — |
 | [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | open | — |
 | [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34) | Promover o sufixo `[N.M/task-NN-fix]` de commits de correção de checkpoint a convenção | shared | docs + tooling | done | — |
+| [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37) | Varrer `workforce.md` contra os ADRs 3.1.x — três lacunas declaradas abertas já foram fechadas | staff | docs | done | — |
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | open | #43, #45 |
 | [#48](https://github.com/MarceloSanC/restaurant-hub/issues/48) | Tirar o HTTP da hierarquia de exceções de domínio | shared | domain + adapters/inbound/http | open | #45 |
@@ -187,6 +188,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#98](https://github.com/MarceloSanC/restaurant-hub/issues/98) | Passo 1 do RUNBOOK usa `$issue` antes de defini-la | shared | docs | open | — |
 | [#99](https://github.com/MarceloSanC/restaurant-hub/issues/99) | `make check` sem conferência de formatação e lint fora de `migrations/` | shared | tooling | open | #7 |
 | [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | open | #7 |
+| [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
