@@ -290,6 +290,10 @@ concept 4.3; ADRs 4.3.0001–4.3.0004; skills `pytest-with-fakes`, `task-orderin
 **Contexto:** o Checkpoint C do bloco 3 apontou variáveis locais em português no código novo de `src/`, contra CONVENTIONS §1 "Idioma do código".
 **Razão:** renomeadas por token (docstrings e comentários intactos), commit `refactor(scheduling)` sem mudança de comportamento. Os nomes de teste seguem o estilo PT já estabelecido no repo.
 
+### 2026-11-01 — [deviation] Tasks extras da auditoria de testes marcadas `task-12-extra` — Claude (auditoria de contexto limpo)
+**Contexto:** as rodadas da auditoria de testes (5, com mutação real) entraram em três commits `test(scheduling)` marcados `[4.3/task-12-extra]` — `396b61b` (lacunas da rodada 1), `51916e8` (registro inativo alocado) e `bb27217` (sobreviventes das rodadas 3 e 4). CONVENTIONS §4(a) "Marca de Task", regra 2, pede numeração acima do `tasks_count` (`task-13-extra`, `task-14-extra`…) e uma Task extra por rodada, com a justificativa nesta §7.
+**Razão:** registro retroativo da justificativa (só testes, nenhuma mudança em `src/`, todos na pasta `tests/unit/features/scheduling/application/`). As marcas ficam como estão — regra 5 (o histórico não se reescreve; o hook não confere o `NN`).
+
 ### 2026-11-01 — [finding] Idioma do código — variáveis locais em português no domínio já mergeado — Claude
 **Contexto:** `src/restaurant_hub/features/scheduling/domain/entities/schedule.py` (4.1, mergeado) usa locais em PT (`faixa`, `demanda`, `alocacao`…), contra CONVENTIONS §1. Esta Stage corrigiu só o código novo.
 **Direção sugerida:** varredura de renomeação por token no domínio de scheduling (e staff, se houver), sem mudança de comportamento. **Stage candidata:** issue avulsa de refactor (scheduling).
