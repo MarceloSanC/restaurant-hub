@@ -48,7 +48,7 @@ graph LR
     S32 --> S33[3.3-staff-persistence]
     S33 --> S34[3.4-staff-access-scope]
     S34 --> S36[3.6-staff-http]
-    S36 --> S35[3.5-employee-login-link] --> S37[3.7-application-authorization]
+    S36 --> S35[3.5-employee-login-link] --> S37[3.7-application-authorization] & S38[3.8-termination-access-scope]
   end
   subgraph Step4[Step 4 — Escala manual]
     S41[4.1-scheduling-domain] --> S42[4.2-validation-policies]
@@ -91,7 +91,7 @@ graph LR
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.6 |
-| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.7 |
+| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.8 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
 | 6 | Implantação piloto | Sistema no ar para o restaurante piloto usar no dia a dia | not_started | 6.1 → 6.3 |
@@ -124,6 +124,7 @@ graph LR
 | `3.6-staff-http` | API de equipe | adapters/inbound/http | done | `3.4-staff-access-scope` |
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
 | `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
+| `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
@@ -171,7 +172,6 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#56](https://github.com/MarceloSanC/restaurant-hub/issues/56) | Harness: triagem por evidência, subagentes de pesquisa, guard de worktree e validação de skills | shared | tooling + docs | open | — |
 | [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
-| [#60](https://github.com/MarceloSanC/restaurant-hub/issues/60) | Desligar registro revoga todas as sessões da conta — rever antes de um login ter mais de um vínculo | staff | application | open | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
 | [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | open | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | open | — |
@@ -1343,6 +1343,54 @@ skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin
 >   borda HTTP (Stage do primeiro driver não-HTTP), staff como provedor do `StaffReadPort` e a adoção do
 >   padrão na 4.3, ponteiros `(#49)` do lado de identity, custo da dupla autorização (6.3).
 
+#### Stage 3.8 — `3.8-termination-access-scope`
+
+**Descrição humana:** desligar um registro de funcionário (R13) passa a revogar as sessões do login vinculado **só quando o registro é a fonte do acesso** — registro ativo, conta de papel `employee` e nenhum outro registro ativo **da mesma unidade** apontando para ela. Login de gerente/dono vinculado a um registro de escala, ou pessoa com outro registro ativo na unidade, não perde as sessões; desligar nunca desativa a conta. Promovida da issue #60 (achado F2 da auditoria pós-merge da 3.5; PIPELINE §4.5: contrato de port novo + ADR que supersede parcialmente o 3.5.0003).
+
+```yaml
+stage_id: 3.8-termination-access-scope
+bounded_context: staff
+camada_alvo: vertical (staff, consumindo consulta nova da fachada de identity)
+depends_on: [3.5-employee-login-link]
+arquivos_a_criar:
+  - features/identity/application/use_cases/get_account_role.py
+  - docs/adr/3_8_0001-termination-revokes-only-access-the-record-grants.md
+arquivos_a_modificar:
+  - features/identity/application/{facade.py,dtos/commands.py,dtos/results.py,use_cases/revoke_all_sessions.py}
+  - features/staff/application/ports/out/identity_gateway.py (lei L-IG5)
+  - features/staff/adapters/out/identity/local_identity_gateway.py
+  - features/staff/application/{use_cases/deactivate_employee.py,errors.py}
+  - composition_root.py (wiring da fachada)
+  - docs/domain/staff/workforce.md (nota datada em §3.8); docs/adr/3_5_0003 (supersessao parcial)
+contratos_introduzidos:
+  - IdentityGateway.is_employee_login (L-IG5); IdentityFacade.account_role; GetAccountRoleUseCase
+contratos_consumidos:
+  - IdentityFacade e RevokeAllSessionsUseCase (3.5); L-IG4 (3.5); EmployeeRepository.list_by_unit (L-E6)
+definition_of_done:
+  - "R13 revoga as sessoes so se o registro estiver ativo, a conta for employee e nao houver outro registro ativo do login na mesma unidade; (a) e (b) travados por teste, inclusive e2e"
+non_goals:
+  - vincular/desvincular login existente (concept 3.5 §10)
+  - User.is_active / desativacao de conta (ADR 3.8.0001: desligar nunca desativa)
+  - olhar registros de outras unidades; revogacao por escopo de unidade
+complexidade_estimada: S
+gate_mode: strict
+skills_hint: [hex-arch-python, pytest-with-fakes, composition-root]
+```
+
+> **Nota (2026-10-19): fechamento da Stage 3.8** (issue #60; concept e technical em
+> `docs/stages/3.8-termination-access-scope/`; ADR 3.8.0001). O que a execução fixou:
+>
+> - **Quatro decisões do sponsor** (concept §13): revogar só com papel `employee` + último vínculo
+>   ativo (Q1); desligar **nunca** desativa a conta (Q2); a Stage entrega em staff + identity
+>   (Q3); "outro registro ativo" olha **só a mesma unidade** (Q4) — por isso não há método novo no
+>   repositório: a checagem lê `list_by_unit` (L-E6).
+> - **Identity:** `GetAccountRoleUseCase` + `IdentityFacade.account_role` (somente leitura).
+>   **Staff:** lei L-IG5 (`is_employee_login`) com contrato fake × real; R13 com a regra e a guarda
+>   `employee.active`. Sem migration.
+> - **6 Tasks + 5 commits de correção** (Checkpoints C) **+ 1 extra** (auditoria de testes: 500 na
+>   borda para falha antes da escrita, lacuna herdada da 3.5). Findings na §7 do technical.
+
+
 ---
 
 ### Step 4 — Escala manual publicável (BC `scheduling`)
@@ -1960,6 +2008,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-10-19 | Stage 2.6-identity-unit-of-work concluída (`done`); bloco acrescido de nota datada (revoke → bool, 13 Tasks, renumeração); issues #67 e #68 na Tabela de Issues | Execução da Stage 2.6 — issue #46 |
 | 2026-10-19 | Issue **#49** promovida a **Stage `3.7-application-authorization`** (Step 3, BC staff; `depends_on: 3.5-employee-login-link`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. O corpo da issue já se declarava candidato a Stage — exige ADR (forma do guard na application e destino do `AuthorizedScope`), toca os 17 use cases e pede uma propriedade sobre a camada inteira — o litmus de PIPELINE §4.5. Step 3 passa a `3.1 → 3.7` | Promoção da issue #49 |
 | 2026-10-19 | Stage 3.7-application-authorization concluída (`done`); bloco acrescido de nota datada de reconciliação pós-execução. Os 17 use cases de staff autorizam o alvo do próprio command pelo `AccessGuard` injetado antes de qualquer outra instrução; a borda HTTP segue autorizando (defesa em profundidade) e nenhuma faixa muda (`tests/e2e/` intocado). ADR 3.7.0001; supersessão parcial datada em 3.2.0002, 3.4.0001 e 3.6.0004; errata no concept 3.2 §5.16. 13 mutações reais na auditoria independente, todas mortas | Execução da Stage 3.7 — issue #49 |
+| 2026-11-01 | Issue **#60** promovida a **Stage `3.8-termination-access-scope`** (Step 3, BC staff; `depends_on: 3.5-employee-login-link`) e concluída (`done`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio e nota datada de fechamento. Executada como `3.7` em paralelo à #49; **renumerada para 3.8** no rebase sobre o #71, que ficou com o número (pasta, ADR 3.8.0001, workforce §3.8, nota no ADR 3.5.0003). A aresta do grafo vai na mesma linha da 3.7; as citações por linha deslocadas pelo bloco (+48 a partir do Step 4, +1 na tabela de Stages) acompanham — as do #70 seguem com a #79. Step 3 passa a `3.1 → 3.8` | Execução da Stage 3.8 — issue #60 |
 
 ## Próxima revisão de roadmap
 

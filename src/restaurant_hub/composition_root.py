@@ -93,6 +93,9 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.get_account_role import (
+    GetAccountRoleUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
 )
@@ -567,7 +570,8 @@ def wire_dependencies(
     staff_access_guard = _IdentityAccessGuard(guard)
 
     # Stage 3.5 — a fachada de identity e o gateway de staff sobre ela (ADR
-    # 3.5.0001). Os três use cases da fachada recebem **os mesmos** `users`,
+    # 3.5.0001). Os quatro use cases da fachada (o quarto, de leitura, é da 3.8 —
+    # ADR 3.8.0001 §3) recebem **os mesmos** `users`,
     # `restaurants`, `units`, `hasher`, `setup_tokens`, `sessions`, `sender` e
     # `clock` que servem as rotas de identity: um grafo, um `Engine`. O gateway
     # é o único módulo de staff que importa identity, e importa só a fachada.
@@ -588,6 +592,7 @@ def wire_dependencies(
         ),
         send_invitation=SendInvitationUseCase(email_sender=sender),
         revoke_all_sessions=RevokeAllSessionsUseCase(sessions=sessions, clock=clock),
+        get_account_role=GetAccountRoleUseCase(users=users),
     )
     staff_identity_gateway = LocalIdentityGateway(identity_facade)
 

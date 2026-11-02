@@ -463,7 +463,10 @@ def test_ja_vinculado_recusa_segundo_login_na_guarda_e_no_link_login() -> None:
 
 
 def test_desligado_recusa_login_na_guarda_e_no_link_login() -> None:
-    """Criar login é conceder acesso, e desligar cortou (ADR 3.5.0003)."""
+    """Criar login é conceder acesso, e desligar cortou o acesso que o registro concede.
+
+    ADR 3.5.0003; o alcance do corte é o do ADR 3.8.0001.
+    """
     desligado = _BASE.deactivate()
 
     with pytest.raises(TerminatedEmployeeLoginError, match="e1"):

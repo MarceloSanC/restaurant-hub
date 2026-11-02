@@ -93,6 +93,18 @@ class ProvisionedAccountResult:
 
 
 @dataclass(frozen=True)
+class AccountRoleResult:
+    """O papel de uma conta existente (Stage 3.8, ADR 3.8.0001 §3).
+
+    Carrega o `Role` — como `UserResult` e `AuthorizedActor` —, não o valor em
+    texto: a conversão para primitivo é da fachada, que é quem fala com outro
+    bounded context.
+    """
+
+    role: Role
+
+
+@dataclass(frozen=True)
 class AuthenticationResult:
     """Par de tokens emitido por um login bem-sucedido.
 

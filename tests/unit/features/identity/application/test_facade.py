@@ -22,17 +22,22 @@ import pytest
 from restaurant_hub.features.identity.application import errors as erros_de_application
 from restaurant_hub.features.identity.application import facade as modulo_facade
 from restaurant_hub.features.identity.application.dtos.commands import (
+    GetAccountRoleCommand,
     ProvisionAccountCommand,
     RevokeAllSessionsCommand,
     SendInvitationCommand,
 )
 from restaurant_hub.features.identity.application.dtos.results import (
+    AccountRoleResult,
     ProvisionedAccountResult,
     UserResult,
 )
 from restaurant_hub.features.identity.application.facade import (
     IdentityFacade,
     ProvisionedAccount,
+)
+from restaurant_hub.features.identity.application.use_cases.get_account_role import (
+    GetAccountRoleUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
@@ -45,6 +50,7 @@ from restaurant_hub.features.identity.application.use_cases.send_invitation impo
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.unit import Unit
+from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions import errors as erros_de_dominio
 from restaurant_hub.features.identity.domain.exceptions.errors import (
     InvalidEmailError,
@@ -134,16 +140,34 @@ class _EspiaoDeRevogacao(RevokeAllSessionsUseCase):
             raise self._levanta
 
 
+class _EspiaoDePapel(GetAccountRoleUseCase):
+    def __init__(
+        self, *, devolve: AccountRoleResult | None = None, levanta: Exception | None = None
+    ) -> None:
+        self.commands: list[GetAccountRoleCommand] = []
+        self._devolve = devolve
+        self._levanta = levanta
+
+    def execute(self, command: GetAccountRoleCommand) -> AccountRoleResult | None:
+        self.commands.append(command)
+        if self._levanta is not None:
+            raise self._levanta
+        return self._devolve
+
+
 def _fachada_espia(
     *,
     provision: _EspiaoDeProvisionamento | None = None,
     send: _EspiaoDeEnvio | None = None,
     revoke: _EspiaoDeRevogacao | None = None,
+    role: _EspiaoDePapel | None = None,
 ) -> tuple[IdentityFacade, _EspiaoDeProvisionamento, _EspiaoDeEnvio, _EspiaoDeRevogacao]:
+    """O espião do papel não volta na tupla: quem o quer passa o seu e o guarda."""
     provision = provision or _EspiaoDeProvisionamento()
     send = send or _EspiaoDeEnvio()
     revoke = revoke or _EspiaoDeRevogacao()
-    return IdentityFacade(provision, send, revoke), provision, send, revoke
+    role = role or _EspiaoDePapel()
+    return IdentityFacade(provision, send, revoke, role), provision, send, revoke
 
 
 def _provisionar(  # noqa: PLR0913 — os cinco argumentos nomeados da fachada, com defaults
@@ -226,14 +250,34 @@ class TestConversaoDePrimitivos:
 
         assert espiao.commands == [RevokeAllSessionsCommand(user_id=UserId("user-42"))]
 
+    @pytest.mark.parametrize("papel", list(Role), ids=lambda papel: papel.value)
+    def test_account_role_converte_o_user_id_e_devolve_o_valor_do_papel(self, papel: Role) -> None:
+        espiao = _EspiaoDePapel(devolve=AccountRoleResult(role=papel))
+        fachada, _, _, _ = _fachada_espia(role=espiao)
+
+        papel_devolvido = fachada.account_role("user-42")
+
+        assert papel_devolvido == papel.value
+        # `Role` é `StrEnum`: o `==` acima passaria com o enum. O tipo é o que
+        # trava a propriedade 1 — o consumidor não recebe tipos de identity.
+        assert type(papel_devolvido) is str
+        assert espiao.commands == [GetAccountRoleCommand(user_id=UserId("user-42"))]
+
+    def test_account_role_de_conta_desconhecida_e_none(self) -> None:
+        fachada, _, _, _ = _fachada_espia(role=_EspiaoDePapel(devolve=None))
+
+        assert fachada.account_role("nunca-existiu") is None
+
     def test_cada_operacao_chama_so_o_seu_use_case(self) -> None:
-        fachada, provision, send, revoke = _fachada_espia()
+        papel = _EspiaoDePapel()
+        fachada, provision, send, revoke = _fachada_espia(role=papel)
 
         _provisionar(fachada)
 
         assert len(provision.commands) == 1
         assert send.commands == []
         assert revoke.commands == []
+        assert papel.commands == []
 
 
 class TestTransparenciaAExcecoes:
@@ -254,6 +298,15 @@ class TestTransparenciaAExcecoes:
 
         with pytest.raises(EmailSenderFailure) as excinfo:
             fachada.send_invitation(email="a@b.com", setup_link="https://x/definir-senha?token=t")
+
+        assert excinfo.value is falha
+
+    def test_excecao_da_consulta_de_papel_sobe_na_mesma_instancia(self) -> None:
+        falha = RuntimeError("banco fora")
+        fachada, _, _, _ = _fachada_espia(role=_EspiaoDePapel(levanta=falha))
+
+        with pytest.raises(RuntimeError) as excinfo:
+            fachada.account_role("user-1")
 
         assert excinfo.value is falha
 
@@ -315,8 +368,10 @@ class TestReexportacao:
 class TestSobreOsUseCasesReais:
     """O espião não é a única testemunha: o grafo real de fakes confirma a conversão."""
 
-    def _fachada_real(self) -> tuple[IdentityFacade, InMemoryUserRepository, RecordingEmailSender]:
-        users = InMemoryUserRepository()
+    def _fachada_real(
+        self, users: InMemoryUserRepository | None = None
+    ) -> tuple[IdentityFacade, InMemoryUserRepository, RecordingEmailSender]:
+        users = users or InMemoryUserRepository()
         restaurants = InMemoryRestaurantRepository()
         units = InMemoryUnitRepository()
         restaurants.add(Restaurant(id=RestaurantId("rest-a"), name="Cantina A"))
@@ -341,8 +396,34 @@ class TestSobreOsUseCasesReais:
             ),
             SendInvitationUseCase(sender),
             RevokeAllSessionsUseCase(InMemorySessionRepository(), clock),
+            GetAccountRoleUseCase(users),
         )
         return fachada, users, sender
+
+    def test_o_papel_da_conta_provisionada_e_employee_e_o_desconhecido_e_none(self) -> None:
+        fachada, _, _ = self._fachada_real()
+        conta = _provisionar(fachada)
+
+        papel = fachada.account_role(conta.user_id)
+
+        assert papel == "employee"
+        assert type(papel) is str  # não o `Role` (StrEnum) — propriedade 1
+        assert fachada.account_role("nunca-existiu") is None
+
+    def test_falha_do_repositorio_atravessa_use_case_e_fachada(self) -> None:
+        """A exceção **do repositório**, não a de um espião: prova o caminho inteiro."""
+        falha = RuntimeError("banco fora")
+
+        class _UsuariosQueFalham(InMemoryUserRepository):
+            def find_by_id(self, user_id: UserId) -> User | None:
+                raise falha
+
+        fachada, _, _ = self._fachada_real(_UsuariosQueFalham())
+
+        with pytest.raises(RuntimeError) as excinfo:
+            fachada.account_role("user-1")
+
+        assert excinfo.value is falha
 
     def test_provisiona_e_envia_pelo_grafo_real(self) -> None:
         fachada, users, sender = self._fachada_real()

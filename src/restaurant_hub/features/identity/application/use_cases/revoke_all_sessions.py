@@ -1,9 +1,11 @@
 """Use case: revogar todas as sessões de um usuário.
 
 Nasce na Stage 3.5 para o desligamento de funcionário (ADR 3.5.0003): quando o
-registro em staff é desligado, o gateway corta as sessões vivas do login vinculado
-**antes** de gravar o desligamento — a pessoa perde o acesso agora, não quando o
-access token expirar. A conta continua existindo e continua podendo logar; o que
+desligamento em staff decide cortar o acesso, o gateway corta as sessões vivas do
+login vinculado **antes** de gravar — a pessoa perde o acesso agora, não quando o
+access token expirar. **Quando** cortar é decisão do consumidor, não deste use
+case (ADR 3.8.0001: só o login de funcionário, e só se o registro desligado é a
+fonte do acesso dele). A conta continua existindo e continua podendo logar; o que
 ela deixa de alcançar é decidido pela autorização, não por este use case.
 
 É uma linha sobre o port: `sessions.revoke_all_for_user(user_id, clock.now())`.

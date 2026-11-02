@@ -1,4 +1,4 @@
-"""As quatro leis do `IdentityGateway` — L-IG1…L-IG4 — como contrato (Stage 3.5).
+"""As cinco leis do `IdentityGateway` — L-IG1…L-IG5 — como contrato (Stages 3.5 e 3.8).
 
 Nasce **já** em `tests/contract/`, na forma que o ADR 3.3.0007 fixou para os
 repositórios: um corpo de teste só, parametrizado pela fixture `gateway` sobre
@@ -287,11 +287,57 @@ def test_l_ig4_revogar_id_desconhecido_nao_e_erro(gateway: GatewaySobContrato) -
 
 
 # ---------------------------------------------------------------------------
+# L-IG5 — `is_employee_login` responde se o login é de funcionário (Stage 3.8)
+# ---------------------------------------------------------------------------
+
+# Todo papel que **não** é o de funcionário, por valor: o corpo do contrato é de
+# staff e não nomeia `Role`. Um representante só deixaria passar `!= "manager"`
+# ou `in ("employee", "hr")` — o quantificador "se e somente se" pede todos.
+_PAPEIS_QUE_NAO_SAO_DE_FUNCIONARIO = ("owner", "manager", "hr", "platform_admin")
+
+
+def test_l_ig5_login_provisionado_e_de_funcionario(gateway: GatewaySobContrato) -> None:
+    login = _provisionar(gateway)
+
+    assert gateway.gateway.is_employee_login(login.user_id) is True
+
+
+@pytest.mark.parametrize("papel", _PAPEIS_QUE_NAO_SAO_DE_FUNCIONARIO)
+def test_l_ig5_login_de_outro_papel_nao_e_de_funcionario(
+    gateway: GatewaySobContrato, papel: str
+) -> None:
+    """O caso (b) da issue #60: gerente ou dono vinculado a um registro de escala."""
+    login = gateway.login_de_outro_papel(papel)
+    assert gateway.login_role_of(login) == papel  # o arranjo produziu o que diz
+
+    assert gateway.gateway.is_employee_login(login) is False
+
+
+def test_l_ig5_login_desconhecido_e_false_e_nao_erro(gateway: GatewaySobContrato) -> None:
+    """Sem conta não há sessão a revogar — e o desligamento não pode falhar por isso."""
+    assert gateway.gateway.is_employee_login(UserId("login-que-nunca-existiu")) is False
+
+
+def test_l_ig5_falha_da_consulta_sobe_crua_na_mesma_instancia(
+    gateway: GatewaySobContrato,
+) -> None:
+    """*Fail-open* proibido: um `False` aqui faria o desligamento gravar com sessão viva."""
+    login = _provisionar(gateway)
+    falha = RuntimeError("identity fora")
+    gateway.consulta_de_papel_falha(falha)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        gateway.gateway.is_employee_login(login.user_id)
+
+    assert excinfo.value is falha
+
+
+# ---------------------------------------------------------------------------
 # As leis estão escritas no port
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("lei", ["L-IG1", "L-IG2", "L-IG3", "L-IG4"])
+@pytest.mark.parametrize("lei", ["L-IG1", "L-IG2", "L-IG3", "L-IG4", "L-IG5"])
 def test_a_lei_esta_documentada_no_port(gateway: GatewaySobContrato, lei: str) -> None:
     """Lei sem texto normativo é convenção — e convenção não sobrevive à segunda
     implementação. Recebe a fixture sem usá-la para rodar sob cada implementação,

@@ -121,6 +121,19 @@ class AuthorizeActionCommand:
 
 
 @dataclass(frozen=True)
+class GetAccountRoleCommand:
+    """Consulta do papel de uma conta (Stage 3.8, ADR 3.8.0001 §3).
+
+    Consulta com nome de command pelo mesmo motivo de `AuthorizeActionCommand`:
+    a entrada de todo use case de identity é um command. Quem pergunta é a
+    fachada, a serviço do desligamento em staff, que precisa saber se o login
+    vinculado é de funcionário antes de revogar as sessões dele.
+    """
+
+    user_id: UserId
+
+
+@dataclass(frozen=True)
 class InviteUserCommand:
     """Convite de uma pessoa que ainda não tem conta.
 

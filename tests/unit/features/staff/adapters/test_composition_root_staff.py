@@ -344,6 +344,10 @@ def test_ca07_o_gateway_de_identity_e_o_local_sobre_a_fachada_das_rotas() -> Non
     assert fachada._send_invitation._email_sender is convite._email_sender
     assert fachada._revoke_all_sessions._sessions is deps.identity_revoke_session._sessions
     assert fachada._revoke_all_sessions._clock is deps.identity_revoke_session._clock
+    # Stage 3.8 — a consulta do papel lê o **mesmo** `users` que cria as contas:
+    # um segundo repositório responderia "desconhecido" ao login recém-criado,
+    # e o desligamento nunca revogaria (ADR 3.8.0001 §3).
+    assert fachada._get_account_role._users is convite._users
 
 
 def test_o_conteiner_de_staff_tem_exatamente_os_campos_declarados() -> None:

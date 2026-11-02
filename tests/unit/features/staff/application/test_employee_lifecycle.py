@@ -29,6 +29,7 @@ from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     JobFunctionInUseError,
 )
+from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
     DeactivateEmployeeUseCase,
 )
@@ -59,9 +60,15 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
     UnavailabilityPeriod,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.fakes.features.staff.in_memory_employee_repository import InMemoryEmployeeRepository
 from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
-from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
+from tests.fakes.features.staff.stub_access_guards import (
+    TEST_ACTOR,
+    DenyingAccessGuard,
+    PermissiveAccessGuard,
+    StubAuthorizationDenied,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -334,72 +341,254 @@ def test_ca11_transicao_com_unidade_alheia_nao_alcanca_o_registro(
 
 
 # ---------------------------------------------------------------------------
-# Stage 3.5 — R13 corta o acesso do login vinculado (ADR 3.5.0003 §1, CA11)
+# R13 corta o acesso que o registro concede — e só esse
+# (Stage 3.5, ADR 3.5.0003 §1 e §2; alcance da Stage 3.8, ADR 3.8.0001 §1 e §2)
 # ---------------------------------------------------------------------------
+#
+# Os testes da 3.5 vinculavam um `UserId("login-1")` que o fake não conhecia; com
+# L-IG5 ("desconhecido ⇒ False") eles deixariam de revogar. O login agora nasce
+# pelo **próprio** fake (`provision_employee_login`) — é ele quem diz que o login
+# é de funcionário. Uma expectativa da 3.5 se inverte: desligar duas vezes revoga
+# **uma** vez (CA12 da 3.8).
+#
+# Todas as asserções de ordem usam um **ledger único**: as chamadas ao gateway são
+# espelhadas em `store.calls` (`mirror`), porque dois ledgers separados não têm
+# posição relativa.
+
+_EMAIL = "maria@cantina.com"
 
 
-def _fakes_com_login() -> StaffFakes:
-    fakes = _fakes()
+def _gateway_espelhado(fakes: StaffFakes) -> InMemoryIdentityGateway:
+    return InMemoryIdentityGateway(mirror=lambda call: fakes.store.record(f"gateway.{call}"))
+
+
+def _vincular(fakes: StaffFakes, gateway: InMemoryIdentityGateway) -> UserId:
+    """Provisiona um login de funcionário pelo fake e o vincula a `_E1`.
+
+    É arranjo: as chamadas que ele produz saem do ledger do gateway, e os testes
+    medem `store.calls` a partir de um índice tomado **depois** dele.
+    """
+    login = gateway.provision_employee_login(
+        email=_EMAIL, tenant_id=_A, unit_id=_U1, delivery=LoginDelivery.LINK
+    )
     vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
     assert vinculado is not None
-    fakes.employees.update(vinculado.link_login(UserId("login-1")))
-    return fakes
+    fakes.employees.update(vinculado.link_login(login.user_id))
+    gateway.calls.clear()
+    return login.user_id
 
 
-def test_desligar_vinculado_revoga_as_sessoes_antes_de_gravar() -> None:
-    """A ordem é o contrato: `revoke_login_sessions` **antes** de `employees.update`.
+def _outro_registro(
+    fakes: StaffFakes,
+    id_: str,
+    *,
+    unit_id: UnitId = _U1,
+    user_id: UserId | None = None,
+    active: bool = True,
+) -> None:
+    registro = Employee(
+        id=EmployeeId(id_),
+        tenant_id=_A,
+        unit_id=unit_id,
+        name=f"Registro {id_}",
+        workload_profile=FixedSchedule(weekly_hours=Decimal("20")),
+        shift_preference=None,
+        job_function_ids=frozenset({_F1}),
+    )
+    fakes.employees.add(registro)
+    if user_id is not None:
+        registro = registro.link_login(user_id)
+    if not active:
+        registro = registro.deactivate()
+    fakes.employees.update(registro)
 
-    Provada num **ledger único**: as chamadas ao gateway são espelhadas em
-    `store.calls` (achado do Checkpoint C, bloco 4 — dois ledgers separados não
-    têm posição relativa, e a versão anterior deste teste afirmava a ordem sem
-    medi-la). Gravar primeiro deixaria um desligado com sessão viva quando
-    identity estivesse fora; o teste de falha abaixo é a outra metade da prova.
-    """
-    fakes = _fakes_com_login()
-    gateway = InMemoryIdentityGateway(mirror=lambda call: fakes.store.record(f"gateway.{call}"))
-    antes = len(fakes.store.calls)
 
-    resultado = _desligar(fakes, gateway).execute(
+def _desligar_e1(use_case: DeactivateEmployeeUseCase) -> EmployeeResult:
+    return use_case.execute(
         DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 
-    assert gateway.revoked == [UserId("login-1")]
+
+def test_ca05_registro_unico_de_funcionario_revoga_antes_de_gravar_na_ordem() -> None:
+    """A ordem é o contrato: unidade → papel → revogar → gravar (concept §5.2).
+
+    Gravar primeiro deixaria um desligado com sessão viva quando identity estivesse
+    fora; a consulta local primeiro decide sem cruzar a fronteira.
+    """
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    login = _vincular(fakes, gateway)
+    antes = len(fakes.store.calls)
+
+    resultado = _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == [login]
     assert fakes.store.calls[antes:] == [
         "employees.find_by_id",
-        "gateway.revoke_login_sessions('login-1')",
+        "employees.list_by_unit",
+        f"gateway.is_employee_login({login!r})",
+        f"gateway.revoke_login_sessions({login!r})",
         "employees.update",
     ]
     assert resultado.active is False
-    # Desligar não é desvincular: o `user_id` permanece (ADR 3.5.0003 §2).
-    assert resultado.user_id == UserId("login-1")
+    # Desligar não é desvincular: o `user_id` permanece (ADR 3.5.0003 §3).
+    assert resultado.user_id == login
     relido = fakes.employees.find_by_id(_A, _U1, _E1)
     assert relido is not None
-    assert relido.user_id == UserId("login-1")
+    assert relido.user_id == login
 
 
-def test_desligar_sem_login_nao_toca_o_gateway() -> None:
+def test_ca06_outro_registro_ativo_do_login_na_unidade_nao_toca_o_gateway() -> None:
+    """Caso (a) da issue #60: é o outro registro que ainda concede o acesso."""
     fakes = _fakes()
-    gateway = InMemoryIdentityGateway()
+    gateway = _gateway_espelhado(fakes)
+    login = _vincular(fakes, gateway)
+    _outro_registro(fakes, "e2", user_id=login)
+    antes = len(fakes.store.calls)
 
-    _desligar(fakes, gateway).execute(
-        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
-    )
+    resultado = _desligar_e1(_desligar(fakes, gateway))
 
     assert gateway.calls == []
+    assert fakes.store.calls[antes:] == [
+        "employees.find_by_id",
+        "employees.list_by_unit",
+        "employees.update",
+    ]
+    assert resultado.active is False
 
 
-def test_falha_da_revogacao_sobe_crua_e_o_registro_continua_ativo() -> None:
-    """Revogar antes de gravar: se identity falha, nada foi desligado."""
-    fakes = _fakes_com_login()
-    falha = RuntimeError("identity fora")
+def test_ca07_o_outro_registro_do_login_na_unidade_ja_desligado_nao_impede() -> None:
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    login = _vincular(fakes, gateway)
+    _outro_registro(fakes, "e2", user_id=login, active=False)
 
-    class _GatewayQueFalha(InMemoryIdentityGateway):
-        def revoke_login_sessions(self, user_id: UserId) -> None:
+    _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == [login]
+
+
+def test_ca08_outro_registro_ativo_do_login_em_outra_unidade_nao_impede() -> None:
+    """Decisão do sponsor (concept §13 Q4): só a unidade conta; a pessoa loga de novo."""
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    login = _vincular(fakes, gateway)
+    _outro_registro(fakes, "e2", unit_id=_U2, user_id=login)
+
+    _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == [login]
+
+
+def test_ca09_outros_ativos_da_unidade_sem_o_login_nao_impedem() -> None:
+    """O filtro é por `user_id`: qualquer outro ativo bloqueando seria nunca revogar."""
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    login = _vincular(fakes, gateway)
+    outro_login = gateway.provision_employee_login(
+        email="joao@cantina.com", tenant_id=_A, unit_id=_U1, delivery=LoginDelivery.LINK
+    ).user_id
+    gateway.calls.clear()
+    _outro_registro(fakes, "e2", user_id=outro_login)
+    _outro_registro(fakes, "e3")
+
+    _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == [login]
+
+
+def test_ca10_login_de_outro_papel_nao_e_revogado() -> None:
+    """Caso (b) da issue #60: gerente ou dono vinculado a um registro de escala."""
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    gerente = UserId("login-do-gerente")
+    gateway.seed_login_of_other_role(gerente, tenant_id=_A, unit_id=_U1)
+    vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert vinculado is not None
+    fakes.employees.update(vinculado.link_login(gerente))
+    antes = len(fakes.store.calls)
+
+    resultado = _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == []
+    assert fakes.store.calls[antes:] == [
+        "employees.find_by_id",
+        "employees.list_by_unit",
+        f"gateway.is_employee_login({gerente!r})",
+        "employees.update",
+    ]
+    assert resultado.active is False
+
+
+def test_ca11_login_desconhecido_de_identity_nao_e_revogado_e_o_registro_grava() -> None:
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert vinculado is not None
+    fakes.employees.update(vinculado.link_login(UserId("login-que-identity-nao-conhece")))
+
+    resultado = _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == []
+    assert resultado.active is False
+
+
+def test_ca12_desligar_de_novo_um_desligado_nao_toca_o_gateway() -> None:
+    """A conta permanece: as sessões abertas depois do primeiro desligamento ficam.
+
+    Inverte a expectativa da 3.5 (`..._revoga_duas_vezes_sem_erro`): o duplo clique
+    não derruba quem logou de novo.
+    """
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    login = _vincular(fakes, gateway)
+    _desligar_e1(_desligar(fakes, gateway))
+    antes = len(fakes.store.calls)
+
+    resultado = _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == [login]
+    assert fakes.store.calls[antes:] == ["employees.find_by_id", "employees.update"]
+    assert resultado.active is False
+
+
+class _GatewayQueFalhaNaRevogacao(InMemoryIdentityGateway):
+    def __init__(self, falha: Exception) -> None:
+        super().__init__()
+        self._falha = falha
+
+    def revoke_login_sessions(self, user_id: UserId) -> None:
+        raise self._falha
+
+
+@pytest.mark.parametrize("onde", ["list_by_unit", "is_employee_login", "revoke_login_sessions"])
+def test_ca13_falha_antes_de_gravar_sobe_crua_e_o_registro_continua_ativo(onde: str) -> None:
+    """Tudo antes da escrita: qualquer falha deixa o registro ativo (ADR 3.5.0003 §2)."""
+    fakes = _fakes()
+    falha = RuntimeError(f"{onde} fora")
+    gateway = (
+        _GatewayQueFalhaNaRevogacao(falha)
+        if onde == "revoke_login_sessions"
+        else InMemoryIdentityGateway()
+    )
+    _vincular(fakes, gateway)
+    if onde == "is_employee_login":
+        gateway.fail_role_query_with = falha
+
+    class _RegistrosQueFalhamNaListagem(InMemoryEmployeeRepository):
+        def list_by_unit(
+            self, tenant_id: TenantId, unit_id: UnitId, *, include_inactive: bool = False
+        ) -> tuple[Employee, ...]:
             raise falha
 
+    # Sobre o **mesmo** store: o ledger e o estado são os do holder.
+    employees = (
+        _RegistrosQueFalhamNaListagem(fakes.store) if onde == "list_by_unit" else fakes.employees
+    )
     antes = len(fakes.store.calls)
+
     with pytest.raises(RuntimeError) as excinfo:
-        _desligar(fakes, _GatewayQueFalha()).execute(
+        DeactivateEmployeeUseCase(employees, gateway, guard=PermissiveAccessGuard()).execute(
             DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
         )
 
@@ -410,32 +599,101 @@ def test_falha_da_revogacao_sobe_crua_e_o_registro_continua_ativo() -> None:
     assert relido.active is True
 
 
-def test_desligar_duas_vezes_um_vinculado_revoga_duas_vezes_sem_erro() -> None:
-    """Idempotente no valor (3.2) **e** idempotente em identity (L-IG4)."""
-    fakes = _fakes_com_login()
+def test_nova_tentativa_depois_de_falha_na_gravacao_revoga_de_novo() -> None:
+    """A guarda `active` não torna a nova tentativa insegura (concept §6, última linha).
+
+    A gravação falhou, o registro continua ativo — então a segunda tentativa roda a
+    regra inteira de novo e revoga outra vez (L-IG4: inócuo).
+    """
+    fakes = _fakes()
     gateway = InMemoryIdentityGateway()
-    comando = DeactivateEmployeeCommand(
-        actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1
-    )
+    login = _vincular(fakes, gateway)
+    falha = RuntimeError("banco fora na gravação")
 
-    _desligar(fakes, gateway).execute(comando)
-    _desligar(fakes, gateway).execute(comando)
+    class _RegistrosQueFalhamNaGravacao(InMemoryEmployeeRepository):
+        def update(self, employee: Employee) -> None:
+            raise falha
 
-    assert gateway.revoked == [UserId("login-1"), UserId("login-1")]
+    with pytest.raises(RuntimeError):
+        DeactivateEmployeeUseCase(
+            _RegistrosQueFalhamNaGravacao(fakes.store), gateway, guard=PermissiveAccessGuard()
+        ).execute(
+            DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
+    resultado = _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.revoked == [login, login]
+    assert resultado.active is False
+
+
+def test_ca14_registro_sem_login_so_le_e_grava() -> None:
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    antes = len(fakes.store.calls)
+
+    _desligar_e1(_desligar(fakes, gateway))
+
+    assert gateway.calls == []
+    assert fakes.store.calls[antes:] == ["employees.find_by_id", "employees.update"]
+
+
+def test_ca15_vinculado_em_endereco_alheio_so_faz_o_lookup() -> None:
+    """Endereço que não alcança o registro: nenhuma das chamadas novas acontece."""
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    _vincular(fakes, gateway)
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(EmployeeNotFoundError):
+        _desligar(fakes, gateway).execute(
+            DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=_E1)
+        )
+
+    assert gateway.calls == []
+    assert fakes.store.calls[antes:] == ["employees.find_by_id"]
+
+
+def test_recusa_do_guard_nao_chama_list_by_unit_nem_is_employee_login() -> None:
+    """A autorização vem antes de tudo (ADR 3.7.0001 §4): as consultas da 3.8 também.
+
+    Com o registro no caminho em que **as duas** consultas aconteceriam (login de
+    funcionário, sem outro registro ativo), a recusa sai crua e nem a unidade é
+    listada nem identity é perguntada — nada é revogado nem gravado.
+    """
+    fakes = _fakes()
+    gateway = _gateway_espelhado(fakes)
+    _vincular(fakes, gateway)
+    guard = DenyingAccessGuard()
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(StubAuthorizationDenied) as excinfo:
+        DeactivateEmployeeUseCase(fakes.employees, gateway, guard=guard).execute(
+            DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
+
+    assert excinfo.value is guard.denial
+    assert fakes.store.calls[antes:] == []
+    assert gateway.calls == []
+    relido = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.active is True
 
 
 def test_recontratar_nao_toca_o_gateway_e_o_login_continua_vinculado() -> None:
-    """R14 não altera o vínculo (ADR 3.5.0003 §2): a conta nunca deixou de existir."""
-    fakes = _fakes_com_login()
+    """R14 não altera o vínculo (ADR 3.5.0003 §4): a conta nunca deixou de existir."""
+    fakes = _fakes()
     gateway = InMemoryIdentityGateway()
-    _desligar(fakes, gateway).execute(
-        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
-    )
+    login = _vincular(fakes, gateway)
+    _desligar_e1(_desligar(fakes, gateway))
+    assert gateway.revoked == [login]  # o desligamento cortou; a recontratação não devolve nada
 
     resultado = _recontratar(fakes).execute(
         ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
     )
 
     assert resultado.active is True
-    assert resultado.user_id == UserId("login-1")
-    assert gateway.calls == ["revoke_login_sessions('login-1')"]
+    assert resultado.user_id == login
+    # A conta nunca deixou de existir: o login continua sendo de funcionário, e
+    # um novo desligamento volta a cortar (o registro está ativo de novo).
+    _desligar_e1(_desligar(fakes, gateway))
+    assert gateway.revoked == [login, login]

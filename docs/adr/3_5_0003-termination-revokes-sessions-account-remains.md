@@ -5,7 +5,7 @@ when-use: Reference before changing what `deactivate_employee` or `delete_employ
 keywords: [adr, termination, deactivate, delete, revoke-sessions, is_active, employee-login, identity-gateway, staff, identity]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-09-13
+updated_at: 2026-10-19
 adr_id: 3.5.0003
 decision: `DeactivateEmployeeUseCase` (R13) gains the `IdentityGateway` and, when the record carries a `user_id`, calls `revoke_login_sessions` **before** writing `active=False`; `DeleteEmployeeUseCase` (R15) refuses a linked record (`EmployeeHasLoginError`, 409 — terminate first) and does not touch identity; the account is not deactivated (`User.is_active` does not exist and is not added), so the person can authenticate again and reaches nothing; `reactivate_employee` does nothing with identity; `is_active` is deferred with the trigger "before the first self-service permission of `employee`"
 context_stage: 3.5-employee-login-link
@@ -215,3 +215,19 @@ implementation agree, and makes a double termination harmless.
   revocation goes through)
 - Kickoff decisions #4 and #13 (memory `loop-kickoff-decisions-2026-07`)
 - Issue #46 (Unit of Work)
+
+## Supersessão parcial
+
+**2026-10-19 — §1 e metade do §5 superadas por ADR 3.8.0001.**
+
+- §1, *"if `employee.user_id is not None` it calls `revoke_login_sessions(user_id)`"*:
+  a chamada passa a exigir também que o registro esteja ativo, que nenhum outro registro
+  **ativo da mesma unidade** aponte para o login e que o papel da conta seja `employee`
+  (ADR 3.8.0001 §1). A premissa deste ADR — toda
+  conta vinculada é `employee` com um registro — não vale para "vincular login existente"
+  (issue #60).
+- §5, *"must add account deactivation (and decide whether termination calls it)"*: a metade
+  *"decide whether termination calls it"* está decidida — **nunca chama** (ADR 3.8.0001 §4).
+  Acrescentar a desativação de conta, com o gatilho daqui, continua valendo.
+
+O resto deste ADR (§1b, §2, §3, §4, §6) continua em vigor.

@@ -30,19 +30,24 @@ Três propriedades definem a fachada:
 
 A fachada é montada **uma vez**, no `composition_root`, sobre os **mesmos
 repositórios, `EmailSender` e `Clock`** que servem as rotas de identity — um
-grafo, não dois. Os três use cases por baixo dela nascem nesta Stage e têm a
-fachada como único consumidor (ADR 3.5.0001 §Consequences).
+grafo, não dois. Os três primeiros use cases por baixo dela nasceram na Stage
+3.5; o quarto, `GetAccountRoleUseCase`, na 3.8 (ADR 3.8.0001 §3) — o único de
+leitura. Todos têm a fachada como único consumidor (ADR 3.5.0001 §Consequences).
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from restaurant_hub.features.identity.application.dtos.commands import (
+    GetAccountRoleCommand,
     ProvisionAccountCommand,
     RevokeAllSessionsCommand,
     SendInvitationCommand,
 )
 from restaurant_hub.features.identity.application.errors import EmailAlreadyRegisteredError
+from restaurant_hub.features.identity.application.use_cases.get_account_role import (
+    GetAccountRoleUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
 )
@@ -83,17 +88,19 @@ class ProvisionedAccount:
 
 
 class IdentityFacade:
-    """As três operações que um consumidor de identity pode pedir nesta Stage."""
+    """As quatro operações que um consumidor de identity pode pedir."""
 
     def __init__(
         self,
         provision_account: ProvisionAccountUseCase,
         send_invitation: SendInvitationUseCase,
         revoke_all_sessions: RevokeAllSessionsUseCase,
+        get_account_role: GetAccountRoleUseCase,
     ) -> None:
         self._provision_account = provision_account
         self._send_invitation = send_invitation
         self._revoke_all_sessions = revoke_all_sessions
+        self._get_account_role = get_account_role
 
     def provision_account(
         self,
@@ -133,3 +140,13 @@ class IdentityFacade:
     def revoke_all_sessions(self, user_id: str) -> None:
         """Corta todas as sessões vivas do usuário; id desconhecido não levanta."""
         self._revoke_all_sessions.execute(RevokeAllSessionsCommand(user_id=UserId(user_id)))
+
+    def account_role(self, user_id: str) -> str | None:
+        """O papel da conta em texto (`Role.value`), ou `None` se ela não existe.
+
+        Só leitura (Stage 3.8, ADR 3.8.0001 §3). Devolve o **valor** do papel,
+        não o `Role`: o consumidor não nomeia tipos de identity (propriedade 1).
+        A falha do repositório sobe como é (propriedade 2).
+        """
+        result = self._get_account_role.execute(GetAccountRoleCommand(user_id=UserId(user_id)))
+        return None if result is None else result.role.value

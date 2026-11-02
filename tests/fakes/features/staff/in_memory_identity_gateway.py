@@ -16,6 +16,12 @@ lei diz que o papel é do port, não do chamador.
 **`calls` nunca carrega o `setup_link`** (L-IG3): registra-se a chamada, não o
 segredo. Um teste que quisesse o link o lê pelo ledger ou por `sent`.
 
+**A linha `_conforms` no fim do arquivo é o gate da conformidade.**
+`make typecheck` é `mypy src/ tests/fakes/`, e nenhum outro sítio que o mypy
+checa passa este fake como `IdentityGateway` — sem ela, um método divergente do
+port (assinatura ou retorno) passaria no gate e só apareceria, se aparecesse, em
+runtime (auditoria da Stage 3.8).
+
 **Ordem das recusas**, espelhando o lado real (fachada + use case): e-mail
 inválido primeiro (o VO `Email` é construído na fachada, antes de tudo), depois
 e-mail já usado (unicidade global é a primeira checagem do use case), depois
@@ -31,6 +37,7 @@ from restaurant_hub.features.staff.application.errors import (
     LoginEmailAlreadyInUseError,
 )
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    IdentityGateway,
     LoginDelivery,
     ProvisionedLogin,
 )
@@ -103,6 +110,14 @@ class InMemoryIdentityGateway:
             gateway e uma ao repositório num ledger só (ex.: "revogar antes de
             gravar", "gravar antes de enviar"): dois ledgers separados não têm
             posição relativa.
+        other_role_logins: logins do ledger cujo papel **não** é o de
+            funcionário (gerente/dono vinculado a um registro de escala —
+            ADR 3.8.0001). É **este** conjunto que faz `is_employee_login`
+            responder `False` para um login conhecido; um id fora de `logins` é
+            o caso "desconhecido", que também responde `False` (L-IG5). Semear
+            por `seed_login_of_other_role`, que grava nos dois.
+        fail_role_query_with: se definido, `is_employee_login` levanta **esta
+            instância** (L-IG5, metade da falha).
     """
 
     logins: dict[UserId, ProvisionedLoginRecord] = field(default_factory=dict)
@@ -114,6 +129,8 @@ class InMemoryIdentityGateway:
     raw_errors_by_tenant: dict[TenantId, Exception] = field(default_factory=dict)
     raw_errors_by_unit: dict[UnitId, Exception] = field(default_factory=dict)
     fail_send_with: Exception | None = None
+    other_role_logins: set[UserId] = field(default_factory=set)
+    fail_role_query_with: Exception | None = None
     mirror: Callable[[str], None] | None = None
     _sequence: int = 0
 
@@ -170,3 +187,50 @@ class InMemoryIdentityGateway:
         """L-IG4 — idempotente e total: registra, nunca levanta."""
         self.record(f"revoke_login_sessions({user_id!r})")
         self.revoked.append(user_id)
+
+    def is_employee_login(self, user_id: UserId) -> bool:
+        """L-IG5 — `True` sse o login está no ledger e não é de outro papel."""
+        self.record(f"is_employee_login({user_id!r})")
+        if self.fail_role_query_with is not None:
+            raise self.fail_role_query_with
+        return user_id in self.logins and user_id not in self.other_role_logins
+
+    # ---- ganchos de teste (não fazem parte do port) ----
+
+    def seed_employee_login(self, user_id: UserId, *, tenant_id: TenantId, unit_id: UnitId) -> None:
+        """Um login **conhecido** de funcionário, com um id escolhido pelo teste.
+
+        Para o arranjo que fixa o `user_id` do registro antes de montar o use case
+        (o `provision_employee_login` numera os ids). Sem ele, o login seria o caso
+        "desconhecido" de L-IG5 e desligar não revogaria. Não registra em `calls`:
+        é arranjo, não chamada recebida.
+        """
+        self.logins[user_id] = ProvisionedLoginRecord(
+            email=f"{user_id}@funcionario.invalid",
+            tenant_id=tenant_id,
+            unit_id=unit_id,
+            delivery=LoginDelivery.EMAIL,
+            setup_link="",
+        )
+
+    def seed_login_of_other_role(
+        self, user_id: UserId, *, tenant_id: TenantId, unit_id: UnitId
+    ) -> None:
+        """Um login **conhecido** de papel diferente de funcionário.
+
+        Grava no ledger **e** em `other_role_logins`: só assim é o segundo
+        conjunto que decide o `False` de L-IG5, e não a ausência do login —
+        senão o caso colapsaria no "desconhecido". Não registra em `calls`: é
+        arranjo, não chamada recebida.
+        """
+        self.logins[user_id] = ProvisionedLoginRecord(
+            email=f"{user_id}@outro-papel.invalid",
+            tenant_id=tenant_id,
+            unit_id=unit_id,
+            delivery=LoginDelivery.EMAIL,
+            setup_link="",
+        )
+        self.other_role_logins.add(user_id)
+
+
+_conforms: IdentityGateway = InMemoryIdentityGateway()

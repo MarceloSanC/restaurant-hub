@@ -2,9 +2,10 @@
 
 É a segunda travessia entre os dois bounded contexts — a primeira é o
 `AccessGuard` (Stage 3.4) — e a primeira consumida por **use case**, que é o
-caso para o qual `ports/out/` foi antecipado (ADR 3.4.0001 §4). Três operações:
+caso para o qual `ports/out/` foi antecipado (ADR 3.4.0001 §4). Quatro operações:
 provisionar o login **pendente** de um funcionário, enviar o convite, revogar
-as sessões de um login. Nada aqui nomeia `User`, `Role`, `Email` ou qualquer
+as sessões de um login e — desde a Stage 3.8 — perguntar se um login é de
+funcionário. Nada aqui nomeia `User`, `Role`, `Email` ou qualquer
 tipo de identity: identificadores atravessam a fronteira como strings opacas
 (`identifiers.py`), o e-mail chega como `str` cru e é a implementação quem o
 valida do outro lado (concept 3.5 §5.7).
@@ -23,12 +24,14 @@ outro papel, porque não existe onde pedir. Quem responde pela autorização é
 o **use case consumidor**, antes de chamar este port (Stage 3.7, ADR 3.7.0001):
 o de **provisionar** (`create_login_for_employee`) autoriza `manage_staff` **e**
 `manage_users` (concept 3.5 §5.3), e a rota R17 autoriza as mesmas duas antes
-dele; o de **revogar sessões** (`deactivate_employee`) autoriza `manage_staff`.
-A fachada de identity não autoriza (#49).
+dele; o de **perguntar o papel e revogar sessões** (`deactivate_employee`, que
+chama `is_employee_login` antes de `revoke_login_sessions`) autoriza
+`manage_staff`. A fachada de identity não autoriza (#49).
 
-**As quatro leis** (concept 3.5 §4). Texto normativo deste módulo, pareado com
-a suíte de contrato `tests/contract/features/staff/test_identity_gateway_laws.py`,
-que roda o **mesmo** corpo contra as duas implementações:
+**As cinco leis** (concept 3.5 §4; L-IG5 do concept 3.8 §4). Texto normativo
+deste módulo, pareado com a suíte de contrato
+`tests/contract/features/staff/test_identity_gateway_laws.py`, que roda o
+**mesmo** corpo contra as duas implementações:
 
 - **L-IG1 — papel e escopo são do port; o resultado é o login recém-criado.**
   O login nasce com o papel de funcionário, dentro de `tenant_id`, membro de
@@ -52,6 +55,14 @@ que roda o **mesmo** corpo contra as duas implementações:
   seus critérios são sobre o use case e a borda (CA05, CA14).
 - **L-IG4 — `revoke_login_sessions` é idempotente e total.** Login sem sessão,
   ou id **desconhecido**, não é erro. Chamado duas vezes, o efeito é o mesmo.
+- **L-IG5 — `is_employee_login` responde se o login é de funcionário; falha sobe
+  crua.** `True` se e somente se identity conhece o login **e** o papel dele é o
+  de funcionário — o mesmo que L-IG1 fixa para o login provisionado. Login
+  desconhecido ⇒ `False`, não erro: não tem sessão a revogar. Qualquer outra
+  falha sobe **como a implementação a levantou** (mesma instância): responder
+  `False` numa falha seria *fail-open* — o desligamento gravaria e a sessão
+  ficaria viva (ADR 3.8.0001 §3). O port responde booleano, nunca o papel: staff
+  não nomeia o vocabulário de papéis de identity.
 
 **Por que `delivery` é parâmetro de `provision_employee_login`, e não só do use
 case:** o canal decide o **prazo** do segredo (concept D9 — o link entregue em
@@ -104,7 +115,10 @@ class ProvisionedLogin:
 
 
 class IdentityGateway(Protocol):
-    """Provisiona logins pendentes, envia convites e revoga sessões — em identity."""
+    """Provisiona logins pendentes, envia convites e revoga sessões — em identity.
+
+    E, desde a Stage 3.8, diz se um login é de funcionário (L-IG5).
+    """
 
     def provision_employee_login(
         self,
@@ -149,6 +163,25 @@ class IdentityGateway(Protocol):
 
         **L-IG4** — idempotente e total: sem sessão, ou id desconhecido, não é
         erro. A conta permanece; o que cai é o refresh (o access em curso vive
-        até expirar — kickoff #13).
+        até expirar — kickoff #13). **Quando** chamar é decisão do desligamento
+        (ADR 3.8.0001 §1), não deste port.
+        """
+        ...
+
+    def is_employee_login(self, user_id: UserId) -> bool:
+        """Diz se o login é de funcionário (L-IG5 — ADR 3.8.0001 §3).
+
+        É uma das condições com que o ADR 3.8.0001 §1 decide se desligar um
+        registro corta as sessões do login: login de gerente ou dono vinculado a
+        um registro de escala tira a autoridade do papel, e revogar não
+        protegeria nada.
+
+        Returns:
+            `True` se e somente se identity conhece o login e o papel é o de
+            funcionário; `False` para qualquer outro papel **e** para login
+            desconhecido.
+
+        Raises:
+            Exception: qualquer falha de identity sobe **crua** — L-IG5.
         """
         ...
