@@ -28,6 +28,7 @@ from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
 from restaurant_hub.shared.infrastructure.http.error_handlers import register_error_handlers
 from restaurant_hub.shared.infrastructure.http.middlewares import register_middlewares
+from restaurant_hub.shared.infrastructure.logging.config import configure_logging
 
 API_PREFIX = "/api/v1"
 
@@ -40,11 +41,27 @@ def create_app(
     """Cria, configura e retorna a instância FastAPI pronta para uso.
 
     Ordem de inicialização:
-    1. Cria o app FastAPI com metadados das settings
-    2. Registra middlewares (CORS, etc.)
-    3. Registra os error handlers genéricos (NotFoundError → 404, DomainError → 422)
-    4. Faz o wiring das dependências via composition_root
-    5. Registra router, handlers de feature e dependency_overrides
+    1. Configura o logging do processo com o `log_level` das settings
+    2. Cria o app FastAPI com metadados das settings
+    3. Registra middlewares (CORS, etc.)
+    4. Registra os error handlers genéricos (NotFoundError → 404, DomainError → 422)
+    5. Faz o wiring das dependências via composition_root
+    6. Registra router, handlers de feature e dependency_overrides
+
+    **O logging é configurado aqui, e não em `main.py`** (issue #6): a regra 5 de
+    `scripts/check_layout.py` fixa que o entrypoint conhece a factory e mais nada. E
+    vem antes de tudo para que um registro emitido durante a montagem já saia no
+    formato e no nível configurados.
+
+    **É estado do processo, não da app, e por isso a chamada se repete sem efeito.**
+    O `basicConfig` por trás de `configure_logging` não faz nada quando o root já
+    tem handler, nem mudar o nível. No boot real isso não pesa, porque o uvicorn
+    importa `main` uma vez por processo servidor e não pendura handler no root. Na
+    suíte, que monta dezenas de apps, o plugin de logging do pytest mantém handlers
+    no root o tempo todo, e cada chamada só reaplica os níveis de
+    `sqlalchemy.engine` e `uvicorn.access`, o que é idempotente. Daí que
+    `create_app(Settings(log_level=...))` **não** muda o nível do root dentro da
+    suíte: o teste de boot (`tests/unit/test_bootstrap.py`) sobe um interpretador novo.
 
     `settings` é injetável para que um teste possa montar a app com outro banco ou
     outros TTLs sem mexer em variável de ambiente global — é o que torna o TTL
@@ -61,6 +78,7 @@ def create_app(
     genérico primeiro deixa claro que ele é a rede de segurança, não o principal.
     """
     cfg = settings or get_settings()
+    configure_logging(cfg.log_level)
 
     app = FastAPI(
         title=cfg.app_name,

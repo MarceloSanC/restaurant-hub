@@ -1,9 +1,12 @@
 """Configuração de logging da aplicação.
 
-`configure_logging()` deve ser chamada uma vez, no início da aplicação (ex: em
-create_app() ou main.py). Usa logging padrão da stdlib para manter compatibilidade
-universal; em produção, considere estruturar os logs em JSON (ex: python-json-logger)
-para facilitar ingestão em Datadog, CloudWatch ou ELK.
+`configure_logging()` é chamada por `create_app()` (shared/infrastructure/http/app.py)
+antes de montar a aplicação, desde a issue #6. Até lá existia sem chamador de
+produção, e o `LOG_LEVEL` do ambiente não tinha efeito nenhum. No boot real roda uma
+vez por processo; nas chamadas seguintes o `basicConfig` não faz nada, porque o root
+já tem handler (o docstring de `create_app` detalha). Usa logging padrão da stdlib
+para manter compatibilidade universal; em produção, considere estruturar os logs em
+JSON (ex: python-json-logger) para facilitar ingestão em Datadog, CloudWatch ou ELK.
 """
 
 import logging

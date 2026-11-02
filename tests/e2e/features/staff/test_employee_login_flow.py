@@ -308,9 +308,10 @@ async def test_ca14_o_valor_do_token_nao_aparece_em_staff_nem_em_log(  # noqa: P
     assert not _valor_aparece_em_alguma_tabela_de_staff(engine, valor)
 
     # **A app não loga nada hoje, e a ausência de log é medida, não suposta.**
-    # `configure_logging` não está plugado no boot (finding #6, herdado da 2.5) e
-    # nenhum módulo de `src/` chama `getLogger` — então "o token não está no log"
-    # seria verdade por vacuidade. Esta sentinela é o que impede a vacuidade de
+    # O logging é configurado no boot desde a issue #6, mas nenhum módulo de `src/`
+    # emite registro: `getLogger` só aparece em `configure_logging`, para ajustar o
+    # nível de `sqlalchemy.engine` e `uvicorn.access`. Então "o token não está no
+    # log" seria verdade por vacuidade. Esta sentinela é o que impede a vacuidade de
     # passar por prova: no dia em que a app começar a logar, ela falha e obriga a
     # reconferir o token nos registros novos, em vez de o teste seguir verde sem
     # medir nada. Filtra por `restaurant_hub` porque `httpx`/`sqlalchemy` podem

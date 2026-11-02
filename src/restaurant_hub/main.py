@@ -15,4 +15,10 @@ app = create_app()
 if __name__ == "__main__":
     # Execução direta para debug local: python -m restaurant_hub.main
     # Em produção, prefira: uvicorn restaurant_hub.main:app --workers 4
-    uvicorn.run("restaurant_hub.main:app", host="0.0.0.0", port=8000, reload=False)
+    #
+    # Entrega ao uvicorn a app já montada, e não a string de import. Aqui este
+    # arquivo roda como `__main__`, que para o import é outro módulo; com a string,
+    # o uvicorn importaria `restaurant_hub.main` de novo e o boot inteiro (logging e
+    # wiring) aconteceria duas vezes no mesmo processo, como a issue #6 mediu.
+    # Reload e workers exigem a string: para eles, use o comando do uvicorn acima.
+    uvicorn.run(app, host="0.0.0.0", port=8000)

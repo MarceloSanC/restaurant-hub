@@ -99,6 +99,20 @@ def test_configure_logging_nivel_invalido_cai_para_info() -> None:
 
 
 @pytest.mark.usefixtures("restore_logging_state")
+def test_configure_logging_aceita_nivel_em_minusculas() -> None:
+    """`LOG_LEVEL=debug` é grafia plausível no ambiente, e é a do `--log-level` do uvicorn.
+
+    Sem o `upper()`, `getattr(logging, "debug")` acha a **função** `logging.debug`, e o
+    `basicConfig` levanta `TypeError`. Com a função plugada no boot (issue #6), a app
+    deixaria de subir por causa da caixa do valor. Medido: tirar o `upper()` passava
+    em toda a suíte, e o boot real com `LOG_LEVEL=debug` caía.
+    """
+    _clear_root_handlers()
+    configure_logging("debug")
+    assert logging.getLogger().level == logging.DEBUG
+
+
+@pytest.mark.usefixtures("restore_logging_state")
 def test_configure_logging_reduz_verbosidade_de_libs() -> None:
     _clear_root_handlers()
     configure_logging("INFO")
