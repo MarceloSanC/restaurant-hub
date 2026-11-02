@@ -14,6 +14,7 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | tradução **por operação** (mapa global) | nada nos caminhos comuns | CA8b/CA8c, aqui |
 | `user_id` fora do `SET` do `update` (#68) | nada, sem vínculo concorrente | #68, aqui |
 | `FOR UPDATE` no lookup de `link_login` (#68) | nada, sem vínculo concorrente | #68, aqui |
+| `FOR UPDATE` + guarda do vínculo no `delete` (#108) | nada, sem vínculo concorrente | #108, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -56,11 +57,18 @@ from restaurant_hub.features.staff.adapters.out.postgres.integrity_errors import
 from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
     PostgresJobFunctionRepository,
 )
-from restaurant_hub.features.staff.application.dtos.commands import RenameEmployeeCommand
+from restaurant_hub.features.staff.application.dtos.commands import (
+    DeleteEmployeeCommand,
+    RenameEmployeeCommand,
+)
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
+    EmployeeHasLoginError,
     JobFunctionInUseError,
     JobFunctionNotFoundError,
+)
+from restaurant_hub.features.staff.application.use_cases.delete_employee import (
+    DeleteEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.rename_employee import (
     RenameEmployeeUseCase,
@@ -1005,3 +1013,122 @@ def test_issue_68_dois_vinculos_concorrentes_o_segundo_e_recusado_e_nao_troca_o_
     relido = PostgresEmployeeRepository(motor_observador).find_by_id(_A, _U1, _E1)
     assert relido is not None
     assert relido.user_id == _LOGIN, "o segundo vínculo trocou o primeiro"
+
+
+# ---------------------------------------------------------------------------
+# Issue #108 — remoção concorrente com R17 não apaga o registro vinculado
+# ---------------------------------------------------------------------------
+
+
+def _registro_e_vinculo(motor: Engine) -> tuple[bool, UserId | None]:
+    relido = PostgresEmployeeRepository(motor).find_by_id(_A, _U1, _E1)
+    return (relido is not None, None if relido is None else relido.user_id)
+
+
+def test_issue_108_r17_entre_a_leitura_e_o_delete_recusa_a_remocao(
+    motores: Callable[[], Engine],
+) -> None:
+    """O cenário da issue, com duas conexões e o use case de verdade.
+
+    O R15 (`DeleteEmployeeUseCase` sobre o adapter Postgres) lê o registro sem
+    vínculo; o R17 vincula e **comita** exatamente depois dessa leitura, por
+    outra conexão; o R15 segue para o `delete`. Antes da #108 o `DELETE` não
+    olhava o `user_id` gravado: o registro sumia e a conta criada pelo R17
+    ficava órfã, com o e-mail tomado. Agora o port relê o vínculo sob o lock e
+    recusa — o 409 de `EmployeeHasLoginError`.
+    """
+    motor_r15 = motores()
+    motor_r17 = motores()
+    _semear(motor_r15)
+    remover = DeleteEmployeeUseCase(
+        PostgresEmployeeRepository(motor_r15), guard=PermissiveAccessGuard()
+    )
+
+    def _r17_vincula() -> None:
+        PostgresEmployeeRepository(motor_r17).link_login(_A, _U1, _E1, _LOGIN)
+
+    with (
+        _entrelacar(motor_r15, "FROM employees", _r17_vincula) as disparou,
+        pytest.raises(EmployeeHasLoginError),
+    ):
+        remover.execute(
+            DeleteEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
+
+    assert disparou[0], "o entrelace não disparou — a corrida não foi exercitada"
+    assert _registro_e_vinculo(motor_r17) == (True, _LOGIN), (
+        "o registro vinculado foi removido (ou perdeu o vínculo) — conta órfã"
+    )
+
+
+def test_issue_108_delete_bloqueia_no_lookup_e_nao_depois(
+    motores: Callable[[], Engine],
+) -> None:
+    """A guarda de `L-DEL-LINK` decide sob o lock — a mesma prova da CA6b.
+
+    Com a linha presa por outra transação, `delete` para no **primeiro**
+    statement, o `SELECT … FOR UPDATE`, e nada completa antes. Sem o lock, a
+    leitura do vínculo completaria primeiro e a guarda decidiria "sem vínculo"
+    sobre um estado que a transação concorrente está mudando.
+    """
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _semear(motor_adapter)
+    repositorio = PostgresEmployeeRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("SELECT unit_id FROM employees WHERE id = :e AND tenant_id = :t FOR UPDATE"),
+            {"e": _E1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            repositorio.delete(_A, _U1, _E1)
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados, "o adapter nem chegou a emitir statement"
+    assert "FOR UPDATE" in tentados[-1], "o adapter bloqueou em outro statement"
+    assert concluidos == [], "algum statement completou antes do lock"
+
+
+def test_issue_108_delete_que_espera_um_vinculo_em_curso_o_rele_e_recusa(
+    motores: Callable[[], Engine],
+) -> None:
+    """O vínculo está gravado e **não comitado**; a remoção espera o lock e relê.
+
+    O `delete` roda numa thread e fica parado no lock da linha. Só então o
+    vínculo comita. Com a guarda sob o lock, a remoção relê a linha já
+    vinculada e responde `EmployeeHasLoginError`. Uma guarda lida antes do
+    lock — ou sob um snapshot anterior ao commit — veria "sem vínculo" e
+    apagaria o registro.
+    """
+    motor_r17 = motores()
+    motor_r15 = motores()
+    motor_observador = motores()
+    _semear(motor_r17)
+    erros: list[BaseException] = []
+
+    def _r15_remove() -> None:
+        try:
+            PostgresEmployeeRepository(motor_r15).delete(_A, _U1, _E1)
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_r17.begin() as r17:
+        r17.execute(
+            text("UPDATE employees SET user_id = :u WHERE id = :e AND tenant_id = :t"),
+            {"u": _LOGIN, "e": _E1, "t": _A},
+        )
+        r15 = threading.Thread(target=_r15_remove)
+        r15.start()
+        _esperar_backend_bloqueado(motor_observador)
+    r15.join(_TIMEOUT_SINCRONIA)
+
+    assert not r15.is_alive(), "a remoção não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], EmployeeHasLoginError), erros
+    assert _registro_e_vinculo(motor_observador) == (True, _LOGIN), (
+        "a remoção apagou o registro vinculado por um R17 em curso"
+    )
