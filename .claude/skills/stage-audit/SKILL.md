@@ -177,7 +177,7 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
        para `in_progress`?
    - **5.b ADRs derivados (se a Stage declarou D* com ADR formal):**
      - Para cada D* em concept §7 que diz `ADR: sim` (ou cita
-       `docs/adr/N_M_NNNN-<slug>.md`), abrir o arquivo do ADR e
+       `docs/adr/N_M_NNNN-<slug-do-adr>.md`), abrir o arquivo do ADR e
        confirmar **`status: accepted`** no frontmatter (não
        `draft`/`proposed`).
      - ADR novo em `draft` ao merge = blocker — a decisão precisa
