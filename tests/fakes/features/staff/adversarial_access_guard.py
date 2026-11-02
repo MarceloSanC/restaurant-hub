@@ -7,7 +7,8 @@ fonte possível — o `AuthorizedScope` devolvido pelo guard — puder discordar
 
 As **duas** implementações existentes do port **ecoam** a unidade pedida:
 
-- o tradutor de produção (`composition_root._IdentityAccessGuard`) devolve
+- o tradutor de produção (`LocalAccessGuard`, o `_IdentityAccessGuard` do
+  composition root até a issue #47) devolve
   `scope_unit_id`, e `AuthorizeActionUseCase` o monta com
   `scope_unit_id=command.unit_id` (`authorize_action.py:113`);
 - o `InMemoryAccessGuard` faz `unit_id=UnitId(unit_id) if unit_id is not None`,

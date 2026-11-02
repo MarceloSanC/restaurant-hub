@@ -5,7 +5,7 @@ when-use: Reference before any module of one bounded context imports another, be
 keywords: [adr, bounded-context, anticorruption-layer, open-host-service, facade, gateway, import-linter, ignore-imports, bc-independence, composition-root, staff, identity]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-09-13
+updated_at: 2026-11-02
 adr_id: 3.5.0001
 decision: identity exposes an in-process Open Host Service (`features/identity/application/facade.py`, primitive types, no authorization, re-exports the errors a consumer must translate); staff implements its `IdentityGateway` port in `features/staff/adapters/out/identity/` importing only that facade; `bc-independence` receives exactly one `ignore_imports` pair (`staff.adapters.out.identity.* -> identity.application.facade`) whose exact list is pinned by test; `_IdentityAccessGuard` remains in `composition_root.py` because the object it wraps is unimportable, and issue #47 is re-scoped accordingly
 context_stage: 3.5-employee-login-link
@@ -252,3 +252,15 @@ The DoD of the Stage is the crossing. Not acceptable.
 - `.importlinter` — contract `bc-independence`
 - `docs/LAYOUT.md` §1, §3, §6
 - External: the six sources in the table above
+
+## Supersessão parcial
+
+**2026-11-02 — §5, *"`_IdentityAccessGuard` stays in `composition_root.py`"*, fechada por
+[ADR 0.0.0016](./0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)
+(issue #47, re-escopada aqui).** identity passou a expor a decisão de acesso fora do adapter de
+entrada — `IdentityAccessFacade`, segunda classe de `application/facade.py` —, e o tradutor é
+`LocalAccessGuard`, segundo módulo de `staff/adapters/out/identity/`. A aresta continua **um**
+par nomeado (§3): o módulo da fachada é o mesmo. A propriedade "a fachada não autoriza" (§1) se
+lê, desde então, como "não autoriza as **próprias** operações": a fachada de acesso **expõe** a
+decisão, não a exige de quem a chama. Nota *append-only*; o corpo acima não foi editado
+(CONVENTIONS §5).

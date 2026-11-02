@@ -66,6 +66,9 @@ _PAR_UNICO = (
     "restaurant_hub.features.identity.application.facade"
 )
 _GATEWAY = _STAFF / "adapters" / "out" / "identity" / "local_identity_gateway.py"
+# Issue #47 (ADR 0.0.0016): o segundo consumidor da mesma aresta — o `AccessGuard`
+# que até ali era `_IdentityAccessGuard`, no composition root.
+_ACCESS_GUARD = _STAFF / "adapters" / "out" / "identity" / "local_access_guard.py"
 # L-IG1: o papel do login de funcionário é do port, e atravessa como valor.
 _PAPEL_DE_FUNCIONARIO = "employee"
 
@@ -175,9 +178,13 @@ def test_ca12_so_o_gateway_importa_identity_e_importa_so_a_fachada() -> None:
         f"Só `{_PACOTE_DO_GATEWAY}/` importa identity, e só `{_MODULO_DA_FACHADA}` "
         f"(ADR 3.5.0001 §3)."
     )
-    assert _GATEWAY.relative_to(_STAFF).as_posix() in importadores, (
-        "o gateway deixou de importar a fachada — a asserção acima ficou vazia"
-    )
+    # Os dois adapters da aresta, e só eles — desde a issue #47. Um terceiro
+    # importador sob `adapters/out/identity/` passaria pela forma acima (o
+    # curinga o autoriza); aqui ele entra por decisão.
+    assert set(importadores) == {
+        _GATEWAY.relative_to(_STAFF).as_posix(),
+        _ACCESS_GUARD.relative_to(_STAFF).as_posix(),
+    }, f"importadores de identity em staff: {sorted(importadores)}"
 
 
 def test_ca12_nenhum_modulo_de_staff_nomeia_role_nem_permission() -> None:

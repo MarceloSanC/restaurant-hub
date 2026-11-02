@@ -204,24 +204,24 @@ def test_gate1_o_detector_do_charter_reprova_as_tres_formas(
 def test_gate1_a_allowlist_do_charter_nao_cresceu() -> None:
     """Não-crescimento: entrada nova reprova até ser justificada.
 
-    O valor da allowlist não é perdoar `_IdentityAccessGuard`; é tornar
-    **contável** o número de classes que decidem acesso dentro do wiring. Hoje é
-    um. Passar a dois exige editar esta linha, o que é visível em qualquer
-    revisão de diff — ao contrário de acrescentar a segunda classe ao módulo.
+    O valor da allowlist é tornar **contável** o número de classes que decidem
+    acesso dentro do wiring. Era um (`_IdentityAccessGuard`) até a issue #47, que
+    o moveu para `staff/adapters/out/identity/` e pagou a dívida: hoje é zero.
+    Passar a um exige editar esta linha, o que é visível em qualquer revisão de
+    diff — ao contrário de acrescentar a classe ao módulo.
     """
-    assert set(check_layout.COMPOSITION_ROOT_CLASS_ALLOWLIST) == {"_IdentityAccessGuard"}
+    assert set(check_layout.COMPOSITION_ROOT_CLASS_ALLOWLIST) == set()
 
 
 def test_gate1_a_allowlist_de_funcoes_do_charter_nao_cresceu() -> None:
     """A segunda metade do charter, e a que a Stage 3.6 estreou.
 
     `_tenant_id_do_ator` entrou no `composition_root.py` **depois** que este gate
-    foi escrito e **antes** de ele mergear. É a demonstração literal do argumento
-    da issue — "gate escrito antes do código previne; escrito depois, documenta"
-    — pelo lado errado: ele encontrou a função em vez de tê-la impedido. Fixar o
-    conjunto é o que impede a terceira.
+    foi escrito e **antes** de ele mergear — o gate a encontrou em vez de tê-la
+    impedido. Saiu com a issue #47, junto do tradutor que a usava. Fixar o
+    conjunto vazio é o que impede a próxima.
     """
-    assert set(check_layout.COMPOSITION_ROOT_FUNCTION_ALLOWLIST) == {"_tenant_id_do_ator"}
+    assert set(check_layout.COMPOSITION_ROOT_FUNCTION_ALLOWLIST) == set()
 
 
 def test_gate1_a_allowlist_de_funcoes_nao_tem_entrada_morta() -> None:

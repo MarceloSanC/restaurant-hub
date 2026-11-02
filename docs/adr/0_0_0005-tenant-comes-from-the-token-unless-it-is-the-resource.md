@@ -5,7 +5,7 @@ when-use: Reference before adding an HTTP route in any bounded context, when dec
 keywords: [adr, transversal, multi-tenancy, tenant, rbac, boundary, confused-deputy, bola, asvs, http, routing]
 status: accepted
 created_at: 2026-08-18
-updated_at: 2026-08-18
+updated_at: 2026-11-02
 adr_id: 0.0.0005
 decision: Three clauses — the tenant that decides access always derives from the token and any tenant in the request is only a declaration confirmed against it; it appears in the path only when the bounded context owns the tenant as an addressable resource or the actor may act outside its own tenant; and it is resolved in a single trusted layer whose location follows the opacity of the actor (the context's own adapter in identity, the composition root in staff)
 context_stage: 3.6-staff-http
@@ -352,3 +352,16 @@ an explicit `tenant_id` and the resolution point is a single module.
   composed at the boundary), ADR 3.4.0007 (the unit enters the employee address),
   ADR 3.4.0008 (tenant-wide permissions), ADR 3.6.0001 (the path addresses the
   record)
+
+## Supersessão parcial
+
+**2026-11-02 — o local derivado pela cláusula 3 para `staff` (*"the composition root in
+staff"*, frontmatter `decision` e §Implementation notes) superado por
+[ADR 0.0.0016](./0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)
+(issue #47).** O princípio não muda — uma camada confiável única, cujo lugar segue a opacidade
+do ator. O que mudou foi a premissa da derivação: o ator deixou de ser um `Any` que só o
+`composition_root` podia ler e passou a ser o `AccessPrincipal` publicado pela fachada de
+identity, produzido e lido pelo `LocalAccessGuard` de `staff/adapters/out/identity/`. É lá que o
+tenant omitido é resolvido agora, com leitura tipada — e, como antes, **nunca** no router de
+staff. As cláusulas 1 e 2 seguem intactas. Nota *append-only*; o corpo acima não foi editado
+(CONVENTIONS §5).

@@ -33,6 +33,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 )
 from restaurant_hub.features.identity.application.dtos.results import AuthorizedActor
 from restaurant_hub.features.identity.application.errors import (
+    InvalidAccessTokenError,
     PermissionDeniedError,
     TenantNotVisibleError,
     TenantScopeRequiredError,
@@ -152,3 +153,38 @@ class AuthorizeActionUseCase:
         # repositório permissivo não concede visibilidade indevida.
         if not user.can_view_unit(unit, self._users.list_memberships(user.id)):
             raise UnitNotVisibleError(user.id, unit.id)
+
+
+def authorize_at_boundary(
+    authorize_action: AuthorizeActionUseCase,
+    command: AuthorizeActionCommand,
+) -> AuthorizedActor:
+    """Autoriza para um chamador **de fora** de identity, fechando os dois oráculos.
+
+    É a mesma decisão de `AuthorizeActionUseCase.execute`, com as duas traduções
+    que a borda deve a quem pergunta (concept 2.4 §6). Nasceram dentro do
+    `IdentityGuard` do adapter HTTP e moram aqui desde a issue #47, porque
+    passaram a ter **dois** consumidores — o guard HTTP e a fachada de acesso
+    (`facade.IdentityAccessFacade`) que staff consome — e duas cópias de uma
+    regra de vazamento divergem em silêncio (ADR 0.0.0016):
+
+    - `UserNotFoundError` só pode se referir ao **ator** (é o único usuário do
+      command), e um token cujo sujeito sumiu é credencial inválida, não recurso
+      ausente → `InvalidAccessTokenError` (401).
+    - `UnitNotFoundError` vira `UnitNotVisibleError` (403): para quem não
+      enxerga a unidade, "não existe" e "existe e não é sua" precisam ser a
+      mesma resposta — é o fechamento do oráculo de enumeração cross-tenant
+      (ADR 2.4.0001 §5).
+
+    Toda outra exceção sobe crua.
+    """
+    try:
+        return authorize_action.execute(command)
+    except UserNotFoundError as exc:
+        # O ator do token sumiu. Credencial inválida, não recurso ausente.
+        raise InvalidAccessTokenError() from exc
+    except UnitNotFoundError as exc:
+        # A mensagem construída aqui nunca chega ao cliente: a faixa 403 tem
+        # corpo constante (error_handlers). Ela existe para o log, que o
+        # handler grava junto com a causa encadeada (`from exc`).
+        raise UnitNotVisibleError(command.actor_id, command.unit_id or "<sem unidade>") from exc

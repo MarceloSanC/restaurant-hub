@@ -7,8 +7,9 @@ do guard o dispensa. O `manager` alcança só as unidades das quais é membro, e
 é ele quem exercita o caminho que a Stage precisa provar.
 
 **E é aqui que o ADR 0.0.0005 é medido de ponta a ponta.** Nenhuma destas
-requisições nomeia o tenant: ele viaja claim do token → tradutor no composition
-root → passo 3 de `AuthorizeActionUseCase`, comparado com o tenant do usuário
+requisições nomeia o tenant: ele viaja claim do token → `LocalAccessGuard` (o
+tradutor de staff, no composition root até a issue #47) → passo 3 de
+`AuthorizeActionUseCase`, comparado com o tenant do usuário
 **carregado do banco**. Antes da Task 01, todas as 16 rotas respondiam 403 para
 todos os papéis.
 """
