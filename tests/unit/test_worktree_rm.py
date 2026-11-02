@@ -198,7 +198,7 @@ def test_dry_run_reports_the_hooks_that_would_be_relinked(
     calls: list[list[str]] = []
     monkeypatch.setattr(wr, "_run", lambda cmd, **_kw: calls.append(cmd))
 
-    assert wr.relink_hooks(common, wt, dry_run=True) is True
+    assert wr.relink_hooks(common, wt, wr.hooks_inside(common, wt), dry_run=True) is True
 
     out = capsys.readouterr().out
     assert "hooks pre-commit, commit-msg apontam para dentro da worktree" in out
@@ -214,10 +214,10 @@ def test_live_hooks_are_left_alone(
     calls: list[list[str]] = []
     monkeypatch.setattr(wr, "_run", lambda cmd, **_kw: calls.append(cmd))
 
-    assert wr.relink_hooks(common, tmp_path / "wt", dry_run=False) is True
+    assert wr.relink_hooks(common, tmp_path / "wt", [], dry_run=False) is True
 
     assert calls == []
-    assert "apontam para um python que existe" in capsys.readouterr().out
+    assert "não dependem da worktree removida" in capsys.readouterr().out
 
 
 def test_dead_hook_is_relinked_from_the_main_checkout(
@@ -235,7 +235,7 @@ def test_dead_hook_is_relinked_from_the_main_checkout(
 
     monkeypatch.setattr(wr, "_run", _relink)
 
-    assert wr.relink_hooks(common, tmp_path / "removida", dry_run=False) is True
+    assert wr.relink_hooks(common, tmp_path / "removida", [], dry_run=False) is True
     assert calls == [
         (["uv", "run", "--extra", "dev", "python", "scripts/install_hooks.py"], principal)
     ]
@@ -248,8 +248,43 @@ def test_relink_that_leaves_a_dead_hook_fails(
     _write_hook(common, "pre-commit", tmp_path / "removida" / "python.exe")
     monkeypatch.setattr(wr, "_run", lambda cmd, **_kw: None)
 
-    assert wr.relink_hooks(common, tmp_path / "removida", dry_run=False) is False
+    assert wr.relink_hooks(common, tmp_path / "removida", [], dry_run=False) is False
     assert wr.install_hooks.RELINK_HINT in capsys.readouterr().err
+
+
+def test_partially_removed_worktree_with_python_still_on_disk_is_relinked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`git worktree remove` no Windows pode parar no meio ("Filename too long"): o
+    `python.exe` fica, as dependências do pre-commit não. Existir não basta.
+    """
+    principal = tmp_path / "restaurant-hub"
+    common = principal / ".git"
+    wt = tmp_path / "restaurant-hub-worktrees" / "feat-1-a"
+    _write_hook(common, "pre-commit", _venv_python(wt))
+    main_python = _venv_python(principal)
+    calls: list[Path] = []
+
+    def _install(cwd: Path) -> None:
+        calls.append(cwd)
+        _write_hook(common, "pre-commit", main_python)
+
+    monkeypatch.setattr(wr, "run_install_hooks", _install)
+
+    assert wr.install_hooks.dead_hooks(common) == []
+    assert wr.relink_hooks(common, wt, ["pre-commit"], dry_run=False) is True
+    assert calls == [principal]
+
+
+def test_relink_that_leaves_the_hook_inside_the_worktree_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    common = tmp_path / "restaurant-hub" / ".git"
+    wt = tmp_path / "restaurant-hub-worktrees" / "feat-1-a"
+    _write_hook(common, "pre-commit", _venv_python(wt))
+    monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
+
+    assert wr.relink_hooks(common, wt, ["pre-commit"], dry_run=False) is False
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -312,3 +347,24 @@ def test_main_exits_2_when_the_hooks_stay_dead(
 
     assert wr.main() == wr.install_hooks.EXIT_ERROR
     assert not wt.exists()
+
+
+def test_main_relinks_when_the_removal_leaves_the_venv_behind(
+    real_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A remoção que para no meio: a pasta e o `python.exe` ficam, e o hook ainda
+    aponta para eles — o `main()` religa mesmo assim.
+    """
+    principal, wt = real_repo
+    common = (principal / ".git").resolve()
+    hook = _write_hook(common, "pre-commit", _venv_python(wt))
+    main_python = _venv_python(principal)
+    monkeypatch.setattr(wr, "remove_worktree_git", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        wr, "run_install_hooks", lambda _cwd: _write_hook(common, "pre-commit", main_python)
+    )
+
+    assert wr.main() == 0
+
+    assert wt.exists()
+    assert wr.install_hooks.hook_python(hook) == main_python

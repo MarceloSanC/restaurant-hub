@@ -12,9 +12,9 @@ Em seguida, em ordem segura:
   4. `git branch -d <branch>` (safe-delete: só remove se mergeada)
   5. `git remote prune origin`
   6. Confere os hooks do git (`pre-commit`/`commit-msg`, um só para todas as
-     worktrees): se o python deles sumiu — estava no venv da worktree que saiu —,
-     religa a partir do checkout principal com `scripts/install_hooks.py`
-     (issue #100).
+     worktrees): se apontavam para o venv da worktree que saiu, ou para um
+     python que não existe mais, religa a partir do checkout principal com
+     `scripts/install_hooks.py` (issue #100).
 
 A imagem Docker (`restaurant_hub-app:dev`) é compartilhada entre worktrees.
 O script pergunta interativamente se deseja removê-la.
@@ -547,18 +547,21 @@ def run_install_hooks(principal: Path) -> None:
     )
 
 
-def relink_hooks(common_dir: Path, wt_path: Path, *, dry_run: bool) -> bool:
-    """Religa os hooks no checkout principal se o python deles não existe mais.
+def relink_hooks(common_dir: Path, wt_path: Path, inside: list[str], *, dry_run: bool) -> bool:
+    """Religa os hooks no checkout principal se dependiam da worktree que saiu.
 
     Os hooks moram no diretório comum e valem para todas as worktrees. Se o
-    `pre-commit install` foi rodado de dentro da worktree que acabou de sair, o
-    `INSTALL_PYTHON` aponta para o venv apagado com ela, e todo commit de toda
-    worktree falha com "`pre-commit` not found". Retorna False só se, depois de
-    tentar, ainda sobrar hook com python inexistente.
+    `pre-commit install` foi rodado de dentro da worktree que saiu, o
+    `INSTALL_PYTHON` aponta para o venv dela, e todo commit de toda worktree
+    falha. O critério é o caminho (`inside`), não só a existência do python:
+    no Windows o `git worktree remove` pode apagar a pasta só em parte
+    ("Filename too long", medido na prova da issue), deixando o `python.exe`
+    sem as dependências do pre-commit. Também religa hook cujo python já não
+    existia (outra worktree removida antes). Retorna False se, depois de religar, ainda sobrar hook
+    morto ou dentro da worktree.
     """
     principal = install_hooks.main_checkout(common_dir)
     if dry_run:
-        inside = hooks_inside(common_dir, wt_path)
         if inside:
             _info(f"[dry-run] hooks {', '.join(inside)} apontam para dentro da worktree;")
             _info(f"[dry-run] seriam religados em {principal} (scripts/install_hooks.py)")
@@ -567,15 +570,17 @@ def relink_hooks(common_dir: Path, wt_path: Path, *, dry_run: bool) -> bool:
         return True
 
     dead = install_hooks.dead_hooks(common_dir)
-    if not dead:
-        _info("hooks do git apontam para um python que existe ✓")
+    if not dead and not inside:
+        _info("hooks do git não dependem da worktree removida ✓")
         return True
 
+    for hook_type in inside:
+        _warn(f"hook {hook_type} apontava para o venv da worktree removida")
     for hook_type, python in dead:
         _warn(f"hook {hook_type} aponta para {python}, que não existe mais")
     _info(f"religando os hooks a partir do checkout principal ({principal})")
     run_install_hooks(principal)
-    still_dead = install_hooks.dead_hooks(common_dir)
+    still_dead = install_hooks.dead_hooks(common_dir) or hooks_inside(common_dir, wt_path)
     if still_dead:
         _warn(
             "os hooks continuam sem python. Religue à mão no checkout principal:\n"
@@ -658,6 +663,10 @@ def main() -> int:
         _section("3. Limpando containers e volumes Docker")
         docker_cleanup(wt_path, dry_run=args.dry_run)
 
+    # Medido uma vez, antes de remover: o mesmo resultado serve ao dry-run e à remoção.
+    _, common_dir = install_hooks.git_dirs()
+    hooks_in_worktree = hooks_inside(common_dir, wt_path)
+
     _section("4. Removendo worktree e branch git")
     remove_worktree_git(
         wt_path,
@@ -668,8 +677,7 @@ def main() -> int:
     )
 
     _section("5. Conferindo os hooks do git")
-    _, common_dir = install_hooks.git_dirs()
-    hooks_ok = relink_hooks(common_dir, wt_path, dry_run=args.dry_run)
+    hooks_ok = relink_hooks(common_dir, wt_path, hooks_in_worktree, dry_run=args.dry_run)
 
     print()
     print("=" * 60)
