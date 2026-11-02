@@ -299,7 +299,8 @@ original aprovado permanece no git. Regras durante a janela de execução:
   `<!-- END: post-execution -->`. Qualquer diff fora desses marcadores
   em um `technical.md` com `status: done` **cuja Stage ainda não mergeou**
   é rejeitado pelo script `scripts/check_technical_postexec.py` (rodado
-  no pre-commit e no Passo 10 do runbook). A detecção de merge usa
+  no `make docs-check`, dentro do `make check`, e no Passo 10 do
+  runbook). A detecção de merge usa
   ancestralidade do commit `stage N.M: technical approved` em relação a
   `develop`/`main`; Stage mergeada → checagem pulada.
 - **`updated_at` do frontmatter não muda** com edições nessa seção. O
