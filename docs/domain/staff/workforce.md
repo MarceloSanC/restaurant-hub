@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (
 keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao, cadastro-minimo, homonimos, wall-clock, fuso-da-unidade, rbac]
 status: accepted
 created_at: 2026-07-23
-updated_at: 2026-10-21
+updated_at: 2026-11-01
 bounded_context: staff
 subdomain: workforce
 references:
@@ -32,6 +32,8 @@ references:
   - ../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md
   - ../../adr/3_5_0003-termination-revokes-sessions-account-remains.md
   - ../../adr/3_5_0004-user-id-as-nullable-opaque-column.md
+  - ../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md
+  - ../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md
   - ../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md
   - ../../adr/4_1_0004-hr-reads-schedules-in-member-units.md
   - ../../adr/4_1_0005-unit-timezone-owned-by-identity.md
@@ -437,7 +439,9 @@ entre unidades").
   isolamento de tenant (§3.1); não existe cópia cross-tenant. Copiar exige poder gerir a equipe
   **nas duas** unidades: o destino é alvo de autorização tal como a origem, e é essa autorização
   que recusa um destino de outro tenant, inexistente ou fora do alcance de quem copia
-  (ADR 3.4.0005; `docs/stages/3.6-staff-http/concept.md` §5.6).
+  (ADR 3.4.0005; `docs/stages/3.6-staff-http/concept.md` §5.6). Desde a Stage 3.7 a autorização
+  dupla é da **operação**, não só da borda HTTP: vale para quem quer que chame a cópia
+  ([ADR 3.7.0001](../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md) §3).
 - **Copiar para a própria unidade de origem é recusado** (ADR 3.2.0003): a operação é para *outra*
   unidade, e o gêmeo na mesma unidade seria indistinguível do original — nomes não são únicos
   (§3.1).
@@ -666,9 +670,18 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 - [ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) — conta
   pendente e link de definição de senha entregue em mãos, sem senha provisória (§3.8).
 - [ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md) — desligar
-  revoga as sessões do login; a conta continua existindo (§3.8).
+  revoga as sessões do login antes de gravar; a conta continua existindo; registro com login não é
+  removido (§3.1, §3.8). O §1 (revogação incondicional) e metade do §5 foram superados pelo
+  ADR 3.8.0001.
 - [ADR 3.5.0004](../../adr/3_5_0004-user-id-as-nullable-opaque-column.md) — `user_id` como coluna
   anulável e opaca, que a cópia não carrega (§3.7, §3.8).
+- [ADR 3.7.0001](../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md) — toda
+  operação de staff autoriza o próprio alvo, qualquer que seja quem a chama; a cópia autoriza a
+  unidade de origem e a de destino (§3.7). A matriz de papéis do §4 não muda.
+- [ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md) — o
+  desligamento revoga as sessões só quando o registro é a fonte do acesso (registro ativo, único
+  ativo do login na unidade, login de papel `employee`) e nunca desativa a conta; supersede em parte
+  o ADR 3.5.0003 (§3.8).
 - [ADR 4.1.0003](../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md) — "conta para a
   carga" é atributo da alocação, lido só pela política de carga (§3.3).
 - [ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md) — o RH lê a escala nas
