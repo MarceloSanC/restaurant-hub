@@ -495,6 +495,21 @@ def test_compose_default_app_port_mirrors_the_compose_file() -> None:
     assert wn.PORT_DEFAULTS["APP_PORT"] == guard.COMPOSE_DEFAULT_APP_PORT
 
 
+def test_make_run_inside_the_app_container_serves_on_the_mapped_port() -> None:
+    """No devcontainer, o `make run` sobe na porta do container, não na `APP_PORT` do host.
+
+    O `env_file` do service `app` carrega o `.env` da worktree (`APP_PORT=8001`)
+    para dentro do container, onde o mapeamento publica só a 8000: sem o
+    `environment` fixando a `APP_PORT` na porta do container, o uvicorn do
+    `make run` subiria numa porta que nada publica.
+    """
+    compose = yaml.safe_load((_REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    app = compose["services"]["app"]
+    container_port = app["ports"][0].rsplit(":", 1)[1]
+
+    assert app["environment"]["APP_PORT"] == container_port
+
+
 def test_make_target_returns_the_command_exit_code(worktree: Path, ran: _Ran) -> None:
     """Migration que falha reprova o `make migrate` — o exit code do Alembic passa adiante."""
     ran.returncode = COMMAND_FAILED

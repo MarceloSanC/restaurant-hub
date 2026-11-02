@@ -47,6 +47,11 @@ services:
       DEBUG: "true"
       HOST: "0.0.0.0"
       PORT: "8000"
+      # Dentro do container a app escuta na 8000 do mapeamento acima, qualquer
+      # que seja a APP_PORT do host. O `make run` sobe na APP_PORT
+      # (scripts/database_url_guard.py, issue #85), e o env_file traria a do
+      # host (8001 numa worktree); o `environment` vence o env_file.
+      APP_PORT: "8000"
       LOG_LEVEL: INFO
     env_file:
       - path: .env
