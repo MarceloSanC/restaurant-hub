@@ -25,6 +25,7 @@ import fnmatch
 import os
 import pathlib
 import subprocess
+import sys
 import tomllib
 
 import pytest
@@ -268,6 +269,19 @@ def test_todo_arquivo_da_raiz_citado_no_codigo_vai_para_a_copia_do_mutmut() -> N
     Reprovar aqui é a corrida noturna morrendo na coleta, dito antes da noite.
     O conserto é a entrada no `also_copy` do `pyproject.toml`.
     """
+    fontes, rastreados, copia = _repositorio()
+
+    achados = _leituras_fora_da_copia(fontes, rastreados, copia)
+
+    assert achados == [], (
+        "arquivos citados no código que o mutmut não copia para `mutants/` — a "
+        "corrida de mutação morre na coleta de estatísticas. Inclua no `also_copy` "
+        "do pyproject.toml:\n" + "\n".join(achados)
+    )
+
+
+def _repositorio() -> tuple[dict[str, str], list[str], list[str]]:
+    """As fontes `.py`, os arquivos rastreados e a cópia declarada do repositório real."""
     raiz = _raiz_do_git()
     rastreados = _rastreados(raiz)
     with (raiz / "pyproject.toml").open("rb") as arquivo:
@@ -277,22 +291,107 @@ def test_todo_arquivo_da_raiz_citado_no_codigo_vai_para_a_copia_do_mutmut() -> N
         for caminho in rastreados
         if caminho.endswith(".py")
     }
-
-    achados = _leituras_fora_da_copia(fontes, rastreados, _copia_declarada(config))
-
-    assert achados == [], (
-        "arquivos citados no código que o mutmut não copia para `mutants/` — a "
-        "corrida de mutação morre na coleta de estatísticas. Inclua no `also_copy` "
-        "do pyproject.toml:\n" + "\n".join(achados)
-    )
+    return fontes, rastreados, _copia_declarada(config)
 
 
 def test_a_varredura_le_o_repositorio_e_nao_uma_lista_vazia() -> None:
     """Sem isto a guarda passaria calada sobre zero fontes e zero arquivos rastreados."""
-    rastreados = _rastreados(_raiz_do_git())
+    fontes, rastreados, _ = _repositorio()
 
     assert ".claude/hooks/git_guard.py" in rastreados
-    assert "tests/unit/test_git_guard.py" in rastreados
+    assert "tests/unit/test_git_guard.py" in fontes
+    assert "scripts/check_harness.py" in fontes
+
+
+@pytest.mark.parametrize(
+    ("retirada", "esperado"),
+    [
+        # O caso da #87, sobre o repositório de verdade.
+        (".claude/hooks", "'.claude' -> .claude/hooks/git_guard.py"),
+        # Um não-`.py`: a lista de rastreados não pode encolher para só código.
+        (".claude/settings.json", "'.claude' -> .claude/settings.json"),
+        # Achado vindo de `scripts/`, não só de `tests/`.
+        (".claude/skills", "scripts/check_harness.py:"),
+    ],
+)
+def test_a_guarda_real_acusa_a_entrada_retirada_da_copia(retirada: str, esperado: str) -> None:
+    """Controle negativo: sem a entrada, a guarda do repositório real reprova.
+
+    Prova que a varredura do teste acima tem fontes e rastreados de verdade — um
+    filtro que a reduzisse a `src/` ou só a `.py` passaria nele calado.
+    """
+    fontes, rastreados, copia = _repositorio()
+    assert retirada in copia
+
+    achados = _leituras_fora_da_copia(
+        fontes, rastreados, [entrada for entrada in copia if entrada != retirada]
+    )
+
+    assert any(esperado in achado for achado in achados), achados
+
+
+def test_a_raiz_e_a_do_git_e_nao_a_do_arquivo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dentro de `mutants/` o `parents[2]` é a cópia; a raiz tem de vir do git."""
+    monkeypatch.setattr(sys.modules[__name__], "_REPO_ROOT", _REPO_ROOT / "src")
+
+    assert (_raiz_do_git() / "pyproject.toml").is_file()
+
+
+def test_o_git_roda_sem_as_variaveis_do_ambiente_do_hook(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Num hook do git, `GIT_DIR`/`GIT_INDEX_FILE` apontariam a lista para outro índice."""
+    monkeypatch.setenv("GIT_DIR", str(tmp_path))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(tmp_path / "index"))
+
+    assert ".claude/hooks/git_guard.py" in _rastreados(_raiz_do_git())
+
+
+def test_os_defaults_sao_os_do_mutmut_instalado(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_DEFAULTS_DO_MUTMUT` é cópia à mão; aqui ela é confrontada com o mutmut.
+
+    Um default inventado (`.claude`, digamos) esconderia da guarda exatamente a
+    classe da #87. O mutmut só está no extra `mutation`: o teste roda onde ele
+    está instalado — a corrida noturna e o ambiente de quem atualiza o mutmut.
+    """
+    configuracao = pytest.importorskip("mutmut.configuration")
+    raiz = _raiz_do_git()
+    monkeypatch.chdir(raiz)
+    also_copy = _config_do_mutmut()["also_copy"]
+    assert isinstance(also_copy, list)
+
+    do_mutmut = [caminho.as_posix() for caminho in configuracao._load_config().also_copy]
+    declarados = [str(entrada).rstrip("/") for entrada in also_copy]
+    globs = do_mutmut[len(declarados) + len(_DEFAULTS_DO_MUTMUT) :]
+
+    assert do_mutmut[: len(declarados)] == declarados
+    assert tuple(do_mutmut[len(declarados) : len(declarados) + len(_DEFAULTS_DO_MUTMUT)]) == (
+        _DEFAULTS_DO_MUTMUT
+    )
+    assert all(fnmatch.fnmatchcase(caminho, _GLOB_DE_RAIZ_DO_MUTMUT) for caminho in globs)
+
+
+def test_arquivo_do_also_copy_vem_depois_do_diretorio_que_cria_o_pai() -> None:
+    """O mutmut copia arquivo com `shutil.copy2`, que não cria o diretório-pai.
+
+    `.claude/settings.json` antes de `.claude/hooks/` quebraria a corrida com
+    `FileNotFoundError` antes da coleta (mutmut 3.7.0, `copy_also_copy_files`).
+    """
+    raiz = _raiz_do_git()
+    also_copy = _config_do_mutmut()["also_copy"]
+    assert isinstance(also_copy, list)
+    vistos: list[str] = []
+    orfaos: list[str] = []
+    for entrada in (str(item) for item in also_copy):
+        pai = entrada.rstrip("/").rpartition("/")[0]
+        # `copytree` de um diretório cria os ancestrais dele e a árvore abaixo.
+        criado = any(_dentro(d, pai) or _dentro(pai, d) for d in vistos)
+        if (raiz / entrada).is_file() and pai and not criado:
+            orfaos.append(entrada)
+        if (raiz / entrada).is_dir():
+            vistos.append(entrada.rstrip("/"))
+
+    assert orfaos == [], f"arquivos do also_copy antes do diretório que cria o pai: {orfaos}"
 
 
 _RASTREADOS_DE_EXEMPLO = [
@@ -333,6 +432,14 @@ _RASTREADOS_DE_EXEMPLO = [
         ('"Makefile"', [], ["t.py:1 'Makefile' -> Makefile"]),
         ('"Makefile"', ["Makefile"], []),
         ('"docs\\\\a.md"', [], ["t.py:1 'docs\\\\a.md' -> docs/a.md"]),
+        # Normalização: barra final, `./` repetido, espaço nas pontas, os três curingas.
+        ('"docs/"', [], ["t.py:1 'docs/' -> docs/a.md"]),
+        ('"././Makefile"', [], ["t.py:1 '././Makefile' -> Makefile"]),
+        ('" Makefile\\n"', [], ["t.py:1 ' Makefile\\n' -> Makefile"]),
+        ('"docs/a?.md"', [], ["t.py:1 'docs/a?.md' -> docs/a.md"]),
+        ('"docs/[ab].md"', [], ["t.py:1 'docs/[ab].md' -> docs/a.md"]),
+        # Texto com espaço não é caminho, nem quando o corte no curinga deixaria um.
+        ('"docs/* não casa"', [], []),
         # Prefixo de nome não é diretório: `Make` não cita o `Makefile`.
         ('"Make"', [], []),
         ('"Makefile"', ["Make"], ["t.py:1 'Makefile' -> Makefile"]),

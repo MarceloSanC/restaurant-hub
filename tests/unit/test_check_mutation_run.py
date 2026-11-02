@@ -10,6 +10,8 @@ sobrevivente continua observacional (limiar da issue #45).
 import importlib.util
 import json
 import pathlib
+import subprocess
+import sys
 import types
 from typing import Any
 
@@ -113,6 +115,25 @@ def test_sem_resumo_reprova(tmp_path: pathlib.Path, capsys: pytest.CaptureFixtur
     assert "não existe" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("resumo", "codigo"),
+    [(None, 1), (_resumo(), 1), (_resumo(total=2, killed=2), 0)],
+)
+def test_o_codigo_de_saida_do_processo_e_o_veredito(
+    tmp_path: pathlib.Path, resumo: dict[str, int] | None, codigo: int
+) -> None:
+    """O workflow lê o código de saída do processo, não o retorno de `main`."""
+    caminho = (
+        tmp_path / "ausente.json" if resumo is None else pathlib.Path(_gravar(tmp_path, resumo))
+    )
+
+    processo = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(caminho)], capture_output=True, check=False
+    )
+
+    assert processo.returncode == codigo
+
+
 def test_sem_argumento_le_o_caminho_do_mutmut(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -162,8 +183,11 @@ def test_os_passos_que_decidem_se_a_corrida_mediu_reprovam(
 ) -> None:
     passo = job_de_mutacao["steps"][_indice_do_passo(job_de_mutacao, trecho)]
 
+    # Nada que pule o passo ou engula a saída dele: `if:`, `continue-on-error`,
+    # e qualquer `||` (`|| true`, `|| exit 0`, `|| :`).
     assert "continue-on-error" not in passo
-    assert "|| true" not in passo["run"]
+    assert "if" not in passo
+    assert "||" not in passo["run"]
 
 
 def test_a_conferencia_le_o_resumo_da_corrida(job_de_mutacao: dict[str, Any]) -> None:
