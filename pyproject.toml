@@ -212,6 +212,14 @@ also_copy = [
     ".claude/skills/",
     ".claude/agents/",
     ".claude/settings.json",
+    # Citados num `.py` rastreado sem serem lidos por `parents[2]`: o
+    # `test_eol_policy.py` lê o `.gitattributes` pela raiz do git, e os dois `.md`
+    # são casos de tabela. A guarda de `tests/unit/test_mutation_scope.py` cobra
+    # todo literal que nomeia arquivo rastreado — aproximação por excesso: a
+    # entrada a mais custa nada, a que falta derruba a corrida (issue #87).
+    ".gitattributes",
+    "CLAUDE.md",
+    "README.md",
 ]
 # `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
 # conveniência.
