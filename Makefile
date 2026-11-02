@@ -141,9 +141,11 @@ lock-check:
 # post-execution desde o gate da Fase 3B (CONVENTIONS §3.4), (2) que toda
 # Stage tem issue correspondente no backlog do GitHub (best-effort — pula
 # se `gh` não está autenticado), (3) o bounded_context dos ADRs, (4) que a
-# árvore de pastas do LAYOUT §2 descreve o repositório que existe e (5) o
+# árvore de pastas do LAYOUT §2 descreve o repositório que existe, (5) o
 # frontmatter de skills/subagentes em `.claude/` — o Claude Code não reporta
-# YAML inválido nem descrição truncada (issue #56).
+# YAML inválido nem descrição truncada (issue #56) — e (6) que toda pasta de
+# Stage tem as dependências fechadas: `done` no roadmap e `stage N.M: complete`
+# no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0009).
 #
 # O (4) é o único que compara documento com sistema de arquivos, e é por isso
 # que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda
@@ -156,6 +158,7 @@ docs-check:
 	uv run python scripts/check_adr_bounded_context.py
 	uv run python scripts/check_docs_claims.py
 	uv run python scripts/check_harness.py
+	uv run python scripts/check_stage_deps.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes (sem cobertura — loop rápido local)

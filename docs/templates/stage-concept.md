@@ -86,7 +86,7 @@ por esta Stage. Use blocos de código Python quando aplicável.>
 
 > Decisões que afetam o "o quê" desta Stage. **Decisões com alternativa
 > real descartada devem virar ADR** em [`../../adr/`](../../adr/)
-> (pasta única; nomear como `N_M_NNNN-<slug>.md` com `N_M` desta Stage)
+> (pasta única; nomear como `N_M_NNNN-<slug-do-adr>.md` com `N_M` desta Stage)
 > — referenciar aqui pelo `adr_id`.
 >
 > Toda decisão deve ter **fonte rastreável** (Overview seção / Roadmap /
@@ -99,7 +99,7 @@ por esta Stage. Use blocos de código Python quando aplicável.>
 - **O quê:** <a decisão tomada>
 - **Por quê:** <razão>
 - **Fonte:** <Overview §X / Roadmap §Stage N.M / arquivo path:linha / pergunta>
-- **ADR:** [`../../adr/N_M_NNNN-<slug>.md`](../../adr/N_M_NNNN-<slug>.md) (se aplicável)
+- **ADR:** [`../../adr/N_M_NNNN-<slug-do-adr>.md`](../../adr/N_M_NNNN-<slug-do-adr>.md) (se aplicável)
 
 ### <Decisão 2>
 - ...

@@ -95,7 +95,7 @@ Comentários e docstrings permanecem em português (conforme §4 de commits/PR).
 - **Stage:** `N.M` dentro do Step `N`. Não recicla.
 - **Task:** `task-NN` dentro do `technical.md` da Stage, zero-padded
   (`task-01`, `task-02`).
-- **ADR de Stage:** nome do arquivo `N_M_NNNN-<slug>.md` em `docs/adr/`;
+- **ADR de Stage:** nome do arquivo `N_M_NNNN-<slug-do-adr>.md` em `docs/adr/`;
   `adr_id` no frontmatter `N.M.NNNN`. `N.M` herda da Stage; `NNNN` é
   sequencial **dentro do prefixo `N_M`** (4 dígitos, não recicla) — o
   prefixo no filename é o separador namespace, **não há subpasta por
@@ -105,8 +105,38 @@ Comentários e docstrings permanecem em português (conforme §4 de commits/PR).
   específica (ex.: decisão fundacional de arquitetura). Vivem na
   mesma pasta `docs/adr/` (Stage e global coexistem; o prefixo
   `N_M` no filename basta para distinguir). Usam `N.M = 0.0` fixo —
-  nome do arquivo `0_0_NNNN-<slug>.md`; `adr_id: 0.0.NNNN`. `NNNN`
+  nome do arquivo `0_0_NNNN-<slug-do-adr>.md`; `adr_id: 0.0.NNNN`. `NNNN`
   sequencial dentro do prefixo `0_0`.
+
+### Identificador da Stage — `stage_id` × número
+
+A Stage tem **um** identificador, o `stage_id` (`N.M-<slug>`), e formas **derivadas** dele.
+Cada superfície exige uma forma, e elas **não se trocam**: um placeholder que vira comando
+com a forma errada não casa nada (HALT falso) ou casa a coisa errada (verde falso) — os dois
+já aconteceram (issue #12).
+
+| Forma | Exemplo | Onde se usa |
+|---|---|---|
+| `stage_id` — `N.M-<slug>` | `1.1-bootstrap` | `depends_on` (roadmap e frontmatter), coluna `Stage` do `roadmap.md`, campo `stage_id`, pasta `docs/stages/` |
+| número — `N.M` | `1.1` | commits reservados (`stage 1.1: complete`, §4(b)), tag de Task (`[1.1/task-01]`, §4(a)), título de PR (`stage 1.1 —`, §4(c)) |
+| `N-M` | `1-1` | branch da Stage (`feat/<num-issue>-1-1-bootstrap`, §4) |
+| `N_M` | `1_1` | prefixo do arquivo de ADR (`1_1_0001-<slug-do-adr>.md`) — o slug ali é **do ADR**, não da Stage |
+| `N.M.NNNN` | `1.1.0001` | `adr_id` (§2) |
+
+A **issue** da Stage (`#<num-issue>`) não deriva do `stage_id`: liga-se a ele pelo `issue_id`
+do `technical.md`. Na *Tabela de Issues* do roadmap, `Depende de` lista issues — inclusive de
+Stage (`#43` é a `3.6-staff-http`, a pasta cujo `technical.md` tem `issue_id: 43`).
+
+- **Conversão:** o número é o prefixo do `stage_id` até o primeiro hífen
+  (`1.1-bootstrap` → `1.1`). O inverso exige o roadmap: o número não carrega o slug.
+- **Placeholder que vira comando diz a forma** no ponto de uso: `<N.M>` é sempre o número;
+  `<dep>` é um item de `depends_on`, logo um `stage_id`; o slug de ADR é `<slug-do-adr>`, para
+  não colidir com o `<slug>` da Stage quando as variáveis de um prompt são substituídas.
+- **A checagem de dependência não converte à mão:** `python scripts/check_stage_deps.py
+  <stage_id>` recebe o `stage_id` e confere cada dependência — `done` no roadmap e
+  `stage N.M: complete` no histórico (`--ref origin/develop` para "mergeado em develop").
+  Roda também no `make docs-check`, sobre toda pasta de Stage
+  ([ADR 0.0.0009](./adr/0_0_0009-stage-dependency-check-derives-the-number.md)).
 
 ---
 

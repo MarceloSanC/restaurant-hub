@@ -2,10 +2,10 @@
 title: Runbook — Validate the CI gate per error class
 description: Step-by-step procedure to prove that each error class is rejected by the local `make check` gate (which is exactly what the CI workflow runs)
 when-use: After hardening the CI gate (a new tool joins the chain); when auditing that the existing CI gate still rejects each error class; after an incident where a regression slipped past the gate
-keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage, fetch-depth, freeze-secao-7]
+keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage, fetch-depth, freeze-secao-7, depends-on]
 status: accepted
 created_at: 2026-06-23
-updated_at: 2026-07-19
+updated_at: 2026-11-01
 runbook_id: validate-ci-gate
 triggers:
   - Hardening of the CI gate (new tool joining the chain — e.g., bandit, import-linter)
@@ -44,6 +44,9 @@ docs-check:
 	uv run python scripts/check_technical_postexec.py
 	uv run python scripts/check_stage_issue.py
 	uv run python scripts/check_adr_bounded_context.py
+	uv run python scripts/check_docs_claims.py
+	uv run python scripts/check_harness.py
+	uv run python scripts/check_stage_deps.py
 ```
 
 ## Triggers
@@ -184,7 +187,7 @@ rm src/restaurant_hub/shared/domain/_temp_violation.py
 
 ### Class 5 — `docs-check` (`check_technical_postexec.py` + `check_stage_issue.py` + `check_adr_bounded_context.py`)
 
-`make docs-check` runs three scripts in sequence; the first to exit non-zero fails the gate.
+`make docs-check` runs its scripts in sequence (§Purpose); the first to exit non-zero fails the gate. This class covers three of them; `check_stage_deps.py` has its own class (§Class 5c).
 
 1. **`check_technical_postexec.py`** enforces, on every `technical.md`:
    - **Structural (always):** exactly one `<!-- BEGIN: post-execution -->` marker and exactly one `<!-- END: post-execution -->` marker, with END after BEGIN.
@@ -254,6 +257,35 @@ git restore docs/stages/N.M-<slug>/technical.md
 ```
 
 > **Local exit codes do not close this class.** Unlike Classes 1–9, the local demonstration proves only the *mechanism*; the runner's `pull_request` event checks out `refs/pull/N/merge`, not a local clone. The environment half is closed only by an **A/B pair of real runs** on a throwaway PR — the same patch, green under `fetch-depth: 1` and red under `fetch-depth: 0`. The recorded evidence (run links) lives in §7 of [`docs/stages/1.2-ci/technical.md`](../stages/1.2-ci/technical.md). Re-do that pair if `ci.yml`'s checkout, or the baseline-lookup logic, ever changes.
+
+---
+
+### Class 5c — `docs-check` / Stage dependency pre-condition (`check_stage_deps.py`)
+
+> Added in **issue #12** ([ADR 0.0.0009](../adr/0_0_0009-stage-dependency-check-derives-the-number.md)). For every Stage folder in `docs/stages/`, each Stage listed under `Depende de` in its row of the roadmap's *Tabela de Stages* must be `done` there **and** have its reserved commit `stage N.M: complete` merged into an integration branch (`origin/develop`, `develop`, `origin/main`, `main` — whichever resolve, the same ones `check_technical_postexec.py` uses); a commit reachable only from `HEAD` (a branch stacked on an unmerged dependency) does not count. An issue dependency (`#N`) must be `done` in the *Tabela de Issues*, on exactly one row. The script takes the `stage_id` and derives the number itself (`1.1-bootstrap` → `stage 1.1: complete`) — the conversion that, done by hand, produced both a false green and a false HALT (PR #11).
+
+**Environment precondition — git history.** The input is git history, as in Class 5b, but a shallow clone never makes this check silently green. With an explicit target (`check_stage_deps.py <stage_id>`, the pre-condition of whoever opens a Stage) a shallow clone, no resolvable integration branch or a git that does not run exits **2** (fail closed). Without a target (the `docs-check` call) the roadmap status is still checked and the missing history becomes a `WARN` on stdout — the local `make check` must not require full history (ADR 1.2.0001). In CI the history exists: `fetch-depth: 0` in [`ci.yml`](../../.github/workflows/ci.yml), locked by `tests/unit/test_ci_workflow.py`, is what lets the commit half give a verdict. So the environment half needs no A/B pair of runs: a shallow CI checkout would show the `WARN` line in the log, never a false green on the commit half.
+
+**Patch:** in `docs/roadmap.md`, *Tabela de Stages*, change the `Status` of a Stage that some Stage folder depends on from `done` to `review` — e.g. the `1.1-bootstrap` row, on which the `1.2-ci` folder depends.
+
+**Command:**
+```bash
+uv run python scripts/check_stage_deps.py
+```
+
+**Expected output (fingerprint):**
+```
+check_stage_deps: FALHA — 1 violação(ões):
+  1.2-ci → 1.1-bootstrap: status `review` na Tabela de Stages (esperado `done`)
+```
+Exit code: **1** (followed by a two-line explanation of the number on stderr).
+
+A second, patch-free trigger for the conversion itself: `uv run python scripts/check_stage_deps.py 1.2` exits **2** — the target is the `stage_id`, never the bare number.
+
+**Revert:**
+```bash
+git restore docs/roadmap.md
+```
 
 ---
 
@@ -435,6 +467,8 @@ If `make check` is green and each class individually produced a non-zero exit co
 
 **Class 5b is the exception that proves the rule** — its input is git history, which the runner does *not* reproduce by default. Its local demonstration does **not** transfer on its own; it transfers only because `ci.yml` pins `fetch-depth: 0`. If that line is ever removed, Class 5b goes green on the runner without anyone noticing, and this §Verification silently overstates what it proved.
 
+**Class 5c reads git history too, but fails the other way**: without `fetch-depth: 0` it exits **2** on the runner (shallow clone detected), so the same removal turns every PR red instead of hiding anything.
+
 ## Rollback
 
 If a patch was committed by accident:
@@ -493,4 +527,4 @@ Update `updated_at` in the frontmatter and reference the hardening Stage in the 
 - Layer rules: [`../LAYOUT.md`](../LAYOUT.md) §3
 - PR gates: [`../GIT-WORKFLOW.md`](../GIT-WORKFLOW.md) §Gates
 - Runbook template: [`../templates/runbook.md`](../templates/runbook.md)
-- Validators: [`../../scripts/check_layout.py`](../../scripts/check_layout.py), [`../../scripts/check_technical_postexec.py`](../../scripts/check_technical_postexec.py), [`../../scripts/check_stage_issue.py`](../../scripts/check_stage_issue.py)
+- Validators: [`../../scripts/check_layout.py`](../../scripts/check_layout.py), [`../../scripts/check_technical_postexec.py`](../../scripts/check_technical_postexec.py), [`../../scripts/check_stage_issue.py`](../../scripts/check_stage_issue.py), [`../../scripts/check_stage_deps.py`](../../scripts/check_stage_deps.py)

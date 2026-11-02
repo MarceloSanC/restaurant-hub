@@ -129,7 +129,7 @@ boilerplate + templates + os dois artefatos. Procedimento detalhado em
 | Roadmap | `docs/roadmap.md` | [`templates/roadmap.md`](./templates/roadmap.md) |
 | Concept (por Stage) | `docs/stages/N.M-<slug>/concept.md` | [`templates/stage-concept.md`](./templates/stage-concept.md) |
 | Technical (por Stage) | `docs/stages/N.M-<slug>/technical.md` | [`templates/stage-technical.md`](./templates/stage-technical.md) |
-| ADR (quando aplicável) | `docs/adr/N_M_NNNN-<slug>.md` (mesma pasta para ADRs de Stage e globais; prefixo `N_M` no filename é o separador) | [`templates/adr.md`](./templates/adr.md) |
+| ADR (quando aplicável) | `docs/adr/N_M_NNNN-<slug-do-adr>.md` (mesma pasta para ADRs de Stage e globais; prefixo `N_M` no filename é o separador) | [`templates/adr.md`](./templates/adr.md) |
 | Runbook (quando aplicável) | `docs/runbooks/<slug>.md` | [`templates/runbook.md`](./templates/runbook.md) |
 | Código + testes | `src/`, `tests/` | — |
 
@@ -334,7 +334,7 @@ Ver [`CONVENTIONS.md`](./CONVENTIONS.md) §1 para regras completas. Resumo:
 - **Stage** `N.M` — `M` é ordem dentro do Step `N`. Ordem cronológica de
   implementação vem do `depends_on`, não do número (identidade ≠ posição).
 - **Task** `task-NN` — zero-padded.
-- **ADR** — nome do arquivo: `N_M_NNNN-<slug>.md` (ex.:
+- **ADR** — nome do arquivo: `N_M_NNNN-<slug-do-adr>.md` (ex.:
   `2_3_0001-stream-vs-batch.md`) em `docs/adr/`; `adr_id` no
   frontmatter: `N.M.NNNN` (ex.: `2.3.0001`). `N.M` herda da Stage;
   `NNNN` é sequencial **dentro do prefixo `N_M`** (4 dígitos, não

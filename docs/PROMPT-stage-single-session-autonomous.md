@@ -5,7 +5,7 @@ when-use: Apenas em corrida autônoma overnight autorizada pelo ADR 0.0.0004 (st
 keywords: [prompt, stage, autonomous, overnight, auto-merge, adr-0004, audit-gate]
 status: done
 created_at: 2026-07-12
-updated_at: 2026-07-16
+updated_at: 2026-11-01
 ---
 
 # Prompt — Execução de Stage em Sessão Única (variante AUTÔNOMA)
@@ -45,7 +45,7 @@ opcional não existe e o commit não espera revisão de diff. Em vez disso:
   (c) avalie o **ganho real** vs o **custo real** de implementação (não superestime o custo),
   (d) prefira a solução **mais simples** que já entrega boa parte do desejado, não prejudica o
   crescimento do sistema e é **fácil de trocar** depois. Registre a decisão não-trivial num
-  **ADR** (`docs/adr/<N>_<M>_NNNN-<slug>.md`, `templates/adr.md`, `status: accepted`,
+  **ADR** (`docs/adr/<N>_<M>_NNNN-<slug-do-adr>.md`, `templates/adr.md`, `status: accepted`,
   frontmatter completo com `bounded_context` — CONVENTIONS §2) com opções, trade-offs e
   reversibilidade. Decisão trivial segue como no canônico: `[decision]` na §7.
   Fork de lei, segurança ou convenção de lib/método passa pela skill `evidence-resolution`
@@ -127,23 +127,21 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
 
 ### 4. Pré-condição de dependência endurecida
 
-Onde o canônico verifica `depends_on` com `status: done` no `roadmap.md`, esta variante
-exige **mergeado em `develop`** (a cadeia avança por merge, não por status):
+Onde o canônico aceita o commit reservado mergeado em **qualquer** branch de integração
+(`origin/develop`, `develop`, `origin/main`, `main` — as que resolverem), esta variante exige
+**mergeado em `origin/develop`** (a cadeia avança por merge, não por status):
 
 ```powershell
 git fetch origin
-# para cada dependência, o commit "stage <N.M>: complete" deve estar em origin/develop
-git log origin/develop --oneline | Select-String "stage <N.M>: complete"
+python scripts/check_stage_deps.py <N.M>-<slug> --ref origin/develop   # exit 1 = HALT
 ```
 
-**`<N.M>` é o NÚMERO da Stage, não o `stage_id`.** O `depends_on` do roadmap carrega o id
-com slug (`1.1-bootstrap`), mas o commit reservado de fechamento usa só o número
-(`stage 1.1: complete` — CONVENTIONS §4(b)). Substituir `<N.M>` pelo `stage_id` não casa
-nada e produz **HALT falso** na primeira dependência checada.
-
-O padrão inclui `: complete` de propósito: `Select-String "stage <N.M>"` casaria também
-`conceptual draft`/`conceptual approved`/`technical approved` (ou qualquer commit parcial da
-Stage que tenha chegado a `develop`), dando verde para dependência que **não fechou**.
+O script recebe o `stage_id` **da Stage-alvo** e, para cada dependência, deriva o número que
+o commit reservado de fechamento carrega (`1.1-bootstrap` → `stage 1.1: complete` —
+CONVENTIONS §1 e §4(b); ADR 0.0.0009). As duas armadilhas que a checagem à mão tinha ficam no
+código, com teste: o `stage_id` no lugar do número (`stage 1.1-bootstrap: complete` não casa
+nada — **HALT falso**) e o prefixo no lugar do subject exato (`stage 1.1` casaria `conceptual
+approved` — **verde** para dependência que não fechou).
 
 `done` no roadmap sem merge = pré-condição falhou → HALT (a Stage anterior não fechou de
 verdade).

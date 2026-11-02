@@ -41,11 +41,18 @@ separada via `stage-audit`). O ganho é evitar re-hidratar contexto entre
 
 ## Variáveis a substituir
 
-- `<N.M>` — identificador da Stage (ex.: `1.2`)
-- `<slug>` — slug da Stage (ex.: `domain-skeleton`)
+- `<N.M>` — **número** da Stage, sem slug (ex.: `1.2`): o que vai no commit reservado
+  (`stage 1.2: complete`), na tag de Task e no título do PR. **Não** é o `stage_id`.
+- `<slug>` — slug da Stage (ex.: `domain-skeleton`). `<N.M>-<slug>` é o `stage_id`
+  (`1.2-domain-skeleton`): pasta, roadmap e `depends_on`.
 - `<issue>` — número da issue no GitHub (ex.: `7`)
 - `<branch>` — nome da branch (ex.: `feat/7-1-2-domain-skeleton`)
 - `<title_humano>` — título legível em PT (ex.: `esqueleto do domínio de Pagamentos`)
+
+Derivadas, substituídas junto: `<N-M>` (branch: `1-2`) e `<N>_<M>` (prefixo de ADR: `1_2`).
+**Não substituir:** `<dep>` (cada item de `depends_on`, que já é um `stage_id`) e
+`<slug-do-adr>` (o slug de cada ADR, decidido na hora — não é o `<slug>` da Stage). As formas
+e onde cada uma vale: [`CONVENTIONS.md`](./CONVENTIONS.md) §1 "Identificador da Stage".
 
 ---
 
@@ -79,7 +86,8 @@ e inegociável** (ver §Gates inegociáveis).
 - `docs/RUNBOOK-STAGE-LIFECYCLE.md` — procedimento canônico (esta sessão é variante)
 - `docs/roadmap.md` — recorte da Stage `<N.M>` e dependências
 - `tree.txt` — estado atual do repo
-- Para cada Stage em `depends_on` da `<N.M>`: `docs/stages/<dep>/concept.md`
+- Para cada Stage em `depends_on` da `<N.M>`: `docs/stages/<dep>/concept.md` — `<dep>` é o
+  item de `depends_on` como está, um `stage_id` com slug (`1.1-bootstrap`), que é o nome da pasta
 - Para cada Stage em `depends_on` (e Stages do **mesmo BC** que não sejam
   dependência formal): a **§7 (post-execution) do `technical.md`** — ler as
   entradas `[finding]` (alguma foi escalada para esta Stage?), `[decision]`
@@ -119,8 +127,10 @@ gh issue view <issue> --json number,state,title
 Test-Path "docs/stages/<N.M>-<slug>/concept.md"
 Test-Path "docs/stages/<N.M>-<slug>/technical.md"
 
-# 5. depends_on done — checar no docs/roadmap.md cada item de depends_on
-#    da Stage <N.M> está marcado como status: done
+# 5. depends_on fechado — cada Stage em depends_on está `done` no roadmap e o commit
+#    reservado `stage N.M: complete` dela está no histórico deste branch. O script recebe
+#    o stage_id e deriva o número sozinho (CONVENTIONS §1; ADR 0.0.0009). Exit 1 = PARE.
+python scripts/check_stage_deps.py <N.M>-<slug>
 ```
 
 Pré-condições **não são burocracia**: pular qualquer uma compromete o resto
@@ -143,7 +153,7 @@ do fluxo. Trate como gate objetivo.
    Frontmatter conforme `CONVENTIONS.md` §2. Seções inaplicáveis **removidas**
    (não escrever "N/A").
 6. Para cada decisão maior com alternativa real descartada → ADR em
-   `docs/adr/<N>_<M>_NNNN-<slug>.md` (`templates/adr.md`, `status: accepted`).
+   `docs/adr/<N>_<M>_NNNN-<slug-do-adr>.md` (`templates/adr.md`, `status: accepted`).
 7. Autovalidar contra o checklist do Passo 5 do runbook (fonte única):
    escopo, decisões rastreáveis, contratos batem com roadmap, critérios
    objetivos, §12 100% sim, ADRs `accepted`, cabe em 3–12 Tasks.

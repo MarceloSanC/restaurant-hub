@@ -5,7 +5,7 @@ when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) trav
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
 created_at: 2026-07-05
-updated_at: 2026-10-19
+updated_at: 2026-11-01
 ---
 
 # Prompt — Orquestração de Step em Sessão Mestra
@@ -174,7 +174,7 @@ de uma abordagem viável):
    em `.claude/skills/`**.
 3. **Bifurcação:**
    - **Docs respondem 100%** → o subagente **decide sozinho** pela abordagem que os docs sustentam,
-     e **registra a decisão em ADR** (`docs/adr/<N>_<M>_NNNN-<slug>.md`, `status: accepted`) —
+     e **registra a decisão em ADR** (`docs/adr/<N>_<M>_NNNN-<slug-do-adr>.md`, `status: accepted`) —
      opções, escolha, trade-offs, reversibilidade, e a **âncora** nos docs que a justifica.
    - **Docs não respondem 100%** → **triagem da skill `evidence-resolution`**. Classe **E/C** (lei, segurança,
      comportamento de lib, convenção de método) → o subagente **resolve por evidência verificada**
@@ -235,6 +235,16 @@ Stage com os esqueletos, commit inicial): no fluxo original, quem os criava era 
 colar o prompt. Aqui **não há humano no meio** — e o subagente de Concept trava na primeira
 verificação. Portanto **é a mestra que os cria**, antes de despachar o primeiro subagente da Stage.
 Invocar `git-versioning-pointer` antes de qualquer operação git.
+
+Tudo sai do `stage_id` da Stage na *Tabela de Stages* (ex.: `4.3-scheduling-application`): a
+pasta é o próprio `stage_id`; a branch leva `<N-M>` (`4-3`); o commit reservado e a tag de Task
+levam `<N.M>`, só o número (`4.3`) — [`CONVENTIONS.md`](./CONVENTIONS.md) §1 "Identificador da
+Stage".
+
+**Antes de tudo, as dependências (bloqueante):** `git fetch origin` e
+`python scripts/check_stage_deps.py <stage_id> --ref origin/develop` — o script recebe o
+`stage_id` e deriva o número do commit reservado (ADR 0.0.0009). Exit 1 = alguma dependência
+não está mergeada em `develop`: a Stage não abre (o Step é sequencial, §3.5).
 
 1. **Issue primeiro (bloqueante).** Buscar duplicata (`gh issue list --search "<termos do escopo>"`)
    e só então `gh issue create` — título e corpo em **PT**, escopo vindo do recorte da Stage no
@@ -363,7 +373,8 @@ de domínio que passou a `accepted` (ou, no Step 1, a **dispensa do gate** com a
    a dispensa no relatório. Step posterior aparentemente "só infra" → **fork ao humano**, não
    dispensa automática.
 3. **Para cada Stage do Step, em ordem de dependência:**
-   1. **Abrir a Stage** (§ Abertura de cada Stage): issue → branch → esqueletos → commit inicial.
+   1. **Abrir a Stage** (§ Abertura de cada Stage): dependências mergeadas → issue → branch →
+      esqueletos → commit inicial.
       Sem isso o subagente de Concept trava nas pré-condições do canônico.
    2. Despachar os **subagentes de fase** (Princípio central): Concept → Checkpoint A → Technical →
       Checkpoint B → Execução → Checkpoint C → Auditoria de testes. Cada **fork** é resolvido por
@@ -385,7 +396,8 @@ de domínio que passou a `accepted` (ou, no Step 1, a **dispensa do gate** com a
 Por dentro de cada fase, **tudo** do canônico continua valendo:
 
 - Carregar contexto antes de agir; pré-condições bloqueantes (working tree limpo, branch correta,
-  issue OPEN, estrutura da Stage, `depends_on` **mergeado em develop**).
+  issue OPEN, estrutura da Stage, `depends_on` **mergeado em develop** — `check_stage_deps.py
+  --ref origin/develop`, §Abertura de cada Stage; o canônico confere contra o próprio branch).
 - Fases 3A/3B/4, critérios de Task Atômica, 3–12 (ou ROADMAP-1) Tasks, escopo estrito por Task.
 - **Checkpoints A/B/C** e **auditoria de testes por subagente independente** (loop até todos "sim",
   com mutação real) — aqui são exatamente os subagentes de fase; **nunca** pulados.
