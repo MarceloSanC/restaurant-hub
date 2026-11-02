@@ -9,6 +9,7 @@ deixa de ser observável pela API sem que nenhum teste fique vermelho.
 import json
 
 import pytest
+from fastapi import FastAPI
 
 from restaurant_hub.features.identity.adapters.inbound.http import error_handlers as handlers
 from restaurant_hub.features.identity.application import errors as application_errors
@@ -268,3 +269,16 @@ def test_corpo_exato_por_faixa_para_toda_classe_das_duas_raizes(classe: type[Exc
     else:
         assert corpo == {"detail": _MENSAGEM_PLANTADA, "type": "identity_error"}
         assert "WWW-Authenticate" not in resposta.headers
+
+
+def test_o_registrador_instala_o_mesmo_handler_nas_duas_raizes() -> None:
+    """Um handler só, sobre as duas raízes (ADR 3.9.0001 §4) — não dois que divirjam.
+
+    Um segundo handler na raiz de aplicação, sem o log da causa suprimida ou com
+    outro corpo, passaria pelo resto desta suíte, que exercita `build_error_response`
+    direto.
+    """
+    app = FastAPI()
+    handlers.register_identity_error_handlers(app)
+
+    assert app.exception_handlers[IdentityError] is app.exception_handlers[IdentityApplicationError]
