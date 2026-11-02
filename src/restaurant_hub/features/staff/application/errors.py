@@ -1,33 +1,40 @@
 """Erros da camada de aplicação do BC staff.
 
-Todos herdam de `StaffError` (domínio, Stage 3.1) e, por consequência, de
-`DomainError`, que é a única raiz com handler HTTP registrado (ADR 2.2.0003).
-A alternativa que o ADR recusa — uma hierarquia de aplicação paralela, fora
-de `DomainError` — deixou de ser representável na #45, quando o
-`ApplicationError` do template foi removido por não ter subclasse nem `raise`
-em seis Stages. O pior caso não-ajustado é 422; a
-Stage 3.4 refina para 404/409 registrando handlers, sem tocar nesta camada.
+Duas raízes, uma por significado (ADR 3.9.0001, que supera o 2.2.0003):
 
-Os **dois** erros de "não encontrado" herdam também de `NotFoundError`, **nesta
-ordem**: a MRO fica `… -> StaffError -> NotFoundError -> DomainError`, e o
-lookup de handler do Starlette (que percorre `type(exc).__mro__`) alcança o
-handler da raiz do BC antes do genérico, e o 404 antes do 422.
+- `StaffError` (domínio, Stage 3.1) — uma regra que o produto enuncia foi violada:
+  nome de função único no tenant, função ou registro em uso, localização imutável,
+  cópia para a própria unidade, as recusas de login.
+- `StaffApplicationError` (abaixo, sobre `ApplicationError`) — o caso de uso não
+  pôde ser atendido por motivo que não é regra: o recurso endereçado não existe
+  **no tenant/unidade consultado**, ou um id gerado colide no armazenamento.
 
-São dois, não três: o `UnavailabilityNotFoundError` do domínio 3.1 continua
-herdando **só** de `StaffError` e é deliberadamente **422**, porque fala de um
-**valor dentro do agregado** (um período que aquele registro não tem), não de
-um recurso endereçável — o funcionário existe e foi encontrado (concept §4).
+Cada classe tem **uma** base. A resposta que cada erro produz para quem chamou é
+decidida pelo adapter de entrada, num mapa explícito e testado por totalidade.
+
+O `UnavailabilityNotFoundError` do domínio 3.1 não é um destes: fala de um **valor
+dentro do agregado** (um período que aquele registro não tem), não de um recurso
+endereçável — o funcionário existe e foi encontrado (concept 3.2 §4) —, e por isso
+segue sob `StaffError`.
 
 Erros de invariante do domínio (`InvalidNameError`, `EmptyJobFunctionsError`,
-`OverlappingUnavailabilityError` etc.) **não** são reembrulhados: sobem como
-estão, com a mesma raiz `StaffError` (concept §5.15).
+`OverlappingUnavailabilityError` etc.) **não** são reembrulhados: sobem como estão,
+com a raiz `StaffError` (concept 3.2 §5.15).
 """
 
 from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
-from restaurant_hub.shared.domain.exceptions.base import NotFoundError
+from restaurant_hub.shared.application.errors import ApplicationError
 
 
-class JobFunctionNotFoundError(StaffError, NotFoundError):
+class StaffApplicationError(ApplicationError):
+    """Raiz das falhas de caso de uso de staff que não são regra de negócio.
+
+    Par de `StaffError` (domínio): todo erro deste BC descende de exatamente uma
+    das duas (ADR 3.9.0001 §2).
+    """
+
+
+class JobFunctionNotFoundError(StaffApplicationError):
     """Função de trabalho inexistente **no tenant consultado**.
 
     Como todo acesso é escopado por tenant (ADR 3.2.0002), uma função que
@@ -40,7 +47,7 @@ class JobFunctionNotFoundError(StaffError, NotFoundError):
         super().__init__(f"função de trabalho não encontrada: {job_function_id!r}")
 
 
-class EmployeeNotFoundError(StaffError, NotFoundError):
+class EmployeeNotFoundError(StaffApplicationError):
     """Registro de funcionário inexistente **no tenant consultado**.
 
     Mesma regra de escopo de `JobFunctionNotFoundError`: registro de outro
@@ -64,7 +71,7 @@ class JobFunctionNameAlreadyExistsError(StaffError):
         super().__init__(f"nome de função de trabalho já usado no restaurante: {name!r}")
 
 
-class JobFunctionAlreadyExistsError(StaffError):
+class JobFunctionAlreadyExistsError(StaffApplicationError):
     """Função com o mesmo id já gravada — `add` é inserção, não upsert (L-JF1).
 
     A colisão de id é checada **globalmente**, não por tenant: na 3.3 o id é a
@@ -76,7 +83,7 @@ class JobFunctionAlreadyExistsError(StaffError):
         super().__init__(f"função de trabalho já existe: {job_function_id!r}")
 
 
-class EmployeeAlreadyExistsError(StaffError):
+class EmployeeAlreadyExistsError(StaffApplicationError):
     """Funcionário com o mesmo id já gravado — `add` é inserção (L-E1).
 
     Escopo global do id, pelo mesmo motivo de `JobFunctionAlreadyExistsError`.
@@ -154,8 +161,8 @@ class LoginEmailAlreadyInUseError(StaffError):
     gerente precisa distingui-la das demais recusas de R17. A mensagem cita
     **só** o e-mail enviado — nunca de quem é, nem em que tenant: dizer mais
     seria o oráculo de existência global de conta que a 2.5 §13 registrou e que
-    esta Stage mantém por coerência (concept 3.5 §10). 409: conflito com estado
-    já gravado do outro lado da fronteira.
+    esta Stage mantém por coerência (concept 3.5 §10). É conflito com estado já
+    gravado do outro lado da fronteira.
     """
 
     def __init__(self, email: str) -> None:
@@ -167,8 +174,8 @@ class InvalidLoginEmailError(StaffError):
 
     Tradução do `InvalidEmailError` de identity (L-IG2): staff **não** valida
     e-mail — o VO `Email` é de identity, e é a fachada quem o constrói (concept
-    3.5 §5.7). Inclui o byte NUL, que o VO passa a recusar nesta Stage (D8).
-    422: invariante violada pelo conteúdo enviado.
+    3.5 §5.7). Inclui o byte NUL, que o VO passa a recusar nesta Stage (D8). É
+    invariante violada pelo conteúdo enviado.
     """
 
     def __init__(self, email: str) -> None:
@@ -186,7 +193,7 @@ class EmployeeHasLoginError(StaffError):
     caminho é **desligar** (R13), que preserva o registro e corta o acesso que
     ele concede (as sessões do login de funcionário — ADR 3.8.0001).
     Vale também para o desligado com login: o vínculo é história (concept 3.5
-    §5.5). 409: conflito com estado já gravado.
+    §5.5). É conflito com estado já gravado.
     """
 
     def __init__(self, employee_id: str) -> None:

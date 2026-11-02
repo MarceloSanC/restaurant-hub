@@ -28,6 +28,7 @@ from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     EmployeeRelocationError,
     JobFunctionNotFoundError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -401,7 +402,7 @@ def test_l_e3_update_com_tenant_alheio_e_not_found_mesmo_com_unidade_divergente(
     catálogo do A.
     """
     _com_funcionario_gravado(repos)
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         repos.employees.update(_funcionario(tenant_id=_B, unit_id=_U2, name="Joana"))
     assert type(excecao.value) is EmployeeNotFoundError
 
@@ -841,7 +842,7 @@ def test_ca9_delete_com_unidade_alheia_e_not_found_e_nao_remove(
     """
     _com_funcionario_gravado(repos)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         repos.employees.delete(_A, _U2, _E1)
     assert type(excecao.value) is EmployeeNotFoundError
 

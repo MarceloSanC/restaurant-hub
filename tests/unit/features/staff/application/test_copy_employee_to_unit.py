@@ -25,6 +25,7 @@ from restaurant_hub.features.staff.application.dtos.results import EmployeeResul
 from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     SameUnitCopyError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.use_cases.copy_employee_to_unit import (
     CopyEmployeeToUnitUseCase,
@@ -335,7 +336,7 @@ def test_precedencia_origem_de_outro_tenant_vence_destino_igual() -> None:
     fakes = _fakes()
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
                 actor=TEST_ACTOR, tenant_id=_B, unit_id=_U1, employee_id=_E1, target_unit_id=_U1
@@ -432,7 +433,7 @@ def test_ca11_copia_com_unidade_de_origem_alheia_nao_alcanca_o_registro() -> Non
     fakes = _fakes()
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _copiar(fakes).execute(
             CopyEmployeeToUnitCommand(
                 actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2, employee_id=_E1, target_unit_id=_U1

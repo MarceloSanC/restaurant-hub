@@ -2,15 +2,15 @@
 
 **Mora na feature, não em `shared`.** O handler genérico de
 `shared/infrastructure/http/error_handlers.py` converte `DomainError` em 422 e
-`NotFoundError` em 404, e continua valendo como rede de segurança; mas as classes
-de staff não podem ser referenciadas de `shared`, que não importa de features
-(LAYOUT §7).
+continua valendo como rede de segurança para o domínio; mas as classes de staff não
+podem ser referenciadas de `shared`, que não importa de features (LAYOUT §7).
 
-**Um handler só, registrado sobre `StaffError`.** O status é resolvido
-percorrendo o `__mro__` da exceção contra o mapa abaixo. Starlette escolhe o
-handler pelo primeiro tipo do MRO que estiver registrado, e como `StaffError`
-precede `NotFoundError`/`DomainError` em todas as MROs deste BC, este handler
-ganha dos genéricos — o que é o desejado, porque o mapa daqui é mais específico.
+**Um handler só, registrado sobre as duas raízes do BC** — `StaffError` (domínio) e
+`StaffApplicationError` (aplicação), ADR 3.9.0001. Starlette escolhe o handler pelo
+primeiro tipo do `__mro__` da exceção que estiver registrado; toda classe deste BC
+tem uma raiz só, que vem antes de `DomainError`/`ApplicationError`, então este
+handler ganha do genérico. É **só aqui** que a ordem da MRO importa — a hierarquia
+não é desenhada para o framework —, e o status sai do mapa abaixo.
 
 **A totalidade do mapa é um teste, não uma promessa.** Um erro novo sem entrada
 cairia no default 422 em silêncio, que é exatamente como um 409 vira 422 sem
@@ -59,6 +59,7 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionNotFoundError,
     LoginEmailAlreadyInUseError,
     SameUnitCopyError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
@@ -75,6 +76,9 @@ from restaurant_hub.features.staff.domain.exceptions.errors import (
     UnavailabilityNotFoundError,
 )
 
+# O que este BC pode levantar: as suas duas raízes (ADR 3.9.0001 §2).
+type StaffFailure = StaffError | StaffApplicationError
+
 HTTP_NOT_FOUND: Final = 404
 HTTP_CONFLICT: Final = 409
 HTTP_UNPROCESSABLE: Final = 422
@@ -85,10 +89,11 @@ HTTP_UNPROCESSABLE: Final = 422
 # para não ficarem verdes contra o erro errado.
 STAFF_ERROR_TYPE: Final = "staff_error"
 
-STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
+STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     # 404 — recurso endereçável ausente **no tenant do ator** e, para
-    # funcionário, **na unidade do endereço** (ADR 3.4.0007). São os dois que
-    # herdam de `NotFoundError`, e a herança existe precisamente para isto.
+    # funcionário, **na unidade do endereço** (ADR 3.4.0007). Os dois são falhas
+    # de lookup, sob `StaffApplicationError` (ADR 3.9.0001); o 404 vem daqui, não
+    # da hierarquia.
     JobFunctionNotFoundError: HTTP_NOT_FOUND,
     EmployeeNotFoundError: HTTP_NOT_FOUND,
     # 409 — conflito com estado **já gravado**: ou a chave existe, ou uma
@@ -136,8 +141,8 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
     # cliente enviou, não colisão de chave gravada.
     OverlappingUnavailabilityError: HTTP_UNPROCESSABLE,
     # 422 e **não** 404: o período é um valor **dentro** do agregado, não um
-    # recurso endereçável — o funcionário existe e foi encontrado. A classe herda
-    # **só** de `StaffError`, precisamente para que a MRO não a leve ao 404.
+    # recurso endereçável — o funcionário existe e foi encontrado. Por isso a
+    # classe fica sob `StaffError`, e não com os dois lookups acima.
     UnavailabilityNotFoundError: HTTP_UNPROCESSABLE,
     # Entrada por **totalidade**: `EmployeeRelocationError` é **inalcançável por
     # HTTP nesta Stage**, porque nenhuma rota permite enviar `unit_id` num
@@ -153,7 +158,7 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffError], int]] = {
 }
 
 
-def resolve_status(exc: StaffError) -> int:
+def resolve_status(exc: StaffFailure) -> int:
     """Status da exceção, resolvido pelo `__mro__`.
 
     Percorrer o MRO — em vez de olhar só `type(exc)` — faz uma subclasse futura
@@ -169,7 +174,7 @@ def resolve_status(exc: StaffError) -> int:
     return HTTP_UNPROCESSABLE
 
 
-def build_error_response(exc: StaffError) -> JSONResponse:
+def build_error_response(exc: StaffFailure) -> JSONResponse:
     """Monta a resposta do erro de staff, com o discriminador de corpo próprio.
 
     Não há regra de corpo constante aqui, e a assimetria com identity é
@@ -186,8 +191,14 @@ def build_error_response(exc: StaffError) -> JSONResponse:
 
 
 def register_staff_error_handlers(app: FastAPI) -> None:
-    """Registra o handler único de `StaffError` na aplicação."""
+    """Registra o handler único do BC sobre as **duas** raízes (ADR 3.9.0001 §4).
 
+    Uma raiz sem registro deixaria os erros dela sem handler algum — não há rede
+    genérica para `ApplicationError` —, e `test_status_map.py` cobra o registro de
+    cada raiz.
+    """
+
+    @app.exception_handler(StaffApplicationError)
     @app.exception_handler(StaffError)
-    async def staff_error_handler(request: Request, exc: StaffError) -> JSONResponse:
+    async def staff_error_handler(request: Request, exc: StaffFailure) -> JSONResponse:
         return build_error_response(exc)

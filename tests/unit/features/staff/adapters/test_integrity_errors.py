@@ -32,6 +32,7 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
 
@@ -86,7 +87,7 @@ def test_mapa_de_insercao_de_funcao(constraint: str, esperado: type[Exception]) 
     assert isinstance(traduzido, esperado)
     # Nada escapa da hierarquia e vira 500 por descuido — todos herdam de
     # `StaffError`, que tem handler registrado.
-    assert isinstance(traduzido, StaffError)
+    assert isinstance(traduzido, StaffError | StaffApplicationError)
 
 
 def test_mapa_de_atualizacao_de_funcao_so_traduz_conflito_de_nome() -> None:
@@ -123,7 +124,7 @@ def test_mapa_de_escrita_de_funcionario(constraint: str, esperado: type[Exceptio
     """L-E1 (backstop da colisão de id) e L-E4 (backstop da pré-checagem)."""
     traduzido = integrity_errors.translate(_erro(constraint), ON_WRITE_EMPLOYEE, "e1")
     assert isinstance(traduzido, esperado)
-    assert isinstance(traduzido, StaffError)
+    assert isinstance(traduzido, StaffError | StaffApplicationError)
 
 
 def test_os_quatro_mapas_estao_completos_e_sao_exatamente_estes() -> None:

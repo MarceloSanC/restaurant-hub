@@ -1,9 +1,9 @@
 """Exceções de domínio do bounded context staff.
 
 Todas herdam de `StaffError`, que por sua vez herda de `DomainError`
-(`shared/domain`) — o error handler HTTP (Stage 2.4) converte a hierarquia
-`DomainError` em resposta 4xx. Aqui garante-se apenas a hierarquia e a mensagem;
-nenhuma exceção carrega estado além do texto.
+(`shared/domain`): cada uma nomeia uma regra do domínio violada (ADR 3.9.0001). Aqui
+garante-se apenas a hierarquia e a mensagem; nenhuma exceção carrega estado além do
+texto. O que cada uma vira para quem chamou é decidido pelo adapter de entrada.
 """
 
 from restaurant_hub.shared.domain.exceptions.base import DomainError
@@ -38,7 +38,7 @@ class InvalidNameError(StaffError):
 
     `reason` existe para que a mensagem não afirme algo falso — dizer "não pode
     ser vazio" sobre um nome que tem conteúdo seria descrever o defeito errado a
-    quem recebe o 422.
+    quem recebe a recusa.
     """
 
     def __init__(self, entity: str, reason: str = "não pode ser vazio") -> None:
@@ -50,7 +50,8 @@ class InvalidDayPeriodError(StaffError):
 
     Espelha `InvalidRoleError` de identity: a conversão de texto para o enum
     falha como **erro de domínio**, e não como o `ValueError` cru do `StrEnum`
-    (que não é `StaffError`, não tem handler, e viraria 500 na borda).
+    (que não é `StaffError`: nenhuma borda saberia classificá-lo, e ele chegaria a
+    quem chamou como falha do servidor).
     """
 
     def __init__(self, value: str) -> None:
@@ -113,8 +114,7 @@ class EmployeeAlreadyHasLoginError(StaffError):
 
     O vínculo é definido **uma vez** por registro (concept 3.5 §5.5): não há
     "trocar o login" — desvincular/relinkar é finding para Stage própria. É
-    conflito com estado **já gravado**, e por isso 409 na borda; herda só de
-    `StaffError` para que a MRO não a leve a 404.
+    conflito com estado **já gravado**, não recurso ausente.
     """
 
     def __init__(self, employee_id: str) -> None:

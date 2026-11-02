@@ -17,6 +17,7 @@ from restaurant_hub.features.staff.application.dtos.commands import AssignJobFun
 from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     JobFunctionNotFoundError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.use_cases.assign_job_functions import (
     AssignJobFunctionsUseCase,
@@ -249,7 +250,7 @@ def test_precedencia_registro_inexistente_vence_funcao_inexistente() -> None:
     fakes = _fakes()
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
                 actor=TEST_ACTOR,
@@ -286,7 +287,7 @@ def test_ca11_atribuicao_com_unidade_alheia_nao_alcanca_o_registro() -> None:
     fakes = _fakes()
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _atribuir(fakes).execute(
             AssignJobFunctionsCommand(
                 actor=TEST_ACTOR,

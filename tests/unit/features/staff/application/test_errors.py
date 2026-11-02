@@ -1,11 +1,10 @@
-"""Testes da hierarquia de erros da camada de aplicação do BC staff (concept §11).
+"""Testes da hierarquia de erros da camada de aplicação do BC staff (concept 3.2 §11; 3.9).
 
-Espelho de `tests/unit/features/identity/application/test_errors.py`. A
-invariante protegida é de **segurança operacional**, não de estética: um erro
-desta camada que escape de `DomainError` vira HTTP 500 na Stage 3.4 em vez de um
-4xx (ADR 2.2.0003). O teste percorre o módulo por introspecção, então uma classe
-nova que esqueça a base certa quebra a suíte — em vez de falhar em silêncio
-meses depois, na API.
+Espelho de `tests/unit/features/identity/application/test_errors.py`. Cada erro
+desta camada tem **uma** raiz, escolhida pelo significado (ADR 3.9.0001, que supera
+o 2.2.0003): `StaffError` quando nomeia regra do produto, `StaffApplicationError`
+quando o caso de uso não pôde ser atendido por motivo que não é regra (lookup,
+colisão de id gerado). A partição é travada por **igualdade de conjuntos**.
 """
 
 import inspect
@@ -13,27 +12,29 @@ import inspect
 import pytest
 
 from restaurant_hub.features.staff.application import errors
+from restaurant_hub.features.staff.application.errors import StaffApplicationError
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     StaffError,
     UnavailabilityNotFoundError,
 )
-from restaurant_hub.shared.domain.exceptions.base import DomainError, NotFoundError
+from restaurant_hub.shared.application.errors import ApplicationError
+from restaurant_hub.shared.domain.exceptions.base import DomainError
 
 pytestmark = pytest.mark.unit
 
-# Os DOIS erros que representam "recurso inexistente" e, por isso, devem
-# alcançar o handler 404 antes do 422 (concept §4).
-_NOT_FOUND_ERRORS = (
+# Falhas que não são regra (concept 3.9 §4): lookup no tenant/unidade e colisão de
+# id gerado. O resto do módulo nomeia regra do produto e fica sob `StaffError`.
+_DE_APLICACAO = (
     errors.JobFunctionNotFoundError,
     errors.EmployeeNotFoundError,
-)
-
-# Todo o resto: conflito, uso, relocalização, cópia e — desde a 3.5 — as três
-# recusas de login da camada de aplicação. Nenhum é ausência.
-_NON_NOT_FOUND_ERRORS = (
-    errors.JobFunctionNameAlreadyExistsError,
     errors.JobFunctionAlreadyExistsError,
     errors.EmployeeAlreadyExistsError,
+)
+
+# Conflito, uso, relocalização, cópia e — desde a 3.5 — as três recusas de login da
+# camada de aplicação: regras do produto.
+_DE_DOMINIO = (
+    errors.JobFunctionNameAlreadyExistsError,
     errors.JobFunctionInUseError,
     errors.EmployeeInUseError,
     errors.EmployeeRelocationError,
@@ -56,7 +57,9 @@ def _application_error_classes() -> list[type]:
     return [
         obj
         for _, obj in inspect.getmembers(errors, inspect.isclass)
-        if obj.__module__ == errors.__name__
+        # A raiz de aplicação (Stage 3.9) não é um erro: é o tipo sobre o qual o
+        # handler é registrado, e tem teste próprio abaixo.
+        if obj.__module__ == errors.__name__ and obj is not StaffApplicationError
     ]
 
 
@@ -87,78 +90,50 @@ def test_modulo_declara_as_doze_excecoes_esperadas() -> None:
     }
 
 
-def test_a_particao_404_x_nao_404_cobre_todos_os_erros_do_modulo() -> None:
+def test_a_particao_dominio_aplicacao_cobre_todos_os_erros_do_modulo() -> None:
     """As duas tuplas literais **particionam** o módulo — nenhum erro fica de fora.
 
-    Sem esta asserção as duas listas são só amostras: um décimo erro futuro
-    entraria na lista de nomes esperados (que o teste acima trava) e **escaparia**
-    da checagem `not issubclass(..., NotFoundError)`, porque ninguém o teria
-    acrescentado à tupla. Um `*AlreadyExistsError` acidentalmente 404 passaria
-    verde — que é exatamente o defeito que a partição existe para impedir.
-
-    (O espelho deste teste em identity tem o mesmo flanco aberto; o defeito não
-    foi replicado aqui de propósito.)
+    Sem esta asserção as duas listas seriam amostras: um erro futuro escaparia da
+    checagem de raiz por ninguém o ter acrescentado a uma das tuplas.
     """
-    particao = set(_NOT_FOUND_ERRORS) | set(_NON_NOT_FOUND_ERRORS)
-    assert particao == set(_application_error_classes())
-    # E são disjuntas: um erro em ambas as tuplas satisfaria a união acima e
-    # tornaria as duas asserções contraditórias sobre a mesma classe.
-    assert not set(_NOT_FOUND_ERRORS) & set(_NON_NOT_FOUND_ERRORS)
+    assert set(_DE_DOMINIO) | set(_DE_APLICACAO) == set(_application_error_classes())
+    assert not set(_DE_DOMINIO) & set(_DE_APLICACAO)
 
 
-@pytest.mark.parametrize("error_class", _application_error_classes())
-def test_todo_erro_de_aplicacao_e_staff_error_e_domain_error(error_class: type) -> None:
-    """Nenhum erro de negócio desta camada pode escapar para 500 na 3.4.
-
-    `BaseException` primeiro: uma classe sem base de exceção não é levantável, e
-    `raise` dela dá `TypeError` — 500 garantido, que é exatamente o que o
-    ADR 2.2.0003 existe para impedir.
-    """
+@pytest.mark.parametrize("error_class", _application_error_classes(), ids=lambda c: c.__name__)
+def test_todo_erro_da_camada_e_levantavel(error_class: type) -> None:
+    """Uma classe sem base de exceção não é levantável: `raise` dela dá `TypeError`."""
     assert issubclass(error_class, BaseException)
-    assert issubclass(error_class, StaffError)
-    assert issubclass(error_class, DomainError)
 
 
-@pytest.mark.parametrize("error_class", _NOT_FOUND_ERRORS)
-def test_erros_de_nao_encontrado_ordenam_bc_antes_de_404_antes_de_422(
-    error_class: type[Exception],
-) -> None:
-    """A ORDEM na MRO é o que decide qual handler responde.
+@pytest.mark.parametrize("error_class", _DE_APLICACAO, ids=lambda c: c.__name__)
+def test_falhas_que_nao_sao_regra_tem_so_a_raiz_de_aplicacao(error_class: type) -> None:
+    """Uma base só, e nenhum caminho até `DomainError` (ADR 3.9.0001 §2)."""
+    assert error_class.__bases__ == (StaffApplicationError,)
+    assert not issubclass(error_class, DomainError)
 
-    O Starlette resolve o handler percorrendo `type(exc).__mro__` e parando na
-    primeira classe registrada. A 3.4 registra um handler para a **raiz do BC**
-    (`StaffError`) e a 1.1 já registra `NotFoundError` (404) e `DomainError`
-    (422): o do BC precisa ganhar do genérico, e entre os genéricos o 404
-    precisa ganhar do 422.
 
-    Asserido por **índice**, não por `issubclass` — que passa nas duas ordens e
-    deixaria a inversão silenciosa.
+@pytest.mark.parametrize("error_class", _DE_DOMINIO, ids=lambda c: c.__name__)
+def test_regras_do_produto_tem_so_a_raiz_de_dominio(error_class: type) -> None:
+    """Conflito e ausência são opostos no significado — e agora também na raiz."""
+    assert error_class.__bases__ == (StaffError,)
+    assert not issubclass(error_class, ApplicationError)
+
+
+def test_a_raiz_de_aplicacao_e_filha_direta_de_application_error() -> None:
+    assert StaffApplicationError.__bases__ == (ApplicationError,)
+
+
+def test_indisponibilidade_nao_encontrada_fica_no_dominio() -> None:
+    """`UnavailabilityNotFoundError` no domínio é decisão, não esquecimento.
+
+    O nome diz "not found" e mesmo assim ela fica sob `StaffError`: fala de um
+    **valor dentro do agregado** (um período que aquele registro não tem), não de um
+    recurso endereçável — o funcionário existe e foi encontrado (concept 3.2 §4;
+    ADR 3.9.0001 §3).
     """
-    mro = error_class.__mro__
-    assert mro.index(StaffError) < mro.index(NotFoundError) < mro.index(DomainError)
-
-
-@pytest.mark.parametrize("error_class", _NON_NOT_FOUND_ERRORS)
-def test_conflito_uso_e_relocalizacao_nao_sao_not_found(error_class: type) -> None:
-    """Conflito e ausência são simétricos no nome e opostos no significado.
-
-    Herdar `NotFoundError` por simetria descuidada faria a 3.4 responder 404 a
-    um conflito de chave — ou, pior, a um `EmployeeRelocationError`, que só
-    existe quando o registro **foi** encontrado.
-    """
-    assert issubclass(error_class, StaffError)
-    assert not issubclass(error_class, NotFoundError)
-
-
-def test_indisponibilidade_nao_encontrada_e_422_e_nao_404() -> None:
-    """`UnavailabilityNotFoundError` fora de `NotFoundError` é decisão, não esquecimento.
-
-    O nome diz "not found" e mesmo assim ele é 422: fala de um **valor dentro
-    do agregado** (um período que aquele registro não tem), não de um recurso
-    endereçável — o funcionário existe e foi encontrado (concept §4).
-    """
-    assert issubclass(UnavailabilityNotFoundError, StaffError)
-    assert not issubclass(UnavailabilityNotFoundError, NotFoundError)
+    assert UnavailabilityNotFoundError.__bases__ == (StaffError,)
+    assert not issubclass(UnavailabilityNotFoundError, ApplicationError)
 
 
 def test_mensagens_identificam_o_recurso_ou_a_regra_violada() -> None:

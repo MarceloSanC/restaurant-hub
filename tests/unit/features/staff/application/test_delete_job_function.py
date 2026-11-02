@@ -27,6 +27,7 @@ from restaurant_hub.features.staff.application.dtos.commands import DeleteJobFun
 from restaurant_hub.features.staff.application.errors import (
     JobFunctionInUseError,
     JobFunctionNotFoundError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.use_cases.delete_job_function import (
     DeleteJobFunctionUseCase,
@@ -216,7 +217,7 @@ def test_precedencia_not_found_vence_in_use_com_tenant_alheio() -> None:
     _funcionario(fakes)  # a função está EM USO no tenant A
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _apagar(fakes).execute(
             DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_B, job_function_id=_F1)
         )

@@ -11,7 +11,10 @@ from decimal import Decimal
 import pytest
 
 from restaurant_hub.features.staff.application.dtos.commands import CreateEmployeeCommand
-from restaurant_hub.features.staff.application.errors import JobFunctionNotFoundError
+from restaurant_hub.features.staff.application.errors import (
+    JobFunctionNotFoundError,
+    StaffApplicationError,
+)
 from restaurant_hub.features.staff.application.use_cases.create_employee import (
     CreateEmployeeUseCase,
 )
@@ -220,7 +223,7 @@ def test_precedencia_funcao_inexistente_vence_nome_vazio() -> None:
     novo. Asserção por **tipo exato**.
     """
     fakes = _com_funcoes()
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _criar(fakes).execute(_comando(name="", funcoes=frozenset({JobFunctionId("f99")})))
     assert type(excecao.value) is JobFunctionNotFoundError
 

@@ -28,6 +28,7 @@ from restaurant_hub.features.staff.application.dtos.results import EmployeeResul
 from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     JobFunctionInUseError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
@@ -332,7 +333,7 @@ def test_ca11_transicao_com_unidade_alheia_nao_alcanca_o_registro(
     antes_estado = _result(fakes)
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         executar(fakes)
     assert type(excecao.value) is EmployeeNotFoundError, nome
 

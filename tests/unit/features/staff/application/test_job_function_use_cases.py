@@ -23,6 +23,7 @@ from restaurant_hub.features.staff.application.dtos.queries import ListJobFuncti
 from restaurant_hub.features.staff.application.errors import (
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
+    StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.use_cases.create_job_function import (
     CreateJobFunctionUseCase,
@@ -295,7 +296,7 @@ def test_precedencia_inexistente_vence_nome_ja_usado() -> None:
     )
     antes = len(fakes.store.calls)
 
-    with pytest.raises(StaffError) as excecao:
+    with pytest.raises((StaffError, StaffApplicationError)) as excecao:
         _renomear(fakes).execute(
             RenameJobFunctionCommand(
                 actor=TEST_ACTOR,
