@@ -11,6 +11,10 @@ Em seguida, em ordem segura:
   3. `git worktree remove <path>`
   4. `git branch -d <branch>` (safe-delete: só remove se mergeada)
   5. `git remote prune origin`
+  6. Confere os hooks do git (`pre-commit`/`commit-msg`, um só para todas as
+     worktrees): se o python deles sumiu — estava no venv da worktree que saiu —,
+     religa a partir do checkout principal com `scripts/install_hooks.py`
+     (issue #100).
 
 A imagem Docker (`restaurant_hub-app:dev`) é compartilhada entre worktrees.
 O script pergunta interativamente se deseja removê-la.
@@ -34,19 +38,34 @@ Uso:
 Exit codes:
   0  limpeza concluída com sucesso
   1  verificação falhou (não sincronizado, worktree não encontrada, etc.)
-  2  erro de subprocess (docker/git)
+  2  erro de subprocess (docker/git), ou hooks do git sem python depois do religamento
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_install_hooks() -> ModuleType:
+    """`scripts/install_hooks.py`, carregado pelo caminho — é quem sabe ler os hooks."""
+    path = Path(__file__).resolve().with_name("install_hooks.py")
+    spec = importlib.util.spec_from_file_location("install_hooks", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+install_hooks = _load_install_hooks()
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +519,74 @@ def remove_worktree_git(
 
 
 # ---------------------------------------------------------------------------
+# hooks do git (issue #100)
+# ---------------------------------------------------------------------------
+
+
+def hooks_inside(common_dir: Path, wt_path: Path) -> list[str]:
+    """Tipos de hook cujo `INSTALL_PYTHON` mora dentro de `wt_path`."""
+    inside: list[str] = []
+    root = wt_path.resolve()
+    for hook_type in install_hooks.HOOK_TYPES:
+        python = install_hooks.hook_python(common_dir / "hooks" / hook_type)
+        if python is not None and python.resolve().is_relative_to(root):
+            inside.append(hook_type)
+    return inside
+
+
+def run_install_hooks(principal: Path) -> None:
+    """`scripts/install_hooks.py` no checkout principal, com o venv dele (`uv run`).
+
+    `--extra dev` porque o `pre-commit` é dependência de dev: sem o `.venv` no
+    principal, o `uv run` o cria, e sem o extra ele nasceria sem o pre-commit.
+    """
+    _run(
+        ["uv", "run", "--extra", "dev", "python", "scripts/install_hooks.py"],
+        cwd=principal,
+        check=False,
+    )
+
+
+def relink_hooks(common_dir: Path, wt_path: Path, *, dry_run: bool) -> bool:
+    """Religa os hooks no checkout principal se o python deles não existe mais.
+
+    Os hooks moram no diretório comum e valem para todas as worktrees. Se o
+    `pre-commit install` foi rodado de dentro da worktree que acabou de sair, o
+    `INSTALL_PYTHON` aponta para o venv apagado com ela, e todo commit de toda
+    worktree falha com "`pre-commit` not found". Retorna False só se, depois de
+    tentar, ainda sobrar hook com python inexistente.
+    """
+    principal = install_hooks.main_checkout(common_dir)
+    if dry_run:
+        inside = hooks_inside(common_dir, wt_path)
+        if inside:
+            _info(f"[dry-run] hooks {', '.join(inside)} apontam para dentro da worktree;")
+            _info(f"[dry-run] seriam religados em {principal} (scripts/install_hooks.py)")
+        else:
+            _info("[dry-run] hooks do git não dependem desta worktree")
+        return True
+
+    dead = install_hooks.dead_hooks(common_dir)
+    if not dead:
+        _info("hooks do git apontam para um python que existe ✓")
+        return True
+
+    for hook_type, python in dead:
+        _warn(f"hook {hook_type} aponta para {python}, que não existe mais")
+    _info(f"religando os hooks a partir do checkout principal ({principal})")
+    run_install_hooks(principal)
+    still_dead = install_hooks.dead_hooks(common_dir)
+    if still_dead:
+        _warn(
+            "os hooks continuam sem python. Religue à mão no checkout principal:\n"
+            f"    cd {principal}\n    {install_hooks.RELINK_HINT}"
+        )
+        return False
+    _info("hooks do git religados ✓")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -580,6 +667,10 @@ def main() -> int:
         force=args.force,
     )
 
+    _section("5. Conferindo os hooks do git")
+    _, common_dir = install_hooks.git_dirs()
+    hooks_ok = relink_hooks(common_dir, wt_path, dry_run=args.dry_run)
+
     print()
     print("=" * 60)
     if args.dry_run:
@@ -590,7 +681,7 @@ def main() -> int:
         print(f"  ✓ Path: {wt_path}")
     print("=" * 60)
     print()
-    return 0
+    return 0 if hooks_ok else 2
 
 
 if __name__ == "__main__":
