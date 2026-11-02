@@ -5,6 +5,7 @@ O caminho feliz é o menos interessante daqui. O que estes testes protegem é a
 que um pedido de redefinição não pode ser usado para matar o convite de ninguém.
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -17,6 +18,7 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     PasswordSetupToken,
     SetupTokenPurpose,
 )
+from restaurant_hub.features.identity.application.use_cases import request_password_reset
 from restaurant_hub.features.identity.application.use_cases.request_password_reset import (
     RequestPasswordResetUseCase,
 )
@@ -276,6 +278,71 @@ class TestFalhaDeEscritaTambemEAbsorvida:
         cenario.use_case.execute(_comando(_CADASTRADO))
 
         assert cenario.sender.sent == ()
+
+
+class TestFalhaAbsorvidaVaiParaOLog:
+    """Issue #26 (finding F3 da #6) — absorvida, mas registrada; e só o tipo."""
+
+    _LOGGER = request_password_reset.__name__
+
+    def _registros(self, caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+        return [r for r in caplog.records if r.name == self._LOGGER]
+
+    def test_falha_do_envio_registra_tipo_e_usuario(self, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(logging.DEBUG, logger=self._LOGGER)
+        cenario = Cenario(sender=RecordingEmailSender(fail_with=FalhaDeProvedor("provedor")))
+
+        cenario.use_case.execute(_comando(_CADASTRADO))
+
+        [registro] = self._registros(caplog)
+        assert registro.levelno == logging.ERROR
+        assert registro.exc_info is None
+        assert registro.getMessage() == (
+            "redefinição de senha não concluída (falha absorvida): user_id=user-1 "
+            f"erro={FalhaDeProvedor.__module__}.FalhaDeProvedor"
+        )
+
+    def test_falha_de_escrita_tambem_e_registrada(self, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(logging.DEBUG, logger=self._LOGGER)
+        cenario = Cenario(tokens=RepositorioDeTokensQueFalha())
+
+        cenario.use_case.execute(_comando(_CADASTRADO))
+
+        [registro] = self._registros(caplog)
+        assert registro.getMessage().endswith("erro=builtins.RuntimeError")
+
+    def test_registro_nao_leva_email_link_token_nem_mensagem(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A mensagem da falha ecoa o destinatário e o link — como um provedor real faria."""
+        caplog.set_level(logging.DEBUG)
+        # O `FakeSetupTokenIssuer` emite `setup-1` na primeira chamada; a falha
+        # ecoa destinatário e link inteiros, como a de um provedor real pode ecoar.
+        valor = "setup-1"
+        cenario = Cenario(
+            sender=RecordingEmailSender(
+                fail_with=FalhaDeProvedor(f"recusado: {_CADASTRADO} {_BASE_URL}/x?token={valor}")
+            )
+        )
+
+        cenario.use_case.execute(_comando(_CADASTRADO))
+
+        assert self._registros(caplog)
+        [emitido] = cenario.tokens.tokens.values()
+        assert emitido.token_fingerprint == cenario.issuer.fingerprint(valor)
+        for vazamento in (_CADASTRADO, _BASE_URL, valor, "recusado", emitido.token_fingerprint):
+            assert vazamento not in caplog.text
+
+    def test_caminho_feliz_e_email_desconhecido_nao_registram(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.DEBUG, logger=self._LOGGER)
+        cenario = Cenario()
+
+        cenario.use_case.execute(_comando(_CADASTRADO))
+        cenario.use_case.execute(_comando(_DESCONHECIDO))
+
+        assert self._registros(caplog) == []
 
 
 class TestInvalidacaoEscopadaPorProposito:
