@@ -5,7 +5,7 @@ when-use: Reference before letting any staff module import from features.identit
 keywords: [adr, bounded-context, independence, port, adapter, authorization, import-linter, composition-root, staff, identity]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-10-19
+updated_at: 2026-11-02
 adr_id: 3.4.0001
 decision: The staff HTTP adapter depends on an AccessGuard Protocol owned by staff (opaque string identifiers, permission named as str, four published laws), whose implementation is assembled in composition_root.py — the module that already imports both bounded contexts — so bc-independence stays absolute with zero ignore_imports
 context_stage: 3.4-staff-access-scope
@@ -263,3 +263,13 @@ construtor e chamam `authorize` antes de qualquer outra instrução: a operaçã
 consumidor que LAYOUT §5 descreve. `authenticate` **não** muda — continua com um único
 consumidor, o adapter de entrada, e recebe a requisição HTTP; para ela a ressalva segue
 verdadeira (finding da 3.7). Nota *append-only*; o corpo acima não foi editado (CONVENTIONS §5).
+
+**2026-11-02 — §3, *"The implementation is assembled in `composition_root.py`"*, superada por
+[ADR 0.0.0016](./0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)
+(issue #47).** O tradutor deixou o `composition_root` e é `LocalAccessGuard`, em
+`features/staff/adapters/out/identity/`, sobre a `IdentityAccessFacade` de identity — a
+precondição que o ADR 3.5.0001 §5 nomeou. A alternativa A deste ADR continua rejeitada como foi
+escrita (embrulhar o `IdentityGuard` com supressões para `Permission`/`RestaurantId`/`UnitId`):
+o caminho tomado não importa nada de identity além da fachada. O port, as quatro leis e a
+colocação do port em `application/ports/out/` seguem em vigor. Nota *append-only*; o corpo acima
+não foi editado (CONVENTIONS §5).

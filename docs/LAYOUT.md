@@ -142,7 +142,8 @@ nenhum módulo de `features/<a>/` importa `features/<b>/`. A única exceção te
 - o BC **fornecedor** expõe um *Open Host Service* in-process em
   `features/<b>/application/facade.py` — assinaturas em **primitivos**, conversão para
   value objects por dentro, exceções próprias **sem tradução**, re-exportando as que o
-  consumidor precisa capturar; a fachada **não autoriza**;
+  consumidor precisa capturar; a fachada **não autoriza as próprias operações** (pode
+  **expor** uma decisão de acesso, como a `IdentityAccessFacade` — ADR 0.0.0016);
 - o BC **consumidor** implementa o seu port-out num **gateway** em
   `features/<a>/adapters/out/<b>/`, que importa **só** `features.<b>.application.facade`
   e traduz as exceções para o vocabulário do próprio BC;
@@ -151,10 +152,15 @@ nenhum módulo de `features/<a>/` importa `features/<b>/`. A única exceção te
   `unmatched_ignore_imports_alerting = error`), e um teste assere a **lista exata** — uma
   segunda aresta entra por decisão, nunca por deriva.
 
-O que a fachada **não** substitui: o tradutor de autenticação/autorização de identity
-continua no `composition_root` (ADR 3.4.0001 §3; ADR 3.5.0001 §5), porque o guard é
-construído por um módulo do adapter de entrada e chega ao contêiner como dependência
-resolvida, não como import de outro BC.
+**O tradutor de acesso também é um adapter da aresta** (issue #47, [ADR 0.0.0016](./adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md),
+que supera o ADR 3.4.0001 §3 e fecha o ADR 3.5.0001 §5): o `AccessGuard` de staff é
+`features/staff/adapters/out/identity/local_access_guard.py`. Ele **autoriza** pela fachada
+de acesso de identity e **autentica** por um chamável que o `composition_root` liga ao
+adapter de entrada de identity (`IdentityGuard.authenticate_principal`), cujo tipo de retorno
+é o publicado pela fachada — o que é HTTP (extrair o Bearer, anotar o ator para o log) fica
+numa cópia só, do lado de identity. Quando o que um BC precisa de outro tem uma metade que é
+do adapter de entrada do fornecedor, a forma é essa: a metade de aplicação pela fachada, a
+outra **injetada** pelo composition root, nunca importada.
 
 ### Shared
 
@@ -267,10 +273,11 @@ composition root ([ADR 2.6.0001](./adr/2_6_0001-identity-unit-of-work-port-and-a
 **O charter, como regra mecânica (issue #45, `check_layout.py` regra 6).** O
 módulo só pode conter classes `@dataclass` (os contêineres), as duas funções de
 wiring — `wire_dependencies` e `build_http_wiring` — e **nenhum `raise`**: quem
-monta o grafo não recusa pedido. O que hoje foge disso (`_IdentityAccessGuard`
-e o seu helper `_tenant_id_do_ator`) está em allowlist **contável** no script,
-cada entrada citando a issue que a remove (#47); entrada nova reprova até ser
-justificada, e entrada que já não corresponde a nada em `src/` reprova também.
+monta o grafo não recusa pedido. As allowlists **contáveis** do script estão
+**vazias** desde a issue #47, que moveu para `staff/adapters/out/identity/` a única
+exceção que já tiveram (`_IdentityAccessGuard` e o seu helper `_tenant_id_do_ator`);
+entrada nova reprova até ser justificada citando a issue que a remove, e entrada
+que já não corresponde a nada em `src/` reprova também.
 
 **Por que isso importa:**
 - Mantém o domínio e a application totalmente desacoplados de implementações concretas
