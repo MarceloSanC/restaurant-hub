@@ -255,6 +255,37 @@ def _raizes_sem_handler(
     return sorted(raiz.__name__ for raiz in raizes if raiz not in registrados)
 
 
+def _violacoes_de_raiz_unica(
+    classes: list[type[Exception]], raizes: tuple[type[Exception], ...]
+) -> list[str]:
+    """As classes que não têm **uma** base e **uma** raiz do BC (concept 3.9 §5.1).
+
+    Isolada para que os violadores plantados a exercitem sem gravar em `src/` uma
+    classe com duas raízes — que é exatamente a forma que a Stage 3.9 removeu.
+    """
+    violacoes: list[str] = []
+    for classe in classes:
+        if classe in raizes:
+            continue
+        alcancadas = [raiz.__name__ for raiz in raizes if issubclass(classe, raiz)]
+        if len(classe.__bases__) != 1 or len(alcancadas) != 1:
+            bases = [base.__name__ for base in classe.__bases__]
+            violacoes.append(f"{classe.__name__} (bases {bases}; raízes {alcancadas})")
+    return sorted(violacoes)
+
+
+def _classes_dos_modulos_de_erro(bc: str) -> list[type[Exception]]:
+    """Toda classe de exceção **definida** nos módulos de erro do BC."""
+    return [
+        valor
+        for modulo in _importar_modulos_de_erro(bc)
+        for valor in vars(modulo).values()
+        if isinstance(valor, type)
+        and issubclass(valor, Exception)
+        and valor.__module__ == modulo.__name__
+    ]
+
+
 def _registro_da_borda(bc: str) -> FastAPI:
     """Uma app com **só** o registro de handlers do BC aplicado.
 
@@ -342,7 +373,7 @@ def test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http() -> None:
     assert com_borda_sem_mapa == [], (
         f"BCs com adapters/inbound/ e sem {_MODULO_DE_HANDLERS}.py: "
         f"{com_borda_sem_mapa}. As rotas deles respondem pelo handler genérico, "
-        f"que converte tudo o que não é NotFoundError em 422"
+        f"que só conhece DomainError (422) e não responde por ApplicationError"
     )
 
 
@@ -539,3 +570,53 @@ def test_um_erro_com_entrada_no_mapa_nao_reprova() -> None:
     mapa = {**_mapa_de_status(bc), plantado: 418}
 
     assert _sem_entrada(universo, mapa) == []
+
+
+# ---------------------------------------------------------------------------
+# Raiz única (Stage 3.9, concept §5.1 e CA2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bc", _BOUNDED_CONTEXTS)
+def test_toda_classe_de_erro_do_bc_tem_uma_base_e_uma_raiz_do_proprio_bc(bc: str) -> None:
+    """Nenhuma classe herda de duas raízes — nem para ordenar a MRO para o framework.
+
+    Até a Stage 3.9 os erros de "não encontrado" herdavam `(RaizDoBC, NotFoundError)`
+    nesta ordem, para que o lookup de handler achasse um antes do outro. O status hoje
+    sai do mapa do adapter (ADR 3.9.0001), e a hierarquia diz só o que o erro é.
+    """
+    assert _violacoes_de_raiz_unica(_classes_dos_modulos_de_erro(bc), _raizes(bc)) == []
+
+
+def test_uma_classe_com_duas_raizes_reprova() -> None:
+    """Violador plantado: a herança dupla que a Stage 3.9 removeu."""
+    bc = _COM_BORDA_HTTP[0]
+    dominio, aplicacao = _raizes(bc)
+    plantado = type("ErroPlantadoComDuasRaizes", (dominio, aplicacao), {})
+
+    assert _violacoes_de_raiz_unica([plantado], (dominio, aplicacao)) == [
+        f"ErroPlantadoComDuasRaizes (bases {[dominio.__name__, aplicacao.__name__]}; "
+        f"raízes {[dominio.__name__, aplicacao.__name__]})"
+    ]
+
+
+def test_uma_classe_sob_application_error_direto_reprova() -> None:
+    """Violador plantado: pular a raiz do BC deixa o erro fora do handler dele."""
+    bc = _COM_BORDA_HTTP[0]
+    plantado = type("ErroPlantadoSemRaizDoBC", (ApplicationError,), {})
+
+    assert _violacoes_de_raiz_unica([plantado], _raizes(bc)) == [
+        "ErroPlantadoSemRaizDoBC (bases ['ApplicationError']; raízes [])"
+    ]
+
+
+def test_uma_classe_com_uma_raiz_nao_reprova() -> None:
+    """A outra direção: a forma correta não é acusada."""
+    bc = _COM_BORDA_HTTP[0]
+    dominio, aplicacao = _raizes(bc)
+    plantadas: list[type[Exception]] = [
+        type("ErroPlantadoDeDominio", (dominio,), {}),
+        type("ErroPlantadoDeAplicacao", (aplicacao,), {}),
+    ]
+
+    assert _violacoes_de_raiz_unica(plantadas, (dominio, aplicacao)) == []

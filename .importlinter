@@ -109,7 +109,8 @@ ignore_imports =
 # shared.application (LAYOUT §3 Application: nunca importa adapters nem
 # infrastructure). NÃO proíbe restaurant_hub.shared.domain nem
 # restaurant_hub.shared.application (dependências legítimas: os erros herdam de
-# DomainError/NotFoundError, e os use cases consomem os ports Clock/IdGenerator),
+# DomainError, ou ApplicationError de shared.application, e os use cases consomem
+# os ports Clock/IdGenerator),
 # nem restaurant_hub.features (auto-proibiria o import do próprio domínio de
 # identity, que é a dependência central desta camada).
 [importlinter:contract:identity-application-purity]
@@ -165,7 +166,7 @@ forbidden_modules =
 # features.identity.application (LAYOUT §3 Application: nunca importa adapters
 # nem infrastructure). NÃO proíbe restaurant_hub.shared.domain nem
 # restaurant_hub.shared.application (dependências legítimas: os erros herdam de
-# StaffError/NotFoundError, e os use cases consomem o port IdGenerator), nem
+# StaffError ou ApplicationError, e os use cases consomem o port IdGenerator), nem
 # restaurant_hub.features (auto-proibiria o import do próprio domínio de staff,
 # que é a dependência central desta camada — o import de features.identity já é
 # barrado pelo contrato bc-independence).
@@ -248,7 +249,7 @@ forbidden_modules =
 # anunciara. Espelha staff-application-purity (LAYOUT §3 Application: nunca
 # importa adapters nem infrastructure nem frameworks). NÃO proíbe
 # restaurant_hub.shared.domain nem restaurant_hub.shared.application (os erros
-# herdam de NotFoundError; os use cases consomem Clock e IdGenerator).
+# herdam de ApplicationError; os use cases consomem Clock e IdGenerator).
 [importlinter:contract:scheduling-application-purity]
 name = features.scheduling.application nao importa adapters nem frameworks (LAYOUT §3 Application)
 type = forbidden

@@ -2,7 +2,8 @@
 
 Sem features registradas ainda, as rotas de sondagem (probe) são adicionadas ao
 app criado pela factory real para percorrer o caminho completo HTTP → handler:
-NotFoundError → 404 e DomainError → 422 (contrato dos error handlers globais).
+DomainError → 422 (contrato do error handler global). Desde a Stage 3.9 não há
+handler global para `ApplicationError` nem para `NotFoundError` (ADR 3.9.0001 §5).
 """
 
 from collections.abc import AsyncIterator
@@ -12,7 +13,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from restaurant_hub.shared.domain.exceptions.base import DomainError, NotFoundError
+from restaurant_hub.shared.application.errors import ApplicationError
+from restaurant_hub.shared.domain.exceptions.base import DomainError
 from restaurant_hub.shared.infrastructure.http.app import create_app
 
 pytestmark = pytest.mark.e2e
@@ -21,10 +23,6 @@ pytestmark = pytest.mark.e2e
 @pytest.fixture
 def probe_app() -> FastAPI:
     app = create_app()
-
-    @app.get("/probe/not-found")
-    async def probe_not_found() -> None:
-        raise NotFoundError("recurso de sonda nao encontrado")
 
     @app.get("/probe/domain-error")
     async def probe_domain_error() -> None:
@@ -53,12 +51,14 @@ async def test_rota_inexistente_retorna_404_json(probe_client: AsyncClient) -> N
     assert "detail" in response.json()
 
 
-async def test_not_found_error_vira_404(probe_client: AsyncClient) -> None:
-    response = await probe_client.get("/probe/not-found")
-    assert response.status_code == HTTPStatus.NOT_FOUND
-    body = response.json()
-    assert body["type"] == "not_found"
-    assert "sonda" in body["detail"]
+def test_nao_ha_rede_generica_para_application_error(probe_app: FastAPI) -> None:
+    """A rede de `shared` cobre só o domínio (ADR 3.9.0001 §5).
+
+    Cada BC registra o seu handler sobre a própria raiz de aplicação; uma rede
+    genérica aqui responderia em silêncio por um BC que esquecesse de registrá-la.
+    """
+    assert DomainError in probe_app.exception_handlers
+    assert ApplicationError not in probe_app.exception_handlers
 
 
 async def test_domain_error_vira_422(probe_client: AsyncClient) -> None:

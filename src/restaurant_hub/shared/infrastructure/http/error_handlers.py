@@ -1,11 +1,16 @@
 """Handlers de erro HTTP globais.
 
-Converte exceções de domínio em respostas HTTP adequadas, mantendo o domínio
-isolado do protocolo HTTP. O handler mais específico (NotFoundError) é registrado
-antes do mais genérico (DomainError) para que FastAPI use o correto.
+Rede de segurança para a hierarquia de domínio: `DomainError` que nenhum handler de
+feature alcançou vira 422. Cada bounded context registra o seu handler, sobre as suas
+duas raízes, com o mapa explícito de status — esse é o caminho normal (ADR 3.9.0001).
 
-Regra: adicione um handler aqui para cada nova hierarquia de exceção que precise
-de tratamento HTTP específico. Nunca coloque lógica de negócio nos handlers.
+**Não há rede para `ApplicationError`, de propósito** (ADR 3.9.0001 §5): qualquer
+status escolhido aqui estaria errado para algum membro (um lookup como 422, um token
+inválido como 404), e responderia em silêncio por um BC que esqueceu de registrar a
+raiz. Os gates de `tests/unit/test_status_map.py` tornam esse estado inalcançável no
+build. O handler 404 de `NotFoundError` saiu com a classe, na mesma Stage.
+
+Nunca coloque lógica de negócio nos handlers.
 """
 
 from typing import Final
@@ -14,7 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from restaurant_hub.shared.domain.exceptions.base import DomainError, NotFoundError
+from restaurant_hub.shared.domain.exceptions.base import DomainError
 
 # Corpo CONSTANTE do 422 de validação (Stage 2.5, concept §5 regra 11).
 #
@@ -38,14 +43,6 @@ _CORPO_422_VALIDACAO: Final = {"detail": "requisição inválida", "type": "vali
 
 def register_error_handlers(app: FastAPI) -> None:
     """Registra todos os exception handlers na aplicação FastAPI."""
-
-    @app.exception_handler(NotFoundError)
-    async def not_found_handler(request: Request, exc: NotFoundError) -> JSONResponse:
-        """NotFoundError → 404 Not Found."""
-        return JSONResponse(
-            status_code=404,
-            content={"detail": str(exc), "type": "not_found"},
-        )
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
