@@ -10,7 +10,7 @@
 # condicional vive em scripts Python (ex.: scripts/clean.py).
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check lint fmt typecheck layout-check import-check lock-check docs-check test test-fast test-cov test-gate clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check lint fmt fmt-check typecheck layout-check import-check lock-check docs-check test test-fast test-cov test-gate clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -26,10 +26,11 @@ help:
 	@echo   make install          Reinstala dependencias apos mudar pyproject.toml
 	@echo   make run              Sobe o servidor de desenvolvimento com hot-reload na APP_PORT
 	@echo   make migrate          Aplica migrations pendentes - alembic upgrade head
-	@echo   make check            Gate completo - lint + types + layout + lock + docs + testes com cobertura
+	@echo   make check            Gate completo - lint + formatacao + types + layout + lock + docs + testes com cobertura
 	@echo   make test-gate        Suite com gate de cobertura 90 - usado pelo check
 	@echo   make lint             Roda ruff check - apenas reporta
 	@echo   make fmt              Formata o codigo com ruff format + ruff check --fix
+	@echo   make fmt-check        Confere a formatacao com ruff format --check - apenas reporta
 	@echo   make typecheck        Roda mypy strict
 	@echo   make layout-check     Valida regras de dependencia - scripts/check_layout.py
 	@echo   make import-check     Valida contratos de import - import-linter
@@ -92,23 +93,40 @@ migrate:
 	uv run python scripts/database_url_guard.py migrate
 
 # ---------------------------------------------------------------------------
-# check — gate completo, bloqueante no CI (lint + types + layout + lock + docs
-# + testes com gate de cobertura >= 90, via fail_under do pyproject.toml)
+# check — gate completo, bloqueante no CI (lint + formatação + types + layout
+# + lock + docs + testes com gate de cobertura >= 90, via fail_under do
+# pyproject.toml)
+#
+# `fmt-check` vem logo depois do `lint` (issue #99): os dois são baratos e
+# reprovam antes do mypy e da suíte.
 # ---------------------------------------------------------------------------
-check: lint typecheck layout-check import-check lock-check docs-check test-gate
+check: lint fmt-check typecheck layout-check import-check lock-check docs-check test-gate
 
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
+#
+# `lint`, `fmt` e `fmt-check` cobrem os mesmos diretórios: todo `.py` versionado
+# (issue #99 incluiu `migrations/`, que só o hook do pre-commit conferia).
 # ---------------------------------------------------------------------------
 lint:
-	uv run ruff check src/ tests/ scripts/ .claude/hooks/
+	uv run ruff check src/ tests/ scripts/ .claude/hooks/ migrations/
 
 # ---------------------------------------------------------------------------
 # fmt — formata e corrige automaticamente o que for possível
 # ---------------------------------------------------------------------------
 fmt:
-	uv run ruff format src/ tests/ scripts/ .claude/hooks/
-	uv run ruff check --fix src/ tests/ scripts/ .claude/hooks/
+	uv run ruff format src/ tests/ scripts/ .claude/hooks/ migrations/
+	uv run ruff check --fix src/ tests/ scripts/ .claude/hooks/ migrations/
+
+# ---------------------------------------------------------------------------
+# fmt-check — confere a formatação sem modificar arquivos (issue #99)
+#
+# É a contrapartida no gate do hook `ruff-format` do pre-commit: sem ela, código
+# commitado com `--no-verify`, ou de uma worktree sem hook, passava no CI
+# desformatado. O `fmt` aplica a formatação; este target só a confere.
+# ---------------------------------------------------------------------------
+fmt-check:
+	uv run ruff format --check src/ tests/ scripts/ .claude/hooks/ migrations/
 
 # ---------------------------------------------------------------------------
 # typecheck — checagem estática de tipos

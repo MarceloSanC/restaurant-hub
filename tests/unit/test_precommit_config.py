@@ -297,6 +297,9 @@ def test_mypy_hook_triggers_on_every_input_of_its_verdict(
     [
         pytest.param("ruff", "lint", _RUFF_CHECK_FLAGS, id="ruff-check-vs-make-lint"),
         pytest.param("ruff-format", "fmt", _RUFF_FORMAT_FLAGS, id="ruff-format-vs-make-fmt"),
+        pytest.param(
+            "ruff-format", "fmt-check", _RUFF_FORMAT_FLAGS, id="ruff-format-vs-make-fmt-check"
+        ),
     ],
 )
 def test_ruff_hooks_run_the_ruff_of_their_make_target(
@@ -312,9 +315,10 @@ def test_ruff_hooks_run_the_ruff_of_their_make_target(
     o veredito sobre cada arquivo é o do target desde que três coisas valham, e são
     elas que se cobram aqui: o mesmo binário e subcomando (`uv run ruff ...`, a
     versão do lock), nenhuma flag que mude as regras e um filtro que entregue ao hook
-    todo diretório que o target cobre. O `ruff-format` é cobrado contra o `make fmt`,
-    que é como o projeto formata: o `make check` não confere formatação
-    (`docs/runbooks/validate-ci-gate.md` §Class 2).
+    todo diretório que o target cobre. O `ruff-format` é cobrado contra os dois
+    targets de formatação: o `make fmt`, que é como o projeto formata, e o
+    `make fmt-check`, que é como o `make check` confere a formatação (issue #99,
+    `docs/runbooks/validate-ci-gate.md` §Class 2).
     """
     hook = _hook(hooks, hook_id)
     command = _command(hook)
