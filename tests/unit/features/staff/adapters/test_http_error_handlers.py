@@ -39,7 +39,7 @@ _MODULOS_DE_ERRO = (domain_errors, application_errors)
 
 
 def _subclasses_concretas() -> set[type[Exception]]:
-    """Todas as subclasses de `StaffError` definidas no código de produção.
+    """Todas as subclasses das duas raízes de staff definidas no código de produção.
 
     **O filtro por `restaurant_hub.` não é cosmético.** `__subclasses__()` é um
     registro global e vivo: a subclasse-cobaia que este arquivo define para

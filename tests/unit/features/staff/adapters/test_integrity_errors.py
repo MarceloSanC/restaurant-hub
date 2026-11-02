@@ -85,8 +85,8 @@ def test_mapa_de_insercao_de_funcao(constraint: str, esperado: type[Exception]) 
     """L-JF1: colisão de id (global) e de nome (por tenant, verbatim)."""
     traduzido = integrity_errors.translate(_erro(constraint), ON_INSERT_JOB_FUNCTION, "f1")
     assert isinstance(traduzido, esperado)
-    # Nada escapa da hierarquia e vira 500 por descuido — todos herdam de
-    # `StaffError`, que tem handler registrado.
+    # Nada escapa da hierarquia e vira 500 por descuido — todos descendem de uma
+    # das duas raízes de staff, ambas com handler registrado (ADR 3.9.0001).
     assert isinstance(traduzido, StaffError | StaffApplicationError)
 
 
