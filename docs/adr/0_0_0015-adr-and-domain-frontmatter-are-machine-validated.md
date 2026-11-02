@@ -27,10 +27,10 @@ concern"* no longer holds for `docs/domain/`. The rest of 0.0.0003 stands.
 
 ## Context
 
-1. **Frontmatter that is not YAML reached `develop` six times.** `yaml.safe_load` refused the
+1. **Frontmatter that is not YAML reached `develop` seven times.** `yaml.safe_load` refused the
    frontmatter of ADRs 0.0.0009, 0.0.0010, 1.2.0001, 2.3.0001, 3.5.0003 and 3.5.0004 — a
    `decision:` starting with a backtick, a `title:` with `: ` inside. Issue #37 counted four;
-   0.0.0009 and 0.0.0010 landed afterwards. No gate parses ADR frontmatter:
+   0.0.0009 and 0.0.0010 landed afterwards, and 0.0.0013 (PR #109) landed while this issue ran. No gate parses ADR frontmatter:
    `check_adr_bounded_context.py` reads one key by regex, `check_harness.py` parses `.claude/` only.
 2. **The same `adr_id` was minted twice, twice.** The branch of issue #12 created 0.0.0007 on
    2026-10-21 (`eb7be50`) and the orchestrator ADR took 0.0.0007 on 2026-11-01 (`4062cbb`); #12
@@ -108,8 +108,10 @@ concern"* no longer holds for `docs/domain/`. The rest of 0.0.0003 stands.
   an auditor.
 
 ### Negative
-- PRs in flight that add an ADR with an unquoted backtick-leading `decision:` (#109, #111) fail
-  `docs-check` after rebasing until they quote it — a true positive, but extra work at rebase time.
+- A PR in flight that adds an ADR with an unquoted backtick-leading `decision:` fails
+  `docs-check` after rebasing until it quotes it — a true positive, but extra work at rebase time.
+  ADR 0.0.0013 (PR #109, merged first) was quoted by this issue; PR #111 also carries a second
+  `adr_id` 0.0.0012 and has to renumber.
 - The valve is a list of filenames inside a script; it has to be edited when the doc changes.
 
 ### Neutral / trade-offs accepted
