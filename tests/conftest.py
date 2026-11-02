@@ -308,8 +308,21 @@ def _recriar_schema(database_url: str) -> None:
     chama tem escopo `session`, e o isolamento entre testes continua sendo o
     `TRUNCATE`. Dropar e recriar cinco tabelas vazias é ruído perto do resto.
     """
-    config = Config(str(_ALEMBIC_INI))
-    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    config = alembic_config(database_url)
     command.downgrade(config, "base")
     command.upgrade(config, "head")
+
+
+def alembic_config(database_url: str) -> Config:
+    """O `Config` de um comando do Alembic in-process, apontado para `database_url`.
+
+    A URL vai em `config.attributes["database_url"]`, o canal que
+    `migrations/env.py` honra (issue #86) — a `sqlalchemy.url` ele recusa. E
+    `configure_logger=False`, para que o `fileConfig(alembic.ini)` não troque os
+    handlers nem o nível do root logger da suíte (finding F-A da #26).
+    """
+    config = Config(str(_ALEMBIC_INI))
+    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    config.attributes["database_url"] = database_url
+    config.attributes["configure_logger"] = False
+    return config

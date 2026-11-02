@@ -20,10 +20,9 @@ import logging
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from sqlalchemy import Engine, text
 
-from tests.conftest import _ALEMBIC_INI, _REPO_ROOT
+from tests.conftest import alembic_config
 
 pytestmark = [pytest.mark.integration]
 
@@ -153,9 +152,7 @@ def test_downgrade_remove_o_que_o_upgrade_criou(engine: Engine, database_url: st
     O teste devolve o banco ao estado anterior no `finally`, inclusive se a asserção
     falhar — o `engine` é de escopo de sessão e compartilhado com o resto da suíte.
     """
-    config = Config(str(_ALEMBIC_INI))
-    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    config = alembic_config(database_url)
 
     try:
         command.downgrade(config, "base")
@@ -189,9 +186,7 @@ def test_downgrade_da_0004_remove_so_a_coluna_user_id(engine: Engine, database_u
     é observável isoladamente é o estado `0003`: a tabela **existe** e a coluna
     **não**. É isso que este teste mede, e devolve o banco a `head` no `finally`.
     """
-    config = Config(str(_ALEMBIC_INI))
-    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    config = alembic_config(database_url)
 
     assert "user_id" in _colunas_de_employees(engine)
     try:
@@ -220,9 +215,7 @@ def test_rodar_as_migrations_nao_desliga_logger_que_ja_existe(
     """
     logger = logging.getLogger("restaurant_hub.tests.sentinela_do_alembic")
     logger.disabled = False
-    config = Config(str(_ALEMBIC_INI))
-    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    config = alembic_config(database_url)
 
     command.upgrade(config, "head")
 
