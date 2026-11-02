@@ -628,7 +628,10 @@ reescreve ADR nem concept — a disposição de cada um está no próprio item):
   ganhou `## Supersessão parcial` datada de 2026-11-02 (append-only, CONVENTIONS §5).
 - **C4 — a fachada de identity ainda aponta para a #49** como a razão de não autorizar, quando a
   decisão vigente é o ADR 0.0.0014 §4 / issue #115 — já rastreado pela issue #77 (o ponteiro
-  sobreviveu à reescrita do docstring da fachada no PR #124).
+  sobreviveu à reescrita do docstring da fachada no PR #124). **Resolvido na issue #77 (PR
+  #130):** os docstrings da fachada, de `get_account_role.py` e do gateway de staff citam o ADR
+  0.0.0014 §4 / issue #115 e o ADR 3.7.0001; o ADR 3.5.0001 ganhou banner de errata datado de
+  2026-11-02 (append-only, CONVENTIONS §5).
 - **C5 — ADR 2.5.0002 §5 descreve um reconvite que não existe.** "Re-inviting leaves exactly one
   live invitation" supõe que convidar de novo emite token; o concept 2.5 §5 regra 6 (e a regra 13)
   fixa que convidar o mesmo e-mail responde como e-mail já cadastrado e não emite nada. A regra
