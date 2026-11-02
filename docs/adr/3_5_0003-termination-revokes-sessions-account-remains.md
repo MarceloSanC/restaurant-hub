@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-09-12
 updated_at: 2026-10-19
 adr_id: 3.5.0003
-decision: `DeactivateEmployeeUseCase` (R13) gains the `IdentityGateway` and, when the record carries a `user_id`, calls `revoke_login_sessions` **before** writing `active=False`; `DeleteEmployeeUseCase` (R15) refuses a linked record (`EmployeeHasLoginError`, 409 — terminate first) and does not touch identity; the account is not deactivated (`User.is_active` does not exist and is not added), so the person can authenticate again and reaches nothing; `reactivate_employee` does nothing with identity; `is_active` is deferred with the trigger "before the first self-service permission of `employee`"
+decision: '`DeactivateEmployeeUseCase` (R13) gains the `IdentityGateway` and, when the record carries a `user_id`, calls `revoke_login_sessions` **before** writing `active=False`; `DeleteEmployeeUseCase` (R15) refuses a linked record (`EmployeeHasLoginError`, 409 — terminate first) and does not touch identity; the account is not deactivated (`User.is_active` does not exist and is not added), so the person can authenticate again and reaches nothing; `reactivate_employee` does nothing with identity; `is_active` is deferred with the trigger "before the first self-service permission of `employee`"'
 context_stage: 3.5-employee-login-link
 bounded_context: staff
 ---

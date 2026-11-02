@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-07-19
 updated_at: 2026-07-19
 adr_id: 2.3.0001
-decision: Integration tests run against a real Postgres in both the laptop and the runner — `ci.yml` gains a `services: postgres`, and an unreachable database fails loudly instead of skipping, so no code path can report green without having touched the database
+decision: 'Integration tests run against a real Postgres in both the laptop and the runner — `ci.yml` gains a `services: postgres`, and an unreachable database fails loudly instead of skipping, so no code path can report green without having touched the database'
 context_stage: 2.3-identity-persistence
 bounded_context: identity
 ---

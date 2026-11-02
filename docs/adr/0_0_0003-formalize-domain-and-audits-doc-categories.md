@@ -5,7 +5,7 @@ when-use: Reference before creating a domain-knowledge doc or an audit report, w
 keywords: [adr, documentation, domain, audits, doc-category, bounded-context, ddd, ubiquitous-language, subdomain, step-gate]
 status: accepted
 created_at: 2026-07-11
-updated_at: 2026-07-12
+updated_at: 2026-11-02
 adr_id: 0.0.0003
 bounded_context: transversal
 decision: Formalize `docs/domain/` (canonical, cross-Stage subdomain theory) and `docs/audits/` (read-only implementation-vs-reality diagnoses) as first-class local documentation categories extending ADR 0.0.0000, in a single ADR, both nested by bounded context (`docs/<category>/<bc>/<slug>.md`) mirroring `features/<bc>/`.
@@ -316,3 +316,14 @@ narrative docs — [CONVENTIONS.md §1](../CONVENTIONS.md)).
   status); [LAYOUT.md §2](../LAYOUT.md) (`features/<bc>/`, mirrored by the
   nesting).
 - Bounded contexts of the project: [`roadmap.md`](../roadmap.md) (`ROADMAP-1`).
+
+## Supersessão parcial
+
+**2026-11-02 — o item *"No machine validation enforces these categories"* de
+`### Neutral / trade-offs accepted` foi superado por
+[ADR 0.0.0015](./0_0_0015-adr-and-domain-frontmatter-are-machine-validated.md) (issue #102).**
+Para `docs/domain/`, o `make docs-check` roda `scripts/check_doc_frontmatter.py`: frontmatter
+YAML válido, `references` e links relativos que resolvem, todo ADR linkado no corpo presente no
+`references` e nenhuma "Lacuna para o concept da Stage N.M" aberta com a Stage `done`.
+`docs/audits/` continua sem gate (nenhuma instância). O resto deste ADR continua valendo. Nota
+*append-only*; o corpo acima não foi editado.

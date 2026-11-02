@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 4 (
 keywords: [domain, scheduling, shift-scheduling, escala, semana, dia-operacional, horario-de-corte, faixa, turno, intervalo, demanda, vaga, alocacao, excecao-de-funcao, sobre-cobertura, reconciliacao-na-leitura, desligamento, escala-vigente, publicacao, auditoria, versao, concorrencia, validacao, block, warn, aceite-consciente, sobreposicao, interjornada, teto-de-horas, carga-contratada, conta-para-a-carga, indisponibilidade, calendario, minha-escala, notificacao, imagem, fuso-horario, clt, lingua-ubiqua]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-27
+updated_at: 2026-11-02
 bounded_context: scheduling
 subdomain: shift-scheduling
 references:
@@ -170,7 +170,7 @@ unidade** para **uma semana** cujo dia de início é configurável (`overview.md
   ambígua. Proposta do gate (§6); com períodos alinhados ao dia de início, decorre da forma.
 - Toda alocação está **dentro do período** da escala (`roadmap.md` §Stage 4.1 › "Descrição humana").
 
-> **Lacuna para o concept da Stage 4.3:** o que acontece com escalas existentes quando o
+> **Lacuna fechada pela Stage 4.3 (concept 4.3 §7 D-CONFIG; nota de §6):** o que acontece com escalas existentes quando o
 > restaurante **muda o dia de início** (ou o horário de corte — §3.2): só períodos futuros? e um
 > período em curso?
 
@@ -221,7 +221,7 @@ concreta **pertence a scheduling**; staff só conhece os **períodos nomeados** 
   `A ∩ B ≠ ∅ ⇔ início_A < fim_B ∧ início_B < fim_A`.
 - A faixa pertence ao **dia operacional** (no fuso da unidade) do seu `início`.
 
-> **Lacuna para o concept da Stage 4.1:** (a) a **forma interna** do `TimeRange` — par de
+> **Lacuna fechada pela Stage 4.1 (ADRs 4.1.0007 e 4.1.0008; nota de §6):** (a) a **forma interna** do `TimeRange` — par de
 > instantes wall-clock × `(dia, hora_início, hora_fim)` — desde que preserve as invariantes e a
 > comparação direta com a indisponibilidade (ADR 3.1.0001 52–53; ADR 3.1.0005 44–46); (b) a
 > **faixa que ultrapassa o corte seguinte** (ex.: 22h–06h com corte 05:00) — proibir, dividir, ou
@@ -254,7 +254,7 @@ da demanda** e pertence a scheduling (`workforce.md` §3.2).
 **Invariantes:** `N ≥ 0`; uma demanda referencia exatamente **uma função** do tenant e **uma
 faixa** de **um dia** do período.
 
-> **Lacuna para o concept da Stage 4.1: cardinalidade** — no máximo uma demanda por
+> **Lacuna fechada pela Stage 4.1 (ADR 4.1.0010; nota de §6): cardinalidade** — no máximo uma demanda por
 > `(dia, faixa, função)`, ou duas da mesma função em faixas parcialmente sobrepostas? (A
 > **sobre-cobertura** deixou de ser lacuna: é política de validação — §3.6.8.)
 
@@ -394,7 +394,7 @@ foi atualizada, se foi, aparece mensagem se deseja atualizar e perder o trabalho
 - Toda mutação gera entrada de auditoria com quem/quando e incrementa a versão da escala.
 - Nenhuma mutação é aplicada sobre uma versão que o editor não viu.
 
-> **Lacuna para o concept da Stage 4.3/4.5 — unidade de salvamento:** uma **operação por
+> **Lacuna fechada pela Stage 4.3 (ADR 4.3.0001; nota de §6) — unidade de salvamento:** uma **operação por
 > requisição** (alocar, desalocar, mudar demanda) ou um **lote de edições** salvo de uma vez? A
 > resposta F8 do sponsor ("ao clicar em publicar", "perder o trabalho", "printar a tela")
 > pressupõe edições acumuladas no cliente e um clique; este doc descreve a mutação como unidade.
@@ -407,11 +407,11 @@ rascunho que não existe: **lacuna de escopo do roadmap para o gate do Step 5** 
 auto-fill publica direto, respeitando `block`, ou o Step 5 cria a sua noção de proposta); (b)
 **e-mail por mutação** — sem agrupador, cada alteração salva dispararia um e-mail (§3.8).
 
-> **Lacuna para o concept da Stage 4.3:** o **protocolo do aceite** — mutação submetida já com o
+> **Lacuna fechada pela Stage 4.3 (ADR 4.3.0001; nota de §6):** o **protocolo do aceite** — mutação submetida já com o
 > aceite dos avisos exibidos pela avaliação ao vivo, ou servidor devolve os avisos para
 > confirmação e a mutação é reenviada com o aceite.
 
-> **Lacuna para o concept da Stage 4.2/4.3:** a **identidade de uma violação** para fins de
+> **Lacuna fechada pelas Stages 4.2 e 4.3 (ADRs 4.2.0002 e 4.3.0001; nota de §6):** a **identidade de uma violação** para fins de
 > aceite (política + sujeito + faixa?) — se o aceite sobrevive a uma mudança na alocação que a
 > originou.
 
@@ -468,7 +468,7 @@ config do restaurante e distingue block × warn" (`roadmap.md` §Stage 4.2 › "
 | Função não detida (§3.6.7) | `função(demanda) ∉ funções(registro)` | — (regra de produto; sponsor 2026-09-14) | **warn** — aceite grava a alocação como **exceção de função** | modo (`block`) |
 | Sobre-cobertura da demanda (§3.6.8) | `alocados(demanda) > N` | — (regra de produto; sponsor 2026-09-26) | **warn** — aceite grava a alocação excedente | modo (`block`) |
 
-> **Lacuna para o concept da Stage 4.2:** forma da `Violation` (campos), ordem de avaliação e se
+> **Lacuna fechada pela Stage 4.2 (ADR 4.2.0002; nota de §6):** forma da `Violation` (campos), ordem de avaliação e se
 > a indisponibilidade (§3.6.6) entra no avaliador com modo fixo ou é checada no use case.
 
 #### 3.6.1 Sobreposição de alocações (`overlap_policy`)
@@ -606,7 +606,7 @@ cargo daquela conta registrado apra aquele horario, e pergunta se deseja adicion
 **Invariante:** toda alocação cuja função não é detida pelo registro carrega a marca de exceção
 de função e um aceite na trilha (ou foi recusada, se o modo for `block`).
 
-> **Lacuna para o concept da Stage 4.2:** se a exceção é **reavaliada** quando o cadastro muda
+> **Lacuna fechada pela Stage 4.2 (ADR 4.2.0001; nota de §6):** se a exceção é **reavaliada** quando o cadastro muda
 > depois (o registro ganha a função → a marca cai? perde a função de uma alocação comum → vira
 > violação?); e a forma da marca na `Violation`/aceite (identidade — §3.5).
 
@@ -629,7 +629,7 @@ Decisão do sponsor, 2026-09-26 (F10 — [ADR 4.1.0003](../../adr/4_1_0003-v1-va
 **Invariante:** nenhuma alocação excedente existe na escala vigente sem um aceite na trilha
 (ou foi recusada, se o modo for `block`).
 
-> **Lacuna para o concept da Stage 4.2:** se o aviso conta o excedente por **demanda** ou por
+> **Lacuna fechada pela Stage 4.2 (nota de §6):** se o aviso conta o excedente por **demanda** ou por
 > `(dia, faixa, função)` quando a cardinalidade da 4.1 admitir duas demandas da mesma função em
 > faixas sobrepostas (§3.3); e se reduzir `N` depois reabre a violação nas alocações já aceitas.
 
@@ -709,7 +709,7 @@ declarado de F7 — §3.4) até a página de histórico de funcionários.
 - Um registro **inativo** não tem "minha escala": a leitura reconcilia com staff e devolve vazio
   para ele (a conta de login, se existir, é assunto da 3.5).
 
-> **Lacuna para o concept da Stage 4.3:** o que o calendário devolve quando o recorte pedido
+> **Lacuna fechada pela Stage 4.3 (concept 4.3 §7 D-CAL e D-OWN; nota de §6):** o que o calendário devolve quando o recorte pedido
 > (mês) abrange várias escalas; e **como** scheduling descobre os `employee_id` do ator (o tenant
 > vem do token — ADR 0.0.0005; o `employee_id` não) sem importar staff nem identity.
 
@@ -1192,6 +1192,28 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 > inclusive como excedente sem aceite na trilha). A escala vigente pode conter até uma
 > violação `block` de indisponibilidade até a gerente desalocar. A mesma regra vale para
 > uma configuração de validação alterada depois (requisito da Stage que criar a edição).
+
+> **Nota (2026-11-02): marcas de lacuna fechadas no lugar** (issue #102). As lacunas que as
+> Stages 4.1, 4.2 e 4.3 fecharam continuavam marcadas como "Lacuna para o concept da Stage N.M"
+> no corpo, embora as notas acima (4.1 e 4.2) e o concept da 4.3 já as respondessem. A marca
+> virou "Lacuna fechada pela Stage N.M (fonte)" **na mesma linha**, sem deslocar as citações por
+> linha deste doc; o texto da pergunta ficou como foi ratificado. O `make docs-check`
+> (`scripts/check_doc_frontmatter.py`) passa a reprovar marca aberta endereçada a Stage `done`.
+> As da 4.3, que nenhuma nota registrava:
+>
+> - **§3.1 — dia de início / corte com escalas existentes.** A mudança vale só para escalas
+>   criadas depois: a escala fotografa o calendário (ADR 4.1.0009, Decision 4), sem migração
+>   (concept 4.3 §7 D-CONFIG). Editar a configuração não tem use case em bloco nenhum — finding
+>   do concept 4.3 §13, com os requisitos (1–6 dias sem escala possível ao mudar o dia de início).
+> - **§3.5 — unidade de salvamento, protocolo do aceite e identidade da violação.** Salvar aplica
+>   um **lote** ordenado de operações nomeadas, atômico contra a versão que o editor viu; o
+>   servidor recusa o `block` e **pede** aceite do `warn` que o lote introduziu, e o aceite vai por
+>   `key` + medida (ADR 4.3.0001; a `key` é da 4.2, ADR 4.2.0002).
+> - **§3.7 — calendário e "minha escala".** O calendário devolve as faixas das escalas que cruzam
+>   o recorte (até 42 dias), cada uma pelo seu calendário fotografado (D-CAL); scheduling descobre
+>   os registros do ator por `StaffReadPort.list_members_of_user(tenant, unidade, user_id)`, com o
+>   `user_id` vindo do escopo autorizado, e a 4.5 compõe as unidades (D-OWN; divergência 10 do
+>   concept 4.3).
 
 ---
 

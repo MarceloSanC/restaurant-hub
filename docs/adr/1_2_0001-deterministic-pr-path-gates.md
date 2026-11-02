@@ -1,5 +1,5 @@
 ---
-title: ADR 1.2.0001 — Deterministic PR-path gates: no network, and no silent degradation either
+title: 'ADR 1.2.0001 — Deterministic PR-path gates: no network, and no silent degradation either'
 description: Architecture Decision Record
 when-use: Reference before adding a gate to `make check` that talks to a network service or reads git history, or when a CI gate turns out to be silently skipping on the runner
 keywords: [adr, ci, gate, pr-path, determinism, fail-open, fetch-depth, shallow-clone, github-actions, scheduled-scan]

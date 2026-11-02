@@ -1,0 +1,361 @@
+"""Guard: o frontmatter dos ADRs e dos docs de domínio é YAML, e o que ele declara bate.
+
+Uso:
+    python scripts/check_doc_frontmatter.py
+    python scripts/check_doc_frontmatter.py --repo .
+
+Issue #102, ADR 0.0.0015. Ligado em `make docs-check`.
+
+---
+
+**Por que existe.** Os outros gates leem o frontmatter por regex
+(`check_adr_bounded_context.py`) ou só parseiam `.claude/` (`check_harness.py`).
+Seis ADRs chegaram a `develop` com frontmatter que `yaml.safe_load` recusa — um
+`decision:` que começa com crase, um `title:` com `: ` no meio — e nada reclamou.
+Duas sessões paralelas criaram ADRs com o mesmo `adr_id` (0.0.0007 em out/2026;
+0.0.0011 em 2026-11-02): os nomes de arquivo diferem, o git não acusa conflito.
+E o doc de domínio de staff chegou a citar 18 ADRs por link com só 8 no
+`references`, com quatro "Lacuna para o concept da Stage N.M" abertas depois da
+Stage `done` (issue #37).
+
+**Regras — `docs/adr/*.md`:**
+
+1. O frontmatter existe e é um mapeamento YAML (`yaml.safe_load`).
+2. O nome do arquivo é `N_M_NNNN-<slug>.md`.
+3. `adr_id` é texto `N.M.NNNN` e bate com o prefixo do nome (`0_0_0012` ↔ `"0.0.0012"`).
+4. Nenhum `adr_id` se repete entre os ADRs.
+
+**Regras — `docs/domain/**/*.md`:**
+
+5. O frontmatter existe e é um mapeamento YAML; `references`, se presente, é lista
+   de caminhos, e cada um resolve.
+6. Todo link relativo do corpo resolve — inline ou definição por referência
+   (`[x]: alvo`); o fragmento `#...` é ignorado. Bloco de
+   código cercado não conta, nesta regra nem na 7 e na 8: é exemplo citado.
+7. Todo ADR linkado no corpo está no `references` — salvo a válvula abaixo.
+8. Nenhuma "Lacuna para o concept da Stage N.M" fica aberta com uma Stage listada
+   (`N.M`, `N.M/P.Q`) `done` na Tabela de Stages do roadmap. Lacuna fechada se
+   reescreve no lugar ("Lacuna fechada pela Stage N.M (fonte)"); a parte que sobra
+   para outra Stage se reendereça a ela.
+
+**A válvula (`VALVULA_REFERENCES`).** O `shift-scheduling.md` é citado **por número
+de linha** pelo corpo de ADRs `accepted` (4.1.0008, 4.1.0011, 4.1.0012) e pelo
+concept da 4.1 — texto que não se edita (CONVENTIONS §5). Cada linha nova no
+frontmatter deslocaria todas essas citações sem erro em lugar nenhum; por isso o
+fechamento da 4.1 decidiu não acrescentar ADRs ao `references` (technical 4.1 §7,
+2026-09-27). A #79 trocou as citações **ao roadmap** por âncora, não as citações a
+este doc, então o motivo continua. A válvula é **contada e exata**: o conjunto de
+ADRs linkados fora do `references` tem de ser *igual* ao declarado — ADR novo
+linkado fora do `references` reprova, e ADR que entrou no `references` (ou cujo
+link saiu) reprova até sair da válvula. Ela só encolhe.
+
+Códigos de saída:
+  0  tudo válido
+  1  violação (arquivo + motivo no stderr)
+  2  `docs/roadmap.md` ausente ou sem Stage `done` legível (fail closed)
+"""
+
+import argparse
+import re
+import sys
+from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+ADR_DIR = Path("docs") / "adr"
+DOMAIN_DIR = Path("docs") / "domain"
+ROADMAP = Path("docs") / "roadmap.md"
+
+# Doc de domínio → nomes de arquivo dos ADRs que ele linka no corpo e, de
+# propósito, não lista no `references` (ver docstring). Só encolhe.
+VALVULA_REFERENCES: dict[str, frozenset[str]] = {
+    "docs/domain/scheduling/shift-scheduling.md": frozenset(
+        {
+            "2_1_0001-identity-aggregates-and-membership.md",
+            "2_4_0003-authorization-composition-at-boundary.md",
+            "3_2_0003-copy-employee-full-duplication.md",
+            "3_2_0007-terminated-employee-remains-editable.md",
+            "3_3_0001-staff-schema-tenant-scoping-and-composite-fk-cerco.md",
+            "3_4_0002-staff-http-error-status-mapping.md",
+            "3_6_0001-path-addresses-the-record-not-the-authorized-scope.md",
+            "3_6_0003-wire-representation-preserves-domain-guarantees.md",
+            "4_1_0007-time-range-as-naive-minute-instants.md",
+            "4_1_0008-band-crossing-the-next-cutoff.md",
+            "4_1_0009-schedule-is-the-single-aggregate-root.md",
+            "4_1_0010-enabled-band-is-an-element-of-the-day.md",
+            "4_1_0011-declared-break-on-band-and-allocation.md",
+            "4_1_0012-one-record-occupies-at-most-one-slot-per-band.md",
+            "4_2_0001-function-mismatch-follows-current-staff-record.md",
+            "4_2_0002-evaluator-input-and-violation-identity.md",
+        }
+    ),
+}
+
+_ADR_ARQUIVO = re.compile(r"^(\d+)_(\d+)_(\d{4})-[a-z0-9][a-z0-9-]*\.md$")
+_ADR_ID = re.compile(r"^\d+\.\d+\.\d{4}$")
+
+# Alvo de um link markdown inline: `[texto](alvo)` ou `[texto](alvo "título")`.
+_LINK = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+# Definição de link por referência: `[rótulo]: alvo` no começo da linha. Sem ela,
+# `[ADR][x]` + `[x]: ../../adr/...` escaparia das regras 6 e 7.
+_DEFINICAO = re.compile(r"^ {0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?")
+_ESQUEMA = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
+_CERCA = re.compile(r"^\s*(```|~~~)")
+
+_LACUNA = re.compile(
+    r"lacuna para o concept da stages? (\d+\.\d+(?:\s*/\s*\d+\.\d+)*)", re.IGNORECASE
+)
+_LINHA_STAGE = re.compile(r"^\|\s*`(\d+\.\d+)-[^`]+`\s*\|")
+
+
+@dataclass(frozen=True)
+class Frontmatter:
+    """O frontmatter parseado (ou o erro) e o corpo que vem depois dele."""
+
+    dados: dict[str, object] | None
+    erro: str | None
+    corpo: str
+    linha_corpo: int  # número (1-based) da primeira linha do corpo
+
+
+def ler_frontmatter(texto: str) -> Frontmatter:
+    """Separa o bloco entre os dois primeiros `---` e o parseia com `yaml.safe_load`."""
+    linhas = texto.splitlines()
+    if not linhas or linhas[0].strip() != "---":
+        return Frontmatter(None, "frontmatter ausente (o arquivo não abre com `---`)", texto, 1)
+    fim = next((i for i in range(1, len(linhas)) if linhas[i].strip() == "---"), None)
+    if fim is None:
+        return Frontmatter(None, "frontmatter sem o `---` de fechamento", texto, 1)
+    corpo = "\n".join(linhas[fim + 1 :])
+    try:
+        dados = yaml.safe_load("\n".join(linhas[1:fim]))
+    except yaml.YAMLError as exc:
+        marca = getattr(exc, "problem_mark", None)
+        onde = f" (linha {marca.line + 2})" if marca is not None else ""
+        problema = getattr(exc, "problem", None) or str(exc).splitlines()[0]
+        return Frontmatter(None, f"frontmatter não é YAML válido{onde}: {problema}", corpo, fim + 2)
+    if not isinstance(dados, dict):
+        return Frontmatter(None, "frontmatter não é um mapeamento YAML", corpo, fim + 2)
+    return Frontmatter(dados, None, corpo, fim + 2)
+
+
+# --- ADRs ----------------------------------------------------------------------
+
+
+def problemas_adr(repo_root: Path) -> list[str]:
+    """Regras 1–4 sobre `docs/adr/*.md`."""
+    saida: list[str] = []
+    donos: dict[str, list[str]] = defaultdict(list)
+    for caminho in sorted((repo_root / ADR_DIR).glob("*.md")):
+        rel = caminho.relative_to(repo_root).as_posix()
+        fm = ler_frontmatter(caminho.read_text(encoding="utf-8-sig"))
+        if fm.dados is None:
+            saida.append(f"{rel}: {fm.erro}")
+            continue
+        nome = _ADR_ARQUIVO.match(caminho.name)
+        if nome is None:
+            saida.append(f"{rel}: nome fora do padrão `N_M_NNNN-<slug>.md`")
+            continue
+        adr_id = fm.dados.get("adr_id")
+        if not isinstance(adr_id, str) or not _ADR_ID.match(adr_id):
+            saida.append(f'{rel}: `adr_id` ausente ou fora do formato "N.M.NNNN": {adr_id!r}')
+            continue
+        esperado = ".".join(nome.groups())
+        if adr_id != esperado:
+            saida.append(
+                f"{rel}: `adr_id` {adr_id!r} não bate com o prefixo do nome (esperado {esperado!r})"
+            )
+            continue
+        donos[adr_id].append(rel)
+    for adr_id, arquivos in sorted(donos.items()):
+        if len(arquivos) > 1:
+            saida.append(
+                f"`adr_id` {adr_id!r} repetido em {len(arquivos)} ADRs: {', '.join(arquivos)}"
+                " — renumere o mais novo para o próximo id livre"
+            )
+    return saida
+
+
+# --- docs de domínio -----------------------------------------------------------
+
+
+def stages_done(roadmap: str) -> set[str]:
+    """Os `N.M` com status `done` na Tabela de Stages (coluna "Status")."""
+    linhas = roadmap.splitlines()
+    try:
+        inicio = linhas.index("## Tabela de Stages")
+    except ValueError:
+        return set()
+    feitas: set[str] = set()
+    coluna: int | None = None
+    for linha in linhas[inicio + 1 :]:
+        if linha.startswith("## "):
+            break
+        if not linha.startswith("|"):
+            continue
+        celulas = [c.strip() for c in linha.strip().strip("|").split("|")]
+        if coluna is None:
+            if "Status" in celulas:
+                coluna = celulas.index("Status")
+            continue
+        m = _LINHA_STAGE.match(linha)
+        if m and len(celulas) > coluna and celulas[coluna] == "done":
+            feitas.add(m.group(1))
+    return feitas
+
+
+def linhas_de_prosa(corpo: str) -> list[tuple[int, str]]:
+    """(índice, linha) do corpo fora de blocos de código cercados — exemplo citado não conta."""
+    prosa: list[tuple[int, str]] = []
+    dentro_de_cerca = False
+    for i, linha in enumerate(corpo.splitlines()):
+        if _CERCA.match(linha):
+            dentro_de_cerca = not dentro_de_cerca
+        elif not dentro_de_cerca:
+            prosa.append((i, linha))
+    return prosa
+
+
+def links_relativos(corpo: str, primeira_linha: int) -> list[tuple[int, str]]:
+    """(linha, alvo) de cada link relativo do corpo, fora de código cercado ou inline."""
+    achados: list[tuple[int, str]] = []
+    for i, linha in linhas_de_prosa(corpo):
+        sem_codigo = re.sub(r"`[^`\n]*`", "", linha)
+        definicao = _DEFINICAO.match(linha)
+        alvos = [m.group(1) for m in _LINK.finditer(sem_codigo)]
+        if definicao is not None:
+            alvos.append(definicao.group(1))
+        for alvo in alvos:
+            if alvo.startswith("#") or _ESQUEMA.match(alvo):
+                continue
+            achados.append((primeira_linha + i, alvo.split("#", 1)[0]))
+    return achados
+
+
+def _referencias(caminho: Path, rel: str, dados: dict[str, object]) -> tuple[set[Path], list[str]]:
+    """Regra 5: os caminhos do `references`, resolvidos, e as violações."""
+    cruas = dados.get("references") or []
+    if not isinstance(cruas, list) or not all(isinstance(r, str) for r in cruas):
+        return set(), [f"{rel}: `references` tem de ser uma lista de caminhos"]
+    saida: list[str] = []
+    resolvidas: set[Path] = set()
+    for ref in cruas:
+        alvo = (caminho.parent / ref).resolve()
+        if not alvo.exists():
+            saida.append(f"{rel}: `references` aponta para {ref!r}, que não existe")
+        resolvidas.add(alvo)
+    return resolvidas, saida
+
+
+def _links(
+    caminho: Path, rel: str, fm: Frontmatter, referencias: set[Path], pasta_adr: Path
+) -> list[str]:
+    """Regras 6 e 7: link que não resolve; ADR linkado fora do `references` e da válvula."""
+    saida: list[str] = []
+    fora: dict[str, int] = {}
+    for linha, alvo_rel in links_relativos(fm.corpo, fm.linha_corpo):
+        alvo = (caminho.parent / alvo_rel).resolve()
+        if not alvo.exists():
+            saida.append(f"{rel}:{linha}: link para {alvo_rel!r}, que não existe")
+        elif alvo.parent == pasta_adr and alvo not in referencias:
+            fora.setdefault(alvo.name, linha)
+
+    valvula = VALVULA_REFERENCES.get(rel, frozenset())
+    saida.extend(
+        f"{rel}:{linha}: ADR {nome} linkado no corpo e ausente do `references`"
+        for nome, linha in sorted(fora.items())
+        if nome not in valvula
+    )
+    saida.extend(
+        f"{rel}: a válvula declara {nome}, que já não falta no `references` —"
+        " tire-o de VALVULA_REFERENCES (a válvula só encolhe)"
+        for nome in sorted(valvula - fora.keys())
+    )
+    return saida
+
+
+def _lacunas(rel: str, fm: Frontmatter, feitas: set[str]) -> list[str]:
+    """Regra 8: lacuna aberta endereçada a (alguma) Stage `done`."""
+    saida: list[str] = []
+    for i, texto_linha in linhas_de_prosa(fm.corpo):
+        for m in _LACUNA.finditer(texto_linha):
+            listadas = [s.strip() for s in m.group(1).split("/")]
+            fechadas = [s for s in listadas if s in feitas]
+            if fechadas:
+                saida.append(
+                    f"{rel}:{fm.linha_corpo + i}: lacuna para a Stage {m.group(1)} aberta,"
+                    f" mas {', '.join(fechadas)} já está done — feche-a no lugar"
+                    " ou reenderece o que sobrou"
+                )
+    return saida
+
+
+def problemas_dominio(repo_root: Path, feitas: set[str]) -> list[str]:
+    """Regras 5–8 sobre `docs/domain/**/*.md`, com a válvula."""
+    saida: list[str] = []
+    pasta_adr = (repo_root / ADR_DIR).resolve()
+    vistos: set[str] = set()
+    for caminho in sorted((repo_root / DOMAIN_DIR).rglob("*.md")):
+        rel = caminho.relative_to(repo_root).as_posix()
+        vistos.add(rel)
+        fm = ler_frontmatter(caminho.read_text(encoding="utf-8-sig"))
+        if fm.dados is None:
+            saida.append(f"{rel}: {fm.erro}")
+            continue
+        referencias, erros = _referencias(caminho, rel, fm.dados)
+        saida.extend(erros)
+        saida.extend(_links(caminho, rel, fm, referencias, pasta_adr))
+        saida.extend(_lacunas(rel, fm, feitas))
+    saida.extend(
+        f"{rel}: está em VALVULA_REFERENCES, mas o doc não existe"
+        for rel in sorted(VALVULA_REFERENCES.keys() - vistos)
+    )
+    return saida
+
+
+def problemas(repo_root: Path) -> list[str]:
+    """Todas as violações, como `arquivo[:linha]: motivo`; `FATAL:` se o roadmap falta."""
+    caminho_roadmap = repo_root / ROADMAP
+    if not caminho_roadmap.exists():
+        return [f"FATAL: {ROADMAP.as_posix()} não existe"]
+    feitas = stages_done(caminho_roadmap.read_text(encoding="utf-8-sig"))
+    if not feitas:
+        return [f"FATAL: nenhuma Stage `done` legível na Tabela de Stages de {ROADMAP.as_posix()}"]
+    return problemas_adr(repo_root) + problemas_dominio(repo_root, feitas)
+
+
+def main() -> int:
+    """Valida o frontmatter dos ADRs e dos docs de domínio."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Valida o frontmatter YAML e o adr_id dos ADRs e o frontmatter, os links e as"
+            " lacunas dos docs de domínio (issue #102)"
+        )
+    )
+    parser.add_argument("--repo", default=".", help="Raiz do repositório (padrão: .)")
+    args = parser.parse_args()
+
+    achados = problemas(Path(args.repo).resolve())
+    if achados and achados[0].startswith("FATAL:"):
+        print(f"check_doc_frontmatter: {achados[0]}", file=sys.stderr)
+        return 2
+    if achados:
+        print(
+            f"check_doc_frontmatter: {len(achados)} problema(s) — CONVENTIONS §2,"
+            " ADR 0.0.0003, ADR 0.0.0015:\n",
+            file=sys.stderr,
+        )
+        for achado in achados:
+            print(f"  {achado}", file=sys.stderr)
+        return 1
+    print(
+        "check_doc_frontmatter: ADRs e docs de domínio com frontmatter YAML válido,"
+        " adr_id único e coerente com o nome, links e references em ordem."
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

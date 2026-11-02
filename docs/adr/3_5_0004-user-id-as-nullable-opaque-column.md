@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-09-12
 updated_at: 2026-11-01
 adr_id: 3.5.0004
-decision: `Employee.user_id: UserId | None` (default `None`) persisted as `employees.user_id TEXT NULL` — opaque (no FK to identity, ADR 3.3.0002), not unique (workforce §3.7 allows several records per person), not indexed (no access path by `user_id` yet, ADR 3.3.0005); set only through `Employee.link_login`, which refuses a record that is already linked or terminated; never carried by the copy, by construction (explicit field-by-field clone with the default left untouched)
+decision: '`Employee.user_id: UserId | None` (default `None`) persisted as `employees.user_id TEXT NULL` — opaque (no FK to identity, ADR 3.3.0002), not unique (workforce §3.7 allows several records per person), not indexed (no access path by `user_id` yet, ADR 3.3.0005); set only through `Employee.link_login`, which refuses a record that is already linked or terminated; never carried by the copy, by construction (explicit field-by-field clone with the default left untouched)'
 context_stage: 3.5-employee-login-link
 bounded_context: staff
 ---

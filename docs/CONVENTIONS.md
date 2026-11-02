@@ -208,6 +208,18 @@ julgamento em prosa. Gate mecânico: `scripts/check_adr_bounded_context.py`
 (em `make docs-check`) exige o campo e valida o valor contra o conjunto
 extraído do roadmap.
 
+**Frontmatter YAML e `adr_id`** ([ADR 0.0.0015](./adr/0_0_0015-adr-and-domain-frontmatter-are-machine-validated.md),
+issue #102): o bloco entre `---` tem de passar no `yaml.safe_load` — valor que
+começa com crase ou contém `: ` vai entre aspas simples (``decision: '`Port` ganha…'``).
+O `adr_id` é texto `N.M.NNNN`, igual ao prefixo `N_M_NNNN` do nome do arquivo e
+**único** entre os ADRs: sessões paralelas que escolhem o mesmo número não
+conflitam no git (os slugs diferem), então o número livre se confere em todas as
+branches abertas, e o choque se resolve renumerando o ADR mais novo. Nos docs de
+`docs/domain/`, o mesmo gate exige que `references` e links relativos resolvam,
+que todo ADR linkado no corpo esteja no `references` e que nenhuma "Lacuna para o
+concept da Stage N.M" fique aberta com a Stage `done`. Gate mecânico:
+`scripts/check_doc_frontmatter.py` (em `make docs-check`).
+
 **Runbooks:**
 ```yaml
 runbook_id: kebab-slug

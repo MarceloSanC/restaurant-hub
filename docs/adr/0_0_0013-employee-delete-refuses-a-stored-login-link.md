@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-11-02
 updated_at: 2026-11-02
 adr_id: "0.0.0013"
-decision: `EmployeeRepository.delete` gains law `L-DEL-LINK` — a record linked **on the stored row** is refused with `EmployeeHasLoginError` and nothing is removed, checked after the address and before references; the Postgres adapter locks the row (`SELECT user_id … FOR UPDATE`, three-part address) before the guard and the `DELETE`, in one transaction; `DeleteEmployeeUseCase` keeps its refusal on the record it read (ADR 3.5.0003 §1b) and lets the port's error propagate
+decision: '`EmployeeRepository.delete` gains law `L-DEL-LINK` — a record linked **on the stored row** is refused with `EmployeeHasLoginError` and nothing is removed, checked after the address and before references; the Postgres adapter locks the row (`SELECT user_id … FOR UPDATE`, three-part address) before the guard and the `DELETE`, in one transaction; `DeleteEmployeeUseCase` keeps its refusal on the record it read (ADR 3.5.0003 §1b) and lets the port''s error propagate'
 context_stage: 0.0-global
 bounded_context: transversal
 ---

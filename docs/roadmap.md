@@ -197,13 +197,15 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#98](https://github.com/MarceloSanC/restaurant-hub/issues/98) | Passo 1 do RUNBOOK usa `$issue` antes de defini-la | shared | docs | open | — |
 | [#99](https://github.com/MarceloSanC/restaurant-hub/issues/99) | `make check` sem conferência de formatação e lint fora de `migrations/` | shared | tooling | open | #7 |
 | [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | open | #7 |
-| [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | open | — |
+| [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | done | — |
 | [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | open | — |
 | [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
 | [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário | staff | application + identity (fachada) | open | — |
 | [#108](https://github.com/MarceloSanC/restaurant-hub/issues/108) | Remoção concorrente com R17 não pode apagar registro já vinculado (conta órfã) | staff | application + adapters/out | done | #68 |
 | [#114](https://github.com/MarceloSanC/restaurant-hub/issues/114) | Provisionar o dono do restaurante por convite em vez de senha escolhida pela plataforma | identity | application + adapters/inbound/http | open | #67 |
 | [#115](https://github.com/MarceloSanC/restaurant-hub/issues/115) | Autorizar o próprio alvo nos use cases de identity (formato da 3.7) | identity | application | open | #67 |
+| [#116](https://github.com/MarceloSanC/restaurant-hub/issues/116) | Citações por número de linha a `docs/domain/**` sem gate; válvula de `references` do `shift-scheduling.md` depende delas | shared | tooling | open | #102 |
+| [#117](https://github.com/MarceloSanC/restaurant-hub/issues/117) | Tabela consolidada de lacunas do `shift-scheduling.md` §6 sem guarda, com linhas de Stages `done` | scheduling | docs | open | #102 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
