@@ -143,9 +143,11 @@ lock-check:
 # se `gh` não está autenticado), (3) o bounded_context dos ADRs, (4) que a
 # árvore de pastas do LAYOUT §2 descreve o repositório que existe, (5) o
 # frontmatter de skills/subagentes em `.claude/` — o Claude Code não reporta
-# YAML inválido nem descrição truncada (issue #56) — e (6) que toda pasta de
+# YAML inválido nem descrição truncada (issue #56) —, (6) que toda pasta de
 # Stage tem as dependências fechadas: `done` no roadmap e `stage N.M: complete`
-# no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0009).
+# no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0009) — e
+# (7) que doc cita o roadmap por âncora (`§Stage N.M › "Rótulo"`), nunca por
+# número de linha, e que toda âncora resolve (issue #79, ADR 0.0.0011).
 #
 # O (4) é o único que compara documento com sistema de arquivos, e é por isso
 # que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda
@@ -159,6 +161,7 @@ docs-check:
 	uv run python scripts/check_docs_claims.py
 	uv run python scripts/check_harness.py
 	uv run python scripts/check_stage_deps.py
+	uv run python scripts/check_roadmap_citations.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes (sem cobertura — loop rápido local)
