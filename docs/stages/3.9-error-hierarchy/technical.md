@@ -1,214 +1,357 @@
 ---
-title: Technical — <Título da Stage>
-description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
-when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
-keywords: [technical, plano de execução, <slug>]
-status: draft
-created_at: YYYY-MM-DD
-updated_at: YYYY-MM-DD
-stage_id: N.M-<slug>
-stage_title: <Título humano da Stage>
-step_id: N                       # sequencial, sem zero-padding (1, 2, 15…)
-step_title: <Título humano do Step>
-depends_on: []
+title: Technical — Hierarquia de exceções sem protocolo HTTP
+description: Plano de execução da Stage 3.9 — ApplicationError e raízes de aplicação por BC, migração por significado, fim de NotFoundError, regra 11 do check_layout e supersessão do ADR 2.2.0003
+when-use: Consultar durante a Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
+keywords: [technical, plano de execução, error-hierarchy, application-error, status-map, check-layout]
+status: done
+created_at: 2026-11-02
+updated_at: 2026-11-02
+stage_id: 3.9-error-hierarchy
+stage_title: Hierarquia de exceções sem protocolo HTTP
+step_id: 3
+step_title: Equipe da unidade
+depends_on: [3.6-staff-http, 4.3-scheduling-application]
 concept_ref: ./concept.md
-issue_id: 0
-branch: feat/<num-issue>-<N-M>-<slug>
-tasks_count: 0
+issue_id: 48
+branch: refactor/48-3-9-error-hierarchy
+tasks_count: 8
 ---
 
-# Technical — Stage N.M — <Título da Stage>
+# Technical — Stage 3.9 — Hierarquia de exceções sem protocolo HTTP
 
-> **Como usar este documento (para code assistant):**
-> 1. Ler primeiro [§1 Contexto e estratégia](#1-contexto-e-estratégia-de-execução).
-> 2. Executar Tasks em ordem (§2). **1 Task = 1 commit.**
-> 3. Cada Task traz: arquivos a tocar, descrição, critério de aceite,
->    comando de verificação.
-> 4. **Não avançar para próxima Task sem verificação verde.**
-> 5. Mensagem de commit segue [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
->    `<type>(<scope>): <description> [N.M/task-NN]`
-> 6. Ao encontrar algo não previsto em §1–§6 ou no `concept.md`:
->    **pausar**, perguntar ao humano com opções e recomendação, e
->    registrar a decisão em [§7 Execução](#7-execução-post-hoc-editável-após-done).
->    Nunca propagar silenciosamente.
-> 7. Ao fim da última Task, validar [§3 Gate de saída da Stage](#3-gate-de-saída-da-stage),
->    fazer commit `stage N.M: complete` e atualizar `roadmap.md`.
->
-> **Stage = 1 branch.** Todo o trabalho desta Stage acontece em
-> `feat/<num-issue>-<N-M>-<slug>` (ver `CONVENTIONS.md` §4). Não há
-> sub-PRs internos. Sobre o fluxo Git completo ver
-> [`PIPELINE.md`](../../PIPELINE.md) §10.
+> **Como usar este documento:** executar as Tasks em ordem (§2), 1 Task = 1 commit
+> `<type>(<scope>): <descrição> [3.9/task-NN]` (CONVENTIONS §4). Algo fora de §1–§6 ou do
+> [`concept.md`](./concept.md) → registrar em §7.
 
 ## 1. Contexto e estratégia de execução
 
 ### Resumo
-<1 parágrafo. O que vamos construir nesta Stage, em termos técnicos.>
+Recriar `ApplicationError` em `shared/application/errors.py`; dar a cada BC uma raiz de
+aplicação; mover para ela os erros de aplicação que não nomeiam regra de negócio (concept §4:
+14 de identity, 4 de staff, 6 de scheduling), tirando a herança dupla com `NotFoundError`;
+registrar o handler de identity e o de staff nas duas raízes; apagar `NotFoundError` e o handler
+genérico 404; generalizar o Gate 3 para raízes do BC; criar a regra 11 de `check_layout.py`;
+registrar a supersessão nos ADRs e emendar `LAYOUT.md`.
 
 ### Estratégia
-<Como vamos construir. Bottom-up? Top-down? Spike primeiro? Mock
-dependências externas? Ordem das Tasks e razão.>
+**Totalidades primeiro** (memória do projeto: varreduras derivadas reprovam mudança
+incremental). Cada Task leva a sua entrada em toda varredura que a observa, para que o build
+fique verde entre commits:
+- `check_dead_shared.py` exige consumidor para todo nome público de `shared/application` — por
+  isso `ApplicationError` nasce (T01) junto com a primeira raiz que a consome (identity), e
+  `NotFoundError` só sai (T05) depois que a última subclasse dela migrou (T04).
+- O Gate 3 (`test_status_map.py`) é generalizado para "raízes do BC" em T01, antes de qualquer
+  raiz de aplicação ter subclasse; o teste de raiz única (CA2) só entra em T05, quando ninguém
+  mais herda de duas raízes.
+- A regra 11 (T06) só entra depois que todos os módulos que ela varre foram reescritos (T02–T05),
+  cada BC no seu commit.
+
+Ordem: shared+identity (raiz) → identity → staff → scheduling → shared (remoção) → tooling →
+ADRs → LAYOUT.
 
 ### Pré-condições
-- <ex.: Stage `<stage_id>` em `done` e mergeada em develop>
-- <ex.: migration X aplicada localmente>
-- <ex.: variáveis de ambiente conforme `.env.example`>
+- `python scripts/check_stage_deps.py 3.9-error-hierarchy` verde (conferido na Fase 3A).
+- Postgres da worktree (`docker compose up -d --wait postgres`) para os testes de contrato e e2e
+  afetados.
 
 ### Premissas técnicas
-- <ex.: Python 3.12+, pyproject já existe>
-- <ex.: redis local rodando em porta 6379>
+- `make check` completo roda só no GitHub Actions (orquestração autônoma); local: ruff,
+  `mypy src tests/fakes`, `scripts/check_layout.py`, `scripts/check_dead_shared.py`,
+  `lint-imports`, `make docs-check` e os testes afetados.
+- Starlette escolhe o handler pelo primeiro tipo do `__mro__` que estiver registrado (concept §3).
 
 ### Estrutura de pastas afetada
 
 ```
 src/restaurant_hub/
-├── <camada-alvo>/
-│   └── <novos arquivos>
-tests/
-└── <pasta>/
-    └── <novos arquivos>
+├── shared/
+│   ├── application/errors.py                     (novo — ApplicationError)
+│   ├── domain/exceptions/base.py                 (NotFoundError sai; docstring)
+│   └── infrastructure/http/{error_handlers.py,app.py}
+└── features/{identity,staff,scheduling}/
+    ├── application/errors.py                     (raiz de aplicação + migração)
+    ├── domain/exceptions/errors.py               (docstrings)
+    └── adapters/inbound/http/error_handlers.py   (identity, staff: duas raízes)
+scripts/check_layout.py                           (regra 11)
+tests/unit/{test_status_map.py,test_check_layout.py,test_check_dead_shared.py,shared/}
 ```
 
 ## 2. Tasks
 
-> Faixa saudável: **3–12 Tasks por Stage**. ≥ 14 = Stage provavelmente
-> está grande demais; reabrir Fase 3A para dividir.
-
-### Task 01 — <descrição curta>
+### Task 01 — `ApplicationError` e a raiz de aplicação de identity; Gate 3 por raízes
 
 - **Arquivos a criar:**
-  - `src/restaurant_hub/<camada>/<arquivo>.py`
-  - `tests/<pasta>/test_<arquivo>.py`
+  - `src/restaurant_hub/shared/application/errors.py`
+  - `tests/unit/shared/test_application_errors.py`
 - **Arquivos a modificar:**
-  - <caminho ou "nenhum">
+  - `src/restaurant_hub/features/identity/application/errors.py` (só a classe-raiz nova)
+  - `src/restaurant_hub/features/identity/adapters/inbound/http/error_handlers.py`
+  - `tests/unit/test_status_map.py`
+  - `tests/unit/test_check_dead_shared.py`
+  - `tests/unit/features/identity/application/test_errors.py` (o conjunto de nomes do módulo
+    ganha `IdentityApplicationError`; o teste de raiz passa a excluir a raiz)
+- **Justificativa do tamanho/escopo (7 arquivos, `shared` + a raiz de identity):** o Gate 7
+  (`check_dead_shared.py`) reprova `ApplicationError` sem consumidor no mesmo commit, e o
+  primeiro consumidor é a raiz de identity; a raiz exige o handler registrado (teste de
+  registro por raiz) — totalidade derivada dita o corte. O escopo do commit é `shared`, cujo
+  contrato a Task introduz; a parte de identity é o consumidor mínimo.
 - **O que fazer:**
-  <Prosa direta descrevendo a mudança material. Sem código completo;
-  apenas indicações como "criar Protocol com método `X(arg: A) -> B`".>
-- **Detalhes técnicos:**
-  - <interface esperada, comportamento esperado, exceções>
-- **Critério de aceite:**
-  - <ex.: testes em `tests/.../test_<arquivo>.py` cobrem happy path e erro>
+  - `ApplicationError(Exception)` com docstring sem vocabulário de protocolo (regra 11 de
+    amanhã): "falha de caso de uso que não é violação de regra de negócio" e o critério do ADR
+    3.9.0001 §3.
+  - `IdentityApplicationError(ApplicationError)` em `identity/application/errors.py`, ainda sem
+    subclasse.
+  - Handler de identity: tipo do mapa e das funções aceita `IdentityError |
+    IdentityApplicationError`; `register_identity_error_handlers` registra a mesma função nas
+    duas raízes; `_nome_da_classe` dá nome curto para as duas (D5).
+  - `test_status_map.py`: `_raizes_de_erro(bc)` devolve a raiz de domínio (exatamente uma
+    subclasse direta de `DomainError` no módulo de domínio) e a de aplicação (no máximo uma
+    subclasse direta de `ApplicationError` no módulo de aplicação, asserção de unicidade); a
+    varredura desce das raízes; o teste de pertinência passa a "descende de uma raiz do BC";
+    teste novo `test_todo_bc_com_borda_registra_handler_em_cada_raiz` — monta `FastAPI()`, chama
+    a função `register_*` do módulo de handlers (descoberta pela forma, não pelo nome do BC) e
+    asserta que cada raiz é chave de `app.exception_handlers`; violador plantado: registro que
+    omite uma raiz reprova (função `_raizes_sem_handler` isolada, como `_sem_entrada`).
+  - `test_check_dead_shared.py`: `ApplicationError` entra em `_NOMES_PUBLICOS_DE_SHARED`.
+  - `test_application_errors.py`: `ApplicationError` é `Exception` e **não** é `DomainError`.
+- **Critério de aceite:** CA3 (parte shared), CA4 (registro por raiz); faixas inalteradas.
 - **Comando de verificação:**
   ```bash
-  pytest tests/<pasta>/test_<arquivo>.py -v
-  mypy --strict src/restaurant_hub/<camada>/<arquivo>.py
-  python scripts/check_layout.py
+  uv run pytest tests/unit/test_status_map.py tests/unit/shared tests/unit/test_check_dead_shared.py tests/unit/features/identity -q
+  uv run python scripts/check_dead_shared.py && uv run python scripts/check_layout.py && uv run lint-imports
   ```
-- **Commit sugerido:** `feat(<scope>): <description> [N.M/task-01]`
+- **Commit sugerido:** `feat(shared): recriar ApplicationError com a raiz de aplicação de identity [3.9/task-01]`
 
 ---
 
-### Task 02 — <descrição curta>
+### Task 02 — identity: 14 erros para a raiz de aplicação
 
-- **Arquivos a criar:** <...>
-- **Arquivos a modificar:** <...>
-- **O que fazer:** <...>
-- **Detalhes técnicos:** <...>
-- **Critério de aceite:** <...>
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/identity/application/errors.py`
+  - `src/restaurant_hub/features/identity/domain/exceptions/errors.py` (docstrings)
+  - `src/restaurant_hub/features/identity/adapters/inbound/http/error_handlers.py` (docstring)
+  - `tests/unit/features/identity/application/test_errors.py`
+  - `tests/unit/features/identity/adapters/test_http_error_handlers.py`
+  - `tests/unit/features/identity/adapters/test_integrity_errors.py`
+- **O que fazer:** os 14 erros do concept §4 passam a herdar só de `IdentityApplicationError`
+  (os três `*NotFoundError` perdem `NotFoundError`); docstrings de módulo e de classe sem
+  `HTTP`/`handler`/`MRO`/número de status (a classificação de status é descrita no adapter); a
+  docstring do módulo de handlers deixa de falar em ordem de MRO e de `NotFoundError`.
+  Testes: partição por **igualdade de conjuntos** (CA3) — lista de domínio ∪ lista de aplicação
+  = classes do módulo, interseção vazia, cada uma sob a raiz da sua lista; a enumeração do
+  handler desce das duas raízes; teste novo de **corpo exato** por faixa para toda subclasse
+  concreta das duas raízes (CA8); `isinstance(traduzido, IdentityError)` vira pertinência às
+  duas raízes (nunca removida). Remover **todo** import e toda asserção de `NotFoundError`
+  dos arquivos de teste da Task (inclusive as negativas, que deixariam de compilar na T05).
+- **Critério de aceite:** CA3/CA8 para identity; oráculos de §5.6 do concept verdes sem edição.
 - **Comando de verificação:**
   ```bash
-  <comando>
+  uv run pytest tests/unit/features/identity tests/unit/test_status_map.py tests/contract/features/identity tests/e2e/features/identity -q
+  uv run mypy src tests/fakes
   ```
-- **Commit sugerido:** `<type>(<scope>): <description> [N.M/task-02]`
+- **Commit sugerido:** `refactor(identity): mover os erros que não são regra de negócio para a raiz de aplicação [3.9/task-02]`
 
 ---
 
-<Repetir Tasks.>
+### Task 03 — staff: raiz de aplicação, 4 erros, handler nas duas raízes
+
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/staff/application/errors.py`
+  - `src/restaurant_hub/features/staff/domain/exceptions/errors.py` (docstrings)
+  - `src/restaurant_hub/features/staff/adapters/inbound/http/error_handlers.py`
+  - `tests/unit/features/staff/application/test_errors.py`
+  - `tests/unit/features/staff/adapters/test_http_error_handlers.py`
+  - `tests/unit/features/staff/adapters/test_integrity_errors.py`
+  - `tests/contract/features/staff/test_identity_gateway_laws.py` (negar as duas raízes)
+  - os sítios `pytest.raises(StaffError)` cujo erro migra, ajustados mecanicamente para
+    `(StaffError, StaffApplicationError)` mantendo a asserção de tipo exato que segue:
+    `tests/contract/features/staff/test_employee_repository_laws.py` (`EmployeeNotFoundError`);
+    em `tests/unit/features/staff/application/`: `test_assign_job_functions.py`,
+    `test_copy_employee_to_unit.py`, `test_create_employee.py`, `test_delete_employee.py`,
+    `test_delete_job_function.py`, `test_employee_edit_use_cases.py`,
+    `test_employee_lifecycle.py`, `test_job_function_use_cases.py`,
+    `test_unavailability_use_cases.py`. Ficam como estão os sítios cujo erro permanece no
+    domínio (`EmployeeRelocationError` na lei; a asserção negativa de `test_create_employee.py`).
+  - `tests/unit/features/staff/domain/test_exceptions.py` (import de `NotFoundError`)
+- **O que fazer:** `StaffApplicationError(ApplicationError)`; os 4 erros do concept §4 herdam
+  dela; handler registrado nas duas raízes com o mesmo `"type": "staff_error"`; mapa tipado
+  pelas duas raízes (23 entradas, sem as raízes); docstrings sem protocolo; a docstring e os
+  comentários do módulo de handlers de staff deixam de falar em rede de segurança de
+  `NotFoundError`, MRO e herança de `NotFoundError`; testes de handler descem das duas raízes,
+  travam o corpo exato (CA8) e o registro nas duas raízes. Remover todo import e toda asserção
+  de `NotFoundError` dos testes de staff (inclusive `test_ca19_os_dois_erros_de_404_herdam_de_not_found_error`,
+  que vira asserção de raiz de aplicação).
+- **Justificativa do tamanho (> 5 arquivos):** os sítios `pytest.raises` são a mesma mudança
+  lógica (a raiz do erro migrado) e não podem ficar para outro commit sem deixar a suíte
+  vermelha — é a totalidade derivada que dita o corte.
+- **Critério de aceite:** CA3/CA8 para staff; `test_staff_status_bands.py` e
+  `test_staff_authorization.py` verdes sem edição.
+- **Comando de verificação:**
+  ```bash
+  uv run pytest tests/unit/features/staff tests/unit/test_status_map.py tests/contract/features/staff tests/e2e/features/staff -q
+  uv run mypy src tests/fakes
+  ```
+- **Commit sugerido:** `refactor(staff): dar raiz de aplicação aos erros de lookup e de colisão de id [3.9/task-03]`
+
+---
+
+### Task 04 — scheduling: raiz de aplicação e 6 erros
+
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/features/scheduling/application/errors.py`
+  - `src/restaurant_hub/features/scheduling/domain/exceptions/errors.py` (docstrings)
+  - `tests/unit/features/scheduling/application/test_errors.py`
+- **O que fazer:** `SchedulingApplicationError(ApplicationError)`; os 6 do concept §4 herdam
+  dela (os três `*NotFoundError` sem `NotFoundError`); `ScheduleVersionConflictError` e os
+  demais 5 seguem em `SchedulingError`; docstrings sem protocolo; teste de partição por
+  igualdade de conjuntos; remover todo import e toda asserção de `NotFoundError` do teste.
+- **Critério de aceite:** CA3 para scheduling; testes de scheduling verdes.
+- **Comando de verificação:**
+  ```bash
+  uv run pytest tests/unit/features/scheduling tests/unit/test_status_map.py -q
+  ```
+- **Commit sugerido:** `refactor(scheduling): dar raiz de aplicação aos erros que não são regra da escala [3.9/task-04]`
+
+---
+
+### Task 05 — `NotFoundError` e o handler genérico 404 saem; raiz única travada
+
+- **Arquivos a modificar:**
+  - `src/restaurant_hub/shared/domain/exceptions/base.py`
+  - `src/restaurant_hub/shared/infrastructure/http/error_handlers.py`
+  - `src/restaurant_hub/shared/infrastructure/http/app.py` (docstrings)
+  - `tests/unit/shared/test_exceptions.py`
+  - `tests/e2e/test_app_smoke.py` (sonda 404 sai; a 422 fica)
+  - `tests/unit/test_check_dead_shared.py` (`NotFoundError` sai da lista)
+  - `tests/unit/test_status_map.py` (teste de raiz única, CA2, com violadores plantados)
+  - `.importlinter` (comentários que justificam dependências com "os erros herdam de
+    DomainError/NotFoundError")
+- **Justificativa do tamanho (8 arquivos):** apagar uma classe pública de `shared` exige, no
+  mesmo commit, toda referência a ela (handler, smoke, Gate 7, contagem do módulo) e a trava
+  que a impede de voltar (CA2) — totalidade derivada.
+- **Pré-check:** `grep -rnw NotFoundError src tests` só acusa os arquivos desta Task.
+- **O que fazer:** apagar `NotFoundError` e o handler; reescrever a docstring de `base.py` sem
+  `HTTP`/`handler`/número de status/"status" (CA5) — `DomainError` como "violação de regra de
+  negócio" e o ponteiro para `ApplicationError`; `test_exceptions.py` passa a contar exatamente
+  `{"DomainError"}` no módulo; teste de raiz única com dois violadores plantados (duas raízes;
+  `ApplicationError` direto) via função isolada.
+- **Critério de aceite:** CA2, CA5; `check_dead_shared.py` verde.
+- **Comando de verificação:**
+  ```bash
+  uv run pytest tests/unit tests/e2e/test_app_smoke.py -q
+  uv run python scripts/check_dead_shared.py && uv run lint-imports
+  grep -rnw NotFoundError src tests                                   # vazio
+  grep -n -i "status" src/restaurant_hub/shared/domain/exceptions/base.py   # vazio
+  ```
+- **Commit sugerido:** `refactor(shared): remover NotFoundError e o handler genérico de 404 [3.9/task-05]`
+
+---
+
+### Task 06 — regra 11 de `check_layout.py`: a hierarquia não fala de protocolo
+
+- **Arquivos a modificar:**
+  - `scripts/check_layout.py`
+  - `tests/unit/test_check_layout.py`
+- **O que fazer:** `check_error_hierarchy_protocol(src_root)` varre os arquivos cujo caminho
+  casa `/domain/exceptions/` ou termina em `/application/errors.py` (âncoras de cobertura
+  derivadas, como as demais) e reprova linha com `\bHTTP\b`, `FastAPI`, `Starlette`,
+  `\bhandlers?\b`, `\bMRO\b`/`__mro__`, ou `\b[45]\d\d\b`, em qualquer lugar do texto (código,
+  docstring, comentário), sem distinção de caixa para as palavras. Ligada em `main()`.
+  Testes: `src/` real verde; um violador plantado **por termo** reprova (parametrizado); caso
+  negativo — número que não é status (`2.3.0003`, `R13`, `600`) e palavra fora do vocabulário
+  (`status`, `borda`) não reprovam; arquivo fora das âncoras (ex.: `domain/value_objects/x.py`)
+  não é varrido.
+- **Critério de aceite:** CA6.
+- **Comando de verificação:**
+  ```bash
+  uv run pytest tests/unit/test_check_layout.py -q && uv run python scripts/check_layout.py
+  ```
+- **Commit sugerido:** `feat(tooling): reprovar vocabulário de protocolo nos módulos de exceção [3.9/task-06]`
+
+---
+
+### Task 07 — ADRs: supersessão do 2.2.0003 e parciais
+
+- **Arquivos a modificar:**
+  - `docs/adr/2_2_0003-application-errors-in-identity-hierarchy.md` (`status: superseded`,
+    `superseded_by: "3.9.0001"`, banner no `## Status`, `updated_at`)
+  - `docs/adr/2_3_0003-add-is-insertion-not-upsert.md`, `docs/adr/2_4_0001-http-error-status-mapping.md`,
+    `docs/adr/3_4_0002-staff-http-error-status-mapping.md` — seção `## Supersessão parcial`
+    append-only, nota datada citando a cláusula e apontando o ADR 3.9.0001; `updated_at`.
+- **Critério de aceite:** CA1; `make docs-check` verde.
+- **Comando de verificação:**
+  ```bash
+  make docs-check
+  grep -c '^status: superseded' docs/adr/2_2_0003-*.md                 # 1
+  grep -c '^superseded_by: "3.9.0001"' docs/adr/2_2_0003-*.md          # 1
+  grep -c '^## Supersessão parcial' docs/adr/2_3_0003-*.md docs/adr/2_4_0001-*.md docs/adr/3_4_0002-*.md   # >= 1 cada, com nota 2026-11-02
+  ```
+- **Commit sugerido:** `docs(adr): registrar a supersessão do ADR 2.2.0003 pelo 3.9.0001 [3.9/task-07]`
+
+---
+
+### Task 08 — `LAYOUT.md`
+
+- **Arquivos a modificar:** `docs/LAYOUT.md`
+- **O que fazer:** §2 (comentários de `shared/domain/` e `shared/application/`), §3 (Application
+  "Pode importar de" inclui `shared/application/errors.py`), §4 (exemplo `NotFoundError` sai;
+  parágrafo de `ApplicationError` ganha nota datada de retorno pela 3.9 com consumidor medido).
+- **Critério de aceite:** CA9; `check_docs_claims.py` verde.
+- **Comando de verificação:**
+  ```bash
+  make docs-check
+  grep -n 'shared/application/errors.py' docs/LAYOUT.md    # acha a linha de §3 (Application)
+  grep -n 'NotFoundError' docs/LAYOUT.md                   # só na nota datada de §4
+  ```
+- **Commit sugerido:** `docs(layout): registrar ApplicationError em shared/application [3.9/task-08]`
 
 ## 3. Gate de saída da Stage
 
-> O que precisa estar verdadeiro para a Stage receber o commit
-> `stage N.M: complete` e ser mergeada em `develop`.
-
 ### Verificações automatizadas
 ```bash
-make check                # lint + type + import-linter + check_layout + testes
-pytest tests/             # todos os testes
-<outros comandos específicos da Stage>
+make check                                    # no GitHub Actions (orquestração autônoma)
+uv run python scripts/check_technical_postexec.py docs/stages/3.9-error-hierarchy/technical.md
+git diff origin/develop --stat -- tests/e2e/features/identity/test_status_bands.py tests/e2e/features/identity/test_suppressed_cause_log.py tests/e2e/features/identity/test_auth_flow.py tests/e2e/features/identity/test_authorization.py tests/e2e/features/staff/test_staff_status_bands.py tests/e2e/features/staff/test_staff_authorization.py tests/unit/features/identity/adapters/test_http_suppressed_cause_log.py   # vazio (CA7)
+grep -n -i "status" src/restaurant_hub/shared/domain/exceptions/base.py   # vazio (CA5)
 ```
 
 ### Verificações funcionais
-- [ ] <comportamento end-to-end que precisa funcionar — ex.: "rodar `python -m restaurant_hub.cli ingest sample.csv` produz N registros no banco">
-- [ ] <outro>
+- [ ] Pela API real: 401 de token inválido numa rota de staff e de identity (corpo constante +
+  `WWW-Authenticate`), 404 de recurso inexistente com `"type"` do BC — idênticos a `develop`.
 
 ### Checklist de fechamento da Stage
 - [ ] Todas as Tasks commitadas, cada uma com seu check verde
-- [ ] `make check` verde no branch
-- [ ] Commit final `stage N.M: complete` aplicado
-- [ ] Branch mergeado em `develop`
-- [ ] `roadmap.md` atualizado: Stage marcada `done`, `updated_at` e
-      `last_reviewed_at` no mesmo merge (ou em PR de docs imediato)
-- [ ] ADRs novos (se houve) em `status: accepted`
-- [ ] Runbooks operacionais criados se aplicável
-- [ ] `concept.md` desta Stage não precisa de retoque retrospectivo
-      (se precisa, abrir TODO ou nova Stage de correção)
+- [ ] `make check` verde no Actions do head do PR
+- [ ] Commit final `stage 3.9: complete` aplicado
+- [ ] `roadmap.md` atualizado: Stage `done`, `updated_at` e `last_reviewed_at`
+- [ ] ADR 3.9.0001 `accepted`
+- [ ] `concept.md` sem retoque retrospectivo pendente
 
 ## 4. Ordem de dependência entre Tasks
 
-<Texto ou lista mostrando quais Tasks dependem de quais. Por padrão a
-ordem listada em §2 já respeita dependências; explicitar aqui só os
-casos não óbvios.>
+```
+T01 ─► T02 ─► T03 ─► T04 ─► T05 ─► T06
+                                    T07 ─► T08   (docs; depois de T05 por citarem o estado final)
+```
 
-```
-Task 01 ─► Task 02 ─► Task 04
-              │
-              └──► Task 03
-```
+T02–T04 dependem da raiz de aplicação e do Gate 3 por raízes (T01); T05 só depois da última
+subclasse de `NotFoundError` migrar (T04); T06 só depois de todo módulo varrido estar limpo.
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
-| <ex.: lib X não suporta caso Y> | <ex.: cair para lib Z, ADR registrando> |
+| Algum oráculo e2e muda de resultado | Parar: a Stage é neutra em comportamento; investigar o handler antes de qualquer edição de teste |
+| `mypy` recusa o mapa tipado pela união das raízes | `dict[type[Exception], int]` com a função de resolução tipada pela união; registrar `[decision]` |
+| Regra 11 com falso positivo em módulo legítimo | Estreitar o padrão (não criar allowlist), com caso negativo no teste |
 
 ## 6. Referências
 
-- [`./concept.md`](./concept.md) — conceito desta Stage
-- [`../../overview.md`](../../overview.md)
-- [`../../roadmap.md`](../../roadmap.md)
-- [`../../CONVENTIONS.md`](../../CONVENTIONS.md) — branches, commits, status
-- ADRs desta Stage: [`../../adr/`](../../adr/) (filtrar por prefixo `N_M_`)
-- Skills aplicáveis: <ids de `skills/`>
-- Docs externos: <links>
+- [`./concept.md`](./concept.md); [ADR 3.9.0001](../../adr/3_9_0001-error-roots-by-meaning-status-by-map.md)
+- [`../../roadmap.md`](../../roadmap.md) §Stage 3.9; [`../../CONVENTIONS.md`](../../CONVENTIONS.md) §4
+- Skills: `hex-arch-python`, `fastapi-thin-adapter`, `pytest-with-fakes`, `task-ordering-hex`
 
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
-
-> Preenchida durante/após a **Fase 4**. **Apenas esta seção é editável
-> após `status: done`** — alterações fora dos marcadores
-> `BEGIN/END: post-execution` são rejeitadas no Passo 10 do
-> [`RUNBOOK-STAGE-LIFECYCLE.md`](../../RUNBOOK-STAGE-LIFECYCLE.md) via
-> `scripts/check_technical_postexec.py`. O frontmatter `updated_at`
-> **não muda** com edições aqui — cada entrada carrega data + autor.
-> Seção pode estar vazia se a execução não produziu notas relevantes.
->
-> **Regra de pergunta antes da nota.** Ao encontrar durante a Fase 4
-> algo não previsto no Concept ou neste Technical, **pause** e
-> levante a pergunta para o humano com 2–4 opções e uma marcada como
-> **recomendada** + razão (via `AskUserQuestion` ou equivalente).
-> Apenas após a decisão, registre a entrada abaixo. Na dúvida sobre
-> se algo é "pequeno o suficiente para decidir sozinho", **pergunte**.
-
-**Formato de cada entrada** (ADR-like, ordem cronológica):
-
-```markdown
-### YYYY-MM-DD — [tag] escopo — Autor
-**Contexto:** <o que foi encontrado durante a execução>
-**Pergunta:** <o que precisava ser decidido>            <!-- só [decision] -->
-**Opções:**                                              <!-- só [decision] -->
-- A — <descrição>
-- B — <descrição> ✅ recomendada
-**Decisão:** B                                           <!-- só [decision] -->
-**Razão:** <por que>
-```
-
-- `[decision]` — algo não previsto foi decidido durante a execução.
-  Inclui pergunta, opções, decisão, razão.
-- `[finding]` — gap/observação a tratar em **próxima Stage**; corpo
-  inclui "direção sugerida" e Stage candidata.
-- `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
-  diz o que mudou e por que ficou abaixo do threshold de perguntar.
-
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
 
 <!-- END: post-execution -->
