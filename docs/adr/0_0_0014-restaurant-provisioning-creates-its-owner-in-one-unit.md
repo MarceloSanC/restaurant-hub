@@ -1,18 +1,18 @@
 ---
-title: ADR 0.0.0012 — Creating a restaurant provisions its first owner in the same identity unit of work; the owner route stays as the way to add an owner to an existing restaurant
+title: ADR 0.0.0014 — Creating a restaurant provisions its first owner in the same identity unit of work; the owner route stays as the way to add an owner to an existing restaurant
 description: Architecture Decision Record
 when-use: Reference before changing `POST /restaurants`, `ProvisionRestaurantUseCase` or `POST /restaurants/{id}/owners`, before adding another route that emits a role without the "cannot grant what you do not hold" composition, or when revisiting ADR 2.4.0003 Alternative B
 keywords: [adr, provisioning, restaurant, owner, tenant, bootstrap, unit-of-work, atomicity, platform-admin, identity, issue-67]
 status: accepted
 created_at: 2026-11-02
 updated_at: 2026-11-02
-adr_id: "0.0.0012"
+adr_id: "0.0.0014"
 decision: `POST /restaurants` takes the restaurant name and its first owner's e-mail and password and runs `ProvisionRestaurantUseCase`, which writes `restaurants.add` + `users.add` inside one identity `UnitOfWork` with the role fixed to `owner` in the use case; `CreateRestaurantUseCase` is removed, so no API path creates a restaurant without an owner; `POST /restaurants/{id}/owners` stays, re-scoped to adding an owner to an existing restaurant; authorization stays at the HTTP boundary as for every identity use case
 context_stage: 0.0-global
 bounded_context: transversal
 ---
 
-# ADR 0.0.0012 — Restaurant provisioning creates its owner in one unit of work
+# ADR 0.0.0014 — Restaurant provisioning creates its owner in one unit of work
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
@@ -23,8 +23,8 @@ bounded_context: transversal
 Decided in issue #67 (standalone issue, hence the `0.0` prefix — CONVENTIONS §1, "ADR global" —
 and `bounded_context: transversal`, CONVENTIONS §2). The decision is about the identity bounded
 context; a search for identity ADRs finds it through ADR 2.4.0003's `## Supersessão parcial`.
-The number `0.0.0012` was reserved for this issue by the orchestrator: `0.0.0011` went to issue
-#79 (PR #110).
+The number `0.0.0014` was assigned by the orchestrator: `0.0.0011` and `0.0.0012` belong to
+issue #79 (PR #110) and `0.0.0013` to PR #109.
 
 **Partially supersedes [ADR 2.4.0003](./2_4_0003-authorization-composition-at-boundary.md):**
 

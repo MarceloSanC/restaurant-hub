@@ -229,7 +229,7 @@ justifying why, and must state which guarantee it is spending.
 
 **2026-11-02 — a Alternativa B (*"a composite `ProvisionRestaurantUseCase` … Revisit when a
 transaction port exists."*) e a frase de §5 *"exactly one such route exists"* foram superadas por
-[ADR 0.0.0012](./0_0_0012-restaurant-provisioning-creates-its-owner-in-one-unit.md) (issue #67).**
+[ADR 0.0.0014](./0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) (issue #67).**
 O port de transação existe (ADR 2.6.0001): `POST /restaurants` passou a criar o restaurante **e**
 o primeiro `owner` numa unidade de trabalho de identity (`ProvisionRestaurantUseCase`), e
 `POST /restaurants/{restaurant_id}/owners` deixou de ser *o* bootstrap — ficou como a rota de
