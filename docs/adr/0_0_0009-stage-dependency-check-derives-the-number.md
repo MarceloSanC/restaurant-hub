@@ -96,7 +96,8 @@ Facts that weigh on the decision:
    branch — `origin/develop`, `develop`, `origin/main`, `main`, whichever resolve, the same list as
    `check_technical_postexec.py` (fact 5). Exact subject: `conceptual approved` and
    `stage 11.1: complete` never satisfy `1.1`.
-4. **An issue dependency (`#N`) is closed when** its row in the *Tabela de Issues* is `done` — the
+4. **An issue dependency (`#N`) is closed when** its single row in the *Tabela de Issues* is `done` (an
+   issue with more than one row is a violation, as a duplicated Stage row is) — the
    rule PROMPT-issue's pre-condition 5 already applies. An issue that is not in that table is a
    violation that points to the right form: a Stage's issue is written as the Stage's `stage_id`.
 5. **`make docs-check` runs it with no arguments** over every Stage folder in `docs/stages/`. A
