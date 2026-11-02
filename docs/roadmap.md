@@ -1494,7 +1494,7 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python]
 >   `develop` depois do merge da 3.5 (technical §7).
 > - **Findings abertos** (technical §7), todos da **4.3** salvo o último: `operational_day_of`
 >   aceita instante tz-aware ou com segundos → validar na entrada; `change_demand_quantity` com o
->   mesmo N gera versão → o use case não chama a mutação; `.env` sem `DATABASE_URL` → issue #58.
+>   mesmo N gera versão → no-op no domínio (4.3, D2); `.env` sem `DATABASE_URL` → issue #58.
 
 #### Stage 4.2 — `4.2-validation-policies`
 
