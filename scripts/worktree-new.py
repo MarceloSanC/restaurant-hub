@@ -707,9 +707,10 @@ def _print_summary(*, branch: str, path: Path, issue: int, base: str) -> None:
     print("  # implementar, commitar (1 commit = 1 mudança, body em bullets);")
     print(f"  # depois: git push -u origin {branch} && gh pr create --base {base}")
     print()
-    print("Quando terminar a worktree (após PR mergeado):")
+    print("Quando terminar a worktree (após PR mergeado — GIT-WORKFLOW §Merge e limpeza):")
+    print("  git pull origin develop   # no checkout principal (em develop), antes do worktree-rm")
     print("  docker compose down -v   # dentro dela: o worktree-rm não derruba esse Postgres")
-    print(f"  python scripts/worktree-rm.py {branch}   # do checkout principal")
+    print(f"  python scripts/worktree-rm.py {branch} --delete-remote   # do checkout principal")
 
 
 def main() -> int:
