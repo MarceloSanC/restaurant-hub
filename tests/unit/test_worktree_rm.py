@@ -252,6 +252,19 @@ def test_relink_that_leaves_a_dead_hook_fails(
     assert wr.install_hooks.RELINK_HINT in capsys.readouterr().err
 
 
+def test_relink_that_leaves_a_dead_hook_outside_the_worktree_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hook morto por uma remoção anterior, fora da worktree que sai agora: se o
+    religamento não resolver, o script não pode anunciar sucesso.
+    """
+    common = tmp_path / "restaurant-hub" / ".git"
+    _write_hook(common, "pre-commit", tmp_path / "outra-removida" / "python.exe")
+    monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
+
+    assert wr.relink_hooks(common, tmp_path / "removida", [], dry_run=False) is False
+
+
 def test_partially_removed_worktree_with_python_still_on_disk_is_relinked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -345,7 +358,7 @@ def test_main_exits_2_when_the_hooks_stay_dead(
     _write_hook((principal / ".git").resolve(), "commit-msg", _venv_python(wt))
     monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
 
-    assert wr.main() == wr.install_hooks.EXIT_ERROR
+    assert wr.main() == 2  # noqa: PLR2004 — o exit code documentado do script
     assert not wt.exists()
 
 

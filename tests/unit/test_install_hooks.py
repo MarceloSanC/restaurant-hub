@@ -279,3 +279,69 @@ def test_removing_a_worktree_keeps_the_commits_of_the_others(
     assert cp.returncode == 0, cp.stdout + cp.stderr
     assert (outra / "pre-commit-rodou").exists()
     assert (outra / "commit-msg-rodou").exists()
+
+
+# ---------------------------------------------------------------------------
+# Contrato: exit codes, comando do install e a ligação no `make setup`
+# ---------------------------------------------------------------------------
+
+
+def test_exit_codes_are_the_documented_ones() -> None:
+    """A docstring e o GIT-WORKFLOW prometem 0/1/2; quem chama distingue hook morto
+    (1, religar no principal) de erro de git ou do pre-commit (2).
+    """
+    assert (ih.EXIT_OK, ih.EXIT_DEAD_HOOK, ih.EXIT_ERROR) == (0, 1, 2)
+
+
+def test_install_runs_pre_commit_for_both_hook_types_in_the_given_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[list[str], str]] = []
+
+    def _fake_run(cmd: list[str], *, cwd: str, check: bool) -> subprocess.CompletedProcess[str]:
+        calls.append((cmd, cwd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(ih.subprocess, "run", _fake_run)
+
+    assert ih.install(tmp_path) == 0
+    assert calls == [
+        (
+            [
+                sys.executable,
+                *("-m", "pre_commit", "install", "--install-hooks"),
+                *("--hook-type", "pre-commit", "--hook-type", "commit-msg"),
+            ],
+            str(tmp_path),
+        )
+    ]
+
+
+def test_unexpected_git_output_exits_2(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`rev-parse` com uma linha só (git antigo sem `--path-format`, por exemplo)."""
+    monkeypatch.setattr(
+        ih.subprocess,
+        "run",
+        lambda cmd, **_kw: subprocess.CompletedProcess(cmd, 0, stdout="/repo/.git\n"),
+    )
+
+    assert ih.main() == ih.EXIT_ERROR
+    assert "repositório git" in capsys.readouterr().err
+
+
+def test_make_setup_installs_hooks_only_through_the_script() -> None:
+    """A linha que causava a issue: `pre-commit install` direto no `make setup`
+    reescrevia os hooks de todas as worktrees com o venv de quem o rodava.
+    """
+    makefile = Path(__file__).resolve().parents[2] / "Makefile"
+    lines = makefile.read_text(encoding="utf-8").splitlines()
+    recipe: list[str] = []
+    for line in lines[lines.index("setup:") + 1 :]:
+        if not line.startswith("\t"):
+            break
+        recipe.append(line.strip())
+
+    assert "uv run python scripts/install_hooks.py" in recipe
+    assert not [cmd for cmd in recipe if "pre-commit install" in cmd]
