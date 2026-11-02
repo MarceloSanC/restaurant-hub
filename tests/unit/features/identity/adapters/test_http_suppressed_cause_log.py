@@ -31,9 +31,11 @@ from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     InvalidAccessTokenError,
     InvalidRefreshTokenError,
+    InvalidSetupTokenError,
     PermissionDeniedError,
     RestaurantNotFoundError,
     UnitNotFoundError,
+    UserNotFoundError,
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
@@ -187,7 +189,7 @@ async def test_403_registra_ator_rota_e_cadeia_de_causas(
     assert _campo(registro, "auth_actor") == "user-7"
     assert _campo(registro, "auth_cause") == (
         "UnitNotVisibleError: usuário 'user-7' não enxerga a unidade 'unit-fantasma'"
-        " <- UnitNotFoundError: unidade não encontrada: 'unit-fantasma'"
+        " <- UnitNotFoundError"
     )
     mensagem = registro.getMessage()
     assert mensagem.startswith("resposta 403 com causa suprimida: POST /units/unit-fantasma/users")
@@ -384,10 +386,7 @@ def test_cadeia_com_ciclo_termina() -> None:
 
     descricao = handlers.describe_suppressed_cause(externa)
 
-    assert descricao == (
-        "InvalidAccessTokenError: token de acesso inválido"
-        " <- UnitNotFoundError: unidade não encontrada: 'u-1'"
-    )
+    assert descricao == "InvalidAccessTokenError: token de acesso inválido <- UnitNotFoundError"
 
 
 def test_cadeia_longa_para_no_teto() -> None:
@@ -398,5 +397,24 @@ def test_cadeia_longa_para_no_teto() -> None:
     descricao = handlers.describe_suppressed_cause(elos[0])
 
     assert descricao.count("UnitNotFoundError") == handlers._ELOS_MAXIMOS
-    assert f"'u-{handlers._ELOS_MAXIMOS - 1}'" in descricao
-    assert f"'u-{handlers._ELOS_MAXIMOS}'" not in descricao
+    assert descricao.startswith("UnitNotFoundError: unidade não encontrada: 'u-0' <- ")
+
+
+def test_mensagem_de_causa_do_bc_nao_vai_ao_log() -> None:
+    """Só a mensagem do elo externo entra — a das causas foi escrita para outro corpo.
+
+    `InvalidSetupTokenError` nasce `from UserNotFoundError(user_id)` na rota
+    pública de definição de senha; o id do dono do token, que ela própria se
+    recusa a interpolar, não pode chegar ao log pela causa.
+    """
+    try:
+        try:
+            raise UserNotFoundError("id-do-dono-do-token")
+        except UserNotFoundError as exc:
+            raise InvalidSetupTokenError() from exc
+    except InvalidSetupTokenError as exc:
+        descricao = handlers.describe_suppressed_cause(exc)
+
+    assert descricao == (
+        "InvalidSetupTokenError: token de definição de senha inválido <- UserNotFoundError"
+    )

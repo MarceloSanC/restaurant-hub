@@ -182,23 +182,13 @@ def _neutralizar(texto: str) -> str:
     )
 
 
-def _descrever_elo(exc: BaseException) -> str:
-    """Um elo da cadeia: classe e mensagem se for do BC, só a classe se não for.
-
-    **A mensagem só entra para `IdentityError`.** As mensagens deste BC são
-    escritas sabendo que acabam em log — nenhuma interpola senha, token, hash ou
-    link (`InvalidSetupTokenError` e `SessionFingerprintAlreadyExistsError`
-    documentam a regra) e `InvalidCredentialsError` não cita o e-mail tentado.
-    Exceção de fora — PyJWT, `ValueError` do parse de uma claim — não passou por
-    essa revisão, e a mensagem dela pode ecoar o que o cliente mandou. Dela fica
-    só o nome qualificado da classe, que já basta para separar "expirado" de
-    "assinatura inválida".
-    """
-    if isinstance(exc, IdentityError):
-        return f"{type(exc).__name__}: {exc}"
+def _nome_da_classe(exc: BaseException) -> str:
+    """Nome da classe — qualificado pelo módulo, salvo para as `builtins`."""
     classe = type(exc)
     if classe.__module__ == "builtins":
         return classe.__qualname__
+    if isinstance(exc, IdentityError):
+        return classe.__name__
     return f"{classe.__module__}.{classe.__qualname__}"
 
 
@@ -217,13 +207,25 @@ def describe_suppressed_cause(exc: IdentityError) -> str:
     Ex.: `"InvalidAccessTokenError: token de acesso inválido <-
     jwt.exceptions.ExpiredSignatureError"`. É o que distingue, no log, as causas
     que o corpo constante iguala.
+
+    **Mensagem, só a do elo externo; das causas, só a classe.** A mensagem
+    externa é exatamente a que o corpo constante deixou de mostrar — a que o
+    ADR 2.4.0001 §4 manda para o log —, e as mensagens das exceções da faixa
+    401/403 são escritas sabendo que acabam em log: nenhuma interpola senha,
+    token, hash, link ou e-mail tentado. A de uma causa não passou por essa
+    revisão. Exceção de fora do BC (PyJWT, `ValueError` do parse de uma claim)
+    pode ecoar o que o cliente mandou; e mesmo a de identity foi escrita para o
+    corpo de outra faixa — `InvalidSetupTokenError` nasce `from
+    UserNotFoundError(user_id)`, e o id do dono do token, que a própria
+    `InvalidSetupTokenError` se recusa a interpolar, iria ao log de uma rota
+    pública. O nome da classe já separa "expirado" de "assinatura inválida".
     """
-    elos: list[str] = []
-    vistos: set[int] = set()
-    atual: BaseException | None = exc
+    elos = [f"{_nome_da_classe(exc)}: {exc}"]
+    vistos = {id(exc)}
+    atual = _proximo_elo(exc)
     while atual is not None and id(atual) not in vistos and len(elos) < _ELOS_MAXIMOS:
         vistos.add(id(atual))
-        elos.append(_descrever_elo(atual))
+        elos.append(_nome_da_classe(atual))
         atual = _proximo_elo(atual)
     return _neutralizar(" <- ".join(elos))
 
