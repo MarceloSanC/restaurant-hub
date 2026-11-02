@@ -107,6 +107,7 @@ check: lint fmt-check typecheck layout-check import-check lock-check docs-check 
 #
 # `lint`, `fmt` e `fmt-check` cobrem os mesmos diretórios: todo `.py` versionado
 # (issue #99 incluiu `migrations/`, que só o hook do pre-commit conferia).
+# `tests/unit/test_ci_workflow.py` reprova `.py` versionado fora deles.
 # ---------------------------------------------------------------------------
 lint:
 	uv run ruff check src/ tests/ scripts/ .claude/hooks/ migrations/

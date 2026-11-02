@@ -19,6 +19,12 @@ Escopo deliberadamente estreito, em duas classes:
    diagnóstico para o `make check` local, em vez de deixá-lo para um run vermelho
    depois do push, onde a causa ("faltou o service") é bem menos óbvia que o
    sintoma ("os testes de integração falharam").
+3. **O que a cadeia do `make check` confere** (issue #99): a transitividade só
+   carrega para o runner o que o `make check` de fato roda. Tirar o `fmt-check`
+   da cadeia, trocar o `--check` por uma formatação que conserta e aprova, ou
+   esquecer um diretório com `.py` nos alvos de ruff deixa o CI verde sobre o que
+   o hook do pre-commit reprovaria — e código commitado com `--no-verify`, ou de
+   uma worktree sem hook, passa.
 
 Não testar aqui estilo, nomes de step ou coisas que qualquer leitura do diff
 pega.
@@ -26,13 +32,17 @@ pega.
 
 from __future__ import annotations
 
+import shlex
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-CI_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+MAKEFILE = REPO_ROOT / "Makefile"
 
 # Cadeia real do target `check` (Makefile). O step do CI roda literalmente
 # `make check` — invariante I3 do concept da Stage 1.2: política específica de CI
@@ -164,3 +174,121 @@ def test_gate_job_exporta_database_url_por_env(gate_job: dict[str, Any]) -> None
         f"a DATABASE_URL do CI precisa nomear o driver (`+psycopg`), como o resto "
         f"do projeto faz desde a Stage 2.3; veio {url!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #99 — o `make check` confere formatação e cobre todo `.py` versionado.
+#
+# O hook do pre-commit formata e linta todo `.py` do commit; o gate só confere o
+# que a cadeia do `check` roda, sobre os diretórios que os alvos nomeiam. As
+# duas lacunas da #7 (F1 e F2) eram exatamente essas: sem conferência de
+# formatação na cadeia e `migrations/` fora do lint.
+# ---------------------------------------------------------------------------
+
+# `uv run ruff <subcomando>`: os tokens antes das flags e dos caminhos.
+_RUFF_PREFIX_LEN = 4
+
+# Os alvos de ruff que o `check` precisa rodar, cada um com o subcomando e as
+# flags exatas. Flag a mais muda o veredito: `--fix` no `lint` ou a falta do
+# `--check` no `fmt-check` consertam o arquivo no runner e saem com 0.
+_GATE_RUFF_TARGETS = {
+    "lint": (["uv", "run", "ruff", "check"], set[str]()),
+    "fmt-check": (["uv", "run", "ruff", "format"], {"--check"}),
+}
+
+# Alvos de ruff que precisam alcançar todo `.py` versionado: os dois do gate e o
+# `fmt`, que é como o projeto formata (um diretório fora dele fica desformatado
+# para sempre, e o `fmt-check` reprovaria sem que o `make fmt` resolvesse).
+_RUFF_TARGETS = ("lint", "fmt-check", "fmt")
+
+
+def _makefile_lines() -> list[str]:
+    return MAKEFILE.read_text(encoding="utf-8").splitlines()
+
+
+def _recipe(target: str) -> list[list[str]]:
+    """Os comandos da receita de `target` no Makefile, já quebrados em tokens."""
+    lines = _makefile_lines()
+    header = f"{target}:"
+    assert header in lines, f"o Makefile não tem mais o target `{target}`"
+    commands: list[list[str]] = []
+    for line in lines[lines.index(header) + 1 :]:
+        if not line.startswith("	"):
+            break
+        commands.append(shlex.split(line))
+    assert commands, f"o target `{target}` do Makefile não tem receita"
+    return commands
+
+
+def _check_prerequisites() -> list[str]:
+    """Os pré-requisitos do target `check`: a cadeia que o CI roda."""
+    [line] = [line for line in _makefile_lines() if line.startswith("check:")]
+    return line.removeprefix("check:").split()
+
+
+def _versioned_python_files() -> list[str]:
+    """Todo `.py`/`.pyi` versionado: o que o hook do pre-commit pode receber."""
+    listed = subprocess.run(
+        ["git", "ls-files", "--", "*.py", "*.pyi"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    files = listed.stdout.splitlines()
+    assert files, "git ls-files não listou nenhum .py — o teste não teria o que cobrar"
+    return files
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("target", sorted(_GATE_RUFF_TARGETS))
+def test_check_chain_runs_ruff_target(target: str) -> None:
+    """O `check` roda o `lint` e o `fmt-check`, com as flags que só conferem.
+
+    Fora da cadeia, o alvo não roda no runner. Com a flag errada, roda e aprova:
+    `ruff check --fix` corrige o erro corrigível e sai com 0, e `ruff format` sem
+    `--check` formata o arquivo e sai com 0. Nos dois casos o CI fica verde sobre
+    o código que o hook do pre-commit reprovaria.
+    """
+    assert target in _check_prerequisites(), (
+        f"o `make check` não roda o `{target}`: o CI roda `make check` literalmente, e "
+        f"o que sai da cadeia deixa de ser conferido no runner (issue #99)"
+    )
+    prefix, flags = _GATE_RUFF_TARGETS[target]
+    [command] = _recipe(target)
+    assert command[:_RUFF_PREFIX_LEN] == prefix, (
+        f"o `make {target}` roda {command}; o gate espera {prefix}"
+    )
+    used = {token for token in command[_RUFF_PREFIX_LEN:] if token.startswith("-")}
+    assert used == flags, (
+        f"o `make {target}` passa {sorted(used)} ao ruff, e o gate espera {sorted(flags)}: "
+        f"flag que conserta em vez de conferir faz o runner aprovar o que devia reprovar"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("target", _RUFF_TARGETS)
+def test_ruff_target_covers_every_versioned_python_file(target: str) -> None:
+    """Cada comando de ruff do alvo alcança todo `.py` versionado do repositório.
+
+    O hook do pre-commit recebe todo `.py` do commit, de qualquer diretório. O
+    alvo só confere os diretórios que nomeia: um `.py` fora deles passa no gate
+    sem nunca ter sido conferido — era o caso de `migrations/` até a issue #99.
+    A cobrança é sobre o que está versionado, e não sobre uma lista fixa: um
+    diretório novo com Python reprova aqui até entrar nos alvos.
+    """
+    files = _versioned_python_files()
+    for command in _recipe(target):
+        assert command[: _RUFF_PREFIX_LEN - 1] == ["uv", "run", "ruff"], (
+            f"o `make {target}` roda {command}, que não é o ruff do projeto"
+        )
+        paths = [
+            token.rstrip("/") + "/"
+            for token in command[_RUFF_PREFIX_LEN:]
+            if not token.startswith("-")
+        ]
+        uncovered = sorted(path for path in files if not path.startswith(tuple(paths)))
+        assert uncovered == [], (
+            f"`{shlex.join(command)}` (make {target}) não alcança {uncovered}: o hook do "
+            f"pre-commit confere esses arquivos e o gate não (issue #99)"
+        )
