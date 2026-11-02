@@ -72,6 +72,7 @@ class FakeDocker:
     volumes: dict[str, str] = field(default_factory=dict)  # nome → projeto
     networks: dict[str, str] = field(default_factory=dict)
     up: bool = True
+    info_error: str | None = None  # daemon que responde, mas recusa (`permission denied`)
     fail_rm: set[str] = field(default_factory=set)
     calls: list[tuple[str, ...]] = field(default_factory=list)
 
@@ -82,17 +83,31 @@ class FakeDocker:
         label = self._label(args)
         match args[0], args[1] if len(args) > 1 else "":
             case "info", _:
+                if self.info_error:
+                    return _cp(returncode=1, stderr=self.info_error)
                 return _cp("27.0.0\n")
             case "ps", "-aq":
                 return _cp("".join(f"id-{c.name}\n" for c in self.containers))
             case "ps", _:
-                selected = [c for c in self.containers if self._matches(c.project, label)]
+                # sem `-a`, o `docker ps` não lista o container parado
+                selected = [
+                    c
+                    for c in self.containers
+                    if self._matches(c.project, label) and (c.running or "-a" in args)
+                ]
                 if "{{.Names}}" in args:
                     return _cp("".join(f"{c.name}\n" for c in selected))
                 return _cp("".join(f"{c.project}\t{c.working_dir}\n" for c in selected))
             case "inspect", _:
+                # a configuração guarda as portas de todo container; o estado de rede,
+                # só as do que está de pé
                 by_id = {f"id-{c.name}": c for c in self.containers}
-                return _cp("".join(f"{json.dumps(by_id[i].ports)}\n" for i in args[3:]))
+                template, ids = args[2], args[3:]
+                if template == "{{json .HostConfig.PortBindings}}":
+                    return _cp("".join(f"{json.dumps(by_id[i].ports)}\n" for i in ids))
+                assert template == "{{json .NetworkSettings.Ports}}", template
+                live = [by_id[i].ports if by_id[i].running else {} for i in ids]
+                return _cp("".join(f"{json.dumps(ports)}\n" for ports in live))
             case ("volume" | "network") as kind, "ls":
                 store = self.volumes if kind == "volume" else self.networks
                 selected_names = [n for n, p in store.items() if self._matches(p, label)]
@@ -480,3 +495,82 @@ def test_main_with_docker_down_exits_1_and_says_nothing_was_checked(
     captured = capsys.readouterr()
     assert "nada foi conferido" in captured.err
     assert "Nenhum projeto" not in captured.out
+
+
+# ---------------------------------------------------------------------------
+# casos pedidos pela auditoria de testes (mutantes sobreviventes)
+# ---------------------------------------------------------------------------
+
+
+def test_stopped_container_of_the_project_is_listed_and_removed(fake: FakeDocker) -> None:
+    fake.containers = [Container("fix-1-a-postgres-1", "fix-1-a", running=False)]
+
+    found, failures = wd.remove_project("fix-1-a")
+
+    assert (found.containers, failures) == (["fix-1-a-postgres-1"], [])
+    assert fake.containers == []
+
+
+def test_blank_working_dir_is_not_a_working_dir(fake: FakeDocker) -> None:
+    fake.containers = [Container("fix-9-x-db-1", "fix-9-x", working_dir="")]
+
+    assert wd.compose_projects() == {"fix-9-x": set()}
+
+
+def test_project_rooted_at_the_worktrees_dir_itself_is_inside_it(tmp_path: Path) -> None:
+    _, worktrees, parent = _worktrees(tmp_path)
+    assert wd.find_orphans({"p": {str(parent)}}, worktrees, parent) == ["p"]
+
+
+@pytest.mark.parametrize("name", ["fix-tmp", "fix--1-a", "docs-update-readme", "fix-1"])
+def test_volume_only_project_needs_a_branch_shaped_name(tmp_path: Path, name: str) -> None:
+    _, worktrees, parent = _worktrees(tmp_path)
+    assert wd.find_orphans({name: set()}, worktrees, parent) == []
+
+
+def test_unreadable_inspect_lines_are_skipped_and_the_rest_counted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outputs = {
+        "info": "27.0.0\n",
+        "ps": "a\nb\nc\n",
+        "inspect": 'not json\n{"5432/tcp": null}\n{"8000/tcp": [{"HostPort": "8004"}]}\n',
+    }
+    monkeypatch.setattr(wd, "docker", lambda *args: _cp(outputs[args[0]]))
+
+    assert wd.published_host_ports() == {8004}
+
+
+def test_main_with_a_refusing_daemon_exits_1_instead_of_no_orphans(
+    repo: Path, fake: FakeDocker, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake.info_error = "permission denied while trying to connect to the Docker daemon socket"
+    fake.containers, fake.volumes = [], {}
+
+    assert wd.main([]) == 1
+    captured = capsys.readouterr()
+    assert "permission denied" in captured.err
+    assert "Nenhum projeto" not in captured.out
+
+
+def test_registered_worktrees_reads_the_main_checkout_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main = tmp_path / "restaurant-hub"
+    other = tmp_path / "restaurant-hub-worktrees" / "fix-1-a"
+    porcelain = f"worktree {main}\nHEAD 1\nbranch refs/heads/develop\n\nworktree {other}\nHEAD 2\n"
+    monkeypatch.setattr(wd.subprocess, "run", lambda *_a, **_kw: _cp(porcelain))
+
+    assert wd.registered_worktrees() == (main, [main, other])
+
+
+def test_main_looks_for_orphans_only_inside_the_worktrees_dir(
+    repo: Path, fake: FakeDocker, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Projeto de outro repositório, ao lado do checkout principal, não é órfão."""
+    fake.containers.append(_orphan_pg("other-app", str(repo.parent / "other-app"), port="5440"))
+
+    assert wd.main([]) == 0
+    out = capsys.readouterr().out
+    assert "fix-85-guard" in out
+    assert "other-app" not in out

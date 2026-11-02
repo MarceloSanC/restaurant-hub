@@ -22,6 +22,7 @@ import socket
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import ClassVar
 
 import pytest
 from dotenv import dotenv_values
@@ -612,3 +613,82 @@ def test_host_port_busy_sees_a_wildcard_bind() -> None:
         server.bind(("0.0.0.0", 0))
         port = server.getsockname()[1]
         assert wn.host_port_busy(port) is True
+
+
+def test_host_port_busy_sees_a_bind_on_another_loopback_address() -> None:
+    """Bind em `127.0.0.2`, sem `listen`: o connect no `127.0.0.1` é recusado, e no
+    Windows só o `SO_EXCLUSIVEADDRUSE` faz o bind curinga da sonda falhar.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        try:
+            server.bind(("127.0.0.2", 0))
+        except OSError:
+            pytest.skip("127.0.0.2 não é loopback neste sistema (macOS)")
+        port = server.getsockname()[1]
+        assert wn.host_port_busy(port) is True
+
+
+class _FakeSocket:
+    """Socket cujo bind sempre passa; o `connect_ex` responde `answer`."""
+
+    answer = 0
+    connects: ClassVar[list[tuple[str, int]]] = []
+    timeouts: ClassVar[list[float]] = []
+
+    def __init__(self, *_args: object) -> None:
+        pass
+
+    def __enter__(self) -> _FakeSocket:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        pass
+
+    def setsockopt(self, *_args: object) -> None:
+        pass
+
+    def bind(self, _addr: object) -> None:
+        pass
+
+    def settimeout(self, value: float) -> None:
+        self.timeouts.append(value)
+
+    def connect_ex(self, addr: tuple[str, int]) -> int:
+        self.connects.append(addr)
+        return self.answer
+
+
+@pytest.mark.parametrize(("answer", "busy"), [(0, True), (10061, False)])
+def test_host_port_busy_counts_an_accepted_connection(
+    monkeypatch: pytest.MonkeyPatch, answer: int, busy: bool
+) -> None:
+    """O bind de teste passa (serviço com `SO_REUSEADDR`, relay do WSL), mas o
+    loopback aceita a conexão: a porta está ocupada.
+    """
+    monkeypatch.setattr(_FakeSocket, "answer", answer)
+    monkeypatch.setattr(_FakeSocket, "connects", [])
+    monkeypatch.setattr(_FakeSocket, "timeouts", [])
+    monkeypatch.setattr(wn.socket, "socket", _FakeSocket)
+
+    assert wn.host_port_busy(5434) is busy
+    assert _FakeSocket.connects == [("127.0.0.1", 5434)]
+    assert _FakeSocket.timeouts == [wn.CONNECT_PROBE_TIMEOUT]
+
+
+def test_docker_reserved_ports_is_none_with_docker_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _down() -> set[int]:
+        raise wn.worktree_docker.DockerUnavailable("down")
+
+    monkeypatch.setattr(wn.worktree_docker, "published_host_ports", _down)
+    assert _REAL_DOCKER_RESERVED_PORTS() is None
+
+
+def test_docker_reserved_ports_does_not_swallow_other_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _bug() -> set[int]:
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(wn.worktree_docker, "published_host_ports", _bug)
+    with pytest.raises(RuntimeError):
+        _REAL_DOCKER_RESERVED_PORTS()

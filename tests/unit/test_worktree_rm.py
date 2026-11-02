@@ -603,3 +603,29 @@ def test_main_refuses_the_branch_of_the_main_checkout(
     assert compose["calls"] == []
     assert principal.exists()
     assert "checkout principal" in capsys.readouterr().err
+
+
+def test_folder_name_is_normalized_like_compose_does(
+    tmp_path: Path, compose: dict[str, list[str]]
+) -> None:
+    wr.compose_cleanup(tmp_path / "Feat-1-A", dry_run=False)
+
+    assert compose["calls"] == ["remove feat-1-a"]
+
+
+def test_compose_leftover_fails_the_cleanup_with_the_devcontainer_path_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compose: dict[str, list[str]]
+) -> None:
+    """Com o daemon de pé, o `docker_cleanup` passa pelo devcontainer e pela imagem e
+    ainda devolve o resultado do compose.
+    """
+    compose["failures"].append(f"volume {PROJECT}_pgdata: in use")
+    monkeypatch.setattr(wr, "_docker_available", lambda: True)
+    monkeypatch.setattr(wr, "find_containers_for_worktree", lambda _p: [])
+    monkeypatch.setattr(
+        wr.subprocess, "run", lambda cmd, *_a, **_kw: subprocess.CompletedProcess(cmd, 1)
+    )
+
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is False
+    compose["failures"].clear()
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is True
