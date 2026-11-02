@@ -1,4 +1,4 @@
-"""O gate de citação ao roadmap, contra violadores plantados (issue #79, ADR 0.0.0011).
+"""O gate de citação ao roadmap, contra violadores plantados (issue #79, ADR 0.0.0012).
 
 **O que o gate protege é o alvo de uma citação.** Doc que cita o roadmap por
 número de linha aponta, um PR depois, para outra coisa: o roadmap cresce no meio

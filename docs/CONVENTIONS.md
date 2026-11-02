@@ -758,7 +758,7 @@ Docs vivem no git, então o histórico é o versionamento. Mas:
 - **Roadmap pode ser editado livremente**, mas `updated_at` e
   `last_reviewed_at` devem refletir a realidade.
 - **Citação ao roadmap — por âncora, nunca por número de linha**
-  ([ADR 0.0.0011](./adr/0_0_0011-cite-the-roadmap-by-stable-anchor.md), issue #79).
+  ([ADR 0.0.0012](./adr/0_0_0012-cite-the-roadmap-by-stable-anchor.md), issue #79).
   O roadmap cresce no meio — cada issue nova entra na Tabela de Issues, acima de
   todos os blocos de Step — e uma citação `` `roadmap.md` <linha> `` passa a apontar
   para outro conteúdo no PR seguinte, sem erro em lugar algum. A forma é seção +

@@ -4,7 +4,7 @@ Uso:
     python scripts/check_roadmap_citations.py
     python scripts/check_roadmap_citations.py --repo .
 
-Issue #79, ADR 0.0.0011. Ligado em `make docs-check`.
+Issue #79, ADR 0.0.0012. Ligado em `make docs-check`.
 
 ---
 
@@ -273,7 +273,7 @@ def main() -> int:
     if achados:
         print(
             f"check_roadmap_citations: {len(achados)} problema(s). Cite o roadmap por âncora "
-            '(`roadmap.md` §Stage N.M › "Rótulo") — CONVENTIONS §5, ADR 0.0.0011:\n',
+            '(`roadmap.md` §Stage N.M › "Rótulo") — CONVENTIONS §5, ADR 0.0.0012:\n',
             file=sys.stderr,
         )
         for achado in achados:

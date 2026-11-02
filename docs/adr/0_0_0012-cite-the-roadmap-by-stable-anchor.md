@@ -1,18 +1,18 @@
 ---
-title: ADR 0.0.0011 — Docs cite the roadmap by stable anchor, never by line number, and a gate enforces it
+title: ADR 0.0.0012 — Docs cite the roadmap by stable anchor, never by line number, and a gate enforces it
 description: Architecture Decision Record
 when-use: Reference before citing docs/roadmap.md from any other doc, before renaming a roadmap heading or a bold label/YAML key inside a Stage block, or before changing what make docs-check enforces about roadmap citations
 keywords: [adr, process, docs, roadmap, citation, anchor, line-number, docs-check, gate]
 status: accepted
 created_at: 2026-11-02
 updated_at: 2026-11-02
-adr_id: "0.0.0011"
+adr_id: "0.0.0012"
 decision: A doc cites docs/roadmap.md by section plus label (`roadmap.md` §Stage N.M › "Descrição humana", `definition_of_done`), never by line number; scripts/check_roadmap_citations.py, run by make docs-check, rejects a line number after a roadmap reference and an anchor whose section or label does not exist. The technical.md §7 log and the roadmap itself are out of scope.
 context_stage: 0.0-global
 bounded_context: transversal
 ---
 
-# ADR 0.0.0011 — Docs cite the roadmap by stable anchor, never by line number
+# ADR 0.0.0012 — Docs cite the roadmap by stable anchor, never by line number
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
@@ -51,7 +51,7 @@ them drifts:
 
 ## Decision
 
-`[decision:C] 0.0.0011 — how other docs cite the roadmap`
+`[decision:C] 0.0.0012 — how other docs cite the roadmap`
 Escolha: anchor (section + label) **and** a gate · Alternativas: remap per PR; content-hash gate;
 move the issue table; gate alone · Degrau (C): 4 (the reversible form that does not have to be
 redone on every PR; degrau 1 — the already-ratified `§Stage N.M` — fixes the section part).
