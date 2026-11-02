@@ -29,7 +29,8 @@ Stage `done` (issue #37).
 
 5. O frontmatter existe e é um mapeamento YAML; `references`, se presente, é lista
    de caminhos, e cada um resolve.
-6. Todo link relativo do corpo resolve (o fragmento `#...` é ignorado). Bloco de
+6. Todo link relativo do corpo resolve — inline ou definição por referência
+   (`[x]: alvo`); o fragmento `#...` é ignorado. Bloco de
    código cercado não conta, nesta regra nem na 7 e na 8: é exemplo citado.
 7. Todo ADR linkado no corpo está no `references` — salvo a válvula abaixo.
 8. Nenhuma "Lacuna para o concept da Stage N.M" fica aberta com uma Stage listada
@@ -97,6 +98,9 @@ _ADR_ID = re.compile(r"^\d+\.\d+\.\d{4}$")
 
 # Alvo de um link markdown inline: `[texto](alvo)` ou `[texto](alvo "título")`.
 _LINK = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+# Definição de link por referência: `[rótulo]: alvo` no começo da linha. Sem ela,
+# `[ADR][x]` + `[x]: ../../adr/...` escaparia das regras 6 e 7.
+_DEFINICAO = re.compile(r"^ {0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?")
 _ESQUEMA = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 _CERCA = re.compile(r"^\s*(```|~~~)")
 
@@ -219,8 +223,11 @@ def links_relativos(corpo: str, primeira_linha: int) -> list[tuple[int, str]]:
     achados: list[tuple[int, str]] = []
     for i, linha in linhas_de_prosa(corpo):
         sem_codigo = re.sub(r"`[^`\n]*`", "", linha)
-        for m in _LINK.finditer(sem_codigo):
-            alvo = m.group(1)
+        definicao = _DEFINICAO.match(linha)
+        alvos = [m.group(1) for m in _LINK.finditer(sem_codigo)]
+        if definicao is not None:
+            alvos.append(definicao.group(1))
+        for alvo in alvos:
             if alvo.startswith("#") or _ESQUEMA.match(alvo):
                 continue
             achados.append((primeira_linha + i, alvo.split("#", 1)[0]))

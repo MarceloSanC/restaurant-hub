@@ -319,6 +319,15 @@ def test_adr_linkado_fora_do_references_reprova(tmp_path: pathlib.Path) -> None:
     assert achado == f"{_DOMINIO}:10: ADR 4_1_0002-b.md linkado no corpo e ausente do `references`"
 
 
+def test_adr_linkado_por_referencia_fora_do_references_reprova(tmp_path: pathlib.Path) -> None:
+    corpo = "\nVer [o ADR][a].\n\n[a]: ../../adr/4_1_0001-a.md\n[b]: <../staff/nao-existe.md>\n"
+    repo = _repo(tmp_path, _com_adrs(corpo, "references: []\n"))
+    assert gate.problemas(repo) == [
+        f"{_DOMINIO}:10: link para '../staff/nao-existe.md', que não existe",
+        f"{_DOMINIO}:9: ADR 4_1_0001-a.md linkado no corpo e ausente do `references`",
+    ]
+
+
 def test_adr_linkado_e_no_references_passa(tmp_path: pathlib.Path) -> None:
     refs = "references:\n  - ../../adr/4_1_0001-a.md\n  - ../../adr/4_1_0002-b.md\n"
     repo = _repo(tmp_path, _com_adrs(f"{_LINK_A} {_LINK_B}\n", refs))
