@@ -8,7 +8,9 @@ adapter, e nenhuma delas é política:
 2. **Declara o requisito** — diz *qual permissão* a ação exige e *qual é o alvo*
    (tenant, unidade). `AuthorizeActionCommand` recebe esses campos como entrada,
    então alguém tem de fornecê-los; declarar o requisito não é decidi-lo.
-3. **Delega a decisão** a `AuthorizeActionUseCase`, e traduz duas exceções.
+3. **Delega a decisão** a `AuthorizeActionUseCase`, por `authorize_at_boundary`,
+   que traduz duas exceções (issue #47: a tradução saiu daqui para a application
+   quando a fachada de acesso passou a precisar dela também).
 
 A regra de acesso — quais permissões cada papel tem, quem faz bypass de escopo,
 como a visibilidade de unidade funciona — vive em `Role`, `User` e no use case.
@@ -42,15 +44,11 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 )
 from restaurant_hub.features.identity.application.dtos.results import AuthorizedActor
 from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
-from restaurant_hub.features.identity.application.errors import (
-    InvalidAccessTokenError,
-    UnitNotFoundError,
-    UnitNotVisibleError,
-    UserNotFoundError,
-)
+from restaurant_hub.features.identity.application.errors import InvalidAccessTokenError
 from restaurant_hub.features.identity.application.ports.out.token_issuer import TokenIssuer
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
+    authorize_at_boundary,
 )
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
@@ -163,19 +161,10 @@ class IdentityGuard:
             tenant_id=tenant_id,
             unit_id=unit_id,
         )
-        try:
-            return self._authorize_action.execute(command)
-        except UserNotFoundError as exc:
-            # O ator do token sumiu. Credencial inválida, não recurso ausente.
-            raise InvalidAccessTokenError() from exc
-        except UnitNotFoundError as exc:
-            # Indistinguível de "existe e você não enxerga" — ver docstring do
-            # módulo. É o fechamento do oráculo de enumeração cross-tenant.
-            #
-            # A mensagem construída aqui nunca chega ao cliente: a faixa 403 tem
-            # corpo constante (error_handlers). Ela existe para o log, que o
-            # handler grava junto com a causa encadeada (`from exc`).
-            raise UnitNotVisibleError(actor.claims.subject, unit_id or "<sem unidade>") from exc
+        # As duas traduções de vazamento moram em `authorize_at_boundary` desde
+        # a issue #47: a fachada de acesso que staff consome as aplica também, e
+        # uma regra de vazamento não pode ter duas cópias (ADR 0.0.0016).
+        return authorize_at_boundary(self._authorize_action, command)
 
     def authorize_all(
         self,

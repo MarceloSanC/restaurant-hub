@@ -13,6 +13,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 from restaurant_hub.features.identity.application.errors import (
+    InvalidAccessTokenError,
     PermissionDeniedError,
     TenantNotVisibleError,
     TenantScopeRequiredError,
@@ -23,6 +24,7 @@ from restaurant_hub.features.identity.application.errors import (
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
+    authorize_at_boundary,
 )
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.entities.user import User
@@ -453,3 +455,54 @@ def test_passo_5_vale_para_permissao_tenant_wide_quando_a_unidade_e_declarada() 
 
     with pytest.raises(UnitNotVisibleError):
         fixture.use_case.execute(_command("m", Permission.MANAGE_JOB_FUNCTIONS, unit=_UNIT_A2))
+
+
+# ---------------------------------------------------------------------------
+# `authorize_at_boundary` — os dois oráculos fechados para quem é de fora (#47)
+#
+# Os casos espelham os de `test_http_dependencies.py` sobre o `IdentityGuard`,
+# que passou a delegar a esta função; aqui o sujeito é a função em si, porque a
+# fachada de acesso de staff a consome sem passar pelo guard HTTP.
+# ---------------------------------------------------------------------------
+
+
+def test_na_borda_ator_inexistente_vira_credencial_invalida() -> None:
+    """`UserNotFoundError` do ator → 401, encadeado à causa."""
+    fixture = _Fixture()
+
+    with pytest.raises(InvalidAccessTokenError) as excinfo:
+        authorize_at_boundary(fixture.use_case, _command("fantasma"))
+
+    assert isinstance(excinfo.value.__cause__, UserNotFoundError)
+
+
+def test_na_borda_unidade_inexistente_e_indistinguivel_de_invisivel() -> None:
+    """`UnitNotFoundError` → `UnitNotVisibleError`, com ator e unidade na mensagem."""
+    fixture = _Fixture()
+    fixture.add_user("gerente", Role.MANAGER, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(UnitNotVisibleError) as excinfo:
+        authorize_at_boundary(fixture.use_case, _command("gerente", unit=UnitId("nao-existe")))
+
+    assert isinstance(excinfo.value.__cause__, UnitNotFoundError)
+    assert "gerente" in str(excinfo.value)
+    assert "nao-existe" in str(excinfo.value)
+
+
+def test_na_borda_as_demais_negacoes_sobem_cruas() -> None:
+    """Só os dois oráculos são traduzidos — a negação de RBAC sai como é."""
+    fixture = _Fixture()
+    fixture.add_user("func", Role.EMPLOYEE, _TENANT_A, (_UNIT_A1,))
+
+    with pytest.raises(PermissionDeniedError) as excinfo:
+        authorize_at_boundary(fixture.use_case, _command("func"))
+
+    assert excinfo.value.__cause__ is None
+
+
+def test_na_borda_o_caminho_feliz_devolve_o_resultado_do_use_case() -> None:
+    fixture = _Fixture()
+    fixture.add_user("gerente", Role.MANAGER, _TENANT_A, (_UNIT_A1,))
+    command = _command("gerente")
+
+    assert authorize_at_boundary(fixture.use_case, command) == fixture.use_case.execute(command)
