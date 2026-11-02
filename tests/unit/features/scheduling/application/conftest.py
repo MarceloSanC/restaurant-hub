@@ -17,6 +17,9 @@ from restaurant_hub.features.scheduling.application.ports.out.access_guard impor
     PERMISSION_VIEW_OWN_SCHEDULE,
     PERMISSION_VIEW_SCHEDULE,
 )
+from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ScheduleChange,
+)
 from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
     JobFunctionEntry,
     StaffMember,
@@ -41,6 +44,12 @@ from restaurant_hub.features.scheduling.domain.value_objects.schedule_period imp
 from tests.fakes.features.scheduling.in_memory_access_guard import (
     FakeActor,
     InMemoryAccessGuard,
+)
+from tests.fakes.features.scheduling.in_memory_schedule_config_repository import (
+    InMemoryScheduleConfigRepository,
+)
+from tests.fakes.features.scheduling.in_memory_schedule_repository import (
+    InMemoryScheduleRepository,
 )
 from tests.fakes.features.scheduling.in_memory_staff_read import InMemoryStaffRead
 from tests.fakes.shared.fake_clock import FakeClock
@@ -97,6 +106,11 @@ def schedule(
     )
 
 
+def blank_change(previous_version: int | None = None) -> ScheduleChange:
+    """Mudança sem operações — para semear escalas pelo próprio port."""
+    return ScheduleChange("user-seed", NOW, previous_version, (), ())
+
+
 class SpyClock(FakeClock):
     """Relógio fixo que conta as leituras (CA03: nenhum relógio lido antes da decisão)."""
 
@@ -119,7 +133,14 @@ class World:
     ids: FakeIdGenerator
     manager: FakeActor
     employee: FakeActor
-    extra: dict[str, object] = field(default_factory=dict)
+    schedules: InMemoryScheduleRepository = field(default_factory=InMemoryScheduleRepository)
+    config: InMemoryScheduleConfigRepository = field(
+        default_factory=InMemoryScheduleConfigRepository
+    )
+
+    def port_calls(self) -> list[str]:
+        """Toda chamada recebida pelos ports de dados (para "nada tocado")."""
+        return [*self.schedules.calls, *self.config.calls, *self.staff.calls]
 
 
 def new_world() -> World:
