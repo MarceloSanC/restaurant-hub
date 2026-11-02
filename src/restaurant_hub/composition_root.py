@@ -84,9 +84,6 @@ from restaurant_hub.features.identity.application.use_cases.authenticate_user im
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
-from restaurant_hub.features.identity.application.use_cases.create_restaurant import (
-    CreateRestaurantUseCase,
-)
 from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
 )
@@ -101,6 +98,9 @@ from restaurant_hub.features.identity.application.use_cases.invite_user import (
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
+    ProvisionRestaurantUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
@@ -389,7 +389,7 @@ class ApplicationDependencies:
     identity_authenticate_user: AuthenticateUserUseCase
     identity_refresh_session: RefreshSessionUseCase
     identity_revoke_session: RevokeSessionUseCase
-    identity_create_restaurant: CreateRestaurantUseCase
+    identity_provision_restaurant: ProvisionRestaurantUseCase
     identity_create_unit: CreateUnitUseCase
     identity_create_user: CreateUserUseCase
     identity_invite_user: InviteUserUseCase
@@ -620,8 +620,12 @@ def wire_dependencies(
         identity_revoke_session=RevokeSessionUseCase(
             sessions=sessions, token_issuer=token_issuer, clock=clock
         ),
-        identity_create_restaurant=CreateRestaurantUseCase(
-            restaurants=restaurants, id_generator=id_generator
+        identity_provision_restaurant=ProvisionRestaurantUseCase(
+            restaurants=restaurants,
+            users=users,
+            hasher=hasher,
+            id_generator=id_generator,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_create_unit=CreateUnitUseCase(
             units=units, restaurants=restaurants, id_generator=id_generator
@@ -744,7 +748,7 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
         router_module._get_authenticate_user: lambda: deps.identity_authenticate_user,
         router_module._get_refresh_session: lambda: deps.identity_refresh_session,
         router_module._get_revoke_session: lambda: deps.identity_revoke_session,
-        router_module._get_create_restaurant: lambda: deps.identity_create_restaurant,
+        router_module._get_provision_restaurant: lambda: deps.identity_provision_restaurant,
         router_module._get_create_unit: lambda: deps.identity_create_unit,
         router_module._get_create_user: lambda: deps.identity_create_user,
         router_module._get_invite_user: lambda: deps.identity_invite_user,

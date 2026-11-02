@@ -24,10 +24,25 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 
 @dataclass(frozen=True)
-class CreateRestaurantCommand:
-    """Criação de um restaurante — que é, ele próprio, o tenant."""
+class ProvisionRestaurantCommand:
+    """Provisionamento de um tenant: o restaurante **e** o seu primeiro `owner`.
+
+    Sem campo de papel: o papel é `Role.OWNER`, fixado no use case — é o que
+    sustenta "nenhuma rota emite `platform_admin`" para este caminho (ADR
+    0.0.0014 §3, ADR 2.4.0003 §2b). Sem `tenant_id`: o tenant do dono é o
+    restaurante que nasce junto com ele.
+
+    Attributes:
+        name: nome do restaurante.
+        owner_email: e-mail de login do dono; a unicidade é global.
+        owner_plain_password: senha em claro do dono — só atravessa o
+            `PasswordHasher`, nunca é persistida nem devolvida.
+    """
 
     name: str
+    owner_email: Email
+    # `repr=False` — ver `CreateUserCommand`.
+    owner_plain_password: str = field(repr=False)
 
 
 @dataclass(frozen=True)

@@ -22,6 +22,7 @@ from tests.e2e.features.identity.conftest import (
     API,
     SENHA_PADRAO,
     auth,
+    corpo_tenant,
     fazer_login,
 )
 
@@ -126,7 +127,9 @@ async def test_refresh_rotaciona_e_invalida_o_anterior(
     novos = resposta.json()
     assert novos["refresh_token"] != tokens["refresh_token"]
     # O access token novo é aceito pelo guard — o round-trip completo.
-    protegida = await client.post(f"{API}/restaurants", json={"name": "Teste"}, headers=auth(novos))
+    protegida = await client.post(
+        f"{API}/restaurants", json=corpo_tenant("Teste", "dono@teste.com"), headers=auth(novos)
+    )
     assert protegida.status_code == HTTPStatus.CREATED
 
 

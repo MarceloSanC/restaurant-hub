@@ -177,7 +177,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
 | [#65](https://github.com/MarceloSanC/restaurant-hub/issues/65) | Trazer do financial-forecasting o harness posterior à #56 | shared | tooling + docs | open | #56 |
-| [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | open | `2.6-identity-unit-of-work` |
+| [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | done | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | done | — |
 | [#75](https://github.com/MarceloSanC/restaurant-hub/issues/75) | Negar na application de staff ator que o guard não emitiu (drivers fora da borda HTTP) | staff | application | open | `3.7-application-authorization` |
 | [#76](https://github.com/MarceloSanC/restaurant-hub/issues/76) | Validar identificador fora da borda HTTP antes de autorizar | staff | application | open | `3.7-application-authorization` |
@@ -202,6 +202,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
 | [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário | staff | application + identity (fachada) | open | — |
 | [#108](https://github.com/MarceloSanC/restaurant-hub/issues/108) | Remoção concorrente com R17 não pode apagar registro já vinculado (conta órfã) | staff | application + adapters/out | done | #68 |
+| [#114](https://github.com/MarceloSanC/restaurant-hub/issues/114) | Provisionar o dono do restaurante por convite em vez de senha escolhida pela plataforma | identity | application + adapters/inbound/http | open | #67 |
+| [#115](https://github.com/MarceloSanC/restaurant-hub/issues/115) | Autorizar o próprio alvo nos use cases de identity (formato da 3.7) | identity | application | open | #67 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

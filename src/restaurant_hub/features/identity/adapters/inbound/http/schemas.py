@@ -87,19 +87,6 @@ class TokenResponse(BaseModel):
     refresh_token_expires_at: datetime
 
 
-class CreateRestaurantRequest(BaseModel):
-    """Criação de restaurante (o tenant). Só `platform_admin` alcança."""
-
-    name: str
-
-
-class RestaurantResponse(BaseModel):
-    """Restaurante criado."""
-
-    id: str
-    name: str
-
-
 class CreateUnitRequest(BaseModel):
     """Criação de unidade sob um restaurante.
 
@@ -118,15 +105,31 @@ class UnitResponse(BaseModel):
 
 
 class CreateOwnerRequest(BaseModel):
-    """Provisionamento do `owner` de um restaurante (ação de plataforma).
+    """O `owner` de um restaurante (ação de plataforma).
 
-    Sem campo `role`: o papel é fixado em `Role.OWNER` no código do router. É o
-    que garante que **nenhuma rota emite `platform_admin`** — se o papel viesse
-    do request, esta seria a rota por onde ele entraria (ADR 2.4.0003 §2b).
+    Corpo de `POST /restaurants/{id}/owners` e campo `owner` de
+    `ProvisionRestaurantRequest` — as duas rotas que emitem `owner` (ADR 0.0.0014).
+
+    Sem campo `role`: o papel é fixado em `Role.OWNER` no código (no router e no
+    use case de provisionamento). É o que garante que **nenhuma rota emite
+    `platform_admin`** — se o papel viesse do request, estas seriam as rotas por
+    onde ele entraria (ADR 2.4.0003 §2b).
     """
 
     email: str
     password: SecretStr
+
+
+class ProvisionRestaurantRequest(BaseModel):
+    """Provisionamento de um tenant: o restaurante e o seu primeiro `owner`.
+
+    Só `platform_admin` alcança. O dono tem a forma de `CreateOwnerRequest` —
+    sem `role` e sem tenant: o papel é `owner`, fixado no use case, e o tenant é
+    o restaurante que nasce junto (ADR 0.0.0014).
+    """
+
+    name: str
+    owner: CreateOwnerRequest
 
 
 class CreateUserRequest(BaseModel):
@@ -154,6 +157,14 @@ class UserResponse(BaseModel):
     role: str
     tenant_id: str | None
     unit_ids: list[str]
+
+
+class ProvisionedRestaurantResponse(BaseModel):
+    """Restaurante provisionado, com o dono criado na mesma unidade de trabalho."""
+
+    id: str
+    name: str
+    owner: UserResponse
 
 
 class InviteUserRequest(BaseModel):

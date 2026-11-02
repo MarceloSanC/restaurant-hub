@@ -19,9 +19,9 @@ import pytest
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthenticateUserCommand,
     AuthorizeActionCommand,
-    CreateRestaurantCommand,
     CreateUnitCommand,
     CreateUserCommand,
+    ProvisionRestaurantCommand,
 )
 from restaurant_hub.features.identity.application.errors import (
     PermissionDeniedError,
@@ -34,14 +34,14 @@ from restaurant_hub.features.identity.application.use_cases.authenticate_user im
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
-from restaurant_hub.features.identity.application.use_cases.create_restaurant import (
-    CreateRestaurantUseCase,
-)
 from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
+    ProvisionRestaurantUseCase,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
@@ -59,6 +59,7 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 from tests.fakes.features.identity.in_memory_session_repository import (
     InMemorySessionRepository,
 )
+from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.shared.fake_clock import FakeClock
@@ -97,7 +98,9 @@ class _Sistema:
         self.issuer = issuer
         self.clock = clock
 
-        self.create_restaurant = CreateRestaurantUseCase(restaurants, ids)
+        self.provision_restaurant = ProvisionRestaurantUseCase(
+            restaurants, users, hasher, ids, InMemoryUnitOfWork(restaurants, users)
+        )
         self.create_unit = CreateUnitUseCase(units, restaurants, ids)
         self.create_user = CreateUserUseCase(users, restaurants, units, hasher, ids)
         self.authenticate = AuthenticateUserUseCase(
@@ -110,8 +113,12 @@ def _montar_restaurante_com_gerente() -> tuple[_Sistema, RestaurantId, UnitId, U
     """Restaurante → duas unidades → gerente vinculado só à primeira."""
     sistema = _Sistema()
 
-    restaurante = sistema.create_restaurant.execute(
-        CreateRestaurantCommand(name="Cantina da Esquina")
+    restaurante = sistema.provision_restaurant.execute(
+        ProvisionRestaurantCommand(
+            name="Cantina da Esquina",
+            owner_email=Email("fundador@cantina.com"),
+            owner_plain_password="s3nha-dono",
+        )
     )
     tenant = RestaurantId(restaurante.id)
 
@@ -252,7 +259,11 @@ def test_fluxo_isola_tenants_distintos() -> None:
     """
     sistema, _tenant_a, _centro, _praia, gerente_a = _montar_restaurante_com_gerente()
 
-    outro = sistema.create_restaurant.execute(CreateRestaurantCommand(name="Outro"))
+    outro = sistema.provision_restaurant.execute(
+        ProvisionRestaurantCommand(
+            name="Outro", owner_email=Email("dono@outro.com"), owner_plain_password="s3nha-dono"
+        )
+    )
     tenant_b = RestaurantId(outro.id)
     unidade_b = sistema.create_unit.execute(
         CreateUnitCommand(restaurant_id=tenant_b, name="Filial B")

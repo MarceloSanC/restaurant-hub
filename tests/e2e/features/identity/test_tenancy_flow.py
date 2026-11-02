@@ -13,7 +13,13 @@ from httpx import AsyncClient
 from sqlalchemy import Engine, text
 
 from restaurant_hub.features.identity.domain.entities.user import User
-from tests.e2e.features.identity.conftest import API, SENHA_PADRAO, auth, fazer_login
+from tests.e2e.features.identity.conftest import (
+    API,
+    SENHA_PADRAO,
+    auth,
+    corpo_tenant,
+    fazer_login,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -29,24 +35,19 @@ async def test_cadeia_completa_de_provisionamento(client: AsyncClient, admin_sem
     # 1. platform_admin faz login
     admin = await fazer_login(client, admin_semeado.email.value)
 
-    # 2. platform_admin cria o restaurante (o tenant)
+    # 2-3. platform_admin provisiona o restaurante (o tenant) **com** o primeiro
+    #      owner, numa chamada (issue #67) — sem o dono a cadeia trava, porque o
+    #      admin não tem manage_users.
     resposta = await client.post(
-        f"{API}/restaurants", json={"name": "Cantina do Zé"}, headers=auth(admin)
-    )
-    assert resposta.status_code == HTTPStatus.CREATED, resposta.text
-    restaurante_id = resposta.json()["id"]
-
-    # 3. platform_admin provisiona o primeiro owner — sem isto a cadeia trava,
-    #    porque ele não tem manage_users e o owner ainda não existe.
-    resposta = await client.post(
-        f"{API}/restaurants/{restaurante_id}/owners",
-        json={"email": "dono@cantina.com", "password": SENHA_PADRAO},
+        f"{API}/restaurants",
+        json=corpo_tenant("Cantina do Zé", "dono@cantina.com"),
         headers=auth(admin),
     )
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
-    assert resposta.json()["role"] == "owner"
-    # O tenant do owner veio do PATH, não do ator (que não tem tenant nenhum).
-    assert resposta.json()["tenant_id"] == restaurante_id
+    restaurante_id = resposta.json()["id"]
+    assert resposta.json()["owner"]["role"] == "owner"
+    # O tenant do owner é o restaurante que nasceu junto com ele.
+    assert resposta.json()["owner"]["tenant_id"] == restaurante_id
 
     # 4. o owner faz login
     owner = await fazer_login(client, "dono@cantina.com")
@@ -113,18 +114,17 @@ async def test_restaurante_inexistente_devolve_404_e_nao_grava_usuario(
 async def test_owner_nao_cria_restaurante(client: AsyncClient, admin_semeado: User) -> None:
     """CA11 — só `platform_admin` cria tenant, agora contra o banco real."""
     admin = await fazer_login(client, admin_semeado.email.value)
-    restaurante_id = (
-        await client.post(f"{API}/restaurants", json={"name": "Cantina"}, headers=auth(admin))
-    ).json()["id"]
     await client.post(
-        f"{API}/restaurants/{restaurante_id}/owners",
-        json={"email": "dono@cantina.com", "password": SENHA_PADRAO},
+        f"{API}/restaurants",
+        json=corpo_tenant("Cantina", "dono@cantina.com"),
         headers=auth(admin),
     )
     owner = await fazer_login(client, "dono@cantina.com")
 
     resposta = await client.post(
-        f"{API}/restaurants", json={"name": "Império"}, headers=auth(owner)
+        f"{API}/restaurants",
+        json=corpo_tenant("Império", "dono@imperio.com"),
+        headers=auth(owner),
     )
 
     assert resposta.status_code == HTTPStatus.FORBIDDEN
@@ -140,18 +140,15 @@ async def test_email_duplicado_entre_tenants_e_409(
     garantia dura — a que vale sob concorrência — é o índice do banco.
     """
     admin = await fazer_login(client, admin_semeado.email.value)
-    primeiro = (
-        await client.post(f"{API}/restaurants", json={"name": "A"}, headers=auth(admin))
-    ).json()["id"]
+    await client.post(
+        f"{API}/restaurants", json=corpo_tenant("A", "repetido@x.com"), headers=auth(admin)
+    )
     segundo = (
-        await client.post(f"{API}/restaurants", json={"name": "B"}, headers=auth(admin))
+        await client.post(
+            f"{API}/restaurants", json=corpo_tenant("B", "dono-b@x.com"), headers=auth(admin)
+        )
     ).json()["id"]
 
-    await client.post(
-        f"{API}/restaurants/{primeiro}/owners",
-        json={"email": "repetido@x.com", "password": SENHA_PADRAO},
-        headers=auth(admin),
-    )
     resposta = await client.post(
         f"{API}/restaurants/{segundo}/owners",
         json={"email": "repetido@x.com", "password": SENHA_PADRAO},
@@ -159,3 +156,94 @@ async def test_email_duplicado_entre_tenants_e_409(
     )
 
     assert resposta.status_code == HTTPStatus.CONFLICT
+
+
+# ---------------------------------------------------------------------------
+# Issue #67 — o restaurante nasce com o dono, ou não nasce (ADR 0.0.0014)
+# ---------------------------------------------------------------------------
+
+
+def _contagens(engine: Engine) -> tuple[int, int]:
+    with engine.connect() as conexao:
+        return (
+            conexao.execute(text("SELECT count(*) FROM restaurants")).scalar_one(),
+            conexao.execute(text("SELECT count(*) FROM users")).scalar_one(),
+        )
+
+
+async def test_email_do_dono_ocupado_nao_deixa_restaurante_orfao(
+    client: AsyncClient, admin_semeado: User, engine: Engine
+) -> None:
+    """O defeito que a issue #67 fecha, pela API e contra o banco real.
+
+    Antes, o restaurante era criado numa chamada e o dono noutra; um 409 na
+    segunda deixava um restaurante que ninguém opera. Agora o 409 vem da mesma
+    requisição e **nenhuma** linha nova fica — nem restaurante, nem usuário.
+    """
+    admin = await fazer_login(client, admin_semeado.email.value)
+    antes = _contagens(engine)
+
+    resposta = await client.post(
+        f"{API}/restaurants",
+        json=corpo_tenant("Órfão", admin_semeado.email.value),
+        headers=auth(admin),
+    )
+
+    assert resposta.status_code == HTTPStatus.CONFLICT
+    assert _contagens(engine) == antes
+
+
+async def test_dono_provisionado_opera_o_proprio_restaurante_e_so_ele(
+    client: AsyncClient, admin_semeado: User
+) -> None:
+    """O dono que nasce com o restaurante tem o tenant certo: cria unidade no dele
+    e é barrado no de outro."""
+    admin = await fazer_login(client, admin_semeado.email.value)
+    meu = (
+        await client.post(
+            f"{API}/restaurants", json=corpo_tenant("Meu", "dono@meu.com"), headers=auth(admin)
+        )
+    ).json()["id"]
+    alheio = (
+        await client.post(
+            f"{API}/restaurants",
+            json=corpo_tenant("Alheio", "dono@alheio.com"),
+            headers=auth(admin),
+        )
+    ).json()["id"]
+    dono = await fazer_login(client, "dono@meu.com")
+
+    no_meu = await client.post(
+        f"{API}/restaurants/{meu}/units", json={"name": "Centro"}, headers=auth(dono)
+    )
+    no_alheio = await client.post(
+        f"{API}/restaurants/{alheio}/units", json={"name": "Centro"}, headers=auth(dono)
+    )
+
+    assert no_meu.status_code == HTTPStatus.CREATED
+    assert no_alheio.status_code == HTTPStatus.FORBIDDEN
+
+
+async def test_rota_de_owner_acrescenta_dono_a_restaurante_existente(
+    client: AsyncClient, admin_semeado: User
+) -> None:
+    """`POST /restaurants/{id}/owners` deixou de ser o bootstrap e segue como o
+    caminho de suporte da plataforma (ADR 0.0.0014 §3)."""
+    admin = await fazer_login(client, admin_semeado.email.value)
+    restaurante = (
+        await client.post(
+            f"{API}/restaurants",
+            json=corpo_tenant("Cantina", "primeiro@x.com"),
+            headers=auth(admin),
+        )
+    ).json()["id"]
+
+    resposta = await client.post(
+        f"{API}/restaurants/{restaurante}/owners",
+        json={"email": "segundo@x.com", "password": SENHA_PADRAO},
+        headers=auth(admin),
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    assert (resposta.json()["role"], resposta.json()["tenant_id"]) == ("owner", restaurante)
+    await fazer_login(client, "segundo@x.com")

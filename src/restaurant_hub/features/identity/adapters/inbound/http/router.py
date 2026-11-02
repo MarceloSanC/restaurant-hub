@@ -23,10 +23,10 @@ from fastapi import APIRouter, Depends, Request, Response, status
 
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthenticateUserCommand,
-    CreateRestaurantCommand,
     CreateUnitCommand,
     CreateUserCommand,
     InviteUserCommand,
+    ProvisionRestaurantCommand,
     RefreshSessionCommand,
     RequestPasswordResetCommand,
     RevokeSessionCommand,
@@ -34,15 +34,12 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 )
 from restaurant_hub.features.identity.application.dtos.results import (
     AuthenticationResult,
-    RestaurantResult,
+    ProvisionedRestaurantResult,
     UnitResult,
     UserResult,
 )
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
-)
-from restaurant_hub.features.identity.application.use_cases.create_restaurant import (
-    CreateRestaurantUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
@@ -52,6 +49,9 @@ from restaurant_hub.features.identity.application.use_cases.create_user import (
 )
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
+    ProvisionRestaurantUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
@@ -76,15 +76,15 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 from .dependencies import AuthenticatedActor, IdentityGuard, required_permissions_for_role
 from .schemas import (
     CreateOwnerRequest,
-    CreateRestaurantRequest,
     CreateUnitRequest,
     CreateUserRequest,
     InviteUserRequest,
     LoginRequest,
     LogoutRequest,
+    ProvisionedRestaurantResponse,
+    ProvisionRestaurantRequest,
     RefreshRequest,
     RequestPasswordResetRequest,
-    RestaurantResponse,
     SetPasswordRequest,
     TokenResponse,
     UnitResponse,
@@ -113,8 +113,8 @@ def _get_revoke_session() -> RevokeSessionUseCase:
     _nao_conectado("revoke_session")
 
 
-def _get_create_restaurant() -> CreateRestaurantUseCase:
-    _nao_conectado("create_restaurant")
+def _get_provision_restaurant() -> ProvisionRestaurantUseCase:
+    _nao_conectado("provision_restaurant")
 
 
 def _get_create_unit() -> CreateUnitUseCase:
@@ -162,10 +162,6 @@ def _authenticated_actor(
     return guard.authenticate(request)
 
 
-def _restaurant_response(resultado: RestaurantResult) -> RestaurantResponse:
-    return RestaurantResponse(id=resultado.id, name=resultado.name)
-
-
 def _unit_response(resultado: UnitResult) -> UnitResponse:
     return UnitResponse(id=resultado.id, restaurant_id=resultado.restaurant_id, name=resultado.name)
 
@@ -177,6 +173,14 @@ def _user_response(resultado: UserResult) -> UserResponse:
         role=resultado.role.value,
         tenant_id=resultado.tenant_id,
         unit_ids=list(resultado.unit_ids),
+    )
+
+
+def _provisioned_restaurant_response(
+    resultado: ProvisionedRestaurantResult,
+) -> ProvisionedRestaurantResponse:
+    return ProvisionedRestaurantResponse(
+        id=resultado.id, name=resultado.name, owner=_user_response(resultado.owner)
     )
 
 
@@ -253,26 +257,42 @@ def logout(
 
 @router.post(
     "/restaurants",
-    response_model=RestaurantResponse,
+    response_model=ProvisionedRestaurantResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_restaurant(
-    payload: CreateRestaurantRequest,
+def provision_restaurant(
+    payload: ProvisionRestaurantRequest,
     ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
-    use_case: Annotated[CreateRestaurantUseCase, Depends(_get_create_restaurant)],
-) -> RestaurantResponse:
-    """Cria um restaurante — que é, ele próprio, o tenant.
+    use_case: Annotated[ProvisionRestaurantUseCase, Depends(_get_provision_restaurant)],
+) -> ProvisionedRestaurantResponse:
+    """Provisiona um tenant: o restaurante **e** o seu primeiro `owner`, tudo ou nada.
 
     Exige `manage_platform`, isto é: **só `platform_admin`** (decisão do sponsor
     de 2026-07-19). `tenant_id=None` no comando de autorização porque esta é uma
     ação de plataforma, não de tenant — e um ator com tenant falha antes disso,
     na checagem de permissão.
+
+    **Restaurante e dono nascem numa unidade de trabalho** (ADR 0.0.0014): antes
+    eram duas chamadas, e uma falha entre elas deixava um restaurante que ninguém
+    opera. Nenhum caminho da API cria restaurante sem dono.
+
+    **É uma das duas exceções declaradas à regra "não se concede o que não se
+    detém"** (a outra é `POST /restaurants/{id}/owners`): o ator emite um `owner`
+    sem deter `manage_tenant` nem `manage_users` — é o que bootstrap significa.
+    O papel não vem do request: é o literal `Role.OWNER` dentro do use case, e é
+    isso que mantém "nenhuma rota emite `platform_admin`" (ADR 2.4.0003 §2b).
     """
     guard.authorize(ator, Permission.MANAGE_PLATFORM)
 
-    resultado = use_case.execute(CreateRestaurantCommand(name=payload.name))
-    return _restaurant_response(resultado)
+    resultado = use_case.execute(
+        ProvisionRestaurantCommand(
+            name=payload.name,
+            owner_email=Email(payload.owner.email),
+            owner_plain_password=payload.owner.password.get_secret_value(),
+        )
+    )
+    return _provisioned_restaurant_response(resultado)
 
 
 @router.post(
@@ -287,19 +307,22 @@ def create_restaurant_owner(
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
 ) -> UserResponse:
-    """Provisiona o primeiro `owner` de um restaurante — ação de **plataforma**.
+    """Acrescenta um `owner` a um restaurante existente — ação de **plataforma**.
 
-    Esta rota existe porque, sem ela, a cadeia do DoD é impossível: só
-    `platform_admin` cria restaurante, e ele detém **apenas** `manage_platform`
-    (mapa da 2.1), logo não poderia criar usuário nenhum — o restaurante nasceria
-    sem ninguém capaz de operá-lo (ADR 2.4.0003 §5).
+    Até a issue #67 esta rota **era** o bootstrap: o restaurante nascia sozinho em
+    `POST /restaurants` e o dono vinha aqui, numa segunda chamada. Hoje o
+    restaurante já nasce com o dono (ADR 0.0.0014), e esta rota ficou como o
+    caminho de suporte da plataforma — devolver acesso a um tenant cujos donos o
+    perderam, ou dar dono a restaurante criado antes da mudança. `platform_admin`
+    detém **apenas** `manage_platform` (mapa da 2.1) e não cria usuário pela rota
+    de tenant (ADR 2.4.0003 §5).
 
     **É exceção declarada à regra "não se concede o que não se detém"**: o ator
-    emite um `owner` sem deter `manage_tenant` nem `manage_users`. É o que
-    bootstrap significa. O que contém a exceção não é a regra, é o conjunto de
-    rotas: existe uma só, exige `manage_platform`, e o papel é o literal
-    `Role.OWNER` abaixo — nunca vindo do request. É isso que garante que
-    **nenhuma rota emite `platform_admin`**.
+    emite um `owner` sem deter `manage_tenant` nem `manage_users`. O que contém a
+    exceção não é a regra, é o conjunto de rotas: são duas (esta e
+    `POST /restaurants`), as duas exigem `manage_platform`, e nas duas o papel é o
+    literal `Role.OWNER` — aqui, abaixo; lá, no use case —, nunca vindo do
+    request. É isso que garante que **nenhuma rota emite `platform_admin`**.
 
     **O tenant vem do PATH, não do ator** (concept §5 regra 3, segunda origem):
     o ator é `platform_admin` e o seu `actor_tenant_id` é necessariamente `None`,

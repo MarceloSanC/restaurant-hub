@@ -46,14 +46,6 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
 
 
 @dataclass(frozen=True)
-class RestaurantResult:
-    """Restaurante criado."""
-
-    id: RestaurantId
-    name: str
-
-
-@dataclass(frozen=True)
 class UnitResult:
     """Unidade criada."""
 
@@ -90,6 +82,23 @@ class ProvisionedAccountResult:
 
     user: UserResult
     setup_link: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class ProvisionedRestaurantResult:
+    """Restaurante provisionado **com** o seu primeiro `owner` (ADR 0.0.0014).
+
+    Os campos do restaurante vão planos: o restaurante e o dono nascem juntos,
+    numa unidade, e o result descreve essa única operação. (O `RestaurantResult`
+    do restaurante criado sozinho saiu com `CreateRestaurantUseCase` na issue
+    #67 — não há mais caminho que crie restaurante sem dono.) O `UserResult` do
+    dono vem de `to_user_result`, como em todo result que carrega usuário
+    (regra 8).
+    """
+
+    id: RestaurantId
+    name: str
+    owner: UserResult
 
 
 @dataclass(frozen=True)

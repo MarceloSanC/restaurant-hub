@@ -5,7 +5,7 @@ when-use: Reference before adding a route that creates or elevates a user, when 
 keywords: [adr, authorization, rbac, privilege-escalation, bootstrap, tenancy, provisioning, boundary, identity]
 status: accepted
 created_at: 2026-07-19
-updated_at: 2026-07-19
+updated_at: 2026-11-02
 adr_id: 2.4.0003
 decision: The HTTP adapter declares which permissions an action requires (including every permission of the role being granted, so no actor can grant what it does not hold) and delegates every decision to AuthorizeActionUseCase; tenant provisioning gets a dedicated manage_platform route that creates the restaurant's first owner, which is what makes the roadmap's end-to-end chain reachable at all
 context_stage: 2.4-identity-http
@@ -224,3 +224,16 @@ justifying why, and must state which guarantee it is spending.
 - `src/restaurant_hub/features/identity/domain/value_objects/role.py`
   (`_ROLE_PERMISSIONS`)
 - Issue #24, sponsor decisions of 2026-07-19
+
+## Supersessão parcial
+
+**2026-11-02 — a Alternativa B (*"a composite `ProvisionRestaurantUseCase` … Revisit when a
+transaction port exists."*) e a frase de §5 *"exactly one such route exists"* foram superadas por
+[ADR 0.0.0014](./0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) (issue #67).**
+O port de transação existe (ADR 2.6.0001): `POST /restaurants` passou a criar o restaurante **e**
+o primeiro `owner` numa unidade de trabalho de identity (`ProvisionRestaurantUseCase`), e
+`POST /restaurants/{restaurant_id}/owners` deixou de ser *o* bootstrap — ficou como a rota de
+plataforma que acrescenta um `owner` a restaurante existente. São agora **duas** as rotas que
+emitem papel sem a composição de §2, ambas exigindo `manage_platform` e ambas com o literal
+`Role.OWNER` (no router e no use case). Tudo o mais deste ADR — §1, §2, §2b ("nenhuma rota emite
+`platform_admin`"), §3 e §4 — continua valendo. Nota *append-only*; o corpo acima não foi editado.

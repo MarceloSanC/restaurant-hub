@@ -22,6 +22,7 @@ from tests.e2e.features.identity.conftest import (
     API,
     SENHA_PADRAO,
     auth,
+    corpo_tenant,
     fazer_login,
 )
 
@@ -41,7 +42,7 @@ FAIXAS_DO_MAPA = (
 
 async def _cenario_401(client: AsyncClient, _admin: dict) -> Response:
     """Credencial ausente."""
-    return await client.post(f"{API}/restaurants", json={"name": "X"})
+    return await client.post(f"{API}/restaurants", json=corpo_tenant("X", "dono-x@x.com"))
 
 
 async def _cenario_403(client: AsyncClient, admin: dict) -> Response:
@@ -65,10 +66,13 @@ async def _cenario_404(client: AsyncClient, admin: dict) -> Response:
 async def _cenario_409(client: AsyncClient, admin: dict) -> Response:
     """E-mail já registrado — unicidade global, imposta pelo índice do Postgres."""
     restaurante = (
-        await client.post(f"{API}/restaurants", json={"name": "Cantina"}, headers=auth(admin))
+        await client.post(
+            f"{API}/restaurants",
+            json=corpo_tenant("Cantina", "duplicado@x.com"),
+            headers=auth(admin),
+        )
     ).json()["id"]
     corpo = {"email": "duplicado@x.com", "password": SENHA_PADRAO}
-    await client.post(f"{API}/restaurants/{restaurante}/owners", json=corpo, headers=auth(admin))
     return await client.post(
         f"{API}/restaurants/{restaurante}/owners", json=corpo, headers=auth(admin)
     )
@@ -82,13 +86,8 @@ async def _cenario_422(client: AsyncClient, admin: dict) -> Response:
     conversão texto→VO do router que faz este caso ser erro de domínio (422 pelo
     mapa) em vez de `RequestValidationError` do FastAPI.
     """
-    restaurante = (
-        await client.post(f"{API}/restaurants", json={"name": "Cantina"}, headers=auth(admin))
-    ).json()["id"]
     await client.post(
-        f"{API}/restaurants/{restaurante}/owners",
-        json={"email": "dono-422@x.com", "password": SENHA_PADRAO},
-        headers=auth(admin),
+        f"{API}/restaurants", json=corpo_tenant("Cantina", "dono-422@x.com"), headers=auth(admin)
     )
     owner = await fazer_login(client, "dono-422@x.com")
     return await client.post(
@@ -148,13 +147,8 @@ async def test_convite_com_email_contendo_nul_e_422_e_nao_500(
     gateway.
     """
     admin = await fazer_login(client, ADMIN_EMAIL)
-    restaurante = (
-        await client.post(f"{API}/restaurants", json={"name": "Cantina"}, headers=auth(admin))
-    ).json()["id"]
     await client.post(
-        f"{API}/restaurants/{restaurante}/owners",
-        json={"email": "dono-nul@x.com", "password": SENHA_PADRAO},
-        headers=auth(admin),
+        f"{API}/restaurants", json=corpo_tenant("Cantina", "dono-nul@x.com"), headers=auth(admin)
     )
     owner = await fazer_login(client, "dono-nul@x.com")
 

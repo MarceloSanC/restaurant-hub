@@ -24,6 +24,7 @@ from tests.e2e.features.identity.conftest import (
     API,
     SENHA_PADRAO,
     auth,
+    corpo_tenant,
     fazer_login,
 )
 
@@ -42,15 +43,10 @@ def _campo(registro: logging.LogRecord, nome: str) -> object:
 
 async def _owner_de(client: AsyncClient, admin: dict, nome: str) -> tuple[str, dict]:
     """Cria restaurante + owner e devolve o id do restaurante e o login do owner."""
-    restaurante = (
-        await client.post(f"{API}/restaurants", json={"name": nome}, headers=auth(admin))
-    ).json()["id"]
     email = f"dono-{nome.lower()}@x.com"
-    await client.post(
-        f"{API}/restaurants/{restaurante}/owners",
-        json={"email": email, "password": SENHA_PADRAO},
-        headers=auth(admin),
-    )
+    restaurante = (
+        await client.post(f"{API}/restaurants", json=corpo_tenant(nome, email), headers=auth(admin))
+    ).json()["id"]
     return restaurante, await fazer_login(client, email)
 
 
@@ -64,7 +60,7 @@ async def test_403_de_causas_diferentes_corpo_igual_e_log_distinto(
     caplog.set_level(logging.DEBUG)
 
     sem_permissao = await client.post(
-        f"{API}/restaurants", json={"name": "X"}, headers=auth(owner_b)
+        f"{API}/restaurants", json=corpo_tenant("X", "dono-x@x.com"), headers=auth(owner_b)
     )
     tenant_alheio = await client.post(
         f"{API}/restaurants/{restaurante_a}/units", json={"name": "Y"}, headers=auth(owner_b)
@@ -122,10 +118,10 @@ async def test_token_adulterado_nomeia_a_causa_da_lib_sem_o_token(
     adulterado = f"{tokens['access_token']}adulterado"
     caplog.set_level(logging.DEBUG)
 
-    sem_header = await client.post(f"{API}/restaurants", json={"name": "X"})
+    sem_header = await client.post(f"{API}/restaurants", json=corpo_tenant("X", "dono@x.com"))
     forjado = await client.post(
         f"{API}/restaurants",
-        json={"name": "X"},
+        json=corpo_tenant("X", "dono@x.com"),
         headers={"Authorization": f"Bearer {adulterado}"},
     )
 

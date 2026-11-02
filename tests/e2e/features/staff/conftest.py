@@ -126,17 +126,15 @@ async def cenario(client: AsyncClient, admin_semeado: User) -> Cenario:
     admin = await fazer_login(client, ADMIN_EMAIL)
 
     resposta = await client.post(
-        f"{API}/restaurants", json={"name": "Cantina do Zé"}, headers=auth(admin)
-    )
-    assert resposta.status_code == HTTPStatus.CREATED, resposta.text
-    restaurante_id = resposta.json()["id"]
-
-    resposta = await client.post(
-        f"{API}/restaurants/{restaurante_id}/owners",
-        json={"email": "dono@cantina.com", "password": SENHA_PADRAO},
+        f"{API}/restaurants",
+        json={
+            "name": "Cantina do Zé",
+            "owner": {"email": "dono@cantina.com", "password": SENHA_PADRAO},
+        },
         headers=auth(admin),
     )
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
+    restaurante_id = resposta.json()["id"]
     owner = await fazer_login(client, "dono@cantina.com")
 
     unidades = []
