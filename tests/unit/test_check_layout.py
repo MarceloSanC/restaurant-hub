@@ -29,6 +29,7 @@ verdadeira uma dívida que já foi paga.
 import ast
 import importlib.util
 import pathlib
+import sys
 import types
 
 import pytest
@@ -957,8 +958,26 @@ def test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado() -> None
 # ---------------------------------------------------------------------------
 
 
+# Os módulos da hierarquia em `src/` hoje (Stage 3.9): 12 — três em `shared` e três
+# por BC, contando os `__init__.py` de `exceptions/`. Piso, não igualdade — BC novo soma.
+_MINIMO_DE_ARQUIVOS_DA_HIERARQUIA = 12
+
+
 def test_regra11_os_modulos_reais_da_hierarquia_nao_falam_de_protocolo() -> None:
+    """Verde sobre `src/` — e sobre um universo que não encolheu sem ninguém ver."""
+    assert len(check_layout.error_hierarchy_files(_SRC)) >= _MINIMO_DE_ARQUIVOS_DA_HIERARQUIA
     assert check_layout.check_error_hierarchy_protocol(_SRC) == []
+
+
+def test_regra11_esta_ligada_ao_main(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A regra só protege o build se o script a executa — é o `main()` que roda no CI."""
+    raiz = _src_falso(tmp_path, {"features/x/application/errors.py": '"""vira 404."""\n'})
+    monkeypatch.setattr(sys, "argv", ["check_layout.py", "--src", str(raiz)])
+
+    assert check_layout.main() == 1
+    assert "PROTOCOLO:" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -974,6 +993,17 @@ def test_regra11_os_modulos_reais_da_hierarquia_nao_falam_de_protocolo() -> None
         ("features/x/application/errors.py", "vira 404"),
         ("features/x/application/errors.py", "e não 500"),
         ("features/x/domain/exceptions/errors.py", "resposta 4xx"),
+        ("features/x/application/errors.py", "via app.exception_handler"),
+        ("features/x/application/errors.py", "levanta HTTPException"),
+        ("features/x/application/errors.py", "como Http404"),
+        ("features/x/application/errors.py", "status.HTTP_404_NOT_FOUND"),
+        ("features/x/application/errors.py", "a method-resolution order"),
+        ("features/x/application/errors.py", "a ordem de resolução de métodos"),
+        # Sem distinção de caixa (concept 3.9 §5.5 lista termos, não grafias).
+        ("features/x/application/errors.py", "o Handler do BC"),
+        ("features/x/application/errors.py", "via http"),
+        ("features/x/application/errors.py", "a Mro"),
+        ("features/x/application/errors.py", "o fastapi"),
     ],
 )
 def test_regra11_cada_termo_do_vocabulario_reprova(
