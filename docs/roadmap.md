@@ -167,7 +167,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#16](https://github.com/MarceloSanC/restaurant-hub/issues/16) | `check_stage_issue.py` aprova issue CLOSED (busca state mas não usa) | shared | tooling | done | — |
 | [#26](https://github.com/MarceloSanC/restaurant-hub/issues/26) | Registrar no log a causa suprimida dos 401/403 | identity | adapters/inbound/http | done | #6 |
 | [#29](https://github.com/MarceloSanC/restaurant-hub/issues/29) | Doc de domínio do BC staff — gate do Step 3 | staff | docs | done | — |
-| [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | open | — |
+| [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | done | — |
 | [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34) | Promover o sufixo `[N.M/task-NN-fix]` de commits de correção de checkpoint a convenção | shared | docs + tooling | done | — |
 | [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37) | Varrer `workforce.md` contra os ADRs 3.1.x — três lacunas declaradas abertas já foram fechadas | staff | docs | done | — |
 | [#41](https://github.com/MarceloSanC/restaurant-hub/issues/41) | Habilitação de função de trabalho por unidade (função segue do restaurante; gerente cria para a sua unidade, alcance extra-unidade para todas) | staff | domain + application + adapters/out | open | `3.4-staff-access-scope` |
@@ -208,6 +208,9 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#115](https://github.com/MarceloSanC/restaurant-hub/issues/115) | Autorizar o próprio alvo nos use cases de identity (formato da 3.7) | identity | application | open | #67 |
 | [#116](https://github.com/MarceloSanC/restaurant-hub/issues/116) | Citações por número de linha a `docs/domain/**` sem gate; válvula de `references` do `shift-scheduling.md` depende delas | shared | tooling | open | #102 |
 | [#117](https://github.com/MarceloSanC/restaurant-hub/issues/117) | Tabela consolidada de lacunas do `shift-scheduling.md` §6 sem guarda, com linhas de Stages `done` | scheduling | docs | open | #102 |
+| [#127](https://github.com/MarceloSanC/restaurant-hub/issues/127) | Comentário de `role.py` ainda proíbe toda permissão de escala ao `hr` — superado pelo ADR 4.1.0004 | identity | domain (comentário) | open | #30 |
+| [#128](https://github.com/MarceloSanC/restaurant-hub/issues/128) | ADR 2.5.0002 §5 descreve um reconvite que o concept 2.5 recusa com 409 | identity | docs | open | #30 |
+| [#129](https://github.com/MarceloSanC/restaurant-hub/issues/129) | Numeração das decisões de kickoff diverge entre ADRs, concepts e código | shared | docs | open | #30 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -2086,6 +2089,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-11-01 | Issue **#60** promovida a **Stage `3.8-termination-access-scope`** (Step 3, BC staff; `depends_on: 3.5-employee-login-link`) e concluída (`done`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio e nota datada de fechamento. Executada como `3.7` em paralelo à #49; **renumerada para 3.8** no rebase sobre o #71, que ficou com o número (pasta, ADR 3.8.0001, workforce §3.8, nota no ADR 3.5.0003). A aresta do grafo vai na mesma linha da 3.7; as citações por linha deslocadas pelo bloco (+48 a partir do Step 4, +1 na tabela de Stages) acompanham — as do #70 seguem com a #79. Step 3 passa a `3.1 → 3.8` | Execução da Stage 3.8 — issue #60 |
 | 2026-11-02 | Issue **#48** promovida a **Stage `3.9-error-hierarchy`** (Step 3, BC shared; `depends_on: 3.6-staff-http, 4.3-scheduling-application`, #45): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. Supersede o ADR 2.2.0003 e pede uma propriedade sobre a hierarquia inteira dos três BCs (detector de protocolo) — o litmus de PIPELINE §4.5. Step 3 passa a `3.1 → 3.9` | Promoção da issue #48 |
 | 2026-11-02 | Stage 3.9-error-hierarchy concluída (`done`); bloco acrescido de nota datada de fechamento. Uma raiz por significado (`DomainError` × `ApplicationError`, de volta em `shared/application`), status só pelo mapa do adapter, `NotFoundError` removida, regra 11 do `check_layout.py`. ADR 3.9.0001 supera o 2.2.0003, com supersessão parcial datada em 2.3.0003, 2.4.0001 e 3.4.0002; `LAYOUT.md` §2–§4 emendado. Nenhuma faixa nem corpo muda (`tests/e2e/` só perde a sonda 404 do smoke) | Execução da Stage 3.9 — issue #48 |
+| 2026-11-02 | Issue #30 concluída (`done`): `docs/domain/identity/tenancy-and-access.md` `accepted` — backfill do gate de domínio do Step 2, consolidando os ADRs de identity sem regra nova (lacunas e achados declarados no doc). **O Step 2 permanece `in_progress`**: o gate de domínio deixa de ser pendência, mas falta a contraparte de frontend (§Escopo deste roadmap; §"Lacunas conhecidas" › "Frontend") e o relatório do Step | Execução da issue #30 |
 
 ## Próxima revisão de roadmap
 
