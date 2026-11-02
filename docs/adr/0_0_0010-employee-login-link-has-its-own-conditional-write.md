@@ -9,7 +9,7 @@ updated_at: 2026-11-01
 adr_id: "0.0.0010"
 decision: `EmployeeRepository` gains `link_login(tenant_id, unit_id, employee_id, user_id)` — the only writer of `employees.user_id` after the record exists — which locks the row, re-runs the domain guards of `Employee.link_login` on the stored record and writes only `user_id`; `update` ignores the entity's `user_id` and keeps the stored one; `CreateLoginForEmployeeUseCase` links through `link_login`
 context_stage: 0.0-global
-bounded_context: staff
+bounded_context: transversal
 ---
 
 # ADR 0.0.0010 — The employee login link has its own conditional write
@@ -21,7 +21,9 @@ bounded_context: staff
 `accepted`
 
 Decided in issue #68 (standalone issue, hence the `0.0` prefix — CONVENTIONS §1, "ADR global":
-decisions taken outside the scope of a specific Stage).
+decisions taken outside the scope of a specific Stage — and, as every global ADR,
+`bounded_context: transversal` (CONVENTIONS §2). The decision is about the staff bounded context;
+a search for staff ADRs finds it through ADR 3.5.0004's `## Supersessão parcial`.)
 
 **Partially supersedes [ADR 3.5.0004](./3_5_0004-user-id-as-nullable-opaque-column.md) §4**, the
 sentence *"The column is **not** in `_COLUNAS_IMUTAVEIS`: it is set by `update`"*, and the first
@@ -64,11 +66,20 @@ rest of ADR 3.5.0004 — nullable opaque column, no FK, no UNIQUE, no index, nev
    (`SELECT … FOR UPDATE`, three-part address), rebuilds the aggregate under the lock, applies
    `Employee.link_login`, and runs `UPDATE employees SET user_id = :u`. Check and write are one
    transaction, so a second linker that waits on the lock re-reads the committed link and is
-   refused.
+   refused. The aggregate is rebuilt at the default `READ COMMITTED`, not under the
+   `REPEATABLE READ` that ADR 3.3.0006 §(c) asks of aggregate reads: the parent row is held by
+   `FOR UPDATE`, and every writer of the child tables (`update`, `delete`) takes that same lock
+   first, so no write can commit between the four statements. `REPEATABLE READ` with
+   `FOR UPDATE` would turn the wait of a second linker into a serialization error (`40001`)
+   instead of a re-read.
 3. **`update` no longer writes `user_id`.** The adapter keeps it out of the `SET`
    (`_COLUNAS_COM_ESCRITA_PROPRIA`, next to `_COLUNAS_IMUTAVEIS`); the fake stores the received
-   entity with the stored `user_id`. A stale entity cannot erase a link, and no write path other
-   than `link_login` can set one. Last write wins (ADR 3.3.0006) still holds for every other field.
+   entity with the stored `user_id`. A stale entity cannot erase a link, and once the record
+   exists no write path other than `link_login` can set one. `add` still inserts the entity's
+   `user_id` as it comes (the column is part of the row); no use case creates a linked record —
+   `create_employee` and the copy never name the field (ADR 3.5.0004 §5) — and the guards of a link
+   on an existing record are what this ADR is about. Last write wins (ADR 3.3.0006) still holds for
+   every other field.
 4. **`CreateLoginForEmployeeUseCase` links through `link_login`.** Its order (concept 3.5 §5.4)
    is unchanged: domain guard on the read record, provision in identity, link, then deliver. The
    result is built from the record it read, with the new link.
@@ -126,6 +137,20 @@ rest of ADR 3.5.0004 — nullable opaque column, no FK, no UNIQUE, no index, nev
   3.5 §6.4 already declares for a failing staff write after provisioning. What changes is that the
   client now gets a `409` for it instead of a `201` over a swapped link. The recovery path ("link
   an existing login") is still the finding of concept 3.5 §10.
+- **The reverse order of the termination race is not closed.** An R13 that read the record before
+  an R17 linked it, and writes `active = False` after, now keeps the link (before #68 it erased
+  it): the record ends terminated **and** linked, R17 answered `201` with a setup link, and R13
+  revoked nothing because it read no `user_id`. The account is pending at that point, so there is
+  no session to revoke, and what a login reaches goes through an active record (ADR 3.5.0003,
+  ADR 4.1.0006), so the state grants nothing today. It contradicts "a terminated record does not
+  receive a login" (concept 3.5 §5.5) as a stored state, and is declared, not fixed: closing it
+  means R13 re-checking the link under the row lock, which reopens the partial-success shape ADR
+  3.5.0003 §2 avoids. Escalated as a finding on issue #68.
+- **Delete has the same check-then-act shape.** `DeleteEmployeeUseCase` refuses a linked record by
+  reading the entity, and the adapter's `DELETE` does not look at the stored `user_id`; an R17 that
+  links between the read and the delete leaves the record deleted and the account orphaned.
+  Outside this issue (it is about the remove path, not the edit path); escalated as a finding on
+  issue #68.
 - `update` silently ignores the `user_id` of the entity it receives. That is the point, and it is
   in the port's docstring; a caller that wants to link must call `link_login`.
 

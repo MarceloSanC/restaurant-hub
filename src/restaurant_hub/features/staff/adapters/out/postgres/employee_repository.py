@@ -186,6 +186,13 @@ class PostgresEmployeeRepository:
         precedência aqui em `if`s sobre colunas abriria a segunda fonte, e a
         divergência fake ≢ real que a suíte de contrato existe para impedir.
 
+        **A remontagem roda em `READ COMMITTED`, e não sob o snapshot único da
+        nota 4** — de propósito. A linha-pai está presa, e todo escritor das
+        filhas (`update`, `delete`) toma esse mesmo lock antes, então nenhuma
+        escrita comita entre os quatro statements. `REPEATABLE READ` junto do
+        `FOR UPDATE` trocaria a espera do segundo R17 por erro de serialização
+        (`40001`) em vez de uma releitura do vínculo já gravado (ADR 0.0.0010).
+
         O `UPDATE` grava **só** `user_id`. O `WHERE user_id IS NULL` que a issue
         sugeria seria redundante sob o lock: nenhuma escrita concorrente alcança
         a linha entre a guarda e a escrita.
