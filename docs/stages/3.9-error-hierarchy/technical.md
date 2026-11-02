@@ -354,4 +354,50 @@ subclasse de `NotFoundError` migrar (T04); T06 só depois de todo módulo varrid
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-11-02 — [decision] Fase 3A — nenhuma bifurcação P; forks fechados por convenção — Claude (Opus 5.5)
+**Contexto:** a Stage é neutra em comportamento observável. Os forks (onde mora `ApplicationError`, critério de raiz, raiz de aplicação por BC, destino de `NotFoundError`, rede genérica, escopo do detector) são de organização interna.
+**Decisão:** todos `[decision:C]`, registrados no concept §7 (D1–D6) e no ADR 3.9.0001. Nenhum foi devolvido ao sponsor.
+**Razão:** skill `evidence-resolution` §1 — nenhum muda regra de domínio, escopo ou algo visível ao usuário do piloto.
+
+### 2026-11-02 — [decision] Checkpoint A — critério de raiz restrito à camada de aplicação, com precedência por fonte de produto — Claude (Opus 5.5)
+**Contexto:** o revisor de domínio mostrou que o critério do ADR, aplicado ao pé da letra, classificava como aplicação análogos que ficam no domínio (`ShiftBandNotFoundError`, `DuplicateEntityIdError`, `InvalidEvaluationInputError`) e que `ScheduleVersionConflictError` (regra canônica de concorrência, decisão do sponsor F8) estava do lado errado.
+**Decisão:** o critério classifica só o que a camada de aplicação levanta; erro levantado por objeto de domínio é domínio por construção; o ramo de domínio exige fonte de **produto**. `ScheduleVersionConflictError` fica no domínio (scheduling: 6 + 6, não 7 + 5). `[decision:C]`, degrau 1 (shift-scheduling.md, "Regra canônica — concorrência").
+**Razão:** sem o escopo e a precedência o ADR não serviria de guia ao criar erro novo, que é o `when-use` dele.
+
+### 2026-11-02 — [decision] Checkpoint C — a regra 11 não usa `\b` — Claude (Opus 5.5)
+**Contexto:** o revisor do bloco T06–T08 mostrou que `\bHTTP\b`/`\bhandlers?\b` deixavam passar as grafias idiomáticas compostas com `_` ou CamelCase (`exception_handler`, `HTTPException`, `Http404`, `HTTP_404_NOT_FOUND`), além de "method-resolution order" por extenso — termos que o ADR 3.9.0001 §6 proíbe.
+**Decisão:** fronteiras por lookaround que não tratam `_` como letra, alternativas por extenso (PT e EN) e um plantado por grafia; o technical (Task 06) citava o regex antigo, o ADR vence. `[decision:C]`, degrau 1.
+**Razão:** o detector existe para pegar a forma como a inversão realmente é escrita.
+
+### 2026-11-02 — [decision] Auditoria de testes — sem e2e novo para o log do 401 em rota de staff — Claude (Opus 5.5)
+**Contexto:** a auditoria (rodada 1) notou que a linha de log da causa suprimida é assertada em e2e só por rotas de identity; numa rota de staff, só o status/corpo/cabeçalho (`test_ca08_toda_rota_sem_bearer_recebe_401`).
+**Decisão:** não acrescentar. O handler de staff não participa: o 401 sai do handler de identity, o mesmo objeto registrado nas duas raízes (`test_o_registrador_instala_o_mesmo_handler_nas_duas_raizes`), e a rota não muda o caminho do log. `[decision:C]`, degrau 5.
+**Razão:** o risco que o teste cobriria já está travado por identidade de objeto; o e2e seria duplicação.
+
+### 2026-11-02 — [deviation] Task 01 — `test_errors.py` de identity entrou na Task — Claude (Opus 5.5)
+Apontado pelo Checkpoint B (A1) antes da aprovação: a raiz nova entrava na varredura do módulo e reprovava dois testes. Já está na lista da Task 01 do technical aprovado; registrado aqui porque a T01 ficou com 7 arquivos e escopo `shared` com o consumidor mínimo em identity.
+
+### 2026-11-02 — [deviation] Task 05 — o grep "`NotFoundError` vazio" vale para código, não para prosa — Claude (Opus 5.5)
+`grep -rnw NotFoundError src tests` não sai vazio: sobram o padrão `*NotFoundError` (família de classes) em `staff/application/ports/out/job_function_repository.py`, um comentário de `tests/unit/features/scheduling/domain/test_schedule.py`, a docstring do oráculo `tests/e2e/features/staff/test_staff_status_bands.py` (intocável, CA7) e as notas históricas que dizem que a classe saiu. Nenhum import nem referência de código à classe.
+
+### 2026-11-02 — [deviation] Checkpoint C / auditoria — testes da auditoria dobrados no `task-06-fix` — Claude (Opus 5.5)
+Os dois testes que a auditoria (rodada 1) propôs para os sobreviventes M10a (caixa) e M11 (regra fora do `main()`) entraram no mesmo commit que corrigiu o regex (`[3.9/task-06-fix]`), porque exercitam o mesmo trecho. As extras puras da auditoria são `[3.9/task-09-extra]` (CA5 por teste) e `[3.9/task-10-extra]` (M18, base única).
+
+### 2026-11-02 — [finding] Regra 11 — número de 400 a 599 que não é status reprova — Claude (Opus 5.5)
+**Contexto:** `[45]\d\d` sem letra/dígito/ponto colado reprova também uma quantidade ("480 minutos", "art. 482") num módulo de erro.
+**Direção sugerida:** quando acontecer, estreitar o padrão (ex.: exigir contexto de status), nunca allowlist; o limite está documentado no comentário do regex.
+**Stage candidata:** `4.5-scheduling-http` (primeira que tende a escrever mensagens de erro com cargas horárias perto do mapa de status).
+
+### 2026-11-02 — [finding] Scheduling ganha a raiz de aplicação sem handler — Claude (Opus 5.5)
+**Contexto:** `SchedulingApplicationError` existe e não há rede genérica para `ApplicationError` (ADR 3.9.0001 §5). Hoje é inalcançável: scheduling não tem `adapters/inbound/`.
+**Direção sugerida:** o handler de scheduling registra sobre as duas raízes; `test_todo_bc_com_borda_registra_handler_em_cada_raiz` e o Gate 3 já reprovam o contrário assim que a pasta da borda existir.
+**Stage candidata:** `4.5-scheduling-http`.
+
+### 2026-11-02 — [decision] Disposição dos checkpoints — Claude (Opus 5.5)
+- **Checkpoint A** (2 revisores): domínio F1–F8 e conformidade F1–F6 — todos corrigidos no commit `stage 3.9: conceptual approved`.
+- **Checkpoint B**: A1–A6 corrigidos no commit `stage 3.9: technical approved`.
+- **Checkpoint C, T01–T05**: sem achado material; m1 → `[3.9/task-02-fix]`, cosméticos de staff → `[3.9/task-03-fix]`, m2/m3 → `[3.9/task-05-fix]`.
+- **Checkpoint C, T06–T08**: R11-1/R11-2 → `[3.9/task-06-fix]`; ADR-1 a ADR-4 → `[3.9/task-07-fix]`; R11-3 → `[finding]` acima.
+- **Auditoria de testes**: 3 rodadas; sobreviventes M10a, M11 (rodada 1) e M18 (rodada 2) mortos; rodada 3 com os seis itens "sim".
+
 <!-- END: post-execution -->
