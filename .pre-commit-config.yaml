@@ -19,9 +19,9 @@
 repos:
   - repo: local
     hooks:
-      # Formata os arquivos do commit. Não tem contrapartida no `make check`: o
-      # target `fmt` aplica a formatação, não a confere
-      # (docs/runbooks/validate-ci-gate.md §Class 2).
+      # Formata os arquivos do commit. A contrapartida no `make check` é o
+      # `make fmt-check`, que confere sem formatar (issue #99,
+      # docs/runbooks/validate-ci-gate.md §Class 2).
       - id: ruff-format
         name: ruff format
         entry: uv run ruff format --force-exclude

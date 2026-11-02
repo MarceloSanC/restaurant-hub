@@ -5,7 +5,7 @@ when-use: After hardening the CI gate (a new tool joins the chain); when auditin
 keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage, fetch-depth, freeze-secao-7, depends-on]
 status: accepted
 created_at: 2026-06-23
-updated_at: 2026-11-01
+updated_at: 2026-11-02
 runbook_id: validate-ci-gate
 triggers:
   - Hardening of the CI gate (new tool joining the chain — e.g., bandit, import-linter)
@@ -22,7 +22,7 @@ estimated_duration: ~20min
 
 ## Purpose
 
-Prove, **class by class**, that each error class enforced by the local `make check` gate produces a non-zero exit code, so the CI step `Run gate completo (lint + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)` in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (which runs literally `make check`) rejects the broken state before merge.
+Prove, **class by class**, that each error class enforced by the local `make check` gate produces a non-zero exit code, so the CI step `Run gate completo (lint + fmt-check + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)` in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (which runs literally `make check`) rejects the broken state before merge.
 
 The argument is transitive: if every class fails `make check` locally, every class fails `make check` on the runner. This runbook documents the local demonstration that closes that transitivity argument.
 
@@ -31,10 +31,10 @@ The argument is transitive: if every class fails `make check` locally, every cla
 In this project, `make check` expands to the following target chain (see [`Makefile`](../../Makefile)):
 
 ```
-check: lint typecheck layout-check import-check lock-check docs-check test-gate
+check: lint fmt-check typecheck layout-check import-check lock-check docs-check test-gate
 ```
 
-where `import-check` runs `lint-imports` (import-linter contracts in
+where `fmt-check` runs `ruff format --check` (formatting is checked, never applied — issue #99), `import-check` runs `lint-imports` (import-linter contracts in
 [`.importlinter`](../../.importlinter)), `lock-check` runs `uv lock --check`
 (lockfile drift), `test-gate` runs pytest with `--cov` (the `fail_under = 90`
 coverage gate fires inside `make check`), and `make docs-check` expands to:
@@ -98,11 +98,13 @@ Exit code: **1**.
 git restore src/restaurant_hub/__init__.py
 ```
 
+> **`migrations/` is in scope** (issue #99). `lint`, `fmt` and `fmt-check` name the same directories — every versioned `.py`, `migrations/` included — and `tests/unit/test_ci_workflow.py` fails if a versioned `.py` falls outside them. The same patch appended to `migrations/env.py` fails `make check` at the `lint` step (`F401`, plus `E402` because it lands after module code).
+
 ---
 
 ### Class 2 — `fmt-check` (ruff format --check)
 
-> **Note:** unlike `lint`/`typecheck`/etc., the formatter check is **not** a standalone target in this template's `make check` chain — the `fmt` target *applies* formatting (`ruff format` + `ruff check --fix`) rather than checking it. The class is kept here because `ruff format --check` is the canonical way to prove the formatter rejects unformatted code, and a project that promotes formatting to a blocking gate (adding `ruff format --check` to `check`) should validate it with exactly this patch. Exercise it directly via the command below.
+> **Blocking since issue #99.** `fmt-check` runs right after `lint` in the `make check` chain and only *checks* formatting (`ruff format --check`); the `fmt` target is the one that *applies* it (`ruff format` + `ruff check --fix`). Before #99 only the `ruff-format` pre-commit hook formatted code, so a commit made with `--no-verify` (or from a worktree without the hook) reached the runner unformatted and passed. `tests/unit/test_ci_workflow.py` fails if `fmt-check` leaves the chain or loses `--check`. Freshly generated Alembic revisions already pass it: the post-write hook in `migrations/alembic.ini` formats them (guarded by `tests/unit/test_alembic_revision_template.py`).
 
 **Patch** (apply to `src/restaurant_hub/__init__.py`):
 ```python
@@ -120,6 +122,13 @@ Would reformat: src/restaurant_hub/__init__.py
 1 file would be reformatted
 ```
 Exit code: **1**.
+
+Through the gate (`make check`, measured in issue #99), `lint` passes — `x=1` is not a lint error — and the chain stops at `fmt-check` before reaching `typecheck`:
+```
+Would reformat: src/restaurant_hub/__init__.py
+1 file would be reformatted, N files already formatted
+make: *** [Makefile:N: fmt-check] Error 1
+```
 
 **Revert:**
 ```bash
@@ -463,7 +472,7 @@ git status              # must be clean
 make check              # must exit 0
 ```
 
-If `make check` is green and each class individually produced a non-zero exit code, the transitivity argument is closed **for every class whose inputs are identical on the runner**: the CI step `Run gate completo (lint + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)` runs exactly `make check`, so every such class fails on the runner as well.
+If `make check` is green and each class individually produced a non-zero exit code, the transitivity argument is closed **for every class whose inputs are identical on the runner**: the CI step `Run gate completo (lint + fmt-check + typecheck + layout-check + import-check + lock-check + docs-check + test-gate)` runs exactly `make check`, so every such class fails on the runner as well.
 
 **Class 5b is the exception that proves the rule** — its input is git history, which the runner does *not* reproduce by default. Its local demonstration does **not** transfer on its own; it transfers only because `ci.yml` pins `fetch-depth: 0`. If that line is ever removed, Class 5b goes green on the runner without anyone noticing, and this §Verification silently overstates what it proved.
 
@@ -508,7 +517,7 @@ When a future Stage **hardens** the CI gate, this runbook MUST be extended in th
 - **New tool joins `make check`** (e.g., `bandit`, `safety`, `pip-audit`): add a new §Class N section in §Procedure, in the order in which `make check` runs it, with the four-part shape (patch / command / expected output / revert). (Done in Stage 1.1 for `import-check` — §Class 8 — and `lock-check` — §Class 9.)
 - **A check's inputs differ between laptop and runner** (git history, network, filesystem layout): the class needs its **environment precondition** written next to the patch, and its local exit code does **not** close the transitivity argument on its own — say so explicitly, and close the environment half with real runs whose links are recorded in the Stage's §7. (Added in Stage 1.2 for the §7 freeze — §Class 5b — whose input is git history and which required `fetch-depth: 0` in `ci.yml`.) The generalisation worth remembering: **a class this runbook cannot trigger locally is not automatically a class the CI enforces** — verify, do not assume.
 - **`scripts/check_layout.py` and `import-linter` coexist** by decision of Stage 1.1 (concept §6 — defense in depth): §Class 4 exercises the script, §Class 8 the contracts. If one ever replaces the other, merge the two classes.
-- **`fmt-check` promoted to a blocking target** (adding `ruff format --check` to `check`): upgrade the note in §Class 2 and add the target to the chain documented in §Purpose.
+- **`fmt-check` promoted to a blocking target**: done in issue #99 — §Class 2 and the chain in §Purpose updated. A new directory with Python joins `lint`, `fmt` and `fmt-check` together (`tests/unit/test_ci_workflow.py` enforces it).
 - **Coverage gate** (`fail_under` in `pyproject.toml`): if the threshold or coverage tool changes, update §Class 7's command and fingerprint accordingly.
 
 - **A gate requires an external service** (database, cache, broker): the class needs
