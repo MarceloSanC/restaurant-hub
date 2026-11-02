@@ -243,8 +243,11 @@ async def test_401_sem_autenticacao_registra_sem_ator(
 
     assert resposta.status_code == handlers.HTTP_UNAUTHORIZED
     [registro] = _registros(caplog)
+    assert _campo(registro, "auth_status") == handlers.HTTP_UNAUTHORIZED
     assert _campo(registro, "auth_actor") is None
-    assert "ator=- " in registro.getMessage()
+    assert registro.getMessage().startswith(
+        "resposta 401 com causa suprimida: POST /units/unit-1/users ator=- "
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +390,23 @@ def test_cadeia_com_ciclo_termina() -> None:
     descricao = handlers.describe_suppressed_cause(externa)
 
     assert descricao == "InvalidAccessTokenError: token de acesso inválido <- UnitNotFoundError"
+
+
+def test_ciclo_entre_causas_internas_nao_repete_elo() -> None:
+    """O ciclo que não volta ao elo externo também é cortado no primeiro retorno."""
+    externa = InvalidAccessTokenError()
+    a = UnitNotFoundError("u-1")
+    b = UserNotFoundError("user-1")
+    externa.__cause__ = a
+    a.__cause__ = b
+    b.__cause__ = a
+
+    descricao = handlers.describe_suppressed_cause(externa)
+
+    assert descricao == (
+        "InvalidAccessTokenError: token de acesso inválido"
+        " <- UnitNotFoundError <- UserNotFoundError"
+    )
 
 
 def test_cadeia_longa_para_no_teto() -> None:
