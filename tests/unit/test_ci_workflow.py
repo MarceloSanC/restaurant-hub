@@ -234,9 +234,16 @@ def _check_prerequisites() -> list[str]:
 
 
 def _versioned_python_files() -> list[str]:
-    """Todo `.py`/`.pyi` versionado: o que o hook do pre-commit pode receber."""
+    """Todo `.py`/`.pyi` versionado: o que o hook do pre-commit pode receber.
+
+    A pathspec `:(top)` e o `--full-name` leem a partir da raiz do git, não do
+    `cwd`. Na corrida de mutação, `REPO_ROOT` é a cópia `mutants/`, que fica
+    dentro do checkout e não tem arquivo rastreado: sem a âncora na raiz, o
+    `ls-files` saía vazio e derrubava a coleta de estatísticas (issue #87, run
+    41489942553).
+    """
     listed = subprocess.run(
-        ["git", "ls-files", "--", "*.py", "*.pyi"],
+        ["git", "ls-files", "--full-name", "--", ":(top)*.py", ":(top)*.pyi"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
