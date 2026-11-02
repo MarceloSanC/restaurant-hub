@@ -5,6 +5,7 @@ CA02, CA04, CA05, CA06, CA07, CA10, CA12, CA16, CA25, CA26.
 
 import dataclasses
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 
@@ -23,6 +24,7 @@ from restaurant_hub.features.scheduling.application.dtos.queries import Evaluate
 from restaurant_hub.features.scheduling.application.errors import (
     BlockingViolationsError,
     IdentifierInUseError,
+    InactiveStaffMemberError,
     MissingStaffRecordsError,
     ScheduleNotFoundError,
     ScheduleVersionConflictError,
@@ -30,6 +32,10 @@ from restaurant_hub.features.scheduling.application.errors import (
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
     SchedulingSettings,
+)
+from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
+    JobFunctionEntry,
+    StaffMember,
 )
 from restaurant_hub.features.scheduling.application.use_cases.evaluate_schedule import (
     EvaluateScheduleUseCase,
@@ -62,7 +68,9 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
     PolicyKind,
     PolicyRule,
     ValidationConfig,
+    WorkloadDirection,
 )
+from tests.fakes.features.scheduling.in_memory_staff_read import InMemoryStaffRead
 from tests.unit.features.scheduling.application.conftest import (
     COOK,
     MONDAY,
@@ -431,3 +439,108 @@ def test_ca25_escala_nao_adjacente_nao_entra_como_vizinha(world: World) -> None:
     )
     # Se a de duas semanas atrás entrasse, o "ze" ausente recusaria.
     _evaluate(world).execute(_q(world, ()))
+
+
+# --- lacunas da auditoria de testes ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("caso", ["avaliar", "publicar"])
+def test_ca02_versao_anterior_a_gravada_recusa(world: World, caso: str) -> None:
+    _seed(world)
+    gravada = world.schedules.find_by_id(T1, U1, _S1)
+    assert gravada is not None
+    world.schedules.save(dataclasses.replace(gravada, version=2), 1, blank_change(1))
+    world.schedules.calls.clear()
+    with pytest.raises(ScheduleVersionConflictError) as excinfo:
+        if caso == "avaliar":
+            _evaluate(world).execute(_q(world, _EXCEDENTE, version=1))
+        else:
+            _publish(world).execute(_c(world, _EXCEDENTE, version=1))
+    assert excinfo.value.current_version == 2  # noqa: PLR2004
+    assert "save" not in world.schedules.calls
+
+
+def test_ca10_sobre_cobertura_pre_existente_nao_pede_aceite_de_novo(world: World) -> None:
+    _seed(world)
+    avaliado = _evaluate(world).execute(_q(world, _EXCEDENTE))
+    acks = tuple(ViolationAcknowledgement(v.key, v.observed, v.limit) for v in avaliado.warnings)
+    _publish(world).execute(_c(world, _EXCEDENTE, acks))
+    publicado = _publish(world).execute(_c(world, (RedeclareBandBreak(_F1, 30),), version=2))
+    assert PolicyKind.OVER_COVERAGE in {v.policy for v in publicado.violations}
+    assert publicado.summary.version == 3  # noqa: PLR2004
+
+
+def test_ca22_id_de_criacao_usado_na_vizinha_recusa_no_use_case(world: World) -> None:
+    _seed(world)
+    anterior = MONDAY - timedelta(days=7)
+    vizinha = schedule("s0", anterior).enable_band(
+        ShiftBandId("g1"), TimeRange(start=at(anterior, 9), end=at(anterior, 12))
+    )
+    world.schedules.add(dataclasses.replace(vizinha, version=1), blank_change())
+    reuso = (EnableBand(ShiftBandId("g1"), TimeRange(start=at(MONDAY, 18), end=at(MONDAY, 20))),)
+    with pytest.raises(IdentifierInUseError):
+        _evaluate(world).execute(_q(world, reuso))
+
+
+def test_ca11_alocar_desligado_pelo_use_case_recusa_como_inativo(world: World) -> None:
+    _seed(world)
+    world.staff.add_member(T1, member("caio", active=False))
+    with pytest.raises(InactiveStaffMemberError):
+        _publish(world).execute(
+            _c(world, (AssignEmployee(AssignmentId("a-caio"), _D1, EmployeeId("caio")),))
+        )
+
+
+def test_insumo_inclui_o_quadro_ativo_nao_alocado(world: World) -> None:
+    _seed(world)
+    world.staff.add_member(T1, member("dora", hours=Decimal("40")))
+    world.config.set_settings(
+        T1,
+        SchedulingSettings(
+            calendar=OperationalCalendar.default(),
+            validation=dataclasses.replace(
+                ValidationConfig.default(), workload_direction=WorkloadDirection.BOTH
+            ),
+        ),
+    )
+    resultado = _evaluate(world).execute(_q(world, ()))
+    assert any(
+        v.policy is PolicyKind.WORKLOAD and v.employee_id == "dora"
+        for v in resultado.schedule.violations
+    )
+
+
+def test_ca16_varios_ausentes_vem_todos_ordenados(world: World) -> None:
+    base = (
+        schedule("s1")
+        .enable_band(_F1, TimeRange(start=at(MONDAY, 10), end=at(MONDAY, 16)))
+        .declare_demand(_D1, _F1, COOK, DemandQuantity(3))
+        .assign(AssignmentId("a-2"), _D1, EmployeeId("ze"))
+        .assign(AssignmentId("a-1"), _D1, EmployeeId("rui"))
+        .assign(AssignmentId("a-ana"), _D1, EmployeeId("ana"))
+    )
+    _seed(world, base)
+    with pytest.raises(MissingStaffRecordsError) as excinfo:
+        _evaluate(world).execute(_q(world, ()))
+    assert excinfo.value.assignment_ids == (AssignmentId("a-1"), AssignmentId("a-2"))
+
+
+class _QuadroDefasado(InMemoryStaffRead):
+    """O quadro ativo devolve uma cópia defasada de Ana (sem as férias)."""
+
+    def list_active_members(self, tenant_id: TenantId, unit_id: UnitId) -> tuple[StaffMember, ...]:
+        return tuple(
+            dataclasses.replace(m, unavailabilities=())
+            for m in super().list_active_members(tenant_id, unit_id)
+        )
+
+
+def test_list_members_prevalece_sobre_o_quadro_ativo(world: World) -> None:
+    staff = _QuadroDefasado()
+    ferias = UnavailabilityWindow(start=at(MONDAY, 0), end=at(MONDAY + timedelta(days=2), 0))
+    staff.add_member(T1, member("ana", unavailabilities=(ferias,)), user_id="user-ana")
+    staff.add_job_function(T1, JobFunctionEntry(COOK, "Cozinheiro"))
+    world.staff = staff
+    _seed(world)
+    resultado = _evaluate(world).execute(_q(world, ()))
+    assert PolicyKind.UNAVAILABILITY in {v.policy for v in resultado.schedule.violations}

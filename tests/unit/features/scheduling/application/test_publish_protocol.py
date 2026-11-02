@@ -437,3 +437,17 @@ def test_ca09_sobre_cobertura_de_outra_demanda_nao_conta_como_antes() -> None:
     )
     agora = _sobre("1", "a", "b")
     assert introduced((outra,), (agora,)) == (agora,)
+
+
+def test_ca10_sobre_cobertura_pre_existente_identica_nao_e_introduzida() -> None:
+    assert introduced((_sobre("1", "a", "b"),), (_sobre("1", "a", "b"),)) == ()
+
+
+def test_ca09_outra_politica_da_mesma_demanda_nao_substitui_a_referencia() -> None:
+    sobre = _sobre("1", "a", "b")
+    alheia = _v(
+        PolicyKind.FUNCTION_MISMATCH, "1", "0", employee="ana", demand="d1", assignments=("a",)
+    )
+    # A referência de sobre-cobertura é a sobre-cobertura da demanda, nunca outra política.
+    assert introduced((sobre, alheia), (sobre,)) == ()
+    assert introduced((alheia, sobre), (sobre,)) == ()
