@@ -14,6 +14,8 @@ bounded_context: staff
 
 # ADR 3.5.0001 — Cross-BC in-process integration: upstream facade, downstream gateway, one named edge
 
+> ⚠️ **Errata (2026-11-02):** §Decision 1 — the pointer in *"no identity use case does today (#49)"* is misleading: issue #49 (Stage 3.7, closed) moved authorization into **staff**'s use cases only and left identity out of scope. The fact stands — no identity use case takes an actor or authorizes; identity authorizes at its HTTP boundary (ADR 2.4.0003 §1, kept by [ADR 0.0.0014](./0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) §4), while every staff use case authorizes its own target ([ADR 3.7.0001](./3_7_0001-every-staff-use-case-authorizes-its-own-target.md)) and staff's `AccessGuard` is an adapter over `IdentityAccessFacade` ([ADR 0.0.0016](./0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)). Whether identity follows staff is open for the whole bounded context in issue #115. Pointer only; no decision content changes — ver issue #77
+
 ## Status
 
 `accepted` — decided by the sponsor on 2026-09-12 after a primary-source
