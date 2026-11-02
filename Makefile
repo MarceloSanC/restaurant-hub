@@ -145,9 +145,13 @@ lock-check:
 # frontmatter de skills/subagentes em `.claude/` — o Claude Code não reporta
 # YAML inválido nem descrição truncada (issue #56) —, (6) que toda pasta de
 # Stage tem as dependências fechadas: `done` no roadmap e `stage N.M: complete`
-# no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0009) — e
+# no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0009) —
 # (7) que doc cita o roadmap por âncora (`§Stage N.M › "Rótulo"`), nunca por
-# número de linha, e que toda âncora resolve (issue #79, ADR 0.0.0012).
+# número de linha, e que toda âncora resolve (issue #79, ADR 0.0.0012) — e
+# (8) que o frontmatter dos ADRs e dos docs de domínio é YAML válido, que
+# `adr_id` é único e bate com o nome do arquivo, e que doc de domínio não tem
+# link quebrado, ADR linkado fora do `references` nem lacuna aberta para
+# Stage `done` (issue #102, ADR 0.0.0015).
 #
 # O (4) é o único que compara documento com sistema de arquivos, e é por isso
 # que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda
@@ -162,6 +166,7 @@ docs-check:
 	uv run python scripts/check_harness.py
 	uv run python scripts/check_stage_deps.py
 	uv run python scripts/check_roadmap_citations.py
+	uv run python scripts/check_doc_frontmatter.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes (sem cobertura — loop rápido local)
