@@ -45,6 +45,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 from restaurant_hub.features.identity.application.dtos.results import AuthorizedActor
 from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
 from restaurant_hub.features.identity.application.errors import InvalidAccessTokenError
+from restaurant_hub.features.identity.application.facade import AccessPrincipal
 from restaurant_hub.features.identity.application.ports.out.token_issuer import TokenIssuer
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
@@ -145,6 +146,24 @@ class IdentityGuard:
         claims = self._token_issuer.decode_access_token(token)
         setattr(request.state, _ATOR_NA_REQUISICAO, claims.subject)
         return AuthenticatedActor(claims=claims)
+
+    def authenticate_principal(self, request: object) -> AccessPrincipal:
+        """`authenticate`, publicado para outro BC em primitivos (issue #47).
+
+        É o que o `AccessGuard` de staff recebe por injeção — o
+        `composition_root` o conecta — para autenticar sem conhecer HTTP nem
+        este módulo: extração do Bearer, verificação e anotação do ator para o
+        log (#26) continuam **aqui**, numa cópia só, e a faixa 401 das rotas de
+        staff segue byte-idêntica à de identity (L-AG1).
+
+        `request` é `object` porque é assim que o port de staff o declara.
+        Qualquer coisa que não seja uma requisição HTTP não tem credencial a
+        verificar, e falha **fechado**, com o mesmo 401 de um header ausente.
+        """
+        if not isinstance(request, Request):
+            raise InvalidAccessTokenError()
+        claims = self.authenticate(request).claims
+        return AccessPrincipal(user_id=claims.subject, tenant_id=claims.tenant_id)
 
     def authorize(
         self,

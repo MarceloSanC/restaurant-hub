@@ -27,6 +27,7 @@ from restaurant_hub.features.identity.application.errors import (
     UnitNotVisibleError,
     UnitScopeRequiredError,
 )
+from restaurant_hub.features.identity.application.facade import AccessPrincipal
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
@@ -481,3 +482,47 @@ def test_guard_nao_tem_tabela_de_papeis_propria() -> None:
     esperado = frozenset({Permission.MANAGE_USERS}) | Role.OWNER.permissions
 
     assert dependencies.required_permissions_for_role(Role.OWNER) == esperado
+
+
+# ---------------------------------------------------------------------------
+# `authenticate_principal` — a autenticação publicada para staff (issue #47)
+# ---------------------------------------------------------------------------
+
+
+def test_authenticate_principal_devolve_sujeito_e_tenant_do_token_em_texto() -> None:
+    """O mesmo caminho de `authenticate`, convertido para o tipo da fachada."""
+    fixture = _Fixture()
+    user = fixture.com_usuario(user_id="gerente-1", role=Role.MANAGER)
+    request = _request({"Authorization": f"Bearer {fixture.token_de(user)}"})
+
+    principal = fixture.guard.authenticate_principal(request)
+
+    assert principal == AccessPrincipal(user_id="gerente-1", tenant_id=_TENANT)
+    # A anotação do ator para o log (#26) acontece aqui também — é o motivo de
+    # a autenticação de staff passar por este guard, e não por uma cópia.
+    assert dependencies.authenticated_actor_id(request) == "gerente-1"
+
+
+def test_authenticate_principal_de_platform_admin_vem_sem_tenant() -> None:
+    fixture = _Fixture()
+    user = fixture.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+    request = _request({"Authorization": f"Bearer {fixture.token_de(user)}"})
+
+    assert fixture.guard.authenticate_principal(request).tenant_id is None
+
+
+def test_authenticate_principal_sem_credencial_e_o_mesmo_401() -> None:
+    """L-AG1 começa aqui: a exceção é a de `authenticate`, sem tradução."""
+    fixture = _Fixture()
+    request = _request()
+
+    with pytest.raises(InvalidAccessTokenError):
+        fixture.guard.authenticate_principal(request)
+
+    assert dependencies.authenticated_actor_id(request) is None
+
+
+def test_authenticate_principal_recusa_o_que_nao_e_requisicao_http() -> None:
+    """`object` no tipo, por causa do port de staff — e fechado no runtime."""
+    with pytest.raises(InvalidAccessTokenError):
+        _Fixture().guard.authenticate_principal(object())

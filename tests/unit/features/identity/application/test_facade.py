@@ -27,14 +27,21 @@ from restaurant_hub.features.identity.application.dtos.commands import (
     RevokeAllSessionsCommand,
     SendInvitationCommand,
 )
+from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 from restaurant_hub.features.identity.application.dtos.results import (
     AccountRoleResult,
     ProvisionedAccountResult,
     UserResult,
 )
 from restaurant_hub.features.identity.application.facade import (
+    AccessGrant,
+    AccessPrincipal,
+    IdentityAccessFacade,
     IdentityFacade,
     ProvisionedAccount,
+)
+from restaurant_hub.features.identity.application.use_cases.authorize_action import (
+    AuthorizeActionUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
@@ -357,10 +364,16 @@ class TestReexportacao:
         assert modulo_facade.InvalidEmailError is erros_de_dominio.InvalidEmailError
 
     def test_all_declara_exatamente_a_superficie_publica(self) -> None:
+        # A fachada de acesso e os seus dois tipos, mais a exceção de L-AG3,
+        # entraram com a issue #47 (ADR 0.0.0016).
         assert set(modulo_facade.__all__) == {
+            "AccessGrant",
+            "AccessPrincipal",
             "EmailAlreadyRegisteredError",
+            "IdentityAccessFacade",
             "IdentityFacade",
             "InvalidEmailError",
+            "PermissionDeniedError",
             "ProvisionedAccount",
         }
 
@@ -445,3 +458,146 @@ class TestSobreOsUseCasesReais:
 
         with pytest.raises(modulo_facade.EmailAlreadyRegisteredError):
             _provisionar(fachada)
+
+
+# ---------------------------------------------------------------------------
+# A fachada de acesso (issue #47, ADR 0.0.0016)
+#
+# Sobre o use case **real** e os fakes de identity: a fachada de acesso não
+# tem estado próprio, e um espião do use case testaria só a conversão — a
+# metade que importa é que os dois oráculos fechados pela borda (a função
+# `authorize_at_boundary`) também se fecham por aqui.
+# ---------------------------------------------------------------------------
+
+
+class TestFachadaDeAcesso:
+    _TENANT = "rest-a"
+    _UNIDADE = "unit-a1"
+
+    def _montar(self) -> tuple[IdentityAccessFacade, InMemoryUserRepository]:
+        users = InMemoryUserRepository()
+        units = InMemoryUnitRepository()
+        units.add(
+            Unit(id=UnitId(self._UNIDADE), restaurant_id=RestaurantId(self._TENANT), name="C")
+        )
+        units.add(Unit(id=UnitId("unit-b1"), restaurant_id=RestaurantId("rest-b"), name="B"))
+        for user_id, role, tenant in (
+            ("gerente", Role.MANAGER, self._TENANT),
+            ("dono", Role.OWNER, self._TENANT),
+            ("admin", Role.PLATFORM_ADMIN, None),
+        ):
+            user = User(
+                id=UserId(user_id),
+                email=Email(f"{user_id}@x.com"),
+                role=role,
+                tenant_id=RestaurantId(tenant) if tenant is not None else None,
+            )
+            vinculos = (
+                [user.link_to_unit(units.units[UnitId(self._UNIDADE)])]
+                if role is Role.MANAGER
+                else []
+            )
+            users.add(user, PasswordHash("hashed::x"), vinculos)
+        return IdentityAccessFacade(AuthorizeActionUseCase(users=users, units=units)), users
+
+    def _principal(
+        self, user_id: str = "gerente", tenant: str | None = "rest-a"
+    ) -> AccessPrincipal:
+        return AccessPrincipal(user_id=user_id, tenant_id=tenant)
+
+    def test_concede_e_devolve_o_escopo_em_texto(self) -> None:
+        fachada, _ = self._montar()
+
+        grant = fachada.authorize(
+            self._principal(), "manage_staff", tenant_id=self._TENANT, unit_id=self._UNIDADE
+        )
+
+        assert grant == AccessGrant(
+            role="manager", actor_tenant_id=self._TENANT, scope_unit_id=self._UNIDADE
+        )
+        assert type(grant.role) is str
+
+    def test_permissao_tenant_wide_volta_sem_unidade(self) -> None:
+        fachada, _ = self._montar()
+
+        grant = fachada.authorize(
+            self._principal(), "manage_job_functions", tenant_id=self._TENANT, unit_id=None
+        )
+
+        assert grant.scope_unit_id is None
+        assert grant.actor_tenant_id == self._TENANT
+
+    def test_ator_sem_tenant_volta_com_actor_tenant_id_ausente(self) -> None:
+        """A fachada **não** impõe L-AG3 — é lei de staff, e o adapter de staff a impõe."""
+        fachada, _ = self._montar()
+
+        grant = fachada.authorize(
+            self._principal("admin", None), "manage_platform", tenant_id=None, unit_id=None
+        )
+
+        assert grant.actor_tenant_id is None
+        assert grant.role == "platform_admin"
+
+    def test_o_tenant_omitido_chega_omitido_e_a_decisao_o_recusa(self) -> None:
+        """A fachada não resolve a omissão: é do chamador (ADR 0.0.0005, cláusula 3)."""
+        fachada, _ = self._montar()
+
+        with pytest.raises(erros_de_application.TenantScopeRequiredError):
+            fachada.authorize(
+                self._principal(), "manage_staff", tenant_id=None, unit_id=self._UNIDADE
+            )
+
+    def test_tenant_vazio_nomeado_e_negado_e_nao_tratado_como_omitido(self) -> None:
+        fachada, _ = self._montar()
+
+        with pytest.raises(erros_de_application.TenantNotVisibleError):
+            fachada.authorize(
+                self._principal(), "manage_staff", tenant_id="", unit_id=self._UNIDADE
+            )
+
+    def test_ator_inexistente_e_o_401_da_borda(self) -> None:
+        fachada, _ = self._montar()
+
+        with pytest.raises(erros_de_application.InvalidAccessTokenError):
+            fachada.authorize(
+                self._principal("sumiu"),
+                "manage_staff",
+                tenant_id=self._TENANT,
+                unit_id=self._UNIDADE,
+            )
+
+    def test_unidade_inexistente_e_indistinguivel_de_invisivel(self) -> None:
+        fachada, _ = self._montar()
+
+        with pytest.raises(erros_de_application.UnitNotVisibleError):
+            fachada.authorize(
+                self._principal(), "manage_staff", tenant_id=self._TENANT, unit_id="nao-existe"
+            )
+
+    def test_unidade_de_outro_tenant_e_negada(self) -> None:
+        fachada, _ = self._montar()
+
+        with pytest.raises(erros_de_application.TenantNotVisibleError):
+            fachada.authorize(
+                self._principal(), "manage_staff", tenant_id=self._TENANT, unit_id="unit-b1"
+            )
+
+    def test_negacao_de_rbac_sobe_crua(self) -> None:
+        fachada, _ = self._montar()
+
+        with pytest.raises(erros_de_application.PermissionDeniedError):
+            fachada.authorize(
+                self._principal(), "manage_tenant", tenant_id=self._TENANT, unit_id=None
+            )
+
+    def test_nome_de_permissao_desconhecido_e_defeito_e_nao_negacao(self) -> None:
+        fachada, _ = self._montar()
+
+        with pytest.raises(ValueError, match="manage_stafff"):
+            fachada.authorize(
+                self._principal(), "manage_stafff", tenant_id=self._TENANT, unit_id=None
+            )
+
+    def test_permission_denied_e_re_exportado_da_application(self) -> None:
+        """O adapter de staff levanta L-AG3 com esta classe — e ela tem de ser a de identity."""
+        assert modulo_facade.PermissionDeniedError is erros_de_application.PermissionDeniedError
