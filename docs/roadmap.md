@@ -196,7 +196,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#97](https://github.com/MarceloSanC/restaurant-hub/issues/97) | Nenhum teste trava a ligação dos validadores de docs no target `docs-check` do `Makefile` | shared | tooling + tests | open | #12 |
 | [#98](https://github.com/MarceloSanC/restaurant-hub/issues/98) | Passo 1 do RUNBOOK usa `$issue` antes de defini-la | shared | docs | open | — |
 | [#99](https://github.com/MarceloSanC/restaurant-hub/issues/99) | `make check` sem conferência de formatação e lint fora de `migrations/` | shared | tooling | open | #7 |
-| [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | open | #7 |
+| [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | done | #7 |
 | [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | done | — |
 | [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | open | — |
 | [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
