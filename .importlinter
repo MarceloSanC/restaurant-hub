@@ -249,7 +249,8 @@ forbidden_modules =
 # anunciara. Espelha staff-application-purity (LAYOUT §3 Application: nunca
 # importa adapters nem infrastructure nem frameworks). NÃO proíbe
 # restaurant_hub.shared.domain nem restaurant_hub.shared.application (os erros
-# herdam de ApplicationError; os use cases consomem Clock e IdGenerator).
+# herdam de SchedulingError ou de ApplicationError; os use cases consomem Clock e
+# IdGenerator).
 [importlinter:contract:scheduling-application-purity]
 name = features.scheduling.application nao importa adapters nem frameworks (LAYOUT §3 Application)
 type = forbidden

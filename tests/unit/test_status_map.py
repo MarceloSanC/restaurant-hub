@@ -620,3 +620,17 @@ def test_uma_classe_com_uma_raiz_nao_reprova() -> None:
     ]
 
     assert _violacoes_de_raiz_unica(plantadas, (dominio, aplicacao)) == []
+
+
+@pytest.mark.parametrize("bc", _BOUNDED_CONTEXTS)
+def test_as_raizes_do_bc_tem_so_a_base_de_shared(bc: str) -> None:
+    """A raiz também tem uma base só: `DomainError` ou `ApplicationError`.
+
+    `_violacoes_de_raiz_unica` pula as raízes, e `_raiz_de_erro` só exige que
+    `DomainError` esteja entre as bases — uma raiz `(DomainError, ValueError)`
+    passaria pelos dois.
+    """
+    raizes = _raizes(bc)
+
+    assert raizes[0].__bases__ == (DomainError,)
+    assert all(raiz.__bases__ == (ApplicationError,) for raiz in raizes[1:])

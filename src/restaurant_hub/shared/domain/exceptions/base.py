@@ -15,10 +15,10 @@ O que cada erro vira para quem chamou é decidido pelo adapter de entrada do BC,
 mapa explícito; esta hierarquia não ordena nem carrega nada para isso.
 
 **Uma classe só.** `NotFoundError` viveu aqui até a Stage 3.9 como segunda base dos
-erros de "não encontrado", herdada **ao lado** da raiz do BC só para que o framework
-web os achasse numa certa ordem. Quando esses erros passaram a ter uma raiz só — a
-de aplicação do BC —, ela ficou sem subclasse e saiu, como `ApplicationError` saíra
-daqui na issue #45 por não ter consumidor (`scripts/check_dead_shared.py`).
+erros de "não encontrado", herdada **ao lado** da raiz do BC. Quando esses erros
+passaram a ter uma raiz só — a de aplicação do BC —, ela ficou sem subclasse e saiu,
+como `ApplicationError` saíra daqui na issue #45 por não ter consumidor
+(`scripts/check_dead_shared.py`).
 """
 
 
