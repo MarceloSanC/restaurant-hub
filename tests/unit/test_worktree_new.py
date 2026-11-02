@@ -451,3 +451,52 @@ def test_main_without_port_assignment_keeps_the_copied_url(
     _run_main(monkeypatch, "--no-port-assign")
 
     assert _env_lines(repo.parent / "restaurant-hub-worktrees" / "chore-58-db-url") == lines
+
+
+# ---------------------------------------------------------------------------
+# setup_env — o venv da worktree, sem tocar nos hooks do git (issue #100)
+# ---------------------------------------------------------------------------
+
+
+def test_setup_runs_only_uv_sync_in_the_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O `make setup` reinstalava os hooks, que são de todas as worktrees, com o
+    venv desta: removida ela, o commit das outras quebrava. Só o `uv sync` fica.
+    """
+    calls: list[tuple[list[str], Path | None]] = []
+    monkeypatch.setattr(wn.shutil, "which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr(wn, "_run", lambda cmd, *, cwd=None, **_kw: calls.append((cmd, cwd)))
+
+    wn.setup_env(tmp_path)
+
+    assert calls == [(["uv", "sync", "--extra", "dev"], tmp_path)]
+
+
+def test_setup_without_uv_warns_and_runs_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(wn.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(wn, "_run", lambda cmd, **_kw: calls.append(cmd))
+
+    wn.setup_env(tmp_path)
+
+    assert calls == []
+    assert "`uv` não encontrado" in capsys.readouterr().err
+
+
+def test_main_sets_up_the_new_worktree_unless_no_setup(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    created: list[Path] = []
+    monkeypatch.setattr(wn, "setup_env", created.append)
+    argv = ["worktree-new.py", "chore/100-hooks", "--no-fetch", "--no-vscode"]
+
+    monkeypatch.setattr(sys, "argv", argv)
+    assert wn.main() == 0
+    assert created == [repo.parent / "restaurant-hub-worktrees" / "chore-100-hooks"]
+
+    monkeypatch.setattr(sys, "argv", [*argv[:1], "chore/100-other", *argv[2:], "--no-setup"])
+    assert wn.main() == 0
+    assert len(created) == 1

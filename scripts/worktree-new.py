@@ -14,8 +14,9 @@ sem `git stash`/checkout no checkout principal. Em um único comando:
      `REDIS_PORT`), levando para elas as URLs que as embutem com host
      loopback: a `DATABASE_URL` (acrescentada se faltar) e a `REDIS_URL`,
      se houver.
-  5. Roda `make setup` na worktree (uv venv + deps + pre-commit hooks),
-     com fallback para `uv` direto se `make` não estiver disponível.
+  5. Roda `uv sync --extra dev` na worktree (o venv dela). Os hooks do git
+     ficam como estão: são um só para todas as worktrees e só o checkout
+     principal os instala (`scripts/install_hooks.py`, issue #100).
   6. Abre uma nova janela do VS Code na worktree (`code -n <path>`).
 
 Uso:
@@ -343,34 +344,18 @@ def copy_env_files(src: Path, dst: Path) -> None:
             _info(f"copiado {name}")
 
 
-def setup_env(path: Path, use_make: bool) -> None:
-    """Roda `make setup` na worktree, com fallback para `uv` direto."""
-    if use_make and shutil.which("make") is not None:
-        _run(["make", "setup"], cwd=path, check=False)
-        return
+def setup_env(path: Path) -> None:
+    """Cria o venv da worktree com `uv sync --extra dev` — e não toca nos hooks do git.
 
+    Não roda `make setup`: o `pre-commit install` grava no hook, que é do
+    diretório comum e vale para todas as worktrees, o python de quem o rodou.
+    Com o venv desta worktree lá, removê-la quebrava o commit das outras
+    (issue #100). Os hooks são do checkout principal (`scripts/install_hooks.py`).
+    """
     if shutil.which("uv") is None:
         print("  AVISO: `uv` não encontrado no PATH — pulando setup do venv.", file=sys.stderr)
         return
-    _info("`make` indisponível — usando `uv` direto")
-    _run(["uv", "venv", ".venv"], cwd=path)
-    _run(["uv", "pip", "install", "-e", ".[dev]"], cwd=path)
-    if (path / ".pre-commit-config.yaml").is_file():
-        _run(
-            [
-                "uv",
-                "run",
-                "pre-commit",
-                "install",
-                "--install-hooks",
-                "--hook-type",
-                "pre-commit",
-                "--hook-type",
-                "commit-msg",
-            ],
-            cwd=path,
-            check=False,
-        )
+    _run(["uv", "sync", "--extra", "dev"], cwd=path, check=False)
 
 
 def open_vscode(path: Path) -> None:
@@ -648,7 +633,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--issue-body", default=None, help="Corpo da issue a criar (markdown PT).")
     parser.add_argument(
-        "--no-setup", action="store_true", help="Pula `make setup` na nova worktree."
+        "--no-setup", action="store_true", help="Pula o `uv sync --extra dev` na nova worktree."
     )
     parser.add_argument(
         "--no-env", action="store_true", help="Não copia .env / .env.local do checkout principal."
@@ -773,8 +758,8 @@ def main() -> int:
     if args.no_setup:
         _info("setup pulado (--no-setup)")
     else:
-        _section("9. Instalando dependências (`make setup` / `uv`)")
-        setup_env(wt_path, use_make=True)
+        _section("9. Instalando dependências (`uv sync --extra dev`; hooks do git intocados)")
+        setup_env(wt_path)
 
     if not args.no_vscode:
         _section("10. Abrindo VS Code")
