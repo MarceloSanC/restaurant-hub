@@ -757,6 +757,26 @@ Docs vivem no git, então o histórico é o versionamento. Mas:
     **derruba** a decisão, então não é errata: é `superseded` (caso acima).
 - **Roadmap pode ser editado livremente**, mas `updated_at` e
   `last_reviewed_at` devem refletir a realidade.
+- **Citação ao roadmap — por âncora, nunca por número de linha**
+  ([ADR 0.0.0011](./adr/0_0_0011-cite-the-roadmap-by-stable-anchor.md), issue #79).
+  O roadmap cresce no meio — cada issue nova entra na Tabela de Issues, acima de
+  todos os blocos de Step — e uma citação `` `roadmap.md` <linha> `` passa a apontar
+  para outro conteúdo no PR seguinte, sem erro em lugar algum. A forma é seção +
+  rótulo:
+  - **Seção:** `§Stage N.M`, `§Step N` ou `§"<título de seção do roadmap>"`
+    (ex.: `§"Tabela de Stages"`, `§"Lacunas conhecidas"`).
+  - **Rótulo** (opcional, depois de ` › `, vários separados por vírgula):
+    `"<texto em negrito>"` (`"Descrição humana"`, `"Resultado de negócio"`,
+    `"ROADMAP-3"`), `` `<literal>` `` (chave do YAML como `` `definition_of_done` ``,
+    célula `` `4.1-scheduling-domain` ``, aresta `` `S31 --> S41` ``),
+    `nota AAAA-MM-DD` (nota datada da seção) ou `#N` (linha da Tabela de Issues).
+  - **Exemplo:** `` `roadmap.md` §Stage 4.1 › "Descrição humana", `definition_of_done`;
+    §Step 4 › nota 2026-09-14 ``. Âncoras de seções diferentes separam-se por `;`.
+  - **Gate:** `scripts/check_roadmap_citations.py` (no `make docs-check`) reprova
+    número de linha depois de uma referência ao roadmap e âncora cuja seção ou
+    rótulo não existe — renomear seção ou rótulo do roadmap exige atualizar quem
+    cita. Fora do gate: o próprio roadmap e a §7 dos `technical.md`, que é registro
+    histórico (remapeamentos passados contados por número ficam como estão).
 - **Lockfile de dependências (`uv.lock`):** **versionado** por padrão
   (este template gera aplicações; lock garante reprodutibilidade
   dev/CI/prod e segurança via SBOM). O `scripts/init-project.py` roda
