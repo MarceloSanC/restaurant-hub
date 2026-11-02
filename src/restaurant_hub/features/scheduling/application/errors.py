@@ -12,8 +12,10 @@ antes do genérico — o mesmo arranjo de `staff/application/errors.py`.
 **Ao contrário dos de domínio, alguns carregam estado**, porque a recusa só serve à
 borda se disser o que recusou: a versão atual (conflito), as violações (recusa e
 aceite pendente) e os ids das **alocações** que travam (D3 e registro ausente). Ids
-de alocação são surrogates opacos — nenhum erro carrega id nem nome de registro de
-funcionário (F7, ADR 4.3.0001 §5).
+de alocação são surrogates opacos: os dois erros que falam de registros **invisíveis**
+(`InactiveAllocationsInUseError`, `MissingStaffRecordsError`) não carregam id nem nome
+de registro (F7, ADR 4.3.0001 §5). Os dois da alocação (`StaffMemberNotFoundError`,
+`InactiveStaffMemberError`) só ecoam o `employee_id` que o próprio pedido nomeou.
 
 Erros de invariante do domínio (`ShiftBandInUseError`, `DuplicateEntityIdError`,
 `InvalidTimeRangeError` etc.) **não** são reembrulhados: sobem como estão (concept

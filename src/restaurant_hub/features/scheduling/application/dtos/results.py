@@ -290,14 +290,15 @@ def _to_my_shift_result(
     )
 
 
-def to_my_schedule_result(
+def to_my_schedule_result(  # noqa: PLR0913 — recorte (2) + escalas + registros + índices (2)
     first_day: date,
     last_day: date,
     schedules: tuple[Schedule, ...],
     mine: frozenset[EmployeeId],
+    staff: StaffIndex,
     names: FunctionNames,
 ) -> MyScheduleResult:
-    """Os turnos dos registros `mine` cujo dia operacional cai no recorte."""
+    """Os turnos dos registros `mine` **ativos** cujo dia operacional cai no recorte."""
     turnos = [
         _to_my_shift_result(escala, faixa, demanda, alocacao, names)
         for escala in schedules
@@ -305,7 +306,7 @@ def to_my_schedule_result(
         if first_day <= escala.operational_day_of(faixa) <= last_day
         for demanda in faixa.demands
         for alocacao in demanda.assignments
-        if alocacao.employee_id in mine
+        if alocacao.employee_id in mine and _visible(alocacao, staff)
     ]
     return MyScheduleResult(
         first_day=first_day,

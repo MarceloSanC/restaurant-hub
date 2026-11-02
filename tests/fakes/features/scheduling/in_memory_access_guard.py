@@ -76,6 +76,9 @@ class InMemoryAccessGuard:
         # mesmo com o alvo concedido.
         if not actor.tenant_id or not actor.user_id.strip():
             raise self.authorization_error
+        # L-SG2 — alvo vazio nunca é concedido (nada de escopo com `""`).
+        if not tenant_id.strip() or not unit_id.strip():
+            raise self.authorization_error
         if actor.tenant_id != tenant_id:
             raise self.authorization_error
         if (permission, tenant_id, unit_id) not in self.grants:

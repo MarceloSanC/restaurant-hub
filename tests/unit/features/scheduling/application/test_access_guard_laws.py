@@ -86,6 +86,23 @@ def test_l_sg2_l_sg4_ator_sem_tenant_ou_sem_sujeito_e_negado_mesmo_concedido(
     assert excinfo.value is guard.authorization_error
 
 
+def test_l_sg2_ator_de_outro_tenant_e_negado_mesmo_com_o_alvo_concedido() -> None:
+    guard, ator = _guard()
+    guard.grant(PERMISSION_MANAGE_SCHEDULE, tenant_id="t2", unit_id=_U)
+    with pytest.raises(Exception) as excinfo:
+        guard.authorize(ator, PERMISSION_MANAGE_SCHEDULE, tenant_id="t2", unit_id=_U)
+    assert excinfo.value is guard.authorization_error
+
+
+@pytest.mark.parametrize(("tenant", "unidade"), [(_T, ""), (_T, "  ")])
+def test_l_sg2_alvo_vazio_nunca_vira_escopo_mesmo_concedido(tenant: str, unidade: str) -> None:
+    guard, ator = _guard()
+    guard.grant(PERMISSION_MANAGE_SCHEDULE, tenant_id=tenant, unit_id=unidade)
+    with pytest.raises(Exception) as excinfo:
+        guard.authorize(ator, PERMISSION_MANAGE_SCHEDULE, tenant_id=tenant, unit_id=unidade)
+    assert excinfo.value is guard.authorization_error
+
+
 def test_l_sg3_cada_alvo_e_uma_chamada_registrada() -> None:
     guard, ator = _guard()
     guard.grant(PERMISSION_MANAGE_SCHEDULE, tenant_id=_T, unit_id=_U2)

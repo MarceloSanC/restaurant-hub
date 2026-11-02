@@ -27,7 +27,20 @@ _NOT_FOUND = {
     errors.StaffMemberNotFoundError,
     errors.JobFunctionNotFoundError,
 }
-_TOTAL = 12
+_NOMES = {
+    "ScheduleNotFoundError",
+    "ScheduleVersionConflictError",
+    "SchedulePeriodTakenError",
+    "IdentifierInUseError",
+    "BlockingViolationsError",
+    "UnacknowledgedViolationsError",
+    "StaffMemberNotFoundError",
+    "InactiveStaffMemberError",
+    "JobFunctionNotFoundError",
+    "InactiveAllocationsInUseError",
+    "MissingStaffRecordsError",
+    "InvalidScheduleRequestError",
+}
 
 
 def _classes() -> list[type]:
@@ -39,7 +52,7 @@ def _classes() -> list[type]:
 
 
 def test_o_modulo_declara_os_doze_erros_do_concept() -> None:
-    assert len(_classes()) == _TOTAL
+    assert {c.__name__ for c in _classes()} == _NOMES
 
 
 @pytest.mark.parametrize("classe", _classes(), ids=lambda c: c.__name__)

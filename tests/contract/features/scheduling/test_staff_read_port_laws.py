@@ -6,59 +6,20 @@ toda implementação: dois tenants, duas unidades, ativos, um desligado, víncul
 login e catálogo.
 """
 
-from collections.abc import Iterator
-from decimal import Decimal
-
 import pytest
 
 from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
-    JobFunctionEntry,
     StaffMember,
     StaffReadPort,
 )
-from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
-    EmployeeId,
-    JobFunctionId,
-    TenantId,
-    UnitId,
-)
-from tests.fakes.features.scheduling.in_memory_staff_read import InMemoryStaffRead
+from restaurant_hub.features.scheduling.domain.value_objects.identifiers import EmployeeId
+from tests.contract.features.scheduling.conftest import T1 as _T1
+from tests.contract.features.scheduling.conftest import T2 as _T2
+from tests.contract.features.scheduling.conftest import U1 as _U1
+from tests.contract.features.scheduling.conftest import U2 as _U2
+from tests.contract.features.scheduling.conftest import staff_member as _membro
 
 pytestmark = pytest.mark.contract
-
-_T1, _T2 = TenantId("t1"), TenantId("t2")
-_U1, _U2 = UnitId("u1"), UnitId("u2")
-
-
-def _membro(eid: str, unidade: UnitId, *, ativo: bool = True) -> StaffMember:
-    return StaffMember(
-        employee_id=EmployeeId(eid),
-        unit_id=unidade,
-        display_name=f"Nome {eid}",
-        active=ativo,
-        job_function_ids=frozenset({JobFunctionId("cozinheiro")}),
-        contracted_weekly_hours=Decimal("40"),
-        unavailabilities=(),
-    )
-
-
-def _semear(fake: InMemoryStaffRead) -> None:
-    fake.add_member(_T1, _membro("ana", _U1), user_id="user-ana")
-    fake.add_member(_T1, _membro("bia", _U1))
-    fake.add_member(_T1, _membro("caio", _U1, ativo=False), user_id="user-ana")
-    fake.add_member(_T1, _membro("ana-u2", _U2), user_id="user-ana")
-    fake.add_member(_T2, _membro("dani", _U1), user_id="user-ana")
-    fake.add_job_function(_T1, JobFunctionEntry(JobFunctionId("cozinheiro"), "Cozinheiro"))
-    fake.add_job_function(_T1, JobFunctionEntry(JobFunctionId("atendente"), "Atendente"))
-    fake.add_job_function(_T2, JobFunctionEntry(JobFunctionId("garcom"), "Garçom"))
-
-
-@pytest.fixture(params=["fake"])
-def mundo(request: pytest.FixtureRequest) -> Iterator[StaffReadPort]:
-    assert request.param == "fake"
-    fake = InMemoryStaffRead()
-    _semear(fake)
-    yield fake
 
 
 def _ids(membros: tuple[StaffMember, ...]) -> set[str]:
