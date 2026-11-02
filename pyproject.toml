@@ -201,6 +201,17 @@ also_copy = [
     "docker-compose.yml",
     ".pre-commit-config.yaml",
     "Makefile",
+    # `test_git_guard.py` e `test_triage_gate.py` carregam os hooks na coleta, e
+    # `scripts/check_harness.py` lê skills, agents e o settings (issue #87). As
+    # quatro entradas rastreadas, e não `.claude/` inteiro: o checkout principal
+    # guarda as worktrees em `.claude/worktrees/` (não rastreado), e a corrida no
+    # contêiner copiaria cada uma, `.venv` incluso, para dentro de `mutants/`.
+    # O arquivo vem depois dos diretórios: o mutmut copia com `shutil.copy2`, que
+    # não cria `mutants/.claude/` — quem cria é o `copytree` de `hooks/`.
+    ".claude/hooks/",
+    ".claude/skills/",
+    ".claude/agents/",
+    ".claude/settings.json",
 ]
 # `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
 # conveniência.
