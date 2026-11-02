@@ -258,4 +258,64 @@ concept 4.3; ADRs 4.3.0001–4.3.0004; skills `pytest-with-fakes`, `task-orderin
 ## 7. Execução (post-hoc, editável após done)
 
 <!-- BEGIN: post-execution -->
+
+### 2026-11-01 — [decision] Fase 3A — retomada do handoff e forks P delegados — Claude (orquestração autônoma)
+**Contexto:** a Fase 3A foi refeita a partir do `HANDOFF-SESSION-2026-10-21.md` (rascunho do concept, 20 registros E/C, D1–D3) sobre o `develop` de 2026-11-01, que já trazia as Stages 2.6, 3.7 e 3.8.
+**Pergunta:** D1 (violação induzida por staff), D2 (`change_demand_quantity` com o mesmo N), D3 (faixa presa só por desligado); revalidar C(1) AccessGuard próprio e C(4) sem unit of work.
+**Opções:**
+- D1 (a) mostrar e corrigir ✅ recomendada · (b) guarda em staff
+- D2 (b) no-op no domínio ✅ recomendada · (a) no use case
+- D3 (b) recusar com contagem + ids de alocação ✅ recomendada · (a) recusa opaca · (c) remover junto (excluída por evidência)
+**Decisão:** as três recomendadas — **P delegado** pelo sponsor ao orquestrador e ratificado em 2026-11-01. C(1) mantida e reaplicada **por BC** contra o ADR 3.7.0001 já em `develop` (ADR 4.3.0002); C(4) mantida contra o ADR 2.6.0002 §5 (uma escrita por use case, regra 10 sem unit — ADR 4.3.0004).
+**Razão:** concept §7 e ADRs 4.3.0001–4.3.0004.
+
+### 2026-11-01 — [decision] Checkpoint A — aceite carrega o limite visto; desvio com sinal; ausente com erro próprio — Claude
+**Contexto:** os dois revisores do Checkpoint A mostraram que o aceite `(key, observed)` não pegava piora pelo `limit` (reduzir N depois de avaliar) e que `|observed − limit|` deixava passar subcarga que vira sobrecarga em `both`; e que o registro ausente era incoerente entre leituras.
+**Pergunta:** como casar o aceite e como comparar a medida.
+**Opções:**
+- A — aceite só com `observed`, magnitude sem sinal
+- B — aceite com `(key, observed, limit)`; desvio com sinal; troca de sinal ou magnitude maior = introduzida ✅ recomendada
+**Decisão:** B, e `MissingStaffRecordsError` com os ids das alocações em toda leitura/escrita que toca a escala.
+**Razão:** fecha o finding de sobre-cobertura da 4.2 e o contra-exemplo de `both`; concept §5.6, §5.7, §5.12 corrigidos antes do `conceptual approved`.
+
+### 2026-11-01 — [deviation] Task 05 — conftest dos testes da application antecipado — Claude
+**Contexto:** os testes de DTO da Task 05 precisavam dos construtores de escala e de registro; o technical listava o `conftest.py` na Task 07.
+**Razão:** o `conftest.py` nasceu na Task 05 só com construtores e cresceu na 06/07 (fakes de repositório, relógio que conta leituras). Nenhum arquivo de `src/` fora da lista.
+
+### 2026-11-01 — [deviation] Task 08 — `test_inputs.py` e `load_for_edit` — Claude
+**Contexto:** o Checkpoint C do bloco 2 pediu os limites de `require_range`/`require_limit` testados nas bordas; o teste foi para `tests/unit/.../application/test_inputs.py` (arquivo não listado). Na Task 09, a carga com checagem de versão (`load_for_edit`) entrou em `_publish.py`, compartilhada por avaliar e publicar.
+**Razão:** mesmo escopo da Task; sem novo contrato.
+
+### 2026-11-01 — [deviation] Task 12-fix — identificadores locais da application em inglês — Claude
+**Contexto:** o Checkpoint C do bloco 3 apontou variáveis locais em português no código novo de `src/`, contra CONVENTIONS §1 "Idioma do código".
+**Razão:** renomeadas por token (docstrings e comentários intactos), commit `refactor(scheduling)` sem mudança de comportamento. Os nomes de teste seguem o estilo PT já estabelecido no repo.
+
+### 2026-11-01 — [finding] Idioma do código — variáveis locais em português no domínio já mergeado — Claude
+**Contexto:** `src/restaurant_hub/features/scheduling/domain/entities/schedule.py` (4.1, mergeado) usa locais em PT (`faixa`, `demanda`, `alocacao`…), contra CONVENTIONS §1. Esta Stage corrigiu só o código novo.
+**Direção sugerida:** varredura de renomeação por token no domínio de scheduling (e staff, se houver), sem mudança de comportamento. **Stage candidata:** issue avulsa de refactor (scheduling).
+
+### 2026-11-01 — [finding] Edição da configuração do restaurante sem dono no roadmap — Claude
+**Contexto:** o Step 4 promete "bloquear/avisar configurável", a 4.3 só lê a config e a 4.5 é só borda HTTP; a permissão da config tenant-wide é lacuna da 4.5 (ADR 4.1.0004:79).
+**Direção sugerida:** use case de escrita da config + método de escrita no port, com os requisitos do concept §13 (violação pré-existente por config alterada; 1–6 dias sem escala ao mudar o dia de início; janela sem período ao atrasar o corte). **Stage candidata:** alargar a 4.5 ou Stage própria antes do fechamento do Step 4.
+
+### 2026-11-01 — [finding] Vincular login existente a registro — Claude
+**Contexto:** concept 3.5 §13 e technical 3.8 §7 nomeiam a 4.3 "ou uma Stage de gestão de acesso anterior". Decidido fora (D-LINK): escrita em staff + identity.
+**Direção sugerida:** Stage de gestão de acesso (staff + identity), com a checagem do tenant do `User` e a regra de fim de vínculo. **Stage candidata:** antes da 4.5. `get_my_schedule` os alcança sem mudança.
+
+### 2026-11-01 — [finding] Persistência — guarda reversa, write skew e reparo do ausente — Claude
+**Contexto:** registro removido em staff faz a escala (e as vizinhas) recusar com `MissingStaffRecordsError`; a guarda reversa é check-then-act entre BCs; publicações simultâneas em semanas adjacentes podem gravar violação de fronteira (write skew).
+**Direção sugerida:** `has_allocations_for`/`has_demands_for` em staff, use case de reparo do ausente, mitigação do write skew; o 1º `find_by_user_id` decide escopo e índice (ADR 3.5.0004 Alt C); granularidade da trilha a partir de `ScheduleChange`. **Stage candidata:** 4.4.
+
+### 2026-11-01 — [finding] Borda HTTP — formato dos ids e corpo das recusas — Claude
+**Contexto:** ids de criação vêm do cliente (ADR 4.3.0004); `ScheduleVersionConflictError` carrega só a versão; `function_exception` não implica aceite.
+**Direção sugerida:** UUID canônico na borda; corpo do 409 (versão ou estado); corpos de `BlockingViolationsError`/`UnacknowledgedViolationsError`/`InactiveAllocationsInUseError`; rótulo da marca de exceção; desativação de conta na 1ª permissão de auto-serviço (ADR 3.5.0003 §5); "minha escala" composta por unidade a partir dos vínculos do token. **Stage candidata:** 4.5.
+
+### 2026-11-01 — [finding] Regra "todo use case autoriza o próprio alvo" transversal — Claude
+**Contexto:** aplicada em staff (ADR 3.7.0001) e scheduling (ADR 4.3.0002) com ports de forma distinta; o ator não é autenticado fora da borda HTTP (mesmo modelo de ameaça).
+**Direção sugerida:** ADR transversal quando o 3º BC a repetir; autenticação de ator no 1º driver não-HTTP. **Stage candidata:** a do 3º BC / a do 1º driver não-HTTP.
+
+### 2026-11-01 — [finding] Suíte de contrato do `ScheduleRepository` lê a trilha por API do fake — Claude
+**Contexto:** a fixture `trail_of` do conftest só sabe ler a trilha do fake (`changes_of`).
+**Direção sugerida:** a 4.4 acrescenta ao conftest o leitor da tabela de auditoria do adapter Postgres junto com o `params`. **Stage candidata:** 4.4.
+
 <!-- END: post-execution -->

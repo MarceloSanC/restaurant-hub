@@ -649,79 +649,79 @@ depois → introduzidas → `BlockingViolationsError` | `UnacknowledgedViolation
 
 ## 11. Critérios de aceitação
 
-- [ ] **CA01 — criar:** escala nasce vazia, versão 1, com o calendário do tenant (ou o default)
+- [x] **CA01 — criar:** escala nasce vazia, versão 1, com o calendário do tenant (ou o default)
       fotografado; `first_day` desalinhado ⇒ `InvalidSchedulePeriodError`; dia já coberto ⇒
       `SchedulePeriodTakenError`; grava uma `ScheduleChange` sem operações `[teste]`.
-- [ ] **CA02 — versão:** `expected_version` ≠ carregada ⇒ `ScheduleVersionConflictError`
+- [x] **CA02 — versão:** `expected_version` ≠ carregada ⇒ `ScheduleVersionConflictError`
       (carregando a versão atual) em avaliar e em publicar, sem gravar; o fake recusa `save` com
       versão vencida (L-SC4) `[teste]`.
-- [ ] **CA03 — autorização é a 1ª instrução, por use case:** com guard que nega, todo use case da
+- [x] **CA03 — autorização é a 1ª instrução, por use case:** com guard que nega, todo use case da
       pasta levanta a sentinela (`is`) sem tocar port, relógio ou gerador; com guard permissivo, a
       sequência de `authorize` é (permissão, tenant, unidade) do command; a 1ª instrução de todo
       `execute` é o `authorize` (AST); a pasta inteira está coberta `[teste]`.
-- [ ] **CA04 — lote atômico:** a 1ª operação que falha recusa o lote com o erro dela e nada é
+- [x] **CA04 — lote atômico:** a 1ª operação que falha recusa o lote com o erro dela e nada é
       gravado; estado intermediário com `block` que some no final não recusa; lote vazio é
       aceito sem gravar `[teste]`.
-- [ ] **CA05 — avaliar:** devolve a escala resultante com todas as violações e as **introduzidas**
+- [x] **CA05 — avaliar:** devolve a escala resultante com todas as violações e as **introduzidas**
       separadas em `blocking`/`warnings`, sem gravar `[teste]`.
-- [ ] **CA06 — publicar recusa `block` introduzida** com `BlockingViolationsError` (todas as
+- [x] **CA06 — publicar recusa `block` introduzida** com `BlockingViolationsError` (todas as
       `block` introduzidas), sem gravar, antes de olhar os `warn`; `function_mismatch` em `block`
       recusa a alocação de função não detida `[teste]`.
-- [ ] **CA07 — publicar pede aceite de `warn` introduzida** (`UnacknowledgedViolationsError`) e,
+- [x] **CA07 — publicar pede aceite de `warn` introduzida** (`UnacknowledgedViolationsError`) e,
       com o aceite, grava; a `ScheduleChange` traz autor (`user_id` do escopo), instante do
       `Clock`, versão anterior, operações efetivas e as violações aceitas `[teste]`.
-- [ ] **CA08 — aceite e medida:** aceite com desvio menor que o atual não cobre (re-pergunta
+- [x] **CA08 — aceite e medida:** aceite com desvio menor que o atual não cobre (re-pergunta
       quando a medida piora); aceite reenviado depois de reduzir N (mesmo `observed`, `limit`
       menor) não cobre; carga em `both` que troca subcarga por sobrecarga é introduzida e um aceite
       de subcarga não a cobre; aceite de `key` diferente é ignorado `[teste]`.
-- [ ] **CA09 — sobre-cobertura:** desalocar excedente sem chegar a N não re-pergunta; aumentar o
+- [x] **CA09 — sobre-cobertura:** desalocar excedente sem chegar a N não re-pergunta; aumentar o
       excedente ou trocar a alocação excedente re-pergunta `[teste]`.
-- [ ] **CA10 — pré-existente não trava:** violação já presente antes (p.ex. induzida por staff,
+- [x] **CA10 — pré-existente não trava:** violação já presente antes (p.ex. induzida por staff,
       D1) aparece em `violations` e não recusa nem pede aceite numa mudança que não a introduziu
       `[teste]`.
-- [ ] **CA11 — alocar:** registro ausente ⇒ `StaffMemberNotFoundError`; desligado ⇒
+- [x] **CA11 — alocar:** registro ausente ⇒ `StaffMemberNotFoundError`; desligado ⇒
       `InactiveStaffMemberError`; `function_exception` nasce `True` sse o registro não detém a
       função, com a política desabilitada inclusive; função fora do catálogo em `DeclareDemand` ⇒
       `JobFunctionNotFoundError` `[teste]`.
-- [ ] **CA12 — no-op:** as cinco idempotentes (inclusive `change_demand_quantity` com o mesmo N,
+- [x] **CA12 — no-op:** as cinco idempotentes (inclusive `change_demand_quantity` com o mesmo N,
       no domínio) não contam versão nem entram na trilha; lote sem efeito não grava `[teste]`.
-- [ ] **CA13 — reconciliação na leitura:** nenhum result (escala, calendário, minha escala) traz
+- [x] **CA13 — reconciliação na leitura:** nenhum result (escala, calendário, minha escala) traz
       alocação de registro inativo ou ausente; nome do estado atual `[teste]`.
-- [ ] **CA14 — D3:** desabilitar faixa / retirar demanda presa só por alocação de desligado ⇒
+- [x] **CA14 — D3:** desabilitar faixa / retirar demanda presa só por alocação de desligado ⇒
       `InactiveAllocationsInUseError` com contagem e ids de alocação (e sem o id do registro);
       desalocá-las no mesmo lote destrava; com alocação de ativo, a recusa é a do domínio; faixa
       sem alocação é desabilitada normalmente `[teste]`.
-- [ ] **CA15 — calendário** sobre duas escalas, só as faixas do recorte, recorte > 42 dias ou
+- [x] **CA15 — calendário** sobre duas escalas, só as faixas do recorte, recorte > 42 dias ou
       invertido ⇒ `InvalidScheduleRequestError` `[teste]`.
-- [ ] **CA16 — fail-closed:** registro alocado (na escala ou numa vizinha) que staff não devolve ⇒
+- [x] **CA16 — fail-closed:** registro alocado (na escala ou numa vizinha) que staff não devolve ⇒
       `MissingStaffRecordsError` com os ids das alocações em avaliar, publicar, ler a escala e
       calendário `[teste]`.
-- [ ] **CA17 — minha escala:** só as alocações dos registros ativos do `user_id` do escopo, na
+- [x] **CA17 — minha escala:** só as alocações dos registros ativos do `user_id` do escopo, na
       unidade, no recorte; sem registro ativo ⇒ vazia; recorte invertido ou > 42 dias ⇒
       `InvalidScheduleRequestError` `[teste]`.
-- [ ] **CA18 — escalas anteriores:** last_day < before, mais recente primeiro, até `limit`;
+- [x] **CA18 — escalas anteriores:** last_day < before, mais recente primeiro, até `limit`;
       `limit` fora de [1, 52] ⇒ `InvalidScheduleRequestError` `[teste]`.
-- [ ] **CA19 — instante de fora:** `RescheduleBand` com limite tz-aware ou com segundos ⇒
+- [x] **CA19 — instante de fora:** `RescheduleBand` com limite tz-aware ou com segundos ⇒
       `InvalidTimeRangeError` antes de `operational_day_of`; dia `datetime` em query ou no
       `CreateScheduleCommand` ⇒ `InvalidScheduleRequestError` `[teste]`.
-- [ ] **CA20 — erros de domínio sobem crus** (mesma instância de tipo de domínio, sem embrulho)
+- [x] **CA20 — erros de domínio sobem crus** (mesma instância de tipo de domínio, sem embrulho)
       `[teste]`.
-- [ ] **CA21 — suítes de lei dos ports** (`StaffReadPort`, `ScheduleRepository`,
+- [x] **CA21 — suítes de lei dos ports** (`StaffReadPort`, `ScheduleRepository`,
       `ScheduleConfigRepository`, `AccessGuard`) verdes contra os fakes `[teste]`.
-- [ ] **CA22 — fluxo editar → avaliar → aceitar `warn` → publicar** com fakes: a `key` devolvida
+- [x] **CA22 — fluxo editar → avaliar → aceitar `warn` → publicar** com fakes: a `key` devolvida
       por avaliar casa no publicar pelos ids do cliente; id de criação já usado na escala ou numa
       vizinha ⇒ `IdentifierInUseError`; repetido no próprio lote ⇒ `DuplicateEntityIdError`
       `[teste]`.
-- [ ] **CA23 — contrato de pureza** `scheduling-application-purity` no `.importlinter`, verde
+- [x] **CA23 — contrato de pureza** `scheduling-application-purity` no `.importlinter`, verde
       `[import-linter]`.
-- [ ] **CA24 — `make check` verde** (Actions do PR) e cobertura ≥ 90% por arquivo da Stage.
-- [ ] **CA25 — vizinhas e virada:** a anterior e a seguinte adjacentes entram no insumo; uma
+- [x] **CA24 — `make check` verde** (Actions do PR) e cobertura ≥ 90% por arquivo da Stage.
+- [x] **CA25 — vizinhas e virada:** a anterior e a seguinte adjacentes entram no insumo; uma
       violação de fronteira (descanso entre o último dia de A e o primeiro de B) introduzida ao
       editar B é perguntada, e editar A depois não a pergunta de novo `[teste]`.
-- [ ] **CA26 — endereço:** escala de outra unidade ou tenant ⇒ `ScheduleNotFoundError` em ler,
+- [x] **CA26 — endereço:** escala de outra unidade ou tenant ⇒ `ScheduleNotFoundError` em ler,
       avaliar e publicar, sem gravar; a config de outro tenant não é lida; sem config gravada,
       valem os defaults `[teste]`.
-- [ ] **CA27 — results determinísticos:** faixas, demandas, alocações e turnos na ordem de §5.20;
+- [x] **CA27 — results determinísticos:** faixas, demandas, alocações e turnos na ordem de §5.20;
       função fora do catálogo sai com nome `None` `[teste]`.
 
 ## 12. Checklist de validação interna
