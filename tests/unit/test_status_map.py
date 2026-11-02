@@ -37,7 +37,9 @@ import pathlib
 import types
 
 import pytest
+from fastapi import FastAPI
 
+from restaurant_hub.shared.application.errors import ApplicationError
 from restaurant_hub.shared.domain.exceptions.base import DomainError
 
 pytestmark = pytest.mark.unit
@@ -109,7 +111,7 @@ _SEM_BORDA_HTTP = tuple(bc for bc in _BOUNDED_CONTEXTS if not _tem_borda_http(bc
 
 
 def _raiz_de_erro(bc: str) -> type[DomainError]:
-    """A exceção-raiz do BC: a única que herda de `DomainError` diretamente.
+    """A raiz **de domínio** do BC: a única que herda de `DomainError` diretamente.
 
     Derivada, e não escrita como `{"identity": IdentityError, ...}`: um mapa
     literal exigiria import estático de cada BC neste arquivo, que é exatamente
@@ -127,6 +129,39 @@ def _raiz_de_erro(bc: str) -> type[DomainError]:
         f"{bc}: esperava uma raiz de erro, achei {[r.__name__ for r in raizes]}"
     )
     return raizes[0]
+
+
+def _raiz_de_aplicacao(bc: str) -> type[ApplicationError] | None:
+    """A raiz **de aplicação** do BC, se houver: subclasse direta de `ApplicationError`.
+
+    Desde a Stage 3.9 (ADR 3.9.0001 §2) cada BC tem até duas raízes, uma por
+    significado. Esta é opcional — um BC anterior à sua camada de aplicação não a
+    tem —, mas **única** quando existe: duas raízes de aplicação no mesmo BC
+    partiriam o que o handler do BC precisa registrar, e a segunda escaparia.
+    Derivada pela forma, pelo mesmo motivo de `_raiz_de_erro`.
+    """
+    nome = f"restaurant_hub.features.{bc}.application.errors"
+    modulo = next((m for m in _importar_modulos_de_erro(bc) if m.__name__ == nome), None)
+    if modulo is None:
+        return None
+    raizes = [
+        valor
+        for valor in vars(modulo).values()
+        if isinstance(valor, type)
+        and valor.__module__ == nome
+        and ApplicationError in valor.__bases__
+    ]
+    assert len(raizes) <= 1, (
+        f"{bc}: esperava no máximo uma raiz de aplicação, achei {[r.__name__ for r in raizes]}"
+    )
+    return raizes[0] if raizes else None
+
+
+def _raizes(bc: str) -> tuple[type[Exception], ...]:
+    """As raízes do BC — a de domínio sempre, a de aplicação quando existe."""
+    aplicacao = _raiz_de_aplicacao(bc)
+    dominio: tuple[type[Exception], ...] = (_raiz_de_erro(bc),)
+    return dominio if aplicacao is None else (*dominio, aplicacao)
 
 
 def _importar_modulos_de_erro(bc: str) -> tuple[types.ModuleType, ...]:
@@ -171,7 +206,8 @@ def _subclasses_concretas(bc: str) -> set[type[Exception]]:
                 encontradas.add(sub)
             _descer(sub)
 
-    _descer(_raiz_de_erro(bc))
+    for raiz in _raizes(bc):
+        _descer(raiz)
     return encontradas
 
 
@@ -204,6 +240,39 @@ def _mapa_de_status(bc: str) -> dict[type[Exception], int]:
     ]
     assert len(candidatos) == 1, f"{bc}: esperava um mapa de status, achei {len(candidatos)}"
     return candidatos[0]
+
+
+def _raizes_sem_handler(
+    raizes: tuple[type[Exception], ...], registrados: dict[object, object]
+) -> list[str]:
+    """As raízes do BC que o registro da borda deixou sem handler.
+
+    Isolada, como `_sem_entrada`, para que o violador plantado a exercite sem
+    gravar em `src/` um registro incompleto. Não há rede genérica para
+    `ApplicationError` (ADR 3.9.0001 §5): uma raiz sem handler é um erro do BC que
+    responde 500.
+    """
+    return sorted(raiz.__name__ for raiz in raizes if raiz not in registrados)
+
+
+def _registro_da_borda(bc: str) -> FastAPI:
+    """Uma app com **só** o registro de handlers do BC aplicado.
+
+    A função de registro é achada pela forma — a única função `register_*` definida
+    no módulo de handlers —, pelo mesmo motivo de `_mapa_de_status`.
+    """
+    modulo = _modulo_de_handlers(bc)
+    funcoes = [
+        valor
+        for nome, valor in vars(modulo).items()
+        if nome.startswith("register_")
+        and callable(valor)
+        and getattr(valor, "__module__", None) == modulo.__name__
+    ]
+    assert len(funcoes) == 1, f"{bc}: esperava uma função de registro, achei {len(funcoes)}"
+    app = FastAPI()
+    funcoes[0](app)
+    return app
 
 
 def _sem_entrada(classes: set[type[Exception]], mapa: dict[type[Exception], int]) -> list[str]:
@@ -330,7 +399,7 @@ def test_toda_excecao_definida_nos_modulos_de_erro_do_bc_herda_da_raiz(bc: str) 
     módulo — a forma que não se estende ao terceiro BC. Aqui é por bounded
     context, com a mesma enumeração de pasta das outras asserções.
     """
-    raiz = _raiz_de_erro(bc)
+    raizes = _raizes(bc)
     fora: list[str] = []
     for modulo in _importar_modulos_de_erro(bc):
         fora.extend(
@@ -339,14 +408,41 @@ def test_toda_excecao_definida_nos_modulos_de_erro_do_bc_herda_da_raiz(bc: str) 
             if isinstance(valor, type)
             and issubclass(valor, Exception)
             and valor.__module__ == modulo.__name__
-            and valor is not raiz
-            and not issubclass(valor, raiz)
+            and valor not in raizes
+            and not issubclass(valor, raizes)
         )
 
     assert fora == [], (
-        f"{bc}: exceções definidas fora da hierarquia de {raiz.__name__}: {fora}. "
-        f"Elas não entram na varredura de exaustividade e cairiam no 422 genérico."
+        f"{bc}: exceções definidas fora das raízes {[r.__name__ for r in raizes]}: {fora}. "
+        f"Elas não entram na varredura de exaustividade e nenhum handler do BC as alcança."
     )
+
+
+@pytest.mark.parametrize("bc", _COM_BORDA_HTTP)
+def test_todo_bc_com_borda_registra_handler_em_cada_raiz(bc: str) -> None:
+    """A segunda raiz só é segura se o handler do BC também estiver nela.
+
+    Desde a Stage 3.9 um BC tem duas raízes, e o handler único precisa ser
+    registrado sobre **cada** uma: uma subclasse da raiz esquecida não acharia
+    handler algum. O mapa total não basta — ele diz que status cada erro teria, não
+    que alguém o consulta.
+    """
+    registrados = dict(_registro_da_borda(bc).exception_handlers)
+
+    assert _raizes_sem_handler(_raizes(bc), registrados) == [], (
+        f"{bc}: raiz de erro sem handler registrado na borda"
+    )
+
+
+def test_uma_raiz_sem_handler_reprova() -> None:
+    """O violador plantado do registro: a guarda já viu um positivo."""
+    bc = _COM_BORDA_HTTP[0]
+    raizes = _raizes(bc)
+    dominio_e_aplicacao = 2
+    assert len(raizes) == dominio_e_aplicacao, f"{bc}: o plantio pressupõe as duas raízes"
+    so_a_primeira = {raizes[0]: object()}
+
+    assert _raizes_sem_handler(raizes, so_a_primeira) == [raizes[1].__name__]
 
 
 @pytest.mark.parametrize("bc", _COM_BORDA_HTTP)

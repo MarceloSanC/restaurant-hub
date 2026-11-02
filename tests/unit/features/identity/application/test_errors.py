@@ -38,7 +38,9 @@ def _application_error_classes() -> list[type]:
     return [
         obj
         for _, obj in inspect.getmembers(errors, inspect.isclass)
-        if obj.__module__ == errors.__name__
+        # A raiz de aplicação (Stage 3.9, ADR 3.9.0001) não é um erro: é o tipo
+        # sobre o qual o handler é registrado, e tem testes próprios.
+        if obj.__module__ == errors.__name__ and obj is not errors.IdentityApplicationError
     ]
 
 

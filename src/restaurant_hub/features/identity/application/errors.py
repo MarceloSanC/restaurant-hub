@@ -18,7 +18,16 @@ etc.) **não** são reembrulhados: sobem como estão, com a mesma raiz `Identity
 """
 
 from restaurant_hub.features.identity.domain.exceptions.errors import IdentityError
+from restaurant_hub.shared.application.errors import ApplicationError
 from restaurant_hub.shared.domain.exceptions.base import NotFoundError
+
+
+class IdentityApplicationError(ApplicationError):
+    """Raiz das falhas de caso de uso de identity que não são regra de negócio.
+
+    Par de `IdentityError` (domínio): todo erro deste BC descende de exatamente uma
+    das duas (ADR 3.9.0001 §2).
+    """
 
 
 class EmailAlreadyRegisteredError(IdentityError):

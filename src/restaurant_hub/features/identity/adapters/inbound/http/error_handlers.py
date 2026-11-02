@@ -36,6 +36,7 @@ from restaurant_hub.features.identity.adapters.inbound.http.dependencies import 
 )
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
+    IdentityApplicationError,
     InvalidAccessTokenError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
@@ -70,6 +71,11 @@ from restaurant_hub.features.identity.domain.exceptions.errors import (
 
 _log = logging.getLogger(__name__)
 
+# O que este BC pode levantar: as suas duas raízes, de domínio e de aplicação
+# (ADR 3.9.0001 §2). O handler trata as duas como uma — mesmo mapa, mesmos corpos,
+# mesma linha de log.
+type IdentityFailure = IdentityError | IdentityApplicationError
+
 HTTP_UNAUTHORIZED: Final = 401
 HTTP_FORBIDDEN: Final = 403
 HTTP_NOT_FOUND: Final = 404
@@ -93,7 +99,7 @@ _CORPO_403: Final = {"detail": "acesso negado", "type": "forbidden"}
 # RFC 6750 §3 — resposta 401 de recurso protegido por Bearer anuncia o esquema.
 _CABECALHOS_401: Final = {"WWW-Authenticate": "Bearer"}
 
-IDENTITY_ERROR_STATUS: Final[dict[type[IdentityError], int]] = {
+IDENTITY_ERROR_STATUS: Final[dict[type[IdentityFailure], int]] = {
     # 401 — quem você é não foi estabelecido.
     InvalidCredentialsError: HTTP_UNAUTHORIZED,
     InvalidAccessTokenError: HTTP_UNAUTHORIZED,
@@ -145,7 +151,7 @@ IDENTITY_ERROR_STATUS: Final[dict[type[IdentityError], int]] = {
 }
 
 
-def resolve_status(exc: IdentityError) -> int:
+def resolve_status(exc: IdentityFailure) -> int:
     """Status da exceção, resolvido pelo `__mro__`.
 
     Percorrer o MRO — em vez de olhar só `type(exc)` — faz uma subclasse futura
@@ -198,7 +204,7 @@ def _nome_da_classe(exc: BaseException) -> str:
     classe = type(exc)
     if classe.__module__ == "builtins":
         return classe.__qualname__
-    if isinstance(exc, IdentityError):
+    if isinstance(exc, IdentityError | IdentityApplicationError):
         return classe.__name__
     return f"{classe.__module__}.{classe.__qualname__}"
 
@@ -212,7 +218,7 @@ def _proximo_elo(exc: BaseException) -> BaseException | None:
     return exc.__context__
 
 
-def describe_suppressed_cause(exc: IdentityError) -> str:
+def describe_suppressed_cause(exc: IdentityFailure) -> str:
     """Cadeia de causas da exceção, do elo mais externo ao mais interno.
 
     Ex.: `"InvalidAccessTokenError: token de acesso inválido <-
@@ -241,7 +247,7 @@ def describe_suppressed_cause(exc: IdentityError) -> str:
     return _neutralizar(" <- ".join(elos))
 
 
-def _registrar_causa_suprimida(request: Request, exc: IdentityError, status: int) -> None:
+def _registrar_causa_suprimida(request: Request, exc: IdentityFailure, status: int) -> None:
     """Grava a causa de um 401/403 — o que o corpo constante não diz ao cliente.
 
     Fica **de fora**: o token, o header `Authorization`, a senha, o e-mail do
@@ -275,7 +281,7 @@ def _registrar_causa_suprimida(request: Request, exc: IdentityError, status: int
     )
 
 
-def build_error_response(exc: IdentityError) -> JSONResponse:
+def build_error_response(exc: IdentityFailure) -> JSONResponse:
     """Monta a resposta, aplicando a regra de corpo constante das faixas 401/403."""
     status = resolve_status(exc)
 
@@ -297,10 +303,16 @@ def build_error_response(exc: IdentityError) -> JSONResponse:
 
 
 def register_identity_error_handlers(app: FastAPI) -> None:
-    """Registra o handler único de `IdentityError` na aplicação."""
+    """Registra o handler único do BC sobre as **duas** raízes (ADR 3.9.0001 §4).
 
+    Uma raiz sem registro deixaria os erros dela sem handler algum — não há rede
+    genérica para `ApplicationError` — e `test_status_map.py` cobra o registro de
+    cada raiz.
+    """
+
+    @app.exception_handler(IdentityApplicationError)
     @app.exception_handler(IdentityError)
-    async def identity_error_handler(request: Request, exc: IdentityError) -> JSONResponse:
+    async def identity_error_handler(request: Request, exc: IdentityFailure) -> JSONResponse:
         status = resolve_status(exc)
         if status in _FAIXAS_SUPRIMIDAS:
             _registrar_causa_suprimida(request, exc, status)
