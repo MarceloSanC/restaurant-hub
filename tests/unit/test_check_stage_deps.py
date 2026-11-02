@@ -400,6 +400,23 @@ def test_issue_dependency_not_done_is_a_violation() -> None:
     ]
 
 
+@pytest.mark.parametrize("order", ["open-then-done", "done-then-open"])
+def test_an_issue_with_two_rows_cannot_close_a_dependency(order: str) -> None:
+    open_row = "| [#47](https://x/47) | C | shared | docs | open | — |\n"
+    done_row = "| #47 | C | shared | docs | done | — |\n"
+    issues = open_row + done_row if order == "open-then-done" else done_row + open_row
+    rows = _row("4.3-scheduling-application", deps="`#47`")
+    statuses = csd.parse_issue_table(_roadmap(rows, issues=issues))
+
+    verdict = csd.check_targets(
+        ["4.3-scheduling-application"], _rows(rows), _history(_CLOSED), statuses
+    )
+
+    assert list(verdict.violations) == [
+        "4.3-scheduling-application → #47: a issue aparece em mais de uma linha da Tabela de Issues"
+    ]
+
+
 def test_issue_outside_the_issue_table_points_to_the_stage_id_form() -> None:
     rows = _row("4.3-scheduling-application", deps="`#43`")  # #43 é a issue da Stage 3.6
 

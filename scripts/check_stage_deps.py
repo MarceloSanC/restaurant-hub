@@ -76,6 +76,8 @@ ISSUE_COLUMN = "Issue"
 STATUS_COLUMN = "Status"
 DEPS_COLUMN = "Depende de"
 DONE = "done"
+# Status-sentinela de issue com mais de uma linha na Tabela de Issues (nunca `done`).
+DUPLICATED_ISSUE = "<mais de uma linha>"
 NO_DEPS = frozenset({"—", "-", ""})
 
 # Onde "mergeada" é verdade: as mesmas branches, na mesma ordem, do
@@ -299,6 +301,8 @@ def parse_issue_table(text: str) -> dict[int, str]:
 
     Linha cuja célula `Issue` não é `[#N](…)` nem `#N` fica de fora: uma
     dependência dela aparece como "fora da tabela" — vermelho, nunca verde.
+    Issue com mais de uma linha vira `DUPLICATED_ISSUE`: escolher uma das linhas
+    (a primeira ou a última) decidiria o verde pela ordem da tabela.
     """
     table = _table_lines(text, ISSUES_TABLE)
     i_issue, i_status, width = _columns(table, ISSUES_TABLE, (ISSUE_COLUMN, STATUS_COLUMN))
@@ -307,7 +311,8 @@ def parse_issue_table(text: str) -> dict[int, str]:
         cells = _cells(line)
         match = _ISSUE_CELL.match(cells[i_issue]) if len(cells) == width else None
         if match is not None:
-            statuses[int(match.group("linked") or match.group("bare"))] = cells[i_status]
+            number = int(match.group("linked") or match.group("bare"))
+            statuses[number] = DUPLICATED_ISSUE if number in statuses else cells[i_status]
     return statuses
 
 
@@ -373,6 +378,8 @@ def _check_issue_dependency(where: str, number: int, issues: Mapping[int, str]) 
             f"{where}: issue fora da {ISSUES_TABLE} — se é a issue de uma Stage, a "
             "dependência se escreve com o stage_id dela (CONVENTIONS §1)"
         ]
+    if status == DUPLICATED_ISSUE:
+        return [f"{where}: a issue aparece em mais de uma linha da {ISSUES_TABLE}"]
     if status != DONE:
         return [f"{where}: status `{status}` na {ISSUES_TABLE} (esperado `{DONE}`)"]
     return []
