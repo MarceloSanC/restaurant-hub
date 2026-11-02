@@ -726,10 +726,21 @@ def main() -> int:
     _section("1. Localizando worktree")
     if not check_worktree_registered(wt_path):
         _fail(f"worktree não registrada no git: {wt_path}\nVerifique com `git worktree list`.")
-    if wt_path.resolve() == install_hooks.main_checkout(common_dir).resolve():
+    principal = install_hooks.main_checkout(common_dir)
+    if wt_path.resolve() == principal.resolve():
         _fail(
             f"{args.branch} está no checkout principal ({wt_path}), não numa worktree.\n"
             "O projeto compose dele é o banco do checkout principal — nada foi removido."
+        )
+    # O compose dá à pasta o nome do projeto; worktree criada à mão numa pasta com o
+    # nome do checkout principal (`../x/restaurant-hub`) teria o mesmo projeto, e
+    # derrubá-lo apagaria o banco de quem fica.
+    project = worktree_docker.compose_project_name(wt_path)
+    if not args.no_docker and project == worktree_docker.compose_project_name(principal):
+        _fail(
+            f"o projeto compose da worktree ({project}) tem o nome do do checkout principal:\n"
+            "derrubá-lo apagaria o banco dele — nada foi removido. Para remover só a\n"
+            "worktree, rode com --no-docker."
         )
     _info(f"worktree: {wt_path}")
     _info(f"branch:   {args.branch}")

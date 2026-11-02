@@ -605,6 +605,30 @@ def test_main_refuses_the_branch_of_the_main_checkout(
     assert "checkout principal" in capsys.readouterr().err
 
 
+def test_main_refuses_a_worktree_whose_compose_project_is_the_main_checkouts(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    compose: dict[str, list[str]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Worktree criada à mão em `../x/Restaurant-Hub`: o compose dá a ela o projeto
+    `restaurant-hub`, o do checkout principal. Derrubá-lo apagaria o banco de quem
+    fica — o script recusa antes de qualquer docker ou git.
+    """
+    principal, _ = real_repo
+    clash = principal.parent / "x" / "Restaurant-Hub"
+    _git(principal, "worktree", "add", "-q", "-b", "fix/2-b", str(clash))
+    monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "fix/2-b", "--force"])
+
+    with pytest.raises(SystemExit) as exc:
+        wr.main()
+
+    assert exc.value.code == 1
+    assert compose["calls"] == []
+    assert clash.exists()
+    assert "--no-docker" in capsys.readouterr().err
+
+
 def test_folder_name_is_normalized_like_compose_does(
     tmp_path: Path, compose: dict[str, list[str]]
 ) -> None:
