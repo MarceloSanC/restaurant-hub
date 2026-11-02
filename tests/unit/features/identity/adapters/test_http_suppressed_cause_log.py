@@ -39,7 +39,10 @@ from restaurant_hub.features.identity.application.use_cases.authorize_action imp
     AuthorizeActionUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.user import User
-from restaurant_hub.features.identity.domain.exceptions.errors import InvalidRoleError
+from restaurant_hub.features.identity.domain.exceptions.errors import (
+    IdentityError,
+    InvalidRoleError,
+)
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
@@ -180,14 +183,14 @@ async def test_403_registra_ator_rota_e_cadeia_de_causas(
     assert registro.levelno == logging.WARNING
     assert _campo(registro, "auth_status") == handlers.HTTP_FORBIDDEN
     assert _campo(registro, "auth_method") == "POST"
-    assert _campo(registro, "auth_route") == "/units/{unit_id}/users"
+    assert _campo(registro, "auth_route") == "/units/unit-fantasma/users"
     assert _campo(registro, "auth_actor") == "user-7"
     assert _campo(registro, "auth_cause") == (
         "UnitNotVisibleError: usuário 'user-7' não enxerga a unidade 'unit-fantasma'"
         " <- UnitNotFoundError: unidade não encontrada: 'unit-fantasma'"
     )
     mensagem = registro.getMessage()
-    assert mensagem.startswith("resposta 403 com causa suprimida: POST /units/{unit_id}/users")
+    assert mensagem.startswith("resposta 403 com causa suprimida: POST /units/unit-fantasma/users")
     assert "ator=user-7" in mensagem
     assert "causa=UnitNotVisibleError" in mensagem
 
@@ -299,6 +302,34 @@ async def test_quebra_de_linha_na_mensagem_nao_forja_linha_de_log(
     assert "\n" not in mensagem
     assert "\r" not in mensagem
     assert "linha 1\\r\\nWARNING forjado" in mensagem
+
+
+async def test_caractere_de_controle_no_path_sai_escapado(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """O path do `scope` ASGI vem decodificado e é do cliente: também é escapado.
+
+    CR/LF/TAB o próprio Starlette já tira (`request.url` passa por `urlsplit`,
+    que os descarta); o resto dos caracteres de controle passa — `ESC` abre
+    sequência ANSI no terminal de quem lê o log. Chama o handler registrado
+    direto, com o `scope` montado à mão, porque o cliente httpx normaliza o
+    path antes de enviar.
+    """
+    caplog.set_level(logging.WARNING, logger=_LOGGER)
+    app = FastAPI()
+    handlers.register_identity_error_handlers(app)
+    handler = app.exception_handlers[IdentityError]
+    request = Request(
+        {"type": "http", "method": "POST", "path": "/units/a\x1b[2Jb\x00c", "headers": []}
+    )
+
+    await handler(request, PermissionDeniedError("owner", "manage_users"))  # type: ignore[misc]
+
+    [registro] = _registros(caplog)
+    mensagem = registro.getMessage()
+    assert "\x1b" not in mensagem
+    assert "\x00" not in mensagem
+    assert _campo(registro, "auth_route") == "/units/a\\x1b[2Jb\\x00c"
 
 
 @pytest.mark.parametrize("status", [404, 409, 422])

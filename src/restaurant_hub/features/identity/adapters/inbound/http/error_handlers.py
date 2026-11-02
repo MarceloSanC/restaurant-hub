@@ -20,7 +20,7 @@ própria.
 **A causa que o corpo esconde vai para o log** (issue #26). As faixas 401/403
 devolvem corpo constante, e o que as distingue — "token expirado", "papel sem
 permissão", "unidade de outro tenant" — só sobrevive no servidor: cada resposta
-dessas faixas grava um `warning` com o status, a rota, o ator (quando o guard o
+dessas faixas grava um `warning` com o status, o método e o path, o ator (quando o guard o
 autenticou) e a cadeia de causas. O que entra e o que fica de fora está em
 `describe_suppressed_cause`.
 """
@@ -228,16 +228,6 @@ def describe_suppressed_cause(exc: IdentityError) -> str:
     return _neutralizar(" <- ".join(elos))
 
 
-def _rota(request: Request) -> str:
-    """O **molde** da rota (`/restaurants/{restaurant_id}/units`), não o path cru.
-
-    O molde agrupa as ocorrências da mesma rota e não carrega o que o cliente
-    escreveu; o path cru só entra se o roteamento não chegou a casar uma rota.
-    """
-    molde = getattr(request.scope.get("route"), "path", None)
-    return molde if isinstance(molde, str) else request.url.path
-
-
 def _registrar_causa_suprimida(request: Request, exc: IdentityError, status: int) -> None:
     """Grava a causa de um 401/403 — o que o corpo constante não diz ao cliente.
 
@@ -247,7 +237,12 @@ def _registrar_causa_suprimida(request: Request, exc: IdentityError, status: int
     401 que nascem antes da verificação.
     """
     ator = authenticated_actor_id(request)
-    rota = _neutralizar(_rota(request))
+    # O path concreto, e não o molde da rota: o molde que o FastAPI expõe em
+    # `scope["route"]` muda de forma entre versões (sem o prefixo do
+    # `include_router` na 0.139), e o path diz **qual** recurso foi sondado. Ele
+    # não carrega credencial — nenhuma rota leva token no path; o de definição
+    # de senha viaja no corpo — e chega neutralizado.
+    rota = _neutralizar(request.url.path)
     metodo = _neutralizar(request.method)
     causa = describe_suppressed_cause(exc)
     _log.warning(
