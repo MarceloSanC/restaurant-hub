@@ -231,6 +231,8 @@ _STAGE_SCOPES = [
     "stage_2_3",
     "stage2.3",
     "stage-1",
+    "stage--2.3",  # separador repetido continua nomeando a Stage
+    "stage-.2",
     "docs.stage-2.3",
     "roadmap-stage-4.1",
     "2.3",

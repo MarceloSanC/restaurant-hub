@@ -87,8 +87,9 @@ CC_PATTERN = re.compile(
 # (mudou aqui, atualizar lá): o escopo é o BC/módulo, nunca a Stage (issue #90).
 # Três formas, todas recusadas:
 #   - `stage`, sozinho;
-#   - `stage` seguido de número, no começo do escopo ou depois de `.`/`_`/`-`:
-#     `stage-2.3`, `stage-1-1`, `stage.12.10`, `stage2`, `docs.stage-2.3`;
+#   - `stage` seguido de número (com ou sem separadores `.`/`_`/`-` no meio),
+#     no começo do escopo ou depois de `.`/`_`/`-`: `stage-2.3`, `stage-1-1`,
+#     `stage.12.10`, `stage2`, `stage--2.3`, `docs.stage-2.3`;
 #   - o número ou o `stage_id` da Stage como escopo inteiro: `2.3`, `1-1`,
 #     `4.1-scheduling-domain`.
 # Fica fora o que só contém a palavra ou um número que não é de Stage:
@@ -96,7 +97,7 @@ CC_PATTERN = re.compile(
 # `PROMPT-stage-*.md`), `v2`, `0.0.0016` (número de ADR: três componentes).
 STAGE_SCOPE_PATTERN = re.compile(
     r"^stage$"
-    r"|(?:^|[._-])stage[._-]?[0-9]"
+    r"|(?:^|[._-])stage[._-]*[0-9]"
     r"|^[0-9]+[._-][0-9]+(?:[._-][a-z][a-z0-9._-]*)?$"
 )
 
