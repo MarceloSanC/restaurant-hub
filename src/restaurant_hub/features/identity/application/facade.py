@@ -20,10 +20,15 @@ Três propriedades definem a fachada:
    nomear o que vai capturar, este módulo **re-exporta** as duas exceções que
    um consumidor é esperado a traduzir: `EmailAlreadyRegisteredError` e
    `InvalidEmailError`.
-3. **Não autoriza as próprias operações.** Nenhum use case de identity autoriza
-   hoje (#49); quem chama
-   responde pela autorização na sua própria borda — para staff, R17 exige
-   `manage_staff` **e** `manage_users` (concept 3.5 §5.3). A fachada é,
+3. **Não autoriza as próprias operações.** Identity não autoriza na
+   application: nenhum use case de identity recebe ator, e a autorização de
+   identity mora na borda HTTP (ADR 2.4.0003 §1, mantido pelo ADR 0.0.0014 §4)
+   — ao contrário de staff, onde todo use case autoriza o próprio alvo (ADR
+   3.7.0001). Se identity deve seguir staff é decisão aberta para o BC inteiro
+   (issue #115). Quem chama a fachada responde pela autorização do seu lado —
+   para staff, o use case consumidor (`create_login_for_employee`, ADR
+   3.7.0001) e a rota R17 exigem `manage_staff` **e** `manage_users` (concept
+   3.5 §5.3). A fachada é,
    assumidamente, um segundo caminho de entrada para "criar conta" que não passa
    por `required_permissions_for_role`; o gateway fecha a brecha fixando o papel
    como valor (`"employee"`, L-IG1), e o pino em `test_http_dependencies.py`
