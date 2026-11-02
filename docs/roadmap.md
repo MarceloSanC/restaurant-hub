@@ -127,7 +127,7 @@ graph LR
 | `3.5-employee-login-link` | Criar login para funcionário | vertical (staff) + identity (domain, application) | done | `3.6-staff-http` |
 | `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
 | `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
-| `3.9-error-hierarchy` | Hierarquia de exceções sem protocolo HTTP | shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) | in_progress | `3.6-staff-http`, `4.3-scheduling-application`, #45 |
+| `3.9-error-hierarchy` | Hierarquia de exceções sem protocolo HTTP | shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) | done | `3.6-staff-http`, `4.3-scheduling-application`, #45 |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
@@ -1453,6 +1453,18 @@ gate_mode: strict
 skills_hint: [hex-arch-python, fastapi-thin-adapter, pytest-with-fakes]
 ```
 
+> **Nota (2026-11-02): fechamento da Stage 3.9** (issue #48; concept e technical em
+> `docs/stages/3.9-error-hierarchy/`; ADR 3.9.0001, que supera o 2.2.0003). O que a execução fixou:
+>
+> - **Partição por significado:** 14 erros de identity, 4 de staff e 6 de scheduling migram para a
+>   raiz de aplicação do BC; `ScheduleVersionConflictError` fica no domínio (regra canônica de
+>   concorrência, decisão do sponsor F8). Erro levantado por objeto de domínio é domínio por construção.
+> - **`NotFoundError` e o handler genérico 404 saíram**; não há rede genérica para `ApplicationError`.
+>   O Gate 3 cobra raiz única do BC, mapa total sobre as duas raízes e handler em cada raiz.
+> - **Regra 11 de `check_layout.py`** reprova vocabulário de protocolo nos módulos de exceção.
+> - **8 Tasks + 5 commits de correção** (Checkpoints C) **+ 2 extras** (auditoria de testes, 3 rodadas).
+>   Oráculos e2e de faixa intocados. Findings para a 4.5 na §7 do technical.
+
 
 ---
 
@@ -2073,6 +2085,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-10-19 | Stage 3.7-application-authorization concluída (`done`); bloco acrescido de nota datada de reconciliação pós-execução. Os 17 use cases de staff autorizam o alvo do próprio command pelo `AccessGuard` injetado antes de qualquer outra instrução; a borda HTTP segue autorizando (defesa em profundidade) e nenhuma faixa muda (`tests/e2e/` intocado). ADR 3.7.0001; supersessão parcial datada em 3.2.0002, 3.4.0001 e 3.6.0004; errata no concept 3.2 §5.16. 13 mutações reais na auditoria independente, todas mortas | Execução da Stage 3.7 — issue #49 |
 | 2026-11-01 | Issue **#60** promovida a **Stage `3.8-termination-access-scope`** (Step 3, BC staff; `depends_on: 3.5-employee-login-link`) e concluída (`done`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio e nota datada de fechamento. Executada como `3.7` em paralelo à #49; **renumerada para 3.8** no rebase sobre o #71, que ficou com o número (pasta, ADR 3.8.0001, workforce §3.8, nota no ADR 3.5.0003). A aresta do grafo vai na mesma linha da 3.7; as citações por linha deslocadas pelo bloco (+48 a partir do Step 4, +1 na tabela de Stages) acompanham — as do #70 seguem com a #79. Step 3 passa a `3.1 → 3.8` | Execução da Stage 3.8 — issue #60 |
 | 2026-11-02 | Issue **#48** promovida a **Stage `3.9-error-hierarchy`** (Step 3, BC shared; `depends_on: 3.6-staff-http, 4.3-scheduling-application`, #45): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. Supersede o ADR 2.2.0003 e pede uma propriedade sobre a hierarquia inteira dos três BCs (detector de protocolo) — o litmus de PIPELINE §4.5. Step 3 passa a `3.1 → 3.9` | Promoção da issue #48 |
+| 2026-11-02 | Stage 3.9-error-hierarchy concluída (`done`); bloco acrescido de nota datada de fechamento. Uma raiz por significado (`DomainError` × `ApplicationError`, de volta em `shared/application`), status só pelo mapa do adapter, `NotFoundError` removida, regra 11 do `check_layout.py`. ADR 3.9.0001 supera o 2.2.0003, com supersessão parcial datada em 2.3.0003, 2.4.0001 e 3.4.0002; `LAYOUT.md` §2–§4 emendado. Nenhuma faixa nem corpo muda (`tests/e2e/` só perde a sonda 404 do smoke) | Execução da Stage 3.9 — issue #48 |
 
 ## Próxima revisão de roadmap
 
