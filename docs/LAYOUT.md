@@ -53,8 +53,8 @@ src/restaurant_hub/
 │               └── identity/       # Gateway para outro BC: implementa um port daqui sobre a fachada de lá (§3)
 │
 └── shared/                         # Código transversal — usado por múltiplas features
-    ├── domain/                     # Exceções base do sistema (DomainError, NotFoundError)
-    ├── application/                # Ports compartilhados (Clock, IdGenerator)
+    ├── domain/                     # Raiz das violações de regra de negócio (DomainError)
+    ├── application/                # Ports compartilhados (Clock, IdGenerator) e ApplicationError
     └── infrastructure/             # Implementações de infraestrutura
         ├── config/                 # Settings (pydantic-settings)
         ├── database/               # Engine SQLAlchemy, sessões
@@ -112,9 +112,20 @@ adapters  →  application  →  domain
 
 ### Application
 
-- **Pode importar de:** `domain/`, `shared/domain/`, `shared/application/ports/`
+- **Pode importar de:** `domain/`, `shared/domain/`, `shared/application/ports/`,
+  `shared/application/errors.py` (desde a Stage 3.9 — a raiz `ApplicationError`)
 - **Nunca pode importar de:** `adapters/`, `shared/infrastructure/`
-- **Contém:** use cases, DTOs (commands, queries, results), ports (Protocols)
+- **Contém:** use cases, DTOs (commands, queries, results), ports (Protocols) e, em
+  `errors.py`, a raiz de aplicação do BC
+
+**Duas raízes de erro, uma por significado** ([ADR 3.9.0001](./adr/3_9_0001-error-roots-by-meaning-status-by-map.md)).
+Erro que nomeia regra de negócio descende da raiz de domínio do BC (`DomainError`); falha
+de caso de uso que não é regra — recurso endereçado inexistente, credencial que não
+autentica, identificador técnico que colide, pedido ou insumo malformado — descende da raiz
+de aplicação do BC (`ApplicationError`). Cada classe tem **uma** base. O status HTTP sai
+**só** do mapa do adapter de entrada do BC; a hierarquia não é ordenada para o framework, e
+a regra 11 de `scripts/check_layout.py` reprova vocabulário de protocolo nos módulos de
+exceção.
 
 ### Adapters
 
@@ -168,7 +179,7 @@ resolvida, não como import de outro BC.
 **Coloque em `shared/`** quando:
 - É genuinamente reutilizado por 2+ features (ex: `Clock`, `IdGenerator`, `EmailSender`)
 - É infraestrutura cross-cutting (ex: configuração, logging, factory do FastAPI)
-- É uma abstração de domínio agnóstica (ex: `DomainError`, `NotFoundError`)
+- É uma abstração agnóstica de feature (ex: `DomainError`, `ApplicationError`)
 
 **Regra prática:** em caso de dúvida, comece na feature. Mova para shared apenas quando
 a segunda feature precisar do mesmo código.
@@ -181,6 +192,12 @@ pelo HTTP, produziria 500. Os dois foram removidos na issue #45, e
 `shared/domain/` ou `shared/application/` que não tem uso em `src/`. Promoção
 para `shared/` sem consumidor não é abstração prematura só em teoria: é código
 que ninguém exercita, num pacote que todas as features leem.
+
+> **Nota (2026-11-02, Stage 3.9):** `ApplicationError` voltou, agora em
+> `shared/application/errors.py`, com o consumidor medido antes da promoção: a raiz de
+> aplicação de cada um dos três BCs (ADR 3.9.0001). Na mesma Stage saiu
+> `NotFoundError`, que ficara sem subclasse quando os erros de "não encontrado" deixaram
+> a herança dupla.
 
 ---
 
