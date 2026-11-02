@@ -61,11 +61,11 @@ class ShiftDemand:
             raise InvalidIdentifierError("função da demanda")
         # Par a par sobre a coleção inteira — não só vizinhos: a reidratação da
         # 4.4 e as transições (via replace) passam por aqui.
-        for indice, alocacao in enumerate(self.assignments):
-            for outra in self.assignments[indice + 1 :]:
-                if alocacao.id == outra.id:
+        for index, assignment in enumerate(self.assignments):
+            for other in self.assignments[index + 1 :]:
+                if assignment.id == other.id:
                     raise DuplicateEntityIdError("AssignmentId")
-                if alocacao.employee_id == outra.employee_id:
+                if assignment.employee_id == other.employee_id:
                     raise DuplicateAssignmentError()
 
     @property
@@ -87,8 +87,10 @@ class ShiftDemand:
         A recusa `AssignmentNotFoundError` é da raiz (`unassign`), que é quem
         localiza a alocação no agregado; não é duplicada aqui.
         """
-        restantes = tuple(alocacao for alocacao in self.assignments if alocacao.id != assignment_id)
-        return dataclasses.replace(self, assignments=restantes)
+        remaining = tuple(
+            assignment for assignment in self.assignments if assignment.id != assignment_id
+        )
+        return dataclasses.replace(self, assignments=remaining)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ShiftDemand):
