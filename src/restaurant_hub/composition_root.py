@@ -102,6 +102,9 @@ from restaurant_hub.features.identity.application.use_cases.invite_user import (
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
+    ProvisionRestaurantUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
 )
@@ -390,6 +393,7 @@ class ApplicationDependencies:
     identity_refresh_session: RefreshSessionUseCase
     identity_revoke_session: RevokeSessionUseCase
     identity_create_restaurant: CreateRestaurantUseCase
+    identity_provision_restaurant: ProvisionRestaurantUseCase
     identity_create_unit: CreateUnitUseCase
     identity_create_user: CreateUserUseCase
     identity_invite_user: InviteUserUseCase
@@ -622,6 +626,13 @@ def wire_dependencies(
         ),
         identity_create_restaurant=CreateRestaurantUseCase(
             restaurants=restaurants, id_generator=id_generator
+        ),
+        identity_provision_restaurant=ProvisionRestaurantUseCase(
+            restaurants=restaurants,
+            users=users,
+            hasher=hasher,
+            id_generator=id_generator,
+            unit_of_work=identity_unit_of_work,
         ),
         identity_create_unit=CreateUnitUseCase(
             units=units, restaurants=restaurants, id_generator=id_generator

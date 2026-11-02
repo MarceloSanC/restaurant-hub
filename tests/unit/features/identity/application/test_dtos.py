@@ -43,6 +43,7 @@ from restaurant_hub.features.identity.application.dtos.results import (
     AuthenticationResult,
     AuthorizedActor,
     ProvisionedAccountResult,
+    ProvisionedRestaurantResult,
     RestaurantResult,
     UnitResult,
     UserResult,
@@ -66,6 +67,7 @@ _RESULT_CLASSES = (
     AuthorizedActor,
     ProvisionedAccountResult,
     AccountRoleResult,
+    ProvisionedRestaurantResult,
 )
 
 # Prefixo dos módulos de entidade — o que um result nunca pode carregar.
@@ -87,7 +89,10 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # `SendInvitationCommand`, `RevokeAllSessionsCommand` e `ProvisionedAccountResult`.
 #
 # 25 até a 3.5; a Stage 3.8 acrescenta `GetAccountRoleCommand` e `AccountRoleResult`.
-_TOTAL_DE_DTOS = 27
+#
+# 27 até a 3.8; a issue #67 acrescenta `ProvisionRestaurantCommand` e
+# `ProvisionedRestaurantResult`.
+_TOTAL_DE_DTOS = 29
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -322,7 +327,8 @@ def test_modulo_de_results_declara_exatamente_os_esperados() -> None:
     `setup_link: str` passa na varredura de nome/tipo-folha abaixo por desenho:
     o que o contém é o `repr=False`, asserido em `test_results_carregam_os_campos_declarados`
     e nos testes do use case, não esta varredura. A 3.8 acrescenta
-    `AccountRoleResult` (só o `Role`).
+    `AccountRoleResult` (só o `Role`). A issue #67 acrescenta
+    `ProvisionedRestaurantResult` (restaurante + o `UserResult` do dono).
 
     O filtro por `__module__` é necessário — `vars(results)` também enxerga os VOs
     de domínio importados (`Email` é dataclass), que não são results.

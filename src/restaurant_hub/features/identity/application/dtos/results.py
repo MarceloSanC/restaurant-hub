@@ -93,6 +93,21 @@ class ProvisionedAccountResult:
 
 
 @dataclass(frozen=True)
+class ProvisionedRestaurantResult:
+    """Restaurante provisionado **com** o seu primeiro `owner` (ADR 0.0.0013).
+
+    Os campos do restaurante vão planos, e não num `RestaurantResult` aninhado:
+    o restaurante e o dono nascem juntos, numa unidade, e o result descreve essa
+    única operação. O `UserResult` do dono vem de `to_user_result`, como em todo
+    result que carrega usuário (regra 8).
+    """
+
+    id: RestaurantId
+    name: str
+    owner: UserResult
+
+
+@dataclass(frozen=True)
 class AccountRoleResult:
     """O papel de uma conta existente (Stage 3.8, ADR 3.8.0001 §3).
 
