@@ -12,6 +12,8 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | `FOR UPDATE` no lookup de `update` | nada, sem edição concorrente | CA6b, aqui |
 | filhas por diferença (§5.20) | nada — o estado final é idêntico | regressão de deadlock, aqui |
 | tradução **por operação** (mapa global) | nada nos caminhos comuns | CA8b/CA8c, aqui |
+| `user_id` fora do `SET` do `update` (#68) | nada, sem vínculo concorrente | #68, aqui |
+| `FOR UPDATE` no lookup de `link_login` (#68) | nada, sem vínculo concorrente | #68, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -54,20 +56,27 @@ from restaurant_hub.features.staff.adapters.out.postgres.integrity_errors import
 from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
     PostgresJobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.dtos.commands import RenameEmployeeCommand
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
     JobFunctionInUseError,
     JobFunctionNotFoundError,
 )
+from restaurant_hub.features.staff.application.use_cases.rename_employee import (
+    RenameEmployeeUseCase,
+)
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
+from restaurant_hub.features.staff.domain.exceptions.errors import EmployeeAlreadyHasLoginError
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = [pytest.mark.integration]
 
@@ -851,3 +860,148 @@ def test_o_backstop_de_identidade_responde_pelo_metodo_publico_e_cita_a_id(
 
     assert disparou[0], "o entrelace não disparou — a corrida não foi exercitada"
     assert "'e1'" in str(excecao.value)
+
+
+# ---------------------------------------------------------------------------
+# Issue #68 — edição concorrente não apaga o vínculo; vínculo concorrente não o troca
+# ---------------------------------------------------------------------------
+
+_LOGIN = UserId("login-do-r17")
+
+
+def test_issue_68_renomear_concorrente_nao_apaga_o_vinculo_gravado(
+    motores: Callable[[], Engine],
+) -> None:
+    """O cenário da issue, com duas conexões e o use case de verdade.
+
+    O R07 (`RenameEmployeeUseCase` sobre o adapter Postgres) lê o registro; o
+    R17 vincula e **comita** exatamente depois dessa leitura, por outra
+    conexão; o R07 grava a entidade que leu — com `user_id=None`. Antes da
+    #68, o `update` gravava o agregado inteiro e o vínculo sumia: conta órfã,
+    e-mail tomado. Agora o `update` não grava o vínculo, e as duas escritas
+    sobrevivem.
+    """
+    motor_r07 = motores()
+    motor_r17 = motores()
+    _semear(motor_r07)
+    renomear = RenameEmployeeUseCase(
+        PostgresEmployeeRepository(motor_r07), guard=PermissiveAccessGuard()
+    )
+
+    def _r17_vincula() -> None:
+        PostgresEmployeeRepository(motor_r17).link_login(_A, _U1, _E1, _LOGIN)
+
+    with _entrelacar(motor_r07, "FROM employees", _r17_vincula) as disparou:
+        renomear.execute(
+            RenameEmployeeCommand(
+                actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
+            )
+        )
+
+    assert disparou[0], "o entrelace não disparou — a corrida não foi exercitada"
+    relido = PostgresEmployeeRepository(motor_r17).find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.name, relido.user_id) == ("Joana", _LOGIN), (
+        "a edição gravada depois do vínculo apagou o vínculo (ou perdeu o nome)"
+    )
+
+
+def test_issue_68_link_login_bloqueia_no_lookup_e_nao_depois(
+    motores: Callable[[], Engine],
+) -> None:
+    """A guarda de `L-LINK` decide sob o lock — a mesma prova da CA6b para o `update`.
+
+    Com a linha presa por outra transação, `link_login` para no **primeiro**
+    statement, o `SELECT … FOR UPDATE`, e nada completa antes. Sem o lock, a
+    leitura do vínculo e a montagem do agregado completariam primeiro, e a
+    guarda decidiria "sem vínculo" sobre um estado que a transação concorrente
+    está mudando.
+    """
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _semear(motor_adapter)
+    repositorio = PostgresEmployeeRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("SELECT unit_id FROM employees WHERE id = :e AND tenant_id = :t FOR UPDATE"),
+            {"e": _E1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            repositorio.link_login(_A, _U1, _E1, _LOGIN)
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados, "o adapter nem chegou a emitir statement"
+    assert "FOR UPDATE" in tentados[-1], "o adapter bloqueou em outro statement"
+    assert concluidos == [], "algum statement completou antes do lock"
+
+
+def _esperar_backend_bloqueado(motor: Engine) -> None:
+    """Espera até haver um backend **esperando lock** — condição, não relógio.
+
+    É o ponto de sincronização da corrida de dois R17: o primeiro só comita
+    depois de o segundo estar de fato parado no lock; senão o teste exercitaria
+    a ordem serial, que qualquer implementação acerta, em vez da corrida. A
+    pausa entre consultas é recuo de polling, não o mecanismo de sincronia.
+    """
+    recuo = threading.Event()
+    tentativas = int(_TIMEOUT_SINCRONIA / 0.02)
+    for _ in range(tentativas):
+        with motor.connect() as conexao:
+            esperando = conexao.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+                )
+            ).scalar_one()
+        if esperando:
+            return
+        recuo.wait(0.02)
+    raise AssertionError("o segundo R17 nunca ficou esperando o lock")
+
+
+def test_issue_68_dois_vinculos_concorrentes_o_segundo_e_recusado_e_nao_troca_o_primeiro(
+    motores: Callable[[], Engine],
+) -> None:
+    """Dois R17 ao mesmo tempo: o primeiro a comitar vence, o outro recebe 409.
+
+    O primeiro vínculo está gravado e **não comitado** numa transação aberta; o
+    segundo `link_login` roda numa thread e fica parado no lock. Só então o
+    primeiro comita. Com a guarda sob o lock, o segundo relê o gravado e
+    responde `EmployeeAlreadyHasLoginError`. Sem ela, o segundo teria lido
+    "sem vínculo" antes, esperado só no `UPDATE`, e gravado por cima — trocando
+    em silêncio o vínculo do primeiro, cuja conta ficaria órfã.
+    """
+    motor_primeiro = motores()
+    motor_segundo = motores()
+    motor_observador = motores()
+    _semear(motor_primeiro)
+    erros: list[BaseException] = []
+
+    def _segundo_r17() -> None:
+        try:
+            PostgresEmployeeRepository(motor_segundo).link_login(
+                _A, _U1, _E1, UserId("login-do-segundo")
+            )
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_primeiro.begin() as primeiro:
+        primeiro.execute(
+            text("UPDATE employees SET user_id = :u WHERE id = :e AND tenant_id = :t"),
+            {"u": _LOGIN, "e": _E1, "t": _A},
+        )
+        segundo = threading.Thread(target=_segundo_r17)
+        segundo.start()
+        _esperar_backend_bloqueado(motor_observador)
+    segundo.join(_TIMEOUT_SINCRONIA)
+
+    assert not segundo.is_alive(), "o segundo R17 não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], EmployeeAlreadyHasLoginError), erros
+    relido = PostgresEmployeeRepository(motor_observador).find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == _LOGIN, "o segundo vínculo trocou o primeiro"

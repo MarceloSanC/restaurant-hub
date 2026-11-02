@@ -104,6 +104,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 
 # Ordem total do port (`L-ORD`). As duas colunas levam a colação explícita — ver
@@ -119,6 +120,14 @@ _ORDEM_TOTAL = (
 # tornaria "mover o funcionário de unidade" um estado produzível por uma escrita
 # que se parece com uma edição de cadastro.
 _COLUNAS_IMUTAVEIS = frozenset({"id", "tenant_id", "unit_id"})
+
+# Colunas que o `update` também não grava, mas por outro motivo: têm escrita
+# **própria** no port. `user_id` é escrito só por `link_login` (`L-LINK`, issue
+# #68): no `SET` do `update`, uma entidade lida antes de um vínculo concorrente
+# apagaria o vínculo gravado depois dela — e a conta criada em identity ficaria
+# órfã. Não é imutável (nasce `NULL` e é definido uma vez); só não é deste
+# método.
+_COLUNAS_COM_ESCRITA_PROPRIA = frozenset({"user_id"})
 
 # `REPEATABLE READ` nas leituras de agregado (§5.18) — ver a nota 4 do docstring.
 _SNAPSHOT_UNICO = "REPEATABLE READ"
@@ -159,6 +168,56 @@ class PostgresEmployeeRepository:
             raise translate(
                 erro, ON_WRITE_EMPLOYEE, self._detalhe_do_conflito(erro, employee)
             ) from erro
+
+    def link_login(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId
+    ) -> None:
+        """`L-LINK` — o vínculo, só se o **gravado** ainda não tiver um (issue #68).
+
+        Checagem e escrita numa transação só, com a linha do registro presa por
+        `FOR UPDATE` **antes** das guardas — a mesma forma do `update` (nota 2
+        do módulo). Sem o lock, dois R17 concorrentes leriam os dois "sem
+        vínculo" e o segundo `UPDATE` trocaria o do primeiro em silêncio.
+
+        As guardas são as do **domínio**, sobre o agregado gravado: o registro
+        é remontado sob o lock e passa por `Employee.link_login`, que chama
+        `assert_can_link_login` (vinculado > desligado) e revalida o `user_id`
+        no `__post_init__`. É a mesma casa que o fake usa — reescrever a
+        precedência aqui em `if`s sobre colunas abriria a segunda fonte, e a
+        divergência fake ≢ real que a suíte de contrato existe para impedir.
+
+        **A remontagem roda em `READ COMMITTED`, e não sob o snapshot único da
+        nota 4** — de propósito. A linha-pai está presa, e todo escritor das
+        filhas (`update`, `delete`) toma esse mesmo lock antes, então nenhuma
+        escrita comita entre os quatro statements. `REPEATABLE READ` junto do
+        `FOR UPDATE` trocaria a espera do segundo R17 por erro de serialização
+        (`40001`) em vez de uma releitura do vínculo já gravado (ADR 0.0.0010).
+
+        O `UPDATE` grava **só** `user_id`. O `WHERE user_id IS NULL` que a issue
+        sugeria seria redundante sob o lock: nenhuma escrita concorrente alcança
+        a linha entre a guarda e a escrita.
+        """
+        with self._engine.begin() as conexao:
+            linha = conexao.execute(
+                select(employees)
+                .where(
+                    employees.c.id == employee_id,
+                    employees.c.tenant_id == tenant_id,
+                    employees.c.unit_id == unit_id,
+                )
+                .with_for_update()
+            ).one_or_none()
+            if linha is None:
+                raise EmployeeNotFoundError(employee_id)
+            vinculado = self._montar_agregados(conexao, [linha])[0].link_login(user_id)
+            conexao.execute(
+                employees.update()
+                .where(
+                    employees.c.id == employee_id,
+                    employees.c.tenant_id == tenant_id,
+                )
+                .values(user_id=vinculado.user_id)
+            )
 
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """L-E5 — remoção definitiva; as filhas somem por `CASCADE` (§5.10).
@@ -287,7 +346,7 @@ class PostgresEmployeeRepository:
         mutaveis = {
             coluna: valor
             for coluna, valor in mappers.employee_to_row(employee).items()
-            if coluna not in _COLUNAS_IMUTAVEIS
+            if coluna not in _COLUNAS_IMUTAVEIS | _COLUNAS_COM_ESCRITA_PROPRIA
         }
         conexao.execute(
             employees.update()

@@ -12,7 +12,9 @@ da fronteira, e a ordem em que o faz é contrato (concept 3.5 §5.4):
    um vínculo que o domínio vai recusar — seria conta órfã, com e-mail ocupado e
    sem registro que a aponte.
 3. **Provisionar** em identity: a conta pendente e o token, com o prazo do canal.
-4. **Gravar o vínculo antes de entregar** o segredo (ADR 3.5.0002 §4). Se o envio
+4. **Gravar o vínculo antes de entregar** o segredo (ADR 3.5.0002 §4), pela
+   escrita própria e condicional do port (`link_login`, issue #68): as guardas
+   do passo 2 rodam de novo sobre o **gravado**, na mesma operação que grava. Se o envio
    do e-mail falhar depois disto, o registro já aponta para a conta — e o caminho
    de recuperação é o pedido público de redefinição de senha, não um segundo
    R17 (que responderia 409, porque o registro já está vinculado). A ordem
@@ -69,8 +71,11 @@ class CreateLoginForEmployeeUseCase:
 
         Raises:
             EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**.
-            EmployeeAlreadyHasLoginError: o registro já tem login (precede a próxima).
-            TerminatedEmployeeLoginError: o registro está desligado.
+            EmployeeAlreadyHasLoginError: o registro já tem login (precede a próxima)
+                — também quando um R17 concorrente vinculou depois da leitura; a
+                conta provisionada por este fica órfã em identity (concept 3.5 §6.4).
+            TerminatedEmployeeLoginError: o registro está desligado — também por
+                um desligamento concorrente gravado depois da leitura.
             LoginEmailAlreadyInUseError: o e-mail já é login de alguém (do gateway, L-IG2).
             InvalidLoginEmailError: identity recusou o e-mail (do gateway, L-IG2).
             Exception: qualquer outra falha de identity sobe crua — inclusive a do
@@ -103,8 +108,15 @@ class CreateLoginForEmployeeUseCase:
             unit_id=command.unit_id,
             delivery=command.delivery,
         )
+        # O vínculo pela escrita própria e condicional do port (`L-LINK`, issue
+        # #68), não pelo `update` do agregado: a guarda roda de novo sobre o
+        # **gravado**, então um R17 concorrente que vinculou primeiro faz este
+        # responder `EmployeeAlreadyHasLoginError` em vez de trocar o vínculo
+        # dele em silêncio. O result sai do registro em mãos, já vinculado.
+        self._employees.link_login(
+            command.tenant_id, command.unit_id, command.employee_id, provisioned.user_id
+        )
         linked = employee.link_login(provisioned.user_id)
-        self._employees.update(linked)
 
         if command.delivery is LoginDelivery.EMAIL:
             self._gateway.send_login_invitation(

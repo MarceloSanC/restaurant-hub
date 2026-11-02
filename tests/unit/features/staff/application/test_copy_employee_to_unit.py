@@ -360,9 +360,7 @@ def test_ca04_a_copia_nao_carrega_o_vinculo_de_login() -> None:
     mãos seria o falso verde que o docstring deste módulo descreve.
     """
     fakes = _fakes()
-    origem = fakes.employees.find_by_id(_A, _U1, _E1)
-    assert origem is not None
-    fakes.employees.update(origem.link_login(UserId("login-1")))
+    fakes.employees.link_login(_A, _U1, _E1, UserId("login-1"))
 
     copia = _copiar(fakes).execute(
         CopyEmployeeToUnitCommand(

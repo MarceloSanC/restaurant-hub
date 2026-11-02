@@ -72,6 +72,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 
 
@@ -109,6 +110,15 @@ class EmployeeRepository(Protocol):
         entidades são `frozen` e as transições devolvem nova instância, então
         não há mutação in-place que a persistência pudesse observar.
 
+        **`update` não grava o vínculo de login** (issue #68, ADR 0.0.0010). O
+        `user_id` da entidade recebida é **ignorado**, e o gravado fica como
+        está: a única escrita do vínculo é `link_login` (`L-LINK`). Sem isso, um
+        R07 que leu o registro **antes** de um R17 concorrente e grava
+        **depois** apagaria o vínculo em silêncio — a janela "última escrita
+        vence sobre `user_id`" do concept 3.5 §6.4 —, e a conta criada ficaria
+        órfã com o e-mail tomado. "Última escrita vence" (ADR 3.3.0006) segue
+        valendo para os **demais** campos.
+
         **L-E3 — localização imutável.** `unit_id` divergente do gravado,
         **no mesmo tenant** ⇒ `EmployeeRelocationError`. A lei tem erro nomeado
         de propósito: sem ele a saída seria gravar o que veio (mover o registro
@@ -135,6 +145,36 @@ class EmployeeRepository(Protocol):
         responde por ela.
 
         **L-E4** vale aqui igual ao `add`.
+        """
+        ...
+
+    def link_login(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId
+    ) -> None:
+        """Grava o vínculo de login do registro — **só** se ainda não houver um.
+
+        **`L-LINK` — escrita própria e condicional do vínculo** (issue #68,
+        ADR 0.0.0010). O vínculo é "definido uma vez" (ADR 3.5.0004 §2), e essa
+        regra vale aqui sobre o estado **gravado**, não sobre uma entidade lida
+        antes: a checagem e a escrita são **uma** operação atômica. É o que
+        impede que um segundo R17 concorrente troque o vínculo em silêncio — a
+        metade "dois R17" da janela "última escrita vence sobre `user_id`" do
+        concept 3.5 §6.4; a outra metade (a edição concorrente) fecha porque
+        `update` não grava o vínculo.
+
+        Endereço de **três** partes (ADR 3.4.0007) e ordem de checagem
+        normativa, a mesma de `Employee.assert_can_link_login`:
+
+        1. inexistente **no endereço** `(tenant_id, unit_id, id)` ⇒
+           `EmployeeNotFoundError` — registro de outra unidade ou de outro
+           tenant é indistinguível de inexistente;
+        2. já vinculado **no gravado** ⇒ `EmployeeAlreadyHasLoginError`, e o
+           vínculo gravado fica intacto (vinculado vence desligado);
+        3. desligado **no gravado** ⇒ `TerminatedEmployeeLoginError`.
+
+        Em qualquer erro, **nada** é gravado. Nenhum outro campo do registro é
+        tocado: o vínculo tem escrita própria justamente para não carregar um
+        agregado inteiro, possivelmente desatualizado.
         """
         ...
 

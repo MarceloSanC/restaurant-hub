@@ -34,8 +34,11 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmployeeAlreadyHasLoginError,
+    InvalidIdentifierError,
     InvalidNameError,
     StaffError,
+    TerminatedEmployeeLoginError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
@@ -287,15 +290,14 @@ def test_l_e2_update_de_inexistente_no_tenant_nao_grava_nada(repos: Repositorios
 
 
 def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: RepositoriosDeStaff) -> None:
-    """Nome, perfil, preferência, conjunto, indisponibilidades, estado **e login**.
+    """Nome, perfil, preferência, conjunto, indisponibilidades e estado.
 
-    `user_id` entrou na Stage 3.5 e é gravado pelo `update` como qualquer campo
-    do agregado — nas **duas** implementações (CA19).
+    O vínculo de login **não** entra: tem escrita própria (`L-LINK`, issue #68),
+    e o teste irmão abaixo trava que o `update` o ignora.
     """
     _com_funcionario_gravado(repos)
     editado = _funcionario(name="Joana", job_function_ids=frozenset({_F2}), active=False)
     editado = editado.change_workload_profile(OnDemand()).add_unavailability(_PERIODO)
-    editado = editado.reactivate().link_login(UserId("login-1")).deactivate()
     repos.employees.update(editado)
     gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
@@ -305,22 +307,53 @@ def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: Repositori
         gravado.job_function_ids,
         gravado.unavailabilities,
         gravado.active,
-        gravado.user_id,
-    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False, UserId("login-1"))
+    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False)
 
 
-def test_l_e2_update_de_outro_campo_preserva_o_login_gravado(repos: RepositoriosDeStaff) -> None:
-    """O agregado é gravado inteiro — e inteiro inclui o vínculo (Stage 3.5).
+def test_l_e2_update_nao_grava_o_vinculo_que_a_entidade_traz(repos: RepositoriosDeStaff) -> None:
+    """`update` ignora o `user_id` da entidade: o vínculo só nasce por `link_login`.
 
-    É a metade "nenhum outro campo mudou" para `user_id`: renomear um registro
-    vinculado, pela entidade **relida**, não apaga o login. (O caso em que a
-    entidade em mãos está desatualizada é "última escrita vence" — ADR 3.3.0006,
-    declarado no concept 3.5 §6.4, e não é o que se testa aqui.)
+    É a metade "um só escritor" da issue #68. Se o `update` gravasse o vínculo
+    quando o gravado é `NULL`, a metade concorrente (dois R17) voltaria a ter um
+    caminho que não passa pela checagem atômica de `L-LINK`.
     """
     _com_funcionario_gravado(repos)
     gravado = repos.employees.find_by_id(_A, _U1, _E1)
     assert gravado is not None
-    repos.employees.update(gravado.link_login(UserId("login-1")))
+
+    repos.employees.update(gravado.link_login(UserId("login-1")).rename("Joana"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.name, relido.user_id) == ("Joana", None)
+
+
+def test_l_e2_update_com_entidade_lida_antes_do_vinculo_nao_o_apaga(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """O cenário da issue #68, serializado: R07 lê, R17 vincula, R07 grava.
+
+    A entidade do R07 foi lida **antes** do vínculo e carrega `user_id=None`.
+    Gravá-la não pode apagar o vínculo — antes da #68, "última escrita vence"
+    (ADR 3.3.0006) apagava, e a conta criada ficava órfã. A versão com duas
+    conexões de verdade, entrelaçadas, é conduta e vive em `test_staff_conduct.py`.
+    """
+    _com_funcionario_gravado(repos)
+    lido_antes = repos.employees.find_by_id(_A, _U1, _E1)
+    assert lido_antes is not None
+    repos.employees.link_login(_A, _U1, _E1, UserId("login-1"))
+
+    repos.employees.update(lido_antes.rename("Joana"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.name, relido.user_id) == ("Joana", UserId("login-1"))
+
+
+def test_l_e2_update_de_outro_campo_preserva_o_login_gravado(repos: RepositoriosDeStaff) -> None:
+    """Renomear um registro vinculado, pela entidade **relida**, não apaga o login."""
+    _com_funcionario_gravado(repos)
+    repos.employees.link_login(_A, _U1, _E1, UserId("login-1"))
 
     vinculado = repos.employees.find_by_id(_A, _U1, _E1)
     assert vinculado is not None
@@ -923,3 +956,156 @@ def test_ca18_nome_adversarial_sem_nul_faz_round_trip_verbatim(
 
     assert lido is not None
     assert lido.name == nome
+
+
+# --- L-LINK: escrita própria e condicional do vínculo (issue #68) ------------
+#
+# O vínculo tem método próprio no port para que a regra "definido uma vez" valha
+# sobre o **gravado**, numa operação só. Os testes daqui travam a lei como o port
+# a descreve, nas duas implementações: o caminho feliz grava **só** `user_id`, e
+# cada recusa — endereço, já vinculado, desligado, id vazio — deixa o gravado
+# exatamente como estava. A metade concorrente (dois escritores ao mesmo tempo)
+# é conduta, e vive em `test_staff_conduct.py`.
+
+_LOGIN = UserId("login-1")
+
+
+def _campos(employee: Employee) -> tuple[object, ...]:
+    """Todos os campos, e não `==`: a igualdade de `Employee` é só por id."""
+    return dataclasses.astuple(employee)
+
+
+def _registro_completo() -> Employee:
+    """Um agregado com todas as filhas preenchidas — o que o vínculo não pode tocar."""
+    return _funcionario(
+        job_function_ids=frozenset({_F1, _F2}),
+        unavailabilities=(_PERIODO,),
+        shift_preference=ShiftPreference(periods=frozenset({DayPeriod.MORNING})),
+    )
+
+
+def test_l_link_grava_o_vinculo_e_nenhum_outro_campo(repos: RepositoriosDeStaff) -> None:
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_registro_completo())
+
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == _LOGIN
+    assert _campos(dataclasses.replace(relido, user_id=None)) == _campos(_registro_completo())
+
+
+@pytest.mark.parametrize(
+    ("tenant", "unidade", "funcionario"),
+    [(_A, _U1, EmployeeId("fantasma")), (_A, _U2, _E1), (_B, _U1, _E1)],
+    ids=["inexistente", "outra_unidade", "outro_tenant"],
+)
+def test_l_link_fora_do_endereco_e_not_found_e_nao_grava(
+    repos: RepositoriosDeStaff, tenant: TenantId, unidade: UnitId, funcionario: EmployeeId
+) -> None:
+    """Endereço de três partes (ADR 3.4.0007): outra unidade e outro tenant são inexistentes."""
+    _com_funcionario_gravado(repos)
+
+    with pytest.raises(EmployeeNotFoundError):
+        repos.employees.link_login(tenant, unidade, funcionario, _LOGIN)
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id is None
+
+
+def test_l_link_registro_ja_vinculado_e_recusado_e_o_vinculo_gravado_fica(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """O coração da issue #68: um segundo vínculo não troca o primeiro."""
+    _com_funcionario_gravado(repos)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    with pytest.raises(EmployeeAlreadyHasLoginError):
+        repos.employees.link_login(_A, _U1, _E1, UserId("login-2"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == _LOGIN
+
+
+def test_l_link_registro_desligado_e_recusado_e_nada_e_gravado(repos: RepositoriosDeStaff) -> None:
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_funcionario(active=False))
+
+    with pytest.raises(TerminatedEmployeeLoginError):
+        repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.active, relido.user_id) == (False, None)
+
+
+def test_l_link_vinculado_vence_desligado_na_precedencia(repos: RepositoriosDeStaff) -> None:
+    """A precedência do domínio (concept 3.5 CA01), agora sobre o **gravado**."""
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_funcionario(active=False, user_id=_LOGIN))
+
+    with pytest.raises(EmployeeAlreadyHasLoginError):
+        repos.employees.link_login(_A, _U1, _E1, UserId("login-2"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == _LOGIN
+
+
+@pytest.mark.parametrize("vazio", ["", "   "], ids=["vazio", "so_espacos"])
+def test_l_link_user_id_vazio_e_recusado_e_nada_e_gravado(
+    repos: RepositoriosDeStaff, vazio: str
+) -> None:
+    """A revalidação da entidade vale para a escrita própria do vínculo também."""
+    _com_funcionario_gravado(repos)
+
+    with pytest.raises(InvalidIdentifierError):
+        repos.employees.link_login(_A, _U1, _E1, UserId(vazio))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id is None
+
+
+def _com_vizinhos_do_e1(
+    repos: RepositoriosDeStaff,
+) -> tuple[tuple[TenantId, UnitId, EmployeeId], ...]:
+    """`e1` e três vizinhos sem vínculo: mesma unidade, outra unidade, outro tenant."""
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_funcionario())
+    repos.employees.add(_funcionario(id=_E2, name="Bruno"))
+    repos.employees.add(_funcionario(id=EmployeeId("e-u2"), unit_id=_U2))
+    repos.employees.add(
+        _funcionario(
+            id=EmployeeId("e-b"), tenant_id=_B, job_function_ids=frozenset({JobFunctionId("f-b")})
+        )
+    )
+    return ((_A, _U1, _E2), (_A, _U2, EmployeeId("e-u2")), (_B, _U1, EmployeeId("e-b")))
+
+
+def test_l_link_vincula_so_o_registro_do_endereco_e_nenhum_vizinho(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Uma linha só: o vínculo não vaza para outro registro (auditoria de testes da #68).
+
+    `employees.user_id` não tem UNIQUE (ADR 3.5.0004 §3), então um `UPDATE` que
+    perdesse o predicado de id vincularia a **mesma** conta a todo registro do
+    tenant — ou do banco — sem erro nenhum. Os demais testes de `L-LINK` gravam
+    um registro só e não enxergariam isso.
+    """
+    vizinhos = _com_vizinhos_do_e1(repos)
+
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+    with pytest.raises(EmployeeAlreadyHasLoginError):
+        repos.employees.link_login(_A, _U1, _E1, UserId("login-2"))
+
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.user_id == _LOGIN
+    for tenant, unidade, funcionario in vizinhos:
+        vizinho = repos.employees.find_by_id(tenant, unidade, funcionario)
+        assert vizinho is not None
+        assert vizinho.user_id is None, f"o vínculo vazou para {funcionario!r}"
