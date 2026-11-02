@@ -344,7 +344,21 @@ def test_every_target_is_checked_not_only_the_first() -> None:
     ]
 
 
-@pytest.mark.parametrize("status", ["draft", "in_progress", "review", "archived", "Done"])
+@pytest.mark.parametrize(
+    "status",
+    [
+        "draft",
+        "in_progress",
+        "review",
+        "archived",
+        "Done",
+        "not done",
+        "undone",
+        "done?",
+        "`done`",
+        "**done**",
+    ],
+)
 def test_only_done_closes_a_dependency(status: str) -> None:
     rows = _row("1.1-bootstrap", status=status) + _row("1.2-ci", deps="`1.1-bootstrap`")
 
@@ -414,6 +428,21 @@ def test_an_issue_with_two_rows_cannot_close_a_dependency(order: str) -> None:
 
     assert list(verdict.violations) == [
         "4.3-scheduling-application → #47: a issue aparece em mais de uma linha da Tabela de Issues"
+    ]
+
+
+@pytest.mark.parametrize("status", ["not done", "undone", "done?", "`done`", "**done**"])
+def test_only_the_exact_done_closes_an_issue_dependency(status: str) -> None:
+    issues = f"| [#47](https://x/47) | C | shared | docs | {status} | — |\n"
+    rows = _row("4.3-scheduling-application", deps="`#47`")
+    statuses = csd.parse_issue_table(_roadmap(rows, issues=issues))
+
+    verdict = csd.check_targets(
+        ["4.3-scheduling-application"], _rows(rows), _history(_CLOSED), statuses
+    )
+
+    assert list(verdict.violations) == [
+        f"4.3-scheduling-application → #47: status `{status}` na Tabela de Issues (esperado `done`)"
     ]
 
 
