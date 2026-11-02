@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-11-01
 updated_at: 2026-10-21
 adr_id: "0.0.0009"
-decision: The dependency pre-condition of a Stage (every Stage it depends on is done in the roadmap and its reserved `stage N.M: complete` commit is merged into an integration branch; every issue it depends on is done in the issue table) is checked by scripts/check_stage_deps.py, which takes the stage_id and derives the number itself; make docs-check runs it over every Stage folder.
+decision: 'The dependency pre-condition of a Stage (every Stage it depends on is done in the roadmap and its reserved `stage N.M: complete` commit is merged into an integration branch; every issue it depends on is done in the issue table) is checked by scripts/check_stage_deps.py, which takes the stage_id and derives the number itself; make docs-check runs it over every Stage folder.'
 context_stage: 0.0-global
 bounded_context: transversal
 ---

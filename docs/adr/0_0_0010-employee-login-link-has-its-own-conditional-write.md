@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-11-01
 updated_at: 2026-11-02
 adr_id: "0.0.0010"
-decision: `EmployeeRepository` gains `link_login(tenant_id, unit_id, employee_id, user_id)` — the only writer of `employees.user_id` after the record exists — which locks the row, re-runs the domain guards of `Employee.link_login` on the stored record and writes only `user_id`; `update` ignores the entity's `user_id` and keeps the stored one; `CreateLoginForEmployeeUseCase` links through `link_login`
+decision: '`EmployeeRepository` gains `link_login(tenant_id, unit_id, employee_id, user_id)` — the only writer of `employees.user_id` after the record exists — which locks the row, re-runs the domain guards of `Employee.link_login` on the stored record and writes only `user_id`; `update` ignores the entity''s `user_id` and keeps the stored one; `CreateLoginForEmployeeUseCase` links through `link_login`'
 context_stage: 0.0-global
 bounded_context: transversal
 ---
