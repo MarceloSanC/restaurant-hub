@@ -258,8 +258,11 @@ def test_issue_58_env_is_refused(worktree: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(pytest.fail.Exception, match="porta 5432 de localhost"):
+    with pytest.raises(pytest.fail.Exception, match="porta 5432 de localhost") as refusal:
         resolve_test_database_url(compose_dir=worktree)
+
+    # da raiz, a dica do diretório corrente seria falsa
+    assert "raiz do checkout" not in str(refusal.value)
 
 
 def test_reverse_issue_58_is_refused(worktree: Path) -> None:
@@ -384,14 +387,21 @@ def test_every_env_the_script_writes_passes_the_guard(
 
 
 class _Ran:
-    """O `subprocess.run` trocado: guarda o comando e devolve o exit code pedido."""
+    """O `subprocess.run` trocado: guarda o comando e devolve o exit code pedido.
+
+    Sem `cwd` nem `env`: o comando roda no diretório corrente, com o ambiente do
+    `make` — os mesmos que a guarda acabou de conferir.
+    """
 
     def __init__(self, returncode: int = 0) -> None:
         self.commands: list[list[str]] = []
         self.returncode = returncode
 
-    def __call__(self, command: list[str], *, check: bool) -> subprocess.CompletedProcess[str]:
+    def __call__(
+        self, command: list[str], *, check: bool, **options: object
+    ) -> subprocess.CompletedProcess[str]:
         assert check is False
+        assert options == {}
         self.commands.append(command)
         return subprocess.CompletedProcess(command, self.returncode)
 
