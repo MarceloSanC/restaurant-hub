@@ -6,6 +6,7 @@ nenhuma falha deixa um restaurante sem dono —, o papel emitido é sempre `owne
 acontecem antes de qualquer escrita.
 """
 
+import re
 from collections.abc import Sequence
 from uuid import UUID
 
@@ -103,6 +104,20 @@ class _UsuariosQueNaoVeemOEmail(InMemoryUserRepository):
         return False
 
 
+class _HasherQueObservaAUnidade(FakePasswordHasher):
+    """Anota, a cada `hash`, se a unidade de trabalho já estava aberta."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.unidade: InMemoryUnitOfWork | None = None
+        self.aberturas_no_hash: list[int] = []
+
+    def hash(self, plain_password: str) -> PasswordHash:
+        assert self.unidade is not None
+        self.aberturas_no_hash.append(self.unidade.aberturas)
+        return super().hash(plain_password)
+
+
 class Cenario:
     def __init__(
         self,
@@ -113,9 +128,10 @@ class Cenario:
         self.registro = registro if registro is not None else _Registro()
         self.restaurants = _RestaurantesRegistrados(self.registro)
         self.users = users if users is not None else _UsuariosRegistrados(self.registro)
-        self.hasher = FakePasswordHasher()
+        self.hasher = _HasherQueObservaAUnidade()
         self.ids = FakeIdGenerator([_ID_DO_RESTAURANTE, _ID_DO_DONO])
         self.unidade = InMemoryUnitOfWork(self.restaurants, self.users)
+        self.hasher.unidade = self.unidade
         self.use_case = ProvisionRestaurantUseCase(
             restaurants=self.restaurants,
             users=self.users,
@@ -199,7 +215,7 @@ class TestCasosDeErro:
             PasswordHash("h"),
         )
 
-        with pytest.raises(EmailAlreadyRegisteredError):
+        with pytest.raises(EmailAlreadyRegisteredError, match=re.escape(repr(_EMAIL.value))):
             cenario.use_case.execute(_comando())
 
         assert cenario.restaurants.restaurants == {}
@@ -229,6 +245,16 @@ class TestUnidadeDeTrabalho:
 
         assert tuple(cenario.registro.escritas) == _ESCRITAS
         assert (cenario.unidade.aberturas, cenario.unidade.commits) == (1, 1)
+
+    def test_o_hash_acontece_antes_de_a_unidade_abrir(self) -> None:
+        """ADR 2.6.0001 §2 — trabalho de CPU fora da unidade: o KDF real leva
+        centenas de ms, e dentro do bloco seguraria a transação aberta."""
+        cenario = Cenario()
+
+        cenario.use_case.execute(_comando())
+
+        assert cenario.hasher.aberturas_no_hash == [0]
+        assert cenario.unidade.aberturas == 1
 
     @pytest.mark.parametrize("n", range(1, len(_ESCRITAS) + 1))
     def test_falha_na_escrita_n_nao_deixa_restaurante_nem_dono(self, n: int) -> None:

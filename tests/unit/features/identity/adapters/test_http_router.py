@@ -260,6 +260,10 @@ async def test_email_do_dono_ocupado_devolve_409_sem_criar_restaurante(
     )
 
     assert resposta.status_code == HTTPStatus.CONFLICT
+    assert resposta.json() == {
+        "detail": "e-mail já registrado: 'admin@x.com'",
+        "type": "identity_error",
+    }
     assert ambiente.restaurants.restaurants == {}
 
 
