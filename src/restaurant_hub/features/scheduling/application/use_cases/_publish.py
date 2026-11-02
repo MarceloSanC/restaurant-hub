@@ -82,11 +82,11 @@ from restaurant_hub.features.scheduling.domain.value_objects.violation import Vi
 
 
 def _ids_by_type(schedule: Schedule) -> dict[str, set[str]]:
-    demandas = [d for f in schedule.bands for d in f.demands]
+    demands = [d for f in schedule.bands for d in f.demands]
     return {
         "ShiftBandId": {f.id for f in schedule.bands},
-        "ShiftDemandId": {d.id for d in demandas},
-        "AssignmentId": {a.id for d in demandas for a in d.assignments},
+        "ShiftDemandId": {d.id for d in demands},
+        "AssignmentId": {a.id for d in demands for a in d.assignments},
     }
 
 
@@ -104,18 +104,18 @@ def check_creation_ids(
     schedules: Iterable[Schedule], operations: tuple[ScheduleOperation, ...]
 ) -> None:
     """Recusa id de criação já usado (mesmo tipo) nas escalas dadas (§5.21)."""
-    usados: dict[str, set[str]] = {
+    used: dict[str, set[str]] = {
         "ShiftBandId": set(),
         "ShiftDemandId": set(),
         "AssignmentId": set(),
     }
-    for escala in schedules:
-        for tipo, ids in _ids_by_type(escala).items():
-            usados[tipo] |= ids
-    for operacao in operations:
-        criado = _created_id(operacao)
-        if criado is not None and criado[1] in usados[criado[0]]:
-            raise IdentifierInUseError(*criado)
+    for sched in schedules:
+        for id_type, ids in _ids_by_type(sched).items():
+            used[id_type] |= ids
+    for operation in operations:
+        created = _created_id(operation)
+        if created is not None and created[1] in used[created[0]]:
+            raise IdentifierInUseError(*created)
 
 
 # --- 2. aplicação ----------------------------------------------------------------------
@@ -133,27 +133,27 @@ def _guard_invisible(assignments: tuple[Assignment, ...], view: StaffView) -> No
     """D3 — ao menos uma alocação e nenhuma de registro ativo ⇒ recusa com os ids."""
     if not assignments:
         return
-    ativos = [
+    active = [
         a for a in assignments if (m := view.members.get(a.employee_id)) is not None and m.active
     ]
-    if not ativos:
+    if not active:
         raise InactiveAllocationsInUseError(tuple(sorted(a.id for a in assignments)))
 
 
 def _assign(schedule: Schedule, operation: AssignEmployee, view: StaffView) -> Schedule:
-    membro = view.members.get(operation.employee_id)
-    if membro is None:
+    member = view.members.get(operation.employee_id)
+    if member is None:
         raise StaffMemberNotFoundError(operation.employee_id)
-    if not membro.active:
+    if not member.active:
         raise InactiveStaffMemberError(operation.employee_id)
-    _, demanda = schedule.locate_demand(operation.demand_id)
+    _, demand = schedule.locate_demand(operation.demand_id)
     return schedule.assign(
         operation.assignment_id,
         operation.demand_id,
         operation.employee_id,
         counts_toward_workload=operation.counts_toward_workload,
         # Marca derivada no ato de alocar, independente da config (§5.8, D-FEXC).
-        function_exception=demanda.job_function_id not in membro.job_function_ids,
+        function_exception=demand.job_function_id not in member.job_function_ids,
     )
 
 
@@ -170,8 +170,8 @@ def _apply_one(  # noqa: PLR0911 — um ramo por operação do lote
     if isinstance(operation, RedeclareBandBreak):
         return schedule.redeclare_band_break(operation.band_id, operation.break_minutes)
     if isinstance(operation, DisableBand):
-        faixa = schedule.band(operation.band_id)
-        _guard_invisible(tuple(a for d in faixa.demands for a in d.assignments), view)
+        band = schedule.band(operation.band_id)
+        _guard_invisible(tuple(a for d in band.demands for a in d.assignments), view)
         return schedule.disable_band(operation.band_id)
     if isinstance(operation, DeclareDemand):
         if operation.job_function_id not in view.function_names:
@@ -182,8 +182,8 @@ def _apply_one(  # noqa: PLR0911 — um ramo por operação do lote
     if isinstance(operation, ChangeDemandQuantity):
         return schedule.change_demand_quantity(operation.demand_id, operation.quantity)
     if isinstance(operation, WithdrawDemand):
-        _, demanda = schedule.locate_demand(operation.demand_id)
-        _guard_invisible(demanda.assignments, view)
+        _, demand = schedule.locate_demand(operation.demand_id)
+        _guard_invisible(demand.assignments, view)
         return schedule.withdraw_demand(operation.demand_id)
     if isinstance(operation, AssignEmployee):
         return _assign(schedule, operation, view)
@@ -198,14 +198,14 @@ def apply_operations(
     schedule: Schedule, operations: tuple[ScheduleOperation, ...], view: StaffView
 ) -> AppliedBatch:
     """Aplica o lote em ordem; a 1ª recusa sobe e nada mais acontece (§5.5)."""
-    atual = schedule
-    efetivas: list[ScheduleOperation] = []
-    for operacao in operations:
-        proxima = _apply_one(atual, operacao, view)
-        if proxima is not atual:
-            efetivas.append(operacao)
-        atual = proxima
-    return AppliedBatch(schedule=atual, effective=tuple(efetivas))
+    current = schedule
+    effective: list[ScheduleOperation] = []
+    for operation in operations:
+        updated = _apply_one(current, operation, view)
+        if updated is not current:
+            effective.append(operation)
+        current = updated
+    return AppliedBatch(schedule=current, effective=tuple(effective))
 
 
 # --- 3. introduzidas -------------------------------------------------------------------
@@ -228,23 +228,23 @@ def introduced(
     before: tuple[Violation, ...], after: tuple[Violation, ...]
 ) -> tuple[Violation, ...]:
     """As violações do depois que a mudança introduziu (§5.6), na ordem do avaliador."""
-    por_chave = {v.key: v for v in before}
-    sobre_antes = {v.demand_id: v for v in before if v.policy is PolicyKind.OVER_COVERAGE}
-    novas: list[Violation] = []
-    for violacao in after:
-        if violacao.policy is PolicyKind.OVER_COVERAGE:
-            antes = sobre_antes.get(violacao.demand_id)
-            nova = (
-                antes is None
-                or not violacao.assignment_ids <= antes.assignment_ids
-                or _deviation(violacao) > _deviation(antes)
+    by_key = {v.key: v for v in before}
+    over_before = {v.demand_id: v for v in before if v.policy is PolicyKind.OVER_COVERAGE}
+    introduced_list: list[Violation] = []
+    for violation in after:
+        if violation.policy is PolicyKind.OVER_COVERAGE:
+            prior = over_before.get(violation.demand_id)
+            is_new = (
+                prior is None
+                or not violation.assignment_ids <= prior.assignment_ids
+                or _deviation(violation) > _deviation(prior)
             )
         else:
-            anterior = por_chave.get(violacao.key)
-            nova = anterior is None or _worse(_deviation(violacao), _deviation(anterior))
-        if nova:
-            novas.append(violacao)
-    return tuple(novas)
+            previous = by_key.get(violation.key)
+            is_new = previous is None or _worse(_deviation(violation), _deviation(previous))
+        if is_new:
+            introduced_list.append(violation)
+    return tuple(introduced_list)
 
 
 # --- 4. aceite -------------------------------------------------------------------------
@@ -258,9 +258,9 @@ def split_acknowledged(
     warnings: tuple[Violation, ...], acknowledgements: tuple[ViolationAcknowledgement, ...]
 ) -> tuple[tuple[Violation, ...], tuple[Violation, ...]]:
     """`(aceitas, pendentes)` entre as `warn` introduzidas (§5.7)."""
-    aceitas = tuple(v for v in warnings if any(_covers(a, v) for a in acknowledgements))
-    pendentes = tuple(v for v in warnings if v not in aceitas)
-    return aceitas, pendentes
+    accepted = tuple(v for v in warnings if any(_covers(a, v) for a in acknowledgements))
+    pending = tuple(v for v in warnings if v not in accepted)
+    return accepted, pending
 
 
 # --- carga para edição -----------------------------------------------------------------
@@ -272,12 +272,12 @@ def load_for_edit(
     expected_version: int,
 ) -> Schedule:
     """A escala no endereço de três partes, na versão que o editor viu (§5.2, §5.4)."""
-    escala = schedules.find_by_id(*address)
-    if escala is None:
+    sched = schedules.find_by_id(*address)
+    if sched is None:
         raise ScheduleNotFoundError(address[2])
-    if escala.version != expected_version:
-        raise ScheduleVersionConflictError(expected_version, escala.version)
-    return escala
+    if sched.version != expected_version:
+        raise ScheduleVersionConflictError(expected_version, sched.version)
+    return sched
 
 
 # --- o lote inteiro (leitura dos ports + avaliação antes x depois) -------------------
@@ -303,36 +303,36 @@ def run_batch(
 ) -> BatchOutcome:
     """Lê o insumo, aplica o lote e avalia antes x depois com o mesmo insumo."""
     settings = settings_of(config, loaded.tenant_id)
-    anterior, seguinte = neighbours_of(schedules, loaded)
-    vizinhas = tuple(e for e in (anterior, seguinte) if e is not None)
-    check_creation_ids((loaded, *vizinhas), operations)
-    alvos = frozenset(
+    previous, following = neighbours_of(schedules, loaded)
+    neighbours = tuple(e for e in (previous, following) if e is not None)
+    check_creation_ids((loaded, *neighbours), operations)
+    targets = frozenset(
         EmployeeId(op.employee_id) for op in operations if isinstance(op, AssignEmployee)
     )
     view = load_staff(
         staff,
         loaded.tenant_id,
         loaded.unit_id,
-        (loaded, *vizinhas),
-        targets=alvos,
+        (loaded, *neighbours),
+        targets=targets,
         with_roster=True,
     )
-    aplicado = apply_operations(loaded, operations, view)
-    fatos = facts_of(view)
-    antes = evaluate(
-        EvaluationContext(schedule=loaded, facts=fatos, previous=anterior, next=seguinte),
+    applied = apply_operations(loaded, operations, view)
+    facts = facts_of(view)
+    prior = evaluate(
+        EvaluationContext(schedule=loaded, facts=facts, previous=previous, next=following),
         settings.validation,
     )
-    depois = evaluate(
+    evaluated_after = evaluate(
         EvaluationContext(
-            schedule=aplicado.schedule, facts=fatos, previous=anterior, next=seguinte
+            schedule=applied.schedule, facts=facts, previous=previous, next=following
         ),
         settings.validation,
     )
     return BatchOutcome(
-        after=aplicado.schedule,
-        effective=aplicado.effective,
+        after=applied.schedule,
+        effective=applied.effective,
         view=view,
-        after_violations=depois.violations,
-        introduced=introduced(antes.violations, depois.violations),
+        after_violations=evaluated_after.violations,
+        introduced=introduced(prior.violations, evaluated_after.violations),
     )

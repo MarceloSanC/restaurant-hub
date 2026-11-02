@@ -146,8 +146,8 @@ class MyScheduleResult:
 
 
 def _visible(assignment: Assignment, staff: StaffIndex) -> bool:
-    membro = staff.get(assignment.employee_id)
-    return membro is not None and membro.active
+    member = staff.get(assignment.employee_id)
+    return member is not None and member.active
 
 
 def to_schedule_summary_result(schedule: Schedule) -> ScheduleSummaryResult:
@@ -179,11 +179,11 @@ def _to_assignment_result(
 def _to_demand_result(
     schedule: Schedule, demand: ShiftDemand, staff: StaffIndex, names: FunctionNames
 ) -> DemandResult:
-    alocacoes = sorted(
+    allocations = sorted(
         (
-            _to_assignment_result(schedule, alocacao, staff[alocacao.employee_id])
-            for alocacao in demand.assignments
-            if _visible(alocacao, staff)
+            _to_assignment_result(schedule, allocation, staff[allocation.employee_id])
+            for allocation in demand.assignments
+            if _visible(allocation, staff)
         ),
         key=lambda a: (a.display_name, a.assignment_id),
     )
@@ -192,20 +192,20 @@ def _to_demand_result(
         job_function_id=demand.job_function_id,
         job_function_name=names.get(demand.job_function_id),
         quantity=demand.quantity.value,
-        assignments=tuple(alocacoes),
+        assignments=tuple(allocations),
     )
 
 
 def _to_band_result(
     schedule: Schedule, band: ShiftBand, staff: StaffIndex, names: FunctionNames
 ) -> BandResult:
-    demandas = sorted(band.demands, key=lambda d: (d.job_function_id, d.id))
+    demands = sorted(band.demands, key=lambda d: (d.job_function_id, d.id))
     return BandResult(
         band_id=band.id,
         schedule_id=schedule.id,
         operational_day=schedule.operational_day_of(band),
         time_range=band.time_range,
-        demands=tuple(_to_demand_result(schedule, d, staff, names) for d in demandas),
+        demands=tuple(_to_demand_result(schedule, d, staff, names) for d in demands),
     )
 
 
@@ -216,15 +216,15 @@ def _bands_of(
     first_day: date | None = None,
     last_day: date | None = None,
 ) -> tuple[BandResult, ...]:
-    faixas = [
-        _to_band_result(escala, faixa, staff, names)
-        for escala in schedules
-        for faixa in escala.bands
+    bands = [
+        _to_band_result(sched, band, staff, names)
+        for sched in schedules
+        for band in sched.bands
         if first_day is None
         or last_day is None
-        or first_day <= escala.operational_day_of(faixa) <= last_day
+        or first_day <= sched.operational_day_of(band) <= last_day
     ]
-    return tuple(sorted(faixas, key=lambda f: (f.time_range.start, f.band_id)))
+    return tuple(sorted(bands, key=lambda f: (f.time_range.start, f.band_id)))
 
 
 def to_schedule_result(
@@ -299,17 +299,17 @@ def to_my_schedule_result(  # noqa: PLR0913 — recorte (2) + escalas + registro
     names: FunctionNames,
 ) -> MyScheduleResult:
     """Os turnos dos registros `mine` **ativos** cujo dia operacional cai no recorte."""
-    turnos = [
-        _to_my_shift_result(escala, faixa, demanda, alocacao, names)
-        for escala in schedules
-        for faixa in escala.bands
-        if first_day <= escala.operational_day_of(faixa) <= last_day
-        for demanda in faixa.demands
-        for alocacao in demanda.assignments
-        if alocacao.employee_id in mine and _visible(alocacao, staff)
+    shifts = [
+        _to_my_shift_result(sched, band, demand, allocation, names)
+        for sched in schedules
+        for band in sched.bands
+        if first_day <= sched.operational_day_of(band) <= last_day
+        for demand in band.demands
+        for allocation in demand.assignments
+        if allocation.employee_id in mine and _visible(allocation, staff)
     ]
     return MyScheduleResult(
         first_day=first_day,
         last_day=last_day,
-        shifts=tuple(sorted(turnos, key=lambda t: (t.start, t.assignment_id))),
+        shifts=tuple(sorted(shifts, key=lambda t: (t.start, t.assignment_id))),
     )

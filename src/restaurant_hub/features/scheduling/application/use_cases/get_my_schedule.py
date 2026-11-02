@@ -49,14 +49,14 @@ class GetMyScheduleUseCase:
             tenant_id=query.tenant_id,
             unit_id=query.unit_id,
         )
-        primeiro, ultimo = require_range(query.first_day, query.last_day)
-        meus = {
+        first, last = require_range(query.first_day, query.last_day)
+        mine = {
             m.employee_id: m
             for m in self._staff.list_members_of_user(query.tenant_id, query.unit_id, scope.user_id)
             if m.active
         }
-        if not meus:
-            return to_my_schedule_result(primeiro, ultimo, (), frozenset(), {}, {})
-        escalas = self._schedules.list_in_range(query.tenant_id, query.unit_id, primeiro, ultimo)
-        nomes = {f.job_function_id: f.name for f in self._staff.list_job_functions(query.tenant_id)}
-        return to_my_schedule_result(primeiro, ultimo, escalas, frozenset(meus), meus, nomes)
+        if not mine:
+            return to_my_schedule_result(first, last, (), frozenset(), {}, {})
+        found = self._schedules.list_in_range(query.tenant_id, query.unit_id, first, last)
+        names = {f.job_function_id: f.name for f in self._staff.list_job_functions(query.tenant_id)}
+        return to_my_schedule_result(first, last, found, frozenset(mine), mine, names)

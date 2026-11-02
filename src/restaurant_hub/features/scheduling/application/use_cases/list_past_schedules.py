@@ -41,7 +41,7 @@ class ListPastSchedulesUseCase:
             tenant_id=query.tenant_id,
             unit_id=query.unit_id,
         )
-        antes = require_day(query.before, "before")
-        limite = require_limit(query.limit)
-        escalas = self._schedules.list_ending_before(query.tenant_id, query.unit_id, antes, limite)
-        return tuple(to_schedule_summary_result(e) for e in escalas)
+        prior = require_day(query.before, "before")
+        limit = require_limit(query.limit)
+        found = self._schedules.list_ending_before(query.tenant_id, query.unit_id, prior, limit)
+        return tuple(to_schedule_summary_result(e) for e in found)

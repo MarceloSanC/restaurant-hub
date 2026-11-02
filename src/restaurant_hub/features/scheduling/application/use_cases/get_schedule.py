@@ -57,10 +57,13 @@ class GetScheduleUseCase:
             tenant_id=query.tenant_id,
             unit_id=query.unit_id,
         )
-        escala = self._schedules.find_by_id(query.tenant_id, query.unit_id, query.schedule_id)
-        if escala is None:
+        sched = self._schedules.find_by_id(query.tenant_id, query.unit_id, query.schedule_id)
+        if sched is None:
             raise ScheduleNotFoundError(query.schedule_id)
-        atual = run_batch(self._schedules, self._config, self._staff, escala, ())
+        current = run_batch(self._schedules, self._config, self._staff, sched, ())
         return to_schedule_result(
-            atual.after, atual.view.members, atual.view.function_names, atual.after_violations
+            current.after,
+            current.view.members,
+            current.view.function_names,
+            current.after_violations,
         )

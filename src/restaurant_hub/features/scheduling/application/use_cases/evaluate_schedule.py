@@ -63,17 +63,17 @@ class EvaluateScheduleUseCase:
             tenant_id=query.tenant_id,
             unit_id=query.unit_id,
         )
-        carregada = load_for_edit(
+        loaded = load_for_edit(
             self._schedules,
             (query.tenant_id, query.unit_id, query.schedule_id),
             query.expected_version,
         )
-        lote = run_batch(self._schedules, self._config, self._staff, carregada, query.operations)
-        escala = to_schedule_result(
-            lote.after, lote.view.members, lote.view.function_names, lote.after_violations
+        batch = run_batch(self._schedules, self._config, self._staff, loaded, query.operations)
+        sched = to_schedule_result(
+            batch.after, batch.view.members, batch.view.function_names, batch.after_violations
         )
         return to_evaluation_result(
-            escala,
-            blocking=tuple(v for v in lote.introduced if v.mode is EnforcementMode.BLOCK),
-            warnings=tuple(v for v in lote.introduced if v.mode is EnforcementMode.WARN),
+            sched,
+            blocking=tuple(v for v in batch.introduced if v.mode is EnforcementMode.BLOCK),
+            warnings=tuple(v for v in batch.introduced if v.mode is EnforcementMode.WARN),
         )

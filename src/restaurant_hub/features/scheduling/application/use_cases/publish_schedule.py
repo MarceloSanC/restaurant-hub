@@ -75,31 +75,31 @@ class PublishScheduleUseCase:
             tenant_id=command.tenant_id,
             unit_id=command.unit_id,
         )
-        carregada = load_for_edit(
+        loaded = load_for_edit(
             self._schedules,
             (command.tenant_id, command.unit_id, command.schedule_id),
             command.expected_version,
         )
-        lote = run_batch(self._schedules, self._config, self._staff, carregada, command.operations)
-        bloqueantes = tuple(v for v in lote.introduced if v.mode is EnforcementMode.BLOCK)
-        if bloqueantes:
-            raise BlockingViolationsError(bloqueantes)
-        avisos = tuple(v for v in lote.introduced if v.mode is EnforcementMode.WARN)
-        aceitas, pendentes = split_acknowledged(avisos, command.acknowledgements)
-        if pendentes:
-            raise UnacknowledgedViolationsError(pendentes)
-        if lote.effective:
+        batch = run_batch(self._schedules, self._config, self._staff, loaded, command.operations)
+        blocking = tuple(v for v in batch.introduced if v.mode is EnforcementMode.BLOCK)
+        if blocking:
+            raise BlockingViolationsError(blocking)
+        warnings = tuple(v for v in batch.introduced if v.mode is EnforcementMode.WARN)
+        accepted, pending = split_acknowledged(warnings, command.acknowledgements)
+        if pending:
+            raise UnacknowledgedViolationsError(pending)
+        if batch.effective:
             self._schedules.save(
-                lote.after,
-                carregada.version,
+                batch.after,
+                loaded.version,
                 ScheduleChange(
                     author_user_id=scope.user_id,
                     occurred_at=self._clock.now(),
-                    previous_version=carregada.version,
-                    operations=lote.effective,
-                    acknowledged=aceitas,
+                    previous_version=loaded.version,
+                    operations=batch.effective,
+                    acknowledged=accepted,
                 ),
             )
         return to_schedule_result(
-            lote.after, lote.view.members, lote.view.function_names, lote.after_violations
+            batch.after, batch.view.members, batch.view.function_names, batch.after_violations
         )
