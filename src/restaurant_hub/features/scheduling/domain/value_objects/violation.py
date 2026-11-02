@@ -29,7 +29,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
     PolicyKind,
 )
 
-_POLITICAS_COM_ALOCACOES_NA_CHAVE = frozenset(
+_POLICIES_WITH_ASSIGNMENTS_IN_KEY = frozenset(
     {
         PolicyKind.OVERLAP,
         PolicyKind.UNAVAILABILITY,
@@ -77,9 +77,9 @@ class Violation:
     @property
     def key(self) -> ViolationKey:
         """Identidade para o aceite — sem modo e sem medida (ADR 4.2.0002 §5)."""
-        alocacoes = (
+        key_assignment_ids = (
             self.assignment_ids
-            if self.policy in _POLITICAS_COM_ALOCACOES_NA_CHAVE
+            if self.policy in _POLICIES_WITH_ASSIGNMENTS_IN_KEY
             else frozenset[AssignmentId]()
         )
         return ViolationKey(
@@ -87,5 +87,5 @@ class Violation:
             employee_id=self.employee_id,
             demand_id=self.demand_id,
             operational_days=self.operational_days,
-            assignment_ids=alocacoes,
+            assignment_ids=key_assignment_ids,
         )
