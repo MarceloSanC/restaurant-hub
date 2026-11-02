@@ -1,5 +1,7 @@
 """Testes da hierarquia base de exceções (shared/domain/exceptions/base.py)."""
 
+import inspect
+
 import pytest
 
 from restaurant_hub.shared.domain.exceptions import base
@@ -35,3 +37,13 @@ def test_domain_error_e_exception() -> None:
 def test_mensagem_preservada_ao_levantar() -> None:
     with pytest.raises(DomainError, match="regra 42 violada"):
         raise DomainError("regra 42 violada")
+
+
+def test_a_raiz_de_dominio_nao_fala_de_status() -> None:
+    """Concept 3.9 CA5: o módulo da raiz não define as classes pelo que viram na borda.
+
+    A regra 11 do `check_layout.py` deixa "status" fora do vocabulário porque o domínio
+    a usa legitimamente (status de escala); aqui, no módulo-raiz, a palavra não tem uso
+    — era a forma como a docstring definia `NotFoundError` antes da Stage 3.9.
+    """
+    assert "status" not in inspect.getsource(base).lower()
