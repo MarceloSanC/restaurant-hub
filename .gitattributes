@@ -1,0 +1,37 @@
+# Política de fim de linha do repositório (issue #8).
+#
+# Texto vai ao índice em LF e sai em LF na working tree, em qualquer
+# plataforma: o atributo `eol` vence o `core.autocrlf` da máquina (o Git for
+# Windows grava `true` na config de sistema). Sem isso, o checkout no Windows
+# sai em CRLF, todo `git add` de arquivo escrito em LF avisa "LF will be
+# replaced by CRLF", e um segundo `git` sem autocrlf (o do MSYS2, ADR 1.1.0001)
+# lê a mesma working tree como inteira modificada.
+#
+# `text=auto` deixa o Git separar texto de binário pelo conteúdo. A guarda
+# `tests/integration/test_eol_policy.py` reprova texto em CRLF no índice e
+# binário sem regra explícita, e espelha as listas abaixo: mudar uma regra sem
+# mudar o espelho reprova.
+* text=auto eol=lf
+
+# CRLF só onde o consumidor exige: o cmd.exe pode errar o alvo de GOTO/CALL num
+# arquivo de lote só com LF. É a mesma regra que o próprio git adota para `.bat`.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binários: bytes intocados, sem diff nem merge textual (`binary` = `-diff
+# -merge -text`). O `text=auto` reconhece a maioria pelo conteúdo, mas um
+# binário quase todo ASCII (um PDF, por exemplo) passaria por texto e perderia
+# os CR no `git add`. Formato binário novo entra aqui antes do primeiro arquivo.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.gz binary
