@@ -286,6 +286,13 @@ forbidden_modules =
 # `tests/unit/features/staff/test_bc_independence.py` assere a lista EXATA, para
 # que um segundo par entre por decisão, nunca por deriva.
 #
+# Issue #47 (ADR 0.0.0016): o par passa a cobrir DOIS módulos, sem mudar de
+# forma — `local_identity_gateway.py` (o `IdentityGateway`, 3.5) e
+# `local_access_guard.py` (o `AccessGuard`, que até a #47 era uma classe do
+# composition_root). Os dois importam o mesmo e único módulo de identity, a
+# fachada; nenhuma supressão nova. O teste cobra que os DOIS aparecem como
+# importadores, para que o par não fique servindo só a um deles sem ninguém notar.
+#
 # Stage 4.1: entra o 3º BC (scheduling). `type = independence` é par a par entre
 # TODOS os módulos listados, logo os três pares passam a ser cobrados de uma vez
 # — e um BC **fora** da lista não violaria nada, que é por que
