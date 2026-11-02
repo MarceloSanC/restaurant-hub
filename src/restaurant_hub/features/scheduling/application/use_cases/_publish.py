@@ -40,6 +40,8 @@ from restaurant_hub.features.scheduling.application.errors import (
     InactiveAllocationsInUseError,
     InactiveStaffMemberError,
     JobFunctionNotFoundError,
+    ScheduleNotFoundError,
+    ScheduleVersionConflictError,
     StaffMemberNotFoundError,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
@@ -64,7 +66,12 @@ from restaurant_hub.features.scheduling.domain.services.validation.context impor
     EvaluationContext,
 )
 from restaurant_hub.features.scheduling.domain.services.validation.evaluator import evaluate
-from restaurant_hub.features.scheduling.domain.value_objects.identifiers import EmployeeId
+from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
+    EmployeeId,
+    ScheduleId,
+    TenantId,
+    UnitId,
+)
 from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
     PolicyKind,
@@ -254,6 +261,23 @@ def split_acknowledged(
     aceitas = tuple(v for v in warnings if any(_covers(a, v) for a in acknowledgements))
     pendentes = tuple(v for v in warnings if v not in aceitas)
     return aceitas, pendentes
+
+
+# --- carga para edição -----------------------------------------------------------------
+
+
+def load_for_edit(
+    schedules: ScheduleRepository,
+    address: tuple[TenantId, UnitId, ScheduleId],
+    expected_version: int,
+) -> Schedule:
+    """A escala no endereço de três partes, na versão que o editor viu (§5.2, §5.4)."""
+    escala = schedules.find_by_id(*address)
+    if escala is None:
+        raise ScheduleNotFoundError(address[2])
+    if escala.version != expected_version:
+        raise ScheduleVersionConflictError(expected_version, escala.version)
+    return escala
 
 
 # --- o lote inteiro (leitura dos ports + avaliação antes x depois) -------------------
