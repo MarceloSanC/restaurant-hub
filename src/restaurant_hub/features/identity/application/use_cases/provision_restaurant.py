@@ -2,14 +2,14 @@
 
 **Restaurante e dono são uma unidade de trabalho** (ADR 0.0.0012, sobre o port
 do ADR 2.6.0001). Antes, o provisionamento eram duas chamadas — criar o
-restaurante, depois criar o dono —, e uma falha entre elas deixava um
-restaurante que ninguém opera: o `platform_admin` só detém `manage_platform` e
-não age dentro do tenant. Aqui, se o `users.add` falha (inclusive pelo índice
-único de e-mail, numa corrida com outro cadastro), o `restaurants.add` é
-desfeito.
+restaurante (`CreateRestaurantUseCase`, removido na issue #67), depois criar o
+dono —, e uma falha entre elas deixava um restaurante que ninguém opera: o
+`platform_admin` só detém `manage_platform` e não age dentro do tenant. Aqui,
+se o `users.add` falha (inclusive pelo índice único de e-mail, numa corrida com
+outro cadastro), o `restaurants.add` é desfeito.
 
-**As duas escritas são chamadas diretas aos repositórios**, e não a
-`CreateRestaurantUseCase`/`CreateUserUseCase`: a regra 10 do `check_layout`
+**As duas escritas são chamadas diretas aos repositórios**, e não ao `execute`
+de outros use cases (`CreateUserUseCase`): a regra 10 do `check_layout`
 enxerga escrita por atributo de repositório, e escrita alcançada pelo `execute`
 de outro use case é ponto cego declarado dela (ADR 2.6.0002 §5).
 

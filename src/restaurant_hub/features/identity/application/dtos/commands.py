@@ -24,13 +24,6 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 
 @dataclass(frozen=True)
-class CreateRestaurantCommand:
-    """Criação de um restaurante — que é, ele próprio, o tenant."""
-
-    name: str
-
-
-@dataclass(frozen=True)
 class ProvisionRestaurantCommand:
     """Provisionamento de um tenant: o restaurante **e** o seu primeiro `owner`.
 

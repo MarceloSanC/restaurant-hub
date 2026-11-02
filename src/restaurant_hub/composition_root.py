@@ -84,9 +84,6 @@ from restaurant_hub.features.identity.application.use_cases.authenticate_user im
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
-from restaurant_hub.features.identity.application.use_cases.create_restaurant import (
-    CreateRestaurantUseCase,
-)
 from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
 )
@@ -392,7 +389,6 @@ class ApplicationDependencies:
     identity_authenticate_user: AuthenticateUserUseCase
     identity_refresh_session: RefreshSessionUseCase
     identity_revoke_session: RevokeSessionUseCase
-    identity_create_restaurant: CreateRestaurantUseCase
     identity_provision_restaurant: ProvisionRestaurantUseCase
     identity_create_unit: CreateUnitUseCase
     identity_create_user: CreateUserUseCase
@@ -623,9 +619,6 @@ def wire_dependencies(
         ),
         identity_revoke_session=RevokeSessionUseCase(
             sessions=sessions, token_issuer=token_issuer, clock=clock
-        ),
-        identity_create_restaurant=CreateRestaurantUseCase(
-            restaurants=restaurants, id_generator=id_generator
         ),
         identity_provision_restaurant=ProvisionRestaurantUseCase(
             restaurants=restaurants,

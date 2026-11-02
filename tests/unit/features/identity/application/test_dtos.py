@@ -27,7 +27,6 @@ from restaurant_hub.features.identity.application.dtos import session as session
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthenticateUserCommand,
     AuthorizeActionCommand,
-    CreateRestaurantCommand,
     CreateUnitCommand,
     CreateUserCommand,
     ProvisionAccountCommand,
@@ -44,7 +43,6 @@ from restaurant_hub.features.identity.application.dtos.results import (
     AuthorizedActor,
     ProvisionedAccountResult,
     ProvisionedRestaurantResult,
-    RestaurantResult,
     UnitResult,
     UserResult,
 )
@@ -60,7 +58,6 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 pytestmark = pytest.mark.unit
 
 _RESULT_CLASSES = (
-    RestaurantResult,
     UnitResult,
     UserResult,
     AuthenticationResult,
@@ -90,9 +87,9 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 #
 # 25 até a 3.5; a Stage 3.8 acrescenta `GetAccountRoleCommand` e `AccountRoleResult`.
 #
-# 27 até a 3.8; a issue #67 acrescenta `ProvisionRestaurantCommand` e
-# `ProvisionedRestaurantResult`.
-_TOTAL_DE_DTOS = 29
+# 27 até a 3.8; a issue #67 troca `CreateRestaurantCommand` e `RestaurantResult`
+# por `ProvisionRestaurantCommand` e `ProvisionedRestaurantResult`.
+_TOTAL_DE_DTOS = 27
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -118,7 +115,6 @@ def test_authorize_action_command_tem_alvo_opcional_no_tipo() -> None:
 
 def test_commands_carregam_os_campos_declarados() -> None:
     """Construção de cada command com todos os campos preenchidos."""
-    assert CreateRestaurantCommand(name="Cantina").name == "Cantina"
 
     unit_command = CreateUnitCommand(restaurant_id=RestaurantId("rest-1"), name="Centro")
     assert unit_command.restaurant_id == "rest-1"
@@ -173,7 +169,6 @@ def test_results_carregam_os_campos_declarados() -> None:
     """Construção de cada result com todos os campos preenchidos."""
     now = datetime(2026, 7, 18, 12, 0, tzinfo=UTC)
 
-    assert RestaurantResult(id=RestaurantId("rest-1"), name="Cantina").name == "Cantina"
     assert (
         UnitResult(
             id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro"
@@ -236,11 +231,11 @@ def test_authorized_actor_separa_tenant_do_ator_do_tenant_alvo() -> None:
 
 def test_dtos_sao_imutaveis() -> None:
     """DTO mutável permitiria alterar a resposta depois da decisão do use case."""
-    command = CreateRestaurantCommand(name="Cantina")
+    command = CreateUnitCommand(restaurant_id=RestaurantId("rest-1"), name="Centro")
     with pytest.raises(FrozenInstanceError):
         command.name = "Outra"  # type: ignore[misc]
 
-    result = RestaurantResult(id=RestaurantId("rest-1"), name="Cantina")
+    result = UnitResult(id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro")
     with pytest.raises(FrozenInstanceError):
         result.name = "Outra"  # type: ignore[misc]
 
