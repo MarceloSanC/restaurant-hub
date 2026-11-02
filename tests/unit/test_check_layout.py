@@ -881,6 +881,8 @@ def test_regra10_o_classificador_bate_com_os_ports_reais() -> None:
         "EmployeeRepository.add",
         "EmployeeRepository.update",
         "EmployeeRepository.delete",
+        "ScheduleRepository.add",
+        "ScheduleRepository.save",
     }
     assert check_layout.is_write("IdentityGateway", "provision_employee_login", portas)
     assert check_layout.is_write("IdentityGateway", "revoke_login_sessions", portas)

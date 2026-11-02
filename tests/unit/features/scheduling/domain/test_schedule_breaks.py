@@ -209,6 +209,10 @@ _NO_OPS: dict[str, Callable[[Schedule], Schedule]] = {
         ShiftBandId("f1"), _as(_SEXTA, 16), _as(_SEXTA, 16) + timedelta(hours=8)
     ),
     "redeclare_band_break": lambda e: e.redeclare_band_break(ShiftBandId("f1"), 0),
+    # Stage 4.3 (D2): a quinta idempotente — o próprio N.
+    "change_demand_quantity": lambda e: e.change_demand_quantity(
+        ShiftDemandId("d-coz"), DemandQuantity(1)
+    ),
     "declare_workload_counting": lambda e: e.declare_workload_counting(_COZINHEIRO, True),
     "declare_allocation_break_herdando": lambda e: e.declare_allocation_break(_ATENDENTE, None),
     "declare_allocation_break_declarado": lambda e: e.declare_allocation_break(
@@ -233,10 +237,10 @@ def test_no_op_de_reschedule_band_nao_vira_duplicidade_com_outras_faixas() -> No
     assert escala.reschedule_band(ShiftBandId("f2"), _as(_SEXTA, 18), _as(_SEXTA, 23)) is escala
 
 
-def test_as_quatro_idempotentes_sao_mutacoes_da_lei_da_versao() -> None:
+def test_as_cinco_idempotentes_sao_mutacoes_da_lei_da_versao() -> None:
     idempotentes = {nome.removesuffix("_herdando").removesuffix("_declarado") for nome in _NO_OPS}
     assert idempotentes <= set(_MUTACOES)
-    assert len(idempotentes) == 4  # noqa: PLR2004
+    assert len(idempotentes) == 5  # noqa: PLR2004
     assert len(_MUTACOES) == _TOTAL_DE_MUTACOES
 
 

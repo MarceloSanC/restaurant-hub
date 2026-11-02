@@ -127,7 +127,7 @@ graph LR
 | `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
-| `4.3-scheduling-application` | Use cases da escala | application | draft | `4.2-validation-policies` |
+| `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
 | `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
 | `4.5-scheduling-http` | API do editor e consulta de escala | adapters/inbound/http | draft | `4.4-scheduling-persistence` |
 | `4.6-schedule-notifications` | Notificação de publicação por e-mail | vertical (scheduling) | draft | `4.5-scheduling-http` |
@@ -189,6 +189,9 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#99](https://github.com/MarceloSanC/restaurant-hub/issues/99) | `make check` sem conferência de formatação e lint fora de `migrations/` | shared | tooling | open | #7 |
 | [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | open | #7 |
 | [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | open | — |
+| [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | open | — |
+| [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
+| [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário | staff | application + identity (fachada) | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -1494,7 +1497,7 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python]
 >   `develop` depois do merge da 3.5 (technical §7).
 > - **Findings abertos** (technical §7), todos da **4.3** salvo o último: `operational_day_of`
 >   aceita instante tz-aware ou com segundos → validar na entrada; `change_demand_quantity` com o
->   mesmo N gera versão → o use case não chama a mutação; `.env` sem `DATABASE_URL` → issue #58.
+>   mesmo N gera versão → no-op no domínio (4.3, D2); `.env` sem `DATABASE_URL` → issue #58.
 
 #### Stage 4.2 — `4.2-validation-policies`
 

@@ -32,11 +32,13 @@ mesmas checagens da construção, sem cópia aqui. Só as guardas que nenhuma
 invariante expressa (remoção com alocação pendente, reagendamento para outro dia)
 são checadas no próprio método.
 
-**Cláusula de no-op** (invariante 16): as quatro mutações idempotentes de valor
+**Cláusula de no-op** (invariante 16): as cinco mutações idempotentes de valor
 — `reschedule_band` para o próprio `(start, end)`, `redeclare_band_break` para o
-próprio intervalo, `declare_workload_counting` e `declare_allocation_break` para
-o valor corrente — devolvem **`self`**, sem incrementar a versão e sem erro de
-duplicidade. A comparação vem **antes** de qualquer outra checagem.
+próprio intervalo, `change_demand_quantity` para o próprio N (Stage 4.3, ADR
+4.3.0001 §4 — a quinta, que a 4.1 deixara de fora da enumeração), e
+`declare_workload_counting` e `declare_allocation_break` para o valor corrente —
+devolvem **`self`**, sem incrementar a versão e sem erro de duplicidade. A
+comparação vem **antes** de qualquer outra checagem.
 
 Entidade **frozen**, igualdade por **identidade**.
 """
@@ -221,8 +223,13 @@ class Schedule:
     def change_demand_quantity(
         self, demand_id: ShiftDemandId, quantity: DemandQuantity
     ) -> "Schedule":
-        """Troca a quantidade-alvo — abaixo dos alocados não é recusado (N é alvo)."""
+        """Troca a quantidade-alvo — abaixo dos alocados não é recusado (N é alvo).
+
+        O próprio N devolve `self` (no-op, ADR 4.3.0001 §4).
+        """
         faixa, demanda = self.locate_demand(demand_id)
+        if quantity == demanda.quantity:
+            return self
         return self._com_demanda(faixa, demanda.with_quantity(quantity))
 
     def withdraw_demand(self, demand_id: ShiftDemandId) -> "Schedule":

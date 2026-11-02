@@ -1407,7 +1407,10 @@ erDiagram
       `(start, end)`, `redeclare_band_break` para o próprio intervalo,
       `declare_workload_counting` e `declare_allocation_break` para o valor
       corrente devolvem **`self`**, com `version` **inalterada** e **sem**
-      `DuplicateShiftBandError` `[teste]`.
+      `DuplicateShiftBandError` `[teste]`. *Errata 2026-11-01 (Stage 4.3, D2, ADR
+      4.3.0001 §4): são **cinco** — `change_demand_quantity` para o próprio N também
+      devolve `self`; a enumeração de quatro era sub-inclusiva frente ao ADR 4.1.0009
+      Decision 3.*
 - [x] **CA12 — caminho negativo de cada transição, derivado da matriz da §6**
       `[teste]`: o teste é parametrizado pelo produto **(método × exceção)** que a
       tabela declara — os 5 métodos de `ShiftBandNotFoundError`, os 4 de

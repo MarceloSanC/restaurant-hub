@@ -1184,6 +1184,16 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 >   Férias lançadas ou função retirada depois, em staff, aparecem como violação ao vivo, sem
 >   mutação de escala que as tenha introduzido. Guarda em staff × mostrar e deixar a gerente
 >   corrigir é pergunta de produto para o concept da 4.3 (divergência 5 do concept da 4.2).
+>
+> **Nota datada — 2026-11-01 (Stage 4.3, D1; ADR 4.3.0003 §4).** Respondida: **mostrar e
+> deixar a gerente corrigir**; nada muda em staff. Os invariantes de §3.5, §3.6.6, §3.6.7 e
+> §3.6.8 valem para o que a **escala** introduz. Quatro origens de violação vinda de staff,
+> todas mostradas ao vivo e nenhuma bloqueante numa edição que não a introduziu: férias ou
+> indisponibilidade lançada, função retirada do registro, carga contratada editada (a
+> política de carga a lê) e recontratação (as alocações antigas, nunca limpas, reaparecem —
+> inclusive como excedente sem aceite na trilha). A escala vigente pode conter até uma
+> violação `block` de indisponibilidade até a gerente desalocar. A mesma regra vale para
+> uma configuração de validação alterada depois (requisito da Stage que criar a edição).
 
 ---
 
