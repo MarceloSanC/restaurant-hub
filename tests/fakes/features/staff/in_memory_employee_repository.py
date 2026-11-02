@@ -50,6 +50,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from tests.fakes.features.staff.in_memory_staff_store import InMemoryStaffStore
 
@@ -102,6 +103,23 @@ class InMemoryEmployeeRepository:
         # (3) Validade referencial do conjunto.
         self._guard_job_functions(employee)
         self._store.employees[employee.id] = employee
+
+    def link_login(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId
+    ) -> None:
+        """`L-LINK` — o vínculo, só se o **gravado** ainda não tiver um (issue #68).
+
+        Endereço de três partes primeiro; depois as guardas sobre o **gravado**,
+        pela própria transição do domínio: `link_login` passa por
+        `assert_can_link_login`, então a precedência vinculado > desligado tem
+        **uma** casa, e este fake não a reescreve. Só `user_id` muda — o resto
+        do agregado é o que já estava gravado.
+        """
+        self._store.record("employees.link_login")
+        gravado = self._find_no_endereco(tenant_id, unit_id, employee_id)
+        if gravado is None:
+            raise EmployeeNotFoundError(employee_id)
+        self._store.employees[employee_id] = gravado.link_login(user_id)
 
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """L-E5 — remoção definitiva guardada, no endereço de três partes.

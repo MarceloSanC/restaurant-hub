@@ -880,6 +880,7 @@ def test_regra10_o_classificador_bate_com_os_ports_reais() -> None:
         "JobFunctionRepository.delete",
         "EmployeeRepository.add",
         "EmployeeRepository.update",
+        "EmployeeRepository.link_login",
         "EmployeeRepository.delete",
         "ScheduleRepository.add",
         "ScheduleRepository.save",

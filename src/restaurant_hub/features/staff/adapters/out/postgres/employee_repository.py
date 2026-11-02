@@ -104,6 +104,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 
 # Ordem total do port (`L-ORD`). As duas colunas levam a colação explícita — ver
@@ -159,6 +160,49 @@ class PostgresEmployeeRepository:
             raise translate(
                 erro, ON_WRITE_EMPLOYEE, self._detalhe_do_conflito(erro, employee)
             ) from erro
+
+    def link_login(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId
+    ) -> None:
+        """`L-LINK` — o vínculo, só se o **gravado** ainda não tiver um (issue #68).
+
+        Checagem e escrita numa transação só, com a linha do registro presa por
+        `FOR UPDATE` **antes** das guardas — a mesma forma do `update` (nota 2
+        do módulo). Sem o lock, dois R17 concorrentes leriam os dois "sem
+        vínculo" e o segundo `UPDATE` trocaria o do primeiro em silêncio.
+
+        As guardas são as do **domínio**, sobre o agregado gravado: o registro
+        é remontado sob o lock e passa por `Employee.link_login`, que chama
+        `assert_can_link_login` (vinculado > desligado) e revalida o `user_id`
+        no `__post_init__`. É a mesma casa que o fake usa — reescrever a
+        precedência aqui em `if`s sobre colunas abriria a segunda fonte, e a
+        divergência fake ≢ real que a suíte de contrato existe para impedir.
+
+        O `UPDATE` grava **só** `user_id`. O `WHERE user_id IS NULL` que a issue
+        sugeria seria redundante sob o lock: nenhuma escrita concorrente alcança
+        a linha entre a guarda e a escrita.
+        """
+        with self._engine.begin() as conexao:
+            linha = conexao.execute(
+                select(employees)
+                .where(
+                    employees.c.id == employee_id,
+                    employees.c.tenant_id == tenant_id,
+                    employees.c.unit_id == unit_id,
+                )
+                .with_for_update()
+            ).one_or_none()
+            if linha is None:
+                raise EmployeeNotFoundError(employee_id)
+            vinculado = self._montar_agregados(conexao, [linha])[0].link_login(user_id)
+            conexao.execute(
+                employees.update()
+                .where(
+                    employees.c.id == employee_id,
+                    employees.c.tenant_id == tenant_id,
+                )
+                .values(user_id=vinculado.user_id)
+            )
 
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """L-E5 — remoção definitiva; as filhas somem por `CASCADE` (§5.10).

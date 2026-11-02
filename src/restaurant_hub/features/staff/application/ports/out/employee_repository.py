@@ -72,6 +72,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 
 
@@ -135,6 +136,35 @@ class EmployeeRepository(Protocol):
         responde por ela.
 
         **L-E4** vale aqui igual ao `add`.
+        """
+        ...
+
+    def link_login(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId
+    ) -> None:
+        """Grava o vínculo de login do registro — **só** se ainda não houver um.
+
+        **`L-LINK` — escrita própria e condicional do vínculo** (issue #68,
+        ADR 0.0.0010). O vínculo é "definido uma vez" (ADR 3.5.0004 §2), e essa
+        regra vale aqui sobre o estado **gravado**, não sobre uma entidade lida
+        antes: a checagem e a escrita são **uma** operação atômica. É o que
+        impede que um segundo R17 concorrente troque o vínculo em silêncio — a
+        metade "dois R17" da janela "última escrita vence sobre `user_id`" do
+        concept 3.5 §6.4.
+
+        Endereço de **três** partes (ADR 3.4.0007) e ordem de checagem
+        normativa, a mesma de `Employee.assert_can_link_login`:
+
+        1. inexistente **no endereço** `(tenant_id, unit_id, id)` ⇒
+           `EmployeeNotFoundError` — registro de outra unidade ou de outro
+           tenant é indistinguível de inexistente;
+        2. já vinculado **no gravado** ⇒ `EmployeeAlreadyHasLoginError`, e o
+           vínculo gravado fica intacto (vinculado vence desligado);
+        3. desligado **no gravado** ⇒ `TerminatedEmployeeLoginError`.
+
+        Em qualquer erro, **nada** é gravado. Nenhum outro campo do registro é
+        tocado: o vínculo tem escrita própria justamente para não carregar um
+        agregado inteiro, possivelmente desatualizado.
         """
         ...
 

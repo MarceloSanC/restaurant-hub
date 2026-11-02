@@ -31,6 +31,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
+    UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import (
@@ -132,6 +133,12 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
         ("employees.add", lambda: fakes.employees.add(_funcionario(id_="e-novo"))),
         ("employees.update", lambda: fakes.employees.update(_funcionario(id_="e-novo"))),
         (
+            "employees.link_login",
+            lambda: fakes.employees.link_login(
+                _TENANT, _UNIDADE, EmployeeId("e-novo"), UserId("login-novo")
+            ),
+        ),
+        (
             "employees.find_by_id",
             lambda: fakes.employees.find_by_id(_TENANT, _UNIDADE, EmployeeId("e-novo")),
         ),
@@ -148,7 +155,7 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
 
 
 def test_todo_metodo_do_par_registra_exatamente_uma_chamada() -> None:
-    """Cada um dos 13 métodos do par tem o seu `record()` travado por teste.
+    """Cada um dos 14 métodos do par tem o seu `record()` travado por teste.
 
     **Por que isto não é zelo excessivo.** `store.calls` sustenta todos os
     critérios "sem tocar o port" das Tasks 07/09/13 — e um critério desses é
@@ -172,7 +179,7 @@ def test_todo_metodo_do_par_registra_exatamente_uma_chamada() -> None:
 def test_as_invocacoes_cobrem_todo_metodo_declarado_nos_dois_protocolos() -> None:
     """A lista acima **é** a superfície do par, não uma amostra dela.
 
-    Sem esta asserção, um 14º método de port entraria sem `record()` e sem
+    Sem esta asserção, um 15º método de port entraria sem `record()` e sem
     ninguém notar — e a Task seguinte herdaria um `calls` incompleto, que é o
     mesmo defeito de fundo do achado anterior sobre listas literais.
     """
