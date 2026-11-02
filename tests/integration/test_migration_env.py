@@ -17,6 +17,7 @@ E o logging (finding F-A da #26): in-process, com `configure_logger=False`, o
 root logger do chamador não muda; pela CLI, o `fileConfig` segue valendo.
 """
 
+import io
 import logging
 import os
 import subprocess
@@ -196,8 +197,15 @@ def _config_com_set_main_option(_tmp_path: Path, url: str) -> Config:
     return config
 
 
+def _config_com_url_vazia_no_ini(tmp_path: Path, _url: str) -> Config:
+    """`sqlalchemy.url =` sem valor: declarada é recusada, mesmo vazia."""
+    return _config_com_url_no_ini(tmp_path, "")
+
+
 @pytest.mark.parametrize(
-    "montar", [_config_com_url_no_ini, _config_com_set_main_option], ids=["ini", "set_main_option"]
+    "montar",
+    [_config_com_url_no_ini, _config_com_url_vazia_no_ini, _config_com_set_main_option],
+    ids=["ini", "ini-vazia", "set_main_option"],
 )
 def test_sqlalchemy_url_no_config_e_recusada(
     montar: Callable[[Path, str], Config],
@@ -226,7 +234,33 @@ def test_url_do_chamador_invalida_e_recusada(invalida: object, scratch_url: str)
 
 
 # ---------------------------------------------------------------------------
-# 4. Logging (finding F-A da #26)
+# 4. Modo offline (`--sql`)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "tem_timestamptz"),
+    [("mysql+pymysql://u:p@h/db", False), ("postgresql+psycopg://u:p@h/db", True)],
+    ids=["mysql", "postgres"],
+)
+def test_offline_gera_o_sql_no_dialeto_da_url_do_chamador(url: str, tem_timestamptz: bool) -> None:
+    """O offline não conecta: a URL do chamador escolhe o dialeto do SQL gerado.
+
+    Com uma URL MySQL no atributo, o `TIMESTAMP WITH TIME ZONE` do Postgres some
+    — um `env.py` que usasse as Settings (Postgres) no offline o manteria.
+    """
+    config = alembic_config(url)
+    saida = io.StringIO()
+    config.output_buffer = saida
+
+    command.upgrade(config, "head", sql=True)
+
+    assert "CREATE TABLE users" in saida.getvalue()
+    assert ("TIMESTAMP WITH TIME ZONE" in saida.getvalue()) is tem_timestamptz
+
+
+# ---------------------------------------------------------------------------
+# 5. Logging (finding F-A da #26)
 # ---------------------------------------------------------------------------
 
 

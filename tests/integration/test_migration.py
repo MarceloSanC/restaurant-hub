@@ -212,11 +212,24 @@ def test_rodar_as_migrations_nao_desliga_logger_que_ja_existe(
     `caplog` só passava se rodasse antes do primeiro uso de `engine`. Aqui o
     logger nasce **antes** de um comando do Alembic e é conferido depois dele, no
     mesmo teste: o resultado não depende da ordem da suíte.
+
+    Desde a #86 o `alembic_config` da suíte pula o `fileConfig`
+    (`configure_logger=False`); este teste tira a chave para que o `fileConfig`
+    rode de fato — é o caminho de um chamador in-process que não a passa. O
+    `fileConfig` troca handlers e nível do root, devolvidos no `finally`.
     """
     logger = logging.getLogger("restaurant_hub.tests.sentinela_do_alembic")
     logger.disabled = False
     config = alembic_config(database_url)
+    del config.attributes["configure_logger"]
+    root = logging.getLogger()
+    handlers, nivel = list(root.handlers), root.level
 
-    command.upgrade(config, "head")
+    try:
+        command.upgrade(config, "head")
+        assert root.level == logging.WARNING, "o fileConfig não rodou: o teste perdeu o objeto"
+    finally:
+        root.handlers[:] = handlers
+        root.setLevel(nivel)
 
     assert not logger.disabled
