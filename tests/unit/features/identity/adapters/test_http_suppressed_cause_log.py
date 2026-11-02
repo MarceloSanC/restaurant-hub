@@ -337,6 +337,37 @@ async def test_caractere_de_controle_no_path_sai_escapado(
     assert _campo(registro, "auth_route") == "/units/a\\x1b[2Jb\\x00c"
 
 
+async def test_espaco_no_path_nao_forja_campo_da_linha_de_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """CWE-117 pelo delimitador — o espaço é o separador dos campos da linha.
+
+    O path chega decodificado (`%20` vira espaço) e vem antes de `ator=` e
+    `causa=` na mensagem: sem escape, `/x ator=vitima causa=Forjada` faria a
+    linha atribuir a tentativa a outro ator e a outra causa.
+    """
+    caplog.set_level(logging.WARNING, logger=_LOGGER)
+    app = FastAPI()
+    handlers.register_identity_error_handlers(app)
+    handler = app.exception_handlers[IdentityError]
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/units/a ator=vitima causa=Forjada",
+            "headers": [],
+        }
+    )
+
+    await handler(request, PermissionDeniedError("owner", "manage_users"))  # type: ignore[misc]
+
+    [registro] = _registros(caplog)
+    mensagem = registro.getMessage()
+    assert mensagem.count(" ator=") == 1
+    assert mensagem.count(" causa=") == 1
+    assert _campo(registro, "auth_route") == "/units/a\\x20ator=vitima\\x20causa=Forjada"
+
+
 @pytest.mark.parametrize("status", [404, 409, 422])
 async def test_faixas_que_mostram_a_mensagem_nao_registram(
     ambiente: _Ambiente, caplog: pytest.LogCaptureFixture, status: int

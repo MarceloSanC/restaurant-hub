@@ -182,6 +182,17 @@ def _neutralizar(texto: str) -> str:
     )
 
 
+def _neutralizar_campo(texto: str) -> str:
+    """`_neutralizar` e também o espaço, que é o delimitador dos campos da linha.
+
+    Vale para o que o cliente controla e vem **antes** de `ator=`/`causa=` na
+    mensagem — método e path. O path chega decodificado (`%20` vira espaço), e
+    sem isto `/x ator=vitima causa=Forjada` atribuiria a linha a outro ator. Os
+    demais espaços em branco já não são imprimíveis e saem por `_neutralizar`.
+    """
+    return _neutralizar(texto).replace(" ", "\\x20")
+
+
 def _nome_da_classe(exc: BaseException) -> str:
     """Nome da classe — qualificado pelo módulo, salvo para as `builtins`."""
     classe = type(exc)
@@ -244,8 +255,8 @@ def _registrar_causa_suprimida(request: Request, exc: IdentityError, status: int
     # `include_router` na 0.139), e o path diz **qual** recurso foi sondado. Ele
     # não carrega credencial — nenhuma rota leva token no path; o de definição
     # de senha viaja no corpo — e chega neutralizado.
-    rota = _neutralizar(request.url.path)
-    metodo = _neutralizar(request.method)
+    rota = _neutralizar_campo(request.url.path)
+    metodo = _neutralizar_campo(request.method)
     causa = describe_suppressed_cause(exc)
     _log.warning(
         "resposta %d com causa suprimida: %s %s ator=%s causa=%s",
