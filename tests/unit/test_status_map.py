@@ -600,6 +600,22 @@ def test_uma_classe_com_duas_raizes_reprova() -> None:
     ]
 
 
+def test_uma_classe_com_duas_bases_e_uma_raiz_reprova() -> None:
+    """Violador plantado: segunda base fora das raízes — a forma `(Raiz, Mixin)`.
+
+    É a forma que a Stage 3.9 removeu, com `NotFoundError` no lugar do mixin: uma raiz
+    só é alcançada, mas a classe tem duas bases e a ordem delas volta a importar.
+    """
+    bc = _COM_BORDA_HTTP[0]
+    dominio, aplicacao = _raizes(bc)
+    plantado = type("ErroPlantadoComMixin", (dominio, ValueError), {})
+
+    assert _violacoes_de_raiz_unica([plantado], (dominio, aplicacao)) == [
+        f"ErroPlantadoComMixin (bases {[dominio.__name__, 'ValueError']}; "
+        f"raízes {[dominio.__name__]})"
+    ]
+
+
 def test_uma_classe_sob_application_error_direto_reprova() -> None:
     """Violador plantado: pular a raiz do BC deixa o erro fora do handler dele."""
     bc = _COM_BORDA_HTTP[0]
