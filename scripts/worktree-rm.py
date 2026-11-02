@@ -5,9 +5,13 @@ Verifica sincronização com o remoto antes de apagar qualquer coisa:
   - worktree sem alterações não commitadas
 
 Em seguida, em ordem segura:
-  1. Para e remove containers Docker da worktree
-     (via label vsch.local.folder / devcontainer.local_folder).
-  2. Remove volumes Docker associados a esses containers.
+  1. Derruba o projeto compose da worktree — o `docker compose down -v` dela,
+     pelo rótulo `com.docker.compose.project`: containers, volumes (o banco) e
+     redes, sem precisar do arquivo do compose (issue #84). Com o Docker parado,
+     avisa: o Postgres segue segurando a `POSTGRES_PORT`, e quem o derruba depois
+     é o `make worktree-orphans ARGS=--prune`.
+  2. Para e remove containers do devcontainer da worktree (via label
+     vsch.local.folder / devcontainer.local_folder) e, com confirmação, os volumes deles.
   3. `git worktree remove <path>`
   4. `git branch -d <branch>` (safe-delete: só remove se mergeada)
   5. `git remote prune origin`
@@ -39,7 +43,11 @@ Exit codes:
   0  limpeza concluída com sucesso
   1  verificação falhou (não sincronizado, worktree não encontrada, etc.)
   2  erro de subprocess (docker/git), worktree que o `--force` não conseguiu remover,
-     ou hooks do git sem python depois do religamento
+     recurso do projeto compose que não saiu, ou hooks do git sem python depois
+     do religamento
+
+Recusa (exit 1) a branch checada no checkout principal: o projeto compose dele é
+o banco de quem não está saindo.
 """
 
 from __future__ import annotations
@@ -68,6 +76,11 @@ def _load_install_hooks() -> ModuleType:
 
 install_hooks = _load_install_hooks()
 
+# `python scripts/worktree-rm.py` já põe `scripts/` no `sys.path`; carregado pelo
+# caminho (os testes), não — daí a linha. O `worktree_docker` é biblioteca padrão.
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))
+import worktree_docker  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # helpers de IO / processo
@@ -343,10 +356,52 @@ def _confirm(prompt: str, expected: str) -> bool:
     return answer == expected
 
 
-def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, PLR0915
+def compose_cleanup(wt_path: Path, *, dry_run: bool) -> bool | None:
+    """O `docker compose down -v` da worktree, pelo rótulo do projeto (issue #84).
+
+    O `docker compose up -d postgres` dentro da worktree cria o projeto com o nome
+    da pasta; sem este passo, o Postgres dele seguia publicando a `POSTGRES_PORT`
+    depois da remoção, e a worktree seguinte podia herdar a porta. O rótulo
+    dispensa o arquivo do compose e a pasta: vale para a worktree já apagada do
+    disco. True = projeto limpo; False = algum recurso não saiu; None = Docker
+    indisponível (avisado — nada foi conferido).
+    """
+    project = worktree_docker.compose_project_name(wt_path)
+    try:
+        worktree_docker.ensure_daemon()
+        if dry_run:
+            found = worktree_docker.project_resources(project)
+            failures: list[str] = []
+        else:
+            found, failures = worktree_docker.remove_project(project)
+    except worktree_docker.DockerUnavailable as e:
+        _warn(
+            f"Docker indisponível ({e}).\n"
+            f"  O projeto compose `{project}` (o Postgres da worktree e o volume do banco)\n"
+            "  NÃO foi derrubado: se existir, segue segurando a POSTGRES_PORT no host.\n"
+            "  Quando o Docker voltar, no checkout principal:\n"
+            "    make worktree-orphans ARGS=--prune"
+        )
+        return None
+    if found.empty():
+        _info(f"projeto compose {project}: nada no Docker")
+        return True
+    verb = "[dry-run] seria derrubado" if dry_run else "derrubado"
+    _info(f"projeto compose {verb}:")
+    for line in worktree_docker.describe(project, found):
+        print(f"  {line}")
+    for failure in failures:
+        _warn(f"não saiu — {failure}")
+    return not failures
+
+
+def docker_cleanup(wt_path: Path, *, dry_run: bool) -> bool:  # noqa: PLR0912, PLR0915
+    """Projeto compose e devcontainer da worktree; False se algo do compose ficou."""
+    compose = compose_cleanup(wt_path, dry_run=dry_run)
+    if compose is None:
+        return True  # Docker indisponível: já avisado, nada mais a conferir
     if not _docker_available():
-        _warn("Docker não está rodando ou não está instalado — pulando limpeza Docker.")
-        return
+        return compose
 
     containers = find_containers_for_worktree(wt_path)
 
@@ -435,6 +490,7 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
                 _warn(f"falha ao remover imagem (em uso?): {cp.stderr.strip()}")
         else:
             _info("imagem mantida (confirmação não fornecida)")
+    return compose
 
 
 # ---------------------------------------------------------------------------
@@ -664,9 +720,17 @@ def main() -> int:
     repo_root = git_top()
     wt_path = resolve_worktree_path(repo_root, args.branch, args.path, worktree_list_porcelain())
 
+    # Medido uma vez, antes de remover: o mesmo resultado serve ao dry-run e à remoção.
+    _, common_dir = install_hooks.git_dirs()
+
     _section("1. Localizando worktree")
     if not check_worktree_registered(wt_path):
         _fail(f"worktree não registrada no git: {wt_path}\nVerifique com `git worktree list`.")
+    if wt_path.resolve() == install_hooks.main_checkout(common_dir).resolve():
+        _fail(
+            f"{args.branch} está no checkout principal ({wt_path}), não numa worktree.\n"
+            "O projeto compose dele é o banco do checkout principal — nada foi removido."
+        )
     _info(f"worktree: {wt_path}")
     _info(f"branch:   {args.branch}")
     if args.dry_run:
@@ -680,12 +744,11 @@ def main() -> int:
     else:
         check_sync(wt_path, args.branch)
 
+    docker_ok = True
     if not args.no_docker:
-        _section("3. Limpando containers e volumes Docker")
-        docker_cleanup(wt_path, dry_run=args.dry_run)
+        _section("3. Derrubando o compose da worktree e limpando o devcontainer")
+        docker_ok = docker_cleanup(wt_path, dry_run=args.dry_run)
 
-    # Medido uma vez, antes de remover: o mesmo resultado serve ao dry-run e à remoção.
-    _, common_dir = install_hooks.git_dirs()
     hooks_in_worktree = hooks_inside(common_dir, wt_path)
 
     _section("4. Removendo worktree e branch git")
@@ -713,7 +776,7 @@ def main() -> int:
         print(f"  ✗ Path: {wt_path}")
     print("=" * 60)
     print()
-    return 0 if hooks_ok and removed else 2
+    return 0 if hooks_ok and removed and docker_ok else 2
 
 
 if __name__ == "__main__":
