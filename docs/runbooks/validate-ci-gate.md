@@ -5,7 +5,7 @@ when-use: After hardening the CI gate (a new tool joins the chain); when auditin
 keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage, fetch-depth, freeze-secao-7, depends-on]
 status: accepted
 created_at: 2026-06-23
-updated_at: 2026-10-21
+updated_at: 2026-11-01
 runbook_id: validate-ci-gate
 triggers:
   - Hardening of the CI gate (new tool joining the chain — e.g., bandit, import-linter)
@@ -262,9 +262,9 @@ git restore docs/stages/N.M-<slug>/technical.md
 
 ### Class 5c — `docs-check` / Stage dependency pre-condition (`check_stage_deps.py`)
 
-> Added in **issue #12** ([ADR 0.0.0009](../adr/0_0_0009-stage-dependency-check-derives-the-number.md)). For every Stage folder in `docs/stages/`, each Stage listed under `Depende de` in its row of the roadmap's *Tabela de Stages* must be `done` there **and** have its reserved commit `stage N.M: complete` in the history of `HEAD`. The script takes the `stage_id` and derives the number itself (`1.1-bootstrap` → `stage 1.1: complete`) — the conversion that, done by hand, produced both a false green and a false HALT (PR #11).
+> Added in **issue #12** ([ADR 0.0.0009](../adr/0_0_0009-stage-dependency-check-derives-the-number.md)). For every Stage folder in `docs/stages/`, each Stage listed under `Depende de` in its row of the roadmap's *Tabela de Stages* must be `done` there **and** have its reserved commit `stage N.M: complete` merged into an integration branch (`origin/develop`, `develop`, `origin/main`, `main` — whichever resolve, the same ones `check_technical_postexec.py` uses); a commit reachable only from `HEAD` (a branch stacked on an unmerged dependency) does not count. An issue dependency (`#N`) must be `done` in the *Tabela de Issues*, on exactly one row. The script takes the `stage_id` and derives the number itself (`1.1-bootstrap` → `stage 1.1: complete`) — the conversion that, done by hand, produced both a false green and a false HALT (PR #11).
 
-**Environment precondition — git history, failing closed.** The input is git history, as in Class 5b, but a shallow clone does **not** make this check pass: it reads `git rev-parse --is-shallow-repository` and exits **2** (`clone raso … (fail closed)`). Under `fetch-depth: 1` the gate is red, never silently green, so the environment half needs no A/B pair of runs — `fetch-depth: 0` in [`ci.yml`](../../.github/workflows/ci.yml) is what lets it give a verdict at all. (Measured in issue #12: a `git clone --depth 1` of the branch exits 2; a full clone exits 0.)
+**Environment precondition — git history.** The input is git history, as in Class 5b, but a shallow clone never makes this check silently green. With an explicit target (`check_stage_deps.py <stage_id>`, the pre-condition of whoever opens a Stage) a shallow clone, no resolvable integration branch or a git that does not run exits **2** (fail closed). Without a target (the `docs-check` call) the roadmap status is still checked and the missing history becomes a `WARN` on stdout — the local `make check` must not require full history (ADR 1.2.0001). In CI the history exists: `fetch-depth: 0` in [`ci.yml`](../../.github/workflows/ci.yml), locked by `tests/unit/test_ci_workflow.py`, is what lets the commit half give a verdict. So the environment half needs no A/B pair of runs: a shallow CI checkout would show the `WARN` line in the log, never a false green on the commit half.
 
 **Patch:** in `docs/roadmap.md`, *Tabela de Stages*, change the `Status` of a Stage that some Stage folder depends on from `done` to `review` — e.g. the `1.1-bootstrap` row, on which the `1.2-ci` folder depends.
 
