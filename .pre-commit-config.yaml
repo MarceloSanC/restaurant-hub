@@ -1,8 +1,10 @@
 # Hooks mínimos que espelham `make check` (ruff, mypy e import-linter) e validam
 # a mensagem de commit contra docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
 #
-# Instalação (uma vez por clone — automatizada em `make setup`):
-#     uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
+# Instalação (uma vez por clone, no checkout principal — automatizada em `make setup`):
+#     uv run python scripts/install_hooks.py
+# Os hooks valem para todas as worktrees; nunca rode `pre-commit install` dentro de
+# uma (docs/GIT-WORKFLOW.md §"Hooks do git", issue #100).
 #
 # Nenhum hook traz a própria versão da ferramenta (issue #7). Todos são `local` e
 # chamam a ferramenta pelo `uv run`: o mesmo binário, na versão do `uv.lock`, que
