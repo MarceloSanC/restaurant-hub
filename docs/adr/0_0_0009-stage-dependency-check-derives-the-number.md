@@ -1,18 +1,18 @@
 ---
-title: ADR 0.0.0007 — The Stage dependency check is a script that takes the stage_id and derives the commit number
+title: ADR 0.0.0009 — The Stage dependency check is a script that takes the stage_id and derives the commit number
 description: Architecture Decision Record
 when-use: Reference before checking whether a Stage's dependencies are closed, before writing a command that turns a depends_on value into a commit subject, or before changing what make docs-check enforces about Stage order
 keywords: [adr, process, pipeline, depends_on, stage_id, reserved-commit, docs-check, placeholder, prompt, integration-branch]
 status: accepted
-created_at: 2026-10-21
+created_at: 2026-11-01
 updated_at: 2026-10-21
-adr_id: "0.0.0007"
+adr_id: "0.0.0009"
 decision: The dependency pre-condition of a Stage (every Stage it depends on is done in the roadmap and its reserved `stage N.M: complete` commit is merged into an integration branch; every issue it depends on is done in the issue table) is checked by scripts/check_stage_deps.py, which takes the stage_id and derives the number itself; make docs-check runs it over every Stage folder.
 context_stage: 0.0-global
 bounded_context: transversal
 ---
 
-# ADR 0.0.0007 — The Stage dependency check is a script that takes the stage_id
+# ADR 0.0.0009 — The Stage dependency check is a script that takes the stage_id
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

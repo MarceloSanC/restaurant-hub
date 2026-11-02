@@ -138,7 +138,7 @@ python scripts/check_stage_deps.py <N.M>-<slug> --ref origin/develop   # exit 1 
 
 O script recebe o `stage_id` **da Stage-alvo** e, para cada dependência, deriva o número que
 o commit reservado de fechamento carrega (`1.1-bootstrap` → `stage 1.1: complete` —
-CONVENTIONS §1 e §4(b); ADR 0.0.0007). As duas armadilhas que a checagem à mão tinha ficam no
+CONVENTIONS §1 e §4(b); ADR 0.0.0009). As duas armadilhas que a checagem à mão tinha ficam no
 código, com teste: o `stage_id` no lugar do número (`stage 1.1-bootstrap: complete` não casa
 nada — **HALT falso**) e o prefixo no lugar do subject exato (`stage 1.1` casaria `conceptual
 approved` — **verde** para dependência que não fechou).

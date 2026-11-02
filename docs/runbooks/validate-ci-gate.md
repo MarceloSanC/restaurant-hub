@@ -262,7 +262,7 @@ git restore docs/stages/N.M-<slug>/technical.md
 
 ### Class 5c — `docs-check` / Stage dependency pre-condition (`check_stage_deps.py`)
 
-> Added in **issue #12** ([ADR 0.0.0007](../adr/0_0_0007-stage-dependency-check-derives-the-number.md)). For every Stage folder in `docs/stages/`, each Stage listed under `Depende de` in its row of the roadmap's *Tabela de Stages* must be `done` there **and** have its reserved commit `stage N.M: complete` in the history of `HEAD`. The script takes the `stage_id` and derives the number itself (`1.1-bootstrap` → `stage 1.1: complete`) — the conversion that, done by hand, produced both a false green and a false HALT (PR #11).
+> Added in **issue #12** ([ADR 0.0.0009](../adr/0_0_0009-stage-dependency-check-derives-the-number.md)). For every Stage folder in `docs/stages/`, each Stage listed under `Depende de` in its row of the roadmap's *Tabela de Stages* must be `done` there **and** have its reserved commit `stage N.M: complete` in the history of `HEAD`. The script takes the `stage_id` and derives the number itself (`1.1-bootstrap` → `stage 1.1: complete`) — the conversion that, done by hand, produced both a false green and a false HALT (PR #11).
 
 **Environment precondition — git history, failing closed.** The input is git history, as in Class 5b, but a shallow clone does **not** make this check pass: it reads `git rev-parse --is-shallow-repository` and exits **2** (`clone raso … (fail closed)`). Under `fetch-depth: 1` the gate is red, never silently green, so the environment half needs no A/B pair of runs — `fetch-depth: 0` in [`ci.yml`](../../.github/workflows/ci.yml) is what lets it give a verdict at all. (Measured in issue #12: a `git clone --depth 1` of the branch exits 2; a full clone exits 0.)
 

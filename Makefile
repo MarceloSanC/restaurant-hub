@@ -145,7 +145,7 @@ lock-check:
 # frontmatter de skills/subagentes em `.claude/` — o Claude Code não reporta
 # YAML inválido nem descrição truncada (issue #56) — e (6) que toda pasta de
 # Stage tem as dependências fechadas: `done` no roadmap e `stage N.M: complete`
-# no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0007).
+# no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0009).
 #
 # O (4) é o único que compara documento com sistema de arquivos, e é por isso
 # que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda

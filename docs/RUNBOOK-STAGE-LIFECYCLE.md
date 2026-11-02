@@ -53,7 +53,7 @@ e `docs/roadmap.md` aprovados; Stage anterior (se houver) já mergeada.
 - [ ] Stages em `depends_on` fechadas: `python scripts/check_stage_deps.py N.M-<slug>`
       sai com 0. O script recebe o `stage_id` e confere cada dependência — `done` no roadmap
       e o commit `stage N.M: complete` no histórico, com o número derivado por ele
-      ([`CONVENTIONS.md`](./CONVENTIONS.md) §1; ADR 0.0.0007).
+      ([`CONVENTIONS.md`](./CONVENTIONS.md) §1; ADR 0.0.0009).
 
 ## Procedimento
 

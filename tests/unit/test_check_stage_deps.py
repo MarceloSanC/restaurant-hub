@@ -1,4 +1,4 @@
-"""Unit de `scripts/check_stage_deps.py` — pré-condição de dependência de Stage (ADR 0.0.0007).
+"""Unit de `scripts/check_stage_deps.py` — pré-condição de dependência de Stage (ADR 0.0.0009).
 
 O que se protege é a conversão que errou duas vezes enquanto era prosa (issue #12): o
 `depends_on` carrega o `stage_id` com slug (`1.1-bootstrap`) e o commit reservado de

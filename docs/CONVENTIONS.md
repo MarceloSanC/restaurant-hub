@@ -136,7 +136,7 @@ Stage (`#43` é a `3.6-staff-http`, a pasta cujo `technical.md` tem `issue_id: 4
   <stage_id>` recebe o `stage_id` e confere cada dependência — `done` no roadmap e
   `stage N.M: complete` no histórico (`--ref origin/develop` para "mergeado em develop").
   Roda também no `make docs-check`, sobre toda pasta de Stage
-  ([ADR 0.0.0007](./adr/0_0_0007-stage-dependency-check-derives-the-number.md)).
+  ([ADR 0.0.0009](./adr/0_0_0009-stage-dependency-check-derives-the-number.md)).
 
 ---
 

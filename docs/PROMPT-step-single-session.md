@@ -243,7 +243,7 @@ Stage".
 
 **Antes de tudo, as dependências (bloqueante):** `git fetch origin` e
 `python scripts/check_stage_deps.py <stage_id> --ref origin/develop` — o script recebe o
-`stage_id` e deriva o número do commit reservado (ADR 0.0.0007). Exit 1 = alguma dependência
+`stage_id` e deriva o número do commit reservado (ADR 0.0.0009). Exit 1 = alguma dependência
 não está mergeada em `develop`: a Stage não abre (o Step é sequencial, §3.5).
 
 1. **Issue primeiro (bloqueante).** Buscar duplicata (`gh issue list --search "<termos do escopo>"`)

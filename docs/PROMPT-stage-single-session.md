@@ -129,7 +129,7 @@ Test-Path "docs/stages/<N.M>-<slug>/technical.md"
 
 # 5. depends_on fechado — cada Stage em depends_on está `done` no roadmap e o commit
 #    reservado `stage N.M: complete` dela está no histórico deste branch. O script recebe
-#    o stage_id e deriva o número sozinho (CONVENTIONS §1; ADR 0.0.0007). Exit 1 = PARE.
+#    o stage_id e deriva o número sozinho (CONVENTIONS §1; ADR 0.0.0009). Exit 1 = PARE.
 python scripts/check_stage_deps.py <N.M>-<slug>
 ```
 

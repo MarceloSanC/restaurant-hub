@@ -5,7 +5,7 @@ Uso (depois de `git fetch origin`):
     python scripts/check_stage_deps.py 4.3-scheduling-application        # uma Stage
     python scripts/check_stage_deps.py 4.3-scheduling-application --ref origin/develop
 
-Decisão: ADR 0.0.0007. Ligado em `make docs-check`.
+Decisão: ADR 0.0.0009. Ligado em `make docs-check`.
 
 ---
 
@@ -458,7 +458,7 @@ def target_problem(target: str) -> str | None:
         return (
             f"`{target}` é o número da Stage; o alvo é o stage_id com slug, como na coluna "
             f"{STAGE_COLUMN} do roadmap (`{target}-<slug>`). O número do commit reservado o "
-            "script deriva sozinho — CONVENTIONS §1, ADR 0.0.0007."
+            "script deriva sozinho — CONVENTIONS §1, ADR 0.0.0009."
         )
     return f"`{target}` não é um stage_id `N.M-<slug>` (ex.: `1.1-bootstrap`)."
 
@@ -470,7 +470,7 @@ def _report(violations: Sequence[str]) -> None:
     print(
         "\nO número do commit reservado sai do stage_id (`1.1-bootstrap` → "
         "`stage 1.1: complete`, CONVENTIONS §1). Uma Stage só abre com as dependências "
-        "`done` no roadmap e mergeadas (ADR 0.0.0007).",
+        "`done` no roadmap e mergeadas (ADR 0.0.0009).",
         file=sys.stderr,
     )
 
