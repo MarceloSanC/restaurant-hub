@@ -16,6 +16,8 @@ schema fica em `features/staff/adapters/out/postgres/test_schema.py`; aqui só a
 existência e a reversibilidade.
 """
 
+import logging
+
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -202,3 +204,26 @@ def test_downgrade_da_0004_remove_so_a_coluna_user_id(engine: Engine, database_u
         command.upgrade(config, "head")
 
     assert "user_id" in _colunas_de_employees(engine)
+
+
+def test_rodar_as_migrations_nao_desliga_logger_que_ja_existe(
+    engine: Engine, database_url: str
+) -> None:
+    """Issue #26 (finding F1 da #6) — o Alembic in-process não cega o log da app.
+
+    O `fileConfig` de `migrations/env.py` roda a cada comando do Alembic; com o
+    default `disable_existing_loggers=True`, todo `logging.getLogger(__name__)`
+    criado antes — na suíte, na coleta — ficava `disabled=True`, e um teste de
+    `caplog` só passava se rodasse antes do primeiro uso de `engine`. Aqui o
+    logger nasce **antes** de um comando do Alembic e é conferido depois dele, no
+    mesmo teste: o resultado não depende da ordem da suíte.
+    """
+    logger = logging.getLogger("restaurant_hub.tests.sentinela_do_alembic")
+    logger.disabled = False
+    config = Config(str(_ALEMBIC_INI))
+    config.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", database_url)
+
+    command.upgrade(config, "head")
+
+    assert not logger.disabled
