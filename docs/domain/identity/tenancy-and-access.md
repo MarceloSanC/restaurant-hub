@@ -602,8 +602,8 @@ regras que ADRs `accepted` e concepts de Stages `done` já decidiram, e o sponso
 orquestrador as decisões de produto da issue #30. Nenhuma regra sem fonte entrou; o que faltava
 virou lacuna (§5).
 
-**Achados — contradições e desatualizações nas fontes** (registrados na issue #30, não corrigidos
-aqui, porque o texto de ADR e de concept não se edita por este doc):
+**Achados — contradições e desatualizações nas fontes** (registrados na issue #30; este doc não
+reescreve ADR nem concept — a disposição de cada um está no próprio item):
 
 - **C1 — numeração das decisões de kickoff diverge entre as fontes.** O mesmo número e a mesma
   data nomeiam coisas diferentes dentro do repo: o ADR 2.1.0001 §Context diz "Kickoff decision #1
@@ -613,23 +613,27 @@ aqui, porque o texto de ADR e de concept não se edita por este doc):
   conjunto de permissões". A lista do kickoff não vive no repositório, então o número não é âncora
   estável.
   Este doc não cita kickoff por número; cita o concept ou o ADR que registrou a decisão.
+  **Disposição:** issue #129.
 - **C2 — comentário do mapa de papéis desatualizado.** `role.py` diz que a Stage 4.x "não pode
   conceder a `hr` nenhuma permissão sobre a escala" (ADR 3.4.0006 §3), restrição superada em parte
   pelo [ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md): `hr` recebe a
-  leitura. É o arquivo que quem estender o mapa lê.
+  leitura. É o arquivo que quem estender o mapa lê. **Disposição:** issue #127 (comentário de
+  código; candidata a Stage 4.5).
 - **C3 — ADR 2.5.0003 justifica a ordem pela ausência de transação, que deixou de ser verdade.** O
   §Decision diz que não há unidade de trabalho cobrindo as quatro escritas; desde o
   [ADR 2.6.0002](../../adr/2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md)
   §1 há, e a troca foi declarada no código (falha parcial agora desfaz também a revogação; a ordem
-  ficou redundante, não errada — docstring de `set_password_with_token.py`), mas o ADR 2.5.0003 não
-  ganhou nota de supersessão parcial. A regra (definir senha revoga sessões e tokens) continua
-  valendo.
+  ficou redundante, não errada — docstring de `set_password_with_token.py`). A regra (definir senha
+  revoga sessões e tokens) continua valendo. **Resolvido na auditoria do PR #125:** o ADR 2.5.0003
+  ganhou `## Supersessão parcial` datada de 2026-11-02 (append-only, CONVENTIONS §5).
 - **C4 — a fachada de identity ainda aponta para a #49** como a razão de não autorizar, quando a
-  decisão vigente é o ADR 0.0.0014 §4 / issue #115 — já rastreado pela issue #77.
+  decisão vigente é o ADR 0.0.0014 §4 / issue #115 — já rastreado pela issue #77 (o ponteiro
+  sobreviveu à reescrita do docstring da fachada no PR #124).
 - **C5 — ADR 2.5.0002 §5 descreve um reconvite que não existe.** "Re-inviting leaves exactly one
   live invitation" supõe que convidar de novo emite token; o concept 2.5 §5 regra 6 (e a regra 13)
   fixa que convidar o mesmo e-mail responde como e-mail já cadastrado e não emite nada. A regra
-  de invalidação por propósito vale; o exemplo do ADR é que não tem caminho.
+  de invalidação por propósito vale; o exemplo do ADR é que não tem caminho. **Disposição:** issue
+  #128 (errata no ADR).
 
 ---
 
