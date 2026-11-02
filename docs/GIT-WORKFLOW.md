@@ -5,7 +5,7 @@ when-use: Consultar antes de qualquer mudança de código. Todos os membros do t
 keywords: [git, github, workflow, ci-cd, pr, code-review, deploy]
 status: done
 created_at: 2026-05-12
-updated_at: 2026-11-01
+updated_at: 2026-11-02
 ---
 
 # Git Workflow Padrão
@@ -400,34 +400,23 @@ gh pr view        # comentários e aprovações
 
 ### Etapa 6: Merge
 
-Garantir que a branch está atualizada:
-```bash
-gh pr view --json mergeable
-```
+Toda branch vive numa worktree (§"Branches em execução"), então o merge
+segue §"Merge e limpeza da worktree", passos 1–4: rebase e CI verde,
+base reconferida **depois** do CI (`develop` anda durante a espera) e
+`gh pr merge <num> --merge` do checkout principal — merge commit, NUNCA
+squash/rebase, e **sem** `--delete-branch`, que não apaga a remota com a
+branch presa a uma worktree.
 
-Se "BEHIND":
-```bash
-git fetch origin
-git merge origin/develop
-git push
-```
-
-Fazer merge commit (NUNCA squash):
-```bash
-gh pr merge <num> --merge --delete-branch
-```
-
-**Gate:** PR mergeado em develop, branch deletada.
+**Gate:** PR mergeado em develop.
 
 ### Etapa 7: Cleanup
 
-```bash
-git checkout develop
-git pull origin develop
-git remote prune origin
-```
+§"Merge e limpeza da worktree", passos 4–7: `git pull` no principal,
+`docker compose down -v` na worktree, `worktree-rm.py <branch>
+--delete-remote` e a verificação (remota, local, worktree, containers e
+hooks).
 
-Verificar:
+Verificar também:
 - [ ] Issue fechada automaticamente
 - [ ] Deploy em dev disparado (verificar em GitHub Actions)
 - [ ] Card no project board movido para "Done"
@@ -553,6 +542,22 @@ Flags úteis (passar via `ARGS='...'`):
 - `--no-setup` / `--no-vscode` / `--no-env` / `--no-port-assign` — opt-outs.
 - `--base main` — força base remota (default já cuida de hotfix).
 
+**Hooks compartilhados — use `--no-setup` enquanto a issue #100 não
+fecha.** Os hooks do git moram no diretório comum do repositório
+(`git rev-parse --git-common-dir`), um só para todas as worktrees. O
+`make setup` da worktree nova reinstala esses hooks com
+`INSTALL_PYTHON` no venv **dela**; quando ela é removida, o
+`pre-commit`/`commit-msg` de todas as outras quebra. Contorno:
+
+```bash
+python scripts/worktree-new.py <branch> --no-vscode --no-setup
+cd <worktree> && uv sync --extra dev        # venv da worktree, sem tocar nos hooks
+```
+
+Os hooks continuam apontando para o venv do checkout principal. A
+conferência e o religamento estão no passo 7 de §"Merge e limpeza da
+worktree".
+
 #### Por que o devcontainer não conflita entre worktrees
 
 O `docker-compose.yml` do template foi desenhado para ser
@@ -605,16 +610,110 @@ raiz da worktree. Cabe a quem usa a worktree subir e derrubar esse banco:
   `postgres` subido por `docker compose up` ficaria órfão segurando a
   porta. Conferir com `docker ps -a --filter name=<pasta-da-worktree>`.
 
-Quando o PR daquela worktree mergear, remover worktree + branch local:
-
-```bash
-python scripts/worktree-rm.py <branch>      # remove worktree + branch local (--dry-run mostra o que faria; --force pula o check de sync)
-# ou, manualmente:
-git worktree remove ../<repo>-worktrees/<branch>
-```
+Quando o PR daquela worktree mergear, a remoção segue a sequência de
+§"Merge e limpeza da worktree", logo abaixo.
 
 Detalhes e todas as flags: `python scripts/worktree-new.py --help` e
 `python scripts/worktree-rm.py --help`.
+
+### Merge e limpeza da worktree
+
+Sequência canônica para mergear um PR cuja branch vive numa worktree —
+humano, mestra de Step ou auditor da orquestração autônoma. Os prompts
+apontam para cá; não copiam os passos. Cada passo existe por uma falha
+medida (issue #81):
+
+- `gh pr merge --delete-branch` mergeia, mas **não apaga a branch
+  remota** quando a branch local está presa a uma worktree — rodado de
+  dentro dela (`fatal: 'develop' is already used by worktree`) ou do
+  checkout principal. Por isso o merge vai sem a flag e a remota sai
+  num passo próprio.
+- `git branch -d` só apaga a branch já mergeada no `develop` local (ou
+  no upstream dela): antes do `git pull` no principal ela sobra.
+- `develop` anda durante a espera do CI: a conferência de "não está
+  atrás" feita antes do CI não vale no merge.
+- O `audit-gate` dispara em `edited`, mas o GitHub **não roda workflow
+  de `pull_request` em PR com conflito de merge** ("Workflows will not
+  run on `pull_request` activity if the pull request has a merge
+  conflict" — [docs do GitHub, evento `pull_request`](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)).
+  Editar o corpo de um PR em conflito com `develop` não gera run.
+
+**1. Sincronizar (na worktree).** Rebase em `origin/develop` e push
+(§Etapa 4); esperar o Actions do head.
+
+```bash
+git fetch --prune origin
+git rebase origin/develop
+git push --force-with-lease
+gh pr checks <num> --watch
+```
+
+**2. Gravar a auditoria `complete`** (só a sessão de auditoria —
+CONVENTIONS §3.6) **com a branch já sem conflito**, depois do run do
+último push. A edição do corpo dispara um run novo do `audit-gate`;
+conferir que ele apareceu e ficou verde:
+
+```bash
+gh run list --workflow audit-gate.yml --branch <branch> --limit 2   # run novo, posterior à edição
+gh pr checks <num>
+```
+
+Sem run novo depois da edição, o PR está em conflito (`gh pr view <num>
+--json mergeable` → `CONFLICTING`): volte ao passo 1 — o push do rebase
+(`synchronize`) relê o corpo já `complete`. Não use `gh run rerun`: ele
+reaproveita o payload do evento original, com o corpo antigo. Commit
+vazio (`git commit --allow-empty`) só como último recurso, com marca
+`--` da Stage/issue.
+
+**3. Reconferir a base logo antes do merge** — depois do CI verde, não
+antes:
+
+```bash
+git fetch origin
+git rev-list --count HEAD..origin/develop   # tem de ser 0; senão volte ao passo 1
+```
+
+**4. Mergear do checkout principal**, com merge commit e **sem**
+`--delete-branch`:
+
+```bash
+gh pr merge <num> --merge                   # nunca --squash/--rebase
+git pull origin develop                     # no principal: traz o merge, para o branch -d do passo 6
+```
+
+**5. Derrubar o banco da worktree** (§"Banco e containers da worktree"):
+
+```bash
+docker compose down -v                      # DENTRO da worktree
+```
+
+**6. Remover worktree, branch local e branch remota (do principal):**
+
+```bash
+python scripts/worktree-rm.py <branch> --delete-remote
+```
+
+O script acha a worktree pela branch checada nela (pasta com slug
+divergente não exige `--path`), confere sync, remove a worktree, faz
+`git branch -d`, `git push origin --delete` e `git remote prune origin`.
+`--dry-run` mostra o que faria; `--force` pula o check de sync e usa
+`branch -D`.
+
+**7. Verificar** — cada linha com saída vazia, menos a dos hooks:
+
+```bash
+git ls-remote --heads origin <branch>       # remota apagada
+git branch --list <branch>                  # local apagada
+git worktree list | grep <pasta-da-worktree>
+docker ps -a --filter name=<pasta-da-worktree>
+grep INSTALL_PYTHON .git/hooks/pre-commit   # tem de apontar para o .venv do principal
+```
+
+Se o `INSTALL_PYTHON` apontar para o venv de uma worktree (a removida
+ou outra), os commits de todas as worktrees quebram: religar no
+principal com `uv run pre-commit install -t pre-commit -t commit-msg`
+(§"Criar a worktree" → hooks compartilhados; correção estrutural na
+issue #100).
 
 ### Quando precisar trocar de escopo no meio (com PR parcial)
 
@@ -804,15 +903,16 @@ gh pr create --base develop --title "..." --body "..."
 gh pr checks                    # status do CI
 gh pr view                      # detalhes
 gh pr review --approve          # aprovar
-gh pr merge <num> --merge --delete-branch  # merge commit + cleanup
+gh pr merge <num> --merge        # merge commit, do principal; sem --delete-branch (§Merge e limpeza da worktree)
 
 # Deploy
 git sync                                 # atualiza main local
 gh pr create --base main --head develop  # criar release PR
 
-# Cleanup (após o merge; `docker compose down -v` dentro da worktree antes)
-python scripts/worktree-rm.py <branch>   # worktree + branch local + prune
-git checkout develop && git pull         # no checkout principal
+# Cleanup (após o merge — sequência completa em §Merge e limpeza da worktree)
+git pull origin develop                                  # no principal, ANTES do worktree-rm
+docker compose down -v                                   # dentro da worktree
+python scripts/worktree-rm.py <branch> --delete-remote   # worktree + branch local + remota + prune
 ```
 
 ---
