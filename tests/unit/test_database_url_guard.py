@@ -591,6 +591,9 @@ def test_guard_script_refuses_end_to_end(tmp_path: Path) -> None:
         text=True,
         encoding="utf-8",
         check=False,
+        # Guarda que deixasse passar rodaria o Alembic contra a 5999 fechada, e a
+        # conexão sem `connect_timeout` pode pendurar a suíte em vez de reprovar.
+        timeout=60,
     )
 
     assert result.returncode == 1
