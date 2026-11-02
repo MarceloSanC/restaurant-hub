@@ -5,11 +5,11 @@ do arquivo da mensagem de commit como primeiro argumento; lê só a primeira
 linha (o subject) e a confere contra:
 
   (1) Mensagens reservadas de gate (CONVENTIONS.md §4(b)).
-  (2) Conventional Commits em português com escopo obrigatório (ASCII/kebab)
-      e marca de Task opcional no fim, `[<dono>/<posição>]` (CONVENTIONS.md
-      §4(a), subseção "Marca de Task"): dono `N.M` (Stage) ou `#<num>`
-      (issue avulsa); posição `task-NN`, `task-NN-fix`, `task-NN-extra` ou
-      `--`.
+  (2) Conventional Commits em português com escopo obrigatório (ASCII/kebab;
+      o BC/módulo, nunca a Stage — `STAGE_SCOPE_PATTERN`) e marca de Task
+      opcional no fim, `[<dono>/<posição>]` (CONVENTIONS.md §4(a), subseção
+      "Marca de Task"): dono `N.M` (Stage) ou `#<num>` (issue avulsa); posição
+      `task-NN`, `task-NN-fix`, `task-NN-extra` ou `--`.
 
 **A marca é opcional; a malformada é recusada.** Um subject que termina em `]`
 precisa terminar numa marca da gramática. Até a issue #34, o grupo da marca era
@@ -83,6 +83,23 @@ CC_PATTERN = re.compile(
     r"(?: \[(?P<tag>" + TAG_PATTERN + r")\])?$"
 )
 
+# Escopo que nomeia a Stage — CONVENTIONS.md §4(a), regra de escopo mínimo
+# (mudou aqui, atualizar lá): o escopo é o BC/módulo, nunca a Stage (issue #90).
+# Três formas, todas recusadas:
+#   - `stage`, sozinho;
+#   - `stage` seguido de número, no começo do escopo ou depois de `.`/`_`/`-`:
+#     `stage-2.3`, `stage-1-1`, `stage.12.10`, `stage2`, `docs.stage-2.3`;
+#   - o número ou o `stage_id` da Stage como escopo inteiro: `2.3`, `1-1`,
+#     `4.1-scheduling-domain`.
+# Fica fora o que só contém a palavra ou um número que não é de Stage:
+# `staging`, `stages`, `stage-audit` (a skill), `prompt-stage` (o doc
+# `PROMPT-stage-*.md`), `v2`, `0.0.0016` (número de ADR: três componentes).
+STAGE_SCOPE_PATTERN = re.compile(
+    r"^stage$"
+    r"|(?:^|[._-])stage[._-]?[0-9]"
+    r"|^[0-9]+[._-][0-9]+(?:[._-][a-z][a-z0-9._-]*)?$"
+)
+
 # O último grupo `[...]` do subject. Só serve para a recusa mostrar o que foi
 # lido como marca — quem decide se a marca é válida é o CC_PATTERN.
 _TRAILING_GROUP = re.compile(r"\[[^\[\]]*\]$")
@@ -101,7 +118,8 @@ def _format_help() -> str:
         "\nFormato esperado (um destes):\n"
         "  <tipo>(<escopo>): <descrição em português> [marca opcional]\n"
         f"    onde <tipo> é um de: {', '.join(ALLOWED_TYPES)}\n"
-        "    escopo em ASCII/kebab (snake/kebab); descrição livre em PT-BR\n"
+        "    escopo em ASCII/kebab (snake/kebab): o BC/módulo, nunca a Stage\n"
+        "      (não: stage-2.3, 2.3, 4.1-scheduling-domain); descrição livre em PT-BR\n"
         "    marca: [<dono>/<posição>] no fim, separada da descrição por um espaço\n"
         "      dono: N.M (número da Stage) ou #<num> (issue avulsa)\n"
         "      posição: task-NN (Task do plano), task-NN-fix (correção da Task NN),\n"
@@ -169,6 +187,14 @@ def _conventional_commit_reason(subject: str) -> str | None:
     match = CC_PATTERN.match(subject)
     if match is None:
         return _no_match_reason(subject)
+
+    scope = match.group("scope")
+    if STAGE_SCOPE_PATTERN.search(scope):
+        return (
+            f"escopo `{scope}` nomeia a Stage — o escopo é o BC/módulo da "
+            "mudança, nunca a Stage; o número dela vai na marca `[N.M/...]` "
+            "(CONVENTIONS.md §4(a) — regra de escopo mínimo)"
+        )
 
     # Sem esta checagem, a marca malformada vira parte da descrição e o subject
     # passa como se não tivesse marca nenhuma (achado F9 da auditoria da 4.1).

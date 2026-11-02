@@ -216,6 +216,109 @@ def test_rejection_without_a_readable_group_still_explains_the_tag(
     assert "marca de Task inválida no fim do subject —" in err
 
 
+# --- Escopo que nomeia a Stage (issue #90) -----------------------------------
+#
+# CONVENTIONS.md §4(a), regra de escopo mínimo: o escopo é o BC/módulo, nunca a
+# Stage. Até a #90 o grupo `scope` aceitava qualquer `[a-z0-9._-]+`, e
+# `docs(stage-1-1): ...` entrou em develop (§7 da `1.2-ci/technical.md`).
+
+_STAGE_SCOPES = [
+    "stage",
+    "stage-2.3",  # o ❌ do §4(a)
+    "stage-12.10",  # o ❌ do §4(c)
+    "stage-1-1",  # o precedente do histórico
+    "stage.2.3",
+    "stage_2_3",
+    "stage2.3",
+    "stage-1",
+    "docs.stage-2.3",
+    "roadmap-stage-4.1",
+    "2.3",
+    "12.10",
+    "1-1",
+    "1_1",
+    "4.1-scheduling-domain",  # o stage_id
+    "3.6-staff-http",
+]
+
+
+@pytest.mark.parametrize("scope", _STAGE_SCOPES)
+def test_scope_naming_the_stage_is_rejected_citing_the_rule(
+    scope: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert ccm.validate_subject(f"feat({scope}): x [2.3/task-01]") == _EXIT_REJECTED
+    err = capsys.readouterr().err
+    assert f"escopo `{scope}` nomeia a Stage" in err
+    assert "CONVENTIONS.md §4(a)" in err
+
+
+@pytest.mark.parametrize("scope", _STAGE_SCOPES)
+def test_scope_naming_the_stage_is_rejected_without_a_tag(scope: str) -> None:
+    """A recusa não depende da marca: sem ela, o subject é o mesmo erro."""
+    assert not _accepted(f"docs({scope}): x")
+
+
+# Escopos que contêm `stage` ou números sem nomear a Stage. `prompt-stage` está
+# no histórico de develop (o doc `PROMPT-stage-*.md`); `stage-audit` é a skill.
+_LEGIT_SCOPES = [
+    "staging",
+    "stages",
+    "stage-audit",
+    "prompt-stage",
+    "prompt-stage-autonomous",
+    "backstage",
+    "process",
+    "tooling",
+    "scheduling",
+    "payment.retry",
+    "v2",
+    "oauth2",
+    "0.0.0016",  # número de ADR: três componentes
+    "1.2.3",
+    "2fa",
+    "2-factor",
+    "concept",
+]
+
+
+@pytest.mark.parametrize("scope", _LEGIT_SCOPES)
+def test_legitimate_scope_is_still_accepted(scope: str) -> None:
+    assert _accepted(f"docs({scope}): x [2.3/task-01]")
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "stage 3.9: conceptual draft",
+        "stage 3.9: technical approved",
+        "stage 3.9: complete",
+        "chore(concept): revert to draft -- revision-from-technical: gap",
+        "chore(technical): revert to draft — revision-from-execution: gap",
+        "refactor(shared): mover a hierarquia de erros [3.9/task-01]",
+    ],
+)
+def test_reserved_gates_and_stage_tags_are_not_scopes(subject: str) -> None:
+    """O número da Stage segue valendo onde ele mora: no gate reservado e na marca."""
+    assert _accepted(subject)
+
+
+def test_the_conventions_negative_scope_examples_are_rejected_by_the_hook() -> None:
+    """Os ❌ de escopo do §4(a)/(c) são o que a regra proíbe; o hook tem de recusá-los."""
+    conventions = (_REPO_ROOT / "docs" / "CONVENTIONS.md").read_text(encoding="utf-8")
+    negatives = re.findall(
+        r"❌ `((?:" + "|".join(ccm.ALLOWED_TYPES) + r")\(stage[^)]*\): [^`]+)`",
+        conventions,
+    )
+    scopes = {subject.split(":")[0] for subject in negatives}
+    assert {"feat(stage-2.3)", "feat(stage-12.10)"} <= scopes
+    accepted = [subject for subject in negatives if _accepted(subject)]
+    assert not accepted, f"❌ de escopo que o hook aceita: {accepted}"
+
+
+def test_the_scope_check_reads_the_scope_not_the_description() -> None:
+    assert _accepted("docs(conventions): proibir stage-2.3 como escopo [#90/task-02]")
+
+
 # --- O que a #34 não mudou ---------------------------------------------------
 
 
@@ -279,6 +382,8 @@ def test_subject_limit_is_inclusive_and_counts_the_tag(length: int, exit_code: i
         ("feat(scheduling): x [4.1/task-03-fix]", _EXIT_OK),
         ("feat(scheduling): x [4.1/tsk-3]", _EXIT_REJECTED),
         ("feat(scheduling): x [41/--]", _EXIT_REJECTED),
+        ("feat(stage-2.3): x", _EXIT_REJECTED),
+        ("feat(stage-12.10): x", _EXIT_REJECTED),
     ],
 )
 def test_hook_exit_code_on_a_commit_message_file(
