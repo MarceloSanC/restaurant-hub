@@ -242,6 +242,23 @@ def test_gitattributes_declares_exactly_the_mirrored_rules(repo_root: Path) -> N
     )
 
 
+def test_root_gitattributes_is_the_only_one(tracked: list[_Entry]) -> None:
+    """A política mora num arquivo só: nenhum `.gitattributes` aninhado a contradiz.
+
+    Um `docs/.gitattributes` com `*.pdf text` venceria a regra da raiz naquela subárvore
+    (gitattributes(5): o arquivo de um diretório mais fundo sobrescreve o dos de cima), e
+    nem o espelho nem o sandbox o leem: só o primeiro PDF que entrasse em `docs/` mostraria
+    o estrago, com os CR já tirados do blob. Exceção por diretório entra por decisão, com
+    esta guarda atualizada junto.
+    """
+    nested = [
+        entry.path
+        for entry in tracked
+        if Path(entry.path).name == ".gitattributes" and entry.path != ".gitattributes"
+    ]
+    assert not nested, "`.gitattributes` aninhado fora da guarda:\n" + "\n".join(nested)
+
+
 # ---------------------------------------------------------------------------
 # Camada 2 — o efeito da política com a configuração do Git for Windows
 # ---------------------------------------------------------------------------
