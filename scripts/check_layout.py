@@ -59,6 +59,7 @@ Retorna código de saída 0 se tudo OK, 1 se houver violações.
 
 import argparse
 import ast
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -226,6 +227,22 @@ EXPECTED_CONSTRUCTION_SITES = 1
 
 PACKAGE_MARKER_ANCHOR = "/__init__.py"
 
+# ---------------------------------------------------------------------------
+# Regra 11 — a hierarquia de exceções não fala de protocolo (ADR 3.9.0001 §6)
+# ---------------------------------------------------------------------------
+
+# Os módulos que **definem** a hierarquia de erro: as duas raízes de `shared` e os
+# módulos de erro de domínio e de aplicação de cada bounded context.
+ERROR_HIERARCHY_ANCHORS = ("/domain/exceptions/", "/application/errors.py")
+
+# O vocabulário do transporte. "status" e "borda" ficam de fora de propósito: têm uso
+# legítimo no domínio (status de escala; bordas inclusivas de um período). Número de
+# status é só `4xx`/`5xx`, com fronteira de palavra — `2.3.0003` e `R13` não casam.
+PROTOCOL_VOCABULARY = re.compile(
+    r"\bHTTP\b|\bFastAPI\b|\bStarlette\b|\bhandlers?\b|\bMRO\b|__mro__|\b[45](?:\d\d|xx)\b",
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -307,6 +324,8 @@ def coverage_anchors() -> dict[str, str]:
     anchors[RESULTS_ANCHOR] = "regra 8 — um sítio de construção por result"
     anchors[PACKAGE_MARKER_ANCHOR] = "regra 9 — marcador de pacote"
     anchors[USE_CASES_ANCHOR] = "regra 10 — escrita múltipla só dentro de uma unidade"
+    for anchor in ERROR_HIERARCHY_ANCHORS:
+        anchors[anchor] = "regra 11 — a hierarquia de exceções não fala de protocolo"
     return anchors
 
 
@@ -527,6 +546,35 @@ def check_package_markers(src_root: Path) -> list[str]:
                     f"PACOTE: {rel}:{node.lineno} — marcador de pacote com código "
                     f"({type(node).__name__}). Re-exportar daqui abre um caminho de "
                     f"import que nenhuma regra de camada inspeciona."
+                )
+
+    return violations
+
+
+def check_error_hierarchy_protocol(src_root: Path) -> list[str]:
+    """Regra 11 — módulo da hierarquia de exceções não menciona o transporte.
+
+    A herança de um erro diz o que ele **é**; o que ele vira para quem chamou é do
+    adapter de entrada, num mapa explícito (ADR 3.9.0001). Até a Stage 3.9 a ordem
+    das bases de um erro era escolhida para o lookup de handler do framework web, e
+    a docstring da raiz definia as classes pelo status — a inversão da Dependency
+    Rule escrita no próprio código. A varredura é **textual**, e não por `ast`, de
+    propósito: docstring e comentário são exatamente onde a inversão morava.
+    """
+    violations: list[str] = []
+
+    for py_file in sorted(src_root.rglob("*.py")):
+        file_str = posix(py_file)
+        if not any(anchor in file_str for anchor in ERROR_HIERARCHY_ANCHORS):
+            continue
+        rel = py_file.relative_to(src_root.parent)
+        for numero, linha in enumerate(py_file.read_text(encoding="utf-8").splitlines(), 1):
+            achado = PROTOCOL_VOCABULARY.search(linha)
+            if achado:
+                violations.append(
+                    f"PROTOCOLO: {rel}:{numero} — {achado.group(0)!r} num módulo da "
+                    f"hierarquia de exceções. O que o erro vira para quem chamou é do "
+                    f"adapter de entrada (ADR 3.9.0001); descreva-o lá."
                 )
 
     return violations
@@ -944,6 +992,7 @@ def main() -> int:
         *check_result_construction_sites(src_root),
         *check_package_markers(src_root),
         *check_multi_write_unit_of_work(src_root),
+        *check_error_hierarchy_protocol(src_root),
     ]
 
     if all_violations:

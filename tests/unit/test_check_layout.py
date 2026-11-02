@@ -950,3 +950,73 @@ def test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado() -> None
         "revoke_login_sessions",
         "send_login_invitation",
     }
+
+
+# ---------------------------------------------------------------------------
+# Regra 11 — a hierarquia de exceções não fala de protocolo (Stage 3.9, CA6)
+# ---------------------------------------------------------------------------
+
+
+def test_regra11_os_modulos_reais_da_hierarquia_nao_falam_de_protocolo() -> None:
+    assert check_layout.check_error_hierarchy_protocol(_SRC) == []
+
+
+@pytest.mark.parametrize(
+    ("caminho", "termo"),
+    [
+        ("shared/domain/exceptions/base.py", "convertida em HTTP"),
+        ("shared/application/errors.py", "o FastAPI registra"),
+        ("features/x/domain/exceptions/errors.py", "o lookup do Starlette"),
+        ("features/x/domain/exceptions/errors.py", "o error handler alcança"),
+        ("features/x/application/errors.py", "dois handlers"),
+        ("features/x/application/errors.py", "a MRO fica"),
+        ("features/x/application/errors.py", "type(exc).__mro__"),
+        ("features/x/application/errors.py", "vira 404"),
+        ("features/x/application/errors.py", "e não 500"),
+        ("features/x/domain/exceptions/errors.py", "resposta 4xx"),
+    ],
+)
+def test_regra11_cada_termo_do_vocabulario_reprova(
+    tmp_path: pathlib.Path, caminho: str, termo: str
+) -> None:
+    """Um violador plantado **por termo**, em docstring — onde a inversão morava."""
+    raiz = _src_falso(tmp_path, {caminho: f'"""Erro de exemplo — {termo}."""\n'})
+
+    violacoes = check_layout.check_error_hierarchy_protocol(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert caminho in violacoes[0].replace("\\", "/")
+
+
+def test_regra11_comentario_tambem_reprova(tmp_path: pathlib.Path) -> None:
+    raiz = _src_falso(
+        tmp_path,
+        {"features/x/domain/exceptions/errors.py": "class XError(Exception):\n    pass  # 422\n"},
+    )
+
+    assert len(check_layout.check_error_hierarchy_protocol(raiz)) == 1
+
+
+def test_regra11_numero_e_palavra_fora_do_vocabulario_nao_reprovam(tmp_path: pathlib.Path) -> None:
+    """O caso negativo: o vocabulário é estreito de propósito."""
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/x/domain/exceptions/errors.py": (
+                '"""ADR 2.3.0003, regra R13, 600 minutos, status da escala, bordas inclusivas,\n'
+                'versão 4.5 e §4.1 — nada disto é transporte."""\n'
+            )
+        },
+    )
+
+    assert check_layout.check_error_hierarchy_protocol(raiz) == []
+
+
+def test_regra11_arquivo_fora_da_hierarquia_nao_e_varrido(tmp_path: pathlib.Path) -> None:
+    """A regra mira os módulos que definem a hierarquia (concept 3.9 D6), não o domínio."""
+    raiz = _src_falso(
+        tmp_path,
+        {"features/x/domain/value_objects/email.py": '"""Evita um 500 em POST /users."""\n'},
+    )
+
+    assert check_layout.check_error_hierarchy_protocol(raiz) == []
