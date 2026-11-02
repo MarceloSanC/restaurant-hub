@@ -207,3 +207,28 @@ def test_ca13_get_nao_traz_violacao_de_registro_inativo_alocado(world: World) ->
     world.schedules.add(_semana("s1", MONDAY, "caio"), blank_change())
     resultado = _get_uc(world).execute(_get(world))
     assert resultado.violations == ()
+
+
+def test_ca27_get_e_calendario_trazem_o_nome_da_funcao_do_catalogo(world: World) -> None:
+    world.schedules.add(_semana("s1", MONDAY, "ana"), blank_change())
+    lida = _get_uc(world).execute(_get(world))
+    assert lida.bands[0].demands[0].job_function_name == "Cozinheiro"
+    cal = _cal_uc(world).execute(_cal(world, MONDAY, MONDAY))
+    assert cal.bands[0].demands[0].job_function_name == "Cozinheiro"
+
+
+def test_ca16_ausente_que_nao_conta_carga_tambem_recusa(world: World) -> None:
+    escala = (
+        schedule("s1")
+        .enable_band(ShiftBandId("f"), TimeRange(start=at(MONDAY, 10), end=at(MONDAY, 14)))
+        .declare_demand(ShiftDemandId("d"), ShiftBandId("f"), COOK, DemandQuantity(1))
+        .assign(
+            AssignmentId("a-ze"), ShiftDemandId("d"), EmployeeId("ze"), counts_toward_workload=False
+        )
+    )
+    world.schedules.add(dataclasses.replace(escala, version=1), blank_change())
+    with pytest.raises(MissingStaffRecordsError) as excinfo:
+        _get_uc(world).execute(_get(world))
+    assert excinfo.value.assignment_ids == (AssignmentId("a-ze"),)
+    with pytest.raises(MissingStaffRecordsError):
+        _cal_uc(world).execute(_cal(world, MONDAY, MONDAY))

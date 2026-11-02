@@ -16,6 +16,7 @@ from restaurant_hub.features.scheduling.application.ports.out.schedule_config_re
 from restaurant_hub.features.scheduling.application.use_cases.create_schedule import (
     CreateScheduleUseCase,
 )
+from restaurant_hub.features.scheduling.domain.entities.schedule import Schedule
 from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidSchedulePeriodError,
 )
@@ -24,6 +25,9 @@ from restaurant_hub.features.scheduling.domain.value_objects.operational_calenda
     DayCutoff,
     OperationalCalendar,
     Weekday,
+)
+from restaurant_hub.features.scheduling.domain.value_objects.schedule_period import (
+    SchedulePeriod,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
     ValidationConfig,
@@ -136,3 +140,21 @@ def test_guard_que_nega_nao_toca_port_nem_relogio_nem_gerador(world: World) -> N
     assert world.port_calls() == []
     assert world.clock.reads == 0
     assert world.ids.next_id() == UUID(int=1)
+
+
+def test_ca01_dia_coberto_no_meio_do_periodo_recusa_sem_chamar_add(world: World) -> None:
+    # Escala antiga fotografada com outro alinhamento (quinta a quarta).
+    quinta = MONDAY + timedelta(days=3)
+    antiga = Schedule(
+        id=ScheduleId("s-antiga"),
+        tenant_id=T1,
+        unit_id=U1,
+        period=SchedulePeriod(first_day=quinta),
+        calendar=OperationalCalendar(
+            week_start=Weekday.THURSDAY, day_cutoff=OperationalCalendar.default().day_cutoff
+        ),
+    )
+    world.schedules.add(antiga, blank_change())
+    with pytest.raises(SchedulePeriodTakenError):
+        _use_case(world).execute(_comando(world))
+    assert world.schedules.calls.count("add") == 1

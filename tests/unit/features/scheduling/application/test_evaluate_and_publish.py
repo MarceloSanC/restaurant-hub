@@ -44,6 +44,7 @@ from restaurant_hub.features.scheduling.application.use_cases.publish_schedule i
     PublishScheduleUseCase,
 )
 from restaurant_hub.features.scheduling.domain.entities.schedule import Schedule
+from restaurant_hub.features.scheduling.domain.exceptions.errors import ShiftDemandNotFoundError
 from restaurant_hub.features.scheduling.domain.value_objects.demand_quantity import (
     DemandQuantity,
 )
@@ -561,3 +562,40 @@ def test_ca10_inativo_alocado_nao_gera_violacao_nem_recusa_no_publish(world: Wor
     assert avaliado.schedule.violations == ()
     publicado = _publish(world).execute(_c(world, (RedeclareBandBreak(_F1, 30),)))
     assert publicado.violations == ()
+
+
+def test_ca04_operacao_que_falha_no_publish_nao_grava_nada(world: World) -> None:
+    _seed(world)
+    lote = (
+        RedeclareBandBreak(_F1, 30),
+        AssignEmployee(AssignmentId("a-x"), ShiftDemandId("nao-existe"), EmployeeId("ana")),
+    )
+    with pytest.raises(ShiftDemandNotFoundError):
+        _publish(world).execute(_c(world, lote))
+    assert "save" not in world.schedules.calls
+    assert len(world.schedules.changes_of(_S1)) == 1
+
+
+def test_ca27_avaliar_traz_o_nome_da_funcao_do_catalogo(world: World) -> None:
+    _seed(world)
+    avaliado = _evaluate(world).execute(_q(world, ()))
+    assert avaliado.schedule.bands[0].demands[0].job_function_name == "Cozinheiro"
+
+
+def test_ca07_aceite_parcial_recusa_so_com_as_pendentes_sem_gravar(world: World) -> None:
+    _seed(world)
+    lote = (
+        *_EXCEDENTE,
+        RedeclareBandBreak(_F1, 0),
+        EnableBand(ShiftBandId("f3"), TimeRange(start=at(MONDAY, 18), end=at(MONDAY, 22))),
+        DeclareDemand(ShiftDemandId("d3"), ShiftBandId("f3"), COOK, DemandQuantity(0)),
+        AssignEmployee(AssignmentId("a-dora"), ShiftDemandId("d3"), EmployeeId("carla")),
+    )
+    avaliado = _evaluate(world).execute(_q(world, lote))
+    assert len(avaliado.warnings) == 2  # noqa: PLR2004
+    primeira, segunda = avaliado.warnings
+    so_uma = (ViolationAcknowledgement(primeira.key, primeira.observed, primeira.limit),)
+    with pytest.raises(UnacknowledgedViolationsError) as excinfo:
+        _publish(world).execute(_c(world, lote, so_uma))
+    assert excinfo.value.violations == (segunda,)
+    assert "save" not in world.schedules.calls
