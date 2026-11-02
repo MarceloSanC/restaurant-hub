@@ -6,10 +6,13 @@ ele, um erro adicionado numa Stage futura cairia no default 422 em silêncio —
 deixa de ser observável pela API sem que nenhum teste fique vermelho.
 """
 
+import json
+
 import pytest
 
 from restaurant_hub.features.identity.adapters.inbound.http import error_handlers as handlers
 from restaurant_hub.features.identity.application import errors as application_errors
+from restaurant_hub.features.identity.application.errors import IdentityApplicationError
 from restaurant_hub.features.identity.domain.exceptions import errors as domain_errors
 from restaurant_hub.features.identity.domain.exceptions.errors import IdentityError
 
@@ -28,8 +31,11 @@ _TOTAL_DE_MODULOS_DE_ERRO = 2
 _MODULOS_DE_ERRO = (domain_errors, application_errors)
 
 
-def _subclasses_concretas() -> set[type[IdentityError]]:
-    """Todas as subclasses de `IdentityError` definidas no código de produção.
+def _subclasses_concretas() -> set[type[Exception]]:
+    """Todas as subclasses das duas raízes do BC definidas no código de produção.
+
+    As raízes são `IdentityError` (domínio) e `IdentityApplicationError`
+    (aplicação) — ADR 3.9.0001 §2.
 
     **O filtro por `restaurant_hub.` não é cosmético.** `__subclasses__()` é um
     registro global e vivo: a subclasse-cobaia que este arquivo define para
@@ -38,15 +44,16 @@ def _subclasses_concretas() -> set[type[IdentityError]]:
     essa falha provavelmente afrouxaria a exigência de "entrada própria" — que é
     justamente o gate.
     """
-    encontradas: set[type[IdentityError]] = set()
+    encontradas: set[type[Exception]] = set()
 
-    def _descer(classe: type[IdentityError]) -> None:
+    def _descer(classe: type[Exception]) -> None:
         for sub in classe.__subclasses__():
             if sub.__module__.startswith("restaurant_hub."):
                 encontradas.add(sub)
             _descer(sub)
 
     _descer(IdentityError)
+    _descer(IdentityApplicationError)
     return encontradas
 
 
@@ -213,3 +220,51 @@ def test_faixas_404_409_422_preservam_a_mensagem() -> None:
     assert b"rest-9" in _corpo(application_errors.RestaurantNotFoundError("rest-9"))
     assert b"a@b.com" in _corpo(application_errors.EmailAlreadyRegisteredError("a@b.com"))
     assert b"papel-x" in _corpo(domain_errors.InvalidRoleError("papel-x"))
+
+
+# ---------------------------------------------------------------------------
+# Corpo exato por faixa, para toda classe das duas raízes (Stage 3.9, CA8)
+# ---------------------------------------------------------------------------
+
+# Os corpos esperados são escritos aqui por extenso, e não lidos do módulo: este
+# teste é o oráculo de que a troca de raiz (ADR 3.9.0001) não mudou um byte do que
+# o cliente recebe, e um oráculo que importasse a constante concordaria com ela
+# mesmo que ela mudasse. Os e2e de faixa assertam só o status.
+_MENSAGEM_PLANTADA = "detalhe-plantado"
+_CORPO_401_ESPERADO = {"detail": "não autenticado", "type": "unauthorized"}
+_CORPO_403_ESPERADO = {"detail": "acesso negado", "type": "forbidden"}
+
+
+def _instancia_com_mensagem(classe: type[Exception]) -> Exception:
+    """Instância da classe com mensagem conhecida, sem passar pelo `__init__` dela.
+
+    Os construtores do BC pedem argumentos diferentes (ids, papéis, e-mails); o que
+    este teste observa é só o corpo produzido a partir de `str(exc)`, então a
+    mensagem é posta direto pela base `Exception`.
+    """
+    excecao = classe.__new__(classe)
+    Exception.__init__(excecao, _MENSAGEM_PLANTADA)
+    return excecao
+
+
+@pytest.mark.parametrize(
+    "classe", sorted(_subclasses_concretas(), key=lambda c: c.__name__), ids=lambda c: c.__name__
+)
+def test_corpo_exato_por_faixa_para_toda_classe_das_duas_raizes(classe: type[Exception]) -> None:
+    """401/403 com corpo constante (e `WWW-Authenticate` só no 401); demais com `str(exc)`."""
+    excecao = _instancia_com_mensagem(classe)
+    assert isinstance(excecao, IdentityError | IdentityApplicationError)
+    resposta = handlers.build_error_response(excecao)
+    corpo = json.loads(resposta.body)
+
+    status = handlers.IDENTITY_ERROR_STATUS[classe]
+    assert resposta.status_code == status
+    if status == 401:  # noqa: PLR2004 — o oráculo é o literal da faixa
+        assert corpo == _CORPO_401_ESPERADO
+        assert resposta.headers["WWW-Authenticate"] == "Bearer"
+    elif status == 403:  # noqa: PLR2004
+        assert corpo == _CORPO_403_ESPERADO
+        assert "WWW-Authenticate" not in resposta.headers
+    else:
+        assert corpo == {"detail": _MENSAGEM_PLANTADA, "type": "identity_error"}
+        assert "WWW-Authenticate" not in resposta.headers

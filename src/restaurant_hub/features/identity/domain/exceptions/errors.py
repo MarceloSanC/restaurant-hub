@@ -1,9 +1,9 @@
 """Exceções de domínio do bounded context identity.
 
 Todas herdam de `IdentityError`, que por sua vez herda de `DomainError`
-(`shared/domain`) — o error handler HTTP (Stage 2.4) converte a hierarquia
-`DomainError` em resposta 4xx. Aqui garante-se apenas a hierarquia e a mensagem;
-nenhuma exceção carrega estado além do texto.
+(`shared/domain`): cada uma nomeia uma regra do domínio violada (ADR 3.9.0001). Aqui
+garante-se apenas a hierarquia e a mensagem; nenhuma exceção carrega estado além do
+texto. O que cada uma vira para quem chamou é decidido pelo adapter de entrada.
 """
 
 from restaurant_hub.shared.domain.exceptions.base import DomainError
@@ -35,8 +35,9 @@ class InvalidIdentifierError(IdentityError):
 class InvalidNameError(IdentityError):
     """Nome obrigatório vazio numa entidade do BC.
 
-    É erro de negócio, não `ValueError`: só assim o error handler HTTP (2.4),
-    que captura `DomainError`, o converte em 4xx em vez de deixar virar 500.
+    É erro de negócio, não `ValueError`: um `ValueError` cru não é erro do BC, e
+    nenhuma borda saberia classificá-lo — chegaria a quem chamou como falha do
+    servidor, não como recusa do conteúdo enviado.
     """
 
     def __init__(self, entity: str) -> None:

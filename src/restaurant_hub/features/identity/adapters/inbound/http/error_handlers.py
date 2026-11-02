@@ -2,15 +2,16 @@
 
 **Mora na feature, não em `shared`.** O handler genérico de
 `shared/infrastructure/http/error_handlers.py` converte `DomainError` em 422 e
-`NotFoundError` em 404, e continua valendo como rede de segurança; mas as classes
-de identity não podem ser referenciadas de `shared`, que não importa de features
-(LAYOUT §7).
+continua valendo como rede de segurança para o domínio; mas as classes de identity
+não podem ser referenciadas de `shared`, que não importa de features (LAYOUT §7).
 
-**Um handler só, registrado sobre `IdentityError`.** O status é resolvido
-percorrendo o `__mro__` da exceção contra o mapa abaixo. Starlette escolhe o
-handler pelo primeiro tipo do MRO que estiver registrado, e como `IdentityError`
-precede `NotFoundError`/`DomainError` em todas as MROs deste BC, este handler
-ganha dos genéricos — o que é o desejado, porque o mapa daqui é mais específico.
+**Um handler só, registrado sobre as duas raízes do BC** — `IdentityError`
+(domínio) e `IdentityApplicationError` (aplicação), ADR 3.9.0001. Starlette escolhe
+o handler pelo primeiro tipo do `__mro__` da exceção que estiver registrado; toda
+classe deste BC tem uma raiz só, e a raiz vem antes de `DomainError`/`ApplicationError`
+na MRO, então este handler ganha do genérico. É **só aqui** que a ordem da MRO
+importa: a hierarquia não é desenhada para o framework, e o status sai do mapa
+abaixo, percorrido pelo `__mro__` da exceção.
 
 **A totalidade do mapa é um teste, não uma promessa.** Um erro novo sem entrada
 cairia no default 422 em silêncio, que é exatamente como um 403 vira 422 sem

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from restaurant_hub.features.identity.adapters.out.postgres import integrity_errors
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
+    IdentityApplicationError,
     RestaurantAlreadyExistsError,
     SessionAlreadyExistsError,
     SessionFingerprintAlreadyExistsError,
@@ -51,7 +52,9 @@ def test_constraint_de_negocio_vira_erro_de_dominio(
     traduzido = integrity_errors.traduzir(_erro(constraint), "chave-1")
     assert isinstance(traduzido, esperado)
     # Invariante #16 da 2.2: nada escapa da hierarquia e vira 500 por descuido.
-    assert isinstance(traduzido, IdentityError)
+    # Pertinência às **duas** raízes do BC (ADR 3.9.0001): o que importa é que
+    # nada escape da hierarquia de identity, não qual das duas raízes.
+    assert isinstance(traduzido, IdentityError | IdentityApplicationError)
 
 
 @pytest.mark.parametrize(
