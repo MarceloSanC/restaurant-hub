@@ -1,7 +1,7 @@
 ---
 title: Domínio staff/workforce — equipe da unidade (teoria canônica)
 description: Camada teórica do subdomínio workforce do BC staff — fundamentos, língua ubíqua, regras canônicas e invariantes de funcionário, função, jornada, preferência, indisponibilidade, cópia entre unidades e fronteira com identity
-when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (3.1–3.5) ou de qualquer Stage futura que toque o BC staff; é a base que os concepts consomem em vez de re-derivar
+when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (3.1–3.8) ou de qualquer Stage futura que toque o BC staff; é a base que os concepts consomem em vez de re-derivar
 keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao, cadastro-minimo, homonimos, wall-clock, fuso-da-unidade, rbac]
 status: accepted
 created_at: 2026-07-23
@@ -63,14 +63,14 @@ O subdomínio **workforce** cobre a teoria da **equipe da unidade** de um restau
 - a **cópia de funcionário entre unidades** do mesmo restaurante;
 - a **fronteira com identity** (login opcional criado pelo gerente).
 
-É a base que os `concept.md` das Stages 3.1–3.5 consomem — e que os Steps 4 (scheduling) e 5
+É a base que os `concept.md` das Stages 3.1–3.8 consomem — e que os Steps 4 (scheduling) e 5
 (auto-preenchimento) leem como insumo (a carga contratada, a preferência e a indisponibilidade são
 os dados que a escala valida e a justiça distributiva persegue).
 
 **Fora do escopo deste subdomínio** (fronteiras negativas ratificadas):
 
 - **Escala, demanda, vaga, alocação** — pertencem ao BC `scheduling` (Step 4). Roadmap 3.2
-  `non_goals` ("noção de escala/demanda é Step 4").
+  `non_goals` ("noção de escala/demanda (Step 4)").
 - **Dinheiro / folha / valorização de horas** — fora da v1 do produto inteiro. Overview §3 "Fora do
   escopo"; kickoff #11.
 - **Regras trabalhistas como validação** (descanso entre jornadas, tetos de horas, antecedência de
@@ -91,7 +91,7 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 |---|---|
 | **Funcionário** (registro) | Cadastro de uma pessoa como membro da equipe de **uma unidade**. É o objeto que o staff gerencia; distinto da **pessoa** (ver §3.1). |
 | **Função** | Papel de **trabalho** (cozinheiro, atendente, faxineiro...), **100% customizável por restaurante** — nada pré-determinado. A demanda da escala (Step 4) é definida por função. Overview §3, §9. |
-| **Papel** (de acesso) | Conceito de **identity**, não de staff: conjunto **fechado e fixo** de 5 papéis RBAC (dono, gerente, RH, funcionário, admin de plataforma). **Função ≠ Papel**: função é trabalho e é customizável; papel é acesso e é fixo. Overview §3 (RBAC), §9. |
+| **Papel** (de acesso) | Conceito de **identity**, não de staff: conjunto **fechado e fixo** de 5 papéis RBAC (dono, gerente, RH, funcionário, admin de plataforma). **Função ≠ Papel**: função é trabalho e é customizável; papel é acesso e é fixo. Overview §3 (RBAC); kickoff #10. |
 | **Jornada fixa** | Perfil de carga com **carga horária semanal contratada** (determinada). Overview §3, §9; kickoff #5. |
 | **Sob demanda** | Perfil de carga de quem atua **quando acionado** — extra, gerente, dono. Overview §3, §9. |
 | **Intermitente** | Designa **apenas o contrato CLT específico** (art. 443 §3º). **"Sob demanda" ≠ "intermitente"** — ver §3.4. Overview §9. |
@@ -101,7 +101,7 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 | **Setor** | Área da operação (cozinha, salão, bar, caixa...); preferido a "praça". Termo **ratificado no glossário, mas fora da v1 do staff** — nenhuma feature o exige (ver §5). Overview §9. |
 | **Indisponibilidade** | Período em que o funcionário não pode ser escalado (férias, atestados na v1). Overview §3. |
 | **Demanda / Vaga** | Necessidade de N pessoas de uma função num turno de um dia — **pertence a scheduling**; listado aqui só para delimitar a fronteira. Overview §9. |
-| **Tenant** | Um restaurante cliente da plataforma, isolado dos demais; unidades pertencem ao tenant. Overview §9. |
+| **Tenant** | Um restaurante cliente da plataforma, isolado dos demais; unidades pertencem ao tenant. Overview §9, §3. |
 
 ---
 
@@ -328,7 +328,7 @@ A fronteira, com a fonte primária verificada (Planalto, 2026-07-23):
   do art. 452-A § 1º) entram como **validação configurável por restaurante** no scheduling
   (overview §6 — CLT não é hard-coded; a fonte sustenta o *default* e os limites, nunca
   comportamento imutável). A teoria dessas validações pertence ao **doc de domínio de scheduling**
-  (gate do Step 4), não a este doc (overview §6).
+  (gate do Step 4), não a este doc (roadmap, Stage 4.2).
 
 ### 3.5 Preferência de turno
 
@@ -347,8 +347,8 @@ dia** — **manhã, tarde, noite, madrugada**. Kickoff #6.
 - **As fronteiras horárias dos períodos NÃO pertencem ao staff.** O BC staff guarda **só os
   períodos nomeados**; o mapeamento período → faixas de horário concretas é responsabilidade do
   **scheduling** (Step 4), onde vive a configuração por restaurante. Âncoras: roadmap 3.2
-  `non_goals` ("noção de escala/demanda é Step 4"); overview §6 (configuração por restaurante vive
-  em scheduling).
+  `non_goals` ("noção de escala/demanda (Step 4)"); Stage 4.2 do roadmap (as políticas configuráveis
+  por restaurante vivem em scheduling).
 - Consumidores: o auto-preenchimento respeita a preferência (overview §3 — "respeita carga,
   preferência de turno e indisponibilidade"). É **sinal soft** (afinidade, justiça), não restrição
   rígida: bloquear é papel da indisponibilidade (§3.6), e a semântica do casamento pertence ao
@@ -542,8 +542,8 @@ Quem faz o quê no staff (papéis de **acesso** de identity aplicados a este sub
 
 | Papel | No subdomínio workforce |
 |---|---|
-| **dono (owner)** | Gerencia a equipe; visibilidade **bypassa** memberships (enxerga todas as unidades do tenant). ADR 2.1.0001 (eixo B); kickoff #9. |
-| **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). Roadmap 3.4 (RBAC "gerente/RH/dono da unidade"). O **catálogo de funções**, que é do restaurante (§3.2), ele gerencia sem nomear unidade — a permissão do catálogo é *tenant-wide* ([ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)). |
+| **dono (owner)** | Gerencia a equipe; visibilidade **bypassa** memberships (enxerga todas as unidades do tenant). ADR 2.1.0001 (eixo de visibilidade); kickoff #1 e #9. |
+| **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). ADR 2.1.0001 (escopo por membership); ADR 3.4.0006 (gerente e RH nas unidades de que são membros). O **catálogo de funções**, que é do restaurante (§3.2), ele gerencia sem nomear unidade — a permissão do catálogo é *tenant-wide* ([ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)). |
 | **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **no staff também coincide** — mesmas permissões e mesmo alcance do gerente: os registros das unidades das quais é membro, **sem** alcance cross-unidade, e o catálogo de funções do restaurante inteiro ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md); ADR 3.4.0008). A divergência que o kickoff #10 previu existe, mas é de **família de operação** e mora na **escala** (Step 4): o RH mexe no cadastro; mexer na escala é do gerente e do dono, e o RH só a lê (ADR 4.1.0004; ver a lacuna fechada abaixo). Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com as mesmas permissões de staff — `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS` — e o mesmo `MANAGE_USERS` de identity). *(Nota 2026-09-13: a divergência real é na **escala**, não no staff — dentro do staff hr ≡ manager ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)); na escala, hr **lê** nas unidades de que é membro e não gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md)).)* |
 | **funcionário (employee)** | Papel fixo, tenant-scoped, com **permissões vazias** — na v1 **não enxerga nada de staff**; o único caso de uso futuro é consultar a própria escala (Step 4, fora deste subdomínio — roadmap 3.5 `non_goals`). Âncoras das permissões vazias: `Role.EMPLOYEE: frozenset()` em `src/restaurant_hub/features/identity/domain/value_objects/role.py` (Stage 2.1, merged); mapeamento bronze do kickoff ("hoje só consulta"). |
 | **admin de plataforma** | Fora do tenant; bypass de visibilidade é da fundação (ADR 2.1.0001), sem particularidade de staff. |
@@ -608,7 +608,7 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 **Derivações ancoradas (sem alternativa real — decididas pelos docs):**
 
 - Fronteiras horárias dos períodos nomeados pertencem ao **scheduling** — roadmap 3.2 `non_goals`;
-  overview §6.
+  roadmap, Stage 4.2.
 - Função de trabalho com escopo de **tenant** — overview §3 ("customizável por restaurante").
 - Atributos mínimos da função: nome verbatim único — ADR 2.3.0005; overview §3
   (parametrização é da demanda da escala). Ciclo de vida (ativo/inativo × remoção) era **lacuna**
@@ -633,7 +633,7 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
 - [`overview.md`](../../overview.md) — §3 Escopo (equipe, login opcional, cópia, indisponibilidade,
   fora-do-escopo), §6 Restrições (CLT não hard-coded; fuso por unidade), §9 Glossário (língua
   ubíqua), §10 Referências (fontes setoriais de terminologia).
-- [`roadmap.md`](../../roadmap.md) — bloco "Step 3 — Equipe da unidade", Stages 3.1–3.5
+- [`roadmap.md`](../../roadmap.md) — bloco "Step 3 — Equipe da unidade", Stages 3.1–3.8
   (contratos, DoD, non_goals); ROADMAP-1 (BCs); ROADMAP-3 (tenancy row-level).
 - [`shift-scheduling.md`](../scheduling/shift-scheduling.md) — teoria do BC scheduling, que lê os
   dados do staff: desligamento reconciliado na leitura e "conta para a carga" na alocação (§3.4),
