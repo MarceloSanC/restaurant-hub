@@ -23,8 +23,8 @@ bounded_context: transversal
 Decided in issue #67 (standalone issue, hence the `0.0` prefix — CONVENTIONS §1, "ADR global" —
 and `bounded_context: transversal`, CONVENTIONS §2). The decision is about the identity bounded
 context; a search for identity ADRs finds it through ADR 2.4.0003's `## Supersessão parcial`.
-The number `0.0.0014` was assigned by the orchestrator: `0.0.0011` and `0.0.0012` belong to
-issue #79 (PR #110) and `0.0.0013` to PR #109.
+The number `0.0.0014` was assigned by the orchestrator: `0.0.0012` belongs to issue #79
+(PR #110) and `0.0.0013` to issue #108 (PR #109); `0.0.0011` was drafted by both and left unused.
 
 **Partially supersedes [ADR 2.4.0003](./2_4_0003-authorization-composition-at-boundary.md):**
 
