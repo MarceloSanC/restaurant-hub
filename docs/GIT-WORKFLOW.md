@@ -547,8 +547,8 @@ Flags úteis (passar via `ARGS='...'`):
 
 #### Hooks do git
 
-Fonte única da regra; os prompts, o RUNBOOK e o `CLAUDE.md` apontam para
-cá. Os hooks `pre-commit` e `commit-msg` moram no diretório comum do
+Fonte única da regra; o prompt do orquestrador, o `CLAUDE.md`, o README e a
+skill `git-versioning-pointer` apontam para cá. Os hooks `pre-commit` e `commit-msg` moram no diretório comum do
 repositório (`git rev-parse --git-common-dir`), **um só para todas as
 worktrees**, e o `pre-commit install` grava neles o caminho absoluto do
 python que o rodou (`INSTALL_PYTHON`). Instalados de dentro de uma
