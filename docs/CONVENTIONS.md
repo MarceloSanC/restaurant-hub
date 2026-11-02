@@ -95,7 +95,7 @@ Comentários e docstrings permanecem em português (conforme §4 de commits/PR).
 - **Stage:** `N.M` dentro do Step `N`. Não recicla.
 - **Task:** `task-NN` dentro do `technical.md` da Stage, zero-padded
   (`task-01`, `task-02`).
-- **ADR de Stage:** nome do arquivo `N_M_NNNN-<slug>.md` em `docs/adr/`;
+- **ADR de Stage:** nome do arquivo `N_M_NNNN-<slug-do-adr>.md` em `docs/adr/`;
   `adr_id` no frontmatter `N.M.NNNN`. `N.M` herda da Stage; `NNNN` é
   sequencial **dentro do prefixo `N_M`** (4 dígitos, não recicla) — o
   prefixo no filename é o separador namespace, **não há subpasta por
@@ -105,7 +105,7 @@ Comentários e docstrings permanecem em português (conforme §4 de commits/PR).
   específica (ex.: decisão fundacional de arquitetura). Vivem na
   mesma pasta `docs/adr/` (Stage e global coexistem; o prefixo
   `N_M` no filename basta para distinguir). Usam `N.M = 0.0` fixo —
-  nome do arquivo `0_0_NNNN-<slug>.md`; `adr_id: 0.0.NNNN`. `NNNN`
+  nome do arquivo `0_0_NNNN-<slug-do-adr>.md`; `adr_id: 0.0.NNNN`. `NNNN`
   sequencial dentro do prefixo `0_0`.
 
 ### Identificador da Stage — `stage_id` × número
