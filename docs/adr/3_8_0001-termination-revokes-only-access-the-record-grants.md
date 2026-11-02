@@ -14,6 +14,8 @@ bounded_context: staff
 
 # ADR 3.8.0001 — Termination revokes only the access the record grants
 
+> ⚠️ **Errata (2026-11-01):** section pointers into `docs/domain/staff/workforce.md` — the explicit copy quoted in Context (*"only the explicit copy (§3.8)"*) is workforce **§3.7**, not §3.8 (§3.8 is the identity boundary); and the References line *"§3.1, §3.8, §3.8"* reads **§3.1, §3.7, §3.8**. Pointers only; no decision content changes — ver issue #37 (finding F6)
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
