@@ -193,6 +193,51 @@ def test_ator_removido_do_banco_vira_401_e_nao_404() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Issue #26 — o ator autenticado fica anotado para o log do handler
+# ---------------------------------------------------------------------------
+
+
+def test_authenticate_anota_o_sujeito_do_token_na_requisicao() -> None:
+    """O handler de erros lê o ator daqui para registrar a causa do 401/403."""
+    fixture = _Fixture()
+    user = fixture.com_usuario(user_id="user-anotado")
+    request = _request({"Authorization": f"Bearer {fixture.token_de(user)}"})
+
+    fixture.guard.authenticate(request)
+
+    assert dependencies.authenticated_actor_id(request) == "user-anotado"
+
+
+def test_requisicao_sem_autenticacao_nao_tem_ator() -> None:
+    assert dependencies.authenticated_actor_id(_request()) is None
+
+
+def test_token_recusado_nao_deixa_ator_anotado() -> None:
+    """A anotação vem **depois** da verificação: token recusado não vira ator.
+
+    Anotar antes atribuiria no log a tentativa a quem o token forjado alega ser.
+    """
+    fixture = _Fixture()
+    user = fixture.com_usuario()
+    token = fixture.token_de(user)
+    fixture.clock.advance(timedelta(minutes=15))
+    request = _request({"Authorization": f"Bearer {token}"})
+
+    with pytest.raises(InvalidAccessTokenError):
+        fixture.guard.authenticate(request)
+
+    assert dependencies.authenticated_actor_id(request) is None
+
+
+def test_anotacao_que_nao_e_texto_e_ignorada() -> None:
+    """Só um `str` vale como ator — qualquer outra coisa no estado vira `None`."""
+    request = _request()
+    request.state.identity_actor_id = 42
+
+    assert dependencies.authenticated_actor_id(request) is None
+
+
+# ---------------------------------------------------------------------------
 # CA22 — o oráculo de enumeração cross-tenant
 # ---------------------------------------------------------------------------
 

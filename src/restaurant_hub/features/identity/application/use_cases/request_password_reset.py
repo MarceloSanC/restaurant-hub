@@ -29,8 +29,16 @@ mataria o convite de qualquer vítima em laço, por esta mesma rota.
 "não existe" retorna na hora. A diferença é medível, e fechá-la exige envio
 assíncrono, que está fora do escopo desta Stage (concept §10 e §13). O que esta
 Stage garante é que status, corpo e cabeçalhos são idênticos.
+
+**A falha absorvida vai para o log — só o tipo dela** (issue #26). Absorver é o
+que fecha o oráculo; absorver sem registro deixaria o operador sem saber por que
+o e-mail de redefinição não chegou. O registro leva o id do usuário e o nome
+qualificado da exceção, e nada além: a mensagem e o traceback de uma falha de
+provedor podem ecoar o destinatário ou o corpo com o link, e o link é a
+credencial.
 """
 
+import logging
 from datetime import timedelta
 
 from restaurant_hub.features.identity.application.dtos.commands import (
@@ -61,6 +69,8 @@ from restaurant_hub.shared.application.ports.out.email_sender import (
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
 
 _ASSUNTO = "Redefinição de senha do Restaurant Hub"
+
+_log = logging.getLogger(__name__)
 
 
 class RequestPasswordResetUseCase:
@@ -114,7 +124,16 @@ class RequestPasswordResetUseCase:
             with self._unit_of_work.transaction():
                 valor_do_token = self._emitir_token(credenciais.user.id)
             self._enviar(command.email.value, valor_do_token)
-        except Exception:
+        except Exception as exc:
+            # Sem `exc_info` e sem `str(exc)`, de propósito — ver o docstring do
+            # módulo. O nome da classe separa "provedor fora" de "banco recusou
+            # escrita", que é o que o operador precisa para agir.
+            classe = type(exc)
+            _log.error(
+                "redefinição de senha não concluída (falha absorvida): user_id=%s erro=%s",
+                credenciais.user.id,
+                f"{classe.__module__}.{classe.__qualname__}",
+            )
             return
 
     def _emitir_token(self, user_id: UserId) -> str:
@@ -149,11 +168,9 @@ class RequestPasswordResetUseCase:
         um erro de escrita no repositório reabriria o oráculo pelo status —
         cadastrado dá 500, desconhecido dá 202.
 
-        A falha não é silenciada por desprezo ao problema: ela deveria ir para o
-        log do servidor. O logging é configurado no boot desde a issue #6, mas
-        nenhuma linha registra esta falha, então esta Stage **não afirma** que a
-        falha é registrada — afirmar sem verificar é o defeito que o finding #26
-        pediu para não repetir.
+        A falha não é silenciada por desprezo ao problema: `execute` a registra
+        no log do servidor (issue #26) — só o tipo, nunca a mensagem, porque a
+        de um provedor de e-mail pode ecoar o destinatário ou o link.
         """
         link = setup_link(self._base_url, valor_do_token)
         self._email_sender.send(

@@ -28,9 +28,16 @@ config = context.config
 settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
-# Configura logging conforme definido no alembic.ini
+# Configura logging conforme definido no alembic.ini.
+#
+# `disable_existing_loggers=False` (a mesma escolha do uvicorn): o default `True`
+# desliga todo logger que já existe quando o Alembic roda. Na suíte, a fixture de
+# sessão `engine` roda as migrations **in-process**, depois da coleta — e cada
+# `logging.getLogger(__name__)` de módulo de `src/` ficava `disabled=True` dali em
+# diante, cegando os testes de `caplog` conforme a ordem de execução (issue #26,
+# finding F1 da #6). Num `alembic upgrade` de linha de comando não muda nada.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # MetaData para autogenerate.
 #
