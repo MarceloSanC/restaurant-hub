@@ -167,7 +167,7 @@ _COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[s
         lambda d: d.staff_identity_gateway._facade._provision_account,
         {"_users", "_restaurants", "_units", "_tokens"},
     ),
-    # Issue #67 — restaurante e dono (ADR 0.0.0012).
+    # Issue #67 — restaurante e dono (ADR 0.0.0014).
     "provision_restaurant": (
         lambda d: d.identity_provision_restaurant,
         {"_restaurants", "_users"},

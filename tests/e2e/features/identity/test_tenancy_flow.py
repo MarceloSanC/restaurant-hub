@@ -159,7 +159,7 @@ async def test_email_duplicado_entre_tenants_e_409(
 
 
 # ---------------------------------------------------------------------------
-# Issue #67 — o restaurante nasce com o dono, ou não nasce (ADR 0.0.0012)
+# Issue #67 — o restaurante nasce com o dono, ou não nasce (ADR 0.0.0014)
 # ---------------------------------------------------------------------------
 
 
@@ -228,7 +228,7 @@ async def test_rota_de_owner_acrescenta_dono_a_restaurante_existente(
     client: AsyncClient, admin_semeado: User
 ) -> None:
     """`POST /restaurants/{id}/owners` deixou de ser o bootstrap e segue como o
-    caminho de suporte da plataforma (ADR 0.0.0012 §3)."""
+    caminho de suporte da plataforma (ADR 0.0.0014 §3)."""
     admin = await fazer_login(client, admin_semeado.email.value)
     restaurante = (
         await client.post(

@@ -108,7 +108,7 @@ class CreateOwnerRequest(BaseModel):
     """O `owner` de um restaurante (ação de plataforma).
 
     Corpo de `POST /restaurants/{id}/owners` e campo `owner` de
-    `ProvisionRestaurantRequest` — as duas rotas que emitem `owner` (ADR 0.0.0012).
+    `ProvisionRestaurantRequest` — as duas rotas que emitem `owner` (ADR 0.0.0014).
 
     Sem campo `role`: o papel é fixado em `Role.OWNER` no código (no router e no
     use case de provisionamento). É o que garante que **nenhuma rota emite
@@ -125,7 +125,7 @@ class ProvisionRestaurantRequest(BaseModel):
 
     Só `platform_admin` alcança. O dono tem a forma de `CreateOwnerRequest` —
     sem `role` e sem tenant: o papel é `owner`, fixado no use case, e o tenant é
-    o restaurante que nasce junto (ADR 0.0.0012).
+    o restaurante que nasce junto (ADR 0.0.0014).
     """
 
     name: str

@@ -86,7 +86,7 @@ class ProvisionedAccountResult:
 
 @dataclass(frozen=True)
 class ProvisionedRestaurantResult:
-    """Restaurante provisionado **com** o seu primeiro `owner` (ADR 0.0.0012).
+    """Restaurante provisionado **com** o seu primeiro `owner` (ADR 0.0.0014).
 
     Os campos do restaurante vão planos: o restaurante e o dono nascem juntos,
     numa unidade, e o result descreve essa única operação. (O `RestaurantResult`

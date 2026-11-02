@@ -273,7 +273,7 @@ def provision_restaurant(
     ação de plataforma, não de tenant — e um ator com tenant falha antes disso,
     na checagem de permissão.
 
-    **Restaurante e dono nascem numa unidade de trabalho** (ADR 0.0.0012): antes
+    **Restaurante e dono nascem numa unidade de trabalho** (ADR 0.0.0014): antes
     eram duas chamadas, e uma falha entre elas deixava um restaurante que ninguém
     opera. Nenhum caminho da API cria restaurante sem dono.
 
@@ -311,7 +311,7 @@ def create_restaurant_owner(
 
     Até a issue #67 esta rota **era** o bootstrap: o restaurante nascia sozinho em
     `POST /restaurants` e o dono vinha aqui, numa segunda chamada. Hoje o
-    restaurante já nasce com o dono (ADR 0.0.0012), e esta rota ficou como o
+    restaurante já nasce com o dono (ADR 0.0.0014), e esta rota ficou como o
     caminho de suporte da plataforma — devolver acesso a um tenant cujos donos o
     perderam, ou dar dono a restaurante criado antes da mudança. `platform_admin`
     detém **apenas** `manage_platform` (mapa da 2.1) e não cria usuário pela rota

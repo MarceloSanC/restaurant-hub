@@ -1,6 +1,6 @@
 """Use case: provisionar um tenant — o restaurante e o seu primeiro `owner`.
 
-**Restaurante e dono são uma unidade de trabalho** (ADR 0.0.0012, sobre o port
+**Restaurante e dono são uma unidade de trabalho** (ADR 0.0.0014, sobre o port
 do ADR 2.6.0001). Antes, o provisionamento eram duas chamadas — criar o
 restaurante (`CreateRestaurantUseCase`, removido na issue #67), depois criar o
 dono —, e uma falha entre elas deixava um restaurante que ninguém opera: o
@@ -15,11 +15,11 @@ de outro use case é ponto cego declarado dela (ADR 2.6.0002 §5).
 
 **O papel é o literal `Role.OWNER`, aqui** — não vem do command. Com ele, "nenhum
 caminho emite `platform_admin`" vale para este use case qualquer que seja o
-adapter que o chame (ADR 0.0.0012 §3; ADR 2.4.0003 §2b).
+adapter que o chame (ADR 0.0.0014 §3; ADR 2.4.0003 §2b).
 
 **A autorização fica na borda**, como em todo use case de identity (ADR 2.4.0003
 §1): este use case não recebe ator. O ADR 3.7.0001 trouxe a autorização para
-dentro dos use cases de **staff**, não de identity (ADR 0.0.0012 §4).
+dentro dos use cases de **staff**, não de identity (ADR 0.0.0014 §4).
 
 Ordem: o nome (invariante do domínio, local e grátis) primeiro; depois a
 unicidade global do e-mail, antes de qualquer escrita; o hash fora da unidade,

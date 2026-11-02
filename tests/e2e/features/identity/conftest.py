@@ -103,7 +103,7 @@ async def fazer_login(client: AsyncClient, email: str, senha: str = SENHA_PADRAO
 def corpo_tenant(nome: str, email_do_dono: str, senha: str = SENHA_PADRAO) -> dict:
     """Corpo de `POST /restaurants`: o restaurante **e** o seu primeiro dono.
 
-    Desde a issue #67 (ADR 0.0.0012) o restaurante nasce com o dono, numa unidade
+    Desde a issue #67 (ADR 0.0.0014) o restaurante nasce com o dono, numa unidade
     de trabalho — não há mais chamada que crie restaurante sozinho.
     """
     return {"name": nome, "owner": {"email": email_do_dono, "password": senha}}
