@@ -183,7 +183,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | done | — |
 | [#75](https://github.com/MarceloSanC/restaurant-hub/issues/75) | Negar na application de staff ator que o guard não emitiu (drivers fora da borda HTTP) | staff | application | open | `3.7-application-authorization` |
 | [#76](https://github.com/MarceloSanC/restaurant-hub/issues/76) | Validar identificador fora da borda HTTP antes de autorizar | staff | application | open | `3.7-application-authorization` |
-| [#77](https://github.com/MarceloSanC/restaurant-hub/issues/77) | Trocar o ponteiro `(#49)` da fachada de identity e do ADR 3.5.0001 pelo ADR 3.7.0001 | identity | docs + application (fachada) | open | `3.7-application-authorization` |
+| [#77](https://github.com/MarceloSanC/restaurant-hub/issues/77) | Trocar o ponteiro `(#49)` da fachada de identity e do ADR 3.5.0001 pelo ADR 3.7.0001 | identity | docs + application (fachada) | done | `3.7-application-authorization` |
 | [#78](https://github.com/MarceloSanC/restaurant-hub/issues/78) | Medir sob carga o custo da dupla autorização de staff (borda + use case) | staff | ops (medição) | blocked | `6.3-ops-baseline` |
 | [#79](https://github.com/MarceloSanC/restaurant-hub/issues/79) | Citar o roadmap por âncora estável em vez de número de linha (gate no `docs-check`) | shared | docs + tooling | done | — |
 | [#81](https://github.com/MarceloSanC/restaurant-hub/issues/81) | Merge do auditor de dentro da worktree não apaga a branch remota | shared | docs + tooling | done | — |
