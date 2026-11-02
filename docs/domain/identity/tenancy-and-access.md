@@ -2,7 +2,7 @@
 title: Domínio identity/tenancy-and-access — restaurante, acesso e credenciais (teoria canônica)
 description: Camada teórica do subdomínio tenancy-and-access do BC identity — fundamentos, língua ubíqua, regras canônicas e invariantes de isolamento de tenant, papéis fixos e permissões, vínculo usuário↔unidade, autorização, provisionamento, sessões, convite e definição de senha, e fronteiras com staff e scheduling. Backfill que consolida o que os ADRs accepted já decidiram (issue #30)
 when-use: Consultar antes de escrever o concept.md de qualquer Stage que toque o BC identity (tenancy, papéis, permissões, membership, login, sessão, convite, senha) ou que consuma o acesso de identity a partir de outro BC; é a base que os concepts consomem em vez de re-derivar dos ADRs 2.x
-keywords: [domain, identity, tenancy, tenant, restaurante, unidade, usuario, conta, rbac, papel, permissao, membership, vinculo, visibilidade, bypass, tenant-wide, autorizacao, fail-closed, provisionamento, platform-admin, sessao, refresh, rotacao, reuso, logout, convite, conta-pendente, token-de-setup, definicao-de-senha, redefinicao, enumeracao, unidade-de-trabalho, fachada, lingua-ubiqua]
+keywords: [domain, identity, tenancy, tenant, restaurante, unidade, usuario, conta, rbac, papel, permissao, membership, vinculo, visibilidade, bypass, tenant-wide, autorizacao, fail-closed, provisionamento, platform-admin, sessao, refresh, rotacao, reuso, logout, fachada-de-acesso, convite, conta-pendente, token-de-setup, definicao-de-senha, redefinicao, enumeracao, unidade-de-trabalho, fachada, lingua-ubiqua]
 status: accepted
 created_at: 2026-11-02
 updated_at: 2026-11-02
@@ -14,6 +14,7 @@ references:
   - ../../adr/0_0_0003-formalize-domain-and-audits-doc-categories.md
   - ../../adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md
   - ../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md
+  - ../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md
   - ../../adr/2_1_0001-identity-aggregates-and-membership.md
   - ../../adr/2_1_0002-platform-admin-without-tenant.md
   - ../../adr/2_2_0001-revocable-refresh-session-port.md
@@ -122,7 +123,7 @@ alcança**:
 | **Token de setup** | Token dedicado, de uso único e com propósito (convite ou redefinição), que só serve para **definir a senha** ([ADR 2.5.0002](../../adr/2_5_0002-dedicated-single-use-setup-token.md)). |
 | **Conta pendente** | Conta criada sem senha utilizável (hash inutilizável), que só se torna usável pelo link de definição de senha ([ADR 2.5.0004](../../adr/2_5_0004-unusable-hash-for-pending-accounts.md); [ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) §1). |
 | **Link entregue em mãos** | O mesmo link de definição de senha do convite, devolvido uma vez ao gestor para entrega física, com prazo próprio ([ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) §2, §3b). Não há senha provisória. |
-| **Fachada de identity** | Serviço in-process com tipos primitivos, única porta por onde outro BC alcança identity ([ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) §1, §4). |
+| **Fachada de identity** | Módulo in-process com tipos primitivos, única porta por onde outro BC alcança identity ([ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) §1, §4). Tem duas classes: as operações de conta e a **fachada de acesso**, que expõe a decisão de autorização ([ADR 0.0.0016](../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md) §Decision 2). |
 
 > **Linguagem de produto × modelo.** O sponsor descreveu o acesso em três níveis —
 > **ouro/prata/bronze**. Isso é linguagem de produto, não o modelo: ouro ≈ `owner`,
@@ -272,6 +273,18 @@ ao contrário de staff, onde todo use case autoriza o próprio alvo
 ([ADR 3.7.0001](../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md)). Se identity
 deve seguir staff é decisão aberta para o BC inteiro (issue #115; §5).
 
+**A mesma decisão, para quem está fora de identity.** Outro BC não recompõe a autorização: ele a
+pede à **fachada de acesso** (`IdentityAccessFacade`, segunda classe de `application/facade.py`),
+em primitivos — o principal autenticado, o nome da permissão, o tenant e a unidade alvo **como o
+chamador os declarou** — e recebe um `AccessGrant` (papel, tenant do ator, unidade aprovada) ou a
+exceção de identity crua ([ADR 0.0.0016](../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)
+§Decision 2). As duas traduções que fecham oráculos (ator sumido → credencial inválida; unidade
+inexistente → não visível) moram numa cópia só, `authorize_at_boundary`
+(`application/use_cases/authorize_action.py`), que o guard HTTP de identity e a fachada de acesso
+chamam (idem, §Decision 2). A fachada **não** resolve o tenant omitido — a omissão só tem
+significado no contrato de quem chama (idem, §Decision 2); autenticar a requisição continua no
+adapter de entrada de identity, que publica o `AccessPrincipal` da fachada (idem, §Decision 3).
+
 **"Não se concede o que não se detém" — nas rotas de tenant.** Criar ou convidar um usuário de
 papel `P` exige do ator `manage_users` **mais todas as permissões de `P`**, derivado do mapa de
 papéis, uma autorização por permissão e **uma por unidade pedida**
@@ -295,6 +308,10 @@ universal do sistema**: vale para essas rotas (ADR 2.4.0003 §2).
 - A checagem não é vazia: o tenant do token é comparado com o do usuário **carregado do banco**
   ([ADR 0.0.0005](../../adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md)
   §Decision, último parágrafo).
+- Quando a borda de staff omite o tenant alvo, ele é o do ator — resolvido pelo adapter de staff
+  que produziu o ator (`LocalAccessGuard`), não pela fachada nem pelo composition root
+  ([ADR 0.0.0016](../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)
+  §Decision 4, que emenda o *local* da cláusula 3 do ADR 0.0.0005 para staff; o princípio fica).
 
 **Respostas que não viram oráculo** ([ADR 2.4.0001](../../adr/2_4_0001-http-error-status-mapping.md)
 §Decision 4–6, mantidas pelo ADR 3.9.0001): negações de autenticação e de autorização respondem com
@@ -458,16 +475,25 @@ id nem papel do dono) — fechar isso exigiria rever a unicidade global (idem, �
 
 ### 3.9 Fronteiras com os outros BCs
 
-- **Uma porta só: a fachada.** Outro BC alcança identity só pela fachada in-process, com tipos
-  primitivos, que **não autoriza** e repassa os erros de identity sem traduzir; é o padrão de toda
-  travessia in-process futura
-  ([ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) §1–§4). Em `develop`
-  em 2026-11-02 a fachada oferece provisionar conta, enviar convite, revogar todas as sessões e
-  consultar o papel de uma conta (`application/facade.py`).
-- **A guarda de acesso de staff** é port do próprio staff, montado no composition root sobre a
-  autorização de identity ([ADR 3.4.0001](../../adr/3_4_0001-staff-owned-access-guard-port.md)
-  §Decision, com supersessão parcial pelo ADR 3.5.0001 §5); levá-la para fora do composition root é
-  a issue #47 (§5).
+- **Uma porta só: o módulo da fachada.** Outro BC alcança identity só por
+  `application/facade.py`, in-process, com tipos primitivos, que repassa os erros de identity sem
+  traduzir; é o padrão de toda travessia in-process futura
+  ([ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) §1–§4). A fachada **não
+  autoriza as próprias operações** — leitura vigente da propriedade "a fachada não autoriza"
+  desde a nota de supersessão parcial de 2026-11-02 no ADR 3.5.0001. Em `develop` em 2026-11-02 o
+  módulo tem duas classes: `IdentityFacade` (provisionar conta, enviar convite, revogar todas as
+  sessões, consultar o papel de uma conta) e `IdentityAccessFacade`, que **expõe** a decisão de
+  acesso de §3.4 a outro BC
+  ([ADR 0.0.0016](../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)
+  §Decision 2) — no mesmo módulo para que a aresta continue sendo um par nomeado.
+- **A guarda de acesso de staff** é port do próprio staff
+  ([ADR 3.4.0001](../../adr/3_4_0001-staff-owned-access-guard-port.md) §Decision 1–2), implementado
+  por `LocalAccessGuard` em `staff/adapters/out/identity/` sobre a fachada de acesso — não mais no
+  composition root, que só faz a fiação
+  ([ADR 0.0.0016](../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md)
+  §Decision 1, 5, que supera o ADR 3.4.0001 §Decision 3 e fecha o ADR 3.5.0001 §Decision 5). O
+  adapter não traduz exceção nenhuma, resolve o tenant omitido como o do ator e nega ator sem tenant
+  (idem, §Decision 4).
 - **Desligar no staff não desativa a conta.** O desligamento revoga as sessões do login **só**
   quando o registro é a fonte do acesso — registro ativo, sem outro registro ativo da mesma unidade
   com o mesmo login, e login de papel `employee`; a conta continua existindo e autenticando
@@ -543,9 +569,6 @@ sua âncora de origem.
   §2; issue #107).
 - **Trilha de auditoria das alterações de acesso** — o `overview.md` §3 ("RBAC") a lista no escopo
   da fundação; nenhum ADR ou Stage de identity a modelou.
-- **Guarda de acesso fora do composition root** — expor autenticação/autorização de identity por
-  uma fachada de acesso — issue #47
-  ([ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) §5).
 - **Agendamento do expurgo de sessões** e **recusa no boot de segredo de desenvolvimento** —
   escalados para o deploy (Step 6)
   ([ADR 2.3.0004](../../adr/2_3_0004-session-retention-and-purge.md) §Decision;
@@ -631,6 +654,9 @@ aqui, porque o texto de ADR e de concept não se edita por este doc):
   tenant vem do token, salvo quando o BC é dono do recurso (§3.4).
 - [ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) —
   restaurante e dono provisionados numa unidade de trabalho; duas rotas emitem `owner` (§3.5).
+- [ADR 0.0.0016](../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md) —
+  fachada de acesso (`IdentityAccessFacade`), `authorize_at_boundary` e o `AccessGuard` de staff
+  como adapter fora do composition root (§3.4, §3.9).
 - [ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md) — três agregados,
   vínculo mínimo, dois eixos (§3.1–§3.3).
 - [ADR 2.1.0002](../../adr/2_1_0002-platform-admin-without-tenant.md) — `platform_admin` sem
@@ -673,14 +699,15 @@ aqui, porque o texto de ADR e de concept não se edita por este doc):
 - [ADR 2.6.0002](../../adr/2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md) —
   escopo da unidade, sem transação entre BCs, e-mail depois do commit, rotação perdida é reuso
   (§3.6, §3.8).
-- [ADR 3.4.0001](../../adr/3_4_0001-staff-owned-access-guard-port.md) — guarda de acesso de staff
-  sobre a autorização de identity (§3.9).
+- [ADR 3.4.0001](../../adr/3_4_0001-staff-owned-access-guard-port.md) — port de guarda de acesso de
+  staff e as suas quatro leis; o §Decision 3 (montagem no composition root) superado pelo ADR
+  0.0.0016 (§3.9).
 - [ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md) — permissões de
   staff; hr ≡ manager no staff (§3.2).
 - [ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md) —
   permissões tenant-wide (§3.4).
-- [ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) — fachada de identity
-  (§3.9).
+- [ADR 3.5.0001](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md) — fachada de identity;
+  §Decision 5 fechado pelo ADR 0.0.0016 (§3.9).
 - [ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) —
   conta pendente e link entregue em mãos (§3.5, §3.7).
 - [ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md) — a conta
