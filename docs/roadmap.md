@@ -191,7 +191,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | open | #58 |
 | [#85](https://github.com/MarceloSanC/restaurant-hub/issues/85) | `make migrate` e `make run` sem a guarda da `DATABASE_URL` da worktree | shared | tooling | done | #58 |
 | [#86](https://github.com/MarceloSanC/restaurant-hub/issues/86) | `migrations/env.py` ignora a `sqlalchemy.url` passada pelo chamador | shared | migrations + tests | done | #58 |
-| [#87](https://github.com/MarceloSanC/restaurant-hub/issues/87) | Mutação noturna morre na coleta — `.claude/` fora do `also_copy` | shared | tooling + ci | open | — |
+| [#87](https://github.com/MarceloSanC/restaurant-hub/issues/87) | Mutação noturna morre na coleta — `.claude/` fora do `also_copy` | shared | tooling + ci | done | — |
 | [#90](https://github.com/MarceloSanC/restaurant-hub/issues/90) | Hook `commit-msg` aceita a Stage como escopo de commit | shared | tooling | done | — |
 | [#91](https://github.com/MarceloSanC/restaurant-hub/issues/91) | `scripts/` fora do `mypy --strict` e do gate de cobertura | shared | tooling | open | — |
 | [#93](https://github.com/MarceloSanC/restaurant-hub/issues/93) | Política de fim de linha do editor — VS Code grava CRLF em arquivo novo (especulativa; disparo: aviso no uso diário ou primeiro colaborador externo) | shared | repo | open | #8 |
