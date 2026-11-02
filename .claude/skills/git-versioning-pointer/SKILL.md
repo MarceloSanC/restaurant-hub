@@ -131,6 +131,7 @@ seção correspondente. Cada uma traz três blocos:
 | Gates de PR | `GIT-WORKFLOW.md` §Gates de PR |
 | PR parcial em draft (procedimento) | `GIT-WORKFLOW.md` §"Branches em execução" → §Quando precisar trocar de escopo no meio |
 | Worktree de toda branch (criar, banco, limpar) | `GIT-WORKFLOW.md` §"Branches em execução" → §Criar a worktree; `scripts/worktree-new.py` / `scripts/worktree-rm.py`; hook `.claude/hooks/git_guard.py` |
+| Hooks do git (instalar, religar; um só para todas as worktrees) | `GIT-WORKFLOW.md` §"Hooks do git"; `scripts/install_hooks.py` |
 | Hotfix | `GIT-WORKFLOW.md` §Hotfix |
 | Release | `GIT-WORKFLOW.md` §Release |
 | Comportamento bloqueante | `GIT-WORKFLOW.md` §Comportamento bloqueante |

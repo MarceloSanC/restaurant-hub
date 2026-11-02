@@ -49,11 +49,13 @@ help:
 
 # ---------------------------------------------------------------------------
 # setup — primeira vez: cria o ambiente, gera o lock e instala hooks
+# Os hooks do git são um só para todas as worktrees: o install_hooks.py só os
+# instala no checkout principal e, numa worktree, não toca neles (issue #100).
 # ---------------------------------------------------------------------------
 setup:
 	uv sync --extra dev
-	uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
-	@echo Ambiente pronto. Hooks pre-commit e commit-msg instalados.
+	uv run python scripts/install_hooks.py
+	@echo Ambiente pronto. Hooks pre-commit e commit-msg sao do checkout principal.
 	@echo Copie e ajuste as variaveis de ambiente: .env.example para .env
 
 # ---------------------------------------------------------------------------

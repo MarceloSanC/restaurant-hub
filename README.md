@@ -64,7 +64,7 @@ Pré-requisitos: Python 3.12+, [uv](https://docs.astral.sh/uv/) e GNU Make 4+.
 git clone <repo-url>
 cd restaurant-hub
 
-make setup                            # uv sync (gera/usa uv.lock) + hooks pre-commit e commit-msg
+make setup                            # uv sync (gera/usa uv.lock) + hooks pre-commit e commit-msg (só no checkout principal)
 Copy-Item .env.example .env           # ajuste credenciais locais
 uv run python scripts/regen_tree.py   # gera tree.txt (contexto para agentes; gitignorado)
 make check                            # gate completo — deve fechar verde
@@ -99,7 +99,7 @@ make docker-down             # derruba a stack
 
 | Comando | O que faz |
 |---------|-----------|
-| `make setup` | `uv sync --extra dev` (gera/usa `uv.lock`) + instala hooks `pre-commit` e `commit-msg` |
+| `make setup` | `uv sync --extra dev` (gera/usa `uv.lock`) + instala hooks `pre-commit` e `commit-msg` pelo `scripts/install_hooks.py` — só no checkout principal; numa worktree, não toca neles (GIT-WORKFLOW §"Hooks do git") |
 | `make install` | Reinstala dependências (após mudança no `pyproject.toml`) |
 | `make run` | Sobe o servidor de desenvolvimento com hot-reload |
 | `make migrate` | Aplica migrations pendentes (`alembic upgrade head`) |

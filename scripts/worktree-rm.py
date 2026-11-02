@@ -11,6 +11,10 @@ Em seguida, em ordem segura:
   3. `git worktree remove <path>`
   4. `git branch -d <branch>` (safe-delete: só remove se mergeada)
   5. `git remote prune origin`
+  6. Confere os hooks do git (`pre-commit`/`commit-msg`, um só para todas as
+     worktrees): se apontavam para o venv da worktree que saiu, ou para um
+     python que não existe mais, religa a partir do checkout principal com
+     `scripts/install_hooks.py` (issue #100).
 
 A imagem Docker (`restaurant_hub-app:dev`) é compartilhada entre worktrees.
 O script pergunta interativamente se deseja removê-la.
@@ -34,19 +38,35 @@ Uso:
 Exit codes:
   0  limpeza concluída com sucesso
   1  verificação falhou (não sincronizado, worktree não encontrada, etc.)
-  2  erro de subprocess (docker/git)
+  2  erro de subprocess (docker/git), worktree que o `--force` não conseguiu remover,
+     ou hooks do git sem python depois do religamento
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_install_hooks() -> ModuleType:
+    """`scripts/install_hooks.py`, carregado pelo caminho — é quem sabe ler os hooks."""
+    path = Path(__file__).resolve().with_name("install_hooks.py")
+    spec = importlib.util.spec_from_file_location("install_hooks", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+install_hooks = _load_install_hooks()
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +442,40 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
 # ---------------------------------------------------------------------------
 
 
+def _remove_worktree_dir(wt_path: Path, *, force: bool) -> bool:
+    """`git worktree remove` (e, com `force`, a segunda tentativa com `--force`).
+
+    True se a worktree saiu. Sem `force`, a falha aborta o script (exit 1). Com
+    `force`, a segunda tentativa pode falhar também — no Windows, "Filename too
+    long" apaga a pasta só em parte (medido na prova da issue #100) — e então
+    devolve False, para o `main()` não anunciar sucesso.
+    """
+    cp = subprocess.run(
+        ["git", "worktree", "remove", str(wt_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if cp.returncode == 0:
+        _info(f"worktree removida: {wt_path}")
+        return True
+    if not force:
+        _fail(
+            f"git worktree remove falhou: {cp.stderr.strip()}\nUse --force para forçar a remoção."
+        )
+    _warn(f"git worktree remove falhou — tentando --force: {cp.stderr.strip()}")
+    forced = subprocess.run(["git", "worktree", "remove", "--force", str(wt_path)], check=False)
+    if forced.returncode == 0 and not wt_path.exists():
+        _info(f"worktree removida (--force): {wt_path}")
+        return True
+    _warn(
+        f"git worktree remove --force falhou; a pasta ficou no disco: {wt_path}\n"
+        "  Caminho longo no Windows: `git config --global core.longpaths true` e\n"
+        "  rode de novo, ou apague a pasta à mão e rode `git worktree prune`."
+    )
+    return False
+
+
 def remove_worktree_git(
     wt_path: Path,
     branch: str,
@@ -429,36 +483,21 @@ def remove_worktree_git(
     dry_run: bool,
     delete_remote: bool,
     force: bool,
-) -> None:
+) -> bool:
+    """Remove a worktree e a branch; False se a pasta da worktree ficou no disco.
+
+    Mesmo com a pasta no disco, segue para a branch e o prune; o `main()` confere
+    os hooks e sai com 2.
+    """
     if dry_run:
         _info(f"[dry-run] git worktree remove {wt_path}")
         _info(f"[dry-run] git branch -d {branch}")
         if delete_remote:
             _info(f"[dry-run] git push origin --delete {branch}")
         _info("[dry-run] git remote prune origin")
-        return
+        return True
 
-    # Remove worktree.
-    cp = subprocess.run(
-        ["git", "worktree", "remove", str(wt_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if cp.returncode != 0:
-        if force:
-            _warn(f"git worktree remove falhou — tentando --force: {cp.stderr.strip()}")
-            subprocess.run(
-                ["git", "worktree", "remove", "--force", str(wt_path)],
-                check=False,
-            )
-        else:
-            _fail(
-                f"git worktree remove falhou: {cp.stderr.strip()}\n"
-                "Use --force para forçar a remoção."
-            )
-    else:
-        _info(f"worktree removida: {wt_path}")
+    removed = _remove_worktree_dir(wt_path, force=force)
 
     # Deleta branch local (safe: -d não remove branch não mergeada).
     cp = subprocess.run(
@@ -497,6 +536,80 @@ def remove_worktree_git(
         check=False,
     )
     _info("refs remotas obsoletas prunadas")
+    return removed
+
+
+# ---------------------------------------------------------------------------
+# hooks do git (issue #100)
+# ---------------------------------------------------------------------------
+
+
+def hooks_inside(common_dir: Path, wt_path: Path) -> list[str]:
+    """Tipos de hook cujo `INSTALL_PYTHON` mora dentro de `wt_path`."""
+    inside: list[str] = []
+    root = wt_path.resolve()
+    for hook_type in install_hooks.HOOK_TYPES:
+        python = install_hooks.hook_python(common_dir / "hooks" / hook_type)
+        if python is not None and python.resolve().is_relative_to(root):
+            inside.append(hook_type)
+    return inside
+
+
+def run_install_hooks(principal: Path) -> None:
+    """`scripts/install_hooks.py` no checkout principal, com o venv dele (`uv run`).
+
+    `--extra dev` porque o `pre-commit` é dependência de dev: sem o `.venv` no
+    principal, o `uv run` o cria, e sem o extra ele nasceria sem o pre-commit.
+    """
+    _run(
+        ["uv", "run", "--extra", "dev", "python", "scripts/install_hooks.py"],
+        cwd=principal,
+        check=False,
+    )
+
+
+def relink_hooks(common_dir: Path, wt_path: Path, inside: list[str], *, dry_run: bool) -> bool:
+    """Religa os hooks no checkout principal se dependiam da worktree que saiu.
+
+    Os hooks moram no diretório comum e valem para todas as worktrees. Se o
+    `pre-commit install` foi rodado de dentro da worktree que saiu, o
+    `INSTALL_PYTHON` aponta para o venv dela, e todo commit de toda worktree
+    falha. O critério é o caminho (`inside`), não só a existência do python:
+    no Windows o `git worktree remove` pode apagar a pasta só em parte
+    ("Filename too long", medido na prova da issue), deixando o `python.exe`
+    sem as dependências do pre-commit. Também religa hook cujo python já não
+    existia (outra worktree removida antes). Retorna False se, depois de religar, ainda sobrar hook
+    morto ou dentro da worktree.
+    """
+    principal = install_hooks.main_checkout(common_dir)
+    if dry_run:
+        if inside:
+            _info(f"[dry-run] hooks {', '.join(inside)} apontam para dentro da worktree;")
+            _info(f"[dry-run] seriam religados em {principal} (scripts/install_hooks.py)")
+        else:
+            _info("[dry-run] hooks do git não dependem desta worktree")
+        return True
+
+    dead = install_hooks.dead_hooks(common_dir)
+    if not dead and not inside:
+        _info("hooks do git não dependem da worktree removida ✓")
+        return True
+
+    for hook_type in inside:
+        _warn(f"hook {hook_type} apontava para o venv da worktree removida")
+    for hook_type, python in dead:
+        _warn(f"hook {hook_type} aponta para {python}, que não existe mais")
+    _info(f"religando os hooks a partir do checkout principal ({principal})")
+    run_install_hooks(principal)
+    still_dead = install_hooks.dead_hooks(common_dir) or hooks_inside(common_dir, wt_path)
+    if still_dead:
+        _warn(
+            "os hooks continuam sem python. Religue à mão no checkout principal:\n"
+            f"    cd {principal}\n    {install_hooks.RELINK_HINT}"
+        )
+        return False
+    _info("hooks do git religados ✓")
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -571,8 +684,12 @@ def main() -> int:
         _section("3. Limpando containers e volumes Docker")
         docker_cleanup(wt_path, dry_run=args.dry_run)
 
+    # Medido uma vez, antes de remover: o mesmo resultado serve ao dry-run e à remoção.
+    _, common_dir = install_hooks.git_dirs()
+    hooks_in_worktree = hooks_inside(common_dir, wt_path)
+
     _section("4. Removendo worktree e branch git")
-    remove_worktree_git(
+    removed = remove_worktree_git(
         wt_path,
         args.branch,
         dry_run=args.dry_run,
@@ -580,17 +697,23 @@ def main() -> int:
         force=args.force,
     )
 
+    _section("5. Conferindo os hooks do git")
+    hooks_ok = relink_hooks(common_dir, wt_path, hooks_in_worktree, dry_run=args.dry_run)
+
     print()
     print("=" * 60)
     if args.dry_run:
         print("  [dry-run] nenhuma alteração foi feita")
         print("  Revise acima e rode sem --dry-run quando estiver pronto.")
-    else:
+    elif removed:
         print(f"  ✓ Worktree {args.branch} removida")
         print(f"  ✓ Path: {wt_path}")
+    else:
+        print(f"  ✗ Worktree {args.branch} NÃO removida — a pasta ficou no disco")
+        print(f"  ✗ Path: {wt_path}")
     print("=" * 60)
     print()
-    return 0
+    return 0 if hooks_ok and removed else 2
 
 
 if __name__ == "__main__":
