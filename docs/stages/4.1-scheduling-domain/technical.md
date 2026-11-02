@@ -23,7 +23,7 @@ tasks_count: 10
 > = 1 commit; `make check` verde **antes** de todo commit; registrar desvios em
 > §7. Mensagem de commit segue [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
 > `<tipo>(<escopo>): <descrição> [4.1/task-NN]`, escopo **`scheduling`**, subject
-> **≤ 100 caracteres** (`scripts/check_commit_msg.py` 74 —
+> **≤ 100 caracteres** (`scripts/check_commit_msg.py`,
 > `MAX_SUBJECT_LEN = 100`), rodapé `Refs #55`.
 >
 > **Stage = 1 branch.** Todo o trabalho acontece em
@@ -1261,7 +1261,7 @@ dentro do teto de 12).
   §3, §7; [`../../CONVENTIONS.md`](../../CONVENTIONS.md) §2, §4.
 - `.importlinter` — `staff-domain-purity` (197–217) e `bc-independence`
   (223–228), os dois espelhos desta Stage; `scripts/check_layout.py` 130
-  (`REQUIRED_FEATURE_DIRS`); `scripts/check_commit_msg.py` 74
+  (`REQUIRED_FEATURE_DIRS`); `scripts/check_commit_msg.py`
   (`MAX_SUBJECT_LEN = 100`); `Makefile` 85 (alvo `check`).
 - Precedente vivo: [`../3.1-staff-domain/technical.md`](../3.1-staff-domain/technical.md)
   (mesma camada `domain`; estrutura de Tasks, contratos de import, placeholders, e

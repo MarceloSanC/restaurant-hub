@@ -513,6 +513,60 @@ Refs #89
 **Um commit por Task.** Se uma Task precisou de mais de um commit, ela
 estava grande demais — fica como lição para a próxima.
 
+##### Marca de Task — gramática e sufixos `-fix`/`-extra`
+
+A marca fecha o subject, depois de **um espaço**: `[<dono>/<posição>]`.
+É a gramática que o hook `commit-msg` valida — `TAG_PATTERN` de
+`scripts/check_commit_msg.py` (o hook é o gate; mudou lá, atualizar aqui).
+
+| Dono | Forma | Branch |
+|---|---|---|
+| Stage | `N.M` — o **número** da Stage (`4.1`), não o `stage_id` (`4.1-scheduling-domain`) | de Stage |
+| Issue avulsa | `#<num>` — o número da issue (`#34`) | de issue avulsa ([`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md)) |
+
+| Posição | O commit… | Exemplo |
+|---|---|---|
+| `task-NN` | entrega a Task `NN` do plano (`technical.md` §2; na issue avulsa, a sub-task `NN` da decomposição) | `[2.3/task-01]`, `[#34/task-02]` |
+| `task-NN-fix` | **corrige** a Task `NN`, já commitada — achado de Checkpoint C ou regressão mid-stage de erro local | `[3.1/task-04-fix]`, `[#34/task-02-fix]` |
+| `task-NN-extra` | entrega uma Task **acrescentada** durante a execução, fora do plano — tipicamente o teste que a auditoria de testes pediu | `[3.2/task-14-extra]`, `[#34/task-06-extra]` |
+| `--` | não pertence a Task nenhuma (off-task, subseção seguinte) | `[2.3/--]`, `[#34/--]` |
+
+Toda posição vale para os dois donos.
+
+Regras:
+
+1. **Correção não reusa a marca da Task.** O commit que corrige a Task
+   `NN` leva `task-NN-fix`, nunca `[N.M/task-NN]` de novo: reusada, a
+   marca fica ambígua com o commit canônico da Task (F1 do Checkpoint C
+   da Stage 3.1, na §7 do
+   [`technical.md`](./stages/3.1-staff-domain/technical.md) dela). Mais
+   de uma correção da mesma Task repete `task-NN-fix`; o subject as
+   distingue.
+2. **Task extra continua a numeração, não reabre o plano.** O `NN` de
+   `-extra` segue o do plano: com `tasks_count: 13`, as Tasks extras são
+   `task-14-extra`, `task-15-extra`… Elas não mudam o `tasks_count` nem
+   as §1–§6 do `technical.md`; a justificativa vai numa entrada da §7
+   (§3.4) — na issue avulsa, no corpo do PR. Cada rodada da auditoria de
+   testes que pede teste novo é uma Task extra nova (o próximo `NN`), não
+   um ordinal.
+3. **`-fix` corrige, `-extra` acrescenta.** Decide a origem: achado de
+   revisão (Checkpoint C) ou regressão sobre a entrega de uma Task →
+   `-fix`, mesmo quando a correção é só de teste; lacuna que a auditoria
+   de testes encontrou → Task extra.
+4. **Opcional para o hook, malformada nunca.** O hook aceita subject sem
+   marca — a obrigação de marcar todo commit do branch da Stage é desta
+   seção e do review, não dele. O que ele recusa é o subject que
+   **termina em `]`** sem terminar numa marca da gramática; até a issue
+   #34, a descrição engolia a marca malformada e o commit passava sem
+   validação. Descrição que precisa terminar em colchetes recebe a marca
+   depois deles ou é reescrita.
+   - ❌ `[4.1/tsk-3]`, `[41/--]`, `[4.1/task-03-fix2]`, `[4.1-scheduling-domain/--]`
+5. **O histórico não se reescreve.** Commits anteriores a esta gramática
+   com ordinal (`-fix2`, `-extra2`…) ou com `-extra` sobre o número de
+   uma Task do plano ficam como estão — aceitos sem ação retroativa, como
+   o F1 da 3.1. Escrito hoje, o ordinal o hook recusa; o `NN` da Task
+   extra ele não confere (não conhece o `tasks_count`) — fica com o review.
+
 ##### Tag `[N.M/--]` — commit no branch da Stage que não pertence a uma Task
 
 `[N.M/--]` (dois hífens) é o **placeholder de off-task**: marca commits
