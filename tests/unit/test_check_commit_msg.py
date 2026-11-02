@@ -233,6 +233,7 @@ _STAGE_SCOPES = [
     "stage-1",
     "stage--2.3",  # separador repetido continua nomeando a Stage
     "stage-.2",
+    "docs_stage-2.3",
     "docs.stage-2.3",
     "roadmap-stage-4.1",
     "2.3",
@@ -241,6 +242,9 @@ _STAGE_SCOPES = [
     "1_1",
     "4.1-scheduling-domain",  # o stage_id
     "3.6-staff-http",
+    "4.1_scheduling-domain",
+    "4.1.scheduling",
+    "5.1-oauth2-login",  # dígito no slug do stage_id
 ]
 
 
@@ -269,6 +273,8 @@ _LEGIT_SCOPES = [
     "prompt-stage",
     "prompt-stage-autonomous",
     "backstage",
+    "backstage-2",  # `stage` colado a outra palavra não conta
+    "prestage-1.1",
     "process",
     "tooling",
     "scheduling",
@@ -280,6 +286,7 @@ _LEGIT_SCOPES = [
     "2fa",
     "2-factor",
     "concept",
+    "-1",  # sem o N antes do separador, não é número de Stage
 ]
 
 
@@ -315,6 +322,34 @@ def test_the_conventions_negative_scope_examples_are_rejected_by_the_hook() -> N
     assert {"feat(stage-2.3)", "feat(stage-12.10)"} <= scopes
     accepted = [subject for subject in negatives if _accepted(subject)]
     assert not accepted, f"❌ de escopo que o hook aceita: {accepted}"
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "feat(stage-2.3): x [4.1/tsk-3]",  # escopo de Stage + marca malformada
+        "feat(stage-2.3): x  [4.1/task-01]",  # escopo de Stage + dois espaços
+    ],
+)
+def test_stage_scope_reason_comes_before_the_tag_reason(
+    subject: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """O escopo vem antes da marca no subject; a recusa nomeia o primeiro erro."""
+    assert ccm.validate_subject(subject) == _EXIT_REJECTED
+    assert "escopo `stage-2.3` nomeia a Stage" in capsys.readouterr().err
+
+
+def test_the_hook_help_says_the_scope_is_never_the_stage() -> None:
+    """Quem teve o escopo recusado aprende a regra pela ajuda; os negativos dela
+    têm de ser mesmo recusados, senão ela ensina a forma errada."""
+    help_text = ccm._format_help()
+    assert "nunca a Stage" in help_text
+    listed = re.search(r"\(não: ([^)]*)\)", help_text)
+    assert listed is not None, "a ajuda perdeu os negativos de escopo"
+    negatives = {scope.strip() for scope in listed.group(1).split(",")}
+    assert {"stage-2.3", "2.3", "4.1-scheduling-domain"} <= negatives
+    accepted = [scope for scope in sorted(negatives) if _accepted(f"feat({scope}): x")]
+    assert not accepted, f"negativo da ajuda que o hook aceita: {accepted}"
 
 
 def test_the_scope_check_reads_the_scope_not_the_description() -> None:
