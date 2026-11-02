@@ -261,19 +261,21 @@ def test_pytest_from_a_subdirectory_is_refused_with_a_hint(worktree: Path) -> No
     assert "rode o pytest da raiz do checkout" in str(refusal.value)
 
 
-def test_stale_get_settings_cache_is_refused(
+def test_stale_get_settings_cache_does_not_decide_the_url(
     worktree: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """O Alembic lê o `get_settings()` em cache (`migrations/env.py`), não a URL conferida."""
+    """A guarda devolve a URL do ambiente de agora, não a do `get_settings()` em cache.
+
+    Até a #86 ela recusava um cache divergente, porque era ele que o Alembic lia.
+    Desde a #86 o Alembic migra a URL que `_recriar_schema` lhe passa — esta —, e
+    o cache não decide nada: a guarda nem o consulta.
+    """
     wn.write_worktree_env_ports(worktree, PORTS)
-    monkeypatch.setenv("DATABASE_URL", _url(f"localhost:{PUBLISHED_PORT}"))
+    monkeypatch.setenv("DATABASE_URL", _url("localhost:5999"))
     get_settings()  # outro teste deixou o cache com uma URL que o ambiente já não tem
-    monkeypatch.delenv("DATABASE_URL")
+    monkeypatch.setenv("DATABASE_URL", _url(f"localhost:{PUBLISHED_PORT}"))
 
-    with pytest.raises(pytest.fail.Exception, match="get_settings") as refusal:
-        resolve_test_database_url(compose_dir=worktree)
-
-    assert SECRET not in str(refusal.value)
+    assert resolve_test_database_url(compose_dir=worktree) == _url(f"localhost:{PUBLISHED_PORT}")
 
 
 def test_database_url_fixture_runs_the_guard(

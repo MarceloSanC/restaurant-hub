@@ -33,7 +33,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 
-from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
+from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -174,14 +174,11 @@ def database_port_mismatch(database_url: str, published_port: int) -> str | None
 def resolve_test_database_url(compose_dir: Path = _REPO_ROOT) -> str:
     """A `DATABASE_URL` da suíte, recusada se não alcançar o Postgres deste checkout.
 
-    Duas conferências, porque a URL tem dois leitores:
-
-    1. a porta: a URL que o `Settings` lê tem de apontar para a porta que o
-       compose publica (`database_port_mismatch`);
-    2. o cache: o Alembic não usa a URL que `_recriar_schema` lhe passa —
-       `migrations/env.py` a sobrescreve com o `get_settings()`, em cache —, e é
-       ele que roda o downgrade. Um cache sujo por outro teste levaria o
-       downgrade a uma URL que a conferência 1 não viu.
+    A URL que o `Settings` lê tem de apontar para a porta que o compose publica
+    (`database_port_mismatch`). Ela é a única URL em jogo: o Alembic migra a que
+    `_recriar_schema` lhe passa (`config.attributes`, issue #86), sem consultar o
+    `get_settings()` em cache — a conferência do cache que a #58 pôs aqui deixou
+    de ter objeto.
     """
     database_url = Settings().database_url
     mismatch = database_port_mismatch(database_url, published_postgres_port(compose_dir))
@@ -189,13 +186,6 @@ def resolve_test_database_url(compose_dir: Path = _REPO_ROOT) -> str:
         mismatch += (
             f"\nO Settings lê o .env do diretório corrente ({Path.cwd()}), não da raiz "
             f"({compose_dir}): rode o pytest da raiz do checkout."
-        )
-    if mismatch is None and get_settings().database_url != database_url:
-        mismatch = (
-            "O get_settings() em cache aponta para outra DATABASE_URL que a do ambiente "
-            "atual, e é ela que o Alembic usa (migrations/env.py) — inclusive no "
-            "downgrade que recria o schema. Algum teste deixou o cache sujo: "
-            "get_settings.cache_clear() no teardown dele."
         )
     if mismatch is not None:
         pytest.fail(mismatch, pytrace=False)
@@ -212,9 +202,8 @@ def database_url() -> str:
     tentativa morreu em `ResolutionError: No such revision '0004'` (629 testes em
     `ERROR at setup`, issue #58); com as mesmas migrations, teria derrubado o
     banco alheio. Por isso a URL passa pela guarda antes de qualquer conexão: uma
-    URL loopback fora da porta que o compose deste checkout publica — ou um
-    `get_settings()` em cache diferente dela, que é o que o Alembic lê — reprova
-    a sessão inteira, aqui, sem tocar o banco. Toda suíte que fala com o banco —
+    URL loopback fora da porta que o compose deste checkout publica reprova a
+    sessão inteira, aqui, sem tocar o banco. Toda suíte que fala com o banco —
     integração, contrato e e2e — resolve a URL por esta fixture.
     """
     return resolve_test_database_url()
