@@ -5,7 +5,7 @@ when-use: Reference when adding any other password-changing path (self-service c
 keywords: [adr, password, session, revocation, reset, account-takeover, identity, security]
 status: accepted
 created_at: 2026-07-20
-updated_at: 2026-07-20
+updated_at: 2026-11-02
 adr_id: "2.5.0003"
 decision: set_password_with_token revokes all of the user's refresh sessions and invalidates all of the user's remaining setup tokens, so that a password reset actually evicts whoever held the previous credential.
 context_stage: 2.5-email-invite
@@ -122,3 +122,19 @@ change that trade; it inherits it.
 - `docs/stages/2.4-identity-http/technical.md` §7 — `[finding]` absolute session cap
 - GitHub issue #27, "Cuidados de segurança"
 - `docs/stages/2.5-email-invite/concept.md` §5 regra 4, §7 D3
+
+## Supersessão parcial
+
+**2026-11-02 — a justificativa da ordem em `## Decision` (*"There is no unit of work spanning
+the four repository calls on this plan … Ordering buys the guarantee that a transaction would
+otherwise be needed for"*) e a garantia de falha parcial que ela comprava foram superadas por
+[ADR 2.6.0002](./2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md) §1
+(com o port de [ADR 2.6.0001](./2_6_0001-identity-unit-of-work-port-and-ambient-connection.md)).**
+Desde a Stage 2.6 as quatro escritas de `set_password_with_token` rodam numa unidade de trabalho
+de identity: uma falha parcial desfaz todas, inclusive a revogação — a troca foi declarada no
+concept 2.6 §5 R2 e no docstring do use case, mas este ADR não recebeu a nota na época (achado C3
+do doc de domínio `docs/domain/identity/tenancy-and-access.md` §7, issue #30). A ordem
+(evicções antes da senha) **permanece** no código, redundante e não errada, e a decisão em si —
+definir a senha revoga todas as sessões e invalida todos os outros tokens de setup, de qualquer
+propósito — continua em vigor. Nota *append-only*; o corpo acima não foi editado
+(CONVENTIONS §5).
