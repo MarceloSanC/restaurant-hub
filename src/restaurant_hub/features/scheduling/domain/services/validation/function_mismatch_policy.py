@@ -34,14 +34,14 @@ class FunctionMismatchPolicy:
             Violation(
                 policy=self.kind,
                 mode=mode,
-                employee_id=alocacao.employee_id,
+                employee_id=allocation.employee_id,
                 demand_id=None,
-                operational_days=(alocacao.operational_day,),
-                assignment_ids=frozenset({alocacao.assignment_id}),
+                operational_days=(allocation.operational_day,),
+                assignment_ids=frozenset({allocation.assignment_id}),
                 observed=Decimal(1),
                 limit=Decimal(0),
             )
-            for alocacao in context.allocations
-            if alocacao.job_function_id
-            not in context.facts_of(alocacao.employee_id).job_function_ids
+            for allocation in context.allocations
+            if allocation.job_function_id
+            not in context.facts_of(allocation.employee_id).job_function_ids
         )

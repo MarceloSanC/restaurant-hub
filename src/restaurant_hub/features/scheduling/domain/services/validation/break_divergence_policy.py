@@ -34,13 +34,13 @@ class BreakDivergencePolicy:
             Violation(
                 policy=self.kind,
                 mode=mode,
-                employee_id=alocacao.employee_id,
+                employee_id=allocation.employee_id,
                 demand_id=None,
-                operational_days=(alocacao.operational_day,),
-                assignment_ids=frozenset({alocacao.assignment_id}),
-                observed=Decimal(alocacao.effective_break_minutes),
-                limit=Decimal(alocacao.band_break_minutes),
+                operational_days=(allocation.operational_day,),
+                assignment_ids=frozenset({allocation.assignment_id}),
+                observed=Decimal(allocation.effective_break_minutes),
+                limit=Decimal(allocation.band_break_minutes),
             )
-            for alocacao in context.allocations
-            if alocacao.break_divergence
+            for allocation in context.allocations
+            if allocation.break_divergence
         )
