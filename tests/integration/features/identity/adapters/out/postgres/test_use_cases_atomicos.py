@@ -44,6 +44,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.user_repository impo
 from restaurant_hub.features.identity.application.dtos.commands import (
     InviteUserCommand,
     ProvisionAccountCommand,
+    ProvisionRestaurantCommand,
     RefreshSessionCommand,
     RequestPasswordResetCommand,
     SetPasswordWithTokenCommand,
@@ -60,6 +61,7 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 )
 from restaurant_hub.features.identity.application.dtos.tokens import IssuedRefreshToken
 from restaurant_hub.features.identity.application.errors import (
+    EmailAlreadyRegisteredError,
     InvalidSetupTokenError,
     RefreshTokenReuseError,
     SessionFingerprintAlreadyExistsError,
@@ -69,6 +71,9 @@ from restaurant_hub.features.identity.application.use_cases.invite_user import (
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
+    ProvisionRestaurantUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.refresh_session import (
     RefreshSessionUseCase,
@@ -148,6 +153,25 @@ class _Usuarios(PostgresUserRepository):
     ) -> None:
         super().add(user, password_hash, memberships)
         self._registro.escreveu("users.add")
+
+
+class _Restaurantes(PostgresRestaurantRepository):
+    def __init__(self, engine: Engine, registro: Registro) -> None:
+        super().__init__(engine)
+        self._registro = registro
+
+    def add(self, restaurant: Restaurant) -> None:
+        super().add(restaurant)
+        self._registro.escreveu("restaurants.add")
+
+
+class _UsuariosQueNaoVeemOEmail(_Usuarios):
+    """`exists_by_email` sempre `False`: a corrida em que outro cadastro do mesmo
+    e-mail comita entre a checagem do use case e o `users.add`. Quem recusa é o
+    índice `uq_users_email`, **dentro** da unidade e depois do `restaurants.add`."""
+
+    def exists_by_email(self, email: Email) -> bool:
+        return False
 
 
 class _Sessoes(PostgresSessionRepository):
@@ -573,6 +597,85 @@ class TestProvisaoAtomica:
 
         assert registro.escritas == ["users.add"]
         assert _linhas(com_link, *_TABELAS_DO_CONVITE) == antes
+
+
+# ---------------------------------------------------------------------------
+# provision_restaurant — o tenant e o seu primeiro owner (issue #67, ADR 0.0.0013)
+# ---------------------------------------------------------------------------
+
+_ESCRITAS_DO_TENANT = ("restaurants.add", "users.add")
+_TABELAS_DO_TENANT = (tables.restaurants, tables.users, tables.unit_memberships)
+_EMAIL_DO_DONO = Email("dono@cantina.com")
+
+
+def _provisionar_tenant(
+    engine: Engine, registro: Registro, *, usuarios: _Usuarios | None = None
+) -> ProvisionRestaurantUseCase:
+    return ProvisionRestaurantUseCase(
+        restaurants=_Restaurantes(engine, registro),
+        users=usuarios if usuarios is not None else _Usuarios(engine, registro),
+        hasher=FakePasswordHasher(),
+        id_generator=FakeIdGenerator(),
+        unit_of_work=PostgresUnitOfWork(engine),
+    )
+
+
+def _tenant(email: Email = _EMAIL_DO_DONO) -> ProvisionRestaurantCommand:
+    return ProvisionRestaurantCommand(
+        name="Cantina Nova", owner_email=email, owner_plain_password="s3nha"
+    )
+
+
+class TestProvisaoDoTenantAtomica:
+    def test_sem_falha_grava_restaurante_e_dono_do_restaurante(self, banco_limpo: Engine) -> None:
+        _semear_tenant_e_usuario(banco_limpo)
+        registro = Registro()
+
+        resultado = _provisionar_tenant(banco_limpo, registro).execute(_tenant())
+
+        assert tuple(registro.escritas) == _ESCRITAS_DO_TENANT
+        with banco_limpo.connect() as conexao:
+            dono = conexao.execute(
+                select(tables.users.c.role, tables.users.c.tenant_id).where(
+                    tables.users.c.email == _EMAIL_DO_DONO.value
+                )
+            ).one()
+            nome = conexao.execute(
+                select(tables.restaurants.c.name).where(tables.restaurants.c.id == resultado.id)
+            ).scalar_one()
+        assert tuple(dono) == ("owner", resultado.id)
+        assert nome == "Cantina Nova"
+
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS_DO_TENANT) + 1))
+    def test_falha_na_escrita_n_deixa_as_tabelas_identicas(
+        self, banco_limpo: Engine, n: int
+    ) -> None:
+        """A falha dispara **depois** de a escrita N chegar ao banco: com N=1, o
+        restaurante já foi inserido na unidade — e não sobrevive."""
+        _semear_tenant_e_usuario(banco_limpo)
+        antes = _linhas(banco_limpo, *_TABELAS_DO_TENANT)
+        registro = Registro(falhar_em=n)
+
+        with pytest.raises(_FalhaInjetada):
+            _provisionar_tenant(banco_limpo, registro).execute(_tenant())
+
+        assert tuple(registro.escritas) == _ESCRITAS_DO_TENANT[:n]
+        assert _linhas(banco_limpo, *_TABELAS_DO_TENANT) == antes
+
+    def test_email_tomado_no_banco_desfaz_o_restaurante(self, banco_limpo: Engine) -> None:
+        """Falha originada no banco (`uq_users_email`) depois do `restaurants.add`."""
+        _semear_tenant_e_usuario(banco_limpo)
+        antes = _linhas(banco_limpo, *_TABELAS_DO_TENANT)
+        registro = Registro()
+        usuarios = _UsuariosQueNaoVeemOEmail(banco_limpo, registro)
+
+        with pytest.raises(EmailAlreadyRegisteredError):
+            _provisionar_tenant(banco_limpo, registro, usuarios=usuarios).execute(
+                _tenant(Email("um@x.com"))
+            )
+
+        assert registro.escritas == ["restaurants.add"]
+        assert _linhas(banco_limpo, *_TABELAS_DO_TENANT) == antes
 
 
 # ---------------------------------------------------------------------------
