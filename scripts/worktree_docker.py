@@ -25,6 +25,11 @@ Uso:
     python scripts/worktree_docker.py            # lista os órfãos
     python scripts/worktree_docker.py --prune    # e os derruba (containers, volumes, redes)
 
+O `--prune` só derruba o órfão que o `working_dir` dos containers prova ser de
+`../<repo>-worktrees/`. O que sobrou só como volume ou rede, achado pelo nome no
+formato de branch, é listado e fica: outro repositório com a mesma convenção de
+pasta tem nomes iguais.
+
 Exit codes:
   0  listagem (ou limpeza) concluída — com ou sem órfãos
   1  Docker parado ou ausente: nada foi conferido
@@ -332,14 +337,20 @@ def main(argv: list[str] | None = None) -> int:
     parent = principal.parent / f"{principal.name}-worktrees"
     try:
         ensure_daemon()
-        orphans = find_orphans(compose_projects(), worktrees, parent)
+        projects = compose_projects()
+        orphans = find_orphans(projects, worktrees, parent)
         if not orphans:
             print("Nenhum projeto compose órfão de worktree.")
             return 0
         print(f"Projetos compose de worktrees que não existem mais ({len(orphans)}):")
         failures: list[str] = []
+        # Só volume/rede, sem `working_dir`: o nome no formato de branch não prova
+        # que o projeto é deste repositório — outro repo com a mesma convenção de
+        # pasta, ou uma worktree viva dele que fez `docker compose down` sem `-v`,
+        # perderia o banco. O `--prune` não os toca; ficam listados para conferir.
+        name_only = [p for p in orphans if not projects[p]]
         for project in orphans:
-            if args.prune:
+            if args.prune and project not in name_only:
                 found, failed = remove_project(project)
                 failures.extend(failed)
             else:
@@ -354,6 +365,13 @@ def main(argv: list[str] | None = None) -> int:
     if not args.prune:
         print("\nPara derrubar: make worktree-orphans ARGS=--prune")
         return 0
+    if name_only:
+        print(
+            "AVISO: não derrubados — só volume/rede, sem `working_dir` que prove a origem\n"
+            f"  neste repositório: {', '.join(name_only)}\n"
+            "  Conferido que são daqui: docker volume rm <volume> / docker network rm <rede>",
+            file=sys.stderr,
+        )
     for failure in failures:
         print(f"AVISO: não saiu — {failure}", file=sys.stderr)
     print("Órfãos derrubados." if not failures else "Limpeza incompleta.")

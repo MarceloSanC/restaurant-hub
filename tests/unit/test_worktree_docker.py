@@ -467,6 +467,28 @@ def test_main_prune_takes_only_the_orphans(
     assert "Órfãos derrubados." in capsys.readouterr().out
 
 
+def test_main_prune_lists_but_keeps_a_volume_only_project_found_by_name(
+    repo: Path, fake: FakeDocker, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Só o volume sobrou e o nome tem formato de branch: pode ser de outro
+    repositório com a mesma convenção de pasta (ou de uma worktree viva dele que
+    fez `docker compose down` sem `-v`). Sem `working_dir`, nada prova a origem —
+    o `--prune` lista, não apaga o banco.
+    """
+    fake.volumes["fix-1-other-repo_pgdata"] = "fix-1-other-repo"
+    fake.networks["fix-1-other-repo_default"] = "fix-1-other-repo"
+
+    assert wd.main(["--prune"]) == 0
+
+    assert "fix-1-other-repo_pgdata" in fake.volumes
+    assert "fix-1-other-repo_default" in fake.networks
+    assert "fix-85-guard_pgdata" not in fake.volumes
+    captured = capsys.readouterr()
+    assert "fix-1-other-repo_pgdata" in captured.out
+    assert "não derrubados" in captured.err
+    assert "fix-1-other-repo" in captured.err
+
+
 def test_main_prune_with_leftovers_exits_2(
     repo: Path, fake: FakeDocker, capsys: pytest.CaptureFixture[str]
 ) -> None:
