@@ -543,7 +543,7 @@ encontra `NotFoundError` antes de `DomainError`).
   `actor_id` nem chamam `authorize_action` internamente. Esta Stage entrega o guard
   como use case testado + a tabela permissão↔ação (§4).
 - **Por quê:** o roadmap atribui explicitamente à 2.4 o *"enforcement de RBAC via
-  dependência"* (`docs/roadmap.md:366`) — o guard como dependência do router é o
+  dependência"* (`docs/roadmap.md` §Stage 2.4 › "Descrição humana") — o guard como dependência do router é o
   desenho sancionado, e antecipá-lo para dentro de cada use case duplicaria a
   composição e contrariaria a fronteira da Stage.
 - **Custo assumido (declarado, não escondido):** enquanto a 2.4 não compõe o guard,
@@ -717,7 +717,7 @@ erDiagram
       `grep`: handlers registrados em `error_handlers.py`; ocorrências de `async`
       contadas em `src/` e `tests/` (existem, e §7.5 diz exatamente onde — uma
       versão anterior deste concept afirmava "não há código async no repo", o que
-      era **falso** e foi corrigido); texto do roadmap 2.4 (linha 366);
+      era **falso** e foi corrigido); texto do roadmap §Stage 2.4 › "Descrição humana";
       §Decision #4 do ADR 0.0.0004 (sem subitem "d", como uma versão anterior
       citava); mapa `Role → Permission` de `role.py` conferido contra a tabela
       permissão↔ação de §4.
