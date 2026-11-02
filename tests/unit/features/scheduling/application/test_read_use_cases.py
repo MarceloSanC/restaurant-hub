@@ -199,3 +199,11 @@ def test_ca18_anteriores_da_mais_recente_ate_o_limite(world: World) -> None:
 def test_ca18_ca19_pedido_invalido_recusa(world: World, antes: object, limite: int) -> None:
     with pytest.raises(InvalidScheduleRequestError):
         _past_uc(world).execute(_past(world, antes, limite))
+
+
+def test_ca13_get_nao_traz_violacao_de_registro_inativo_alocado(world: World) -> None:
+    ferias = UnavailabilityWindow(start=at(MONDAY, 0), end=at(MONDAY + timedelta(days=2), 0))
+    world.staff.add_member(T1, member("caio", active=False, unavailabilities=(ferias,)))
+    world.schedules.add(_semana("s1", MONDAY, "caio"), blank_change())
+    resultado = _get_uc(world).execute(_get(world))
+    assert resultado.violations == ()

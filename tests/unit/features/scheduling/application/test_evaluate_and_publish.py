@@ -544,3 +544,20 @@ def test_list_members_prevalece_sobre_o_quadro_ativo(world: World) -> None:
     _seed(world)
     resultado = _evaluate(world).execute(_q(world, ()))
     assert PolicyKind.UNAVAILABILITY in {v.policy for v in resultado.schedule.violations}
+
+
+def test_ca10_inativo_alocado_nao_gera_violacao_nem_recusa_no_publish(world: World) -> None:
+    ferias = UnavailabilityWindow(start=at(MONDAY, 0), end=at(MONDAY + timedelta(days=2), 0))
+    world.staff.add_member(T1, member("caio", active=False, unavailabilities=(ferias,)))
+    base = (
+        schedule("s1")
+        .enable_band(_F1, TimeRange(start=at(MONDAY, 10), end=at(MONDAY, 16)))
+        .declare_demand(_D1, _F1, COOK, DemandQuantity(1))
+        .assign(AssignmentId("a-caio"), _D1, EmployeeId("caio"))
+    )
+    _seed(world, base)
+    avaliado = _evaluate(world).execute(_q(world, (RedeclareBandBreak(_F1, 30),)))
+    assert avaliado.blocking == ()
+    assert avaliado.schedule.violations == ()
+    publicado = _publish(world).execute(_c(world, (RedeclareBandBreak(_F1, 30),)))
+    assert publicado.violations == ()
