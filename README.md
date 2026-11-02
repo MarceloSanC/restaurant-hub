@@ -47,6 +47,16 @@ Pré-requisitos: Python 3.12+, [uv](https://docs.astral.sh/uv/) e GNU Make 4+.
    ```
    Sessões do Claude Code já herdam a variável de `.claude/settings.json`
    (versionado).
+3. **Clone (ou worktree) anterior ao `.gitattributes` da issue #8:** o
+   `git pull` não reescreve arquivo que a mudança não tocou, então a working
+   tree guarda o CRLF do checkout antigo e o `git add` desses arquivos avisa
+   "CRLF will be replaced by LF". Com a árvore limpa, refaça o checkout uma
+   vez:
+   ```powershell
+   git status --porcelain              # deve sair vazio antes do passo abaixo
+   git rm --cached -r -q . ; git reset --hard -q
+   git ls-files --eol | Select-String "w/crlf"   # vazio
+   ```
 
 **Setup do projeto:**
 
