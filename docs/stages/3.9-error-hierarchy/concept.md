@@ -294,30 +294,30 @@ interna ou convenção (skill `evidence-resolution`).
 
 ## 11. Critérios de aceitação
 
-- [ ] **CA1** — ADR 3.9.0001 `accepted` com `supersedes: "2.2.0003"`; ADR 2.2.0003 em
+- [x] **CA1** — ADR 3.9.0001 `accepted` com `supersedes: "2.2.0003"`; ADR 2.2.0003 em
   `superseded` com `superseded_by: "3.9.0001"`; seção `## Supersessão parcial` datada nos ADRs
   2.3.0003, 2.4.0001 e 3.4.0002.
-- [ ] **CA2** — Raiz única do próprio BC (§5.1): teste em `test_status_map.py` que deriva, por
+- [x] **CA2** — Raiz única do próprio BC (§5.1): teste em `test_status_map.py` que deriva, por
   BC, exatamente uma raiz de domínio e no máximo uma de aplicação, e exige que toda outra
   exceção dos módulos de erro tenha uma base e descenda de exatamente uma raiz **do BC**; com
   violadores plantados (classe com duas raízes; classe sob `ApplicationError` direto).
-- [ ] **CA3** — `ApplicationError` existe em `shared/application/errors.py`, tem raiz de
+- [x] **CA3** — `ApplicationError` existe em `shared/application/errors.py`, tem raiz de
   aplicação em cada um dos três BCs, e a partição de §4 é travada por teste de **igualdade de
   conjuntos** por BC (`test_errors.py`): lista de domínio ∪ lista de aplicação = classes
   definidas no módulo, interseção vazia, cada classe sob a raiz da sua lista.
   `check_dead_shared.py` verde com `ApplicationError` entre os nomes vivos.
-- [ ] **CA4** — Gate 3 generalizado: totalidade, ausência de órfã e faixa 4xx sobre as subclasses
+- [x] **CA4** — Gate 3 generalizado: totalidade, ausência de órfã e faixa 4xx sobre as subclasses
   das **duas** raízes; teste novo: todo BC com borda registra handler em cada raiz.
-- [ ] **CA5** — `NotFoundError` e o handler genérico 404 removidos; `shared/domain/exceptions/base.py`
+- [x] **CA5** — `NotFoundError` e o handler genérico 404 removidos; `shared/domain/exceptions/base.py`
   verde na regra 11 (sem `HTTP`, `FastAPI`, `Starlette`, `handler`, `MRO`, número `4xx`/`5xx`)
   e sem a palavra "status" (conferido por grep no gate de saída).
-- [ ] **CA6** — Regra 11 de `check_layout.py` verde sobre `src/` e vermelha contra violador
+- [x] **CA6** — Regra 11 de `check_layout.py` verde sobre `src/` e vermelha contra violador
   plantado (um por termo do vocabulário), com caso negativo (número/termo fora do vocabulário).
-- [ ] **CA7** — Os sete arquivos de oráculo de §5.6 sem diff na branch
+- [x] **CA7** — Os sete arquivos de oráculo de §5.6 sem diff na branch
   (`git diff origin/develop -- <arquivos>` vazio) e verdes no CI.
-- [ ] **CA8** — Corpo exato por faixa travado para toda subclasse concreta das duas raízes de
+- [x] **CA8** — Corpo exato por faixa travado para toda subclasse concreta das duas raízes de
   identity e de staff (§5.6, teste novo).
-- [ ] **CA9** — `docs/LAYOUT.md` reflete `ApplicationError` em `shared/application` (§2, §4 e a
+- [x] **CA9** — `docs/LAYOUT.md` reflete `ApplicationError` em `shared/application` (§2, §4 e a
   lista "Pode importar de" de Application em §3) e a saída de `NotFoundError`.
 
 ## 12. Checklist de validação interna

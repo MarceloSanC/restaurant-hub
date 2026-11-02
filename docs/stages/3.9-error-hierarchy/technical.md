@@ -400,4 +400,9 @@ Os dois testes que a auditoria (rodada 1) propôs para os sobreviventes M10a (ca
 - **Checkpoint C, T06–T08**: R11-1/R11-2 → `[3.9/task-06-fix]`; ADR-1 a ADR-4 → `[3.9/task-07-fix]`; R11-3 → `[finding]` acima.
 - **Auditoria de testes**: 3 rodadas; sobreviventes M10a, M11 (rodada 1) e M18 (rodada 2) mortos; rodada 3 com os seis itens "sim".
 
+### 2026-11-02 — [decision] Auditoria independente da Stage — Claude (Opus 5.5)
+**Contexto:** auditoria de contexto limpo (skill `stage-audit`) sobre a branch rebaseada em `origin/develop` (`bf4a224`). Gates locais: ruff, `mypy src tests/fakes` (249 arquivos), `check_layout.py`, `check_dead_shared.py`, `lint-imports` (11 contratos), os oito scripts de `make docs-check` e `pytest tests/unit` (4579 passed); oráculos de CA7 sem diff (`tests/e2e` só o smoke). Quatro mutações reais, todas mortas: `EmployeeNotFoundError` de volta sob `StaffError` (2 testes), handler de staff só em `StaffError` (96), regra 11 sem `IGNORECASE` (8), erro novo sob `StaffApplicationError` sem entrada no mapa (5).
+**Decisão:** CA1–CA9 marcados no concept (estavam provados e abertos); nenhum achado bloqueante. A nota de fechamento do roadmap conta **5** commits de correção (`task-02/03/05/06/07-fix`), não 4.
+**Razão:** um `[ ]` com evidência é o mesmo defeito de um `[x]` sem ela (skill `stage-audit`, Fase C.4).
+
 <!-- END: post-execution -->
