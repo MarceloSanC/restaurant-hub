@@ -59,7 +59,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 
 # Ordem total do port (`L-ORD`). As duas colunas levam a colação explícita — ver
 # o docstring do módulo.
-_ORDEM_TOTAL = (
+_TOTAL_ORDER = (
     job_functions.c.name.collate("C"),
     job_functions.c.id.collate("C"),
 )
@@ -76,14 +76,14 @@ class PostgresJobFunctionRepository:
     def add(self, job_function: JobFunction) -> None:
         """L-JF1 — inserção, nunca upsert. Id colide globalmente; nome, por tenant."""
         try:
-            with self._engine.begin() as conexao:
-                self._add(conexao, job_function)
-        except IntegrityError as erro:
-            # `from erro` preserva a cadeia de causa: sem ela, o diagnóstico de
+            with self._engine.begin() as connection:
+                self._add(connection, job_function)
+        except IntegrityError as error:
+            # `from error` preserva a cadeia de causa: sem ela, o diagnóstico de
             # um conflito de integridade perde o SQL e a constraint originais.
             raise translate(
-                erro, ON_INSERT_JOB_FUNCTION, self._detalhe_do_conflito(erro, job_function)
-            ) from erro
+                error, ON_INSERT_JOB_FUNCTION, self._conflict_detail(error, job_function)
+            ) from error
 
     def update(self, job_function: JobFunction) -> None:
         """L-JF2 — `UPDATE` com `rowcount == 0` ⇒ `JobFunctionNotFoundError`.
@@ -95,10 +95,10 @@ class PostgresJobFunctionRepository:
         ainda seria check-then-act sob concorrência.
         """
         try:
-            with self._engine.begin() as conexao:
-                self._update(conexao, job_function)
-        except IntegrityError as erro:
-            raise translate(erro, ON_UPDATE_JOB_FUNCTION, job_function.name) from erro
+            with self._engine.begin() as connection:
+                self._update(connection, job_function)
+        except IntegrityError as error:
+            raise translate(error, ON_UPDATE_JOB_FUNCTION, job_function.name) from error
 
     def delete(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> None:
         """L-JF3 — remoção guardada pelo `RESTRICT`, com o lookup **antes**.
@@ -113,28 +113,28 @@ class PostgresJobFunctionRepository:
         concorrente mudaria a resposta.
         """
         try:
-            with self._engine.begin() as conexao:
-                self._delete(conexao, tenant_id, job_function_id)
-        except IntegrityError as erro:
-            raise translate(erro, ON_DELETE_JOB_FUNCTION, job_function_id) from erro
+            with self._engine.begin() as connection:
+                self._delete(connection, tenant_id, job_function_id)
+        except IntegrityError as error:
+            raise translate(error, ON_DELETE_JOB_FUNCTION, job_function_id) from error
 
     # ---- leitura ----------------------------------------------------------
 
     def find_by_id(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> JobFunction | None:
         """Função **do tenant**, ou `None` — id alheio é indistinguível de inexistente."""
-        with self._engine.connect() as conexao:
-            return self._find_by_id(conexao, tenant_id, job_function_id)
+        with self._engine.connect() as connection:
+            return self._find_by_id(connection, tenant_id, job_function_id)
 
     def find_by_name(self, tenant_id: TenantId, name: str) -> JobFunction | None:
         """Homônima do tenant, ou `None`. Comparação **verbatim** — `=`, nunca `ILIKE`."""
-        with self._engine.connect() as conexao:
-            linha = conexao.execute(
+        with self._engine.connect() as connection:
+            row = connection.execute(
                 select(job_functions).where(
                     job_functions.c.tenant_id == tenant_id,
                     job_functions.c.name == name,
                 )
             ).one_or_none()
-        return mappers.row_to_job_function(linha) if linha is not None else None
+        return mappers.row_to_job_function(row) if row is not None else None
 
     def find_all_by_ids(
         self, tenant_id: TenantId, job_function_ids: frozenset[JobFunctionId]
@@ -147,8 +147,8 @@ class PostgresJobFunctionRepository:
         """
         if not job_function_ids:
             return ()
-        with self._engine.connect() as conexao:
-            linhas = conexao.execute(
+        with self._engine.connect() as connection:
+            rows = connection.execute(
                 select(job_functions)
                 .where(
                     job_functions.c.tenant_id == tenant_id,
@@ -157,27 +157,29 @@ class PostgresJobFunctionRepository:
                     # ordem do resultado é a do `ORDER BY`, não a do `IN`.
                     job_functions.c.id.in_(sorted(job_function_ids)),
                 )
-                .order_by(*_ORDEM_TOTAL)
+                .order_by(*_TOTAL_ORDER)
             ).all()
-        return tuple(mappers.row_to_job_function(linha) for linha in linhas)
+        return tuple(mappers.row_to_job_function(row) for row in rows)
 
     def list_by_tenant(self, tenant_id: TenantId) -> tuple[JobFunction, ...]:
         """L-JF5 — todas as do tenant e nenhuma de outro; `L-ORD` — em ordem total."""
-        with self._engine.connect() as conexao:
-            linhas = conexao.execute(
+        with self._engine.connect() as connection:
+            rows = connection.execute(
                 select(job_functions)
                 .where(job_functions.c.tenant_id == tenant_id)
-                .order_by(*_ORDEM_TOTAL)
+                .order_by(*_TOTAL_ORDER)
             ).all()
-        return tuple(mappers.row_to_job_function(linha) for linha in linhas)
+        return tuple(mappers.row_to_job_function(row) for row in rows)
 
     # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) -----
 
-    def _add(self, conexao: Connection, job_function: JobFunction) -> None:
-        conexao.execute(job_functions.insert().values(**mappers.job_function_to_row(job_function)))
+    def _add(self, connection: Connection, job_function: JobFunction) -> None:
+        connection.execute(
+            job_functions.insert().values(**mappers.job_function_to_row(job_function))
+        )
 
-    def _update(self, conexao: Connection, job_function: JobFunction) -> None:
-        resultado = conexao.execute(
+    def _update(self, connection: Connection, job_function: JobFunction) -> None:
+        result = connection.execute(
             job_functions.update()
             .where(
                 job_functions.c.id == job_function.id,
@@ -188,15 +190,15 @@ class PostgresJobFunctionRepository:
             # restaurante por uma escrita que se parece com uma renomeação.
             .values(name=job_function.name)
         )
-        if resultado.rowcount == 0:
+        if result.rowcount == 0:
             raise JobFunctionNotFoundError(job_function.id)
 
     def _delete(
-        self, conexao: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
+        self, connection: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
     ) -> None:
-        if self._find_by_id(conexao, tenant_id, job_function_id) is None:
+        if self._find_by_id(connection, tenant_id, job_function_id) is None:
             raise JobFunctionNotFoundError(job_function_id)
-        conexao.execute(
+        connection.execute(
             job_functions.delete().where(
                 job_functions.c.id == job_function_id,
                 job_functions.c.tenant_id == tenant_id,
@@ -204,18 +206,18 @@ class PostgresJobFunctionRepository:
         )
 
     def _find_by_id(
-        self, conexao: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
+        self, connection: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
     ) -> JobFunction | None:
-        linha = conexao.execute(
+        row = connection.execute(
             select(job_functions).where(
                 job_functions.c.id == job_function_id,
                 job_functions.c.tenant_id == tenant_id,
             )
         ).one_or_none()
-        return mappers.row_to_job_function(linha) if linha is not None else None
+        return mappers.row_to_job_function(row) if row is not None else None
 
     @staticmethod
-    def _detalhe_do_conflito(erro: IntegrityError, job_function: JobFunction) -> str:
+    def _conflict_detail(error: IntegrityError, job_function: JobFunction) -> str:
         """Qual valor entra na mensagem depende de **qual** regra foi violada.
 
         `translate` recebe um `detail` só (contrato do concept §4), e as duas
@@ -225,6 +227,6 @@ class PostgresJobFunctionRepository:
         o conflito errado com a confiança de quem sabe. Precedente literal:
         `user_repository.py` de identity, na mesma situação.
         """
-        if constraint_name(erro) == "uq_job_functions_tenant_name":
+        if constraint_name(error) == "uq_job_functions_tenant_name":
             return job_function.name
         return job_function.id

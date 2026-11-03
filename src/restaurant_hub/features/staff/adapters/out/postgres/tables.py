@@ -98,7 +98,7 @@ _PERIOD_IN_LIST = ", ".join(f"'{value}'" for value in _PERIOD_VALUES)
 # declarada, que em Postgres é microssegundo — a mesma do `datetime` do Python;
 # precisão reduzida truncaria em silêncio e o round-trip devolveria outro
 # instante.
-_TIMESTAMP_SEM_FUSO = TIMESTAMP(timezone=False)
+_NAIVE_TIMESTAMP = TIMESTAMP(timezone=False)
 
 
 job_functions = Table(
@@ -226,8 +226,8 @@ employee_unavailabilities = Table(
     Column("employee_id", Text, nullable=False),
     # Sem `tenant_id`: a única referência desta tabela é o próprio funcionário,
     # e não há ligação cross-tenant a cercar (D2).
-    Column("start_at", _TIMESTAMP_SEM_FUSO, nullable=False),
-    Column("end_at", _TIMESTAMP_SEM_FUSO, nullable=False),
+    Column("start_at", _NAIVE_TIMESTAMP, nullable=False),
+    Column("end_at", _NAIVE_TIMESTAMP, nullable=False),
     # `start_at` na PK: períodos do mesmo funcionário não se sobrepõem, logo o
     # início é único por registro — e é por isso que `ORDER BY start_at` é ordem
     # **total** na reidratação (`L-ORD`, ADR 3.3.0003).
