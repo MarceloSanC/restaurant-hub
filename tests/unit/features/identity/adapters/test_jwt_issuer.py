@@ -31,9 +31,19 @@ pytestmark = pytest.mark.unit
 # >= 32 bytes (RFC 7518 §3.2): abaixo disso o PyJWT emite
 # InsecureKeyLengthWarning, e um teste que convive com o aviso ensina a ignorá-lo.
 _SEGREDO = "segredo-de-teste-com-32-bytes-ou-mais"
-_FUTURO = datetime.now(UTC) + timedelta(minutes=15)
 _TENANT_PADRAO = RestaurantId("rest-1")
 _AMOSTRA_DE_REFRESH = 10
+
+
+def _futuro() -> datetime:
+    """Daqui a 15 minutos, medido na chamada — não na importação do módulo.
+
+    Uma constante de módulo vencia antes do teste rodar quando a sessão do
+    pytest passava de 15 minutos: a corrida do mutmut importa a suíte, roda a
+    coleta de estatísticas (~7 min) e só então o teste limpo, e o round trip
+    caía em `Signature has expired` (issue #87, run 41471644715).
+    """
+    return datetime.now(UTC) + timedelta(minutes=15)
 
 
 def _claims(
@@ -47,7 +57,7 @@ def _claims(
         role=role,
         tenant_id=tenant_id,
         session_id=SessionId("sess-1"),
-        expires_at=expires_at or _FUTURO,
+        expires_at=expires_at or _futuro(),
     )
 
 
@@ -131,7 +141,7 @@ def test_recusa_token_com_algoritmo_none() -> None:
 def test_recusa_token_assinado_com_outro_algoritmo() -> None:
     """Token válido, segredo certo, algoritmo fora da allowlist."""
     token = jwt.encode(
-        {"sub": "user-1", "role": "owner", "tenant_id": "r", "sid": "s", "exp": _FUTURO},
+        {"sub": "user-1", "role": "owner", "tenant_id": "r", "sid": "s", "exp": _futuro()},
         _SEGREDO,
         algorithm="HS512",
     )
@@ -158,7 +168,7 @@ def test_recusa_token_bem_assinado_com_payload_de_forma_errada(
     Cenário real numa troca de formato de claims, quando tokens do formato antigo
     ainda circulam. Sem esta captura, um `KeyError` viraria 500 em vez de 401.
     """
-    token = jwt.encode({**payload, "exp": _FUTURO}, _SEGREDO, algorithm="HS256")
+    token = jwt.encode({**payload, "exp": _futuro()}, _SEGREDO, algorithm="HS256")
 
     with pytest.raises(InvalidAccessTokenError):
         _issuer().decode_access_token(token)

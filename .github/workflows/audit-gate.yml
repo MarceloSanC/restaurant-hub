@@ -69,20 +69,26 @@ jobs:
   # 2. **Noturno, não por PR.** A corrida leva minutos por mutante sobrevivente,
   #    e o sinal que ela dá — "esta suíte não notaria esta mudança" — é sobre a
   #    suíte, não sobre o diff. Não há o que bloquear num PR específico.
-  # 3. **`continue-on-error` enquanto o limiar não está decidido.** A issue #45
-  #    registra a incerteza: falhar a qualquer sobrevivente provavelmente é ruído
-  #    no primeiro dia. A primeira semana mede o baseline; só então se escolhe
-  #    entre "zero sobreviventes" e "não pior que o baseline". Um gate que nasce
-  #    vermelho não é gate — é um alarme que se aprende a ignorar.
+  # 3. **Sobrevivente observacional enquanto o limiar não está decidido.** A
+  #    issue #45 registra a incerteza: falhar a qualquer sobrevivente
+  #    provavelmente é ruído no primeiro dia. A primeira semana mede o baseline;
+  #    só então se escolhe entre "zero sobreviventes" e "não pior que o
+  #    baseline". Um gate que nasce vermelho não é gate — é um alarme que se
+  #    aprende a ignorar.
   #
-  # Quando o limiar for decidido, o que muda aqui é UMA linha: o
-  # `continue-on-error: true` sai, e o passo de comparação passa a `exit 1`.
+  # **Corrida que não mede reprova (issue #87).** Até a #87 o job inteiro era
+  # `continue-on-error`, e isso escondia o outro modo de falha: a corrida que
+  # morre na coleta (`failed to collect stats`) e sai sem testar um mutante. Foi
+  # o que aconteceu por dias, com o workflow verde. Agora o job reprova quando
+  # o código original não passa, quando o `mutmut run` sai com erro, e quando
+  # sobra mutante sem desfecho (`scripts/check_mutation_run.py`). Sobrevivente
+  # continua sem reprovar: o `mutmut run` sai com 0 com sobreviventes, e o passo
+  # do baseline engole o código de saída. Quando o limiar for decidido, é esse
+  # passo de comparação que passa a `exit 1`.
   # ---------------------------------------------------------------------------
   mutation-access-modules:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    # Observacional: reporta e não reprova (ver nota 3 acima).
-    continue-on-error: true
 
     # O mesmo Postgres do `ci.yml`, e pela mesma razão: os testes de integração
     # e e2e não se pulam quando falta banco (ADR 2.3.0001). Sem o service, cada
@@ -131,6 +137,13 @@ jobs:
       # arquivos que decidem acesso, e nada mais.
       - name: Rodar mutmut nos módulos de acesso
         run: uv run mutmut run
+
+      # `mutmut run` com saída 0 não garante que mediu: zero mutantes gerados ou
+      # mutante sem desfecho também saem verdes. O resumo do mutmut cobra os dois.
+      - name: A corrida testou todos os mutantes
+        run: |
+          uv run mutmut export-cicd-stats
+          uv run python scripts/check_mutation_run.py mutants/mutmut-cicd-stats.json
 
       - name: Baseline de sobreviventes
         if: always()
