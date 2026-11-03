@@ -214,10 +214,10 @@ def periods_to_shift_preference(periods: Iterable[str]) -> ShiftPreference | Non
     derivada do enum só aceita os correntes, então uma linha fora deles é schema
     divergente do código.
     """
-    valores = frozenset(DayPeriod(period) for period in periods)
-    if not valores:
+    day_periods = frozenset(DayPeriod(period) for period in periods)
+    if not day_periods:
         return None
-    return ShiftPreference(periods=valores)
+    return ShiftPreference(periods=day_periods)
 
 
 # ---------------------------------------------------------------------------

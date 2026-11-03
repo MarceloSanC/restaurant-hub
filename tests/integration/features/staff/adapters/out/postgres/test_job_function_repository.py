@@ -132,7 +132,7 @@ def test_l_jf1_add_com_nome_ja_usado_no_tenant_e_erro_com_o_nome_na_mensagem(
     """O índice único `(tenant_id, name)` recusa — e a mensagem cita o **nome**.
 
     Citar o id numa mensagem de "nome já usado" descreveria o conflito errado
-    com a confiança de quem sabe; é o que `_detalhe_do_conflito` evita.
+    com a confiança de quem sabe; é o que `_conflict_detail` evita.
     """
     repositorio.add(_funcao())
     with pytest.raises(JobFunctionNameAlreadyExistsError) as excecao:
