@@ -85,13 +85,16 @@ def _compose_port(name: str, default: int, compose_dir: Path) -> int:
 
     class _ComposePorts(BaseSettings):
         model_config = SettingsConfigDict(
-            env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True
+            env_file=compose_dir / ".env",
+            env_file_encoding="utf-8",
+            extra="ignore",
+            env_ignore_empty=True,
         )
 
         postgres_port: int | None = None
         app_port: int | None = None
 
-    declared: int | None = getattr(_ComposePorts(_env_file=compose_dir / ".env"), name)
+    declared: int | None = getattr(_ComposePorts(), name)
     return default if declared is None else declared
 
 
