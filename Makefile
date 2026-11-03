@@ -139,9 +139,16 @@ fmt-check:
 # pyproject fixa `files = ["src"]`, então uma anotação dentro de um teste some
 # em runtime e nunca é verificada. Como os fakes são a especificação que os
 # adapters reais (2.3/2.4) reimplementam, a divergência seria herdada em silêncio.
+#
+# Inclui scripts/ e .claude/hooks/ (desde a issue #91): são os gates e os hooks
+# que decidem se o código entra, e uma regressão de tipo neles passava no
+# `make check`. Os scripts de nome com hífen (`worktree-new.py`) não são módulos
+# importáveis, mas o mypy os acha pela varredura do diretório. O
+# `tests/unit/test_ci_workflow.py` cobra que o alvo alcance todo `.py` versionado
+# fora de `tests/` (exceto os fakes) e `migrations/`.
 # ---------------------------------------------------------------------------
 typecheck:
-	uv run mypy src/ tests/fakes/
+	uv run mypy src/ tests/fakes/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # layout-check — valida as regras de arquitetura que NÃO são arestas de import
