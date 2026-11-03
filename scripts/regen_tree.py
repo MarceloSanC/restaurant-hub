@@ -18,6 +18,7 @@ rápida da estrutura atual sem precisar navegar o repo.
 from __future__ import annotations
 
 import contextlib
+import io
 import sys
 from pathlib import Path
 
@@ -74,8 +75,11 @@ def _force_utf8_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         if stream.encoding and stream.encoding.lower() == "utf-8":
             continue
-        with contextlib.suppress(AttributeError, OSError):
-            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        # `sys.stdout` é `TextIO` no typeshed; só o `TextIOWrapper` tem `reconfigure`
+        # (sob captura do pytest, o stream é outro objeto e fica como está).
+        if isinstance(stream, io.TextIOWrapper):
+            with contextlib.suppress(OSError):
+                stream.reconfigure(encoding="utf-8")
 
 
 def main() -> None:
@@ -97,4 +101,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
