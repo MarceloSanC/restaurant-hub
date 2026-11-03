@@ -171,82 +171,82 @@ _EMPLOYEE = "funcionário"
 _UNIT = "unidade"
 
 
-def _nao_conectado(nome: str) -> Never:
+def _not_wired(name: str) -> Never:
     raise RuntimeError(
-        f"dependência {nome!r} não foi conectada pelo composition root — "
+        f"dependência {name!r} não foi conectada pelo composition root — "
         "veja wire_dependencies() e create_app()"
     )
 
 
 def _get_create_job_function() -> CreateJobFunctionUseCase:
-    _nao_conectado("staff_create_job_function")
+    _not_wired("staff_create_job_function")
 
 
 def _get_list_job_functions() -> ListJobFunctionsUseCase:
-    _nao_conectado("staff_list_job_functions")
+    _not_wired("staff_list_job_functions")
 
 
 def _get_rename_job_function() -> RenameJobFunctionUseCase:
-    _nao_conectado("staff_rename_job_function")
+    _not_wired("staff_rename_job_function")
 
 
 def _get_delete_job_function() -> DeleteJobFunctionUseCase:
-    _nao_conectado("staff_delete_job_function")
+    _not_wired("staff_delete_job_function")
 
 
 def _get_create_employee() -> CreateEmployeeUseCase:
-    _nao_conectado("staff_create_employee")
+    _not_wired("staff_create_employee")
 
 
 def _get_list_employees() -> ListEmployeesUseCase:
-    _nao_conectado("staff_list_employees")
+    _not_wired("staff_list_employees")
 
 
 def _get_rename_employee() -> RenameEmployeeUseCase:
-    _nao_conectado("staff_rename_employee")
+    _not_wired("staff_rename_employee")
 
 
 def _get_delete_employee() -> DeleteEmployeeUseCase:
-    _nao_conectado("staff_delete_employee")
+    _not_wired("staff_delete_employee")
 
 
 def _get_assign_job_functions() -> AssignJobFunctionsUseCase:
-    _nao_conectado("staff_assign_job_functions")
+    _not_wired("staff_assign_job_functions")
 
 
 def _get_change_workload_profile() -> ChangeWorkloadProfileUseCase:
-    _nao_conectado("staff_change_workload_profile")
+    _not_wired("staff_change_workload_profile")
 
 
 def _get_declare_shift_preference() -> DeclareShiftPreferenceUseCase:
-    _nao_conectado("staff_declare_shift_preference")
+    _not_wired("staff_declare_shift_preference")
 
 
 def _get_register_unavailability() -> RegisterUnavailabilityUseCase:
-    _nao_conectado("staff_register_unavailability")
+    _not_wired("staff_register_unavailability")
 
 
 def _get_remove_unavailability() -> RemoveUnavailabilityUseCase:
-    _nao_conectado("staff_remove_unavailability")
+    _not_wired("staff_remove_unavailability")
 
 
 def _get_deactivate_employee() -> DeactivateEmployeeUseCase:
-    _nao_conectado("staff_deactivate_employee")
+    _not_wired("staff_deactivate_employee")
 
 
 def _get_reactivate_employee() -> ReactivateEmployeeUseCase:
-    _nao_conectado("staff_reactivate_employee")
+    _not_wired("staff_reactivate_employee")
 
 
 def _get_copy_employee_to_unit() -> CopyEmployeeToUnitUseCase:
-    _nao_conectado("staff_copy_employee_to_unit")
+    _not_wired("staff_copy_employee_to_unit")
 
 
 def _get_create_login_for_employee() -> CreateLoginForEmployeeUseCase:
-    _nao_conectado("staff_create_login_for_employee")
+    _not_wired("staff_create_login_for_employee")
 
 
-def _to_shift_preference(periodos: list[str] | None) -> ShiftPreference | None:
+def _to_shift_preference(periods: list[str] | None) -> ShiftPreference | None:
     """Lista de textos para value object; `None` significa **sem preferência**.
 
     `DayPeriod.from_string` é o **único** conversor de período do dia da borda
@@ -254,12 +254,12 @@ def _to_shift_preference(periodos: list[str] | None) -> ShiftPreference | None:
     `StaffError` e vira 500. Há varredura de AST que reprova a construção direta
     em qualquer módulo deste pacote.
     """
-    if periodos is None:
+    if periods is None:
         return None
-    return ShiftPreference(periods=frozenset(DayPeriod.from_string(p) for p in periodos))
+    return ShiftPreference(periods=frozenset(DayPeriod.from_string(p) for p in periods))
 
 
-def _job_function_ids(brutos: list[str]) -> frozenset[JobFunctionId]:
+def _job_function_ids(raw_ids: list[str]) -> frozenset[JobFunctionId]:
     """Valida **cada elemento** antes de deixá-lo alcançar o repositório.
 
     `Employee.__post_init__` valida a não-vacuidade do conjunto, mas **nenhum
@@ -268,7 +268,7 @@ def _job_function_ids(brutos: list[str]) -> frozenset[JobFunctionId]:
     esta Stage existe para fechar (concept §5.14).
     """
     return frozenset(
-        JobFunctionId(validate_identifier(bruto, entity=_JOB_FUNCTION)) for bruto in brutos
+        JobFunctionId(validate_identifier(raw_id, entity=_JOB_FUNCTION)) for raw_id in raw_ids
     )
 
 
@@ -379,14 +379,14 @@ def create_employee(
     use_case: Annotated[CreateEmployeeUseCase, Depends(_get_create_employee)],
 ) -> EmployeeResponse:
     """Cria um funcionário na unidade do endereço."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
+    unit = validate_identifier(unit_id, entity=_UNIT)
     job_function_ids = _job_function_ids(payload.job_function_ids)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         CreateEmployeeCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
+            unit_id=UnitId(unit),
             name=payload.name,
             workload_profile=to_workload_profile(payload.workload_profile),
             job_function_ids=job_function_ids,
@@ -405,13 +405,13 @@ def list_employees(
     include_inactive: bool = False,
 ) -> list[EmployeeResponse]:
     """Lista os funcionários da unidade; desligados só com `include_inactive`."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     results = use_case.execute(
         ListEmployeesQuery(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
+            unit_id=UnitId(unit),
             include_inactive=include_inactive,
         )
     )
@@ -435,15 +435,15 @@ def rename_employee(  # noqa: PLR0913
     use_case: Annotated[RenameEmployeeUseCase, Depends(_get_rename_employee)],
 ) -> EmployeeResponse:
     """Renomeia o funcionário endereçado pela unidade e pelo id."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         RenameEmployeeCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
             name=payload.name,
         )
     )
@@ -462,15 +462,15 @@ def delete_employee(
     use_case: Annotated[DeleteEmployeeUseCase, Depends(_get_delete_employee)],
 ) -> Response:
     """Remove o registro do funcionário endereçado."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     use_case.execute(
         DeleteEmployeeCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
         )
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -501,16 +501,16 @@ def assign_job_functions(  # noqa: PLR0913
     use_case: Annotated[AssignJobFunctionsUseCase, Depends(_get_assign_job_functions)],
 ) -> EmployeeResponse:
     """**Substitui** o conjunto de funções do funcionário — não acrescenta."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
     job_function_ids = _job_function_ids(payload.job_function_ids)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         AssignJobFunctionsCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
             job_function_ids=job_function_ids,
         )
     )
@@ -530,15 +530,15 @@ def change_workload_profile(  # noqa: PLR0913
     use_case: Annotated[ChangeWorkloadProfileUseCase, Depends(_get_change_workload_profile)],
 ) -> EmployeeResponse:
     """Troca o perfil de jornada (fixa ou sob demanda)."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         ChangeWorkloadProfileCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
             workload_profile=to_workload_profile(payload.workload_profile),
         )
     )
@@ -563,15 +563,15 @@ def declare_shift_preference(  # noqa: PLR0913
     tem default — com default, o cliente que esquecesse o campo apagaria um dado
     sem pedir.
     """
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         DeclareShiftPreferenceCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
             shift_preference=_to_shift_preference(payload.shift_preference),
         )
     )
@@ -596,15 +596,15 @@ def register_unavailability(  # noqa: PLR0913
     `Location` prometeria uma que não existe. A resposta é o funcionário
     resultante, como em toda escrita.
     """
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         RegisterUnavailabilityCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
             period=UnavailabilityPeriod(start=payload.start, end=payload.end),
         )
     )
@@ -632,15 +632,15 @@ def remove_unavailability(  # noqa: PLR0913
     (`UnavailabilityNotFoundError`), e não 404: o período é um valor **dentro**
     do agregado, e o funcionário existe e foi encontrado.
     """
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         RemoveUnavailabilityCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
             period=UnavailabilityPeriod(start=start, end=end),
         )
     )
@@ -670,15 +670,15 @@ def deactivate_employee(
     use_case: Annotated[DeactivateEmployeeUseCase, Depends(_get_deactivate_employee)],
 ) -> EmployeeResponse:
     """Desliga o funcionário — o registro **sobrevive** (ADR 3.2.0006)."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         DeactivateEmployeeCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
         )
     )
     return EmployeeResponse.from_result(result)
@@ -696,15 +696,15 @@ def reactivate_employee(
     use_case: Annotated[ReactivateEmployeeUseCase, Depends(_get_reactivate_employee)],
 ) -> EmployeeResponse:
     """Recontrata o funcionário, devolvendo-o à listagem default."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         ReactivateEmployeeCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
         )
     )
     return EmployeeResponse.from_result(result)
@@ -744,20 +744,20 @@ def copy_employee_to_unit(  # noqa: PLR0913
     produzem o **mesmo** status e o **mesmo** corpo, por desenho: quem não
     enxerga a unidade não pode distinguir "não existe" de "existe e não é sua".
     """
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    destino = validate_identifier(payload.target_unit_id, entity=_UNIT)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    target_unit = validate_identifier(payload.target_unit_id, entity=_UNIT)
 
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
-    guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=destino)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
+    guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=target_unit)
 
     result = use_case.execute(
         CopyEmployeeToUnitCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
-            target_unit_id=UnitId(destino),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
+            target_unit_id=UnitId(target_unit),
         )
     )
     return EmployeeResponse.from_result(result)
@@ -797,16 +797,16 @@ def create_login_for_employee(  # noqa: PLR0913
     use_case: Annotated[CreateLoginForEmployeeUseCase, Depends(_get_create_login_for_employee)],
 ) -> EmployeeLoginResponse:
     """Cria a conta pendente em identity e a vincula ao registro — 201 (R17)."""
-    unidade = validate_identifier(unit_id, entity=_UNIT)
-    funcionario = validate_identifier(employee_id, entity=_EMPLOYEE)
-    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unidade)
-    guard.authorize(actor, MANAGE_USERS_IN_UNIT_ACCESS.permission, unit_id=unidade)
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
+    guard.authorize(actor, MANAGE_USERS_IN_UNIT_ACCESS.permission, unit_id=unit)
     result = use_case.execute(
         CreateLoginForEmployeeCommand(
             actor=actor,
             tenant_id=scope.tenant_id,
-            unit_id=UnitId(unidade),
-            employee_id=EmployeeId(funcionario),
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
             email=payload.email,
             delivery=LoginDelivery(payload.delivery),
         )

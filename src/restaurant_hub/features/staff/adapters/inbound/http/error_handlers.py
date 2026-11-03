@@ -167,8 +167,8 @@ def resolve_status(exc: StaffFailure) -> int:
     herança existe só para que um erro não classificado degrade para algo
     sensato em produção em vez de virar 500.
     """
-    for classe in type(exc).__mro__:
-        status = STAFF_ERROR_STATUS.get(classe)
+    for exc_type in type(exc).__mro__:
+        status = STAFF_ERROR_STATUS.get(exc_type)
         if status is not None:
             return status
     return HTTP_UNPROCESSABLE

@@ -165,12 +165,12 @@ def get_access_guard() -> AccessGuard:
     Falhar alto é melhor que servir um `None` que só quebra três camadas adiante
     — é o padrão que o router de identity já usa.
     """
-    _nao_conectado("staff_access_guard")
+    _not_wired("staff_access_guard")
 
 
-def _nao_conectado(nome: str) -> Never:
+def _not_wired(name: str) -> Never:
     raise RuntimeError(
-        f"dependência {nome!r} não foi conectada pelo composition root — "
+        f"dependência {name!r} não foi conectada pelo composition root — "
         "veja wire_dependencies() e create_app()"
     )
 
@@ -245,14 +245,14 @@ def identifier_fields(model: type[BaseModel]) -> tuple[IdentifierField, ...]:
     nenhuma.
     """
     return tuple(
-        IdentifierField(name=nome, is_collection=_e_colecao(info.annotation))
-        for nome, info in model.model_fields.items()
-        if nome.endswith(("_id", "_ids"))
+        IdentifierField(name=name, is_collection=_is_collection(info.annotation))
+        for name, info in model.model_fields.items()
+        if name.endswith(("_id", "_ids"))
     )
 
 
-def _e_colecao(anotacao: object) -> bool:
+def _is_collection(annotation: object) -> bool:
     """Se a anotação alcança um `list[...]`, inclusive sob `| None`."""
-    if get_origin(anotacao) is list:
+    if get_origin(annotation) is list:
         return True
-    return any(_e_colecao(argumento) for argumento in get_args(anotacao))
+    return any(_is_collection(argument) for argument in get_args(annotation))

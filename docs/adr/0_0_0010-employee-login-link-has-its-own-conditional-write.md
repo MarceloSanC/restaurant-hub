@@ -5,7 +5,7 @@ when-use: Reference before writing `employees.user_id`, before changing `Employe
 keywords: [adr, user_id, employee, login-link, lost-update, conditional-write, for-update, staff, port, issue-68]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-02
+updated_at: 2026-11-03
 adr_id: "0.0.0010"
 decision: '`EmployeeRepository` gains `link_login(tenant_id, unit_id, employee_id, user_id)` — the only writer of `employees.user_id` after the record exists — which locks the row, re-runs the domain guards of `Employee.link_login` on the stored record and writes only `user_id`; `update` ignores the entity''s `user_id` and keeps the stored one; `CreateLoginForEmployeeUseCase` links through `link_login`'
 context_stage: 0.0-global
@@ -13,6 +13,8 @@ bounded_context: transversal
 ---
 
 # ADR 0.0.0010 — The employee login link has its own conditional write
+
+> ⚠️ **Errata (2026-11-03):** §Decision 3 and §Status — the adapter constants were renamed to English in issue #135 (pure rename, no behaviour change): `_COLUNAS_COM_ESCRITA_PROPRIA` is now `_COLUMNS_WITH_OWN_WRITE` and `_COLUNAS_IMUTAVEIS` is now `_IMMUTABLE_COLUMNS`, both in `staff/adapters/out/postgres/employee_repository.py`. The quoted sentence of ADR 3.5.0004 keeps the old name because it is a quotation. Pointer only; no decision content changes — ver issue #135
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
