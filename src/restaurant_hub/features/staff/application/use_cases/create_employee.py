@@ -73,14 +73,12 @@ class CreateEmployeeUseCase:
             unit_id=command.unit_id,
         )
         # (1) Resolução do conjunto — antes da construção, de propósito.
-        encontradas = self._job_functions.find_all_by_ids(
-            command.tenant_id, command.job_function_ids
-        )
-        ausentes = command.job_function_ids - {job_function.id for job_function in encontradas}
-        if ausentes:
+        found = self._job_functions.find_all_by_ids(command.tenant_id, command.job_function_ids)
+        missing = command.job_function_ids - {job_function.id for job_function in found}
+        if missing:
             # `sorted` para a id reportada ser determinística quando falta
             # mais de uma: mensagem de erro instável é ruído em log e em teste.
-            raise JobFunctionNotFoundError(sorted(ausentes)[0])
+            raise JobFunctionNotFoundError(sorted(missing)[0])
 
         # (2) Construção — o registro nasce ativo (ADR 3.2.0006).
         employee = Employee(

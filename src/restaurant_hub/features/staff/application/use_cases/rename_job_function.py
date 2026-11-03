@@ -69,11 +69,11 @@ class RenameJobFunctionUseCase:
         if job_function is None:
             raise JobFunctionNotFoundError(command.job_function_id)
         # (2) Transição: o domínio rejeita o nome inválido aqui, antes do port.
-        renomeada = job_function.rename(command.name)
+        renamed = job_function.rename(command.name)
         # (3) Conflito de nome, ignorando a própria função.
-        homonima = self._job_functions.find_by_name(command.tenant_id, command.name)
-        if homonima is not None and homonima.id != job_function.id:
+        namesake = self._job_functions.find_by_name(command.tenant_id, command.name)
+        if namesake is not None and namesake.id != job_function.id:
             raise JobFunctionNameAlreadyExistsError(command.name)
         # (4) Escrita.
-        self._job_functions.update(renomeada)
-        return to_job_function_result(renomeada)
+        self._job_functions.update(renamed)
+        return to_job_function_result(renamed)
