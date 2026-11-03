@@ -76,7 +76,7 @@ def issue_exists(issue_id: int) -> bool:
         if result.returncode != 0:
             return False
         data = json.loads(result.stdout)
-        return data.get("number") == issue_id
+        return bool(data.get("number") == issue_id)
     except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
         return False
 

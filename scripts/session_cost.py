@@ -71,7 +71,9 @@ def _is_human(entry: dict[str, Any]) -> bool:
 
 
 def measure(entries: list[dict[str, Any]], cost: Cost) -> None:
-    seen: set[str] = set()
+    # `requestId` e `uuid` podem faltar os dois: o `None` entra no conjunto como
+    # qualquer id, e a segunda entrada sem id conta como repetida.
+    seen: set[str | None] = set()
     last_agent: datetime | None = None
     stamps = [t for t in (_ts(e) for e in entries) if t]
     if stamps:

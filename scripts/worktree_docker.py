@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import io
 import json
 import re
 import subprocess
@@ -286,8 +287,11 @@ def _force_utf8_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         if stream.encoding and stream.encoding.lower() == "utf-8":
             continue
-        with contextlib.suppress(AttributeError, OSError):
-            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        # `sys.stdout` é `TextIO` no typeshed; só o `TextIOWrapper` tem `reconfigure`
+        # (sob captura do pytest, o stream é outro objeto e fica como está).
+        if isinstance(stream, io.TextIOWrapper):
+            with contextlib.suppress(OSError):
+                stream.reconfigure(encoding="utf-8")
 
 
 def registered_worktrees() -> tuple[Path, list[Path]]:
