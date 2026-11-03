@@ -101,8 +101,8 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
 # A ordem de declaração do enum, materializada como chave de ordenação
 # (ADR 3.6.0003 §Decision 4). Deriva de `DayPeriod` em vez de repetir a sequência
 # à mão: um período novo entra na ordem certa sem ninguém lembrar deste módulo.
-_ORDEM_DO_PERIODO: Final[dict[DayPeriod, int]] = {
-    periodo: posicao for posicao, periodo in enumerate(DayPeriod.__members__.values())
+_PERIOD_ORDER: Final[dict[DayPeriod, int]] = {
+    period: position for position, period in enumerate(DayPeriod.__members__.values())
 }
 
 # O link de definição de senha numa resposta (decisão 6 do módulo). A rota irmã de
@@ -311,7 +311,7 @@ class EmployeeResponse(BaseModel):
             shift_preference=to_shift_preference_payload(result.shift_preference),
             job_function_ids=sorted(result.job_function_ids),
             unavailabilities=[
-                to_unavailability_payload(periodo) for periodo in result.unavailabilities
+                to_unavailability_payload(period) for period in result.unavailabilities
             ],
             active=result.active,
             user_id=result.user_id,
@@ -402,11 +402,9 @@ def to_shift_preference_payload(preference: ShiftPreference | None) -> list[str]
     """
     if preference is None:
         return None
-    return [
-        periodo.value for periodo in sorted(preference.periods, key=_ORDEM_DO_PERIODO.__getitem__)
-    ]
+    return [period.value for period in sorted(preference.periods, key=_PERIOD_ORDER.__getitem__)]
 
 
-def to_unavailability_payload(periodo: UnavailabilityPeriod) -> UnavailabilityPayload:
+def to_unavailability_payload(period: UnavailabilityPeriod) -> UnavailabilityPayload:
     """Value object → payload, com os instantes ingênuos como estão."""
-    return UnavailabilityPayload(start=periodo.start, end=periodo.end)
+    return UnavailabilityPayload(start=period.start, end=period.end)
