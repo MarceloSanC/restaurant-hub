@@ -5,7 +5,7 @@ when-use: Reference before touching `employees.user_id`, before adding a constra
 keywords: [adr, user_id, employee, login-link, schema, nullable, opaque, no-fk, no-unique, copy, staff]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-11-01
+updated_at: 2026-11-03
 adr_id: 3.5.0004
 decision: '`Employee.user_id: UserId | None` (default `None`) persisted as `employees.user_id TEXT NULL` — opaque (no FK to identity, ADR 3.3.0002), not unique (workforce §3.7 allows several records per person), not indexed (no access path by `user_id` yet, ADR 3.3.0005); set only through `Employee.link_login`, which refuses a record that is already linked or terminated; never carried by the copy, by construction (explicit field-by-field clone with the default left untouched)'
 context_stage: 3.5-employee-login-link
@@ -13,6 +13,8 @@ bounded_context: staff
 ---
 
 # ADR 3.5.0004 — `user_id` as a nullable opaque column on `employees`
+
+> ⚠️ **Errata (2026-11-03):** §Decision 4 and `## Supersessão parcial` — the constant `_COLUNAS_IMUTAVEIS` of `staff/adapters/out/postgres/employee_repository.py` was renamed to `_IMMUTABLE_COLUMNS` in issue #135 (pure rename, no behaviour change). Pointer only; no decision content changes — ver issue #135
 
 ## Status
 
