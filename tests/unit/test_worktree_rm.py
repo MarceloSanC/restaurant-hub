@@ -420,3 +420,236 @@ def test_forced_removal_that_succeeds_exits_0(
 
     assert wr.main() == 0
     assert not wt.exists()
+
+
+# ---------------------------------------------------------------------------
+# o compose da worktree — derrubado pelo rótulo do projeto (issue #84)
+# ---------------------------------------------------------------------------
+
+PROJECT = "fix-84-orphan-port"
+
+
+@pytest.fixture
+def compose(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[str]]:
+    """O `worktree_docker` com o daemon de pé e um projeto com Postgres e volume.
+
+    `calls` registra quem foi chamado com qual projeto; `failures` é o que o
+    `remove_project` devolve como não removido.
+    """
+    state: dict[str, list[str]] = {"calls": [], "failures": []}
+    wd = wr.worktree_docker
+
+    def _found() -> object:
+        return wd.ProjectResources(
+            containers=[f"{PROJECT}-postgres-1"], volumes=[f"{PROJECT}_pgdata"]
+        )
+
+    def _remove(project: str) -> tuple[object, list[str]]:
+        state["calls"].append(f"remove {project}")
+        return _found(), state["failures"]
+
+    def _resources(project: str) -> object:
+        state["calls"].append(f"list {project}")
+        return _found()
+
+    monkeypatch.setattr(wd, "ensure_daemon", lambda: None)
+    monkeypatch.setattr(wd, "remove_project", _remove)
+    monkeypatch.setattr(wd, "project_resources", _resources)
+    monkeypatch.setattr(wr, "_docker_available", lambda: False)
+    return state
+
+
+def _docker_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _down() -> None:
+        raise wr.worktree_docker.DockerUnavailable("failed to connect to the docker API")
+
+    monkeypatch.setattr(wr.worktree_docker, "ensure_daemon", _down)
+
+
+def test_compose_project_of_the_folder_is_taken_down_even_with_the_folder_gone(
+    tmp_path: Path, compose: dict[str, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    gone = tmp_path / "restaurant-hub-worktrees" / PROJECT  # nunca criada
+
+    assert wr.compose_cleanup(gone, dry_run=False) is True
+
+    assert compose["calls"] == [f"remove {PROJECT}"]
+    out = capsys.readouterr().out
+    assert "projeto compose derrubado" in out
+    assert f"{PROJECT}-postgres-1" in out
+    assert f"{PROJECT}_pgdata" in out
+
+
+def test_dry_run_only_lists_the_compose_project(
+    tmp_path: Path, compose: dict[str, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert wr.compose_cleanup(tmp_path / PROJECT, dry_run=True) is True
+
+    assert compose["calls"] == [f"list {PROJECT}"]
+    assert "[dry-run] seria derrubado" in capsys.readouterr().out
+
+
+def test_compose_leftover_is_reported_as_failure(
+    tmp_path: Path, compose: dict[str, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    compose["failures"].append(f"volume {PROJECT}_pgdata: in use")
+
+    assert wr.compose_cleanup(tmp_path / PROJECT, dry_run=False) is False
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is False
+    assert f"não saiu — volume {PROJECT}_pgdata: in use" in capsys.readouterr().err
+
+
+def test_empty_compose_project_is_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compose: dict[str, list[str]]
+) -> None:
+    empty = wr.worktree_docker.ProjectResources()
+    monkeypatch.setattr(wr.worktree_docker, "remove_project", lambda _p: (empty, []))
+
+    assert wr.compose_cleanup(tmp_path / PROJECT, dry_run=False) is True
+
+
+def test_docker_down_warns_with_the_project_and_the_way_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    compose: dict[str, list[str]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Docker parado: nada foi conferido — o aviso diz o quê, e como derrubar depois."""
+    _docker_down(monkeypatch)
+    devcontainer: list[bool] = []
+    monkeypatch.setattr(wr, "_docker_available", lambda: devcontainer.append(True) or False)
+
+    assert wr.compose_cleanup(tmp_path / PROJECT, dry_run=False) is None
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is True
+
+    assert compose["calls"] == []
+    assert devcontainer == []  # sem daemon, a limpeza do devcontainer nem pergunta
+    err = capsys.readouterr().err
+    assert f"`{PROJECT}`" in err
+    assert "NÃO foi derrubado" in err
+    assert "make worktree-orphans ARGS=--prune" in err
+
+
+def test_main_takes_down_the_compose_before_removing_the_worktree(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    compose: dict[str, list[str]],
+) -> None:
+    _, wt = real_repo
+    monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "feat/1-a", "--force"])
+    monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
+    existed: list[bool] = []
+    recorded = wr.worktree_docker.remove_project  # o da fixture, que registra a chamada
+
+    def _remove(project: str) -> tuple[object, list[str]]:
+        existed.append(wt.exists())
+        return recorded(project)
+
+    monkeypatch.setattr(wr.worktree_docker, "remove_project", _remove)
+
+    assert wr.main() == 0
+
+    assert compose["calls"] == ["remove feat-1-a"]
+    assert existed == [True]
+    assert not wt.exists()
+
+
+def test_main_exits_2_when_the_compose_leaves_something_behind(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    compose: dict[str, list[str]],
+) -> None:
+    _, wt = real_repo
+    compose["failures"].append("volume feat-1-a_pgdata: in use")
+    monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "feat/1-a", "--force"])
+    monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
+
+    assert wr.main() == 2  # noqa: PLR2004 — o exit code documentado do script
+    assert not wt.exists()  # a worktree sai mesmo assim; o exit code acusa o resto
+
+
+def test_main_with_docker_down_still_removes_and_exits_0(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    compose: dict[str, list[str]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, wt = real_repo
+    _docker_down(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "feat/1-a", "--force"])
+    monkeypatch.setattr(wr, "run_install_hooks", lambda _cwd: None)
+
+    assert wr.main() == 0
+    assert not wt.exists()
+    assert "make worktree-orphans ARGS=--prune" in capsys.readouterr().err
+
+
+def test_main_refuses_the_branch_of_the_main_checkout(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    compose: dict[str, list[str]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`develop` está no checkout principal: o projeto compose dele é o banco de
+    quem fica. O script recusa antes de qualquer docker ou git.
+    """
+    principal, _ = real_repo
+    monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "develop", "--force"])
+
+    with pytest.raises(SystemExit) as exc:
+        wr.main()
+
+    assert exc.value.code == 1
+    assert compose["calls"] == []
+    assert principal.exists()
+    assert "checkout principal" in capsys.readouterr().err
+
+
+def test_main_refuses_a_worktree_whose_compose_project_is_the_main_checkouts(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    compose: dict[str, list[str]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Worktree criada à mão em `../x/Restaurant-Hub`: o compose dá a ela o projeto
+    `restaurant-hub`, o do checkout principal. Derrubá-lo apagaria o banco de quem
+    fica — o script recusa antes de qualquer docker ou git.
+    """
+    principal, _ = real_repo
+    clash = principal.parent / "x" / "Restaurant-Hub"
+    _git(principal, "worktree", "add", "-q", "-b", "fix/2-b", str(clash))
+    monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "fix/2-b", "--force"])
+
+    with pytest.raises(SystemExit) as exc:
+        wr.main()
+
+    assert exc.value.code == 1
+    assert compose["calls"] == []
+    assert clash.exists()
+    assert "--no-docker" in capsys.readouterr().err
+
+
+def test_folder_name_is_normalized_like_compose_does(
+    tmp_path: Path, compose: dict[str, list[str]]
+) -> None:
+    wr.compose_cleanup(tmp_path / "Feat-1-A", dry_run=False)
+
+    assert compose["calls"] == ["remove feat-1-a"]
+
+
+def test_compose_leftover_fails_the_cleanup_with_the_devcontainer_path_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compose: dict[str, list[str]]
+) -> None:
+    """Com o daemon de pé, o `docker_cleanup` passa pelo devcontainer e pela imagem e
+    ainda devolve o resultado do compose.
+    """
+    compose["failures"].append(f"volume {PROJECT}_pgdata: in use")
+    monkeypatch.setattr(wr, "_docker_available", lambda: True)
+    monkeypatch.setattr(wr, "find_containers_for_worktree", lambda _p: [])
+    monkeypatch.setattr(
+        wr.subprocess, "run", lambda cmd, *_a, **_kw: subprocess.CompletedProcess(cmd, 1)
+    )
+
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is False
+    compose["failures"].clear()
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is True

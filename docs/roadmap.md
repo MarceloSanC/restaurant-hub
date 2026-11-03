@@ -188,7 +188,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#79](https://github.com/MarceloSanC/restaurant-hub/issues/79) | Citar o roadmap por âncora estável em vez de número de linha (gate no `docs-check`) | shared | docs + tooling | done | — |
 | [#81](https://github.com/MarceloSanC/restaurant-hub/issues/81) | Merge do auditor de dentro da worktree não apaga a branch remota | shared | docs + tooling | done | — |
 | [#82](https://github.com/MarceloSanC/restaurant-hub/issues/82) | Tripwire para campo de credencial em resposta que nasça sem a marca `x-credential` (especulativa; disparo: rota de reemissão do link ou primeiro frontend do Step 3) | shared | tests (e2e) | open | #61 |
-| [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | open | #58 |
+| [#84](https://github.com/MarceloSanC/restaurant-hub/issues/84) | Worktree nova pode herdar a porta de um Postgres órfão | shared | tooling | done | #58 |
 | [#85](https://github.com/MarceloSanC/restaurant-hub/issues/85) | `make migrate` e `make run` sem a guarda da `DATABASE_URL` da worktree | shared | tooling | done | #58 |
 | [#86](https://github.com/MarceloSanC/restaurant-hub/issues/86) | `migrations/env.py` ignora a `sqlalchemy.url` passada pelo chamador | shared | migrations + tests | done | #58 |
 | [#87](https://github.com/MarceloSanC/restaurant-hub/issues/87) | Mutação noturna morre na coleta — `.claude/` fora do `also_copy` | shared | tooling + ci | done | — |

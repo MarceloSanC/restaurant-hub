@@ -413,9 +413,9 @@ branch presa a uma worktree.
 ### Etapa 7: Cleanup
 
 §"Merge e limpeza da worktree", passos 4–7: `git pull` no principal,
-`docker compose down -v` na worktree, `worktree-rm.py <branch>
---delete-remote` e a verificação (remota, local, worktree, containers e
-hooks).
+o banco da worktree, `worktree-rm.py <branch> --delete-remote` (que
+derruba esse banco) e a verificação (remota, local, worktree, containers
+e hooks).
 
 Verificar também:
 - [ ] Issue fechada automaticamente
@@ -532,7 +532,10 @@ O script, num único comando:
   paralela não brigar com o da principal por bind no host, e **leva a
   `DATABASE_URL` para a mesma `POSTGRES_PORT`** (acrescentada se faltar; só
   com host `localhost`/`127.0.0.1`/`::1` — o host `postgres` fala na porta do
-  contêiner e fica como está);
+  contêiner e fica como está). Livre quer dizer: fora do `.env` das worktrees
+  registradas, sem container que a publique (de pé ou parado) e sem nada
+  ocupando-a no host (bind de teste) — issue #84, §"Banco e containers da
+  worktree";
 - roda `uv sync --extra dev` (o venv da worktree) e **não** toca nos hooks
   do git (§"Hooks do git", logo abaixo);
 - abre uma nova janela do VS Code na worktree.
@@ -615,17 +618,30 @@ worktree. O `make run` sobe na `APP_PORT` do checkout (8000 sem ela), a
 mesma em que o compose publicaria a app. Cabe a quem usa a worktree subir e derrubar esse banco:
 
 - **Ao abrir a worktree:** `docker compose up -d --wait postgres` dentro
-  dela, antes do primeiro `pytest`. Se o `up` falhar com a porta
-  ocupada, algo já a segura — tipicamente o Postgres órfão de uma
-  worktree removida sem o passo abaixo, que o script não enxerga (ele só
-  lê as portas do `.env` das worktrees registradas). Liberar a porta, ou
-  trocar `POSTGRES_PORT` e `DATABASE_URL` juntas; nunca rodar a suíte
-  contra o que responde nela — a guarda confere portas, não de quem é o
-  banco.
-- **Antes de remover a worktree:** `docker compose down -v` dentro dela.
-  `worktree-rm.py` só remove containers com label de devcontainer; o
-  `postgres` subido por `docker compose up` ficaria órfão segurando a
-  porta. Conferir com `docker ps -a --filter name=<pasta-da-worktree>`.
+  dela, antes do primeiro `pytest`. O `worktree-new.py` não entrega porta
+  que esteja no `.env` de outra worktree, que um container publique (de pé
+  ou parado — o `start` a toma de volta) ou que o bind de teste ache
+  ocupada no host (issue #84). Com o **Docker parado**, ele avisa: a sonda
+  vê o que está de pé, mas as portas dos containers parados não foram
+  conferidas. Se mesmo assim o `up` falhar com a porta ocupada, liberar a
+  porta, ou trocar `POSTGRES_PORT` e `DATABASE_URL` juntas; nunca rodar a
+  suíte contra o que responde nela — a guarda confere portas, não de quem
+  é o banco.
+- **Ao remover a worktree:** o `worktree-rm.py` derruba o projeto compose
+  dela — o `docker compose down -v`: containers, volumes (o banco) e redes,
+  achados pelo rótulo `com.docker.compose.project` = nome da pasta, então
+  vale sem o arquivo do compose e com a pasta já apagada. Com o **Docker
+  parado**, ele avisa e segue: o projeto fica órfão até o Docker voltar.
+- **Órfãos:** `make worktree-orphans` (do checkout principal) lista os
+  projetos compose de worktrees que não existem mais — `working_dir`
+  dentro de `../<repo>-worktrees/`, ou só volume/rede com nome de pasta de
+  branch — e `make worktree-orphans ARGS=--prune` derruba os provados pelo
+  `working_dir`. O que sobrou só como volume/rede fica listado e não sai:
+  o nome não prova que é deste repositório (outro repo com a mesma
+  convenção de pasta tem nomes iguais); conferido, sai com `docker volume
+  rm`. Sai com 1 se o Docker estiver parado (nada foi conferido). O projeto
+  do checkout principal nunca entra; o `worktree-rm.py` recusa a branch
+  dele e a worktree cuja pasta dá o mesmo nome de projeto que a dele.
 
 Quando o PR daquela worktree mergear, a remoção segue a sequência de
 §"Merge e limpeza da worktree", logo abaixo.
@@ -698,10 +714,14 @@ gh pr merge <num> --merge                   # nunca --squash/--rebase
 git pull origin develop                     # no principal: traz o merge, para o branch -d do passo 6
 ```
 
-**5. Derrubar o banco da worktree** (§"Banco e containers da worktree"):
+**5. O banco da worktree** (§"Banco e containers da worktree") sai no
+passo 6: o `worktree-rm.py` derruba o projeto compose dela (containers,
+volumes e redes). O `docker compose down -v` dentro da worktree, antes,
+continua válido e só antecipa isso. Se o `worktree-rm.py` avisar que o
+Docker está parado, rodar depois, com o Docker de pé:
 
 ```bash
-docker compose down -v                      # DENTRO da worktree
+make worktree-orphans ARGS=--prune          # no checkout principal
 ```
 
 **6. Remover worktree, branch local e branch remota (do principal):**
@@ -716,13 +736,14 @@ divergente não exige `--path`), confere sync, remove a worktree, faz
 `--dry-run` mostra o que faria; `--force` pula o check de sync e usa
 `branch -D`.
 
-**7. Verificar** — cada linha com saída vazia, menos a dos hooks:
+**7. Verificar** — cada linha com saída vazia, menos a dos órfãos e a dos hooks:
 
 ```bash
 git ls-remote --heads origin <branch>       # remota apagada
 git branch --list <branch>                  # local apagada
 git worktree list | grep <pasta-da-worktree>
 docker ps -a --filter name=<pasta-da-worktree>
+make worktree-orphans                       # "Nenhum projeto compose órfão de worktree."
 grep INSTALL_PYTHON .git/hooks/pre-commit   # tem de apontar para o .venv do principal
 ```
 
@@ -927,8 +948,8 @@ gh pr create --base main --head develop  # criar release PR
 
 # Cleanup (após o merge — sequência completa em §Merge e limpeza da worktree)
 git pull origin develop                                  # no principal, ANTES do worktree-rm
-docker compose down -v                                   # dentro da worktree
-python scripts/worktree-rm.py <branch> --delete-remote   # worktree + branch local + remota + prune
+python scripts/worktree-rm.py <branch> --delete-remote   # compose + worktree + branches + prune
+make worktree-orphans                                    # compose de worktree que já saiu
 ```
 
 ---

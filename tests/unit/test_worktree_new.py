@@ -18,9 +18,11 @@ resto (cópia do `.env`, escolha de porta, escrita) é o código real em `tmp_pa
 from __future__ import annotations
 
 import importlib.util
+import socket
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import ClassVar
 
 import pytest
 from dotenv import dotenv_values
@@ -50,6 +52,8 @@ def _load() -> ModuleType:
 
 
 wn = _load()
+# antes de a fixture `repo` o trocar: o teste do Docker parado usa o real
+_REAL_DOCKER_RESERVED_PORTS = wn.docker_reserved_ports
 
 
 def _write_env(directory: Path, *lines: str) -> Path:
@@ -415,6 +419,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(wn, "branch_exists", lambda _branch: (False, False))
     monkeypatch.setattr(wn, "create_worktree", _create_worktree)
     monkeypatch.setattr(wn, "_list_worktree_paths", lambda: [main_checkout, other])
+    # host e Docker sem nada nas portas: os testes da sonda (issue #84) trocam estes dois
+    monkeypatch.setattr(wn, "host_port_busy", lambda _port: False)
+    monkeypatch.setattr(wn, "docker_reserved_ports", set)
     return main_checkout
 
 
@@ -437,7 +444,7 @@ def test_main_creates_worktree_whose_url_follows_its_port(
     assert "DATABASE_URL=postgresql+psycopg://user:pass@localhost:5434/restaurant_hub" in lines
     out = capsys.readouterr().out
     assert "docker compose up -d --wait postgres" in out
-    assert "docker compose down -v" in out
+    assert "derruba também o Postgres desta worktree" in out
     assert "python scripts/worktree-rm.py chore/58-db-url --delete-remote" in out
     assert "git pull origin develop" in out
 
@@ -500,3 +507,188 @@ def test_main_sets_up_the_new_worktree_unless_no_setup(
     monkeypatch.setattr(sys, "argv", [*argv[:1], "chore/100-other", *argv[2:], "--no-setup"])
     assert wn.main() == 0
     assert len(created) == 1
+
+
+# ---------------------------------------------------------------------------
+# a porta ocupada fora dos `.env` — o Postgres órfão (issue #84)
+# ---------------------------------------------------------------------------
+
+
+def test_port_busy_on_the_host_is_skipped(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """O Postgres de uma worktree removida segue publicando a 5434: nenhum `.env` a
+    mostra, e a worktree nova a recebia.
+    """
+    monkeypatch.setattr(wn, "host_port_busy", lambda port: port in {5434, 8002})
+
+    ports = wn.assign_worktree_ports(repo.parent / "restaurant-hub-worktrees" / "new")
+
+    assert ports == {"APP_PORT": 8003, "POSTGRES_PORT": 5435, "REDIS_PORT": 6381}
+    out = capsys.readouterr().out
+    assert "POSTGRES_PORT: 5434 ocupada no host" in out
+    assert "APP_PORT: 8002 ocupada no host" in out
+
+
+def test_port_published_by_a_stopped_container_is_skipped(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Container parado não ocupa a porta agora, mas o `start` dele a toma de volta;
+    a reserva vale para qualquer chave (a 6381 do Postgres de outro projeto também).
+    """
+    monkeypatch.setattr(wn, "docker_reserved_ports", lambda: {5434, 5435, 6381})
+    probed: list[int] = []
+    monkeypatch.setattr(wn, "host_port_busy", lambda port: probed.append(port) or False)
+
+    ports = wn.assign_worktree_ports(repo.parent / "restaurant-hub-worktrees" / "new")
+
+    assert ports == {"APP_PORT": 8002, "POSTGRES_PORT": 5436, "REDIS_PORT": 6382}
+    assert probed == [8002, 5436, 6382]  # reservada nem chega à sonda
+    assert "POSTGRES_PORT: 5434 reservada por um container" in capsys.readouterr().out
+
+
+def test_ports_of_the_env_files_are_never_probed(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    probed: list[int] = []
+    monkeypatch.setattr(wn, "host_port_busy", lambda port: probed.append(port) or False)
+
+    wn.assign_worktree_ports(repo.parent / "restaurant-hub-worktrees" / "new")
+
+    assert 5433 not in probed  # noqa: PLR2004 — a da outra worktree
+    assert probed == [8002, 5434, 6381]
+
+
+def test_no_free_port_in_range_fails(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(wn, "host_port_busy", lambda _port: True)
+
+    with pytest.raises(SystemExit):
+        wn.assign_worktree_ports(repo.parent / "restaurant-hub-worktrees" / "new")
+
+
+def test_docker_down_warns_and_still_assigns_by_env_and_probe(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Docker parado: nada publica porta agora, e a sonda basta para o presente; o que
+    não se sabe são as portas dos containers parados — o aviso diz isso, em vez de
+    o script fingir que conferiu.
+    """
+
+    def _down() -> set[int]:
+        raise wn.worktree_docker.DockerUnavailable("failed to connect to the docker API")
+
+    monkeypatch.setattr(wn, "docker_reserved_ports", _REAL_DOCKER_RESERVED_PORTS)
+    monkeypatch.setattr(wn.worktree_docker, "published_host_ports", _down)
+    monkeypatch.setattr(wn, "host_port_busy", lambda port: port == 5434)  # noqa: PLR2004
+
+    ports = wn.assign_worktree_ports(repo.parent / "restaurant-hub-worktrees" / "new")
+
+    assert ports["POSTGRES_PORT"] == 5435  # noqa: PLR2004
+    err = capsys.readouterr().err
+    assert "Docker indisponível (failed to connect to the docker API)" in err
+    assert "não foram conferidas" in err
+    assert "make worktree-orphans" in err
+
+
+def test_docker_reserved_ports_passes_the_published_ports_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(wn.worktree_docker, "published_host_ports", lambda: {5434})
+    assert wn.docker_reserved_ports() == {5434}
+
+
+def test_host_port_busy_sees_a_listening_socket() -> None:
+    """Sonda real: um serviço ouvindo no loopback ocupa a porta; fechado, ela volta."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        port = server.getsockname()[1]
+        assert wn.host_port_busy(port) is True
+    assert wn.host_port_busy(port) is False
+
+
+def test_host_port_busy_sees_a_wildcard_bind() -> None:
+    """O Docker publica em `0.0.0.0` — sem `listen`, só o bind de teste o vê."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(("0.0.0.0", 0))
+        port = server.getsockname()[1]
+        assert wn.host_port_busy(port) is True
+
+
+def test_host_port_busy_sees_a_bind_on_another_loopback_address() -> None:
+    """Bind em `127.0.0.2`, sem `listen`: o connect no `127.0.0.1` é recusado, e no
+    Windows só o `SO_EXCLUSIVEADDRUSE` faz o bind curinga da sonda falhar.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        try:
+            server.bind(("127.0.0.2", 0))
+        except OSError:
+            pytest.skip("127.0.0.2 não é loopback neste sistema (macOS)")
+        port = server.getsockname()[1]
+        assert wn.host_port_busy(port) is True
+
+
+class _FakeSocket:
+    """Socket cujo bind sempre passa; o `connect_ex` responde `answer`."""
+
+    answer = 0
+    connects: ClassVar[list[tuple[str, int]]] = []
+    timeouts: ClassVar[list[float]] = []
+
+    def __init__(self, *_args: object) -> None:
+        pass
+
+    def __enter__(self) -> _FakeSocket:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        pass
+
+    def setsockopt(self, *_args: object) -> None:
+        pass
+
+    def bind(self, _addr: object) -> None:
+        pass
+
+    def settimeout(self, value: float) -> None:
+        self.timeouts.append(value)
+
+    def connect_ex(self, addr: tuple[str, int]) -> int:
+        self.connects.append(addr)
+        return self.answer
+
+
+@pytest.mark.parametrize(("answer", "busy"), [(0, True), (10061, False)])
+def test_host_port_busy_counts_an_accepted_connection(
+    monkeypatch: pytest.MonkeyPatch, answer: int, busy: bool
+) -> None:
+    """O bind de teste passa (serviço com `SO_REUSEADDR`, relay do WSL), mas o
+    loopback aceita a conexão: a porta está ocupada.
+    """
+    monkeypatch.setattr(_FakeSocket, "answer", answer)
+    monkeypatch.setattr(_FakeSocket, "connects", [])
+    monkeypatch.setattr(_FakeSocket, "timeouts", [])
+    monkeypatch.setattr(wn.socket, "socket", _FakeSocket)
+
+    assert wn.host_port_busy(5434) is busy
+    assert _FakeSocket.connects == [("127.0.0.1", 5434)]
+    assert _FakeSocket.timeouts == [wn.CONNECT_PROBE_TIMEOUT]
+
+
+def test_docker_reserved_ports_is_none_with_docker_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _down() -> set[int]:
+        raise wn.worktree_docker.DockerUnavailable("down")
+
+    monkeypatch.setattr(wn.worktree_docker, "published_host_ports", _down)
+    assert _REAL_DOCKER_RESERVED_PORTS() is None
+
+
+def test_docker_reserved_ports_does_not_swallow_other_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _bug() -> set[int]:
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(wn.worktree_docker, "published_host_ports", _bug)
+    with pytest.raises(RuntimeError):
+        _REAL_DOCKER_RESERVED_PORTS()

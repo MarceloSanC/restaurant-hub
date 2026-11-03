@@ -13,7 +13,10 @@ sem `git stash`/checkout no checkout principal. Em um único comando:
      portas livres no `.env` da worktree (`APP_PORT`/`POSTGRES_PORT`/
      `REDIS_PORT`), levando para elas as URLs que as embutem com host
      loopback: a `DATABASE_URL` (acrescentada se faltar) e a `REDIS_URL`,
-     se houver.
+     se houver. Livre = fora dos `.env` das worktrees registradas, sem
+     container que a publique (inclusive parado) e sem nada ocupando-a no
+     host (bind de teste) — o Postgres órfão de uma worktree removida não a
+     empresta à nova (issue #84).
   5. Roda `uv sync --extra dev` na worktree (o venv dela). Os hooks do git
      ficam como estão: são um só para todas as worktrees e só o checkout
      principal os instala (`scripts/install_hooks.py`, issue #100).
@@ -56,6 +59,7 @@ import contextlib
 import json
 import re
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -70,6 +74,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # o venv.
 if str(ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts"))
+import worktree_docker  # noqa: E402
 from database_url_guard import is_loopback  # noqa: E402
 
 # Tipos aceitos no prefixo do branch — espelha CONVENTIONS.md §4.
@@ -462,19 +467,75 @@ def _collect_used_ports(skip: Path | None = None) -> dict[str, set[int]]:
     return used
 
 
+# Quanto esperar o `connect` da sonda: porta fechada no loopback recusa na hora;
+# o teto só existe para o Windows, que repete o SYN antes de desistir.
+CONNECT_PROBE_TIMEOUT = 0.2
+
+
+def host_port_busy(port: int) -> bool:
+    """Algo já ocupa `port` no host — o que os `.env` das worktrees não mostram.
+
+    Ocupada = o bind de teste é recusado em `0.0.0.0` ou em `127.0.0.1`, ou o
+    `127.0.0.1` aceita conexão. É assim que se vê o Postgres órfão de uma
+    worktree removida, publicado pelo Docker (no Windows, pelo
+    `com.docker.backend`), e qualquer outro serviço na porta. No Windows o bind
+    vai com `SO_EXCLUSIVEADDRUSE`: sem ele, um socket pode se ligar por cima do
+    de outro processo, e a sonda diria "livre".
+    """
+    for host in ("0.0.0.0", "127.0.0.1"):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            try:
+                probe.bind((host, port))
+            except OSError:
+                return True
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(CONNECT_PROBE_TIMEOUT)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def docker_reserved_ports() -> set[int] | None:
+    """Portas que algum container publica (de pé ou parado); None com o Docker parado."""
+    try:
+        return worktree_docker.published_host_ports()
+    except worktree_docker.DockerUnavailable as e:
+        print(
+            f"  AVISO: Docker indisponível ({e}).\n"
+            "  As portas de containers parados — o Postgres órfão de uma worktree\n"
+            "  removida — não foram conferidas; o bind de teste só vê o que está de pé.\n"
+            "  Com o Docker de volta, no checkout principal: make worktree-orphans",
+            file=sys.stderr,
+        )
+        return None
+
+
 def assign_worktree_ports(new_wt: Path) -> dict[str, int]:
-    """Escolhe portas livres para a worktree paralela, evitando colidir
-    com as portas já em uso pela principal e por outras worktrees.
+    """Escolhe portas livres para a worktree paralela.
+
+    Pula a porta que já está no `.env` da principal ou de outra worktree
+    registrada, a que algum container publica — inclusive parado, que a toma de
+    volta no `start` — e a que está ocupada no host (issue #84): o Postgres de
+    uma worktree removida sem `docker compose down -v` segue publicando a dele,
+    e a worktree nova que a recebesse rodaria a suíte contra o banco velho.
     """
     used = _collect_used_ports(skip=new_wt)
+    reserved = docker_reserved_ports() or set()
     chosen: dict[str, int] = {}
     for key, default in PORT_DEFAULTS.items():
         for offset in range(1, PORT_OFFSET_MAX + 1):
             candidate = default + offset
-            if candidate not in used[key]:
-                chosen[key] = candidate
-                used[key].add(candidate)
-                break
+            if candidate in used[key]:
+                continue
+            if candidate in reserved:
+                _info(f"{key}: {candidate} reservada por um container — pulando")
+                continue
+            if host_port_busy(candidate):
+                _info(f"{key}: {candidate} ocupada no host — pulando")
+                continue
+            chosen[key] = candidate
+            used[key].add(candidate)
+            break
         else:
             _fail(f"sem porta livre para {key} dentro de +{PORT_OFFSET_MAX} do default {default}.")
     return chosen
@@ -684,8 +745,8 @@ def _print_summary(*, branch: str, path: Path, issue: int, base: str) -> None:
     print()
     print("Quando terminar a worktree (após PR mergeado — GIT-WORKFLOW §Merge e limpeza):")
     print("  git pull origin develop   # no checkout principal (em develop), antes do worktree-rm")
-    print("  docker compose down -v   # dentro dela: o worktree-rm não derruba esse Postgres")
     print(f"  python scripts/worktree-rm.py {branch} --delete-remote   # do checkout principal")
+    print("  # o worktree-rm derruba também o Postgres desta worktree (containers e volumes)")
 
 
 def main() -> int:

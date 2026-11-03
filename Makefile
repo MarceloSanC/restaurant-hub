@@ -10,7 +10,7 @@
 # condicional vive em scripts Python (ex.: scripts/clean.py).
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check lint fmt fmt-check typecheck layout-check import-check lock-check docs-check test test-fast test-cov test-gate clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check lint fmt fmt-check typecheck layout-check import-check lock-check docs-check test test-fast test-cov test-gate clean worktree worktree-orphans docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -41,6 +41,7 @@ help:
 	@echo   make test-cov         Testes com relatorio de cobertura HTML + gate 90
 	@echo   make clean            Remove artefatos de build, cache e arquivos gerados
 	@echo   make worktree BRANCH=tipo/num-slug   Cria worktree paralela pronta para uso
+	@echo   make worktree-orphans   Lista o compose de worktrees removidas - ARGS=--prune derruba
 	@echo   make docker-build     Builda a stage builder - tag dev
 	@echo   make docker-build-prod  Builda a stage runtime - tag prod
 	@echo   make docker-up        Sobe a stack em background
@@ -238,6 +239,15 @@ ifndef BRANCH
 	$(error Uso: make worktree BRANCH=tipo/num-slug [BASE=develop ou main] [ARGS='...'])
 endif
 	uv run python scripts/worktree-new.py $(BRANCH) $(if $(BASE),--base $(BASE),) $(ARGS)
+
+# ---------------------------------------------------------------------------
+# worktree-orphans — projetos compose (Postgres, volumes, redes) de worktrees
+# que não existem mais: seguram a POSTGRES_PORT no host (issue #84).
+#     make worktree-orphans                # lista
+#     make worktree-orphans ARGS=--prune   # derruba
+# ---------------------------------------------------------------------------
+worktree-orphans:
+	uv run python scripts/worktree_docker.py $(ARGS)
 
 # ---------------------------------------------------------------------------
 # docker-build — builda a stage 'builder' (devcontainer e CI)
