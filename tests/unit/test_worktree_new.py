@@ -17,6 +17,7 @@ resto (cópia do `.env`, escolha de porta, escrita) é o código real em `tmp_pa
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import socket
@@ -1786,3 +1787,74 @@ def test_main_opens_vscode_unless_no_vscode(repo: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(sys, "argv", ["worktree-new.py", "chore/59-other", *flags, "--no-vscode"])
     assert wn.main() == 0
     assert len(opened) == 1
+
+
+# ---------------------------------------------------------------------------
+# varredura: toda saída de processo em texto é UTF-8 explícito (issue #143)
+# ---------------------------------------------------------------------------
+
+_SCRIPTS_DIR = _SCRIPT.parent
+_SWEPT_SCRIPTS = ("worktree-new.py", "worktree-rm.py", "install_hooks.py", "worktree_docker.py")
+
+
+def _text_runs_without_utf8(source: str) -> list[int]:
+    """Linhas de `subprocess.run(..., text=True)` sem `encoding="utf-8"`/`errors=` explícitos."""
+    missing: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "subprocess"
+        ):
+            continue
+        kwargs = {kw.arg: kw.value for kw in node.keywords}
+        text = kwargs.get("text")
+        if not (isinstance(text, ast.Constant) and text.value is True):
+            continue
+        encoding = kwargs.get("encoding")
+        utf8 = (isinstance(encoding, ast.Constant) and encoding.value == "utf-8") or (
+            isinstance(encoding, ast.Name) and encoding.id == "GIT_ENCODING"
+        )
+        if not utf8 or "errors" not in kwargs:
+            missing.append(node.lineno)
+    return missing
+
+
+@pytest.mark.parametrize("script", _SWEPT_SCRIPTS)
+def test_every_text_subprocess_run_decodes_utf8_explicitly(script: str) -> None:
+    """Sem `encoding`, o Windows decodifica em cp1252 e corrompe caminho com acento."""
+    source = (_SCRIPTS_DIR / script).read_text(encoding="utf-8")
+
+    assert _text_runs_without_utf8(source) == []
+
+
+def test_sweep_flags_a_text_run_without_encoding() -> None:
+    """A varredura não é vácua: acha a chamada sem `encoding` e a sem `errors`."""
+    source = (
+        "import subprocess\n"
+        "subprocess.run(['git'], text=True)\n"
+        "subprocess.run(['git'], text=True, encoding='utf-8')\n"
+        "subprocess.run(['git'], text=True, encoding='utf-8', errors='replace')\n"
+        "subprocess.run(['git'], capture_output=True)\n"
+    )
+
+    assert _text_runs_without_utf8(source) == [2, 3]
+
+
+def test_list_worktree_paths_survives_output_that_is_not_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Byte inválido vira `\ufffd`, não `UnicodeDecodeError` (o `errors="replace"`)."""
+
+    def _bytes_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raw = b"worktree /x\xff\n"
+        out = raw.decode(
+            str(kwargs.get("encoding") or "utf-8"), str(kwargs.get("errors") or "strict")
+        )
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    monkeypatch.setattr(wn.subprocess, "run", _bytes_run)
+
+    assert wn._list_worktree_paths() == [Path("/x\ufffd")]
