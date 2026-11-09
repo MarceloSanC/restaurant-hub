@@ -540,7 +540,8 @@ O script, num único comando:
   registradas, sem container que a publique (de pé ou parado) e sem nada
   ocupando-a no host (bind de teste) — issue #84, §"Banco e containers da
   worktree";
-- roda `uv sync --extra dev` (o venv da worktree) e **não** toca nos hooks
+- roda `uv sync --locked --extra dev` (o venv da worktree, instalado do
+  `uv.lock` revisado: lock defasado falha em vez de ser reescrito) e **não** toca nos hooks
   do git (§"Hooks do git", logo abaixo);
 - abre uma nova janela do VS Code na worktree.
 
