@@ -5,7 +5,7 @@ when-use: Reference whenever revisiting how refresh tokens are stored, rotated o
 keywords: [adr, identity, session, refresh-token, revocation, port, lgpd]
 status: accepted
 created_at: 2026-07-18
-updated_at: 2026-07-18
+updated_at: 2026-11-09
 adr_id: "2.2.0001"
 decision: Model the refresh session as a SessionRepository out port separate from TokenIssuer, storing only a fingerprint of the refresh token plus expiry and revocation timestamps.
 context_stage: 2.2-identity-application
@@ -13,6 +13,8 @@ bounded_context: identity
 ---
 
 # ADR 2.2.0001 — Persisted, revocable refresh session as its own out port
+
+> ⚠️ **Errata (2026-11-09):** §Context and Alternative A — "Kickoff decision #1" is the **position** of the session item in issue #20's "Decisões já fechadas" list, not the kickoff numbering. In the canonical list ([`overview.md`](../overview.md) §3 "Decisões de kickoff (2026-07)") the persisted, rotated refresh token is **decision #4**; decision #1 is the single role per tenant with the user↔unit link (ADR 2.1.0001). Pointer only; no decision content changes — ver issue #129
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

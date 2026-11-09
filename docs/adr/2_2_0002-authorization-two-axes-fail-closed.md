@@ -5,7 +5,7 @@ when-use: Reference whenever revisiting how authorize_action combines RBAC with 
 keywords: [adr, identity, authorization, rbac, visibility, fail-closed, use-case]
 status: accepted
 created_at: 2026-07-18
-updated_at: 2026-07-18
+updated_at: 2026-11-09
 adr_id: "2.2.0002"
 decision: authorize_action evaluates RBAC, tenant scope, unit-scope requirement and unit visibility in a normative order, raises a distinct exception per check, and never returns a boolean verdict.
 context_stage: 2.2-identity-application
@@ -13,6 +13,8 @@ bounded_context: identity
 ---
 
 # ADR 2.2.0002 — Authorization composes the two access axes and fails closed
+
+> ⚠️ **Errata (2026-11-09):** §Context and Alternatives B and D — "Kickoff decision #4" is the **position** of the "two orthogonal access axes" item in issue #20's "Decisões já fechadas" list, not a kickoff decision. That item is Stage 2.1's modeling, recorded in [ADR 2.1.0001](./2_1_0001-identity-aggregates-and-membership.md) and derived from kickoff decision #1; in the canonical list ([`overview.md`](../overview.md) §3 "Decisões de kickoff (2026-07)") decision #4 is the persisted, rotated refresh token. Pointer only; no decision content changes — ver issue #129
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
