@@ -60,6 +60,13 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 _BEARER_SCHEME = "bearer"
 
+# Nome de campo HTTP é case-insensitive (RFC 9110 §5.1), o ASGI o entrega em
+# minúsculas e `Headers.get` do Starlette baixa a caixa da chave: a grafia aqui
+# não muda comportamento. Inline em `extract_bearer_token`, cada variação de
+# caixa virava um mutante equivalente; constante de módulo, como o esquema, não
+# é mutada (issue #155).
+_AUTHORIZATION_HEADER = "Authorization"
+
 # Atributo de `request.state` onde o guard anota o sujeito do token aceito.
 # `request.state` vive no `scope` ASGI, então o handler de exceção enxerga a
 # anotação feita pela dependência, mesmo recebendo outro objeto `Request`.
@@ -85,7 +92,7 @@ def extract_bearer_token(request: Request) -> str:
     conseguir distinguir "você esqueceu o header" de "seu token não vale"
     (concept §5 regra 10).
     """
-    header = request.headers.get("Authorization")
+    header = request.headers.get(_AUTHORIZATION_HEADER)
     if header is None:
         raise InvalidAccessTokenError()
 
