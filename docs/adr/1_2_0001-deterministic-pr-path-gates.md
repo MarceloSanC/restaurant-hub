@@ -47,7 +47,7 @@ critical path, weekly, with `GH_TOKEN` and `permissions: issues: read` — but i
 this ADR does not pretend otherwise. Its first sentence is imprecise: "valida só o
 delta da branch" describes `check_technical_postexec.py` (which only *enforces*
 inside a stage's execution window) but not `check_stage_issue.py`, which globs
-every stage. And `check_stage_issue.py:19-22` says the script "funciona normalmente"
+every stage. And `check_stage_issue.py` › `__doc__` says the script "funciona normalmente"
 in CI with an authenticated `gh` — true of the scheduled workflow, but readable as
 an expectation of a token on PRs too. The decision below rests on structural facts,
 not on this reading.
@@ -137,7 +137,7 @@ history, ask what it sees under `fetch-depth: 1`; before adding anything whose
   in phase 3A with a placeholder `issue_id` reds *every unrelated PR* in the repo.
   This is not hypothetical: it is the state of this stage's own branch as written
   (`make check` red locally on `issue_id: 0`), and it would recur on every stage's
-  3A. (2) The verdict would depend on the network: `check_stage_issue.py:66-81`
+  3A. (2) The verdict would depend on the network: `check_stage_issue.py` › `issue_exists`
   returns the same `False` for "the API answered: no such issue" and "I could not
   reach the API", so an outage reds the PR while blaming a valid issue number.
   (3) The weekly scan already covers the case.
