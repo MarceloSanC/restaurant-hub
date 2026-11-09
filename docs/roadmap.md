@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-11-02
-last_reviewed_at: 2026-11-02
+updated_at: 2026-11-09
+last_reviewed_at: 2026-11-09
 ---
 
 # Roadmap — restaurant-hub
@@ -216,6 +216,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#135](https://github.com/MarceloSanC/restaurant-hub/issues/135) | Identificadores em português na application e nos adapters de staff | staff | application + adapters | open | #105 |
 | [#136](https://github.com/MarceloSanC/restaurant-hub/issues/136) | Identificadores em português no BC identity | identity | todas as camadas | open | #105 |
 | [#137](https://github.com/MarceloSanC/restaurant-hub/issues/137) | Identificadores em português no kernel compartilhado | shared | infrastructure | open | #105 |
+| [#139](https://github.com/MarceloSanC/restaurant-hub/issues/139) | `develop` vermelho — detector do `also_copy` toma fixture sob `tmp_path` por citação | shared | tooling + tests | done | #84, #87 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
