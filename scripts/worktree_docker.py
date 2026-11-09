@@ -300,6 +300,9 @@ def registered_worktrees() -> tuple[Path, list[Path]]:
         ["git", "worktree", "list", "--porcelain"],
         capture_output=True,
         text=True,
+        # UTF-8, não o locale (cp1252 no Windows): caminho com acento (issue #143)
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     paths = [
