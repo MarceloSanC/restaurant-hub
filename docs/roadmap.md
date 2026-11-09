@@ -218,7 +218,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#137](https://github.com/MarceloSanC/restaurant-hub/issues/137) | Identificadores em português no kernel compartilhado | shared | infrastructure | done | #105 |
 | [#139](https://github.com/MarceloSanC/restaurant-hub/issues/139) | `develop` vermelho — detector do `also_copy` toma fixture sob `tmp_path` por citação | shared | tooling + tests | done | #84, #87 |
 | [#143](https://github.com/MarceloSanC/restaurant-hub/issues/143) | `worktree-new`/`worktree-rm` — encoding do git, raiz do checkout principal e issue-first sem `gh` | shared | tooling | done | #91 |
-| [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | open | #116 |
+| [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | done | #116 |
 | [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | done | #132 |
 | [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | open | #117 |
 | [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | open | #65 |
