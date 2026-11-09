@@ -595,7 +595,7 @@ config do restaurante e distingue block × warn" (`roadmap.md` §Stage 4.2 › "
   unit, a record that is schedulable during the employee's own vacation"* (ADR 3.2.0003
   104–107). Regra do produto (`overview.md` 39), não trabalhista.
 - **Não é uma das quatro do roadmap 4.2** — o sponsor a confirmou na tabela de F4 (§3.6.0).
-  Onde vive (avaliador com modo fixo × use case) é lacuna da 4.2.
+  Onde vive (avaliador com modo fixo × use case) é lacuna da 4.2, *fechada pela Stage 4.2: no avaliador, com modo fixo `block` (ADR 4.2.0002)*.
 
 **Invariante:** a escala vigente nunca contém alocação sobre indisponibilidade.
 
@@ -773,7 +773,7 @@ vigente/impressa é o "quadro sujeito à fiscalização" (premissa, ver H3).
   131), o mesmo regime da indisponibilidade de staff (ADR 3.1.0005 41–46), o que permite cruzar
   alocação × indisponibilidade **sem conversão** (ADR 3.1.0001 52–53). "Consumers MUST NOT
   compare staff datetimes with aware datetimes without converting first" (ADR 3.1.0005 84–85).
-  A **representação** é lacuna da 4.1 (§3.2); este doc fixa só a semântica.
+  A **representação** é lacuna da 4.1 (§3.2), *fechada pela Stage 4.1: instantes ingênuos de minuto inteiro (ADR 4.1.0007); a persistida é da 4.4/4.5 (§6)*; este doc fixa só a semântica.
 - **Conversão wall-clock → instante absoluto** só quando um consumidor precisa (e-mail, ponto,
   hub entre unidades), por quem **conhece o fuso** — "scheduling validations in Step 4"
   (ADR 3.1.0005 44–46), agora com o fuso lido de identity. Cópia entre unidades de fusos
