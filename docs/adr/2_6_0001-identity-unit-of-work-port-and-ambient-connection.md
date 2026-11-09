@@ -37,12 +37,12 @@ Facts measured on `develop` at `2c71615`:
   and open `engine.begin()` / `engine.connect()` in every public method. Most
   delegate to a private helper that takes a `Connection`, marked as "the swap
   point for a future UoW" (restaurant, unit, user and session repositories, e.g.
-  `restaurant_repository.py:55`; the setup-token repository has no such helper). The module docstring
-  (`:14-18`) foresaw the swap as a **constructor change** ("passar a aceitar uma
+  `restaurant_repository.py` › `PostgresRestaurantRepository`; the setup-token repository has no such helper). The module docstring
+  (`restaurant_repository.py` › `__doc__`) foresaw the swap as a **constructor change** ("passar a aceitar uma
   `Connection` de fora vira uma mudança de construtor"); this ADR departs from that
   plan — Alternative B says why.
 - Use cases and repositories are built **once** in `wire_dependencies` and shared
-  by every concurrent request (`composition_root.py:480-690`); FastAPI runs the
+  by every concurrent request (`composition_root.py` › `wire_dependencies`); FastAPI runs the
   sync endpoints in its threadpool.
 - `SetPasswordWithTokenUseCase` performs four writes over three repositories with
   no enclosing transaction; its docstring points the debt at Stage 4.4, whose

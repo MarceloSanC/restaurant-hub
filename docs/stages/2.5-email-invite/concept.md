@@ -493,7 +493,7 @@ duas rotas de criação com semânticas de conflito diferentes, que é pior.
 - **A geração continua fora da camada de aplicação:** o `secrets` vive no adapter,
   atrás do port, como todo o resto da criptografia (LAYOUT §3, CLAUDE.md §5).
 - **Fonte:** Checkpoint A (dois revisores independentes, achado blocker);
-  `argon2_hasher.py:22,36`; `password_hasher.py` (lei 2).
+  `argon2_hasher.py` › `_SENTINELA_DUMMY`, `Argon2PasswordHasher.__init__`; `password_hasher.py` (lei 2).
 - **ADR:** [`../../adr/2_5_0004-unusable-hash-for-pending-accounts.md`](../../adr/2_5_0004-unusable-hash-for-pending-accounts.md)
 
 ### D5 — O link é composto no use case, a partir de configuração injetada

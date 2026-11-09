@@ -136,7 +136,7 @@ pending invitation on the platform, simultaneously.
   "not yet activated" remains implicit rather than modelled.
 
 ## References
-- `src/restaurant_hub/features/identity/adapters/out/security/argon2_hasher.py:22,36`
+- `src/restaurant_hub/features/identity/adapters/out/security/argon2_hasher.py` › `_SENTINELA_DUMMY`, `Argon2PasswordHasher.__init__`
 - `src/restaurant_hub/features/identity/application/ports/out/password_hasher.py` (laws 1 and 2)
 - `docs/adr/2_4_0004-security-adapter-parameters.md`
 - `docs/stages/2.5-email-invite/concept.md` §3 (premises), §5 regra 9, §7 D4, CA6b/CA6c
