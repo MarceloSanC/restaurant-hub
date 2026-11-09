@@ -5,7 +5,7 @@ when-use: Toda vez que iniciar uma nova Stage no projeto destino
 keywords: [runbook, stage, concept, technical, execucao, lifecycle]
 status: draft
 created_at: 2026-05-14
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 runbook_id: stage-lifecycle
 triggers:
   - Stage anterior foi mergeada e a próxima está pronta para iniciar
@@ -69,13 +69,17 @@ $title_humano = "<titulo>"      # ex: adicionar S3 source adapter
 # Formas (CONVENTIONS §1): "$N.$M" é o NÚMERO — commit reservado, tag de Task, título;
 # "$N.$M-$slug" é o stage_id — pasta, roadmap, depends_on; "$N-$M" vai na branch.
 
-gh issue create `
+# gh issue create devolve a URL (.../issues/42); o -replace guarda só o número
+$issue = (gh issue create `
   --title "feat: stage $N.$M — $title_humano" `
-  --body "Stage $N.$M-$slug — ver docs/roadmap.md e (após criação) docs/stages/$N.$M-$slug/concept.md"
+  --body "Stage $N.$M-$slug — ver docs/roadmap.md e (após criação) docs/stages/$N.$M-$slug/concept.md") -replace '.*/',''
+$issue                          # ex: 42
 ```
 
-**Saída esperada:** URL da issue + número atribuído (ex.: `#42`).
-Anotar o número — vai entrar no nome do branch e no rodapé dos commits.
+**Saída esperada:** o número atribuído à issue (ex.: `42`), já em `$issue`.
+Anotar o número — vai entrar no nome do branch e no rodapé dos commits
+(numa sessão nova do PowerShell, redefinir `$issue = "<num-issue>"` antes
+de seguir).
 
 **Gate de saída do Passo 1 — issue DEVE existir antes de qualquer passo
 seguinte.** Verificar live no GitHub:
@@ -96,13 +100,13 @@ Issue-first é princípio bloqueante ([`./GIT-WORKFLOW.md`](./GIT-WORKFLOW.md)
 
 ### Passo 2 — Criar branch a partir de develop
 
-> **Pré-condição (Passo 1):** `$issue` é o número de uma issue que
-> **já existe** no backlog do GitHub — confirmado por `gh issue view
-> $issue`. Se você não tem o número, voltar ao Passo 1.
+> **Pré-condição (Passo 1):** `$issue`, definido no Passo 1, é o número
+> de uma issue que **já existe** no backlog do GitHub — confirmado pelo
+> gate do Passo 1 (`gh issue view $issue`). Se `$issue` está vazio ou você
+> não tem o número, voltar ao Passo 1.
 
 ```powershell
-$issue = "<num-issue>"          # ex: 42 — confirmado por gh issue view
-$N_M_kebab = "$N-$M"            # ex: 2-3
+$N_M_kebab = "$N-$M"            # ex: 2-3 ($issue vem do Passo 1)
 
 # Worktree própria (GIT-WORKFLOW §"Branches em execução"); o checkout principal fica em develop
 python scripts/worktree-new.py "feat/$issue-$N_M_kebab-$slug" --no-vscode
