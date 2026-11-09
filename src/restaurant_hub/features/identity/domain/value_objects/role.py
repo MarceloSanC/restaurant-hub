@@ -45,11 +45,11 @@ class Role(StrEnum):
 # **dentro do BC `staff` eles são equivalentes**: detêm exatamente as mesmas duas
 # permissões de equipe, com o mesmo alcance (as unidades de que são membros).
 # O eixo real da divergência é **família de operação**, não alcance: RH mexe no
-# cadastro do funcionário; escala é do gerente e do dono (ADR 3.4.0006 §1 e §2).
+# cadastro do funcionário; mexer na escala é do gerente e do dono (ADR 3.4.0006 §1 e §2).
 #
-# **Restrição para frente, vinculante (ADR 3.4.0006 §3):** a Stage 4.x **não pode
-# conceder a `hr` nenhuma permissão sobre a escala**. É nisso, e só nisso, que a
-# divergência hr/manager consiste — este é o arquivo que quem estender o mapa lê.
+# **Restrição vinculante (ADR 3.4.0006 §3, superado em parte pelo ADR 4.1.0004):** `hr`
+# **não recebe permissão de escrita sobre a escala**; `hr` **lê** a escala das unidades de
+# que é membro. Nisso consiste a divergência hr/manager — arquivo lido por quem estende o mapa.
 _ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.PLATFORM_ADMIN: frozenset({Permission.MANAGE_PLATFORM}),
     Role.OWNER: frozenset(

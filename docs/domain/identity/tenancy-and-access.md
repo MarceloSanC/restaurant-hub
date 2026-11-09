@@ -614,11 +614,13 @@ reescreve ADR nem concept — a disposição de cada um está no próprio item):
   estável.
   Este doc não cita kickoff por número; cita o concept ou o ADR que registrou a decisão.
   **Disposição:** issue #129.
-- **C2 — comentário do mapa de papéis desatualizado.** `role.py` diz que a Stage 4.x "não pode
+- **C2 — comentário do mapa de papéis desatualizado.** `role.py` dizia que a Stage 4.x "não pode
   conceder a `hr` nenhuma permissão sobre a escala" (ADR 3.4.0006 §3), restrição superada em parte
   pelo [ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md): `hr` recebe a
-  leitura. É o arquivo que quem estender o mapa lê. **Disposição:** issue #127 (comentário de
-  código; candidata a Stage 4.5).
+  leitura. É o arquivo que quem estender o mapa lê. **Resolvido na issue #127 (PR #152):** o
+  comentário de `role.py` diz que `hr` não recebe permissão de **escrita** sobre a escala e **lê**
+  a escala das unidades de que é membro, citando o ADR 4.1.0004 ao lado do ADR 3.4.0006 §3; o mapa
+  não mudou.
 - **C3 — ADR 2.5.0003 justifica a ordem pela ausência de transação, que deixou de ser verdade.** O
   §Decision diz que não há unidade de trabalho cobrindo as quatro escritas; desde o
   [ADR 2.6.0002](../../adr/2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md)
