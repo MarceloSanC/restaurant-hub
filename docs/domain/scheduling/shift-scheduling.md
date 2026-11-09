@@ -333,9 +333,9 @@ realiza-se assim:
   escopo para os gates dos Steps 7/8; (3) o desligamento **não gera entrada de auditoria na
   escala** (a auditoria do ato é do staff); (4) a **recontratação** (ADR 3.2.0006) faz as
   alocações antigas — inclusive futuras — **reaparecerem**: limpar ou não as alocações futuras no
-  momento do desligamento é lacuna do concept da 4.3 (o sponsor não pediu limpeza; default: não
+  momento do desligamento é lacuna do concept da 4.3, *fechada pela Stage 4.3: não limpar, concept 4.3 §7 D-TERM* (o sponsor não pediu limpeza; default: não
   limpar); (5) a regra vale para **toda** leitura, presente e futura — custo por leitura,
-  mitigável por consulta em lote ao `StaffReadPort` (lacuna 4.3/4.4).
+  mitigável por consulta em lote ao `StaffReadPort` (lacuna 4.3/4.4, *fechada pela Stage 4.3: o port só tem leituras em lote, ADR 4.3.0003; a 4.4 as serve*).
 - **Remoção definitiva — guarda L-E5 mantida** (`EmployeeInUseError`; "o Step 4 (alocação) é
   quem os preenche" — `docs/stages/3.2-staff-application/concept.md` 301–308; ADR 3.2.0006
   177–178): apagar só passa se **nenhuma** alocação — nem histórica — referenciar o registro.
@@ -829,7 +829,7 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
 
 - **Ports**: dados de staff via port-out **`StaffReadPort`** (4.3), adapter local (4.4)
   (`roadmap.md` §Stage 4.3 › "Descrição humana", `arquivos_a_criar`, `contratos_consumidos`; §Stage 4.4 › `arquivos_a_criar`). DTO **próprio de scheduling** (o `EmployeeResult` de
-  staff carrega VOs de staff) — lacuna 4.3. Onde o adapter mora (`adapters/out/staff/` do roadmap
+  staff carrega VOs de staff) — lacuna 4.3, *fechada pela Stage 4.3: `StaffMember`, ADR 4.3.0003*. Onde o adapter mora (`adapters/out/staff/` do roadmap
   × tradutor no composition root, ADR 3.4.0001 101–118) é do `technical.md` da 4.4 — a 3.5
   (`draft`) enfrenta a mesma forma antes.
 - **Desligamento**: reconciliado na leitura — **nenhum crossing de escrita** staff → scheduling
@@ -1093,26 +1093,26 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
   `identifiers.py` 5–7; ADR 3.4.0007. §3.10.
 - **Glosa PT ↔ EN** fixada em §2 (roadmap 4.1/4.2; os demais † como proposta).
 
-### Lacunas para o concept de cada Stage (consolidado)
+### Lacunas para o concept de cada Stage (consolidado — índice vivo)
 
 | Stage dona | Lacuna (§) |
 |---|---|
-| **4.1** | forma interna do `TimeRange`; faixa que ultrapassa o corte seguinte (§3.2) |
-| **4.1** | cardinalidade da demanda por `(dia, faixa, função)` (§3.3) |
-| **4.1** | `Schedule` como raiz do agregado — confirmar (§3.1) |
-| **4.1 (technical)** | incluir `scheduling` em `bc-independence` (§3.10) |
-| **4.2** | forma da `Violation`, ordem de avaliação, onde vive a indisponibilidade (§3.6.0) |
-| **4.2** | exceção de função × mudança posterior do cadastro; forma da marca na `Violation`/aceite (§3.6.7) |
-| **4.2** | sobre-cobertura: contagem por demanda × por `(dia, faixa, função)`; reduzir `N` reabre a violação aceita? (§3.6.8) |
-| **4.3/4.5** | unidade de salvamento — uma operação por requisição × lote de edições (§3.5) |
-| **4.2/4.3** | identidade da violação para fins de aceite (§3.5) |
-| **4.3** | protocolo do aceite de `warn` na mutação (§3.5) |
-| **4.3** | mudança do dia de início / corte com escalas existentes (§3.1) |
-| **4.3** | calendário sobre recortes com várias escalas; resolução ator → `employee_id` (§3.7) |
-| **4.3** | DTO próprio do `StaffReadPort` (§3.10.1) |
-| **4.3** | limpar ou não as alocações futuras no desligamento — a recontratação as reexibe (limite (4) de F7, §3.4) |
-| **4.3 / 4.4** | consulta em lote ao `StaffReadPort` para a reconciliação na leitura (custo por leitura — limite (5) de F7, §3.4) |
-| **4.3 / 4.4** | Stage em que staff passa a consultar o port de consulta reverso — funcionário e função demandada (§3.3, §3.4) |
+| **4.1** | forma interna do `TimeRange`; faixa que ultrapassa o corte seguinte (§3.2) — *fechada pela Stage 4.1 (ADRs 4.1.0007 e 4.1.0008; nota 2026-09-27 abaixo)* |
+| **4.1** | cardinalidade da demanda por `(dia, faixa, função)` (§3.3) — *fechada pela Stage 4.1 (ADR 4.1.0010; nota 2026-09-27 abaixo)* |
+| **4.1** | `Schedule` como raiz do agregado — confirmar (§3.1) — *fechada pela Stage 4.1 (ADR 4.1.0009; nota 2026-09-27 abaixo)* |
+| **4.1 (technical)** | incluir `scheduling` em `bc-independence` (§3.10) — *fechada pela Stage 4.1 (concept 4.1 §1, divergência 1; o contrato `bc-independence` do `.importlinter` lista `scheduling`)* |
+| **4.2** | forma da `Violation`, ordem de avaliação, onde vive a indisponibilidade (§3.6.0) — *fechada pela Stage 4.2 (ADR 4.2.0002; nota 2026-10-19 abaixo)* |
+| **4.2** | exceção de função × mudança posterior do cadastro; forma da marca na `Violation`/aceite (§3.6.7) — *fechada pela Stage 4.2 (ADR 4.2.0001; nota 2026-10-19 abaixo)* |
+| **4.2** | sobre-cobertura: contagem por demanda × por `(dia, faixa, função)`; reduzir `N` reabre a violação aceita? (§3.6.8) — *fechada pela Stage 4.2 (concept 4.2 §7 D6 e D7; nota 2026-10-19 abaixo)* |
+| **4.3/4.5** | unidade de salvamento — uma operação por requisição × lote de edições (§3.5) — *fechada pela Stage 4.3: lote atômico (ADR 4.3.0001; concept 4.3 §7 D-SAVE); a 4.5 fica com a UX "publicar edições acumuladas × gravar a cada ação"* |
+| **4.2/4.3** | identidade da violação para fins de aceite (§3.5) — *fechada pelas Stages 4.2 e 4.3 (ADRs 4.2.0002 e 4.3.0001; nota 2026-11-02 abaixo)* |
+| **4.3** | protocolo do aceite de `warn` na mutação (§3.5) — *fechada pela Stage 4.3 (ADR 4.3.0001; concept 4.3 §7 D-ACK)* |
+| **4.3** | mudança do dia de início / corte com escalas existentes (§3.1) — *fechada pela Stage 4.3: vale só para escalas criadas depois (concept 4.3 §7 D-CONFIG); o requisito da edição da configuração fica com a issue #106* |
+| **4.3** | calendário sobre recortes com várias escalas; resolução ator → `employee_id` (§3.7) — *fechada pela Stage 4.3 (concept 4.3 §7 D-CAL e D-OWN); a 4.5 compõe as unidades do ator (divergência 10 do concept 4.3)* |
+| **4.3** | DTO próprio do `StaffReadPort` (§3.10.1) — *fechada pela Stage 4.3: `StaffMember` (ADR 4.3.0003; concept 4.3 §7 D-STAFFPORT)* |
+| **4.3** | limpar ou não as alocações futuras no desligamento — a recontratação as reexibe (limite (4) de F7, §3.4) — *fechada pela Stage 4.3: não limpar (concept 4.3 §7 D-TERM; ADR 4.1.0006)* |
+| **4.3 / 4.4** | consulta em lote ao `StaffReadPort` para a reconciliação na leitura (custo por leitura — limite (5) de F7, §3.4) — *fechada pela Stage 4.3: o port só tem leituras em lote (ADR 4.3.0003; concept 4.3 §7 D-STAFFPORT); a 4.4 as serve no adapter* |
+| **4.3 / 4.4** | Stage em que staff passa a consultar o port de consulta reverso — funcionário e função demandada (§3.3, §3.4) — *fechada pela Stage 4.3: é a 4.4, dona da consulta e do wiring (concept 4.3 §7 D-REVERSE); até lá registro removido é "ausente", fail-closed* |
 | **4.4** | granularidade e retenção da auditoria; o que o funcionário vê quando muda (§3.5) |
 | **4.4 / 4.5** | versão da escala + checagem otimista (4.4); status/corpo da recusa (4.5) (§3.5) |
 | **4.4 / 4.5** | representação persistida dos dois regimes de tempo; forma na borda HTTP (§3.9) |
@@ -1230,6 +1230,17 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 >   os registros do ator por `StaffReadPort.list_members_of_user(tenant, unidade, user_id)`, com o
 >   `user_id` vindo do escopo autorizado, e a 4.5 compõe as unidades (D-OWN; divergência 10 do
 >   concept 4.3).
+
+> **Nota (2026-11-09): a tabela de lacunas é índice vivo** (issue #117). A tabela "Lacunas para o
+> concept de cada Stage (consolidado)" acima reflete o estado **atual**, como o resto do doc
+> (ADR 0.0.0003: doc de domínio é referência viva, revista no lugar); o que foi ratificado em
+> 2026-09-26 é o texto de cada pergunta, que não muda. Linha cuja Stage dona está `done` leva, na
+> mesma linha, *"fechada pela Stage N.M (fonte)"* — a mesma forma da marca do corpo (nota
+> 2026-11-02) —, e a parte que sobra para outra Stage é dita ali ou reendereçada na coluna "Stage
+> dona". As linhas da 4.1, 4.2 e 4.3 foram fechadas assim; nenhuma sobrou sem dona: o que resta
+> nelas é da 4.4 (adapter em lote, ligação do port reverso), da 4.5 (UX do lote, unidades do ator)
+> e da issue #106 (edição da configuração). O `make docs-check` (`scripts/check_doc_frontmatter.py`,
+> regra 8) reprova linha `| **N.M** |` desta forma de tabela com Stage `done` sem a marca.
 
 ---
 
