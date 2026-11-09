@@ -32,22 +32,20 @@ Stage `done` (issue #37).
 6. Todo link relativo do corpo resolve — inline ou definição por referência
    (`[x]: alvo`); o fragmento `#...` é ignorado. Bloco de
    código cercado não conta, nesta regra nem na 7 e na 8: é exemplo citado.
-7. Todo ADR linkado no corpo está no `references` — salvo a válvula abaixo.
+7. Todo ADR linkado no corpo está no `references`.
 8. Nenhuma "Lacuna para o concept da Stage N.M" fica aberta com uma Stage listada
    (`N.M`, `N.M/P.Q`) `done` na Tabela de Stages do roadmap. Lacuna fechada se
    reescreve no lugar ("Lacuna fechada pela Stage N.M (fonte)"); a parte que sobra
    para outra Stage se reendereça a ela.
 
-**A válvula (`VALVULA_REFERENCES`).** O `shift-scheduling.md` é citado **por número
-de linha** pelo corpo de ADRs `accepted` (4.1.0008, 4.1.0011, 4.1.0012) e pelo
-concept da 4.1 — texto que não se edita (CONVENTIONS §5). Cada linha nova no
-frontmatter deslocaria todas essas citações sem erro em lugar nenhum; por isso o
-fechamento da 4.1 decidiu não acrescentar ADRs ao `references` (technical 4.1 §7,
-2026-09-27). A #79 trocou as citações **ao roadmap** por âncora, não as citações a
-este doc, então o motivo continua. A válvula é **contada e exata**: o conjunto de
-ADRs linkados fora do `references` tem de ser *igual* ao declarado — ADR novo
-linkado fora do `references` reprova, e ADR que entrou no `references` (ou cujo
-link saiu) reprova até sair da válvula. Ela só encolhe.
+**Sem válvula.** Até a issue #116 o `shift-scheduling.md` tinha uma exceção à
+regra 7 (`VALVULA_REFERENCES`, ADR 0.0.0015 §Decision 5): 16 ADRs linkados fora do
+`references`, porque acrescentá-los ao frontmatter deslocaria as citações por
+número de linha que ADRs `accepted` e o concept da 4.1 faziam ao doc. A #116
+trocou essas citações por âncora e criou o gate que as cobra
+(`check_domain_citations.py`, ADR 0.0.0017); os 16 entraram no `references` e a
+válvula saiu. Linha nova no frontmatter de um doc de domínio já não desloca
+citação nenhuma — não há motivo para exceção voltar.
 
 Códigos de saída:
   0  tudo válido
@@ -67,31 +65,6 @@ import yaml
 ADR_DIR = Path("docs") / "adr"
 DOMAIN_DIR = Path("docs") / "domain"
 ROADMAP = Path("docs") / "roadmap.md"
-
-# Doc de domínio → nomes de arquivo dos ADRs que ele linka no corpo e, de
-# propósito, não lista no `references` (ver docstring). Só encolhe.
-VALVULA_REFERENCES: dict[str, frozenset[str]] = {
-    "docs/domain/scheduling/shift-scheduling.md": frozenset(
-        {
-            "2_1_0001-identity-aggregates-and-membership.md",
-            "2_4_0003-authorization-composition-at-boundary.md",
-            "3_2_0003-copy-employee-full-duplication.md",
-            "3_2_0007-terminated-employee-remains-editable.md",
-            "3_3_0001-staff-schema-tenant-scoping-and-composite-fk-cerco.md",
-            "3_4_0002-staff-http-error-status-mapping.md",
-            "3_6_0001-path-addresses-the-record-not-the-authorized-scope.md",
-            "3_6_0003-wire-representation-preserves-domain-guarantees.md",
-            "4_1_0007-time-range-as-naive-minute-instants.md",
-            "4_1_0008-band-crossing-the-next-cutoff.md",
-            "4_1_0009-schedule-is-the-single-aggregate-root.md",
-            "4_1_0010-enabled-band-is-an-element-of-the-day.md",
-            "4_1_0011-declared-break-on-band-and-allocation.md",
-            "4_1_0012-one-record-occupies-at-most-one-slot-per-band.md",
-            "4_2_0001-function-mismatch-follows-current-staff-record.md",
-            "4_2_0002-evaluator-input-and-violation-identity.md",
-        }
-    ),
-}
 
 _ADR_ARQUIVO = re.compile(r"^(\d+)_(\d+)_(\d{4})-[a-z0-9][a-z0-9-]*\.md$")
 _ADR_ID = re.compile(r"^\d+\.\d+\.\d{4}$")
@@ -252,7 +225,7 @@ def _referencias(caminho: Path, rel: str, dados: dict[str, object]) -> tuple[set
 def _links(
     caminho: Path, rel: str, fm: Frontmatter, referencias: set[Path], pasta_adr: Path
 ) -> list[str]:
-    """Regras 6 e 7: link que não resolve; ADR linkado fora do `references` e da válvula."""
+    """Regras 6 e 7: link que não resolve; ADR linkado fora do `references`."""
     saida: list[str] = []
     fora: dict[str, int] = {}
     for linha, alvo_rel in links_relativos(fm.corpo, fm.linha_corpo):
@@ -262,16 +235,9 @@ def _links(
         elif alvo.parent == pasta_adr and alvo not in referencias:
             fora.setdefault(alvo.name, linha)
 
-    valvula = VALVULA_REFERENCES.get(rel, frozenset())
     saida.extend(
         f"{rel}:{linha}: ADR {nome} linkado no corpo e ausente do `references`"
         for nome, linha in sorted(fora.items())
-        if nome not in valvula
-    )
-    saida.extend(
-        f"{rel}: a válvula declara {nome}, que já não falta no `references` —"
-        " tire-o de VALVULA_REFERENCES (a válvula só encolhe)"
-        for nome in sorted(valvula - fora.keys())
     )
     return saida
 
@@ -293,13 +259,11 @@ def _lacunas(rel: str, fm: Frontmatter, feitas: set[str]) -> list[str]:
 
 
 def problemas_dominio(repo_root: Path, feitas: set[str]) -> list[str]:
-    """Regras 5–8 sobre `docs/domain/**/*.md`, com a válvula."""
+    """Regras 5–8 sobre `docs/domain/**/*.md`."""
     saida: list[str] = []
     pasta_adr = (repo_root / ADR_DIR).resolve()
-    vistos: set[str] = set()
     for caminho in sorted((repo_root / DOMAIN_DIR).rglob("*.md")):
         rel = caminho.relative_to(repo_root).as_posix()
-        vistos.add(rel)
         fm = ler_frontmatter(caminho.read_text(encoding="utf-8-sig"))
         if fm.dados is None:
             saida.append(f"{rel}: {fm.erro}")
@@ -308,10 +272,6 @@ def problemas_dominio(repo_root: Path, feitas: set[str]) -> list[str]:
         saida.extend(erros)
         saida.extend(_links(caminho, rel, fm, referencias, pasta_adr))
         saida.extend(_lacunas(rel, fm, feitas))
-    saida.extend(
-        f"{rel}: está em VALVULA_REFERENCES, mas o doc não existe"
-        for rel in sorted(VALVULA_REFERENCES.keys() - vistos)
-    )
     return saida
 
 
