@@ -34,7 +34,10 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     UnitId,
     UserId,
 )
-from restaurant_hub.features.identity.domain.value_objects.permission import Permission
+from restaurant_hub.features.identity.domain.value_objects.permission import (
+    TENANT_WIDE_PERMISSIONS,
+    Permission,
+)
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 from restaurant_hub.features.identity.domain.value_objects.unit_membership import (
     UnitMembership,
@@ -506,3 +509,184 @@ def test_na_borda_o_caminho_feliz_devolve_o_resultado_do_use_case() -> None:
     command = _command("gerente")
 
     assert authorize_at_boundary(fixture.use_case, command) == fixture.use_case.execute(command)
+
+
+# ---------------------------------------------------------------------------
+# Toda negação nomeia quem e o quê (issue #155)
+#
+# A faixa 401/403 devolve corpo constante; a causa vai para o log (issue #26),
+# e é a mensagem destas exceções que diz ali QUEM foi negado e SOBRE O QUÊ. Uma
+# negação que perde um desses nomes continua negando, mas o log passa a atribuir
+# a tentativa a ninguém — e investigar um acesso cross-tenant sem saber qual
+# tenant, papel ou unidade estava em jogo é investigar no escuro.
+#
+# Os testes varrem papel x permissão em vez de um representante: a propriedade
+# é "toda negação deste passo nomeia", não "a negação do manager nomeia". Os
+# nomes são conferidos com `repr`, a forma que as mensagens usam, então um
+# argumento trocado por `None` não passa por coincidência de substring.
+# ---------------------------------------------------------------------------
+
+
+def _bypassa_unidade(role: Role) -> bool:
+    """Lê a regra de bypass do domínio, sem copiá-la para o teste."""
+    tenant = None if role is Role.PLATFORM_ADMIN else _TENANT_A
+    user = User(id=UserId("probe"), email=Email("probe@x.com"), role=role, tenant_id=tenant)
+    return user.bypasses_unit_scope()
+
+
+_PARES_CONCEDIDOS = [
+    (role, permission)
+    for role in Role
+    for permission in sorted(role.permissions, key=lambda p: p.value)
+]
+_PARES_DE_TENANT = [(r, p) for r, p in _PARES_CONCEDIDOS if r is not Role.PLATFORM_ADMIN]
+_PARES_ESCOPADOS_POR_UNIDADE = [
+    (r, p)
+    for r, p in _PARES_DE_TENANT
+    if not _bypassa_unidade(r) and p not in TENANT_WIDE_PERMISSIONS
+]
+_PARES_NEGADOS = [
+    (role, permission)
+    for role in Role
+    for permission in Permission
+    if permission not in role.permissions
+]
+
+
+def _ator(fixture: _Fixture, role: Role) -> str:
+    """Ator do papel, vinculado a `_UNIT_A1` quando o papel admite vínculo."""
+    if role is Role.PLATFORM_ADMIN:
+        fixture.add_user("ator", role, None)
+    else:
+        fixture.add_user("ator", role, _TENANT_A, (_UNIT_A1,))
+    return "ator"
+
+
+def _ids(pares: list[tuple[Role, Permission]]) -> list[str]:
+    return [f"{r.value}-{p.value}" for r, p in pares]
+
+
+def test_varreduras_nao_sao_vazias() -> None:
+    """Guarda das varreduras abaixo: uma lista vazia as tornaria verdes à toa."""
+    assert _PARES_NEGADOS
+    assert _PARES_DE_TENANT
+    assert _PARES_ESCOPADOS_POR_UNIDADE
+
+
+@pytest.mark.parametrize("permission", list(Permission), ids=lambda p: p.value)
+def test_ator_inexistente_e_nomeado_na_negacao(permission: Permission) -> None:
+    """Passo 1 — a causa do 401 nomeia o sujeito do token que não existe mais."""
+    fixture = _Fixture()
+
+    with pytest.raises(UserNotFoundError) as erro:
+        fixture.use_case.execute(_command("fantasma", permission))
+
+    assert repr("fantasma") in str(erro.value)
+
+
+@pytest.mark.parametrize(("role", "permission"), _PARES_NEGADOS, ids=_ids(_PARES_NEGADOS))
+def test_negacao_de_rbac_nomeia_papel_e_permissao(role: Role, permission: Permission) -> None:
+    """Passo 2 — todo par papel x permissão não concedida nomeia os dois."""
+    fixture = _Fixture()
+    ator = _ator(fixture, role)
+
+    with pytest.raises(PermissionDeniedError) as erro:
+        fixture.use_case.execute(_command(ator, permission))
+
+    assert repr(role.value) in str(erro.value)
+    assert repr(permission.value) in str(erro.value)
+
+
+@pytest.mark.parametrize(("role", "permission"), _PARES_DE_TENANT, ids=_ids(_PARES_DE_TENANT))
+def test_tenant_nao_declarado_e_negado_nomeando_o_papel(role: Role, permission: Permission) -> None:
+    """Passo 3 — todo ator de tenant que omite o tenant é negado, e o papel é nomeado."""
+    fixture = _Fixture()
+    ator = _ator(fixture, role)
+
+    with pytest.raises(TenantScopeRequiredError) as erro:
+        fixture.use_case.execute(_command(ator, permission, tenant=None, unit=None))
+
+    assert repr(role.value) in str(erro.value)
+
+
+@pytest.mark.parametrize(("role", "permission"), _PARES_DE_TENANT, ids=_ids(_PARES_DE_TENANT))
+def test_tenant_alheio_e_sempre_negado_nomeando_os_dois_tenants(
+    role: Role, permission: Permission
+) -> None:
+    """Passo 3 — tenant alheio nega para todo papel e toda permissão que ele detém.
+
+    Sem unidade alvo, o passo 3 é a única barreira de tenant (o domínio só
+    compara tenants dentro de `can_view_unit`). A mensagem põe o tenant do
+    **ator** ao lado do alvo; sem o do ator, o log não diz de onde veio o ataque.
+    """
+    fixture = _Fixture()
+    ator = _ator(fixture, role)
+
+    with pytest.raises(TenantNotVisibleError) as erro:
+        fixture.use_case.execute(_command(ator, permission, tenant=_TENANT_B, unit=None))
+
+    assert repr(_TENANT_A) in str(erro.value)
+    assert repr(_TENANT_B) in str(erro.value)
+
+
+@pytest.mark.parametrize(
+    ("role", "permission"),
+    _PARES_ESCOPADOS_POR_UNIDADE,
+    ids=_ids(_PARES_ESCOPADOS_POR_UNIDADE),
+)
+def test_unidade_nao_declarada_e_negada_nomeando_o_papel(
+    role: Role, permission: Permission
+) -> None:
+    """Passo 4 — papel sem bypass, permissão unit-scoped, unidade omitida: nega e nomeia."""
+    fixture = _Fixture()
+    ator = _ator(fixture, role)
+
+    with pytest.raises(UnitScopeRequiredError) as erro:
+        fixture.use_case.execute(_command(ator, permission, unit=None))
+
+    assert repr(role.value) in str(erro.value)
+
+
+@pytest.mark.parametrize(("role", "permission"), _PARES_CONCEDIDOS, ids=_ids(_PARES_CONCEDIDOS))
+def test_unidade_inexistente_e_nomeada_dentro_e_na_borda(
+    role: Role, permission: Permission
+) -> None:
+    """Passo 5 — a unidade procurada é nomeada na causa e na tradução da borda.
+
+    Na borda, o 403 que fecha o oráculo de enumeração tem de nomear a mesma
+    unidade que a causa encadeada: são as duas linhas do mesmo registro de log.
+    """
+    fixture = _Fixture()
+    ator = _ator(fixture, role)
+    tenant = None if role is Role.PLATFORM_ADMIN else _TENANT_A
+    command = _command(ator, permission, tenant=tenant, unit=UnitId("nao-existe"))
+
+    with pytest.raises(UnitNotFoundError) as causa:
+        fixture.use_case.execute(command)
+    with pytest.raises(UnitNotVisibleError) as na_borda:
+        authorize_at_boundary(fixture.use_case, command)
+
+    assert repr("nao-existe") in str(causa.value)
+    assert causa.value.unit_id == "nao-existe"
+    assert repr(ator) in str(na_borda.value)
+    assert repr("nao-existe") in str(na_borda.value)
+    assert isinstance(na_borda.value.__cause__, UnitNotFoundError)
+
+
+@pytest.mark.parametrize(
+    ("role", "permission"),
+    _PARES_ESCOPADOS_POR_UNIDADE,
+    ids=_ids(_PARES_ESCOPADOS_POR_UNIDADE),
+)
+def test_unidade_sem_vinculo_e_negada_nomeando_ator_e_unidade(
+    role: Role, permission: Permission
+) -> None:
+    """Passo 5 — unidade do próprio tenant sem vínculo: nega, e nomeia ator e unidade."""
+    fixture = _Fixture()
+    ator = _ator(fixture, role)
+
+    with pytest.raises(UnitNotVisibleError) as erro:
+        fixture.use_case.execute(_command(ator, permission, unit=_UNIT_A2))
+
+    assert repr(ator) in str(erro.value)
+    assert repr(_UNIT_A2) in str(erro.value)
