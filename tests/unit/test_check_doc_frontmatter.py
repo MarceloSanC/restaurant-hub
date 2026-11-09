@@ -433,6 +433,9 @@ _TABELA = "\n| Stage dona | Lacuna (§) |\n|---|---|\n"
         ("| **4.1** | a pergunta — *fechada pela Stage 4.11 (ADR)* |", "4.1"),
         ("| **4.1** | a pergunta — *Lacuna da Stage 4.1 (ADR)* |", "4.1"),
         ("| **4.1** | a pergunta — fechada pela 4.1 |", "4.1"),
+        # reendereçada: a Stage dona do negrito continua guardada, a nota de fora não conta
+        ("| **4.1** (reendereçada da 4.4) | a pergunta |", "4.1"),
+        ("| **4.1 (*technical*)** | a pergunta |", "4.1"),
     ],
 )
 def test_linha_da_tabela_com_stage_done_sem_marca_reprova(

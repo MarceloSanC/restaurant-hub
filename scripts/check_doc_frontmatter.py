@@ -84,10 +84,12 @@ _CERCA = re.compile(r"^\s*(```|~~~)")
 _LACUNA = re.compile(
     r"lacuna para o concept da stages? (\d+\.\d+(?:\s*/\s*\d+\.\d+)*)", re.IGNORECASE
 )
-# Linha de tabela de lacunas: 1ª célula = Stage(s) dona(s) em negrito, com nota
-# opcional entre parênteses dentro do negrito — `| **4.3 / 4.4** |`, `| **4.1 (technical)** |`.
+# Linha de tabela de lacunas: 1ª célula abre com a(s) Stage(s) dona(s) em negrito, com
+# nota opcional entre parênteses dentro do negrito e texto livre depois dele —
+# `| **4.3 / 4.4** |`, `| **4.1 (technical)** |`, `| **4.4** (reendereçada da 4.1) |`.
+# Só o que está no negrito é Stage dona: a origem de um reendereçamento fica fora dele.
 _LINHA_LACUNA = re.compile(
-    r"^\s*\|\s*\*\*\s*(\d+\.\d+(?:\s*/\s*\d+\.\d+)*)(?:\s*\([^)*|]*\))?\s*\*\*\s*\|"
+    r"^\s*\|\s*\*\*\s*(\d+\.\d+(?:\s*/\s*\d+\.\d+)*)(?:\s*\([^)|]*\))?\s*\*\*[^|]*\|"
 )
 _FECHADA = re.compile(
     r"fechada pelas? stages? (\d+\.\d+(?:\s*(?:/|,|\be\b)\s*\d+\.\d+)*)", re.IGNORECASE
