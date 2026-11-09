@@ -8,7 +8,8 @@ sem `git stash`/checkout no checkout principal. Em um único comando:
      (gate "issue-first" — GIT-WORKFLOW.md §Princípios fundamentais #1).
      Opcionalmente cria a issue antes via `gh issue create`.
   3. Cria a worktree em `../<repo>-worktrees/<branch-slug>/` saindo de
-     `origin/<base>` (default `develop`; `main` para `hotfix/...`).
+     `origin/<base>` (default `develop`; `main` para `hotfix/...`). `<repo>`
+     é o checkout principal, mesmo rodado de dentro de outra worktree.
   4. Copia `.env` (e `.env.local` se existir) do checkout principal e gera
      portas livres no `.env` da worktree (`APP_PORT`/`POSTGRES_PORT`/
      `REDIS_PORT`), levando para elas as URLs que as embutem com host
@@ -105,6 +106,12 @@ _BRANCH_RE = re.compile(
 # Limite de chars do nome completo do branch (mesma ordem do CONVENTIONS.md §1).
 BRANCH_MAX_LEN = 60
 
+# Git e gh escrevem UTF-8; `text=True` sem `encoding` decodifica pelo locale — no
+# Windows, cp1252 —, e a worktree em caminho com acento não tinha o `.env` achado:
+# as portas dela voltavam à rotação (issue #143). `errors="replace"` porque uma
+# mensagem ilegível não deve derrubar o script.
+GIT_ENCODING = "utf-8"
+
 
 # ---------------------------------------------------------------------------
 # helpers de IO / processo
@@ -136,6 +143,8 @@ def _run(
             cwd=str(cwd) if cwd else None,
             check=check,
             text=True,
+            encoding=GIT_ENCODING,
+            errors="replace",
             capture_output=capture,
         )
     except FileNotFoundError as e:
@@ -209,16 +218,20 @@ def default_base(branch_type: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def git_top() -> Path:
-    """Raiz do worktree principal (não da worktree atual, se aninhada)."""
-    cp = _run(["git", "rev-parse", "--show-toplevel"], capture=True)
-    return Path(cp.stdout.strip()).resolve()
-
-
 def git_common_dir() -> Path:
-    """`.git/` comum (no main checkout). Útil pra checar refs/branches."""
-    cp = _run(["git", "rev-parse", "--git-common-dir"], capture=True)
+    """O `.git` comum a todas as worktrees — o do checkout principal —, absoluto."""
+    cp = _run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture=True)
     return Path(cp.stdout.strip()).resolve()
+
+
+def main_checkout_root() -> Path:
+    """Raiz do checkout principal, rodado dele ou de dentro de uma worktree.
+
+    É o pai do `.git` comum (repositório não bare). O `--show-toplevel` dava a
+    raiz da worktree atual: rodado de dentro de uma, a nova ia para
+    `<worktree-atual>-worktrees/` com o `.env` da atual (issue #143).
+    """
+    return git_common_dir().parent
 
 
 def branch_exists(branch: str) -> tuple[bool, bool]:
@@ -247,6 +260,8 @@ def gh_available() -> bool:
         ["gh", "auth", "status"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     return cp.returncode == 0
@@ -257,6 +272,8 @@ def gh_issue_exists(num: int) -> bool:
         ["gh", "issue", "view", str(num), "--json", "number,state"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.returncode != 0:
@@ -276,7 +293,10 @@ def gh_issue_create(title: str, body: str) -> int:
     )
     # `gh issue create` imprime a URL no stdout, no formato:
     #   https://github.com/<owner>/<repo>/issues/<num>
-    last_line = cp.stdout.strip().splitlines()[-1]
+    lines = cp.stdout.strip().splitlines()
+    if not lines:  # exit 0 sem a URL: erro tratado, não `IndexError` (issue #143)
+        _fail("`gh issue create` não imprimiu a URL da issue criada.", exit_code=2)
+    last_line = lines[-1]
     m = re.search(r"/issues/(\d+)\s*$", last_line)
     if m is None:
         _fail(f"não foi possível extrair o número da issue criada: {last_line!r}", exit_code=2)
@@ -289,8 +309,20 @@ def gh_issue_create(title: str, body: str) -> int:
 
 
 def ensure_issue(num: int, *, create_title: str | None, create_body: str | None) -> int:
-    """Garante que a issue existe; cria se solicitado. Retorna o número final."""
+    """Garante que a issue existe; cria se solicitado. Retorna o número final.
+
+    Sem `gh`, o número do nome segue sem conferência (aviso, best-effort); sem
+    número — o placeholder do `--create-issue` —, não há issue a criar nem a
+    conferir, e o script para antes de criar `<tipo>/0-<slug>` (issue #143).
+    """
     if not gh_available():
+        if num == 0:
+            _fail(
+                "sem `gh` (indisponível ou não autenticado), a issue do `--create-issue`\n"
+                "não pode ser criada, e a branch nasceria sem issue — GIT-WORKFLOW.md\n"
+                "§Princípios fundamentais #1. Instale o `gh` e rode `gh auth login`, ou\n"
+                "crie a issue à mão e passe o número no nome do branch."
+            )
         print(
             "  AVISO: `gh` indisponível ou não autenticado — não posso validar a issue\n"
             "  no GitHub. Prosseguindo (best-effort). Para ativar, instale `gh` e\n"
@@ -426,6 +458,8 @@ def _list_worktree_paths() -> list[Path]:
         ["git", "worktree", "list", "--porcelain"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.returncode != 0:
@@ -772,7 +806,7 @@ def main() -> int:
     _info(f"base remota: origin/{base}")
 
     _section("2. Verificando repositório git")
-    repo_root = git_top()
+    repo_root = main_checkout_root()
     _info(f"repositório raiz: {repo_root}")
 
     if not args.no_fetch:

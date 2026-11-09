@@ -84,6 +84,11 @@ if str(ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts"))
 import worktree_docker  # noqa: E402
 
+# Git e docker escrevem UTF-8; `text=True` sem `encoding` decodifica pelo locale —
+# no Windows, cp1252 —, e a worktree em caminho com acento saía com o caminho
+# corrompido (issue #143). Mesmo critério do `worktree-new.py`.
+GIT_ENCODING = "utf-8"
+
 # ---------------------------------------------------------------------------
 # helpers de IO / processo
 # ---------------------------------------------------------------------------
@@ -112,6 +117,8 @@ def _run(
             cwd=str(cwd) if cwd else None,
             check=check,
             text=True,
+            encoding=GIT_ENCODING,
+            errors="replace",
             capture_output=capture,
         )
     except FileNotFoundError as e:
@@ -149,11 +156,6 @@ def _warn(msg: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def git_top() -> Path:
-    cp = _run(["git", "rev-parse", "--show-toplevel"], capture=True)
-    return Path(cp.stdout.strip()).resolve()
-
-
 def compute_worktree_path(repo_root: Path, branch: str, override: str | None) -> Path:
     if override:
         return Path(override).resolve()
@@ -167,6 +169,8 @@ def worktree_list_porcelain() -> str:
         ["git", "worktree", "list", "--porcelain"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     return cp.stdout
@@ -206,6 +210,8 @@ def check_worktree_registered(wt_path: Path) -> bool:
         ["git", "worktree", "list", "--porcelain"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     for line in cp.stdout.splitlines():
@@ -223,6 +229,8 @@ def check_sync(wt_path: Path, branch: str) -> None:
         cwd=str(wt_path),
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.stdout.strip():
@@ -252,6 +260,8 @@ def check_sync(wt_path: Path, branch: str) -> None:
         cwd=str(wt_path),
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.stdout.strip():
@@ -314,6 +324,8 @@ def find_containers_for_worktree(wt_path: Path) -> list[dict[str, Any]]:
                 ],
                 capture_output=True,
                 text=True,
+                encoding=GIT_ENCODING,
+                errors="replace",
                 check=False,
             )
             for raw_line in cp.stdout.splitlines():
@@ -343,6 +355,8 @@ def get_container_volumes(container_id: str) -> list[str]:
         ],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     return [v.strip() for v in cp.stdout.splitlines() if v.strip()]
@@ -408,7 +422,15 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> bool:  # noqa: PLR0912, P
     if not _docker_available():
         return compose
 
-    containers = find_containers_for_worktree(wt_path)
+    # Sem ID, `docker inspect ""`/`docker rm ""` não miram nada; o
+    # `find_containers_for_worktree` já descarta esses, e a guarda vale para
+    # quem o trocar (issue #143).
+    containers: list[dict[str, Any]] = []
+    for c in find_containers_for_worktree(wt_path):
+        if c.get("ID") or c.get("Id"):
+            containers.append(c)
+        else:
+            _warn(f"container sem ID ignorado: {c.get('Names') or c.get('Name') or '?'}")
 
     if not containers:
         _info("nenhum container Docker encontrado para esta worktree")
@@ -430,7 +452,12 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> bool:  # noqa: PLR0912, P
                 if "running" in state.lower() or state.lower().startswith("up"):
                     subprocess.run(["docker", "stop", cid], capture_output=True, check=False)
                 cp = subprocess.run(
-                    ["docker", "rm", cid], capture_output=True, text=True, check=False
+                    ["docker", "rm", cid],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    encoding=GIT_ENCODING,
+                    errors="replace",
                 )
                 if cp.returncode == 0:
                     _info(f"  → removido: {name}")
@@ -456,6 +483,8 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> bool:  # noqa: PLR0912, P
                         ["docker", "volume", "rm", vol],
                         capture_output=True,
                         text=True,
+                        encoding=GIT_ENCODING,
+                        errors="replace",
                         check=False,
                     )
                     if cp.returncode == 0:
@@ -487,6 +516,8 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> bool:  # noqa: PLR0912, P
                 ["docker", "rmi", image],
                 capture_output=True,
                 text=True,
+                encoding=GIT_ENCODING,
+                errors="replace",
                 check=False,
             )
             if cp.returncode == 0:
@@ -515,6 +546,8 @@ def _remove_worktree_dir(wt_path: Path, *, force: bool) -> bool:
         ["git", "worktree", "remove", str(wt_path)],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.returncode == 0:
@@ -565,6 +598,8 @@ def remove_worktree_git(
         ["git", "branch", "-d", branch],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.returncode != 0:
@@ -583,6 +618,8 @@ def remove_worktree_git(
             ["git", "push", "origin", "--delete", branch],
             capture_output=True,
             text=True,
+            encoding=GIT_ENCODING,
+            errors="replace",
             check=False,
         )
         if cp.returncode == 0:
@@ -594,6 +631,8 @@ def remove_worktree_git(
         ["git", "remote", "prune", "origin"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     _info("refs remotas obsoletas prunadas")
@@ -722,16 +761,16 @@ def main() -> int:
     _force_utf8_stdio()
     args = _build_parser().parse_args()
 
-    repo_root = git_top()
-    wt_path = resolve_worktree_path(repo_root, args.branch, args.path, worktree_list_porcelain())
-
     # Medido uma vez, antes de remover: o mesmo resultado serve ao dry-run e à remoção.
     _, common_dir = install_hooks.git_dirs()
+    # A raiz do checkout principal, não a da worktree de onde rodou (issue #143): é
+    # dela que sai o caminho-padrão `../<repo>-worktrees/<slug>`.
+    principal = install_hooks.main_checkout(common_dir)
+    wt_path = resolve_worktree_path(principal, args.branch, args.path, worktree_list_porcelain())
 
     _section("1. Localizando worktree")
     if not check_worktree_registered(wt_path):
         _fail(f"worktree não registrada no git: {wt_path}\nVerifique com `git worktree list`.")
-    principal = install_hooks.main_checkout(common_dir)
     if wt_path.resolve() == principal.resolve():
         _fail(
             f"{args.branch} está no checkout principal ({wt_path}), não numa worktree.\n"

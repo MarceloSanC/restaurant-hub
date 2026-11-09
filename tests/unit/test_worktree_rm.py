@@ -136,7 +136,6 @@ def test_main_removes_the_worktree_found_by_branch(
     só o registro de worktrees e a raiz do repo vêm do teste.
     """
     porcelain, main, target, _ = _porcelain(tmp_path)
-    monkeypatch.setattr(wr, "git_top", lambda: main)
     monkeypatch.setattr(wr, "worktree_list_porcelain", lambda: porcelain)
     monkeypatch.setattr(wr, "check_worktree_registered", lambda p: p == target.resolve())
     monkeypatch.setattr(wr.install_hooks, "git_dirs", lambda: (main / ".git", main / ".git"))
@@ -324,6 +323,96 @@ def real_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pa
     monkeypatch.chdir(principal)
     monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "feat/1-a", "--no-docker", "--force"])
     return principal, wt
+
+
+_REAL_SUBPROCESS_RUN = subprocess.run
+
+
+def _windows_locale_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[object]:
+    """`subprocess.run` de verdade, decodificando como o Windows quando falta `encoding=`.
+
+    Mesmo papel que em `test_worktree_new.py`: o processo roda em bytes, e a
+    saída sem `encoding` explícito vira cp1252 (o locale do Windows), como o
+    Linux do CI não faria (issue #143).
+    """
+    text = kwargs.pop("text", False)
+    encoding = kwargs.pop("encoding", None)
+    errors = kwargs.pop("errors", None)
+    cp = _REAL_SUBPROCESS_RUN(cmd, **kwargs)  # type: ignore[call-overload]
+    if not (text or encoding or errors):
+        return cp  # type: ignore[no-any-return]
+
+    def _decode(raw: bytes | None) -> str | None:
+        return (
+            None if raw is None else raw.decode(str(encoding or "cp1252"), str(errors or "strict"))
+        )
+
+    return subprocess.CompletedProcess(
+        cp.args, cp.returncode, _decode(cp.stdout), _decode(cp.stderr)
+    )
+
+
+@pytest.fixture
+def non_ascii_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """Principal e worktree `feat/1-a` sob uma pasta com acento, saída decodificada à Windows."""
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        monkeypatch.delenv(var, raising=False)
+    base = tmp_path / "pasta çã"
+    principal = base / "restaurant-hub"
+    principal.mkdir(parents=True)
+    _git(principal, "init", "-q", "-b", "develop")
+    _git(principal, "config", "user.name", "Teste")
+    _git(principal, "config", "user.email", "teste@example.com")
+    _git(principal, "commit", "-q", "--allow-empty", "--no-verify", "-m", "inicial")
+    wt = base / "restaurant-hub-worktrees" / "feat-1-a"
+    _git(principal, "worktree", "add", "-q", "-b", "feat/1-a", str(wt))
+    monkeypatch.chdir(principal)
+    monkeypatch.setattr(wr.subprocess, "run", _windows_locale_run)
+    return principal, wt
+
+
+def test_worktree_under_a_non_ascii_path_is_found_and_registered(
+    non_ascii_repo: tuple[Path, Path],
+) -> None:
+    """Caminho com acento: o porcelain e o `git rev-parse` chegam legíveis (#143)."""
+    principal, wt = non_ascii_repo
+
+    assert wr.find_worktree_by_branch(wr.worktree_list_porcelain(), "feat/1-a") == wt.resolve()
+    assert wr.check_worktree_registered(wt) is True
+    common = (principal / ".git").resolve()
+    assert [p.resolve() for p in wr.install_hooks.git_dirs()] == [common, common]
+
+
+def test_main_dry_run_under_a_non_ascii_path_names_the_real_worktree(
+    non_ascii_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, wt = non_ascii_repo
+    argv = ["worktree-rm.py", "feat/1-a", "--dry-run", "--no-docker", "--force"]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert wr.main() == 0
+
+    assert f"[dry-run] git worktree remove {wt.resolve()}" in capsys.readouterr().out
+
+
+def test_main_from_inside_a_worktree_falls_back_beside_the_main_checkout(
+    real_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Sem worktree da branch, o caminho-padrão sai do principal, não da atual (#143)."""
+    principal, wt = real_repo
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(sys, "argv", ["worktree-rm.py", "feat/9-zz", "--dry-run", "--no-docker"])
+
+    with pytest.raises(SystemExit) as exc:
+        wr.main()
+
+    assert exc.value.code == EXIT_CHECK
+    expected = (principal.parent / "restaurant-hub-worktrees" / "feat-9-zz").resolve()
+    assert f"worktree não registrada no git: {expected}" in capsys.readouterr().err
 
 
 def test_main_relinks_the_hooks_of_a_removed_worktree(
@@ -703,7 +792,14 @@ def test_run_prints_the_command_and_forwards_cwd_and_check(
 
     assert cp.stdout == "ok"
     assert fake.kwargs == [
-        {"cwd": str(tmp_path), "check": False, "text": True, "capture_output": False}
+        {
+            "cwd": str(tmp_path),
+            "check": False,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "capture_output": False,
+        }
     ]
     assert "  $ git status" in capsys.readouterr().out
 
@@ -716,7 +812,16 @@ def test_run_with_capture_stays_quiet_and_has_no_cwd(
 
     wr._run(["git", "rev-parse"], capture=True)
 
-    assert fake.kwargs == [{"cwd": None, "check": True, "text": True, "capture_output": True}]
+    assert fake.kwargs == [
+        {
+            "cwd": None,
+            "check": True,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "capture_output": True,
+        }
+    ]
     assert capsys.readouterr().out == ""
 
 
@@ -1210,6 +1315,27 @@ def test_devcontainer_failures_are_warned_not_fatal(
     assert "→ removido: wt-old" not in captured.out
 
 
+def test_devcontainer_entry_without_id_is_skipped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    devcontainer: _FakeDocker,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Sem ID, nada de `docker inspect ""`/`stop ""`/`rm ""` — os outros seguem (#143)."""
+    no_id = [{"Names": "sem-id", "State": "running"}, {"ID": "", "Id": "", "Names": "vazio"}]
+    monkeypatch.setattr(wr, "find_containers_for_worktree", lambda _p: [*no_id, *CONTAINERS])
+    _answers(monkeypatch, "apagar volumes", "apagar imagens")
+
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is True
+
+    assert [c for c in devcontainer.calls if "" in c] == []
+    assert ["docker", "rm", "fff000"] in devcontainer.destructive()
+    captured = capsys.readouterr()
+    assert "container sem ID ignorado: sem-id" in captured.err
+    assert "container sem ID ignorado: vazio" in captured.err
+    assert "container: sem-id" not in captured.out
+
+
 def test_devcontainer_without_volumes_or_image_asks_nothing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1325,7 +1451,6 @@ def _fake_main_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, registered: bool, argv: list[str]
 ) -> Path:
     porcelain, main, target, _ = _porcelain(tmp_path)
-    monkeypatch.setattr(wr, "git_top", lambda: main)
     monkeypatch.setattr(wr, "worktree_list_porcelain", lambda: porcelain)
     monkeypatch.setattr(wr, "check_worktree_registered", lambda _p: registered)
     monkeypatch.setattr(wr.install_hooks, "git_dirs", lambda: (main / ".git", main / ".git"))

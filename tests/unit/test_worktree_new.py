@@ -17,6 +17,7 @@ resto (cópia do `.env`, escolha de porta, escrita) é o código real em `tmp_pa
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import socket
@@ -56,6 +57,7 @@ def _load() -> ModuleType:
 wn = _load()
 # antes de a fixture `repo` o trocar: o teste do Docker parado usa o real
 _REAL_DOCKER_RESERVED_PORTS = wn.docker_reserved_ports
+_REAL_ENSURE_ISSUE = wn.ensure_issue  # a fixture `repo` o troca; o gate sem `gh` usa o real
 
 
 def _write_env(directory: Path, *lines: str) -> Path:
@@ -416,7 +418,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     def _create_worktree(_branch: str, _base: str, path: Path, _local: bool, _remote: bool) -> None:
         path.mkdir(parents=True)
 
-    monkeypatch.setattr(wn, "git_top", lambda: main_checkout)
+    monkeypatch.setattr(wn, "main_checkout_root", lambda: main_checkout)
     monkeypatch.setattr(wn, "ensure_issue", lambda num, **_kwargs: num)
     monkeypatch.setattr(wn, "branch_exists", lambda _branch: (False, False))
     monkeypatch.setattr(wn, "create_worktree", _create_worktree)
@@ -737,7 +739,14 @@ def test_run_echoes_the_command_and_forwards_the_options(
     assert fake.calls == [
         (
             ["git", "status"],
-            {"cwd": str(tmp_path), "check": False, "text": True, "capture_output": False},
+            {
+                "cwd": str(tmp_path),
+                "check": False,
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "capture_output": False,
+            },
         )
     ]
     assert capsys.readouterr().out == "  $ git status\n"
@@ -752,7 +761,17 @@ def test_run_captured_is_silent_and_without_cwd_passes_none(
     wn._run(["git", "rev-parse"], capture=True)
 
     assert fake.calls == [
-        (["git", "rev-parse"], {"cwd": None, "check": True, "text": True, "capture_output": True})
+        (
+            ["git", "rev-parse"],
+            {
+                "cwd": None,
+                "check": True,
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "capture_output": True,
+            },
+        )
     ]
     assert capsys.readouterr().out == ""
 
@@ -878,6 +897,7 @@ def test_gh_available_follows_auth_status(
     assert looked_up == ["gh"]
     assert [cmd for cmd, _kw in fake.calls] == [["gh", "auth", "status"]]
     assert fake.calls[0][1]["check"] is False
+    assert fake.calls[0][1]["encoding"] == "utf-8"
 
 
 @pytest.mark.parametrize(
@@ -901,6 +921,7 @@ def test_gh_issue_exists(
     assert [cmd for cmd, _kw in fake.calls] == [
         ["gh", "issue", "view", str(ISSUE_NUM), "--json", "number,state"]
     ]
+    assert fake.calls[0][1]["encoding"] == "utf-8"  # não o locale (issue #143)
 
 
 class _FakeCapturedRun:
@@ -945,6 +966,20 @@ def test_gh_issue_create_without_issue_url_exits_2(
     )
 
 
+@pytest.mark.parametrize("stdout", ["", "  \n\n"])
+def test_gh_issue_create_with_empty_output_exits_2_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stdout: str
+) -> None:
+    """`gh` que sai com 0 e nada no stdout: erro tratado, não `IndexError` (issue #143)."""
+    monkeypatch.setattr(wn, "_run", _FakeCapturedRun(stdout))
+
+    with pytest.raises(SystemExit) as exc:
+        wn.gh_issue_create("t", "b")
+
+    assert exc.value.code == EXIT_SUBPROCESS
+    assert "`gh issue create` não imprimiu a URL da issue criada" in capsys.readouterr().err
+
+
 # ---------------------------------------------------------------------------
 # git de verdade, num repositório em tmp_path
 # ---------------------------------------------------------------------------
@@ -970,14 +1005,27 @@ def git_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return principal
 
 
-def test_git_top_from_a_subdirectory_is_the_checkout_root(
+def test_main_checkout_root_from_a_subdirectory_is_the_checkout_root(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sub = git_repo / "a" / "b"
     sub.mkdir(parents=True)
     monkeypatch.chdir(sub)
 
-    assert wn.git_top() == git_repo.resolve()
+    assert wn.main_checkout_root() == git_repo.resolve()
+    assert wn.git_common_dir() == (git_repo / ".git").resolve()
+
+
+def test_main_checkout_root_from_a_linked_worktree_is_the_main_checkout(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Não a raiz da worktree atual, que o `--show-toplevel` devolvia (issue #143)."""
+    linked = tmp_path / "linked"
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    (linked / "sub").mkdir()
+    monkeypatch.chdir(linked / "sub")
+
+    assert wn.main_checkout_root() == git_repo.resolve()
 
 
 def test_git_common_dir_from_a_linked_worktree_is_the_main_git_dir(
@@ -992,6 +1040,36 @@ def test_git_common_dir_from_a_linked_worktree_is_the_main_git_dir(
     assert wn.git_common_dir() == (git_repo / ".git").resolve()
 
 
+def test_main_run_from_a_linked_worktree_creates_beside_the_main_checkout(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """De dentro de uma worktree, a nova nasce ao lado do principal com o `.env` dele (#143)."""
+    _git(git_repo, "update-ref", "refs/remotes/origin/develop", "HEAD")
+    _write_env(git_repo, "DEBUG=principal")
+    linked = tmp_path / "principal-worktrees" / "feat-1-x"
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    _write_env(linked, "DEBUG=worktree-atual")
+    monkeypatch.chdir(linked)
+    monkeypatch.setattr(wn, "ensure_issue", lambda num, **_kwargs: num)
+    flags = ["--no-fetch", "--no-setup", "--no-vscode", "--no-port-assign"]
+    monkeypatch.setattr(sys, "argv", ["worktree-new.py", "feat/2-yy", *flags])
+
+    assert wn.main() == 0
+
+    new = tmp_path / "principal-worktrees" / "feat-2-yy"
+    assert _env_lines(new) == ["DEBUG=principal"]
+    assert not (tmp_path / "principal-worktrees" / "feat-1-x-worktrees").exists()
+    porcelain = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
+    assert f"worktree {new.resolve().as_posix()}" in porcelain
+
+
 def test_branch_exists_tells_local_from_remote(git_repo: Path) -> None:
     _git(git_repo, "branch", "feat/1-local")
     _git(git_repo, "update-ref", "refs/remotes/origin/feat/2-remote", "HEAD")
@@ -1001,13 +1079,61 @@ def test_branch_exists_tells_local_from_remote(git_repo: Path) -> None:
     assert wn.branch_exists("feat/3-nada") == (False, False)
 
 
-def test_list_worktree_paths_lists_main_and_linked(git_repo: Path, tmp_path: Path) -> None:
-    linked = tmp_path / "com espaco"  # espaço no caminho: o porcelain não o cita
+_REAL_SUBPROCESS_RUN = subprocess.run
+
+
+def _windows_locale_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[object]:
+    """`subprocess.run` de verdade, decodificando a saída como o Windows sem `encoding=`.
+
+    Em `text=True` sem `encoding`, o Python decodifica pelo locale — no Windows,
+    cp1252 — e o git escreve caminhos em UTF-8: `ç` vira `Ã§` (issue #143). O
+    Linux do CI decodifica em UTF-8 e esconderia o defeito; aqui o processo roda
+    em bytes e a decodificação segue o que a chamada pediu, com cp1252 no lugar
+    do locale.
+    """
+    text = kwargs.pop("text", False)
+    encoding = kwargs.pop("encoding", None)
+    errors = kwargs.pop("errors", None)
+    cp = _REAL_SUBPROCESS_RUN(cmd, **kwargs)  # type: ignore[call-overload]
+    if not (text or encoding or errors):
+        return cp  # type: ignore[no-any-return]
+
+    def _decode(raw: bytes | None) -> str | None:
+        if raw is None:
+            return None
+        return raw.decode(str(encoding or "cp1252"), str(errors or "strict"))
+
+    return subprocess.CompletedProcess(
+        cp.args, cp.returncode, _decode(cp.stdout), _decode(cp.stderr)
+    )
+
+
+NON_ASCII_DIR = "espaço çã"  # espaço e acento no caminho: o porcelain não cita nenhum dos dois
+LINKED_APP_PORT = 8123
+
+
+def test_list_worktree_paths_lists_main_and_linked(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    linked = tmp_path / NON_ASCII_DIR
     _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    monkeypatch.setattr(wn.subprocess, "run", _windows_locale_run)
 
     paths = [p.resolve() for p in wn._list_worktree_paths()]
 
     assert paths == [git_repo.resolve(), linked.resolve()]
+
+
+def test_collect_used_ports_reads_the_env_of_a_non_ascii_worktree(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Caminho com acento: o `.env` da worktree é achado e a porta dela não volta (#143)."""
+    linked = tmp_path / NON_ASCII_DIR
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    _write_env(linked, f"APP_PORT={LINKED_APP_PORT}")
+    monkeypatch.setattr(wn.subprocess, "run", _windows_locale_run)
+
+    assert wn._collect_used_ports()["APP_PORT"] == {8000, LINKED_APP_PORT}
 
 
 def test_list_worktree_paths_outside_git_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1166,6 +1292,22 @@ def test_ensure_issue_without_gh_warns_and_goes_on(
     assert gh.viewed == []
     assert gh.created == []
     assert "AVISO: `gh` indisponível ou não autenticado" in capsys.readouterr().err
+
+
+def test_ensure_issue_without_gh_and_without_number_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Sem `gh`, não há como criar nem conferir: `<tipo>/0-<slug>` não nasce (issue #143)."""
+    gh = _Gh(available=False).install(monkeypatch)
+
+    with pytest.raises(SystemExit) as exc:
+        wn.ensure_issue(0, create_title="feat: algo", create_body=None)
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert gh.created == []
+    err = capsys.readouterr().err
+    assert "sem `gh`" in err
+    assert "--create-issue" in err
 
 
 def test_ensure_issue_existing_issue_passes(
@@ -1516,6 +1658,26 @@ def test_main_create_issue_names_the_branch_with_the_new_number(
     assert f"✓ Issue: #{CREATED_NUM}" in out
 
 
+def test_main_create_issue_without_gh_creates_no_worktree(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`feat/-slug --create-issue` sem `gh` sai com 1 antes do `git worktree add` (#143)."""
+    created: list[str] = []
+    monkeypatch.setattr(wn, "ensure_issue", _REAL_ENSURE_ISSUE)
+    monkeypatch.setattr(wn, "gh_available", lambda: False)
+    monkeypatch.setattr(wn, "create_worktree", lambda branch, *_a: created.append(branch))
+    flags = ["--create-issue", "--issue-title", "chore: banco", "--no-fetch", "--no-vscode"]
+    monkeypatch.setattr(sys, "argv", ["worktree-new.py", "chore/-db-url", *flags])
+
+    with pytest.raises(SystemExit) as exc:
+        wn.main()
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert created == []
+    assert not repo.parent.joinpath("restaurant-hub-worktrees", "chore-0-db-url").exists()
+    assert "chore/0-db-url" not in capsys.readouterr().out
+
+
 def test_main_title_without_create_issue_is_not_passed_on(
     repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1625,3 +1787,74 @@ def test_main_opens_vscode_unless_no_vscode(repo: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(sys, "argv", ["worktree-new.py", "chore/59-other", *flags, "--no-vscode"])
     assert wn.main() == 0
     assert len(opened) == 1
+
+
+# ---------------------------------------------------------------------------
+# varredura: toda saída de processo em texto é UTF-8 explícito (issue #143)
+# ---------------------------------------------------------------------------
+
+_SCRIPTS_DIR = _SCRIPT.parent
+_SWEPT_SCRIPTS = ("worktree-new.py", "worktree-rm.py", "install_hooks.py", "worktree_docker.py")
+
+
+def _text_runs_without_utf8(source: str) -> list[int]:
+    """Linhas de `subprocess.run(..., text=True)` sem `encoding="utf-8"`/`errors=` explícitos."""
+    missing: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "subprocess"
+        ):
+            continue
+        kwargs = {kw.arg: kw.value for kw in node.keywords}
+        text = kwargs.get("text")
+        if not (isinstance(text, ast.Constant) and text.value is True):
+            continue
+        encoding = kwargs.get("encoding")
+        utf8 = (isinstance(encoding, ast.Constant) and encoding.value == "utf-8") or (
+            isinstance(encoding, ast.Name) and encoding.id == "GIT_ENCODING"
+        )
+        if not utf8 or "errors" not in kwargs:
+            missing.append(node.lineno)
+    return missing
+
+
+@pytest.mark.parametrize("script", _SWEPT_SCRIPTS)
+def test_every_text_subprocess_run_decodes_utf8_explicitly(script: str) -> None:
+    """Sem `encoding`, o Windows decodifica em cp1252 e corrompe caminho com acento."""
+    source = (_SCRIPTS_DIR / script).read_text(encoding="utf-8")
+
+    assert _text_runs_without_utf8(source) == []
+
+
+def test_sweep_flags_a_text_run_without_encoding() -> None:
+    """A varredura não é vácua: acha a chamada sem `encoding` e a sem `errors`."""
+    source = (
+        "import subprocess\n"
+        "subprocess.run(['git'], text=True)\n"
+        "subprocess.run(['git'], text=True, encoding='utf-8')\n"
+        "subprocess.run(['git'], text=True, encoding='utf-8', errors='replace')\n"
+        "subprocess.run(['git'], capture_output=True)\n"
+    )
+
+    assert _text_runs_without_utf8(source) == [2, 3]
+
+
+def test_list_worktree_paths_survives_output_that_is_not_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Byte inválido vira `\ufffd`, não `UnicodeDecodeError` (o `errors="replace"`)."""
+
+    def _bytes_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raw = b"worktree /x\xff\n"
+        out = raw.decode(
+            str(kwargs.get("encoding") or "utf-8"), str(kwargs.get("errors") or "strict")
+        )
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    monkeypatch.setattr(wn.subprocess, "run", _bytes_run)
+
+    assert wn._list_worktree_paths() == [Path("/x\ufffd")]

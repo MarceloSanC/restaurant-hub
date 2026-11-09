@@ -69,6 +69,9 @@ def git_dirs(cwd: Path | None = None) -> tuple[Path, Path]:
         cwd=str(cwd) if cwd else None,
         capture_output=True,
         text=True,
+        # UTF-8, não o locale (cp1252 no Windows): caminho com acento (issue #143)
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     git_dir, common_dir = cp.stdout.strip().splitlines()
