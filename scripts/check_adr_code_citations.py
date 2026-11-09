@@ -69,7 +69,7 @@ ADR_DIR = Path("docs") / "adr"
 
 PASTAS_VARRIDAS = ("docs", ".claude", ".github")
 # Onde mora o código e a config que os docs citam.
-PASTAS_DE_CODIGO = ("src", "tests", "scripts", "migrations", ".github", ".claude", ".devcontainer")
+PASTAS_DE_CODIGO = ("src", "tests", "scripts", "migrations", ".github", ".claude")
 _IGNORADAS = {".venv", "node_modules", "__pycache__", ".mypy_cache", ".ruff_cache", "htmlcov"}
 
 _SECAO_7 = re.compile(r"^## 7\.", re.MULTILINE)
