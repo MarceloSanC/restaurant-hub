@@ -16,6 +16,8 @@ bounded_context: staff
 
 > ⚠️ **Errata (2026-11-09):** §Decision, "The names are in English, diverging from identity's `traduzir`" — issue #136 renamed identity's `traduzir` to `translate` (and `nome_da_constraint` to `constraint_name`) in `identity/adapters/out/postgres/integrity_errors.py`, pure rename, no behaviour change; the debt this paragraph records is paid and the two modules no longer diverge in language. Pointer only; no decision content changes — ver issue #136
 
+> ⚠️ **Errata (2026-11-09):** §Consequences › "Neutral / trade-offs accepted", "The `detalhe` on the L-E4 backstop path" — in staff the value is the `detail` argument of `translate` in `staff/adapters/out/postgres/integrity_errors.py`, computed by the repositories' `_conflict_detail` (renamed from `_detalhe_do_conflito` in issue #135, pure rename); no staff identifier is named `detalhe`. Pointer only; no decision content changes — ver issue #136 (auditoria do PR #144)
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
