@@ -5,7 +5,7 @@ when-use: Fluxo padrão de execução de Stage (PIPELINE §11.1, implementa → 
 keywords: [prompt, stage, single-session, concept, technical, execucao, lifecycle, review, subagents, gates]
 status: done
 created_at: 2026-05-21
-updated_at: 2026-11-01
+updated_at: 2026-11-09
 ---
 
 # Prompt — Execução de Stage em Sessão Única
@@ -582,7 +582,7 @@ ou e2e contra Postgres real; teste unitário com fake não é validação.
 ### 2. Ajustes durante o processo
 (vazio se não houve)
 - Regressões de concept/technical (com motivo).
-- Entradas em §7 (`[decision]`/`[finding]`/`[deviation]`).
+- Entradas em §7 (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`).
 - Findings escalados (com Stage candidata).
 
 ### 3. Revisões por agentes independentes

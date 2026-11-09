@@ -585,7 +585,7 @@ Após a última Task, executar o checklist canônico de fechamento
       `technical.md` ficou restrito à §7 (entre os marcadores
       `BEGIN/END: post-execution`). Ver bloco de comando abaixo.
 - [ ] §7 do `technical.md` reflete o que realmente aconteceu na
-      execução (entradas `[decision]`/`[finding]`/`[deviation]` com header
+      execução (entradas `[decision]`/`[finding]`/`[deviation]`/`[measurement]` com header
       `### data — [tag] escopo — autor`).
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] Commit final `stage N.M: complete` no branch (ver bloco abaixo).
@@ -675,7 +675,7 @@ Select-String -Path docs/roadmap.md -Pattern "^\| .$N\.$M-$slug. \|[^|]*\|[^|]*\
 |---|---|---|
 | Fase 3B revela lacuna no Concept | Concept incompleto | Regredir concept para `draft` via `chore(concept): revert to draft -- revision-from-technical: <motivo>` (CONVENTIONS §3.2). Atualizar Concept. Re-aprovar com `stage N.M: conceptual approved`. Voltar a 3B. **Nova sessão não obrigatória.** |
 | Fase 4 (não iniciada) — gap no Technical | Technical precisa ajuste antes da execução | Regredir technical para `draft` via `chore(technical): revert to draft -- revision-from-execution: <motivo>`. Ajustar. Re-aprovar. |
-| Fase 4 — algo não previsto encontrado durante execução | Decisão/observação ausente nos docs | IA **pergunta** com `AskUserQuestion` (2–4 opções + recomendada) quando **material** (contrato/fronteira/critério/dado); escolha local reversível-barata **sem âncora** decide sem pergunta e vira `[decision]` (carve-out CONVENTIONS §3.4). Registra entrada em §7 do `technical.md` (`[decision]`/`[finding]`/`[deviation]`). Nunca decide em silêncio. |
+| Fase 4 — algo não previsto encontrado durante execução | Decisão/observação ausente nos docs | IA **pergunta** com `AskUserQuestion` (2–4 opções + recomendada) quando **material** (contrato/fronteira/critério/dado); escolha local reversível-barata **sem âncora** decide sem pergunta e vira `[decision]` (carve-out CONVENTIONS §3.4). Registra entrada em §7 do `technical.md` (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`). Nunca decide em silêncio. |
 | Fase 4 — Task estoura escopo (precisa tocar arquivo extra) | Technical incompleto | IA para e pergunta. Humano decide: regredir technical (§1–§6), aceitar exceção registrada em §7 como `[decision]`, ou abortar Task. |
 | Fase 4 revela problema **grande** no Concept | Concept tem decisão errada | Stop. Voltar à Fase 3A explicitamente em nova sessão (PIPELINE §12.2). Regressão simples não cobre. |
 | Fase 4 revela problema no Roadmap | Stage está mal recortada | Pausar. Nova sessão com Overview + Roadmap. Replanejar Stages afetadas. |
