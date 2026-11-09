@@ -219,6 +219,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#139](https://github.com/MarceloSanC/restaurant-hub/issues/139) | `develop` vermelho — detector do `also_copy` toma fixture sob `tmp_path` por citação | shared | tooling + tests | done | #84, #87 |
 | [#143](https://github.com/MarceloSanC/restaurant-hub/issues/143) | `worktree-new`/`worktree-rm` — encoding do git, raiz do checkout principal e issue-first sem `gh` | shared | tooling | done | #91 |
 | [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | open | #116 |
+| [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | open | #132 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
