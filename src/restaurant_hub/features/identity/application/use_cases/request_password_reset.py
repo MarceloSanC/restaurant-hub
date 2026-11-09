@@ -68,7 +68,7 @@ from restaurant_hub.shared.application.ports.out.email_sender import (
 )
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
 
-_ASSUNTO = "Redefinição de senha do Restaurant Hub"
+_SUBJECT = "Redefinição de senha do Restaurant Hub"
 
 _log = logging.getLogger(__name__)
 
@@ -105,8 +105,8 @@ class RequestPasswordResetUseCase:
         num dos caminhos distinguiria e-mail cadastrado de não cadastrado, que é
         exatamente o que a regra 7 do concept proíbe.
         """
-        credenciais = self._users.find_credentials_by_email(command.email)
-        if credenciais is None:
+        credentials = self._users.find_credentials_by_email(command.email)
+        if credentials is None:
             # Silêncio deliberado. Não levanta, não registra, não envia — e o
             # chamador não tem como saber que foi por aqui que passou.
             return
@@ -122,45 +122,43 @@ class RequestPasswordResetUseCase:
         # tempo nenhum, exatamente o ataque que esta regra existe para fechar.
         try:
             with self._unit_of_work.transaction():
-                valor_do_token = self._emitir_token(credenciais.user.id)
-            self._enviar(command.email.value, valor_do_token)
+                token_value = self._issue_token(credentials.user.id)
+            self._send(command.email.value, token_value)
         except Exception as exc:
             # Sem `exc_info` e sem `str(exc)`, de propósito — ver o docstring do
             # módulo. O nome da classe separa "provedor fora" de "banco recusou
             # escrita", que é o que o operador precisa para agir.
-            classe = type(exc)
+            exc_type = type(exc)
             _log.error(
                 "redefinição de senha não concluída (falha absorvida): user_id=%s erro=%s",
-                credenciais.user.id,
-                f"{classe.__module__}.{classe.__qualname__}",
+                credentials.user.id,
+                f"{exc_type.__module__}.{exc_type.__qualname__}",
             )
             return
 
-    def _emitir_token(self, user_id: UserId) -> str:
+    def _issue_token(self, user_id: UserId) -> str:
         """Invalida as redefinições anteriores e emite uma nova."""
-        agora = self._clock.now()
+        now = self._clock.now()
 
         # Escopado por propósito: um convite pendente do mesmo usuário sobrevive.
         # Sem o escopo, esta rota pública seria um botão de "matar o convite de
         # qualquer pessoa", acionável em laço por quem soubesse o e-mail dela.
-        self._tokens.invalidate_all_for_user(
-            user_id, agora, purpose=SetupTokenPurpose.PASSWORD_RESET
-        )
+        self._tokens.invalidate_all_for_user(user_id, now, purpose=SetupTokenPurpose.PASSWORD_RESET)
 
-        emitido = self._token_issuer.issue()
+        issued = self._token_issuer.issue()
         self._tokens.add(
             PasswordSetupToken(
                 id=SetupTokenId(str(self._id_generator.next_id())),
                 user_id=user_id,
                 purpose=SetupTokenPurpose.PASSWORD_RESET,
-                token_fingerprint=emitido.fingerprint,
-                issued_at=agora,
-                expires_at=agora + self._reset_ttl,
+                token_fingerprint=issued.fingerprint,
+                issued_at=now,
+                expires_at=now + self._reset_ttl,
             )
         )
-        return emitido.value
+        return issued.value
 
-    def _enviar(self, destinatario: str, valor_do_token: str) -> None:
+    def _send(self, recipient: str, token_value: str) -> None:
         """Compõe e envia a mensagem.
 
         **A absorção da falha não acontece aqui**: ela envolve o caminho inteiro,
@@ -172,11 +170,11 @@ class RequestPasswordResetUseCase:
         no log do servidor (issue #26) — só o tipo, nunca a mensagem, porque a
         de um provedor de e-mail pode ecoar o destinatário ou o link.
         """
-        link = setup_link(self._base_url, valor_do_token)
+        link = setup_link(self._base_url, token_value)
         self._email_sender.send(
             EmailMessage(
-                to=destinatario,
-                subject=_ASSUNTO,
+                to=recipient,
+                subject=_SUBJECT,
                 body_text=(
                     "Recebemos um pedido para redefinir a sua senha.\n\n"
                     f"Defina uma senha nova por este link:\n{link}\n\n"

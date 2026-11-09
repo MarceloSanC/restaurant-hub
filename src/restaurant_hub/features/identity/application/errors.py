@@ -221,13 +221,13 @@ class SessionFingerprintAlreadyExistsError(IdentityApplicationError):
         # resolvia: para qualquer valor de até 8 caracteres a "redação" devolvia o
         # segredo inteiro — e os fingerprints curtos dos próprios testes
         # (`fp::a`, `fp::abc`) caíam exatamente nesse caso.
-        prefixo_seguro = 8
-        if len(fingerprint) > prefixo_seguro:
-            visivel = f"{fingerprint[:prefixo_seguro]!r}…"
+        safe_prefix = 8
+        if len(fingerprint) > safe_prefix:
+            visible = f"{fingerprint[:safe_prefix]!r}…"
         else:
-            visivel = "<redigido>"
+            visible = "<redigido>"
         super().__init__(
-            f"fingerprint de refresh token já registrado: {visivel} ({len(fingerprint)} chars)"
+            f"fingerprint de refresh token já registrado: {visible} ({len(fingerprint)} chars)"
         )
 
 

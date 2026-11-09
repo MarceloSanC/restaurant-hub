@@ -222,7 +222,7 @@ def test_usuario_duplicado_levanta_erro_de_id_e_nao_de_email(cenario: Engine) ->
 
 
 # ---------------------------------------------------------------------------
-# Conteúdo do `detalhe` traduzido — I11 / CA20
+# Conteúdo do `detail` traduzido — I11 / CA20
 # ---------------------------------------------------------------------------
 #
 # A classe do erro já é asserida acima. O que estes dois testes travam é o VALOR
@@ -549,7 +549,7 @@ def test_linha_corrompida_levanta_ao_ser_lida(cenario: Engine, caso: _Corrompida
             ).one()
 
             with pytest.raises(caso.esperada):
-                mappers.linha_para_usuario(linha)
+                mappers.row_to_user(linha)
         finally:
             transacao.rollback()
 

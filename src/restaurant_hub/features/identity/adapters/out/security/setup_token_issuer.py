@@ -31,7 +31,7 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 
 # 32 bytes de entropia, codificados em base64url (~43 caracteres). Entra em URL
 # de e-mail sem escape, que é o único motivo de ser `urlsafe` e não `hex`.
-_BYTES_DE_ENTROPIA = 32
+_ENTROPY_BYTES = 32
 
 
 class Sha256SetupTokenIssuer:
@@ -46,7 +46,7 @@ class Sha256SetupTokenIssuer:
         redenção falharia, porque a consulta procuraria um fingerprint diferente
         do que a emissão gravou.
         """
-        value = secrets.token_urlsafe(_BYTES_DE_ENTROPIA)
+        value = secrets.token_urlsafe(_ENTROPY_BYTES)
         return IssuedSetupToken(value=value, fingerprint=self.fingerprint(value))
 
     def fingerprint(self, token_value: str) -> str:

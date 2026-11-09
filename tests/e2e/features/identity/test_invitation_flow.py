@@ -23,7 +23,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.user_repository impo
     PostgresUserRepository,
 )
 from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
-    _SENTINELA_DUMMY,
+    _DUMMY_SENTINEL,
     Argon2PasswordHasher,
 )
 from restaurant_hub.features.identity.domain.entities.user import User
@@ -205,7 +205,7 @@ class TestFluxoCompletoDeConvite:
     ) -> None:
         """CA6c — o teste que existe por causa de uma vulnerabilidade real.
 
-        `dummy_hash()` é o hash de `_SENTINELA_DUMMY`, uma constante **literal
+        `dummy_hash()` é o hash de `_DUMMY_SENTINEL`, uma constante **literal
         deste repositório**. Se a conta convidada carregasse esse hash — que era
         o plano original desta Stage —, qualquer pessoa que tivesse lido o código
         faria login como qualquer convidado que ainda não ativou a conta,
@@ -224,7 +224,7 @@ class TestFluxoCompletoDeConvite:
 
         tentativa = await client_com_captura.post(
             f"{API}/auth/login",
-            json={"email": "convidado@cantina.com", "password": _SENTINELA_DUMMY},
+            json={"email": "convidado@cantina.com", "password": _DUMMY_SENTINEL},
         )
 
         assert tentativa.status_code == HTTPStatus.UNAUTHORIZED

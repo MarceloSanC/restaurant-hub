@@ -251,7 +251,7 @@ composition root ([ADR 2.6.0001](./adr/2_6_0001-identity-unit-of-work-port-and-a
   seguem ordenadas, com as janelas declaradas (ADR 4.1.0006 Alt. A). O port fica
   na feature até um segundo BC precisar dele (§4).
 - **O adapter não muda o construtor dos repositórios**: eles pedem a conexão a
-  `conexao_da_unidade` e recebem a da unidade ativa do **mesmo** engine, num
+  `unit_connection` e recebem a da unidade ativa do **mesmo** engine, num
   savepoint por chamada — por isso repositório e unidade precisam do mesmo
   `Engine` no composition root.
 - **`scripts/check_layout.py` regra 10** reprova o use case com duas ou mais

@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
-    _SENTINELA_DUMMY,
+    _DUMMY_SENTINEL,
     Argon2PasswordHasher,
 )
 from restaurant_hub.features.identity.adapters.out.security.jwt_issuer import (
@@ -152,7 +152,7 @@ def test_lei_2_dummy_hash_e_estavel(hasher: PasswordHasher) -> None:
         # convidado que ainda não ativou a conta. Este parâmetro é o que impede
         # a regressão, e é por isso que ele é nomeado e não genérico
         # (ADR 2.5.0004).
-        _SENTINELA_DUMMY,
+        _DUMMY_SENTINEL,
     ],
 )
 def test_lei_1_unusable_hash_nao_autentica_nenhuma_senha(

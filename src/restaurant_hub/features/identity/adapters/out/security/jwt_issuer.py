@@ -32,7 +32,7 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 # Bytes de entropia do refresh token. 32 bytes = 256 bits do CSPRNG do SO —
 # espaço de busca que não se percorre, o que é o que permite guardar apenas um
 # hash rápido do valor (ver `fingerprint`).
-_BYTES_DE_ENTROPIA_DO_REFRESH = 32
+_REFRESH_ENTROPY_BYTES = 32
 
 
 class JwtTokenIssuer:
@@ -97,7 +97,7 @@ class JwtTokenIssuer:
         sessão falharia — um bug que se manifesta como "nenhum refresh token
         jamais é encontrado", longe da linha que o causou.
         """
-        value = secrets.token_urlsafe(_BYTES_DE_ENTROPIA_DO_REFRESH)
+        value = secrets.token_urlsafe(_REFRESH_ENTROPY_BYTES)
         return IssuedRefreshToken(value=value, fingerprint=self.fingerprint(value))
 
     def fingerprint(self, refresh_token_value: str) -> str:

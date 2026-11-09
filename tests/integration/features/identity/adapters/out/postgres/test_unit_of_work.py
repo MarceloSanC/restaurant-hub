@@ -14,14 +14,14 @@ import pytest
 from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.exc import DBAPIError
 
-from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
-    para_leitura,
-)
 from restaurant_hub.features.identity.adapters.out.postgres.restaurant_repository import (
     PostgresRestaurantRepository,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.session_repository import (
     PostgresSessionRepository,
+)
+from restaurant_hub.features.identity.adapters.out.postgres.unit_connection import (
+    for_read,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.unit_of_work import (
     PostgresUnitOfWork,
@@ -172,7 +172,7 @@ def test_repositorio_de_outro_engine_nao_entra_na_unidade(
 
 
 def test_leitura_que_falha_dentro_da_unidade_nao_envenena_a_unidade(com_usuario: Engine) -> None:
-    """L3 do lado da leitura: o savepoint de `para_leitura` é o que segura o aborto.
+    """L3 do lado da leitura: o savepoint de `for_read` é o que segura o aborto.
 
     Sem ele, o erro da consulta abortaria a transação da unidade, a escrita seguinte
     falharia e o commit viraria um `ROLLBACK` silencioso.
@@ -181,7 +181,7 @@ def test_leitura_que_falha_dentro_da_unidade_nao_envenena_a_unidade(com_usuario:
 
     with PostgresUnitOfWork(com_usuario).transaction():
         sessoes.add(_sessao("1"))
-        with pytest.raises(DBAPIError), para_leitura(com_usuario) as conexao:
+        with pytest.raises(DBAPIError), for_read(com_usuario) as conexao:
             conexao.execute(text("SELECT 1 / 0"))
         sessoes.add(_sessao("2"))
 

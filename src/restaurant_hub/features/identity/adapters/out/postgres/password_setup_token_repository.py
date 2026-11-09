@@ -43,12 +43,12 @@ from datetime import datetime
 from sqlalchemy import Engine, delete, select, update
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
-from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
-    para_escrita,
-    para_leitura,
-)
 from restaurant_hub.features.identity.adapters.out.postgres.tables import (
     password_setup_tokens,
+)
+from restaurant_hub.features.identity.adapters.out.postgres.unit_connection import (
+    for_read,
+    for_write,
 )
 from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
 from restaurant_hub.features.identity.application.dtos.setup_tokens import (
@@ -66,20 +66,20 @@ class PostgresPasswordSetupTokenRepository:
 
     def add(self, token: PasswordSetupToken) -> None:
         """Insere o token. `IntegrityError` sobe intacto — ver docstring do módulo."""
-        with para_escrita(self._engine) as conexao:
-            conexao.execute(
-                password_setup_tokens.insert().values(**mappers.token_de_setup_para_linha(token))
+        with for_write(self._engine) as connection:
+            connection.execute(
+                password_setup_tokens.insert().values(**mappers.setup_token_to_row(token))
             )
 
     def find_by_fingerprint(self, fingerprint: str) -> PasswordSetupToken | None:
         """Busca **sem filtro** de consumo ou expiração — regra 1 do módulo."""
-        with para_leitura(self._engine) as conexao:
-            linha = conexao.execute(
+        with for_read(self._engine) as connection:
+            row = connection.execute(
                 select(password_setup_tokens).where(
                     password_setup_tokens.c.token_fingerprint == fingerprint
                 )
             ).one_or_none()
-        return mappers.linha_para_token_de_setup(linha) if linha is not None else None
+        return mappers.row_to_setup_token(row) if row is not None else None
 
     def consume(self, token_id: SetupTokenId, consumed_at: datetime) -> bool:
         """Transição condicional e atômica. `True` só se o token ainda não fora usado.
@@ -89,8 +89,8 @@ class PostgresPasswordSetupTokenRepository:
         devolve `False`, que é o contrato: quem consome já trata `False` como
         "token inválido".
         """
-        with para_escrita(self._engine) as conexao:
-            resultado = conexao.execute(
+        with for_write(self._engine) as connection:
+            result = connection.execute(
                 update(password_setup_tokens)
                 .where(
                     password_setup_tokens.c.id == token_id,
@@ -98,7 +98,7 @@ class PostgresPasswordSetupTokenRepository:
                 )
                 .values(consumed_at=consumed_at)
             )
-        return bool(resultado.rowcount == 1)
+        return bool(result.rowcount == 1)
 
     def invalidate_all_for_user(
         self,
@@ -107,7 +107,7 @@ class PostgresPasswordSetupTokenRepository:
         purpose: SetupTokenPurpose | None = None,
     ) -> int:
         """Invalida os tokens **não consumidos** do usuário. Devolve quantos foram."""
-        condicoes = [
+        conditions = [
             password_setup_tokens.c.user_id == user_id,
             # Nunca reescreve um `consumed_at` já gravado — regra 5 do port: o
             # instante do primeiro consumo é o dado da forense.
@@ -116,18 +116,18 @@ class PostgresPasswordSetupTokenRepository:
         if purpose is not None:
             # Escopo por propósito: é o que impede que a rota **pública** de
             # redefinição mate o convite pendente de qualquer vítima, em laço.
-            condicoes.append(password_setup_tokens.c.purpose == purpose.value)
+            conditions.append(password_setup_tokens.c.purpose == purpose.value)
 
-        with para_escrita(self._engine) as conexao:
-            resultado = conexao.execute(
-                update(password_setup_tokens).where(*condicoes).values(consumed_at=consumed_at)
+        with for_write(self._engine) as connection:
+            result = connection.execute(
+                update(password_setup_tokens).where(*conditions).values(consumed_at=consumed_at)
             )
-        return int(resultado.rowcount)
+        return int(result.rowcount)
 
     def purge_expired(self, before: datetime) -> int:
         """Remove os tokens já expirados. `<=` porque `is_usable` é half-open."""
-        with para_escrita(self._engine) as conexao:
-            resultado = conexao.execute(
+        with for_write(self._engine) as connection:
+            result = connection.execute(
                 delete(password_setup_tokens).where(password_setup_tokens.c.expires_at <= before)
             )
-        return int(resultado.rowcount)
+        return int(result.rowcount)

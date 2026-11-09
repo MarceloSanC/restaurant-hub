@@ -250,7 +250,7 @@ def row_to_employee(
     """Reidrata o agregado **pelo construtor**, na ordem especificada em §5.11.
 
     As três conversões saem para variáveis locais **de propósito** — mesmo
-    motivo do `linha_para_usuario` de identity. Avaliá-las inline nos argumentos
+    motivo do `row_to_user` de identity. Avaliá-las inline nos argumentos
     faria a precedência depender da ordem em que os kwargs estão escritos (Python
     avalia argumentos na ordem da fonte), e um reorder futuro — de um formatter,
     ou de quem só quis alinhar com a assinatura de `Employee` — inverteria em

@@ -42,7 +42,7 @@ class PasswordHasher(Protocol):
 
         **Só serve a esse propósito, e a Stage 2.5 descobriu por quê.** A lei 2
         promete que `verify` "sempre falha", mas o adapter argon2 deriva este
-        valor de uma constante literal do repositório: `verify(_SENTINELA_DUMMY,
+        valor de uma constante literal do repositório: `verify(_DUMMY_SENTINEL,
         dummy_hash())` devolve **`True`**. Enquanto o valor só é comparado e
         descartado, conhecer a pré-imagem não vale nada. **Persistido como
         credencial**, valeria uma tomada de conta — daí `unusable_hash()`.

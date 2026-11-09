@@ -58,12 +58,12 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
-_ESQUEMA_BEARER = "bearer"
+_BEARER_SCHEME = "bearer"
 
 # Atributo de `request.state` onde o guard anota o sujeito do token aceito.
 # `request.state` vive no `scope` ASGI, então o handler de exceção enxerga a
 # anotação feita pela dependência, mesmo recebendo outro objeto `Request`.
-_ATOR_NA_REQUISICAO = "identity_actor_id"
+_ACTOR_STATE_ATTR = "identity_actor_id"
 
 
 def authenticated_actor_id(request: Request) -> str | None:
@@ -73,8 +73,8 @@ def authenticated_actor_id(request: Request) -> str | None:
     ausente, esquema errado, token inválido) e o de toda rota pública, como o
     login — onde o "ator" seria o e-mail digitado, que não entra no log.
     """
-    valor = getattr(request.state, _ATOR_NA_REQUISICAO, None)
-    return valor if isinstance(valor, str) else None
+    value = getattr(request.state, _ACTOR_STATE_ATTR, None)
+    return value if isinstance(value, str) else None
 
 
 def extract_bearer_token(request: Request) -> str:
@@ -89,17 +89,17 @@ def extract_bearer_token(request: Request) -> str:
     if header is None:
         raise InvalidAccessTokenError()
 
-    partes = header.split(maxsplit=1)
-    esperado = 2
-    if len(partes) != esperado or partes[0].lower() != _ESQUEMA_BEARER:
+    parts = header.split(maxsplit=1)
+    expected = 2
+    if len(parts) != expected or parts[0].lower() != _BEARER_SCHEME:
         raise InvalidAccessTokenError()
 
     # Sem checagem extra de "token vazio": `split(maxsplit=1)` descarta o espaço
     # em branco à direita, então `"Bearer   "` produz UMA parte e já cai no `if`
-    # acima. Um `if not partes[1].strip()` aqui seria inalcançável — e código
+    # acima. Um `if not parts[1].strip()` aqui seria inalcançável — e código
     # morto dentro de um guard de segurança é ruído que esconde o que importa.
     # Verificado empiricamente, inclusive com tab,  e espaços unicode.
-    return partes[1].strip()
+    return parts[1].strip()
 
 
 def required_permissions_for_role(target_role: Role) -> frozenset[Permission]:
@@ -144,7 +144,7 @@ class IdentityGuard:
         """
         token = extract_bearer_token(request)
         claims = self._token_issuer.decode_access_token(token)
-        setattr(request.state, _ATOR_NA_REQUISICAO, claims.subject)
+        setattr(request.state, _ACTOR_STATE_ATTR, claims.subject)
         return AuthenticatedActor(claims=claims)
 
     def authenticate_principal(self, request: object) -> AccessPrincipal:
@@ -209,14 +209,14 @@ class IdentityGuard:
         Devolve o `AuthorizedActor` da primeira checagem; todas validam o mesmo
         ator, então qualquer uma serve para ler o tenant dele.
         """
-        alvos: tuple[UnitId | None, ...] = unit_ids or (None,)
+        targets: tuple[UnitId | None, ...] = unit_ids or (None,)
         # `sorted` para que a ordem das checagens — e portanto qual erro o cliente
         # vê quando falha em mais de uma — seja determinística entre execuções.
         # Sem isso, a mensagem de erro dependeria da ordem de iteração de um
         # frozenset, e um teste de precedência ficaria intermitente.
-        resultados = [
+        results = [
             self.authorize(actor, permission, tenant_id=tenant_id, unit_id=unit_id)
             for permission in sorted(permissions)
-            for unit_id in alvos
+            for unit_id in targets
         ]
-        return resultados[0]
+        return results[0]

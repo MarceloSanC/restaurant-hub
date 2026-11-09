@@ -15,14 +15,14 @@ from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
-from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
-    para_escrita,
-    para_leitura,
-)
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
-    traduzir,
+    translate,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.tables import units
+from restaurant_hub.features.identity.adapters.out.postgres.unit_connection import (
+    for_read,
+    for_write,
+)
 from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.value_objects.identifiers import UnitId
 
@@ -36,20 +36,20 @@ class PostgresUnitRepository:
     def add(self, unit: Unit) -> None:
         """Insere uma unidade. Id já gravado levanta `UnitAlreadyExistsError`."""
         try:
-            with para_escrita(self._engine) as conexao:
-                self._add(conexao, unit)
-        except IntegrityError as erro:
-            raise traduzir(erro, unit.id) from erro
+            with for_write(self._engine) as connection:
+                self._add(connection, unit)
+        except IntegrityError as error:
+            raise translate(error, unit.id) from error
 
     def find_by_id(self, unit_id: UnitId) -> Unit | None:
-        with para_leitura(self._engine) as conexao:
-            return self._find_by_id(conexao, unit_id)
+        with for_read(self._engine) as connection:
+            return self._find_by_id(connection, unit_id)
 
     # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
-    def _add(self, conexao: Connection, unit: Unit) -> None:
-        conexao.execute(units.insert().values(**mappers.unidade_para_linha(unit)))
+    def _add(self, connection: Connection, unit: Unit) -> None:
+        connection.execute(units.insert().values(**mappers.unit_to_row(unit)))
 
-    def _find_by_id(self, conexao: Connection, unit_id: UnitId) -> Unit | None:
-        linha = conexao.execute(select(units).where(units.c.id == unit_id)).one_or_none()
-        return mappers.linha_para_unidade(linha) if linha is not None else None
+    def _find_by_id(self, connection: Connection, unit_id: UnitId) -> Unit | None:
+        row = connection.execute(select(units).where(units.c.id == unit_id)).one_or_none()
+        return mappers.row_to_unit(row) if row is not None else None

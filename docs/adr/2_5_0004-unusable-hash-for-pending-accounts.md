@@ -5,7 +5,7 @@ when-use: Reference before persisting any placeholder credential, before reusing
 keywords: [adr, password, hash, argon2, invitation, dummy-hash, authentication-bypass, identity, security]
 status: accepted
 created_at: 2026-07-20
-updated_at: 2026-07-20
+updated_at: 2026-11-09
 adr_id: "2.5.0004"
 decision: PasswordHasher gains unusable_hash(), a fresh random-seeded argon2 hash with no known preimage, and invited accounts store that instead of dummy_hash() — whose preimage is a literal in this repository and would otherwise become a working password for every pending invite.
 context_stage: 2.5-email-invite
@@ -13,6 +13,8 @@ bounded_context: identity
 ---
 
 # ADR 2.5.0004 — Pending accounts store an unusable random hash, never the timing dummy
+
+> ⚠️ **Errata (2026-11-09):** §Context and §Decision 3 — the constant `_SENTINELA_DUMMY` of `identity/adapters/out/security/argon2_hasher.py` was renamed to `_DUMMY_SENTINEL` in issue #136 (pure rename; the literal value is unchanged), and the contract test asserts the law for `_DUMMY_SENTINEL`. Pointer only; no decision content changes — ver issue #136
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

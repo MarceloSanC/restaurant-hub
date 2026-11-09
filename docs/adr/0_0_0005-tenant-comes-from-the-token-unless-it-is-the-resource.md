@@ -5,7 +5,7 @@ when-use: Reference before adding an HTTP route in any bounded context, when dec
 keywords: [adr, transversal, multi-tenancy, tenant, rbac, boundary, confused-deputy, bola, asvs, http, routing]
 status: accepted
 created_at: 2026-08-18
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 adr_id: 0.0.0005
 decision: Three clauses — the tenant that decides access always derives from the token and any tenant in the request is only a declaration confirmed against it; it appears in the path only when the bounded context owns the tenant as an addressable resource or the actor may act outside its own tenant; and it is resolved in a single trusted layer whose location follows the opacity of the actor (the context's own adapter in identity, the composition root in staff)
 context_stage: 3.6-staff-http
@@ -13,6 +13,8 @@ bounded_context: transversal
 ---
 
 # ADR 0.0.0005 — The tenant comes from the token unless the context owns it as a resource
+
+> ⚠️ **Errata (2026-11-09):** §Decision, the clause on where `identity` resolves the tenant — the router local `ator` was renamed to `actor` in issue #136 (pure rename, no behaviour change), so the read is now `actor.claims.tenant_id`, at `identity/adapters/inbound/http/router.py:408` and `:458` (the cited `:385`/`:435` had already drifted). Pointer only; no decision content changes — ver issue #136
 
 ## Status
 

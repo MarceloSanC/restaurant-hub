@@ -49,7 +49,7 @@ def _erro(constraint: str | None) -> IntegrityError:
 def test_constraint_de_negocio_vira_erro_de_dominio(
     constraint: str, esperado: type[Exception]
 ) -> None:
-    traduzido = integrity_errors.traduzir(_erro(constraint), "chave-1")
+    traduzido = integrity_errors.translate(_erro(constraint), "chave-1")
     assert isinstance(traduzido, esperado)
     # Invariante #16 da 2.2: nada escapa da hierarquia e vira 500 por descuido.
     # Pertinência às **duas** raízes do BC (ADR 3.9.0001): o que importa é que
@@ -76,7 +76,7 @@ def test_violacao_de_fk_nao_e_traduzida(constraint: str) -> None:
     a pior coisa que se pode fazer com um defeito.
     """
     erro = _erro(constraint)
-    assert integrity_errors.traduzir(erro, "chave-1") is erro
+    assert integrity_errors.translate(erro, "chave-1") is erro
 
 
 def test_check_de_invariante_nao_e_traduzida() -> None:
@@ -86,30 +86,30 @@ def test_check_de_invariante_nao_e_traduzida() -> None:
     — de novo, bug, não regra de negócio.
     """
     erro = _erro("ck_users_tenant_iff_platform_admin")
-    assert integrity_errors.traduzir(erro, "user-1") is erro
+    assert integrity_errors.translate(erro, "user-1") is erro
 
 
 def test_constraint_desconhecida_sobe_intacta() -> None:
     """Inventar erro de negócio para o que não se entende perde o bug de vista."""
     erro = _erro("uq_alguma_coisa_nova")
-    assert integrity_errors.traduzir(erro, "x") is erro
+    assert integrity_errors.translate(erro, "x") is erro
 
 
 def test_erro_sem_nome_de_constraint_sobe_intacto() -> None:
     """Sem `diag.constraint_name` não há como decidir — degradar para parsing de
     mensagem trocaria uma falha explícita por uma silenciosa."""
     erro = _erro(None)
-    assert integrity_errors.traduzir(erro, "x") is erro
+    assert integrity_errors.translate(erro, "x") is erro
 
 
 def test_erro_sem_diag_algum_sobe_intacto() -> None:
     """Outro driver, ou erro que não é de constraint."""
     erro = IntegrityError("INSERT ...", {}, Exception("boom"))  # type: ignore[arg-type]
-    assert integrity_errors.traduzir(erro, "x") is erro
-    assert integrity_errors.nome_da_constraint(erro) is None
+    assert integrity_errors.translate(erro, "x") is erro
+    assert integrity_errors.constraint_name(erro) is None
 
 
 def test_detalhe_chega_na_mensagem_do_erro_traduzido() -> None:
     """Sem a chave em conflito, a mensagem é inútil para diagnóstico."""
-    traduzido = integrity_errors.traduzir(_erro("pk_users"), "user-42")
+    traduzido = integrity_errors.translate(_erro("pk_users"), "user-42")
     assert "user-42" in str(traduzido)

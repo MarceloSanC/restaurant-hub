@@ -441,13 +441,13 @@ def test_ciclo_entre_causas_internas_nao_repete_elo() -> None:
 
 
 def test_cadeia_longa_para_no_teto() -> None:
-    elos = [UnitNotFoundError(f"u-{i}") for i in range(handlers._ELOS_MAXIMOS + 2)]
+    elos = [UnitNotFoundError(f"u-{i}") for i in range(handlers._MAX_LINKS + 2)]
     for externa, interna in itertools.pairwise(elos):
         externa.__cause__ = interna
 
     descricao = handlers.describe_suppressed_cause(elos[0])
 
-    assert descricao.count("UnitNotFoundError") == handlers._ELOS_MAXIMOS
+    assert descricao.count("UnitNotFoundError") == handlers._MAX_LINKS
     assert descricao.startswith("UnitNotFoundError: unidade não encontrada: 'u-0' <- ")
 
 

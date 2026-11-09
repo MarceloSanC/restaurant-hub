@@ -21,7 +21,7 @@ from restaurant_hub.features.identity.application.dtos.identifiers import Passwo
 
 # Senha-semente do hash inatingível. Nunca é uma senha real de ninguém: o hash
 # derivado dela só existe para ser comparado e falhar.
-_SENTINELA_DUMMY = "dummy-password-that-never-authenticates"
+_DUMMY_SENTINEL = "dummy-password-that-never-authenticates"
 
 
 class Argon2PasswordHasher:
@@ -35,7 +35,7 @@ class Argon2PasswordHasher:
         # inexistente" passaria a pagar DOIS argon2 (derivar o dummy + verificar
         # contra ele) enquanto o caminho "senha errada" paga um só — e a
         # diferença voltaria a distinguir os dois casos no relógio.
-        self._dummy_hash = PasswordHash(self._backend.hash(_SENTINELA_DUMMY))
+        self._dummy_hash = PasswordHash(self._backend.hash(_DUMMY_SENTINEL))
 
     def hash(self, plain_password: str) -> PasswordHash:
         """Deriva o hash argon2id da senha, com salt novo a cada chamada."""
@@ -93,7 +93,7 @@ class Argon2PasswordHasher:
 
         **Não é `dummy_hash()`, e a distinção é a diferença entre uma conta
         pendente segura e um bypass de autenticação.** O dummy é o hash de
-        `_SENTINELA_DUMMY`, um literal deste arquivo; gravá-lo como
+        `_DUMMY_SENTINEL`, um literal deste arquivo; gravá-lo como
         `users.password_hash` de um convidado faria `POST /auth/login` com essa
         string devolver o par de tokens da vítima, com o papel e o tenant dela,
         antes de a vítima abrir o e-mail.
