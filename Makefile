@@ -197,6 +197,10 @@ lock-check:
 # que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda
 # consultá-la antes de criar qualquer arquivo. Uma linha falsa ali é uma
 # instrução errada que nenhum compilador corrige (issue #45, Gate 5).
+#
+# Todo `scripts/check_*.py` é validador de docs e tem linha aqui, salvo as
+# exceções declaradas em `tests/unit/test_ci_workflow.py` (`_IN_OTHER_TARGET`,
+# `_OUTSIDE_MAKE`): validador novo sem linha reprova a suíte (issue #97).
 # ---------------------------------------------------------------------------
 docs-check:
 	uv run python scripts/check_technical_postexec.py
