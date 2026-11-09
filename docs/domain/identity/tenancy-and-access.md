@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage que toque o
 keywords: [domain, identity, tenancy, tenant, restaurante, unidade, usuario, conta, rbac, papel, permissao, membership, vinculo, visibilidade, bypass, tenant-wide, autorizacao, fail-closed, provisionamento, platform-admin, sessao, refresh, rotacao, reuso, logout, fachada-de-acesso, convite, conta-pendente, token-de-setup, definicao-de-senha, redefinicao, enumeracao, unidade-de-trabalho, fachada, lingua-ubiqua]
 status: accepted
 created_at: 2026-11-02
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 bounded_context: identity
 subdomain: tenancy-and-access
 references:
@@ -635,8 +635,10 @@ reescreve ADR nem concept — a disposição de cada um está no próprio item):
 - **C5 — ADR 2.5.0002 §5 descreve um reconvite que não existe.** "Re-inviting leaves exactly one
   live invitation" supõe que convidar de novo emite token; o concept 2.5 §5 regra 6 (e a regra 13)
   fixa que convidar o mesmo e-mail responde como e-mail já cadastrado e não emite nada. A regra
-  de invalidação por propósito vale; o exemplo do ADR é que não tem caminho. **Disposição:** issue
-  #128 (errata no ADR).
+  de invalidação por propósito vale; o exemplo do ADR é que não tem caminho. **Resolvido na issue
+  #128 (PR #149):** o ADR 2.5.0002 ganhou banner de errata datado de 2026-11-09 (append-only,
+  CONVENTIONS §5) — reconvidar responde 409 sem emitir token; a invalidação por propósito governa
+  a redefinição e qualquer emissão futura de convite a usuário existente.
 
 ---
 
