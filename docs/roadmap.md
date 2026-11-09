@@ -178,7 +178,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
-| [#65](https://github.com/MarceloSanC/restaurant-hub/issues/65) | Trazer do financial-forecasting o harness posterior à #56 | shared | tooling + docs | open | #56 |
+| [#65](https://github.com/MarceloSanC/restaurant-hub/issues/65) | Trazer do financial-forecasting o harness posterior à #56 | shared | tooling + docs | done | #56 |
 | [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | done | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | done | — |
 | [#75](https://github.com/MarceloSanC/restaurant-hub/issues/75) | Negar na application de staff ator que o guard não emitiu (drivers fora da borda HTTP) | staff | application | open | `3.7-application-authorization` |
