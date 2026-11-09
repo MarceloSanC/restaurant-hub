@@ -436,6 +436,10 @@ _TABELA = "\n| Stage dona | Lacuna (§) |\n|---|---|\n"
         # reendereçada: a Stage dona do negrito continua guardada, a nota de fora não conta
         ("| **4.1** (reendereçada da 4.4) | a pergunta |", "4.1"),
         ("| **4.1 (*technical*)** | a pergunta |", "4.1"),
+        # auditoria de testes por mutação: "fechada" é parte da marca, e só a lista que a
+        # segue fecha — número de ADR na fonte não fecha a Stage dona
+        ("| **4.1** | a pergunta — aberta pela Stage 4.1 |", "4.1"),
+        ("| **4.1** | x — *fechada pela Stage 4.4 (ADR 4.1.0007)* |", "4.1"),
     ],
 )
 def test_linha_da_tabela_com_stage_done_sem_marca_reprova(
@@ -463,6 +467,7 @@ def test_linha_da_tabela_com_stage_done_sem_marca_reprova(
         "| **4.4** (reendereçada da 4.1) | a pergunta |",  # 4.1 fora do negrito
         "| 4.1 | sem negrito na célula dona |",
         "| a 1ª célula | **4.1** em outra célula |",
+        "| a 1ª célula | **4.1** | a pergunta |",  # negrito fechando a 2ª célula
     ],
 )
 def test_linha_da_tabela_fechada_ou_sem_stage_done_passa(
@@ -470,6 +475,14 @@ def test_linha_da_tabela_fechada_ou_sem_stage_done_passa(
 ) -> None:
     repo = _repo(tmp_path, {_DOMINIO: _dominio(_TABELA + linha + "\n")})
     assert gate.problemas(repo) == []
+
+
+def test_mensagem_da_tabela_nomeia_a_celula_e_so_as_pendentes(tmp_path: pathlib.Path) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(_TABELA + "| **4.4/4.2** | a pergunta |\n")})
+    assert gate.problemas(repo) == [
+        f'{_DOMINIO}:9: linha da tabela de lacunas da Stage 4.4/4.2 sem "fechada pela Stage 4.2",'
+        " mas já está done — feche-a no lugar ou reenderece a Stage dona"
+    ]
 
 
 def test_linha_da_tabela_dentro_de_bloco_cercado_e_exemplo(tmp_path: pathlib.Path) -> None:
