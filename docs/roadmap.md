@@ -221,6 +221,9 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | open | #116 |
 | [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | done | #132 |
 | [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | open | #117 |
+| [#170](https://github.com/MarceloSanC/restaurant-hub/issues/170) | Falha de envio do convite vai ao log com traceback e pode vazar destinatário e link | identity | application + adapters/inbound/http | open | #114 |
+| [#171](https://github.com/MarceloSanC/restaurant-hub/issues/171) | O piloto não pode subir com o `ConsoleSender`, que imprime o link de convite no log | shared | infrastructure + composition root | open | #114 |
+| [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
