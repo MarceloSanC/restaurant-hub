@@ -137,7 +137,7 @@ class TestFluxoCompletoDeConvite:
         Convite → e-mail capturado → link extraído → senha definida → login
         funciona. Cada seta é uma requisição HTTP de verdade contra Postgres.
         """
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
 
         convite = await client_com_captura.post(
             f"{API}/users/invitations",
@@ -173,7 +173,7 @@ class TestFluxoCompletoDeConvite:
         admin: User,
     ) -> None:
         """CA14 — o token existe no e-mail e em lugar nenhum mais."""
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
 
         convite = await client_com_captura.post(
             f"{API}/users/invitations",
@@ -191,7 +191,7 @@ class TestFluxoCompletoDeConvite:
         admin: User,
     ) -> None:
         """CA11 — a conta existe e não é utilizável até a senha ser definida."""
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
         await client_com_captura.post(
             f"{API}/users/invitations",
             json={"email": "convidado@cantina.com", "role": "manager", "unit_ids": []},
@@ -223,7 +223,7 @@ class TestFluxoCompletoDeConvite:
         teste é o que impede a regressão pelo caminho real — os testes de contrato
         cobrem a lei do port; este cobre a rota.
         """
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
         await client_com_captura.post(
             f"{API}/users/invitations",
             json={"email": "convidado@cantina.com", "role": "manager", "unit_ids": []},
@@ -244,7 +244,7 @@ class TestFluxoCompletoDeConvite:
         admin: User,
     ) -> None:
         """CA9 pelo caminho real: o mesmo link, duas vezes."""
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
         await client_com_captura.post(
             f"{API}/users/invitations",
             json={"email": "convidado@cantina.com", "role": "manager", "unit_ids": []},
@@ -282,7 +282,7 @@ class TestAutorizacaoDoConvite:
         `owner` seria escalada de privilégio numa requisição. Se a rota de convite
         afrouxasse aqui, seria a porta lateral da defesa que `POST /users` fecha.
         """
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
         await client_com_captura.post(
             f"{API}/users/invitations",
             json={"email": "gerente@cantina.com", "role": "manager", "unit_ids": []},
@@ -321,7 +321,7 @@ class TestAutorizacaoDoConvite:
         admin: User,
     ) -> None:
         """Reconvidar não funciona — o caminho de recuperação é a redefinição."""
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
         corpo = {"email": "convidado@cantina.com", "role": "manager", "unit_ids": []}
         await client_com_captura.post(
             f"{API}/users/invitations", json=corpo, headers=auth(tokens_owner)
@@ -352,7 +352,7 @@ class TestRedefinicaoDeSenha:
         teste de dois cenários esqueceria, e é justamente o estado em que uma
         implementação distraída se comportaria diferente.
         """
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
         await client_com_captura.post(
             f"{API}/users/invitations",
             json={"email": "nao-ativado@cantina.com", "role": "manager", "unit_ids": []},
@@ -394,7 +394,7 @@ class TestRedefinicaoDeSenha:
         É o cenário de retomada de conta: o atacante tinha uma sessão aberta, a
         vítima redefine a senha, e a sessão do atacante precisa parar de renovar.
         """
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
 
         pedido = await client_com_captura.post(
             f"{API}/auth/password-reset-requests", json={"email": "dono@cantina.com"}
@@ -428,7 +428,7 @@ class TestRedefinicaoDeSenha:
         Sem ele, qualquer pessoa na internet mataria o link de convite de qualquer
         vítima, em laço, batendo nesta rota pública.
         """
-        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura)
+        _, tokens_owner = await _montar_restaurante_com_owner(client_com_captura, caixa_de_entrada)
         await client_com_captura.post(
             f"{API}/users/invitations",
             json={"email": "convidado@cantina.com", "role": "manager", "unit_ids": []},
