@@ -105,6 +105,12 @@ _BRANCH_RE = re.compile(
 # Limite de chars do nome completo do branch (mesma ordem do CONVENTIONS.md §1).
 BRANCH_MAX_LEN = 60
 
+# Git e gh escrevem UTF-8; `text=True` sem `encoding` decodifica pelo locale — no
+# Windows, cp1252 —, e a worktree em caminho com acento não tinha o `.env` achado:
+# as portas dela voltavam à rotação (issue #143). `errors="replace"` porque uma
+# mensagem ilegível não deve derrubar o script.
+GIT_ENCODING = "utf-8"
+
 
 # ---------------------------------------------------------------------------
 # helpers de IO / processo
@@ -136,6 +142,8 @@ def _run(
             cwd=str(cwd) if cwd else None,
             check=check,
             text=True,
+            encoding=GIT_ENCODING,
+            errors="replace",
             capture_output=capture,
         )
     except FileNotFoundError as e:
@@ -247,6 +255,8 @@ def gh_available() -> bool:
         ["gh", "auth", "status"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     return cp.returncode == 0
@@ -257,6 +267,8 @@ def gh_issue_exists(num: int) -> bool:
         ["gh", "issue", "view", str(num), "--json", "number,state"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.returncode != 0:
@@ -426,6 +438,8 @@ def _list_worktree_paths() -> list[Path]:
         ["git", "worktree", "list", "--porcelain"],
         capture_output=True,
         text=True,
+        encoding=GIT_ENCODING,
+        errors="replace",
         check=False,
     )
     if cp.returncode != 0:

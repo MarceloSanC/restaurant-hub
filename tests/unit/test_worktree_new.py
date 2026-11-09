@@ -737,7 +737,14 @@ def test_run_echoes_the_command_and_forwards_the_options(
     assert fake.calls == [
         (
             ["git", "status"],
-            {"cwd": str(tmp_path), "check": False, "text": True, "capture_output": False},
+            {
+                "cwd": str(tmp_path),
+                "check": False,
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "capture_output": False,
+            },
         )
     ]
     assert capsys.readouterr().out == "  $ git status\n"
@@ -752,7 +759,17 @@ def test_run_captured_is_silent_and_without_cwd_passes_none(
     wn._run(["git", "rev-parse"], capture=True)
 
     assert fake.calls == [
-        (["git", "rev-parse"], {"cwd": None, "check": True, "text": True, "capture_output": True})
+        (
+            ["git", "rev-parse"],
+            {
+                "cwd": None,
+                "check": True,
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "capture_output": True,
+            },
+        )
     ]
     assert capsys.readouterr().out == ""
 
@@ -878,6 +895,7 @@ def test_gh_available_follows_auth_status(
     assert looked_up == ["gh"]
     assert [cmd for cmd, _kw in fake.calls] == [["gh", "auth", "status"]]
     assert fake.calls[0][1]["check"] is False
+    assert fake.calls[0][1]["encoding"] == "utf-8"
 
 
 @pytest.mark.parametrize(
@@ -901,6 +919,7 @@ def test_gh_issue_exists(
     assert [cmd for cmd, _kw in fake.calls] == [
         ["gh", "issue", "view", str(ISSUE_NUM), "--json", "number,state"]
     ]
+    assert fake.calls[0][1]["encoding"] == "utf-8"  # não o locale (issue #143)
 
 
 class _FakeCapturedRun:
@@ -1001,13 +1020,61 @@ def test_branch_exists_tells_local_from_remote(git_repo: Path) -> None:
     assert wn.branch_exists("feat/3-nada") == (False, False)
 
 
-def test_list_worktree_paths_lists_main_and_linked(git_repo: Path, tmp_path: Path) -> None:
-    linked = tmp_path / "com espaco"  # espaço no caminho: o porcelain não o cita
+_REAL_SUBPROCESS_RUN = subprocess.run
+
+
+def _windows_locale_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[object]:
+    """`subprocess.run` de verdade, decodificando a saída como o Windows sem `encoding=`.
+
+    Em `text=True` sem `encoding`, o Python decodifica pelo locale — no Windows,
+    cp1252 — e o git escreve caminhos em UTF-8: `ç` vira `Ã§` (issue #143). O
+    Linux do CI decodifica em UTF-8 e esconderia o defeito; aqui o processo roda
+    em bytes e a decodificação segue o que a chamada pediu, com cp1252 no lugar
+    do locale.
+    """
+    text = kwargs.pop("text", False)
+    encoding = kwargs.pop("encoding", None)
+    errors = kwargs.pop("errors", None)
+    cp = _REAL_SUBPROCESS_RUN(cmd, **kwargs)  # type: ignore[call-overload]
+    if not (text or encoding or errors):
+        return cp  # type: ignore[no-any-return]
+
+    def _decode(raw: bytes | None) -> str | None:
+        if raw is None:
+            return None
+        return raw.decode(str(encoding or "cp1252"), str(errors or "strict"))
+
+    return subprocess.CompletedProcess(
+        cp.args, cp.returncode, _decode(cp.stdout), _decode(cp.stderr)
+    )
+
+
+NON_ASCII_DIR = "espaço çã"  # espaço e acento no caminho: o porcelain não cita nenhum dos dois
+LINKED_APP_PORT = 8123
+
+
+def test_list_worktree_paths_lists_main_and_linked(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    linked = tmp_path / NON_ASCII_DIR
     _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    monkeypatch.setattr(wn.subprocess, "run", _windows_locale_run)
 
     paths = [p.resolve() for p in wn._list_worktree_paths()]
 
     assert paths == [git_repo.resolve(), linked.resolve()]
+
+
+def test_collect_used_ports_reads_the_env_of_a_non_ascii_worktree(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Caminho com acento: o `.env` da worktree é achado e a porta dela não volta (#143)."""
+    linked = tmp_path / NON_ASCII_DIR
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    _write_env(linked, f"APP_PORT={LINKED_APP_PORT}")
+    monkeypatch.setattr(wn.subprocess, "run", _windows_locale_run)
+
+    assert wn._collect_used_ports()["APP_PORT"] == {8000, LINKED_APP_PORT}
 
 
 def test_list_worktree_paths_outside_git_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
