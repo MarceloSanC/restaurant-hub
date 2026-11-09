@@ -23,10 +23,10 @@ bounded_context: scheduling
 ## Context
 
 [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.3 leaves the
-**cardinality of the demand** as a gap for this concept (lines 257–258): *"no máximo
+**cardinality of the demand** as a gap for this concept (`shift-scheduling.md` §3.3 › "ou duas da mesma função em faixas parcialmente sobrepostas"): *"no máximo
 uma demanda por `(dia, faixa, função)`, ou duas da mesma função em faixas
-parcialmente sobrepostas?"* — and §6 lists it for this Stage (line 1087). Stage
-4.2's own gap (lines 632–634) is written on top of the answer: whether over-coverage is
+parcialmente sobrepostas?"* — and §6 lists it for this Stage (`shift-scheduling.md` §6 › "cardinalidade da demanda por (dia, faixa, função)"). Stage
+4.2's own gap (`shift-scheduling.md` §3.6.8 › "se o aviso conta o excedente por demanda") is written on top of the answer: whether over-coverage is
 counted per demand or per `(day, band, function)` *"quando a cardinalidade da 4.1
 admitir duas demandas da mesma função em faixas sobrepostas"*.
 
@@ -38,7 +38,7 @@ facts follow from that single line:
 
 1. **Two acts, not one:** bands are *enabled* per day; demand is *defined* per
    function × band. The domain doc names the result of the first act "faixas de
-   funcionamento — as faixas **habilitadas por dia** na escala" (§2, line 107),
+   funcionamento — as faixas **habilitadas por dia** na escala" (`shift-scheduling.md` §2 › "Faixas de funcionamento"),
    the same thing the calendar draws its mini-cards over (`overview.md` 46).
 2. **Two functions share one band:** `16h–00h` carries both the cozinheiro and the
    two atendentes.
@@ -83,7 +83,7 @@ And the band is what **carries the declared break** that
    has an unambiguous subject once a demand is unique per (band, function): the
    surplus person belongs to exactly one demand. **How the warning is counted and
    reported — per demand, or aggregated per `(day, band, function)` — remains a 4.2
-   decision** (domain doc §3.6.8, lines 632–634), now *informed* by this answer
+   decision** (`shift-scheduling.md` §3.6.8 › "se o aviso conta o excedente por demanda"), now *informed* by this answer
    instead of blocked by it. This ADR frames the gap; it does not close it.
 
 ## Alternatives considered
@@ -135,7 +135,7 @@ And the band is what **carries the declared break** that
 ### Alternative D — Allow several demands of the same function on the same band
 - **Description:** `N` split over two rows for the same (band, function).
 - **Pros:** it is the literal second reading of the gap as the domain doc writes it
-   (*"ou duas da mesma função em faixas parcialmente sobrepostas?"*, line 258), so it
+   (*"ou duas da mesma função em faixas parcialmente sobrepostas?"*, `shift-scheduling.md` §3.3 › "ou duas da mesma função em faixas parcialmente sobrepostas"), so it
    had to be answered rather than assumed away; it would let an editor split `N`
    into rows with different provenance (e.g. fixed staff versus on-demand).
 - **Cons:** two rows for the same slot are just `N₁+N₂`, and
@@ -148,7 +148,7 @@ And the band is what **carries the declared break** that
 
 ### Alternative E — Do nothing / leave cardinality to 4.2
 - **Why not acceptable:** 4.2's own gap is written as depending on this answer
-  (doc lines 632–634), and `declare_demand` must accept or refuse the second demand of a
+  (`shift-scheduling.md` §3.6.8 › "se o aviso conta o excedente por demanda"), and `declare_demand` must accept or refuse the second demand of a
   function on a band.
 
 ## Consequences
@@ -204,8 +204,8 @@ And the band is what **carries the declared break** that
 - [`overview.md`](../overview.md) line 41 (two acts and the three-band example),
   line 46 (calendar over the "faixas de funcionamento").
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
-  §2 (line 107), §3.3 (the gap, lines 257–258), §3.6.8 (the 4.2 gap on how the
-  surplus is counted, lines 632–634), §6 (line 1087).
+  §2 › "Faixas de funcionamento", §3.3 › "ou duas da mesma função em faixas parcialmente sobrepostas" (the gap), §3.6.8 › "se o aviso conta o excedente por demanda" (the 4.2 gap on how
+  the surplus is counted), §6 › "cardinalidade da demanda por (dia, faixa, função)".
 - [`roadmap.md`](../roadmap.md) §Stage 4.1 › `arquivos_a_criar` (the three-entity file list this ADR
   diverges from; the entities are its first item).
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)

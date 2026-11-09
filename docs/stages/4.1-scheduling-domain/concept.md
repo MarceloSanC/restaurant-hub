@@ -26,8 +26,8 @@ depends_on: [3.1-staff-domain]
 > do sponsor de 2026-09-13/14/26 chegam aqui pelos **ADRs 4.1.0001–4.1.0006** e
 > são consumidas, não reabertas.
 >
-> **As quatro lacunas que o doc de domínio endereçou a esta Stage** (§6, tabela
-> consolidada, linhas 1086–1088) são fechadas aqui, cada uma com ADR: forma
+> **As quatro lacunas que o doc de domínio endereçou a esta Stage** (tabela consolidada,
+> `shift-scheduling.md` §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte", "cardinalidade da demanda por (dia, faixa, função)", "Schedule como raiz do agregado — confirmar") são fechadas aqui, cada uma com ADR: forma
 > interna do `TimeRange` (4.1.0007); faixa que ultrapassa o corte seguinte
 > (4.1.0008); `Schedule` como raiz do agregado, com o lugar das marcas da
 > alocação e da contagem de horas (4.1.0009); cardinalidade da demanda
@@ -101,8 +101,8 @@ depends_on: [3.1-staff-domain]
   divergência; nomear a política, o modo e a pergunta "qual intervalo manter" é
   da 4.2 (+ borda 4.5).
 - **As duas elegibilidades estruturais que dependem de dado de staff** — *"registro
-  ativo da unidade da escala"* e *"mesma unidade"* (doc §3.4, elegibilidades 1 e
-  2, linhas 269–276, esta última literalmente *"erro estrutural, não política"*).
+  ativo da unidade da escala"* e *"mesma unidade"* (`shift-scheduling.md` §3.4 › "Registro ativo da unidade da escala", "Mesma unidade" —
+  elegibilidades 1 e 2, esta última literalmente *"erro estrutural, não política"*).
   A 4.1 **não tem o dado**: `EmployeeId` é string opaca e o domínio não conhece a
   unidade nem o estado do registro. As duas são impostas na **4.3**, pela lei do
   `StaffReadPort` (o lookup exige a unidade — ADR 3.4.0007 57–64) antes de chamar
@@ -211,7 +211,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    §"Visão geral" › `S31 --> S41`). E é dependência **de ordenação com consumo por
    valor**: nem um import, nem um contrato de código.
 8. **Nota de glosa pendente no doc de domínio.** `ShiftBand` é glosa EN nova para
-   "faixas de funcionamento" (doc §2, linha 107, que não traz glosa própria); o
+   "faixas de funcionamento" (`shift-scheduling.md` §2 › "Faixas de funcionamento", que não traz glosa própria); o
    doc `accepted` prevê glosa "proposta deste gate (†)" (§2). O **commit de
    fechamento** desta Stage leva a nota datada em `shift-scheduling.md` §2
    registrando o termo — precedente: a reconciliação de `workforce.md` com o gate
@@ -256,7 +256,7 @@ seguintes do Step 4.
     de ela não ser invariante **aqui** não é o modo: é que **o dado não existe
     neste BC** — indisponibilidade é de staff e chega por `StaffReadPort` na 4.3.
     Quem sustenta a invariante do doc §3.6.6 (*"a escala vigente nunca contém
-    alocação sobre indisponibilidade"*, linha 584) é o avaliador da 4.2 com modo
+    alocação sobre indisponibilidade"*, `shift-scheduling.md` §3.6.6 › "a escala vigente nunca contém alocação sobre indisponibilidade") é o avaliador da 4.2 com modo
     fixo mais o use case da 4.3 que lhe entrega o insumo — e o próprio doc
     registra "onde vive (avaliador com modo fixo × use case)" como **lacuna da
     4.2** (§3.6.6).
@@ -487,7 +487,7 @@ seguintes do Step 4.
   ```
 
 - **`ShiftBand`** (`entity`, interna) — a **faixa habilitada** de um dia da
-  escala ("faixa de funcionamento", doc §2 linha 107); agrega as demandas:
+  escala ("faixa de funcionamento", `shift-scheduling.md` §2 › "Faixas de funcionamento"); agrega as demandas:
 
   ```python
   @dataclass(frozen=True, eq=False)
@@ -630,7 +630,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
    `calendar.is_aligned(period)` — `Weekday.from_date(period.first_day)` é o
    `week_start` do calendário fotografado. O alinhamento é imposto **no
    `Schedule.__post_init__`**, não só na fábrica `period_starting_on`: é a única
-   forma de a lei ratificada (doc §3.1 linha 166: *"O período é não vazio,
+   forma de a lei ratificada (`shift-scheduling.md` §3.1 › "O período é não vazio, contíguo e alinhado": *"O período é não vazio,
    contíguo e alinhado ao dia de início configurado (7 dias operacionais)"*;
    ADR 4.1.0002 §1: *"the sequence of **7 operational days** starting on the
    **week start day configured per restaurant**"*) valer também na **reidratação**
@@ -644,7 +644,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
    estrutural. Consequência declarada: a 4.4 pode reidratar um período de 3 dias
    **alinhado** sem invariante disparar — estado que nenhuma escrita da v1 produz,
    porque só a fábrica cria períodos.
-   A **semana de apuração** (doc §2, linha 105) não ganha tipo aqui: na v1 ela
+   A **semana de apuração** (`shift-scheduling.md` §2 › "Semana de apuração") não ganha tipo aqui: na v1 ela
    **é** este período (ADR 4.1.0002 §1), e quem soma por ela é a 4.2 (§1 Fora do
    escopo, §8).
 3. **Identidade natural `(tenant, unidade, período)`** (doc §3.1) — declarada
@@ -653,7 +653,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
 4. **Os conjuntos de dias operacionais de duas escalas da mesma unidade são
    disjuntos** — invariante **cross-agregado**: declarada aqui, imposta na
    4.3/4.4 (índice/checagem sobre `period`, não sobre instantes).
-   **Reformulação deliberada.** O doc §3.1 (linhas 167–169) enuncia *"as escalas de
+   **Reformulação deliberada.** O doc (`shift-scheduling.md` §3.1 › "As escalas de uma mesma unidade não se sobrepõem no tempo") enuncia *"as escalas de
    uma mesma unidade **não se sobrepõem no tempo**"* e a deriva de "com períodos
    alinhados ao dia de início, decorre da forma". Essa derivação **deixou de valer**
    com o ADR 4.1.0008 §3: uma faixa que começa no **último** dia operacional do
@@ -727,7 +727,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
    `period.contains(calendar.operational_day_of(band.time_range.start))` — a
    contenção é medida no **início** (ADR 4.1.0008). É a leitura estrutural de
    "toda alocação está **dentro do período** da escala" (`roadmap.md` §Stage 4.1 › "Descrição humana", a
-   mesma linha que o doc de domínio cita — `shift-scheduling.md` 171), já que a
+   mesma linha que o doc de domínio cita — `shift-scheduling.md` §3.1 › "Toda alocação está dentro do período"), já que a
    alocação herda a faixa por contenção. Corolário **aceito**, não tolerado: a
    faixa que começa no último dia operacional e **termina depois** dele é válida
    (ADR 4.1.0008 §3), e é o único corte que não trunca o turno de domingo à noite
@@ -866,8 +866,8 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     pelo domínio e governadas por ela (invariante 18, CA13 itens 1 e 2).
     **Estreitamento declarado em relação ao doc de domínio.** O doc §3.6.1 define a
     sobreposição como *"o mesmo registro com duas alocações cujas faixas se
-    sobrepõem"* (linha 476) com modo **configurável** (*"tolerar sobreposição
-    deliberada de troca 'na porta'"*, linhas 481–482). Lido ao pé da letra, o predicado é
+    sobrepõem"* (`shift-scheduling.md` §3.6.1 › "o mesmo registro com duas alocações cujas faixas se sobrepõem") com modo **configurável** (*"tolerar sobreposição
+    deliberada de troca 'na porta'"*, `shift-scheduling.md` §3.6.1 › "Configurável: só o modo"). Lido ao pé da letra, o predicado é
     trivialmente verdadeiro quando as **duas** alocações estão na **mesma** faixa,
     logo esse sub-caso caía na política e um tenant em `warn` poderia ligá-lo. A
     decisão do sponsor de 2026-09-27 o **retira** da superfície configurável: a troca
@@ -881,7 +881,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     turno** preenche **uma** vaga, e a outra fica **descoberta**. Ana, sexta
     16h–00h, com uma vaga de cozinheiro e uma de atendente na mesma faixa: ela
     ocupa uma das duas, a outra permanece vazia, e a cobertura do dia fica **abaixo
-    de 100%** — estado **legítimo** e visível (doc §3.3, linhas 243–244:
+    de 100%** — estado **legítimo** e visível (`shift-scheduling.md` §3.3 › "Cobertura < 100% é estado legítimo":
     *"Cobertura **< 100% é estado legítimo**"*; `N` é alvo, não teto —
     ADR 4.1.0003 (g)). É mais honesto do que declarar as duas vagas preenchidas por
     uma pessoa e mandar 16h para o hub. Se o negócio quiser representar "uma pessoa,
@@ -995,7 +995,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   mesma faixa seriam só `N₁+N₂` e tornariam `alocados(demanda) > N` ambíguo;
   proibir faixas sobrepostas, no outro extremo, impediria o reforço de pico que o
   exemplo ratificado já insinua.
-- **Fonte:** `overview.md` 41 e 46; doc §2 (linha 108), §3.3 (lacuna), §3.6.8
+- **Fonte:** `overview.md` 41 e 46; `shift-scheduling.md` §2 › "Intervalo declarado", §3.3 (lacuna), §3.6.8
   (que **antecipa** a 4.1 admitir faixas sobrepostas da mesma função).
 - **ADR:** [`../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md`](../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md)
 
@@ -1003,7 +1003,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **O quê:** `Schedule.__post_init__` exige `calendar.is_aligned(period)`. O
   `days == 7` **não** é imposto (é default da fábrica); o teto 31 é o limite.
 - **Por quê:** a lei ratificada é *"o período é … alinhado ao dia de início
-  configurado"* (doc §3.1, linha 166; ADR 4.1.0002 §1), e §2/§5.17 prometem
+  configurado"* (`shift-scheduling.md` §3.1 › "O período é não vazio, contíguo e alinhado"; ADR 4.1.0002 §1), e §2/§5.17 prometem
   invariantes válidas em **todos** os caminhos, inclusive a reidratação. Com a
   checagem só em `period_starting_on`, o mapper da 4.4 podia montar uma escala
   desalinhada sem invariante disparar, e `calendar.week_start` era **dado morto**
@@ -1014,7 +1014,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   caso em staff — a validação par a par da coleção inicial foi endurecida no
   `__post_init__` justamente por uma mutação sobrevivente (`employee.py` 113–116;
   `3.1/technical.md` §7, 2026-07-29).
-- **Fonte:** doc §3.1 (linha 166); ADR 4.1.0002 §1; ADR 4.1.0009 §Decision 6;
+- **Fonte:** `shift-scheduling.md` §3.1 › "O período é não vazio, contíguo e alinhado"; ADR 4.1.0002 §1; ADR 4.1.0009 §Decision 6;
   §5.2; CA8 e CA10.
 
 ### Identificadores tipados próprios do BC e ativação do enforcement estrutural
@@ -1238,7 +1238,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   impõe as invariantes **cross-agregado** 3 e 4 (esta última na forma
   reformulada: **dias operacionais disjuntos**, §5.4). É também a dona das **duas
   elegibilidades estruturais** que dependem de dado de staff — *"registro ativo da
-  unidade da escala"* e *"mesma unidade"* (doc §3.4, 269–276) —, impostas antes de
+  unidade da escala"* e *"mesma unidade"* (`shift-scheduling.md` §3.4 › "Registro ativo da unidade da escala", "Mesma unidade") —, impostas antes de
   chamar `Schedule.assign`, pela lei do port que **exige a unidade** no lookup
   (ADR 3.4.0007 57–64; `staff/application/ports/out/employee_repository.py` 38–41).
   A 4.1 aceita qualquer `EmployeeId` opaco, e isso é declaração, não descuido: sem
@@ -1614,8 +1614,8 @@ erDiagram
       §5)? **Dois** pontos se afastam da letra do doc, os dois declarados,
       justificados e ancorados: a **invariante 4**, reformulada porque a formulação
       original virou falsa por construção depois do ADR 4.1.0008 §3 (§5.4); e a
-      **invariante 23**, que **estreita** a política de sobreposição do doc §3.6.1
-      (linhas 476 e 481–482) tirando do modo configurável o sub-caso degenerado da
+      **invariante 23**, que **estreita** a política de sobreposição do doc
+      (`shift-scheduling.md` §3.6.1 › "o mesmo registro com duas alocações cujas faixas se sobrepõem", "Configurável: só o modo") tirando do modo configurável o sub-caso degenerado da
       **mesma** faixa — por decisão do sponsor de 2026-09-27, que é a mesma fonte de
       que o doc é registro (§5.23, ADR 4.1.0012).
 - [x] As quatro lacunas que o doc de domínio endereça à 4.1 estão fechadas com
@@ -1692,7 +1692,7 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
 
 - [`../../domain/scheduling/shift-scheduling.md`](../../domain/scheduling/shift-scheduling.md)
   — teoria canônica consumida (§2, §3.1–§3.5, §3.6.0/§3.6.8/§3.6.10, §3.9, §3.10,
-  §5, §6 incluindo a tabela de lacunas, linhas 1086–1088).
+  §5, §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte", "cardinalidade da demanda por (dia, faixa, função)", "Schedule como raiz do agregado — confirmar" — a tabela de lacunas).
 - [`../../overview.md`](../../overview.md) §3 (41, 44, 46), §6 (111),
   §9 (130–141).
 - [`../../roadmap.md`](../../roadmap.md) — §Stage 4.1

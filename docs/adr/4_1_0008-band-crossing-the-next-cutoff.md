@@ -29,8 +29,8 @@ starts**, quoting the sponsor: *"começou sexta as 18h e acabou sabado as 2h con
 como um dia só"*. The same ADR left one case open, in §4, verbatim: *"A range
 that crosses the **next** cutoff (e.g. 22:00–06:00 with cutoff 05:00): forbid,
 split or allow-and-assign-to-start-day — a gap for the 4.1 concept."* The domain
-doc repeats it as gap (b) of §3.2 (line 224) and lists it for this Stage in §6
-(line 1086).
+doc repeats it as gap (b) of §3.2 (`shift-scheduling.md` §3.2 › "faixa que ultrapassa o corte seguinte") and lists it for this Stage in §6
+(`shift-scheduling.md` §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte").
 
 The forces:
 
@@ -48,7 +48,7 @@ The forces:
   overlap policy sees instants, not day labels.
 - The period invariant "toda alocação está **dentro do período** da escala"
   (`roadmap.md` §Stage 4.1 › "Descrição humana", the same line the domain doc cites —
-  `shift-scheduling.md` 171) has to be given a precise meaning once a band can end
+  `shift-scheduling.md` §3.1 › "Toda alocação está dentro do período") has to be given a precise meaning once a band can end
   after the period's last operational day.
 
 ## Decision
@@ -161,7 +161,7 @@ The forces:
   form and the single hours site); [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md)
   (`block` reserved for physical impossibility; daily cap default 10h).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
-  §3.2 (gap (b), line 224), §3.6.1, §3.6.3, §3.6.10, §6 (line 1086).
+  §3.2 › "faixa que ultrapassa o corte seguinte" (gap (b)), §3.6.1, §3.6.3, §3.6.10, §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte".
 - [`roadmap.md`](../roadmap.md) §Stage 4.1 › "Descrição humana" ("alocação dentro do período").
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)
   §5.5, §5.8, §5.9, §7.

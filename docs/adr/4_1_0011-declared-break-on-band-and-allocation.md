@@ -27,7 +27,7 @@ settled fork F3 — *"Menos intervalo declarado (Recomendada)"* — and put the 
 **on the time range**, i.e. on the band: `hours(a) = (end − start) − break`, a
 **single function** consumed by every policy that sums and by the hub. The domain
 doc glosses it the same way: *"Minutos de intervalo dentro da faixa, declarados
-pelo editor; default 0"* (`shift-scheduling.md` 108).
+pelo editor; default 0"* (`shift-scheduling.md` §2 › "Intervalo declarado").
 
 The Checkpoint A review of this Stage's concept (2026-09-26) showed that the
 single-level shape is contradictory in practice, and that both ways out of the
@@ -235,7 +235,7 @@ keep" is a policy with a mode and a boundary interaction, not a structural refus
   twin-band pathology, and Decision 3's uniqueness key, narrowed here to
   `(start, end)`).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
-  §2 (line 108, "intervalo declarado"; line 109, `hours(a)`), §3.2, §3.6.3, §3.6.9
+  §2 › "Intervalo declarado", "Horas de uma alocação" (`hours(a)`), §3.2, §3.6.3, §3.6.9
   (intra-shift break as deferred policy), §3.6.10.
 - [`overview.md`](../overview.md) line 41 (two functions on one band — the case that
   forces the decision), line 46 (the hub's single hours number).

@@ -10,28 +10,44 @@ bounded_context: scheduling
 subdomain: shift-scheduling
 references:
   - ../staff/workforce.md
-  - ../../adr/4_1_0001-every-saved-change-is-the-live-schedule.md
-  - ../../adr/4_1_0002-weekly-period-operational-day-and-allocation-hours.md
-  - ../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md
-  - ../../adr/4_1_0004-hr-reads-schedules-in-member-units.md
-  - ../../adr/4_1_0005-unit-timezone-owned-by-identity.md
-  - ../../adr/4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md
   - ../../adr/0_0_0003-formalize-domain-and-audits-doc-categories.md
   - ../../adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md
+  - ../../adr/2_1_0001-identity-aggregates-and-membership.md
   - ../../adr/2_2_0002-authorization-two-axes-fail-closed.md
+  - ../../adr/2_4_0003-authorization-composition-at-boundary.md
   - ../../adr/2_5_0001-email-sender-in-shared.md
   - ../../adr/3_1_0001-workforce-gate-modeling-decisions.md
   - ../../adr/3_1_0002-minimal-employee-record-attributes.md
   - ../../adr/3_1_0004-shift-preference-scope-and-cardinality.md
   - ../../adr/3_1_0005-naive-wall-clock-unavailability-datetimes.md
   - ../../adr/3_1_0006-employee-function-set-cardinality.md
+  - ../../adr/3_2_0003-copy-employee-full-duplication.md
   - ../../adr/3_2_0006-employee-lifecycle-and-guarded-deletion.md
+  - ../../adr/3_2_0007-terminated-employee-remains-editable.md
+  - ../../adr/3_3_0001-staff-schema-tenant-scoping-and-composite-fk-cerco.md
   - ../../adr/3_3_0002-no-cross-bounded-context-foreign-keys.md
   - ../../adr/3_3_0006-transactional-atomicity-without-optimistic-locking.md
   - ../../adr/3_4_0001-staff-owned-access-guard-port.md
+  - ../../adr/3_4_0002-staff-http-error-status-mapping.md
   - ../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md
   - ../../adr/3_4_0007-unit-enters-the-employee-address.md
   - ../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md
+  - ../../adr/3_6_0001-path-addresses-the-record-not-the-authorized-scope.md
+  - ../../adr/3_6_0003-wire-representation-preserves-domain-guarantees.md
+  - ../../adr/4_1_0001-every-saved-change-is-the-live-schedule.md
+  - ../../adr/4_1_0002-weekly-period-operational-day-and-allocation-hours.md
+  - ../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md
+  - ../../adr/4_1_0004-hr-reads-schedules-in-member-units.md
+  - ../../adr/4_1_0005-unit-timezone-owned-by-identity.md
+  - ../../adr/4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md
+  - ../../adr/4_1_0007-time-range-as-naive-minute-instants.md
+  - ../../adr/4_1_0008-band-crossing-the-next-cutoff.md
+  - ../../adr/4_1_0009-schedule-is-the-single-aggregate-root.md
+  - ../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md
+  - ../../adr/4_1_0011-declared-break-on-band-and-allocation.md
+  - ../../adr/4_1_0012-one-record-occupies-at-most-one-slot-per-band.md
+  - ../../adr/4_2_0001-function-mismatch-follows-current-staff-record.md
+  - ../../adr/4_2_0002-evaluator-input-and-violation-identity.md
 ---
 
 # Domínio scheduling/shift-scheduling — escala manual publicável

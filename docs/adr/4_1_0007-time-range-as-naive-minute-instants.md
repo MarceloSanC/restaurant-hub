@@ -25,7 +25,7 @@ bounded_context: scheduling
 [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.2 leaves the
 **internal form** of `TimeRange` as an explicit gap for this concept: *"par de
 instantes wall-clock × `(dia, hora_início, hora_fim)` — desde que preserve as
-invariantes e a comparação direta com a indisponibilidade"* (line 224). The
+invariantes e a comparação direta com a indisponibilidade"* (`shift-scheduling.md` §3.2 › "a forma interna do TimeRange"). The
 constraints that surround the gap are all ratified:
 
 - Half-open `[start, end)` semantics, the same ones staff assumes, so that a
@@ -129,7 +129,7 @@ rehydration by the 4.4 mapper.
 - **Description:** keep the domain range abstract and let 4.4 pick a shape.
 - **Why not acceptable:** the form is what makes the ratified invariants
   expressible; `worked_minutes` has to exist before 4.2 can sum anything, and the
-  gap was explicitly addressed to this concept (doc §6, line 1086).
+  gap was explicitly addressed to this concept (`shift-scheduling.md` §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte").
 
 ## Consequences
 
@@ -179,7 +179,7 @@ rehydration by the 4.4 mapper.
   both levels, the effective break as the argument of this single site, and the
   `(start, end)` uniqueness key).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
-  §2, §3.2 (the gap, line 224), §3.6.1, §3.6.10, §3.9, §6 (line 1086).
+  §2, §3.2 › "a forma interna do TimeRange" (the gap), §3.6.1, §3.6.10, §3.9, §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte".
 - Code: `features/staff/domain/value_objects/unavailability_period.py` 23–49
   (the shape being mirrored: naive pair at 31–32, tz check before comparison at
   34–41, half-open `overlaps` at 43–49).

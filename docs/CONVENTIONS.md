@@ -804,6 +804,26 @@ Docs vivem no git, então o histórico é o versionamento. Mas:
     rótulo não existe — renomear seção ou rótulo do roadmap exige atualizar quem
     cita. Fora do gate: o próprio roadmap e a §7 dos `technical.md`, que é registro
     histórico (remapeamentos passados contados por número ficam como estão).
+- **Citação a doc de domínio (`docs/domain/**`) — por âncora, nunca por número de linha**
+  ([ADR 0.0.0017](./adr/0_0_0017-cite-domain-docs-by-stable-anchor.md), issue #116). Um doc de
+  domínio também cresce no meio — nota datada numa seção, lacuna fechada reescrita no lugar, ADR
+  novo no `references` — e a citação por linha passa a apontar para o vizinho sem erro. A forma é
+  a da citação ao roadmap, com a gramática do doc de domínio:
+  - **Referência:** o nome do arquivo (`` `shift-scheduling.md` ``, link ou caminho) ou o nome sem
+    `.md` seguido de ` §` (`workforce §3.7`). Âncora com rótulo **nomeia o doc**, mesmo quando o
+    parágrafo já o nomeou — "doc §2" solto o gate não enxerga.
+  - **Seção:** `§N`, `§N.M`, `§N.M.K` (número do título no doc) ou `§"<título>"` (seção sem
+    número). A seção engloba as subseções.
+  - **Rótulo** (opcional, depois de ` › `, vários separados por vírgula): `"<trecho>"` — texto da
+    seção, comparado sem `*`, crase, `>` de citação e com o espaço normalizado (não precisa ser
+    negrito) — ou `` `<literal>` `` (cru).
+  - **Exemplo:** `` `shift-scheduling.md` §3.4 › "não ocupa duas vagas da mesma demanda";
+    §6 › "Schedule como raiz do agregado — confirmar" ``.
+  - **Gate:** `scripts/check_domain_citations.py` (no `make docs-check`) reprova número de linha
+    depois de uma referência a doc de domínio e âncora cuja seção ou rótulo não existe no doc
+    citado — renumerar seção ou reescrever trecho que outro doc usa como rótulo exige atualizar
+    quem cita. Fora do gate: a §7 dos `technical.md`. Citação por linha a outros docs
+    (`overview.md`, ADR, código) fica fora desta regra.
 - **Lockfile de dependências (`uv.lock`):** **versionado** por padrão
   (este template gera aplicações; lock garante reprodutibilidade
   dev/CI/prod e segurança via SBOM). O `scripts/init-project.py` roda

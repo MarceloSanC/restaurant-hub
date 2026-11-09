@@ -44,7 +44,7 @@ Two forces framed the question:
   95–97) states why: `block` is reserved for **physical impossibility** — *"`block`
   for overlap (one person in two places)"*. Its only configurable dimension is the
   mode, so that a tenant may *"tolerar sobreposição deliberada de troca 'na porta'"*
-  (`shift-scheduling.md` 481–482).
+  (`shift-scheduling.md` §3.6.1 › "Configurável: só o modo").
 - This BC refuses structurally only what it cannot represent (concept §5.18). A
   declared limit ("the number may double, the policy guards it") was therefore the
   cheap answer, and the concept recommended it.
@@ -67,7 +67,7 @@ aggregate with a dedicated exception, `DuplicateAssignmentInBandError`.
    `Schedule.assign` and in the 4.4 mapper's rehydration alike.
 2. **Two disjoint exceptions, by level.** A second slot in the **same demand**
    remains `DuplicateAssignmentError` (the ratified invariant,
-   `shift-scheduling.md` 344: *"o mesmo funcionário **não ocupa duas vagas da mesma
+   `shift-scheduling.md` §3.4 › "não ocupa duas vagas da mesma demanda": *"o mesmo funcionário **não ocupa duas vagas da mesma
    demanda**"*). A slot in **another demand of the same band** is
    `DuplicateAssignmentInBandError`. The error map of the concept §6 carries both,
    and they never overlap.
@@ -95,7 +95,7 @@ aggregate with a dedicated exception, `DuplicateAssignmentInBandError`.
    in one shift fills **one** slot, and the other stays **uncovered**: Ana, Friday
    16h–00h, with a cozinheiro slot and an atendente slot on the same band, takes one
    of them and the day's coverage drops **below 100%** — a legitimate, visible state
-   (`shift-scheduling.md` 243–244: *"Cobertura **< 100% é estado legítimo**"*; `N` is
+   (`shift-scheduling.md` §3.3 › "Cobertura < 100% é estado legítimo": *"Cobertura **< 100% é estado legítimo**"*; `N` is
    a target, not a cap — ADR 4.1.0003 (g)). That is more honest than declaring both
    slots filled by one person and sending 16h to the hub. Representing "one person,
    two functions, one shift" as full coverage — a multi-function slot, or coverage
@@ -173,7 +173,7 @@ aggregate with a dedicated exception, `DuplicateAssignmentInBandError`.
 
 ### Negative
 - The concept **narrows** the literal reading of the doc's overlap policy
-  (`shift-scheduling.md` 476, 481–482), which covered the same-band case with a
+  (`shift-scheduling.md` §3.6.1 › "o mesmo registro com duas alocações cujas faixas se sobrepõem", "Configurável: só o modo"), which covered the same-band case with a
   configurable mode. The narrowing has to be declared and carried in every derived
   sweep (concept §5.18, §5.23, §12, CA13).
 - A person who really covers two functions in one shift leaves a slot **uncovered**,
@@ -230,8 +230,8 @@ aggregate with a dedicated exception, `DuplicateAssignmentInBandError`.
   now carries per-person breaks, which is what makes "two slots, one person" clearly
   redundant rather than a way to model different hours).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
-  §3.3 lines 243–244 (coverage below 100% is a legitimate state), §3.4 line 344 (the
-  ratified per-demand invariant this ADR extends), §3.6.1 lines 476 and 481–482 (the
+  §3.3 › "Cobertura < 100% é estado legítimo" (coverage below 100% is a legitimate state), §3.4 › "não ocupa duas vagas da mesma demanda" (the
+  ratified per-demand invariant this ADR extends), §3.6.1 › "o mesmo registro com duas alocações cujas faixas se sobrepõem", "Configurável: só o modo" (the
   overlap predicate and its configurable mode — narrowed here in the degenerate
   sub-case), §3.6.3 (hours summed per allocation).
 - [`overview.md`](../overview.md) line 41 (two functions on one band), line 46 (the

@@ -87,17 +87,10 @@ def _repo(tmp_path: pathlib.Path, arquivos: dict[str, str]) -> pathlib.Path:
     return tmp_path
 
 
-@pytest.fixture(autouse=True)
-def _sem_valvula(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A válvula real aponta para o repositório real; o repositório plantado começa sem ela."""
-    monkeypatch.setattr(gate, "VALVULA_REFERENCES", {})
-
-
 # --- repositório real e ligação -------------------------------------------------
 
 
-def test_o_repositorio_real_passa(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.undo()  # volta a válvula real
+def test_o_repositorio_real_passa() -> None:
     assert gate.problemas(_REPO_ROOT) == []
 
 
@@ -352,50 +345,36 @@ def test_adr_so_citado_em_texto_sem_link_nao_exige_references(tmp_path: pathlib.
     assert gate.problemas(repo) == []
 
 
-# --- domínio: a válvula ---------------------------------------------------------
+# --- domínio: sem válvula --------------------------------------------------------
 
 
-def test_valvula_exata_passa(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(gate, "VALVULA_REFERENCES", {_DOMINIO: frozenset({"4_1_0002-b.md"})})
-    corpo = f"{_LINK_A} {_LINK_B}\n"
-    repo = _repo(tmp_path, _com_adrs(corpo, "references:\n  - ../../adr/4_1_0001-a.md\n"))
-    assert gate.problemas(repo) == []
+def test_nao_ha_excecao_a_regra_dos_references() -> None:
+    """A válvula do `shift-scheduling.md` saiu na #116 (ADR 0.0.0017): nenhum doc é exceção."""
+    assert not hasattr(gate, "VALVULA_REFERENCES")
 
 
-def test_valvula_nao_cobre_adr_novo_fora_do_references(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(gate, "VALVULA_REFERENCES", {_DOMINIO: frozenset({"4_1_0002-b.md"})})
-    repo = _repo(tmp_path, _com_adrs(f"{_LINK_A} {_LINK_B}\n", "references: []\n"))
-    [achado] = gate.problemas(repo)
+def test_o_doc_da_antiga_valvula_nao_e_excecao(tmp_path: pathlib.Path) -> None:
+    """Exceção reintroduzida com outro nome, pelo caminho do doc, também reprova."""
+    arquivos = _com_adrs(f"{_LINK_A}\n", "references: []\n")
+    arquivos["docs/domain/scheduling/shift-scheduling.md"] = arquivos.pop(_DOMINIO)
+    [achado] = gate.problemas(_repo(tmp_path, arquivos))
+    assert achado.startswith("docs/domain/scheduling/shift-scheduling.md:")
     assert "ADR 4_1_0001-a.md linkado no corpo e ausente do `references`" in achado
 
 
-def test_valvula_so_encolhe(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        gate, "VALVULA_REFERENCES", {_DOMINIO: frozenset({"4_1_0001-a.md", "4_1_0002-b.md"})}
-    )
-    corpo = f"{_LINK_A} {_LINK_B}\n"
-    repo = _repo(tmp_path, _com_adrs(corpo, "references:\n  - ../../adr/4_1_0001-a.md\n"))
-    [achado] = gate.problemas(repo)
-    assert achado.startswith(f"{_DOMINIO}: a válvula declara 4_1_0001-a.md, que já não falta")
-
-
-def test_valvula_de_doc_que_nao_existe_reprova(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(gate, "VALVULA_REFERENCES", {"docs/domain/x/sumiu.md": frozenset()})
-    repo = _repo(tmp_path, {})
-    assert gate.problemas(repo) == [
-        "docs/domain/x/sumiu.md: está em VALVULA_REFERENCES, mas o doc não existe"
-    ]
-
-
-def test_valvula_real_esta_no_doc_que_a_justifica() -> None:
-    """A válvula real é do `shift-scheduling.md` e só dele; o motivo está na docstring."""
-    assert set(gate.VALVULA_REFERENCES) == set()  # o fixture a esvaziou
-    real = _carregar_script().VALVULA_REFERENCES
-    assert set(real) == {"docs/domain/scheduling/shift-scheduling.md"}
+def test_o_doc_da_antiga_valvula_lista_todo_adr_que_linka() -> None:
+    """Os 16 ADRs que a válvula deixava de fora estão no `references` do `shift-scheduling.md`."""
+    doc = _REPO_ROOT / "docs" / "domain" / "scheduling" / "shift-scheduling.md"
+    fm = gate.ler_frontmatter(doc.read_text(encoding="utf-8-sig"))
+    assert fm.dados is not None
+    referencias = {pathlib.PurePosixPath(r).name for r in fm.dados["references"]}
+    linkados = {
+        pathlib.PurePosixPath(alvo).name
+        for _, alvo in gate.links_relativos(fm.corpo, fm.linha_corpo)
+        if "/adr/" in alvo
+    }
+    assert len(linkados) > 16  # noqa: PLR2004 — o doc linka mais que os 16 da válvula
+    assert linkados <= referencias
 
 
 # --- domínio: lacunas -----------------------------------------------------------
@@ -572,17 +551,6 @@ def test_so_docs_adr_na_raiz_sao_adr(tmp_path: pathlib.Path) -> None:
         },
     )
     assert gate.problemas(repo) == []
-
-
-def test_valvula_de_um_doc_nao_vale_para_outro(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(gate, "VALVULA_REFERENCES", {_DOMINIO: frozenset({"4_1_0001-a.md"})})
-    arquivos = _com_adrs(_LINK_A, "references: []\n")
-    arquivos["docs/domain/staff/b.md"] = _dominio(f"{_LINK_A.replace('../../', '../../')}\n")
-    repo = _repo(tmp_path, arquivos)
-    [achado] = gate.problemas(repo)
-    assert achado.startswith("docs/domain/staff/b.md:6: ADR 4_1_0001-a.md linkado")
 
 
 @pytest.mark.parametrize(
