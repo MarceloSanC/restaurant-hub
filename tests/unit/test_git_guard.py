@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,8 @@ LOCAL_BRANCHES = {
 
 
 def _load() -> ModuleType:
+    if str(_HOOK.parent) not in sys.path:  # o hook importa o helper vizinho `_shell_segments`
+        sys.path.insert(0, str(_HOOK.parent))
     spec = importlib.util.spec_from_file_location("git_guard", _HOOK)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -88,6 +91,77 @@ def test_blocks_branch_changes_in_main_checkout(command: str) -> None:
 )
 def test_allows_safe_commands_in_main_checkout(command: str) -> None:
     assert not _blocked(command)
+
+
+# --- separadores e grupos escondendo o git (issue #65, port da FF#183) ---
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git status || git checkout -b feat/99-x",
+        "git status; git checkout -b feat/99-x",
+        "git log | git checkout -b feat/99-x",
+        "git status\ngit checkout -b feat/99-x",
+        "git status\r\ngit checkout -b feat/99-x",
+        "git status & git checkout -b feat/99-x",
+        "& git checkout -b feat/99-x",
+        "& 'C:\\Program Files\\Git\\bin\\git.exe' checkout -b feat/99-x",
+        "(git checkout -b feat/99-x)",
+        "( git checkout -b feat/99-x )",
+        "{ git checkout -b feat/99-x; }",
+        "$(git switch -c feat/99-x)",
+        "FOO=1 git switch -c feat/99-x",
+        "if true; then git switch -c feat/99-x; fi",
+        "git status\n(git switch feat/55-4-1-scheduling-domain)",
+        # checkout de branch existente casa pelo nome exato: `)` colado ou solto não pode vazar
+        "(git checkout feat/55-4-1-scheduling-domain)",
+        "( git checkout feat/55-4-1-scheduling-domain )",
+        "{ git checkout feat/55-4-1-scheduling-domain;}",
+    ],
+)
+def test_blocks_branch_change_after_any_separator(command: str) -> None:
+    assert _blocked(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "(git checkout develop)",
+        "( git switch develop )",
+        "git status\ngit log -1 & git diff",
+        "{ git checkout -- src/restaurant_hub/main.py; }",
+    ],
+)
+def test_groups_and_new_separators_do_not_create_false_positives(command: str) -> None:
+    assert not _blocked(command)
+
+
+def test_cd_to_worktree_on_a_previous_line_is_honored() -> None:
+    assert not _blocked(f"cd {WORKTREE}\ngit switch -c feat/99-x")
+    assert _blocked(f"cd {WORKTREE}\ncd {MAIN}\ngit switch -c feat/99-x")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"(cd {WORKTREE}) ; git checkout -b feat/99-x",
+        f"(cd {WORKTREE} && git status); git checkout -b feat/99-x",
+        f"pushd {WORKTREE}; popd; git checkout -b feat/99-x",
+        "if ($true) { git checkout -b feat/99-x }",
+        "if (Test-Path x) { git switch -c feat/99-x }",
+        "foreach ($b in 'x') { git checkout -b feat/99-x }",
+    ],
+)
+def test_subshell_cd_and_powershell_blocks_do_not_hide_the_branch_change(command: str) -> None:
+    assert _blocked(command)
+
+
+def test_uses_the_shared_segmentation_helper() -> None:
+    import _shell_segments  # noqa: PLC0415 — carregado do mesmo diretório que o git_guard
+
+    assert gg.commands is _shell_segments.commands
+    assert gg.git_invocation is _shell_segments.git_invocation
 
 
 def test_allows_branch_work_inside_a_worktree() -> None:
@@ -201,3 +275,60 @@ def test_empty_segment_and_dangling_option_are_skipped() -> None:
     """Segmento vazio (`;;`) e `-C` sem valor no fim não quebram a varredura."""
     assert _blocked("git status ;; git checkout -b feat/99-x")
     assert not _blocked("git -C")
+
+
+# --- processo real, como o Claude Code chama o hook (issue #65) ---
+
+# GIT_DIR/GIT_WORK_TREE herdados apontariam o git para o repo real
+_ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
+@pytest.fixture
+def main_checkout(tmp_path: Path) -> Path:
+    subprocess.run(["git", "init", "-q", "-b", "develop", str(tmp_path)], check=True, env=_ENV)
+    return tmp_path
+
+
+def _run_hook(payload: str) -> subprocess.CompletedProcess[str]:
+    """`python <hook>.py` com o payload no stdin: o helper vizinho `_shell_segments` resolve
+    pelo diretório do script, sem o sys.path do pytest."""
+    return subprocess.run(
+        [sys.executable, str(_HOOK)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=60,
+        env=_ENV,
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git status\ngit checkout -b feat/99-x",
+        "git status & git switch -c feat/99-x",
+        "(git checkout -b feat/99-x)",
+        "if ($true) { git checkout -b feat/99-x }",
+    ],
+)
+def test_process_denies_branch_creation_on_a_later_segment(
+    main_checkout: Path, command: str
+) -> None:
+    payload = {"tool_input": {"command": command}, "cwd": str(main_checkout)}
+    out = json.loads(_run_hook(json.dumps(payload)).stdout)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+    assert out["permissionDecisionReason"] == gg.REASON
+
+
+def test_process_reads_payload_with_utf8_bom(main_checkout: Path) -> None:
+    """Pipe do Windows PowerShell 5.1 prefixa BOM; sem `utf-8-sig` o hook calava (fail open)."""
+    payload = {"tool_input": {"command": "git switch -c feat/99-x"}, "cwd": str(main_checkout)}
+    out = json.loads(_run_hook("﻿" + json.dumps(payload)).stdout)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+
+
+def test_process_is_silent_on_safe_commands(main_checkout: Path) -> None:
+    payload = {"tool_input": {"command": "git status\ngit log -1"}, "cwd": str(main_checkout)}
+    assert _run_hook(json.dumps(payload)).stdout == ""
