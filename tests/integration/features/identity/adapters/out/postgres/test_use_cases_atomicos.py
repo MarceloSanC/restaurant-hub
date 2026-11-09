@@ -600,30 +600,44 @@ class TestProvisaoAtomica:
 
 
 # ---------------------------------------------------------------------------
-# provision_restaurant — o tenant e o seu primeiro owner (issue #67, ADR 0.0.0014)
+# provision_restaurant — o tenant e o seu primeiro owner (issue #67, ADR 0.0.0014),
+# convidado (issue #114, ADR 0.0.0018): o token do convite entra na mesma unidade
 # ---------------------------------------------------------------------------
 
-_ESCRITAS_DO_TENANT = ("restaurants.add", "users.add")
-_TABELAS_DO_TENANT = (tables.restaurants, tables.users, tables.unit_memberships)
+_ESCRITAS_DO_TENANT = ("restaurants.add", "users.add", "tokens.add")
+_TABELAS_DO_TENANT = (
+    tables.restaurants,
+    tables.users,
+    tables.unit_memberships,
+    tables.password_setup_tokens,
+)
 _EMAIL_DO_DONO = Email("dono@cantina.com")
 
 
 def _provisionar_tenant(
-    engine: Engine, registro: Registro, *, usuarios: _Usuarios | None = None
+    engine: Engine,
+    registro: Registro,
+    *,
+    usuarios: _Usuarios | None = None,
+    sender: RecordingEmailSender | None = None,
 ) -> ProvisionRestaurantUseCase:
     return ProvisionRestaurantUseCase(
         restaurants=_Restaurantes(engine, registro),
         users=usuarios if usuarios is not None else _Usuarios(engine, registro),
         hasher=FakePasswordHasher(),
+        tokens=_Tokens(engine, registro),
+        token_issuer=FakeSetupTokenIssuer(),
+        email_sender=sender if sender is not None else RecordingEmailSender(),
         id_generator=FakeIdGenerator(),
+        clock=FakeClock(_AGORA),
+        invitation_ttl=timedelta(hours=72),
+        base_url="https://app.exemplo.com",
         unit_of_work=PostgresUnitOfWork(engine),
     )
 
 
 def _tenant(email: Email = _EMAIL_DO_DONO) -> ProvisionRestaurantCommand:
-    return ProvisionRestaurantCommand(
-        name="Cantina Nova", owner_email=email, owner_plain_password="s3nha"
-    )
+    return ProvisionRestaurantCommand(name="Cantina Nova", owner_email=email)
 
 
 class TestProvisaoDoTenantAtomica:
@@ -645,6 +659,23 @@ class TestProvisaoDoTenantAtomica:
             ).scalar_one()
         assert tuple(dono) == ("owner", resultado.id)
         assert nome == "Cantina Nova"
+        linhas = _linhas(banco_limpo, tables.password_setup_tokens)["password_setup_tokens"]
+        assert len(linhas) == 1
+
+    def test_falha_do_envio_deixa_restaurante_dono_e_token_comitados(
+        self, banco_limpo: Engine
+    ) -> None:
+        """ADR 0.0.0018 §4 contra o banco real: o envio sai depois do commit, e a
+        falha dele sobe sem desfazer o tenant — a recuperação é a redefinição."""
+        sender = RecordingEmailSender(fail_with=EmailSenderFailure("fora"))
+
+        with pytest.raises(EmailSenderFailure):
+            _provisionar_tenant(banco_limpo, Registro(), sender=sender).execute(_tenant())
+
+        linhas = _linhas(banco_limpo, *_TABELAS_DO_TENANT)
+        assert len(linhas["restaurants"]) == 1
+        assert len(linhas["users"]) == 1
+        assert len(linhas["password_setup_tokens"]) == 1
 
     @pytest.mark.parametrize("n", range(1, len(_ESCRITAS_DO_TENANT) + 1))
     def test_falha_na_escrita_n_deixa_as_tabelas_identicas(

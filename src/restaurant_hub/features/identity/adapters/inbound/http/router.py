@@ -268,6 +268,12 @@ def provision_restaurant(
 ) -> ProvisionedRestaurantResponse:
     """Provisiona um tenant: o restaurante **e** o seu primeiro `owner`, tudo ou nada.
 
+    **O dono é convidado** (ADR 0.0.0018): o corpo leva só o e-mail dele, a conta
+    nasce pendente e o link de definição de senha sai por e-mail depois do
+    commit. A resposta não carrega token nem link. Se o envio falha, a resposta é
+    500 com o tenant já comitado, e o dono recupera pelo pedido público de
+    redefinição de senha.
+
     Exige `manage_platform`, isto é: **só `platform_admin`** (decisão do sponsor
     de 2026-07-19). `tenant_id=None` no comando de autorização porque esta é uma
     ação de plataforma, não de tenant — e um ator com tenant falha antes disso,
@@ -289,7 +295,6 @@ def provision_restaurant(
         ProvisionRestaurantCommand(
             name=payload.name,
             owner_email=Email(payload.owner.email),
-            owner_plain_password=payload.owner.password.get_secret_value(),
         )
     )
     return _provisioned_restaurant_response(result)

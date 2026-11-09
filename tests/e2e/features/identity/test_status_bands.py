@@ -24,7 +24,9 @@ from tests.e2e.features.identity.conftest import (
     auth,
     corpo_tenant,
     fazer_login,
+    login_do_dono,
 )
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.e2e
 
@@ -40,12 +42,12 @@ FAIXAS_DO_MAPA = (
 )
 
 
-async def _cenario_401(client: AsyncClient, _admin: dict) -> Response:
+async def _cenario_401(client: AsyncClient, _admin: dict, _caixa: RecordingEmailSender) -> Response:
     """Credencial ausente."""
     return await client.post(f"{API}/restaurants", json=corpo_tenant("X", "dono-x@x.com"))
 
 
-async def _cenario_403(client: AsyncClient, admin: dict) -> Response:
+async def _cenario_403(client: AsyncClient, admin: dict, _caixa: RecordingEmailSender) -> Response:
     """`platform_admin` não tem `manage_users` — escalada barrada."""
     return await client.post(
         f"{API}/users",
@@ -54,7 +56,7 @@ async def _cenario_403(client: AsyncClient, admin: dict) -> Response:
     )
 
 
-async def _cenario_404(client: AsyncClient, admin: dict) -> Response:
+async def _cenario_404(client: AsyncClient, admin: dict, _caixa: RecordingEmailSender) -> Response:
     """Restaurante do path não existe (o ator é global, então chega ao use case)."""
     return await client.post(
         f"{API}/restaurants/restaurante-inexistente/owners",
@@ -63,7 +65,7 @@ async def _cenario_404(client: AsyncClient, admin: dict) -> Response:
     )
 
 
-async def _cenario_409(client: AsyncClient, admin: dict) -> Response:
+async def _cenario_409(client: AsyncClient, admin: dict, _caixa: RecordingEmailSender) -> Response:
     """E-mail já registrado — unicidade global, imposta pelo índice do Postgres."""
     restaurante = (
         await client.post(
@@ -78,7 +80,7 @@ async def _cenario_409(client: AsyncClient, admin: dict) -> Response:
     )
 
 
-async def _cenario_422(client: AsyncClient, admin: dict) -> Response:
+async def _cenario_422(client: AsyncClient, admin: dict, caixa: RecordingEmailSender) -> Response:
     """Papel desconhecido — invariante de domínio violada pelo conteúdo enviado.
 
     Usa rota **autenticada** de propósito. Um 422 vindo só de rota pública
@@ -89,7 +91,7 @@ async def _cenario_422(client: AsyncClient, admin: dict) -> Response:
     await client.post(
         f"{API}/restaurants", json=corpo_tenant("Cantina", "dono-422@x.com"), headers=auth(admin)
     )
-    owner = await fazer_login(client, "dono-422@x.com")
+    owner = await login_do_dono(client, caixa, "dono-422@x.com")
     return await client.post(
         f"{API}/users",
         json={"email": "x@y.com", "password": SENHA_PADRAO, "role": "imperador"},
@@ -97,7 +99,9 @@ async def _cenario_422(client: AsyncClient, admin: dict) -> Response:
     )
 
 
-CENARIOS: dict[HTTPStatus, Callable[[AsyncClient, dict], Awaitable[Response]]] = {
+CENARIOS: dict[
+    HTTPStatus, Callable[[AsyncClient, dict, RecordingEmailSender], Awaitable[Response]]
+] = {
     HTTPStatus.UNAUTHORIZED: _cenario_401,
     HTTPStatus.FORBIDDEN: _cenario_403,
     HTTPStatus.NOT_FOUND: _cenario_404,
@@ -117,12 +121,15 @@ def test_toda_faixa_do_mapa_tem_cenario() -> None:
 
 @pytest.mark.parametrize("faixa", FAIXAS_DO_MAPA, ids=lambda f: str(int(f)))
 async def test_faixa_e_alcancavel_pela_api(
-    client: AsyncClient, admin_semeado: User, faixa: HTTPStatus
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
+    faixa: HTTPStatus,
 ) -> None:
     """Cada uma das cinco faixas é produzida por uma requisição real."""
     admin = await fazer_login(client, ADMIN_EMAIL)
 
-    resposta = await CENARIOS[faixa](client, admin)
+    resposta = await CENARIOS[faixa](client, admin, caixa_de_entrada)
 
     assert resposta.status_code == faixa, resposta.text
 
@@ -133,7 +140,7 @@ async def test_faixa_e_alcancavel_pela_api(
 
 
 async def test_convite_com_email_contendo_nul_e_422_e_nao_500(
-    client: AsyncClient, admin_semeado: User
+    client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
 ) -> None:
     """Medido no Checkpoint A da Stage 3.5: era **500**.
 
@@ -150,7 +157,7 @@ async def test_convite_com_email_contendo_nul_e_422_e_nao_500(
     await client.post(
         f"{API}/restaurants", json=corpo_tenant("Cantina", "dono-nul@x.com"), headers=auth(admin)
     )
-    owner = await fazer_login(client, "dono-nul@x.com")
+    owner = await login_do_dono(client, caixa_de_entrada, "dono-nul@x.com")
 
     resposta = await client.post(
         f"{API}/users/invitations",

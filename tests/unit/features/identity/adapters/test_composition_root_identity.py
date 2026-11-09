@@ -116,6 +116,7 @@ def test_o_adapter_de_email_do_grafo_e_o_console_sender() -> None:
 
     assert isinstance(deps.identity_invite_user._email_sender, ConsoleSender)
     assert isinstance(deps.identity_request_password_reset._email_sender, ConsoleSender)
+    assert isinstance(deps.identity_provision_restaurant._email_sender, ConsoleSender)
 
 
 def test_costura_de_email_sender_substitui_apenas_o_envio() -> None:
@@ -130,6 +131,7 @@ def test_costura_de_email_sender_substitui_apenas_o_envio() -> None:
     deps = wire_dependencies(Settings(_env_file=None), email_sender=outro)
 
     assert deps.identity_invite_user._email_sender is outro
+    assert deps.identity_provision_restaurant._email_sender is outro
     assert isinstance(deps.identity_authenticate_user._users, PostgresUserRepository)
     assert isinstance(deps.identity_invite_user._hasher, Argon2PasswordHasher)
 
@@ -167,10 +169,11 @@ _COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[s
         lambda d: d.staff_identity_gateway._facade._provision_account,
         {"_users", "_restaurants", "_units", "_tokens"},
     ),
-    # Issue #67 — restaurante e dono (ADR 0.0.0014).
+    # Issue #67 — restaurante e dono (ADR 0.0.0014); #114 — e o token do convite
+    # do dono (ADR 0.0.0018).
     "provision_restaurant": (
         lambda d: d.identity_provision_restaurant,
-        {"_restaurants", "_users"},
+        {"_restaurants", "_users", "_tokens"},
     ),
     "request_password_reset": (
         lambda d: d.identity_request_password_reset,
@@ -275,6 +278,7 @@ def test_ttls_do_token_de_setup_vem_da_configuracao() -> None:
     deps = wire_dependencies(cfg)
 
     assert deps.identity_invite_user._invitation_ttl == timedelta(hours=5)
+    assert deps.identity_provision_restaurant._invitation_ttl == timedelta(hours=5)
     assert deps.identity_request_password_reset._reset_ttl == timedelta(minutes=11)
 
 

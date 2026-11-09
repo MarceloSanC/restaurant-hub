@@ -124,6 +124,18 @@ def test_create_owner_request_nao_aceita_role() -> None:
     assert "role" not in schemas.CreateOwnerRequest.model_fields
 
 
+def test_dono_convidado_no_provisionamento_so_tem_o_email() -> None:
+    """ADR 0.0.0018 — a senha do dono não transita pela API de plataforma.
+
+    Conjunto **exato**: um campo `password` (ou `role`) que voltasse ao schema
+    reprova aqui, antes de qualquer rota o ler.
+    """
+    assert set(schemas.InviteOwnerRequest.model_fields) == {"email"}
+    assert schemas.ProvisionRestaurantRequest.model_fields["owner"].annotation is (
+        schemas.InviteOwnerRequest
+    )
+
+
 def test_campo_extra_no_corpo_e_ignorado_e_nao_rejeitado() -> None:
     """Política de `extra` fixada de propósito (Task 07 do technical).
 

@@ -44,5 +44,14 @@ class RecordingEmailSender:
             raise self._fail_with
         self._sent.append(message)
 
+    def start_failing(self, error: Exception) -> None:
+        """Passa a falhar a partir de agora, com `error`.
+
+        Existe para o teste cujo cenário já manda e-mail antes do passo que mede
+        a falha — desde a issue #114 o provisionamento do dono convida por e-mail,
+        e uma caixa quebrada desde o construtor derrubaria o cenário.
+        """
+        self._fail_with = error
+
 
 _conforms: EmailSender = RecordingEmailSender()

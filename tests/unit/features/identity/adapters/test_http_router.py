@@ -120,8 +120,16 @@ class _Ambiente:
                     restaurants=self.restaurants,
                     users=self.users,
                     hasher=self.hasher,
+                    tokens=self.setup_tokens,
+                    token_issuer=FakeSetupTokenIssuer(),
+                    email_sender=self.sender,
                     id_generator=FakeIdGenerator(),
-                    unit_of_work=InMemoryUnitOfWork(self.restaurants, self.users),
+                    clock=self.clock,
+                    invitation_ttl=timedelta(hours=72),
+                    base_url="https://app.exemplo.com",
+                    unit_of_work=InMemoryUnitOfWork(
+                        self.restaurants, self.users, self.setup_tokens
+                    ),
                 ),
                 router_module._get_create_unit: lambda: CreateUnitUseCase(
                     units=self.units,
@@ -210,8 +218,12 @@ async def client(ambiente: _Ambiente) -> Iterator[AsyncClient]:
 
 
 def _tenant(nome: str = "Cantina", email: str = "dono@cantina.com") -> dict[str, object]:
-    """Corpo de `POST /restaurants`: o restaurante e o seu primeiro dono (issue #67)."""
-    return {"name": nome, "owner": {"email": email, "password": _SENHA}}
+    """Corpo de `POST /restaurants`: o restaurante e o e-mail do primeiro dono.
+
+    Issue #67 (ADR 0.0.0014) juntou restaurante e dono; a #114 (ADR 0.0.0018)
+    tirou a senha — o dono é convidado.
+    """
+    return {"name": nome, "owner": {"email": email}}
 
 
 async def test_platform_admin_provisiona_restaurante_com_dono(
@@ -234,7 +246,67 @@ async def test_platform_admin_provisiona_restaurante_com_dono(
     assert RestaurantId(corpo["id"]) in ambiente.restaurants.restaurants
     dono = ambiente.users.users[UserId(corpo["owner"]["id"])]
     assert (dono.role, dono.tenant_id) == (Role.OWNER, corpo["id"])
-    assert ambiente.users.password_hashes[dono.id] == ambiente.hasher.hash(_SENHA)
+    assert ambiente.users.password_hashes[dono.id].startswith("unusable::")
+    assert [m.to for m in ambiente.sender.sent] == ["dono@cantina.com"]
+
+
+async def test_senha_enviada_por_cliente_antigo_nao_vira_a_senha_do_dono(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """ADR 0.0.0018 — a senha do dono não transita pela API de plataforma.
+
+    O schema não tem o campo; uma `password` enviada mesmo assim é descartada como
+    todo campo extra (nota 3 de `schemas.py`) e nunca chega ao hasher: o dono
+    nasce pendente, e só o link do convite define a senha dele.
+    """
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+    corpo = _tenant()
+    corpo["owner"] = {"email": "dono@cantina.com", "password": _SENHA}
+
+    resposta = await client.post("/api/v1/restaurants", json=corpo, headers=ambiente.auth(admin))
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    gravado = ambiente.users.password_hashes[UserId(resposta.json()["owner"]["id"])]
+    assert gravado != ambiente.hasher.hash(_SENHA)
+    assert ambiente.hasher.verify(_SENHA, gravado) is False
+    assert _SENHA not in ambiente.sender.sent[0].body_text
+
+
+async def test_resposta_do_provisionamento_nao_carrega_o_link_do_convite(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """O link existe só no e-mail (regra 1 da 2.5): nem token nem link na resposta."""
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+
+    resposta = await client.post(
+        "/api/v1/restaurants", json=_tenant(), headers=ambiente.auth(admin)
+    )
+
+    corpo_do_email = ambiente.sender.sent[0].body_text
+    _, _, resto = corpo_do_email.partition("token=")
+    assert resto.split()[0] not in resposta.text
+    assert "token" not in resposta.text
+
+
+async def test_falha_do_sender_no_provisionamento_devolve_500(ambiente: _Ambiente) -> None:
+    """ADR 0.0.0018 §4 — a falha de envio sobe como 5xx, com o tenant já comitado.
+
+    `raise_app_exceptions=False` pelo mesmo motivo do teste de convite abaixo.
+    """
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+    ambiente.sender.quebrar()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=ambiente.app, raise_app_exceptions=False),
+        base_url="http://t",
+    ) as cliente:
+        resposta = await cliente.post(
+            "/api/v1/restaurants", json=_tenant(), headers=ambiente.auth(admin)
+        )
+
+    assert resposta.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+    assert len(ambiente.restaurants.restaurants) == 1
+    assert ambiente.users.exists_by_email(Email("dono@cantina.com")) is True
 
 
 async def test_resposta_do_provisionamento_nao_carrega_a_senha(
@@ -304,7 +376,7 @@ async def test_papel_no_corpo_do_dono_e_ignorado(ambiente: _Ambiente, client: As
     """ADR 2.4.0003 §2b — nenhuma rota emite `platform_admin`: o papel não vem do request."""
     admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
     corpo = _tenant()
-    corpo["owner"] = {"email": "dono@cantina.com", "password": _SENHA, "role": "platform_admin"}
+    corpo["owner"] = {"email": "dono@cantina.com", "role": "platform_admin"}
 
     resposta = await client.post("/api/v1/restaurants", json=corpo, headers=ambiente.auth(admin))
 

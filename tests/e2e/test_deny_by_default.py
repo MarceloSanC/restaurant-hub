@@ -59,7 +59,15 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
 from tests.conftest import truncar_tudo
-from tests.e2e.features.identity.conftest import ADMIN_EMAIL, API, SENHA_PADRAO, auth, fazer_login
+from tests.e2e.features.identity.conftest import (
+    ADMIN_EMAIL,
+    API,
+    SENHA_PADRAO,
+    auth,
+    fazer_login,
+    login_do_dono,
+)
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.e2e
 
@@ -152,10 +160,16 @@ def _settings(database_url: str) -> Settings:
 
 
 @pytest.fixture
-def app_gate(engine: Engine, database_url: str) -> FastAPI:
+def caixa_gate() -> RecordingEmailSender:
+    """Captura os e-mails: o dono provisionado entra pelo convite (ADR 0.0.0018)."""
+    return RecordingEmailSender()
+
+
+@pytest.fixture
+def app_gate(engine: Engine, database_url: str, caixa_gate: RecordingEmailSender) -> FastAPI:
     """App real, montada pelo composition root de produção, com banco limpo."""
     truncar_tudo(engine)
-    return create_app(_settings(database_url))
+    return create_app(_settings(database_url), email_sender=caixa_gate)
 
 
 @pytest.fixture
@@ -495,7 +509,9 @@ async def test_rota_publica_nao_recusa_por_falta_de_credencial(
 
 
 @pytest.fixture
-async def token_sem_permissao(client_gate: AsyncClient, admin_gate: User) -> dict[str, str]:
+async def token_sem_permissao(
+    client_gate: AsyncClient, admin_gate: User, caixa_gate: RecordingEmailSender
+) -> dict[str, str]:
     """Um `employee` autenticado — o papel cujo conjunto de permissões é vazio.
 
     `Role.EMPLOYEE` mapeia para `frozenset()` (`role.py`), então ele é negado em
@@ -513,11 +529,11 @@ async def token_sem_permissao(client_gate: AsyncClient, admin_gate: User) -> dic
     restaurante = (
         await client_gate.post(
             f"{API}/restaurants",
-            json={"name": "Gate 2", "owner": {"email": email_owner, "password": SENHA_PADRAO}},
+            json={"name": "Gate 2", "owner": {"email": email_owner}},
             headers=auth(admin),
         )
     ).json()["id"]
-    owner = await fazer_login(client_gate, email_owner)
+    owner = await login_do_dono(client_gate, caixa_gate, email_owner)
 
     unidade = (
         await client_gate.post(

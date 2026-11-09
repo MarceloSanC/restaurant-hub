@@ -32,17 +32,18 @@ class ProvisionRestaurantCommand:
     0.0.0014 §3, ADR 2.4.0003 §2b). Sem `tenant_id`: o tenant do dono é o
     restaurante que nasce junto com ele.
 
+    **Sem senha** (ADR 0.0.0018): o dono nasce como conta pendente e define a
+    própria senha pelo link do convite — a plataforma não escolhe, não conhece e
+    não transporta a credencial dele.
+
     Attributes:
         name: nome do restaurante.
-        owner_email: e-mail de login do dono; a unicidade é global.
-        owner_plain_password: senha em claro do dono — só atravessa o
-            `PasswordHasher`, nunca é persistida nem devolvida.
+        owner_email: e-mail de login do dono, para onde vai o convite; a
+            unicidade é global.
     """
 
     name: str
     owner_email: Email
-    # `repr=False` — ver `CreateUserCommand`.
-    owner_plain_password: str = field(repr=False)
 
 
 @dataclass(frozen=True)

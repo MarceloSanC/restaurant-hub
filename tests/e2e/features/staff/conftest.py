@@ -39,6 +39,8 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
 from tests.conftest import truncar_tudo
+from tests.e2e.features.identity.conftest import login_do_dono
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 SENHA_PADRAO = "s3nha-de-teste-e2e"
 ADMIN_EMAIL = "admin-staff@plataforma.com"
@@ -56,14 +58,23 @@ def settings_e2e(database_url: str) -> Settings:
 
 
 @pytest.fixture
-def app_e2e(engine: Engine, settings_e2e: Settings) -> object:
+def caixa_de_entrada() -> RecordingEmailSender:
+    """Captura os e-mails: o dono provisionado entra pelo convite (ADR 0.0.0018)."""
+    return RecordingEmailSender()
+
+
+@pytest.fixture
+def app_e2e(
+    engine: Engine, settings_e2e: Settings, caixa_de_entrada: RecordingEmailSender
+) -> object:
     """App real, montada pelo composition root de produção, com banco limpo.
 
     O `TRUNCATE` roda **antes** do teste: quando um teste falha, o estado que ele
-    deixou permanece para diagnóstico, e ainda assim o próximo começa limpo.
+    deixou permanece para diagnóstico, e ainda assim o próximo começa limpo. Só o
+    `EmailSender` é trocado, pela costura do composition root.
     """
     truncar_tudo(engine)
-    return create_app(settings_e2e)
+    return create_app(settings_e2e, email_sender=caixa_de_entrada)
 
 
 @pytest.fixture
@@ -115,7 +126,9 @@ def admin_semeado(engine: Engine, app_e2e: object) -> User:
 
 
 @pytest.fixture
-async def cenario(client: AsyncClient, admin_semeado: User) -> Cenario:
+async def cenario(
+    client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
+) -> Cenario:
     """Provisiona restaurante, duas unidades e os atores — **tudo pela API**.
 
     O `manager` é membro das **duas** unidades de propósito: o alcance dele é
@@ -129,13 +142,13 @@ async def cenario(client: AsyncClient, admin_semeado: User) -> Cenario:
         f"{API}/restaurants",
         json={
             "name": "Cantina do Zé",
-            "owner": {"email": "dono@cantina.com", "password": SENHA_PADRAO},
+            "owner": {"email": "dono@cantina.com"},
         },
         headers=auth(admin),
     )
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
     restaurante_id = resposta.json()["id"]
-    owner = await fazer_login(client, "dono@cantina.com")
+    owner = await login_do_dono(client, caixa_de_entrada, "dono@cantina.com")
 
     unidades = []
     for nome in ("Filial Centro", "Filial Praia"):

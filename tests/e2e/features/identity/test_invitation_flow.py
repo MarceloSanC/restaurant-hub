@@ -40,6 +40,7 @@ from tests.e2e.features.identity.conftest import (
     auth,
     corpo_tenant,
     fazer_login,
+    login_do_dono,
 )
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
@@ -103,9 +104,13 @@ def _link_do_ultimo_email(caixa: RecordingEmailSender) -> str:
 
 
 async def _montar_restaurante_com_owner(
-    client: AsyncClient, email_do_owner: str = "dono@cantina.com"
+    client: AsyncClient, caixa: RecordingEmailSender, email_do_owner: str = "dono@cantina.com"
 ) -> tuple[str, dict]:
-    """Semeia o cenário mínimo: um restaurante e o seu `owner` autenticado."""
+    """Semeia o cenário mínimo: um restaurante e o seu `owner` autenticado.
+
+    O owner é convidado (ADR 0.0.0018): o primeiro e-mail da caixa é o convite
+    dele, e ele define a senha pelo link antes do login.
+    """
     tokens_admin = await fazer_login(client, ADMIN_EMAIL)
 
     resposta = await client.post(
@@ -116,7 +121,7 @@ async def _montar_restaurante_com_owner(
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
     restaurant_id = resposta.json()["id"]
 
-    tokens_owner = await fazer_login(client, email_do_owner)
+    tokens_owner = await login_do_dono(client, caixa, email_do_owner)
     return restaurant_id, tokens_owner
 
 
@@ -141,8 +146,11 @@ class TestFluxoCompletoDeConvite:
         )
         assert convite.status_code == HTTPStatus.CREATED, convite.text
 
-        assert len(caixa_de_entrada.sent) == 1
-        assert caixa_de_entrada.sent[0].to == "convidado@cantina.com"
+        # O primeiro é o convite do dono, que o provisionamento enviou (ADR 0.0.0018).
+        assert [m.to for m in caixa_de_entrada.sent] == [
+            "dono@cantina.com",
+            "convidado@cantina.com",
+        ]
         token = _link_do_ultimo_email(caixa_de_entrada)
 
         definir = await client_com_captura.post(
@@ -324,7 +332,10 @@ class TestAutorizacaoDoConvite:
         )
 
         assert segunda.status_code == HTTPStatus.CONFLICT
-        assert len(caixa_de_entrada.sent) == 1
+        assert [m.to for m in caixa_de_entrada.sent] == [
+            "dono@cantina.com",
+            "convidado@cantina.com",
+        ]
 
 
 class TestRedefinicaoDeSenha:

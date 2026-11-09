@@ -19,12 +19,16 @@ from tests.e2e.features.identity.conftest import (
     auth,
     corpo_tenant,
     fazer_login,
+    login_do_dono,
 )
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.e2e
 
 
-async def test_cadeia_completa_de_provisionamento(client: AsyncClient, admin_semeado: User) -> None:
+async def test_cadeia_completa_de_provisionamento(
+    client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
+) -> None:
     """CA18 — a cadeia inteira, do login do admin ao 403 do funcionário.
 
     Cada passo usa o token emitido pelo passo anterior, então o teste também
@@ -49,8 +53,8 @@ async def test_cadeia_completa_de_provisionamento(client: AsyncClient, admin_sem
     # O tenant do owner é o restaurante que nasceu junto com ele.
     assert resposta.json()["owner"]["tenant_id"] == restaurante_id
 
-    # 4. o owner faz login
-    owner = await fazer_login(client, "dono@cantina.com")
+    # 4. o owner define a senha pelo convite (ADR 0.0.0018) e faz login
+    owner = await login_do_dono(client, caixa_de_entrada, "dono@cantina.com")
 
     # 5. o owner cria uma unidade
     resposta = await client.post(
@@ -111,7 +115,9 @@ async def test_restaurante_inexistente_devolve_404_e_nao_grava_usuario(
     assert depois == antes
 
 
-async def test_owner_nao_cria_restaurante(client: AsyncClient, admin_semeado: User) -> None:
+async def test_owner_nao_cria_restaurante(
+    client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
+) -> None:
     """CA11 — só `platform_admin` cria tenant, agora contra o banco real."""
     admin = await fazer_login(client, admin_semeado.email.value)
     await client.post(
@@ -119,7 +125,7 @@ async def test_owner_nao_cria_restaurante(client: AsyncClient, admin_semeado: Us
         json=corpo_tenant("Cantina", "dono@cantina.com"),
         headers=auth(admin),
     )
-    owner = await fazer_login(client, "dono@cantina.com")
+    owner = await login_do_dono(client, caixa_de_entrada, "dono@cantina.com")
 
     resposta = await client.post(
         f"{API}/restaurants",
@@ -194,7 +200,7 @@ async def test_email_do_dono_ocupado_nao_deixa_restaurante_orfao(
 
 
 async def test_dono_provisionado_opera_o_proprio_restaurante_e_so_ele(
-    client: AsyncClient, admin_semeado: User
+    client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
 ) -> None:
     """O dono que nasce com o restaurante tem o tenant certo: cria unidade no dele
     e é barrado no de outro."""
@@ -211,7 +217,7 @@ async def test_dono_provisionado_opera_o_proprio_restaurante_e_so_ele(
             headers=auth(admin),
         )
     ).json()["id"]
-    dono = await fazer_login(client, "dono@meu.com")
+    dono = await login_do_dono(client, caixa_de_entrada, "dono@meu.com")
 
     no_meu = await client.post(
         f"{API}/restaurants/{meu}/units", json={"name": "Centro"}, headers=auth(dono)
