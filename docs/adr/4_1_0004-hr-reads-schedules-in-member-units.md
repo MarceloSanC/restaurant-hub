@@ -51,8 +51,8 @@ Forces:
 - `workforce.md` §4 says *"é NO STAFF que hr diverge do manager"*; ADR 3.4.0006 placed the
   divergence on the scheduling axis instead, and the Stage 3.6 concept (finding, lines 926–933)
   asked for a dated note in `workforce.md` §4 when the divergence became text.
-- The `employee` role has an empty permission set today (`role.py` 77) and must gain one to see
-  "my schedule" ([ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md) 231–234) — so a
+- The `employee` role has an empty permission set today (`role.py` › `_ROLE_PERMISSIONS`, entry `Role.EMPLOYEE`) and must gain one to see
+  "my schedule" ([ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md) › "holds no permission at all") — so a
   read-type capability distinct from "manage" is born in Step 4 regardless of hr.
 
 ## Decision
@@ -141,7 +141,7 @@ would have made the read grant a violation without this record.
 
 - Related ADRs: [ADR 3.4.0006](./3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)
   (superseded in part — §3; errata 2026-09-13); [ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md)
-  (fail-closed axes; `employee` needs a permission, 231–234); [ADR 2.4.0003](./2_4_0003-authorization-composition-at-boundary.md)
+  (fail-closed axes; `employee` needs a permission, ADR 2.2.0002 › "holds no permission at all"); [ADR 2.4.0003](./2_4_0003-authorization-composition-at-boundary.md)
   (permission set declared per route); [ADR 3.4.0008](./3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)
   (unit exemption by permission); [ADR 2.1.0001](./2_1_0001-identity-aggregates-and-membership.md)
   (owner visibility bypass).
@@ -151,8 +151,8 @@ would have made the read grant a violation without this record.
   PR); `docs/stages/3.6-staff-http/concept.md` 926–933 (finding that asked for it).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.7,
   §4, §6.
-- `src/restaurant_hub/features/identity/domain/value_objects/role.py` (lines 50–52, 77);
-  `permission.py` (8–9, 32–44).
+- `src/restaurant_hub/features/identity/domain/value_objects/role.py` › `_ROLE_PERMISSIONS` (its comment; entry `Role.EMPLOYEE`);
+  `permission.py` › `__doc__`, `TENANT_WIDE_PERMISSIONS`.
 - Sponsor decisions: 2026-08-12 (ADR 3.4.0006 — "apenas o gerente ou dono pode mexer na
   escala"); 2026-09-13, fork F5 — *"Sim — leitura nas suas unidades"* (session record
   `gate-decisions.md`).

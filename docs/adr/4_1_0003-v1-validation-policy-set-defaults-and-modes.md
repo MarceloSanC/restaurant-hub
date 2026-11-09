@@ -47,7 +47,7 @@ Forces:
   compensation/hours bank — CLT 59 §§ 2º/5º/6º).
 - Kickoff decision #11 models the "extra period" as a **classification** ("counts or not toward
   the contracted workload") without money, with the real effect in 4.x; the code
-  (`workload_profile.py` 35–39) places the classification on the **allocation**. Its default and
+  (`workload_profile.py` › `OnDemand`) places the classification on the **allocation**. Its default and
   the direction of the workload policy were open.
 - The skeptic review (finding #2) noted that the same person may hold N employee records in N
   units (`workforce.md` §3.1) while the legal limits belong to the employee vis-à-vis the
@@ -257,7 +257,7 @@ enters as a new strategy in the same protocol, still configurable per `overview.
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §1, §2, §3.1, §3.3, §3.4, §3.6.
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.4,
   §3.6, §6.
-- `src/restaurant_hub/features/staff/domain/value_objects/workload_profile.py` lines 35–39;
+- `src/restaurant_hub/features/staff/domain/value_objects/workload_profile.py` › `OnDemand`;
   kickoff decision #11 (project memory).
 - Sponsor decisions F4 (2026-09-13) and F9 (2026-09-14) — session record `gate-decisions.md`.
 - External (primary; verified on the Planalto consolidated text by direct download on

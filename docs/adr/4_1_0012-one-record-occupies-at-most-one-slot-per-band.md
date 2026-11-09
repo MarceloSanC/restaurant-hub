@@ -40,8 +40,8 @@ cap, the contracted workload and the hub.
 
 Two forces framed the question:
 
-- The overlap policy's default mode is **`block`**, and ADR 4.1.0003 (c) (lines
-  95–97) states why: `block` is reserved for **physical impossibility** — *"`block`
+- The overlap policy's default mode is **`block`**, and ADR 4.1.0003 (c) ›
+  "block only for physical impossibility" states why: `block` is reserved for **physical impossibility** — *"`block`
   for overlap (one person in two places)"*. Its only configurable dimension is the
   mode, so that a tenant may *"tolerar sobreposição deliberada de troca 'na porta'"*
   (`shift-scheduling.md` §3.6.1 › "Configurável: só o modo").
@@ -215,9 +215,9 @@ aggregate with a dedicated exception, `DuplicateAssignmentInBandError`.
 - Related ADRs:
   [ADR 4.1.0002](./4_1_0002-weekly-period-operational-day-and-allocation-hours.md) §3
   (the single counting rule, correct again without a second definition);
-  [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md) (a)
-  line 73 (the overlap row: *"— (physical impossibility) | **block**"*), (c) lines
-  95–97 (*"`block` for overlap (one person in two places)"*) and (g) (`N` is a
+  [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md) (a) ›
+  "Overlap | same record" (the overlap row: *"— (physical impossibility) | **block**"*), (c) › "block only for physical impossibility"
+  (*"`block` for overlap (one person in two places)"*) and (g) (`N` is a
   target, not a cap, so an uncovered slot is legitimate);
   [ADR 4.1.0007](./4_1_0007-time-range-as-naive-minute-instants.md) (the single hours
   computation site that Alternative B would duplicate);

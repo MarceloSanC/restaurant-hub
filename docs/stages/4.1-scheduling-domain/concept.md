@@ -85,7 +85,7 @@ depends_on: [3.1-staff-domain]
   pureza de `scheduling.domain` e inclusão de `scheduling` no contrato
   `bc-independence`, mais os pacotes-placeholder
   `features/scheduling/{application,adapters}/` exigidos por
-  `scripts/check_layout.py` (`REQUIRED_FEATURE_DIRS`, linha 130).
+  `scripts/check_layout.py` › `REQUIRED_FEATURE_DIRS`.
 
 ### Fora do escopo (explicitamente)
 
@@ -105,7 +105,7 @@ depends_on: [3.1-staff-domain]
   elegibilidades 1 e 2, esta última literalmente *"erro estrutural, não política"*).
   A 4.1 **não tem o dado**: `EmployeeId` é string opaca e o domínio não conhece a
   unidade nem o estado do registro. As duas são impostas na **4.3**, pela lei do
-  `StaffReadPort` (o lookup exige a unidade — ADR 3.4.0007 57–64) antes de chamar
+  `StaffReadPort` (o lookup exige a unidade — ADR 3.4.0007 › "The unit becomes part of the address, in the port signature") antes de chamar
   `Schedule.assign`; ver §8. Estrutural, aqui, significa *impossível de
   representar com o que o agregado tem*.
 - **A "semana de apuração"** como conceito próprio: na v1 ela **coincide** com o
@@ -126,12 +126,12 @@ depends_on: [3.1-staff-domain]
   desligamento. Idem a **guarda de remoção por port de consulta reverso**.
 - **Fuso horário:** nenhum objeto desta Stage guarda fuso. Faixas são wall-clock
   ingênuo da unidade; o fuso é `Unit.timezone`, de identity, lido por port
-  (ADR 4.1.0005; ADR 3.1.0005 28–31).
+  (ADR 4.1.0005; ADR 3.1.0005 › "The unit's timezone lives in configuration outside staff").
 - **Rascunho, versão publicada e evento de publicação** — não existem como
   estado (ADR 4.1.0001 §1). Ver §1 Divergências, item 4.
 - **Ator, carimbo de tempo e histórico** no domínio — o histórico é a trilha de
   auditoria da 4.4; staff estabeleceu o precedente de domínio sem `Clock`
-  (ADR 3.2.0006 155–157).
+  (ADR 3.2.0006 › "The state is a boolean, not a dated event").
 - **Mapa período nomeado → faixas concretas** (doc §3.2) — sem Stage dona;
   proposta do gate: 5.1, primeiro consumidor.
 - **`domain/services/`** — não nasce nesta Stage. `LAYOUT.md` §2 marca o
@@ -157,9 +157,9 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
 
 1. **`arquivos_a_modificar` deixa de ser `[]`.** Entra o `.importlinter`, com
    **dois** movimentos: o contrato novo `scheduling-domain-purity` (espelho de
-   `staff-domain-purity`, linhas 197–217) e a inclusão de
-   `restaurant_hub.features.scheduling` no contrato `bc-independence` (linhas
-   271–277, antes da 4.1 só `identity` e `staff`) — a lacuna que o doc de domínio
+   `staff-domain-purity` — `.importlinter` › `[importlinter:contract:staff-domain-purity]`) e a inclusão de
+   `restaurant_hub.features.scheduling` no contrato `bc-independence` (`.importlinter` ›
+   `[importlinter:contract:bc-independence]`, antes da 4.1 só `identity` e `staff`) — a lacuna que o doc de domínio
    endereça ao `technical.md` da 4.1 (§3.10). Precedente literal: a 3.1 fez o
    mesmo par de movimentos para o BC staff.
 2. **`arquivos_a_criar` cresce em quatro frentes.** (a) placeholders
@@ -185,7 +185,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    quem/quando)"* e o DoD (§Stage 4.1 › `definition_of_done`) fala em *"montagem e publicação"*; o
    **ADR 4.1.0001 §1** (posterior e `accepted`) aboliu rascunho e versão
    publicada — *"There is **no draft on the server** and **no published version
-   separate from the schedule being edited**"* (linha 58) — e mandou o histórico
+   separate from the schedule being edited**"* (ADR 4.1.0001 §1 › "There is no draft on the server") — e mandou o histórico
    para a trilha de auditoria da 4.4. Logo **não há entidade, estado nem método
    de publicação** nesta Stage: o que resta de F1/F8 no domínio é o **contador
    de versão**. O DoD lê-se como "montagem da escala com invariantes cobertas por
@@ -203,7 +203,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
 6. **`contratos_consumidos` é mais estreito do que parece.**
    `EmployeeId/JobFunctionId de staff` lê-se como **emitidos** por staff:
    scheduling **tipa os seus**, e importar os de staff é violação medida
-   (doc §3.10; ADR 3.4.0001 106–113). Nenhuma linha de `features.staff` é
+   (doc §3.10; ADR 3.4.0001 › "the promise that justified it"). Nenhuma linha de `features.staff` é
    importada. O único contrato consumido de fora do BC é `DomainError`
    (`shared/domain`).
 7. **`depends_on` é `3.1-staff-domain`**, corrigido de `3.5-employee-login-link`
@@ -252,7 +252,7 @@ seguintes do Step 4.
     coluna *Configurable*; (c)): a mesma regra que é `block` num tenant é `warn`
     noutro, e uma invariante estrutural tornaria o `warn` impossível;
   - **alocação × indisponibilidade** é **`block` fixo — *"Configurable:
-    nothing"*** (ADR 4.1.0003 (a), linha 74; (c) confirma o bloqueio fixo). A razão
+    nothing"*** (ADR 4.1.0003 (a) › "overlap with an unavailability period of the record"; (c) confirma o bloqueio fixo). A razão
     de ela não ser invariante **aqui** não é o modo: é que **o dado não existe
     neste BC** — indisponibilidade é de staff e chega por `StaffReadPort` na 4.3.
     Quem sustenta a invariante do doc §3.6.6 (*"a escala vigente nunca contém
@@ -265,7 +265,7 @@ seguintes do Step 4.
   agregado tem** (§5.18) — e a decisão do sponsor de 2026-09-27 acrescentou uma
   precisão a isso: o **sub-caso degenerado** da sobreposição, a mesma pessoa em
   duas vagas da **mesma** faixa, é impossibilidade física (*"one person in two
-  places"*, ADR 4.1.0003 (c) linhas 95–97) e virou **invariante** (§5.23). A
+  places"*, ADR 4.1.0003 (c) › "block only for physical impossibility") e virou **invariante** (§5.23). A
   política de sobreposição **continua não sendo** invariante: o seu escopo são
   faixas **distintas**, inclusive parcialmente sobrepostas.
 - **Dia operacional e faixa** (ADR 4.1.0002): o dia é uma janela de 24h a partir
@@ -289,7 +289,7 @@ seguintes do Step 4.
   (§5.21, §10).
 - **Tempo em dois regimes** (doc §3.9): faixas em wall-clock **ingênuo** da
   unidade (o mesmo regime da indisponibilidade de staff, para cruzar sem
-  conversão — ADR 3.1.0005 41–46); carimbos de auditoria em instante absoluto
+  conversão — ADR 3.1.0005 › "stores naive datetime values whose meaning is wall-clock time"); carimbos de auditoria em instante absoluto
   UTC — estes últimos **na 4.4**, não aqui.
 - **Fronteira com staff:** scheduling **lê** funcionário e função por id e por
   dados, via `StaffReadPort` da 4.3; o domínio da 4.1 só conhece **strings
@@ -372,7 +372,7 @@ seguintes do Step 4.
   (`MONDAY`…`SUNDAY`), com `from_date(day: date)` (via `isoweekday()`) e
   `from_string(value: str)` → `InvalidWeekdayError` (espelho de
   `DayPeriod.from_string` de staff —
-  `staff/domain/value_objects/shift_preference.py` 33, idem `Role.from_string` de
+  `staff/domain/value_objects/shift_preference.py` › `DayPeriod.from_string`, idem `Role.from_string` de
   identity, ADR 3.4.0003 §3: conversão de texto falha como erro de domínio, não
   como `ValueError` cru do `StrEnum`).
 
@@ -389,9 +389,9 @@ seguintes do Step 4.
   ```
 
   `at` **não tem teto** na v1, e isto é **decisão do sponsor de 2026-09-27**
-  (resposta literal: *"Sem teto (Recomendada)"*), confirmando o ADR 4.1.0002 §2
-  (linhas 70–79: o corte é *"configured per restaurant"* e o default 05:00 é
-  *"a default only, configurable, with no force of rule"*). Consequência real, e
+  (resposta literal: *"Sem teto (Recomendada)"*), confirmando o ADR 4.1.0002
+  §2 › "configured per restaurant", "a default only, configurable, with no force of rule" (o corte é *"configured per restaurant"*
+  e o default 05:00 é *"a default only, configurable, with no force of rule"*). Consequência real, e
   **limite/erro de configuração**, não regra do domínio: com `at = 23:00`, o
   jantar de sexta 22:00 tem dia operacional **quinta** — muda o rótulo do dia, a
   semana de apuração e a pertinência ao período de toda a casa, por uma edição de
@@ -675,8 +675,8 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
 5. **Faixa:** `start < end`; instantes **ingênuos** (tz-aware é recusado) e de
    **minuto inteiro**; duração nominal **≤ 24h**; semântica **semi-aberta**
    `[start, end)` — adjacentes não se sobrepõem, o instante `end` não é
-   trabalhado (doc §3.2; ADR 3.1.0001 47–51, decisão (i), com o literal
-   *"adjacent intervals do not conflict"* na linha 50; ADR 4.1.0007/4.1.0008).
+   trabalhado (doc §3.2; ADR 3.1.0001 §Decision (i) ›
+   "Unavailability is a DATETIME interval with half-open", "adjacent intervals do not conflict"; ADR 4.1.0007/4.1.0008).
 6. **Intervalo declarado nos dois níveis** (decisão do sponsor, 2026-09-26:
    *"pode ser na alocacao e na faixa, mas precisa apontar conflito, e perguntar
    qual horario quer manter"* — ADR 4.1.0011; errata no ADR 4.1.0002):
@@ -715,7 +715,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
    a interseção duas vezes. Isso **não** é estado degenerado do agregado: são dois
    turnos distintos, e quem o governa é a **política de sobreposição** (default
    `block`, reservado à impossibilidade física; em `warn`, o tenant o aceita
-   ciente — ADR 4.1.0003 (a) linha 73 e (c) linhas 95–97).
+   ciente — ADR 4.1.0003 (a) › "same record, start_A < end_B ∧ start_B < end_A (half-open)"; (c) › "block only for physical impossibility").
    **Lacuna endereçada à 4.2:** como o teto diário/semanal, a carga e as "horas
    escaladas" do hub tratam a interseção de **faixas distintas** sobrepostas
    aceitas em `warn`. Ver §10.
@@ -768,8 +768,8 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
 
     **A v1 não expõe mutação para `function_exception`** — e a razão é atribuição,
     não regra: o ADR 4.1.0003 (f) manda para a **4.2** a pergunta "a exceção é
-    reavaliada quando o registro ganha ou perde a função" (*"is a Stage 4.2
-    concept gap"*, linhas 125–126), e inventar aqui uma mutação (ou declarar a
+    reavaliada quando o registro ganha ou perde a função" (ADR 4.1.0003 (f)
+    › "is a Stage 4.2 concept gap"), e inventar aqui uma mutação (ou declarar a
     marca **irrevogável**, como este concept fazia) seria decidir a lacuna alheia.
     Consequência declarada enquanto a 4.2 não decidir: corrigir uma marca errada é
     desalocar e alocar de novo — sob salvar = publicar, isso publica a remoção do
@@ -824,7 +824,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     não política"* (doc §3.4) é lei imposta na **4.3**, porque a unidade do
     registro não está aqui (§1 Fora do escopo, §8).
 19. **Sem fuso, sem ator, sem carimbo, sem estado de publicação** no domínio
-    (ADR 4.1.0005; ADR 4.1.0001 §1; precedente ADR 3.2.0006 155–157).
+    (ADR 4.1.0005; ADR 4.1.0001 §1; precedente ADR 3.2.0006 › "The state is a boolean, not a dated event").
 20. **Sem texto livre:** nenhum contrato desta Stage carrega nome ou rótulo — não
     há `InvalidNameError` nem a regra do byte NUL (ADR 3.4.0003), cuja hipótese é
     um nome persistido, sujeito que aqui não existe.
@@ -834,7 +834,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     **enquanto houver alocação** dependente. O domínio **não cascateia**: o caminho
     de dois passos (desalocar → remover) é orquestração da 4.3, e agrupá-lo num
     botão é da 4.5. Mesmo padrão da remoção guardada de staff (ADR 3.1.0003; guarda
-    L-E5 de `EmployeeInUseError`, ADR 3.2.0006 177–178).
+    L-E5 de `EmployeeInUseError`, ADR 3.2.0006 › "the FK becomes the hard half of the").
     **Sem alocação, remove sem cerimônia** — e isto é declaração, não omissão:
     `disable_band` numa faixa com **demandas** mas **sem alocação** passa e descarta
     as demandas junto (são contidas na faixa, não têm vida própria); idem
@@ -857,8 +857,8 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     construção de `ShiftBand` (logo também na reidratação da 4.4) e em
     `Schedule.assign`. É invariante **estrutural**, não política — a pessoa
     ocupando duas vagas do mesmo turno é **impossibilidade física**, e `block` é
-    exatamente o que o ADR 4.1.0003 (c) (linhas 95–97: *"`block` for overlap (one
-    person in two places)"*) reserva para ela; tratá-la como aviso configurável
+    exatamente o que o ADR 4.1.0003 (c) › "block for overlap (one person in two places)"
+    reserva para ela; tratá-la como aviso configurável
     seria deixar o tenant ligar o impossível. É também o que devolve a
     **correção** à fórmula única de horas (§5.7), sem segunda definição.
     **A política de sobreposição mantém o seu escopo:** faixas **distintas**,
@@ -944,12 +944,12 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   reintroduzir o caso especial "fim < início ⇒ dia seguinte" que o ADR 4.1.0002
   aboliu, e uma conversão a cada comparação com a indisponibilidade de staff —
   que é exatamente um par de `datetime` ingênuos
-  (`staff/domain/value_objects/unavailability_period.py` 31–32). Minuto inteiro
+  (`staff/domain/value_objects/unavailability_period.py` › `UnavailabilityPeriod.start`, `UnavailabilityPeriod.end`). Minuto inteiro
   mantém **exata** toda soma de horas (1/3 de hora não é exato em `Decimal`) e o
   intervalo já é declarado em minutos.
-- **Fonte:** doc §3.2 (lacuna (a)), §3.9, §3.6.10; ADR 3.1.0001 47–51 (decisão
-  (i); o literal *"adjacent intervals do not conflict"* na linha 50);
-  ADR 3.1.0005 41–46; `unavailability_period.py` 23–49.
+- **Fonte:** doc §3.2 (lacuna (a)), §3.9, §3.6.10; ADR 3.1.0001 §Decision (i) ›
+  "Unavailability is a DATETIME interval with half-open", "adjacent intervals do not conflict"; ADR 3.1.0005 ›
+  "stores naive datetime values whose meaning is wall-clock time"; `unavailability_period.py` › `UnavailabilityPeriod`.
 - **ADR:** [`../../adr/4_1_0007-time-range-as-naive-minute-instants.md`](../../adr/4_1_0007-time-range-as-naive-minute-instants.md)
 
 ### Faixa que ultrapassa o corte seguinte: permitida, do dia em que começa (lacuna doc §3.2 (b))
@@ -1012,7 +1012,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **Alternativa descartada:** declarar o alinhamento como "regra de fábrica" e
   aceitar que a reidratação o viole. Descartada porque o repo já tratou o mesmo
   caso em staff — a validação par a par da coleção inicial foi endurecida no
-  `__post_init__` justamente por uma mutação sobrevivente (`employee.py` 113–116;
+  `__post_init__` justamente por uma mutação sobrevivente (`employee.py` › `Employee.__post_init__`;
   `3.1/technical.md` §7, 2026-07-29).
 - **Fonte:** `shift-scheduling.md` §3.1 › "O período é não vazio, contíguo e alinhado"; ADR 4.1.0002 §1; ADR 4.1.0009 §Decision 6;
   §5.2; CA8 e CA10.
@@ -1024,7 +1024,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **Por quê:** BCs se comunicam por ports, nunca por import; importar os ids de
   staff é violação medida. Sem o contrato, a violação é possível e invisível.
 - **Fonte:** doc §3.10 (lacuna endereçada ao technical da 4.1);
-  ADR 3.4.0001 106–113; `.importlinter` 197–277; `check_layout.py` 130;
+  ADR 3.4.0001 › "the promise that justified it"; `.importlinter` › `[importlinter:contract:staff-domain-purity]`, `[importlinter:contract:bc-independence]`; `check_layout.py` › `REQUIRED_FEATURE_DIRS`;
   LAYOUT §3–§4; precedente: concept 3.1 §7.
 
 ### `Weekday` e `DayCutoff` co-locados em `operational_calendar.py`
@@ -1058,7 +1058,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   a trilha de auditoria da 4.4; staff estabeleceu o precedente de domínio sem
   `Clock`. O contador de versão é o que sobra de F8 no domínio, e é o que permite
   testar a lei "toda mutação incrementa" sem banco.
-- **Fonte:** ADR 4.1.0001 §1 (linha 58) e §2; ADR 3.2.0006 155–157; divergência 4
+- **Fonte:** ADR 4.1.0001 §1 › "There is no draft on the server" e §2; ADR 3.2.0006 › "The state is a boolean, not a dated event"; divergência 4
   da §1.
 
 ### Guardas de remoção: recusa, sem cascata no domínio (Q1 — decisão do sponsor)
@@ -1067,7 +1067,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   **não cascateia**. Faixa ou demanda **sem** alocação é removida sem cerimônia —
   as demandas contidas vão com a faixa, e isso é declarado, não omitido (§5.21).
 - **Por quê:** remoção guardada é o padrão do repo (ADR 3.1.0003; guarda L-E5 de
-  `EmployeeInUseError`, ADR 3.2.0006 177–178) e, sob salvar = publicar, a cascata
+  `EmployeeInUseError`, ADR 3.2.0006 › "the FK becomes the hard half of the") e, sob salvar = publicar, a cascata
   apagaria o turno de várias pessoas com um clique e sem trilha de intenção. O
   caminho de dois passos é orquestração da 4.3; agrupá-lo num botão é da 4.5.
 - **Custo declarado da opção escolhida** (o achado que faltava na pergunta):
@@ -1142,7 +1142,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   (`DuplicateAssignmentInBandError`, §5.23), e por isso `worked_minutes_of`
   continua sendo **por alocação**, com a fórmula única do ADR 4.1.0002 §3 e **sem**
   segunda definição de horas.
-- **Por quê:** (1) o ADR 4.1.0003 (c) (linhas 95–97) reserva `block` à
+- **Por quê:** (1) o ADR 4.1.0003 (c) › "block only for physical impossibility" reserva `block` à
   **impossibilidade física** — *"one person in two places"* —, e a mesma pessoa
   duas vezes na mesma faixa é exatamente isso: não há segunda pessoa para ocupar a
   segunda vaga; (2) a política de **sobreposição** continua governando faixas
@@ -1161,15 +1161,15 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   política de sobreposição avisar — deixa número errado no hub.
 - **Fonte:** **decisão do sponsor (2026-09-27, via sessão mestra)** — resposta
   literal: *"como ela é alocada 2 vezes? nao faz sentido"*; âncoras em
-  ADR 4.1.0003 (a) linha 73 e (c) linhas 95–97, ADR 4.1.0002 §3, doc §3.3/§3.6.3;
+  ADR 4.1.0003 (a) › "same record, start_A < end_B ∧ start_B < end_A (half-open)"; (c) › "block only for physical impossibility"; ADR 4.1.0002 §3, doc §3.3/§3.6.3;
   invariante §5.23; exceção em §6; critérios CA25 e CA13 item 2.
 - **ADR:** [`../../adr/4_1_0012-one-record-occupies-at-most-one-slot-per-band.md`](../../adr/4_1_0012-one-record-occupies-at-most-one-slot-per-band.md)
 
 ### Corte do dia sem teto (Q5 — decisão do sponsor)
 - **O quê:** `DayCutoff.at` aceita qualquer hora de minuto inteiro; **nenhum teto**
   no domínio.
-- **Por quê:** é o literal do ADR 4.1.0002 §2 (linhas 70–79 — *"configured per
-  restaurant"*, default 05:00 *"with no force of rule"*), e inventar um limite
+- **Por quê:** é o literal do ADR 4.1.0002 §2 › "configured per restaurant", "a default only, configurable, with no force of rule"
+  (*"configured per restaurant"*, default 05:00 *"with no force of rule"*), e inventar um limite
   trabalhista sem fonte é o que `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded" proíbe. A casa que abre só à
   noite continua representável.
 - **Limite/erro de configuração declarado:** com `at = 23:00`, o jantar de sexta
@@ -1184,14 +1184,14 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   aqui o fato declarado se manteve). O registro vive aqui, em §4 `DayCutoff` e em
   §13 Q5.
 - **Fonte:** **decisão do sponsor (2026-09-27, via sessão mestra)** — resposta
-  literal: *"Sem teto (Recomendada)"*; ADR 4.1.0002 §2 linhas 70–79;
+  literal: *"Sem teto (Recomendada)"*; ADR 4.1.0002 §2 › "configured per restaurant", "a default only, configurable, with no force of rule";
   `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded"; CA4.
 
 ### `function_exception` sem mutação na v1 — por atribuição, não por regra
 - **O quê:** a v1 não expõe caminho para alterar `function_exception` numa alocação
   existente. O concept **não** declara mais a marca "irrevogável".
-- **Por quê:** o ADR 4.1.0003 (f) manda para a **4.2** a pergunta "a exceção é
-  reavaliada quando o registro ganha ou perde a função" (linhas 125–126); declarar
+- **Por quê:** o ADR 4.1.0003 (f) › "is a Stage 4.2 concept gap" manda para a **4.2**
+  a pergunta "a exceção é reavaliada quando o registro ganha ou perde a função"; declarar
   aqui a irrevogabilidade seria fechar, sem fonte, a lacuna alheia — e a marca é
   assimétrica com `counts_toward_workload`, que é re-declarável, sem que nada
   ratificado peça a assimetria. A mutação nasce **aditivamente** quando a 4.2
@@ -1199,7 +1199,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **Custo declarado enquanto isso:** corrigir uma marca errada é desalocar e alocar
   de novo — sob salvar = publicar, publica a remoção do turno e a recriação, com
   auditoria e e-mail. Lacuna de UX da 4.5.
-- **Fonte:** ADR 4.1.0003 (f), linhas 125–126; §5.13; CA14 (que afirma **ausência
+- **Fonte:** ADR 4.1.0003 (f) › "is a Stage 4.2 concept gap"; §5.13; CA14 (que afirma **ausência
   na superfície pública da v1**, não irrevogabilidade).
 
 ### Teto declarado para `SchedulePeriod.days`
@@ -1240,7 +1240,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   elegibilidades estruturais** que dependem de dado de staff — *"registro ativo da
   unidade da escala"* e *"mesma unidade"* (`shift-scheduling.md` §3.4 › "Registro ativo da unidade da escala", "Mesma unidade") —, impostas antes de
   chamar `Schedule.assign`, pela lei do port que **exige a unidade** no lookup
-  (ADR 3.4.0007 57–64; `staff/application/ports/out/employee_repository.py` 38–41).
+  (ADR 3.4.0007 › "The unit becomes part of the address, in the port signature"; `staff/application/ports/out/employee_repository.py` › docstring do módulo, "O endereço do funcionário tem três partes").
   A 4.1 aceita qualquer `EmployeeId` opaco, e isso é declaração, não descuido: sem
   o dado, a regra não tem como ser invariante aqui.
   Herda também o **caminho de dois passos** da remoção guardada (§5.21) e a
@@ -1664,8 +1664,8 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
   recomendada (A, somar por alocação com o número dobrado como limite declarado).
   **Decisão, ancorada pela sessão mestra:** o mesmo registro **não pode ocupar duas
   vagas da mesma faixa** — virou **invariante estrutural** do agregado, com exceção
-  nomeada própria (`DuplicateAssignmentInBandError`). Âncoras: ADR 4.1.0003 (c)
-  (linhas 95–97) reserva `block` à **impossibilidade física** — *"one person in two
+  nomeada própria (`DuplicateAssignmentInBandError`). Âncoras: ADR 4.1.0003 (c) ›
+  "block only for physical impossibility" reserva `block` à **impossibilidade física** — *"one person in two
   places"* —, e a mesma pessoa duas vezes na mesma faixa é exatamente isso; a
   política de **sobreposição** continua governando faixas **distintas** (inclusive
   parcialmente sobrepostas), logo **não** perde escopo; e a fórmula única de
@@ -1678,8 +1678,8 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
   [ADR 4.1.0012](../../adr/4_1_0012-one-record-occupies-at-most-one-slot-per-band.md).
 - [x] **Q5 — O horário de corte deve ter teto?** Resposta literal: *"Sem teto
   (Recomendada)"* — opção **A**. `DayCutoff.at` aceita qualquer hora de minuto
-  inteiro; **nenhum teto no domínio**. É **confirmação** do ADR 4.1.0002 §2 (linhas
-  70–79: *"configured per restaurant"*; o default 05:00 é *"a default only,
+  inteiro; **nenhum teto no domínio**. É **confirmação** do ADR 4.1.0002 §2 › "configured per restaurant",
+  "a default only, configurable, with no force of rule" (*"configured per restaurant"*; o default 05:00 é *"a default only,
   configurable, with no force of rule"*), logo **sem ADR novo** e sem errata — a
   premissa declarada lá se manteve (CONVENTIONS §5 reserva a errata ao fato que se
   revelou incorreto). O cenário do corte tardio (`at = 23:00` move o jantar de sexta
@@ -1721,7 +1721,7 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
   registrada como `[decision] Checkpoint C`, 2026-07-29, e **não** como
   `[finding]`: a §7 da 3.1 não tem nenhuma entrada `[finding]`).
 - [`../../LAYOUT.md`](../../LAYOUT.md) §2–§4, §7; `.importlinter`
-  (`staff-domain-purity` 197–217, `bc-independence` 271–277);
-  `scripts/check_layout.py` (130); `scripts/check_docs_claims.py`;
+  › `[importlinter:contract:staff-domain-purity]`, `[importlinter:contract:bc-independence]`;
+  `scripts/check_layout.py` › `REQUIRED_FEATURE_DIRS`; `scripts/check_docs_claims.py`;
   [`../../CONVENTIONS.md`](../../CONVENTIONS.md) §1, §2, §5 (errata de ADR), §6.
 - Skills: `ddd-tactical-patterns`, `hex-arch-python`.

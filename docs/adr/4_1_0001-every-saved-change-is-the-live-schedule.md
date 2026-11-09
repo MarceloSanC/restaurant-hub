@@ -44,7 +44,7 @@ image, the timeclock's "what applied that day", and optimistic concurrency). The
 to the sponsor with three options.
 
 For concurrency, the staff precedent is **"last write wins"**
-([ADR 3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md) lines 91–98),
+([ADR 3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md) › "therefore remains the semantics of two concurrent edits", "Optimistic concurrency control is"),
 and the roadmap records optimistic concurrency as "aberto, sem Stage candidata" (§Stage 3.4 › nota 2026-08-12).
 The schedule is the first aggregate with dozens of mutations per session and more than one
 legitimate editor (owner and manager), so the precedent could not simply be inherited.
@@ -162,7 +162,7 @@ the fork into four Stage concepts.
   (audit log; version column; check) and 4.5 (refusal status/body). The theory lives in
   [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.5.
 - The audit log is the first in the system (staff has no `Clock` and no timestamps —
-  [ADR 3.2.0006](./3_2_0006-employee-lifecycle-and-guarded-deletion.md) 155–157); whatever 4.4
+  [ADR 3.2.0006](./3_2_0006-employee-lifecycle-and-guarded-deletion.md) › "The state is a boolean, not a dated event"); whatever 4.4
   decides becomes precedent.
 
 ## References
@@ -179,7 +179,7 @@ the fork into four Stage concepts.
   `contratos_consumidos`); optimistic control gap (§Stage 3.4 › nota 2026-08-12).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.5,
   §3.8, §3.10.3, §6.
-- `src/restaurant_hub/shared/application/ports/out/clock.py` line 17 (absolute "when").
+- `src/restaurant_hub/shared/application/ports/out/clock.py` › `Clock.now` (absolute "when").
 - Process: [`PROMPT-step-single-session.md`](../PROMPT-step-single-session.md) §1–§2; sponsor
   decisions F1 and F8 on 2026-09-13 (session record `gate-decisions.md`).
 - External: none — this is a product decision; no labour-law source constrains the publication

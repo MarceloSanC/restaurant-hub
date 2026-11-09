@@ -51,7 +51,7 @@ Two further forces:
   the 4.3 concept (doc §3.1).
 - Staff's precedent is an aggregate root holding an internal collection whose
   pairwise invariant is validated in `__post_init__` — including on the
-  rehydration path (`employee.py` 113–116), a hardening that the 3.1 execution
+  rehydration path (`employee.py` › `Employee.__post_init__`), a hardening that the 3.1 execution
   added after a surviving-mutation finding.
 
 ## Decision
@@ -228,7 +228,7 @@ Two further forces:
   (the cost of guarding rules across aggregates);
   [ADR 3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md)
   (staff's last-write-wins, superseded for the schedule by 4.1.0001);
-  [ADR 3.2.0006](./3_2_0006-employee-lifecycle-and-guarded-deletion.md) 155–157
+  [ADR 3.2.0006](./3_2_0006-employee-lifecycle-and-guarded-deletion.md) › "The state is a boolean, not a dated event"
   (domain without `Clock`);
   [ADR 4.1.0011](./4_1_0011-declared-break-on-band-and-allocation.md) (the optional
   break on `Assignment`, the effective break feeding the single hours site, the
@@ -238,7 +238,7 @@ Two further forces:
   §3.1 › "a confirmar na 4.1", "O período é não vazio, contíguo e alinhado" (the gate's proposal that `Schedule` is the root, to be
   confirmed here; the period invariant that Decision 6 now enforces), §3.3, §3.4,
   §3.5, §6 › "Schedule como raiz do agregado — confirmar".
-- Code: `features/staff/domain/entities/employee.py` 113–116 (pairwise validation on
+- Code: `features/staff/domain/entities/employee.py` › `Employee.__post_init__` (pairwise validation on
   every construction path, including rehydration).
 - Skill `ddd-tactical-patterns` (§Aggregate, §Invariants, §DON'T).
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)

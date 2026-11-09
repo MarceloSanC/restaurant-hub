@@ -34,10 +34,10 @@ Forces:
 - [ADR 3.1.0005](./3_1_0005-naive-wall-clock-unavailability-datetimes.md) stores staff
   unavailability as naive wall-clock datetimes and states that *"The unit's timezone lives in
   configuration outside staff"*, delegating wall-clock → instant conversion to *"scheduling
-  validations in Step 4"* (lines 28–31, 41–46). It also records, **without a source**, that the
-  pilot timezone has no DST (87–88).
+  validations in Step 4"* (ADR 3.1.0005 › "configuration outside staff", "performed by the consumer that knows the unit's timezone"). It also records, **without a source**,
+  that the pilot timezone has no DST (ADR 3.1.0005 › "currently has no DST").
 - **Nothing in the merged code holds a timezone.** `Unit` (identity) has only `id`,
-  `restaurant_id` and `name` (`unit.py` 32–34); no settings, no config table. Step 4 needs the
+  `restaurant_id` and `name` (`unit.py` › `Unit`); no settings, no config table. Step 4 needs the
   timezone to turn "16h" into an instant when the timeclock (Step 7) compares planned × actual,
   when an e-mail is sent, or when the hub aggregates units. A ratified rule had no owner.
 - The external-sources pass verified: an IANA key is the standard representation (PEP 615;
@@ -141,13 +141,13 @@ timezone from; every consumer would invent its own.
   (wall-clock in the unit's timezone; timezone outside staff; conversion by the consumer);
   [ADR 3.4.0001](./3_4_0001-staff-owned-access-guard-port.md) (BC-owned port with translator in
   the composition root); [ADR 3.4.0006](./3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)
-  §5 (touching identity authorised); [ADR 3.2.0003](./3_2_0003-copy-employee-full-duplication.md)
-  177–183 (copy between units of different timezones keeps wall-clock).
+  §5 (touching identity authorised); [ADR 3.2.0003](./3_2_0003-copy-employee-full-duplication.md) › "The copied instants keep their wall-clock reading"
+  (copy between units of different timezones keeps wall-clock).
 - [`overview.md`](../overview.md) — §6 › "Fuso horário configurável por unidade"; §3 › "ASSUM-4";
   §9 › "Turno: faixa de horário demandada/trabalhada num dia" (16h–00h as local time).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.9,
   §3.10.2, §6.
-- `src/restaurant_hub/features/identity/domain/entities/unit.py` lines 32–34 (no timezone
+- `src/restaurant_hub/features/identity/domain/entities/unit.py` › `Unit` (no timezone
   today).
 - Sponsor decision F6 on 2026-09-13 (session record `gate-decisions.md`).
 - External (primary; verified 2026-09-13):
