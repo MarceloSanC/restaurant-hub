@@ -5,7 +5,7 @@ when-use: Reference before creating or renumbering an ADR, before linking an ADR
 keywords: [adr, process, docs, frontmatter, yaml, adr-id, uniqueness, domain, references, lacuna, docs-check, gate, issue-102]
 status: accepted
 created_at: 2026-11-02
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 adr_id: "0.0.0015"
 decision: 'scripts/check_doc_frontmatter.py, run by make docs-check, parses the frontmatter of docs/adr/*.md and docs/domain/**/*.md with yaml.safe_load and rejects: invalid YAML; an adr_id that is not "N.M.NNNN", differs from the N_M_NNNN filename prefix or repeats across ADRs; and, in a domain doc, a references entry or relative link that does not resolve, an ADR linked in the body but absent from references, and a "Lacuna para o concept da Stage N.M" still open when a listed Stage is done. shift-scheduling.md keeps an exact, shrink-only valve for its missing references.'
 context_stage: 0.0-global
@@ -130,3 +130,17 @@ concern"* no longer holds for `docs/domain/`. The rest of 0.0.0003 stands.
 - [`scripts/check_doc_frontmatter.py`](../../scripts/check_doc_frontmatter.py) and
   [`tests/unit/test_check_doc_frontmatter.py`](../../tests/unit/test_check_doc_frontmatter.py).
 - Issue #102; issue #37 (findings F1, F2); PR #110 audit comment on issue #102.
+
+## Supersessão parcial
+
+**2026-11-09 — Decision 5 e a rejeição da Alternative D superadas por ADR 0.0.0017.**
+
+- Decision 5, *"`VALVULA_REFERENCES` in the script maps `shift-scheduling.md` to the exact set of
+  ADRs it links without listing (16 today)"*: a válvula saiu do script. As citações por número de
+  linha ao `shift-scheduling.md`, que eram o motivo dela, viraram âncora e um gate as cobra
+  (`check_domain_citations.py`); os 16 ADRs entraram no `references` (issue #116).
+- Alternative D, *"16 new frontmatter lines shift every line of the doc, and with it the line
+  citations in three accepted ADR bodies and a `done` concept"*: a premissa deixou de valer, e a
+  alternativa é o estado atual.
+
+O resto deste ADR (Decisions 1–4 e 6) continua em vigor.
