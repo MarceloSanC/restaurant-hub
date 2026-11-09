@@ -104,6 +104,8 @@ _NUMERO_DE_LINHA = re.compile(r"(?<![\w])\d{2,4}(?=\s*(?:[,;:)/–\]-]|$|\(|(?:e
 _LINHA_EXPLICITA = re.compile(
     r"\b(?:linhas?|lines?|l\.|ln)\s*~?\d{2,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
 )
+# Fragmento de linha no alvo de um link (`...md#L171`, `...md#L171-L175`).
+_FRAGMENTO_DE_LINHA = re.compile(r"#L\d+")
 # Número logo depois da referência (`x.md` 171, `x.md:171`) é linha sempre.
 _NUMERO_IMEDIATO = re.compile(
     r"^\s*:?\s*\(?\s*(?:(?:linhas?|lines?|l\.)\s*)?\d{2,4}\b", re.IGNORECASE
@@ -227,7 +229,7 @@ def regex_de_referencia(nomes: list[str]) -> re.Pattern[str]:
     alternativas = "|".join(re.escape(n) for n in sorted(nomes, key=len, reverse=True))
     return re.compile(
         rf"(?<![\w-])(?P<nome>{alternativas})"
-        r"(?:\.md(?P<fragmento>#L\d+)?`?(?:\]\([^)\s]*\))?|(?= §))"
+        r"(?:\.md(?P<fragmento>#L\d+)?`?(?:\]\((?P<alvo>[^)\s]*)\))?|(?= §))"
     )
 
 
@@ -276,7 +278,14 @@ def problemas_no_texto(texto: str, docs: dict[str, Doc]) -> list[tuple[int, str]
         doc = docs[ref.group("nome")]
         linha = _linha_de(texto, ref.start())
         resto, trecho = _trecho(texto, ref.end())
-        if ref.group("fragmento") or _tem_numero_de_linha(resto, trecho):
+        # `#L171` no alvo do link (`[`x.md`](../x.md#L171)`) é linha: o link inteiro é
+        # consumido pela referência, e o trecho começa depois dele.
+        alvo_do_link = ref.group("alvo") or ""
+        if (
+            ref.group("fragmento")
+            or _FRAGMENTO_DE_LINHA.search(alvo_do_link)
+            or _tem_numero_de_linha(resto, trecho)
+        ):
             citado = (ref.group(0) + trecho).replace("\n", " ").strip()
             achados.append((linha, f"citação por número de linha a {doc.rel}: {citado[:100]!r}"))
         for m in cadeia_de_ancoras(texto, ref.end()):

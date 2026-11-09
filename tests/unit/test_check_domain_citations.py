@@ -148,6 +148,7 @@ def test_o_repositorio_real_tem_ancoras_a_conferir() -> None:
         "ver [escala](../domain/scheduling/escala.md#L171)",
         "equipe §3.8 (linhas 470–480)",
         "o doc `equipe.md` 120; e mais",
+        "ver [`escala.md`](../domain/scheduling/escala.md#L171) para a regra",
     ],
     ids=[
         "simples",
@@ -161,6 +162,7 @@ def test_o_repositorio_real_tem_ancoras_a_conferir() -> None:
         "fragmento-de-linha-no-link",
         "nome-sem-extensao-com-secao",
         "outro-doc-de-dominio",
+        "fragmento-de-linha-no-link-com-o-nome-do-arquivo",
     ],
 )
 def test_numero_de_linha_depois_de_doc_de_dominio_reprova(
