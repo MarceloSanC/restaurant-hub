@@ -29,17 +29,18 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
 5. **Sem deploy manual**: produção só via merge em `main`. Dev só via merge em `develop`. SSH em prod é proibido.
 6. **Merge commit preserva história**: NUNCA squash, NUNCA rebase no merge. Branches trazem toda sua contexto.
 7. **Branches em paralelo só sem conflito, cada uma na sua worktree**:
-   não há teto de branches em execução; uma branch nova só começa se
-   **não conflita** com nenhuma em execução ou em review (critérios em
-   §"Branches em execução"). **Toda**
+   fora da orquestração autônoma não há teto de branches em execução;
+   uma branch nova só começa se **não conflita** com nenhuma em execução
+   ou em review (critérios em §"Branches em execução"). **Toda**
    implementação roda numa worktree própria criada por
    `scripts/worktree-new.py`; o **checkout principal fica sempre em
    `develop`, limpo** — nunca se cria nem se troca de branch nele (o hook
    `.claude/hooks/git_guard.py` recusa). Ver §"Branches em execução" para
    critérios, comando, limpeza e o procedimento de PR parcial.
    **Na orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md))
-   o teto é outro: **três worktrees de implementação**, contando as com
-   PR aberto ainda não mergeado (§"Branches em execução").
+   o teto continua: **três worktrees de implementação**, contando as com
+   PR aberto ainda não mergeado (§"Branches em execução"); a remoção do
+   teto na #65 não o alcança.
 
 ---
 
@@ -462,9 +463,9 @@ Quando a equipe decide promover `develop` para `main`:
 
 ## Branches em execução
 
-**Regra (Princípios fundamentais #7):** branches em execução sem teto
-de quantidade, **cada uma na sua worktree**, e o checkout principal
-sempre livre em `develop`. O que bloqueia uma branch nova é **conflito
+**Regra (Princípios fundamentais #7):** fora da orquestração autônoma
+(abaixo), branches em execução sem teto de quantidade, **cada uma na
+sua worktree**, e o checkout principal sempre livre em `develop`. O que bloqueia uma branch nova é **conflito
 direto** com outra em execução ou com PR aberto aguardando review
 (critérios abaixo) — não a contagem (decisão do sponsor na issue #65,
 2026-10-19, que removeu o teto anterior). A regra existe porque
@@ -481,9 +482,10 @@ outros dois.
 
 **Orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md),
 [`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)):
-o teto passa a ser de **três worktrees de implementação existindo ao
-mesmo tempo**, contando as com PR aberto ainda não mergeado (cada uma
-segura uma sessão viva — o teto é de custo). Uma nova só abre quando
+vale um teto de **três worktrees de implementação existindo ao
+mesmo tempo** (fixado pelo sponsor e mantido pela #65), contando as com
+PR aberto ainda não mergeado (cada uma segura uma sessão viva — o teto
+é de custo). Uma nova só abre quando
 outra é removida pelo auditor, e só se não conflitar com as em voo
 (critérios abaixo). A branch de docs de processo do próprio orquestrador
 não conta.
