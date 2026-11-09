@@ -136,3 +136,13 @@ Configuração candidata: nenhuma · Reversível: sim (convert anchors back to n
 - [`scripts/check_domain_citations.py`](../../scripts/check_domain_citations.py) and
   [`tests/unit/test_check_domain_citations.py`](../../tests/unit/test_check_domain_citations.py).
 - [`scripts/check_doc_frontmatter.py`](../../scripts/check_doc_frontmatter.py) — valve removed.
+
+## Supersessão parcial
+
+**2026-11-09 — a última frase da Decision 5 superada pelo ADR 0.0.0019.**
+
+- Decision 5, "Line citations to other docs [...] stay outside this decision": o `overview.md`
+  entrou como alvo fixo do `check_domain_citations.py`, com a mesma gramática; ADRs e código ganharam
+  o `check_adr_code_citations.py`
+  ([ADR 0.0.0019](./0_0_0019-cite-overview-adrs-and-code-by-stable-anchor.md), issue #154). O resto
+  desta decisão continua em vigor.

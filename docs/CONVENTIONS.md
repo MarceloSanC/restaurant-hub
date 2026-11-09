@@ -830,8 +830,28 @@ Docs vivem no git, então o histórico é o versionamento. Mas:
   - **Gate:** `scripts/check_domain_citations.py` (no `make docs-check`) reprova número de linha
     depois de uma referência a doc de domínio e âncora cuja seção ou rótulo não existe no doc
     citado — renumerar seção ou reescrever trecho que outro doc usa como rótulo exige atualizar
-    quem cita. Fora do gate: a §7 dos `technical.md`. Citação por linha a outros docs
-    (`overview.md`, ADR, código) fica fora desta regra.
+    quem cita. Fora do gate: a §7 dos `technical.md`. O `overview.md` segue esta mesma regra (item
+    seguinte); ADR e código têm a sua.
+- **Citação ao overview, a ADR e a código — por âncora, nunca por número de linha**
+  ([ADR 0.0.0019](./adr/0_0_0019-cite-overview-adrs-and-code-by-stable-anchor.md), issue #154).
+  Um ADR `accepted` ganha banner de errata no topo e supersessão parcial no fim, o overview ganha
+  notas datadas e o código muda a cada PR, e a citação por linha passa a apontar para o vizinho sem
+  erro. As formas:
+  - **Overview:** a do doc de domínio (item anterior) — `` `overview.md` §3 › "salvar = publicar";
+    §9 › "Turno: faixa de horário" ``. A seção é o título `## N.` e engloba as subseções.
+  - **ADR:** `ADR N.N.NNNN <localizador> › "<trecho>"` — o localizador é opcional e livre (`§Decision
+    2`, `(c)`, `§Alternative B`), o trecho é texto do ADR (comparado sem `*`, crase e `>`). Ex.:
+    `ADR 4.1.0003 (c) › "block only for physical impossibility"`.
+  - **Código e config:** `` `<arquivo>` › `<símbolo>` `` — classe, método, função, constante, nome
+    de teste, alvo do `Makefile`, chave do YAML, contrato do `.importlinter`
+    (`` `.importlinter` › `[importlinter:contract:bc-independence]` ``). Linha fora de símbolo:
+    `__doc__` ou um trecho curto entre aspas.
+  - **Gate:** `scripts/check_domain_citations.py` cobre o overview; `scripts/check_adr_code_citations.py`
+    (no `make docs-check`) reprova número de linha depois de um ADR ou de um arquivo do repo e
+    trecho de ADR que não existe. O símbolo de código **não** é conferido: concept e technical de
+    Stage `done` descrevem o código do seu tempo. Fora do gate: arquivo de terceiro com versão fixa
+    (`engine/base.py` do SQLAlchemy), bloco cercado (saída capturada), a `## Errata` de um ADR e a §7
+    dos `technical.md` (registro histórico).
 - **Lockfile de dependências (`uv.lock`):** **versionado** por padrão
   (este template gera aplicações; lock garante reprodutibilidade
   dev/CI/prod e segurança via SBOM). O `scripts/init-project.py` roda

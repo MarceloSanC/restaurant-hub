@@ -5,7 +5,7 @@ when-use: Reference before citing docs/roadmap.md from any other doc, before ren
 keywords: [adr, process, docs, roadmap, citation, anchor, line-number, docs-check, gate]
 status: accepted
 created_at: 2026-11-02
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 adr_id: "0.0.0012"
 decision: A doc cites docs/roadmap.md by section plus label (`roadmap.md` §Stage N.M › "Descrição humana", `definition_of_done`), never by line number; scripts/check_roadmap_citations.py, run by make docs-check, rejects a line number after a roadmap reference and an anchor whose section or label does not exist. The technical.md §7 log and the roadmap itself are out of scope.
 context_stage: 0.0-global
@@ -123,3 +123,14 @@ Configuração candidata: nenhuma · Reversível: sim (convert anchors back to n
 - [`scripts/check_roadmap_citations.py`](../../scripts/check_roadmap_citations.py) and
   [`tests/unit/test_check_roadmap_citations.py`](../../tests/unit/test_check_roadmap_citations.py).
 - Stage technical §7 entries of 3.7, 3.8 and 4.1 — the three bulk remaps.
+
+## Supersessão parcial
+
+**2026-11-09 — a frase do "Limits" que deixava o `overview.md` de fora foi superada pelo ADR 0.0.0019.**
+
+- "Line citations to other docs [...] are out of this decision: `overview.md` does not grow in the
+  middle on every PR. If it starts to, the same gate can take a second target": o overview cresceu no
+  meio (issue #129 acrescentou a lista de decisões de kickoff no fim do §3), e as citações por linha
+  a ele, a ADRs e a código passaram a ter gate
+  ([ADR 0.0.0019](./0_0_0019-cite-overview-adrs-and-code-by-stable-anchor.md), issue #154). O resto
+  desta decisão continua em vigor.
