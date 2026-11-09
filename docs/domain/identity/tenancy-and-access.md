@@ -129,7 +129,7 @@ alcança**:
 > **ouro/prata/bronze**. Isso é linguagem de produto, não o modelo: ouro ≈ `owner`,
 > prata ≈ `manager`/`hr` (escopados por atribuição), bronze ≈ `employee`; `platform_admin` fica
 > fora dos três. O modelo segue com os cinco papéis (decisões de kickoff de 2026-07-19, registradas
-> na memória do projeto e citadas em [`workforce.md`](../staff/workforce.md) §4 e
+> em [`overview.md`](../../overview.md) §3 "Decisões de kickoff (2026-07)" e citadas em [`workforce.md`](../staff/workforce.md) §4 e
 > [`shift-scheduling.md`](../scheduling/shift-scheduling.md) §4 como "kickoff #9/#10").
 
 ---
@@ -613,7 +613,12 @@ reescreve ADR nem concept — a disposição de cada um está no próprio item):
   conjunto de permissões". A lista do kickoff não vive no repositório, então o número não é âncora
   estável.
   Este doc não cita kickoff por número; cita o concept ou o ADR que registrou a decisão.
-  **Disposição:** issue #129.
+  **Resolvido na issue #129 (PR #153):** a lista vive em [`overview.md`](../../overview.md) §3
+  "Decisões de kickoff (2026-07)", com a numeração canônica (o refresh é a decisão 4; papel único,
+  a 1; os cinco papéis, a 10). A colisão vinha das Stages 2.1/2.2, que numeraram pela posição na
+  lista das issues #17 e #20; a nota "Numeração legada" da mesma seção mapeia essas citações. Os
+  ADRs 2.2.0001 e 2.2.0002 ganharam banner de errata datado de 2026-11-09 (append-only, CONVENTIONS
+  §5), e o docstring de `role.py` cita overview §3 e a decisão 10.
 - **C2 — comentário do mapa de papéis desatualizado.** `role.py` dizia que a Stage 4.x "não pode
   conceder a `hr` nenhuma permissão sobre a escala" (ADR 3.4.0006 §3), restrição superada em parte
   pelo [ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md): `hr` recebe a
