@@ -549,7 +549,7 @@ def test_linha_corrompida_levanta_ao_ser_lida(cenario: Engine, caso: _Corrompida
             ).one()
 
             with pytest.raises(caso.esperada):
-                mappers.linha_para_usuario(linha)
+                mappers.row_to_user(linha)
         finally:
             transacao.rollback()
 

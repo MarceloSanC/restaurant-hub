@@ -45,7 +45,7 @@ from restaurant_hub.features.identity.application.errors import (
 # O valor recebe o "detalhe" já extraído pelo chamador (o id ou o e-mail em
 # conflito), porque só o repositório sabe o que estava tentando gravar — a
 # mensagem do Postgres nem sempre carrega o valor de forma confiável.
-_POR_CONSTRAINT: dict[str, Callable[[str], Exception]] = {
+_BY_CONSTRAINT: dict[str, Callable[[str], Exception]] = {
     "pk_restaurants": RestaurantAlreadyExistsError,
     "pk_units": UnitAlreadyExistsError,
     "pk_users": UserAlreadyExistsError,
@@ -56,7 +56,7 @@ _POR_CONSTRAINT: dict[str, Callable[[str], Exception]] = {
 }
 
 
-def nome_da_constraint(erro: IntegrityError) -> str | None:
+def constraint_name(error: IntegrityError) -> str | None:
     """Extrai o nome da constraint violada, ou `None` se não der para saber.
 
     O psycopg 3 expõe isso de forma estruturada em `diag.constraint_name`, sem
@@ -64,28 +64,28 @@ def nome_da_constraint(erro: IntegrityError) -> str | None:
     de constraint), devolve `None` e o chamador deixa o erro subir — degradar para
     parsing de mensagem seria trocar uma falha explícita por uma silenciosa.
     """
-    original = getattr(erro, "orig", None)
+    original = getattr(error, "orig", None)
     diag = getattr(original, "diag", None)
-    nome = getattr(diag, "constraint_name", None)
-    return str(nome) if nome else None
+    name = getattr(diag, "constraint_name", None)
+    return str(name) if name else None
 
 
-def traduzir(erro: IntegrityError, detalhe: str) -> Exception:
-    """Devolve a exceção de domínio correspondente, ou o próprio `erro`.
+def translate(error: IntegrityError, detail: str) -> Exception:
+    """Devolve a exceção de domínio correspondente, ou o próprio `error`.
 
     Devolver (em vez de levantar) mantém a decisão de `raise` no repositório, onde
-    o `from erro` preserva a cadeia de causa — perder o `__cause__` custaria caro
+    o `from error` preserva a cadeia de causa — perder o `__cause__` custaria caro
     justamente no diagnóstico de um conflito de integridade.
 
-    `detalhe` é o valor em conflito (id ou e-mail), fornecido por quem tentou
+    `detail` é o valor em conflito (id ou e-mail), fornecido por quem tentou
     gravar.
     """
-    nome = nome_da_constraint(erro)
-    if nome is None:
-        return erro
-    fabrica = _POR_CONSTRAINT.get(nome)
-    if fabrica is None:
+    name = constraint_name(error)
+    if name is None:
+        return error
+    factory = _BY_CONSTRAINT.get(name)
+    if factory is None:
         # Constraint conhecida do banco mas sem significado de negócio (as FKs) ou
         # constraint nova que ninguém mapeou: sobe intacta.
-        return erro
-    return fabrica(detalhe)
+        return error
+    return factory(detail)

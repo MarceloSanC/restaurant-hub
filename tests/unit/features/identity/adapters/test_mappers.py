@@ -57,17 +57,17 @@ def test_restaurante_faz_round_trip_com_name_verbatim() -> None:
     """
     restaurante = Restaurant(id=RestaurantId("rest-1"), name="  Cantina  ")
 
-    linha = mappers.restaurante_para_linha(restaurante)
+    linha = mappers.restaurant_to_row(restaurante)
     assert linha["name"] == "  Cantina  "
 
-    de_volta = mappers.linha_para_restaurante(_linha(**linha))
+    de_volta = mappers.row_to_restaurant(_linha(**linha))
     assert de_volta.id == "rest-1"
     assert de_volta.name == "  Cantina  "
 
 
 def test_unidade_faz_round_trip() -> None:
     unidade = Unit(id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro")
-    de_volta = mappers.linha_para_unidade(_linha(**mappers.unidade_para_linha(unidade)))
+    de_volta = mappers.row_to_unit(_linha(**mappers.unit_to_row(unidade)))
     assert (de_volta.id, de_volta.restaurant_id, de_volta.name) == (
         "unit-1",
         "rest-1",
@@ -84,11 +84,11 @@ def test_usuario_faz_round_trip_e_o_hash_viaja_ao_lado() -> None:
         tenant_id=RestaurantId("rest-1"),
     )
 
-    linha = mappers.usuario_para_linha(user, _HASH)
+    linha = mappers.user_to_row(user, _HASH)
     assert linha["password_hash"] == _HASH
     assert linha["role"] == "owner"
 
-    de_volta = mappers.linha_para_usuario(_linha(**linha))
+    de_volta = mappers.row_to_user(_linha(**linha))
     assert de_volta.id == "user-1"
     assert de_volta.email == Email("dono@x.com")
     assert de_volta.role is Role.OWNER
@@ -102,10 +102,10 @@ def test_platform_admin_faz_round_trip_com_tenant_nulo() -> None:
         role=Role.PLATFORM_ADMIN,
         tenant_id=None,
     )
-    linha = mappers.usuario_para_linha(admin, _HASH)
+    linha = mappers.user_to_row(admin, _HASH)
     assert linha["tenant_id"] is None
 
-    de_volta = mappers.linha_para_usuario(_linha(**linha))
+    de_volta = mappers.row_to_user(_linha(**linha))
     assert de_volta.tenant_id is None
     assert de_volta.role is Role.PLATFORM_ADMIN
 
@@ -114,10 +114,10 @@ def test_vinculo_recebe_o_tenant_de_quem_grava() -> None:
     """`UnitMembership` só carrega dois ids; o tenant vem do repositório."""
     vinculo = UnitMembership(user_id=UserId("user-1"), unit_id=UnitId("unit-1"))
 
-    linha = mappers.vinculo_para_linha(vinculo, RestaurantId("rest-1"))
+    linha = mappers.membership_to_row(vinculo, RestaurantId("rest-1"))
     assert linha == {"user_id": "user-1", "unit_id": "unit-1", "tenant_id": "rest-1"}
 
-    assert mappers.linha_para_vinculo(_linha(**linha)) == vinculo
+    assert mappers.row_to_membership(_linha(**linha)) == vinculo
 
 
 def test_sessao_faz_round_trip_e_nao_carrega_valor_de_token() -> None:
@@ -128,7 +128,7 @@ def test_sessao_faz_round_trip_e_nao_carrega_valor_de_token() -> None:
         issued_at=_NOW,
         expires_at=_NOW + timedelta(days=7),
     )
-    linha = mappers.sessao_para_linha(sessao)
+    linha = mappers.session_to_row(sessao)
 
     assert set(linha) == {
         "id",
@@ -138,7 +138,7 @@ def test_sessao_faz_round_trip_e_nao_carrega_valor_de_token() -> None:
         "expires_at",
         "revoked_at",
     }
-    assert mappers.linha_para_sessao(_linha(**linha)) == sessao
+    assert mappers.row_to_session(_linha(**linha)) == sessao
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ def test_linha_com_platform_admin_e_tenant_levanta_ao_ler() -> None:
     trataria como legítimo — um `platform_admin` com tenant enxergando o tenant.
     """
     with pytest.raises(PlatformAdminTenantError):
-        mappers.linha_para_usuario(
+        mappers.row_to_user(
             _linha(
                 id="admin-1",
                 email="adm@x.com",
@@ -167,7 +167,7 @@ def test_linha_com_platform_admin_e_tenant_levanta_ao_ler() -> None:
 
 def test_linha_de_papel_de_restaurante_sem_tenant_levanta_ao_ler() -> None:
     with pytest.raises(MissingTenantError):
-        mappers.linha_para_usuario(
+        mappers.row_to_user(
             _linha(
                 id="user-1",
                 email="dono@x.com",
@@ -181,7 +181,7 @@ def test_linha_de_papel_de_restaurante_sem_tenant_levanta_ao_ler() -> None:
 def test_linha_com_papel_desconhecido_levanta_antes_de_construir_o_usuario() -> None:
     """`Role.from_string` roda primeiro — a ordem é parte da especificação (§6)."""
     with pytest.raises(InvalidRoleError):
-        mappers.linha_para_usuario(
+        mappers.row_to_user(
             _linha(
                 id="user-1",
                 email="dono@x.com",
@@ -194,7 +194,7 @@ def test_linha_com_papel_desconhecido_levanta_antes_de_construir_o_usuario() -> 
 
 def test_linha_com_id_vazio_levanta_ao_ler() -> None:
     with pytest.raises(InvalidIdentifierError):
-        mappers.linha_para_usuario(
+        mappers.row_to_user(
             _linha(
                 id="   ",
                 email="dono@x.com",
@@ -213,7 +213,7 @@ def test_precedencia_papel_invalido_vence_tenant_inconsistente() -> None:
     fronteira de leitura.
     """
     with pytest.raises(InvalidRoleError):
-        mappers.linha_para_usuario(
+        mappers.row_to_user(
             _linha(
                 id="user-1",
                 email="dono@x.com",
@@ -235,7 +235,7 @@ def test_precedencia_papel_invalido_vence_email_malformado() -> None:
     passa.
     """
     with pytest.raises(InvalidRoleError):
-        mappers.linha_para_usuario(
+        mappers.row_to_user(
             _linha(
                 id="user-1",
                 email="nao-e-email",
@@ -250,7 +250,7 @@ def test_precedencia_id_vazio_vence_iff_de_platform_admin() -> None:
     """Dentro de `__post_init__`, id vazio roda ANTES do iff de tenancy.
 
     O concept §6 fixa a ordem interna de `User.__post_init__` como id vazio → iff
-    de `platform_admin` → tenant ausente, e o docstring de `linha_para_usuario`
+    de `platform_admin` → tenant ausente, e o docstring de `row_to_user`
     repete a afirmação. Até aqui nada a provava: os testes de reidratação corrompem
     **um** eixo por vez, e com um eixo só qualquer ordem passa — trocar as duas
     primeiras checagens de lugar não derrubava teste nenhum.
@@ -263,7 +263,7 @@ def test_precedencia_id_vazio_vence_iff_de_platform_admin() -> None:
     aqui, na fronteira de leitura, sem tocar no domínio. Ver §7 do technical.
     """
     with pytest.raises(InvalidIdentifierError):
-        mappers.linha_para_usuario(
+        mappers.row_to_user(
             _linha(
                 id="   ",
                 email="adm@x.com",
@@ -289,7 +289,7 @@ def test_datetime_lido_em_outro_fuso_volta_em_utc() -> None:
     sao_paulo = timezone(timedelta(hours=-3))
     em_sao_paulo = _NOW.astimezone(sao_paulo)
 
-    sessao = mappers.linha_para_sessao(
+    sessao = mappers.row_to_session(
         _linha(
             id="sess-1",
             user_id="user-1",
@@ -312,7 +312,7 @@ def test_datetime_naive_e_interpretado_como_utc() -> None:
     Deixar passar naive faria `is_active` comparar naive com aware e levantar
     `TypeError` no meio de uma renovação de token.
     """
-    sessao = mappers.linha_para_sessao(
+    sessao = mappers.row_to_session(
         _linha(
             id="sess-1",
             user_id="user-1",
@@ -327,7 +327,7 @@ def test_datetime_naive_e_interpretado_como_utc() -> None:
 
 
 def test_revoked_at_nulo_continua_nulo() -> None:
-    sessao = mappers.linha_para_sessao(
+    sessao = mappers.row_to_session(
         _linha(
             id="sess-1",
             user_id="user-1",
@@ -342,7 +342,7 @@ def test_revoked_at_nulo_continua_nulo() -> None:
 
 def test_revoked_at_preenchido_volta_em_utc() -> None:
     sao_paulo = timezone(timedelta(hours=-3))
-    sessao = mappers.linha_para_sessao(
+    sessao = mappers.row_to_session(
         _linha(
             id="sess-1",
             user_id="user-1",

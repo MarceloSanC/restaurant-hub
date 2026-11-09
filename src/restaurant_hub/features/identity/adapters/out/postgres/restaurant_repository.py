@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
-    traduzir,
+    translate,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.tables import restaurants
 from restaurant_hub.features.identity.adapters.out.postgres.unit_connection import (
@@ -44,10 +44,10 @@ class PostgresRestaurantRepository:
         try:
             with for_write(self._engine) as connection:
                 self._add(connection, restaurant)
-        except IntegrityError as erro:
-            # `from erro` preserva a cadeia de causa: sem ela, o diagnóstico de um
+        except IntegrityError as error:
+            # `from error` preserva a cadeia de causa: sem ela, o diagnóstico de um
             # conflito de integridade perde o SQL e a constraint originais.
-            raise traduzir(erro, restaurant.id) from erro
+            raise translate(error, restaurant.id) from error
 
     def find_by_id(self, restaurant_id: RestaurantId) -> Restaurant | None:
         with for_read(self._engine) as connection:
@@ -56,12 +56,10 @@ class PostgresRestaurantRepository:
     # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
     def _add(self, connection: Connection, restaurant: Restaurant) -> None:
-        connection.execute(
-            restaurants.insert().values(**mappers.restaurante_para_linha(restaurant))
-        )
+        connection.execute(restaurants.insert().values(**mappers.restaurant_to_row(restaurant)))
 
     def _find_by_id(self, connection: Connection, restaurant_id: RestaurantId) -> Restaurant | None:
-        linha = connection.execute(
+        row = connection.execute(
             select(restaurants).where(restaurants.c.id == restaurant_id)
         ).one_or_none()
-        return mappers.linha_para_restaurante(linha) if linha is not None else None
+        return mappers.row_to_restaurant(row) if row is not None else None

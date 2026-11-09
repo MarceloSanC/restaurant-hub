@@ -19,7 +19,7 @@ vai tratar como legítima.
 `timestamptz` guarda um instante, mas o psycopg o devolve no fuso **da sessão**.
 Sem normalizar, o mesmo teste passa no runner (UTC) e falha numa máquina em
 `America/Sao_Paulo`, e o `is_active` de uma sessão passa a depender do fuso de quem
-consulta. `_para_utc` fecha isso na leitura; o `Engine` também fixa `timezone=UTC`
+consulta. `_to_utc` fecha isso na leitura; o `Engine` também fixa `timezone=UTC`
 na conexão (cinto e suspensório: este mapper pode receber linha de um `Engine` que
 não passou pelo composition root).
 """
@@ -54,7 +54,7 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
 Row = Any
 
 
-def _para_utc(momento: datetime) -> datetime:
+def _to_utc(moment: datetime) -> datetime:
     """Normaliza um datetime lido do banco para aware em UTC.
 
     Aceita naive por robustez (um `TIMESTAMP` sem fuso, ou um driver configurado
@@ -63,9 +63,9 @@ def _para_utc(momento: datetime) -> datetime:
     `Session.is_active` comparar naive com aware e levantar `TypeError` no meio de
     uma renovação de token.
     """
-    if momento.tzinfo is None:
-        return momento.replace(tzinfo=UTC)
-    return momento.astimezone(UTC)
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=UTC)
+    return moment.astimezone(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -73,12 +73,12 @@ def _para_utc(momento: datetime) -> datetime:
 # ---------------------------------------------------------------------------
 
 
-def restaurante_para_linha(restaurant: Restaurant) -> dict[str, Any]:
+def restaurant_to_row(restaurant: Restaurant) -> dict[str, Any]:
     """`name` vai **verbatim** — a persistência não normaliza (ADR 2.3.0005)."""
     return {"id": restaurant.id, "name": restaurant.name}
 
 
-def linha_para_restaurante(row: Row) -> Restaurant:
+def row_to_restaurant(row: Row) -> Restaurant:
     return Restaurant(id=RestaurantId(row.id), name=row.name)
 
 
@@ -87,11 +87,11 @@ def linha_para_restaurante(row: Row) -> Restaurant:
 # ---------------------------------------------------------------------------
 
 
-def unidade_para_linha(unit: Unit) -> dict[str, Any]:
+def unit_to_row(unit: Unit) -> dict[str, Any]:
     return {"id": unit.id, "restaurant_id": unit.restaurant_id, "name": unit.name}
 
 
-def linha_para_unidade(row: Row) -> Unit:
+def row_to_unit(row: Row) -> Unit:
     return Unit(
         id=UnitId(row.id),
         restaurant_id=RestaurantId(row.restaurant_id),
@@ -104,7 +104,7 @@ def linha_para_unidade(row: Row) -> Unit:
 # ---------------------------------------------------------------------------
 
 
-def usuario_para_linha(user: User, password_hash: PasswordHash) -> dict[str, Any]:
+def user_to_row(user: User, password_hash: PasswordHash) -> dict[str, Any]:
     """O hash viaja ao lado da entidade — `User` não carrega senha (DTO da 2.2)."""
     return {
         "id": user.id,
@@ -116,7 +116,7 @@ def usuario_para_linha(user: User, password_hash: PasswordHash) -> dict[str, Any
     }
 
 
-def linha_para_usuario(row: Row) -> User:
+def row_to_user(row: Row) -> User:
     """Reidrata `User` **pelo construtor**, revalidando todas as invariantes.
 
     A ordem é parte da especificação (concept §6): `Role.from_string` primeiro
@@ -146,7 +146,7 @@ def linha_para_usuario(row: Row) -> User:
 # ---------------------------------------------------------------------------
 
 
-def vinculo_para_linha(membership: UnitMembership, tenant_id: RestaurantId) -> dict[str, Any]:
+def membership_to_row(membership: UnitMembership, tenant_id: RestaurantId) -> dict[str, Any]:
     """O `tenant_id` é denormalizado na tabela e ancorado por duas FKs compostas.
 
     Ele não vem do próprio `UnitMembership` (que só carrega os dois ids) — quem o
@@ -161,7 +161,7 @@ def vinculo_para_linha(membership: UnitMembership, tenant_id: RestaurantId) -> d
     }
 
 
-def linha_para_vinculo(row: Row) -> UnitMembership:
+def row_to_membership(row: Row) -> UnitMembership:
     return UnitMembership(user_id=UserId(row.user_id), unit_id=UnitId(row.unit_id))
 
 
@@ -170,7 +170,7 @@ def linha_para_vinculo(row: Row) -> UnitMembership:
 # ---------------------------------------------------------------------------
 
 
-def sessao_para_linha(session: Session) -> dict[str, Any]:
+def session_to_row(session: Session) -> dict[str, Any]:
     """Persiste o **fingerprint**, nunca o valor do refresh token (ADR 2.2.0001).
 
     Não existe coluna capaz de guardar o valor, então não existe nem a
@@ -187,14 +187,14 @@ def sessao_para_linha(session: Session) -> dict[str, Any]:
     }
 
 
-def linha_para_sessao(row: Row) -> Session:
+def row_to_session(row: Row) -> Session:
     return Session(
         id=SessionId(row.id),
         user_id=UserId(row.user_id),
         refresh_token_fingerprint=row.refresh_token_fingerprint,
-        issued_at=_para_utc(row.issued_at),
-        expires_at=_para_utc(row.expires_at),
-        revoked_at=_para_utc(row.revoked_at) if row.revoked_at is not None else None,
+        issued_at=_to_utc(row.issued_at),
+        expires_at=_to_utc(row.expires_at),
+        revoked_at=_to_utc(row.revoked_at) if row.revoked_at is not None else None,
     )
 
 
@@ -203,10 +203,10 @@ def linha_para_sessao(row: Row) -> Session:
 # ---------------------------------------------------------------------------
 
 
-def token_de_setup_para_linha(token: PasswordSetupToken) -> dict[str, Any]:
+def setup_token_to_row(token: PasswordSetupToken) -> dict[str, Any]:
     """Persiste o **fingerprint**, nunca o valor do token (ADR 2.5.0002).
 
-    Mesma disciplina de `sessao_para_linha`: não existe coluna capaz de guardar o
+    Mesma disciplina de `session_to_row`: não existe coluna capaz de guardar o
     valor, então não existe nem a possibilidade de gravá-lo por engano.
     """
     return {
@@ -220,7 +220,7 @@ def token_de_setup_para_linha(token: PasswordSetupToken) -> dict[str, Any]:
     }
 
 
-def linha_para_token_de_setup(row: Row) -> PasswordSetupToken:
+def row_to_setup_token(row: Row) -> PasswordSetupToken:
     """Reidrata o registro, convertendo o propósito de volta para o enum.
 
     `SetupTokenPurpose(row.purpose)` levanta `ValueError` para um valor que o
@@ -234,7 +234,7 @@ def linha_para_token_de_setup(row: Row) -> PasswordSetupToken:
         user_id=UserId(row.user_id),
         purpose=SetupTokenPurpose(row.purpose),
         token_fingerprint=row.token_fingerprint,
-        issued_at=_para_utc(row.issued_at),
-        expires_at=_para_utc(row.expires_at),
-        consumed_at=_para_utc(row.consumed_at) if row.consumed_at is not None else None,
+        issued_at=_to_utc(row.issued_at),
+        expires_at=_to_utc(row.expires_at),
+        consumed_at=_to_utc(row.consumed_at) if row.consumed_at is not None else None,
     )

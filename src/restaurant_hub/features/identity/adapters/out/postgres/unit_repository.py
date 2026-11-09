@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
-    traduzir,
+    translate,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.tables import units
 from restaurant_hub.features.identity.adapters.out.postgres.unit_connection import (
@@ -38,8 +38,8 @@ class PostgresUnitRepository:
         try:
             with for_write(self._engine) as connection:
                 self._add(connection, unit)
-        except IntegrityError as erro:
-            raise traduzir(erro, unit.id) from erro
+        except IntegrityError as error:
+            raise translate(error, unit.id) from error
 
     def find_by_id(self, unit_id: UnitId) -> Unit | None:
         with for_read(self._engine) as connection:
@@ -48,8 +48,8 @@ class PostgresUnitRepository:
     # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
     def _add(self, connection: Connection, unit: Unit) -> None:
-        connection.execute(units.insert().values(**mappers.unidade_para_linha(unit)))
+        connection.execute(units.insert().values(**mappers.unit_to_row(unit)))
 
     def _find_by_id(self, connection: Connection, unit_id: UnitId) -> Unit | None:
-        linha = connection.execute(select(units).where(units.c.id == unit_id)).one_or_none()
-        return mappers.linha_para_unidade(linha) if linha is not None else None
+        row = connection.execute(select(units).where(units.c.id == unit_id)).one_or_none()
+        return mappers.row_to_unit(row) if row is not None else None

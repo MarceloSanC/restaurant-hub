@@ -31,8 +31,8 @@ from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
-    nome_da_constraint,
-    traduzir,
+    constraint_name,
+    translate,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.tables import (
     unit_memberships,
@@ -69,12 +69,12 @@ class PostgresUserRepository:
         try:
             with for_write(self._engine) as connection:
                 self._add(connection, user, password_hash, memberships)
-        except IntegrityError as erro:
+        except IntegrityError as error:
             # Qual valor entra na mensagem depende de QUAL regra foi violada: o
             # e-mail para o conflito de e-mail, o id para os demais. Uma mensagem
             # dizendo "e-mail já registrado: user-42" seria pior que nenhuma.
-            detalhe = user.email.value if nome_da_constraint(erro) == "uq_users_email" else user.id
-            raise traduzir(erro, detalhe) from erro
+            detail = user.email.value if constraint_name(error) == "uq_users_email" else user.id
+            raise translate(error, detail) from error
 
     def find_by_id(self, user_id: UserId) -> User | None:
         with for_read(self._engine) as connection:
@@ -88,30 +88,30 @@ class PostgresUserRepository:
         só usasse um tenant.
         """
         with for_read(self._engine) as connection:
-            achado = connection.execute(
+            found = connection.execute(
                 select(users.c.id).where(users.c.email == email.value)
             ).one_or_none()
-            return achado is not None
+            return found is not None
 
     def find_credentials_by_email(self, email: Email) -> UserCredentials | None:
         """Usuário + hash numa ida só — `authenticate_user` precisa dos dois."""
         with for_read(self._engine) as connection:
-            linha = connection.execute(
+            row = connection.execute(
                 select(users).where(users.c.email == email.value)
             ).one_or_none()
-            if linha is None:
+            if row is None:
                 return None
             return UserCredentials(
-                user=mappers.linha_para_usuario(linha),
-                password_hash=PasswordHash(linha.password_hash),
+                user=mappers.row_to_user(row),
+                password_hash=PasswordHash(row.password_hash),
             )
 
     def list_memberships(self, user_id: UserId) -> tuple[UnitMembership, ...]:
         with for_read(self._engine) as connection:
-            linhas = connection.execute(
+            rows = connection.execute(
                 select(unit_memberships).where(unit_memberships.c.user_id == user_id)
             ).all()
-            return tuple(mappers.linha_para_vinculo(linha) for linha in linhas)
+            return tuple(mappers.row_to_membership(row) for row in rows)
 
     # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
@@ -122,9 +122,9 @@ class PostgresUserRepository:
         password_hash: PasswordHash,
         memberships: Sequence[UnitMembership],
     ) -> None:
-        connection.execute(users.insert().values(**mappers.usuario_para_linha(user, password_hash)))
-        vinculos = list(memberships)
-        if not vinculos:
+        connection.execute(users.insert().values(**mappers.user_to_row(user, password_hash)))
+        membership_list = list(memberships)
+        if not membership_list:
             return
         # O `tenant_id` do vínculo vem do usuário dono, não do próprio
         # `UnitMembership` (que só carrega dois ids). As FKs compostas rejeitam a
@@ -132,14 +132,14 @@ class PostgresUserRepository:
         # cross-tenant fica irrepresentável.
         #
         # Por que o `type: ignore[arg-type]` abaixo é seguro: `user.tenant_id` é
-        # `RestaurantId | None` e `vinculo_para_linha` exige `RestaurantId`. O único
+        # `RestaurantId | None` e `membership_to_row` exige `RestaurantId`. O único
         # papel com tenant nulo é `platform_admin`, que não chega aqui —
         # `User.link_to_unit` levanta `PlatformAdminMembershipError` antes (domínio,
         # 2.1); e se chegasse, a coluna é `NOT NULL` sob FK composta. Estreitar o tipo
         # exigiria um `assert` reafirmando invariante que o domínio já garante.
         connection.execute(
             unit_memberships.insert(),
-            [mappers.vinculo_para_linha(v, user.tenant_id) for v in vinculos],  # type: ignore[arg-type]
+            [mappers.membership_to_row(v, user.tenant_id) for v in membership_list],  # type: ignore[arg-type]
         )
 
     def set_password_hash(self, user_id: UserId, password_hash: PasswordHash) -> None:
@@ -152,18 +152,18 @@ class PostgresUserRepository:
         nada.
         """
         with for_write(self._engine) as connection:
-            resultado = connection.execute(
+            result = connection.execute(
                 users.update().where(users.c.id == user_id).values(password_hash=password_hash)
             )
-            if resultado.rowcount == 0:
+            if result.rowcount == 0:
                 raise UserNotFoundError(user_id)
 
     def _find_by_id(self, connection: Connection, user_id: UserId) -> User | None:
         # Colunas explícitas, sem `password_hash`: material de credencial que não é
         # carregado não vaza em log nem em traceback.
-        linha = connection.execute(
+        row = connection.execute(
             select(users.c.id, users.c.email, users.c.role, users.c.tenant_id).where(
                 users.c.id == user_id
             )
         ).one_or_none()
-        return mappers.linha_para_usuario(linha) if linha is not None else None
+        return mappers.row_to_user(row) if row is not None else None

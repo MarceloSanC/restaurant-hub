@@ -29,8 +29,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
-    nome_da_constraint,
-    traduzir,
+    constraint_name,
+    translate,
 )
 from restaurant_hub.features.identity.adapters.out.postgres.tables import sessions
 from restaurant_hub.features.identity.adapters.out.postgres.unit_connection import (
@@ -51,22 +51,22 @@ class PostgresSessionRepository:
     def add(self, session: Session) -> None:
         try:
             with for_write(self._engine) as connection:
-                connection.execute(sessions.insert().values(**mappers.sessao_para_linha(session)))
-        except IntegrityError as erro:
-            detalhe = (
+                connection.execute(sessions.insert().values(**mappers.session_to_row(session)))
+        except IntegrityError as error:
+            detail = (
                 session.refresh_token_fingerprint
-                if nome_da_constraint(erro) == "uq_sessions_fingerprint"
+                if constraint_name(error) == "uq_sessions_fingerprint"
                 else session.id
             )
-            raise traduzir(erro, detalhe) from erro
+            raise translate(error, detail) from error
 
     def find_by_fingerprint(self, fingerprint: str) -> Session | None:
         """Devolve a sessão **sem filtrar** revogada nem expirada (regra 1)."""
         with for_read(self._engine) as connection:
-            linha = connection.execute(
+            row = connection.execute(
                 select(sessions).where(sessions.c.refresh_token_fingerprint == fingerprint)
             ).one_or_none()
-            return mappers.linha_para_sessao(linha) if linha is not None else None
+            return mappers.row_to_session(row) if row is not None else None
 
     def revoke(self, session_id: SessionId, revoked_at: datetime) -> bool:
         """Revoga uma sessão. `True` só se esta chamada revogou (`rowcount == 1`)."""
@@ -81,20 +81,20 @@ class PostgresSessionRepository:
     def purge_expired(self, before: datetime) -> int:
         """Remove as sessões já expiradas em `before` (`expires_at <= before`)."""
         with for_write(self._engine) as connection:
-            resultado = connection.execute(delete(sessions).where(sessions.c.expires_at <= before))
-            return resultado.rowcount
+            result = connection.execute(delete(sessions).where(sessions.c.expires_at <= before))
+            return result.rowcount
 
     # ---- núcleo sobre `Connection` (a mesma dentro ou fora da unidade de trabalho) ----
 
     def _revoke(
-        self, connection: Connection, criterio: ColumnElement[bool], revoked_at: datetime
+        self, connection: Connection, criterion: ColumnElement[bool], revoked_at: datetime
     ) -> int:
         """Devolve quantas sessões esta chamada revogou — já revogadas não contam."""
-        resultado = connection.execute(
+        result = connection.execute(
             update(sessions)
             # `revoked_at IS NULL` é o que torna a idempotência forte: sessão já
             # revogada não é tocada, e o instante da PRIMEIRA revogação sobrevive.
-            .where(criterio, sessions.c.revoked_at.is_(None))
+            .where(criterion, sessions.c.revoked_at.is_(None))
             .values(revoked_at=revoked_at)
         )
-        return int(resultado.rowcount)
+        return int(result.rowcount)
