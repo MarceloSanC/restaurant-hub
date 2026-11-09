@@ -212,6 +212,24 @@ def e_do_repo(citado: str, caminhos: set[str], nomes: set[str]) -> bool:
     return any(c == sufixo or c.endswith("/" + sufixo) for c in caminhos)
 
 
+_ID_NA_LISTA = re.compile(rf"(?<![\w.]){_ID}|(?<=[/–,\s-])\d{{4}}\b")
+
+
+def ids_da_lista(citacao: str, primeiro: str) -> list[str]:
+    """Os ADRs de uma referência em lista: `ADRs 3.4.0006/0008` → `3.4.0006`, `3.4.0008`."""
+    if not citacao.lstrip("[").startswith("ADR"):
+        return [primeiro]
+    ids: list[str] = []
+    prefixo = ""
+    for m in _ID_NA_LISTA.finditer(citacao.split("](", 1)[0]):
+        if "." in m.group(0):
+            ids.append(m.group(0))
+            prefixo = m.group(0).rsplit(".", 1)[0]
+        else:
+            ids.append(f"{prefixo}.{m.group(0)}")
+    return ids or [primeiro]
+
+
 def _linha_de(texto: str, pos: int) -> int:
     return texto.count("\n", 0, pos) + 1
 
@@ -270,15 +288,19 @@ def problemas_no_texto(
             if _ROTULO_MAL_FORMADO.match(texto, pos) and not texto.startswith(" › ", pos):
                 achados.append((linha, f'trecho do ADR {ident} fora da forma ` › "trecho"`'))
             continue
-        adr = todos.get(ident)
-        if adr is None:
-            achados.append((linha, f"ADR {ident} não existe em {ADR_DIR.as_posix()}/"))
+        lista = ids_da_lista(ref.group(0), ident)
+        faltam = [i for i in lista if i not in todos]
+        if faltam:
+            achados.append((linha, f"ADR {faltam[0]} não existe em {ADR_DIR.as_posix()}/"))
             continue
+        adr = todos[ident]
         for rotulo in _ROTULO_ITEM.findall(m.group("rotulos")):
-            achou = (
-                rotulo.strip("`") in adr.cru
+            # Numa lista (`ADRs 3.4.0006/0008 › "x"`), o trecho pode estar em qualquer um deles.
+            achou = any(
+                rotulo.strip("`") in todos[i].cru
                 if rotulo.startswith("`")
-                else normaliza(rotulo.strip('"')) in adr.texto
+                else normaliza(rotulo.strip('"')) in todos[i].texto
+                for i in lista
             )
             if not achou:
                 achados.append((linha, f"trecho {rotulo} não existe no ADR {ident} ({adr.rel})"))
