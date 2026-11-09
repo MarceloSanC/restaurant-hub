@@ -955,10 +955,10 @@ def test_path_variants_have_both_slashes_and_the_resolved_path(
 
     variants = wr._path_variants(rel)
 
-    assert variants[:2] == list(dict.fromkeys([str(rel), "rel/wt"]))
-    assert str(resolved) in variants
-    assert str(resolved).replace("\\", "/") in variants
-    assert len(variants) == len(set(variants))
+    # No Windows são quatro grafias (barra invertida e normal, relativa e
+    # resolvida); no Linux, duas. A ordem e a deduplicação são as mesmas.
+    spellings = [str(rel), "rel/wt", str(resolved), str(resolved).replace("\\", "/")]
+    assert variants == list(dict.fromkeys(spellings))
 
 
 class _UnresolvablePath(type(Path())):  # type: ignore[misc]
