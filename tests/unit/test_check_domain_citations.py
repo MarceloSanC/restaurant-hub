@@ -271,6 +271,7 @@ def test_ancora_que_existe_no_doc_passa(tmp_path: pathlib.Path, ancora: str) -> 
         ("§3.1 › `TimeRange`", "rótulo `TimeRange` não existe em"),
         ('§2 › "Toda alocação está dentro do período"', "não existe em"),
         ('§"Tabela Inexistente"', 'seção §"Tabela Inexistente" não existe'),
+        ('§"Lacunas para o concept de cada Stag"', "não existe"),
     ],
     ids=[
         "secao-inexistente",
@@ -279,6 +280,7 @@ def test_ancora_que_existe_no_doc_passa(tmp_path: pathlib.Path, ancora: str) -> 
         "literal-de-outra-secao",
         "rotulo-de-outra-secao",
         "secao-entre-aspas-inexistente",
+        "secao-entre-aspas-prefixo-sem-fronteira-de-palavra",
     ],
 )
 def test_ancora_que_nao_resolve_reprova(tmp_path: pathlib.Path, ancora: str, motivo: str) -> None:
