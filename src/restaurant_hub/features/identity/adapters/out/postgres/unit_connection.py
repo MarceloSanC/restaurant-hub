@@ -2,10 +2,10 @@
 
 É a metade "repositório" do adapter da unidade de trabalho (ADR 2.6.0001 §3). Os
 repositórios continuam recebendo um `Engine` no construtor e não sabem se há
-unidade aberta: pedem a conexão a `para_escrita`/`para_leitura`, e estes decidem.
+unidade aberta: pedem a conexão a `for_write`/`for_read`, e estes decidem.
 
-- **Sem unidade ativa** (lei L6): `para_escrita` abre `engine.begin()` e
-  `para_leitura` abre `engine.connect()` — exatamente o que cada método público
+- **Sem unidade ativa** (lei L6): `for_write` abre `engine.begin()` e
+  `for_read` abre `engine.connect()` — exatamente o que cada método público
   fazia antes da Stage 2.6. Cada chamada é a própria transação.
 - **Com unidade ativa para o MESMO engine**: entregam a conexão da unidade, dentro
   de um `SAVEPOINT` (`Connection.begin_nested()`). O savepoint é o que faz a lei
@@ -33,60 +33,60 @@ from sqlalchemy import Connection, Engine
 # (engine da unidade, conexão da unidade) enquanto uma unidade está aberta neste
 # contexto de execução; `None` fora de unidade. Quem publica é o
 # `PostgresUnitOfWork`, e só ele.
-_unidade_ativa: ContextVar[tuple[Engine, Connection] | None] = ContextVar(
+_active_unit: ContextVar[tuple[Engine, Connection] | None] = ContextVar(
     "unidade_de_trabalho_identity", default=None
 )
 
 
-def _conexao_da_unidade(engine: Engine) -> Connection | None:
-    ativa = _unidade_ativa.get()
-    if ativa is None or ativa[0] is not engine:
+def _unit_connection(engine: Engine) -> Connection | None:
+    active = _active_unit.get()
+    if active is None or active[0] is not engine:
         return None
-    return ativa[1]
+    return active[1]
 
 
 @contextmanager
-def para_escrita(engine: Engine) -> Iterator[Connection]:
+def for_write(engine: Engine) -> Iterator[Connection]:
     """Conexão para uma escrita: a da unidade (em savepoint) ou uma transação própria."""
-    conexao = _conexao_da_unidade(engine)
-    if conexao is None:
-        with engine.begin() as propria:
-            yield propria
+    connection = _unit_connection(engine)
+    if connection is None:
+        with engine.begin() as own:
+            yield own
         return
-    with conexao.begin_nested():
-        yield conexao
+    with connection.begin_nested():
+        yield connection
 
 
 @contextmanager
-def para_leitura(engine: Engine) -> Iterator[Connection]:
+def for_read(engine: Engine) -> Iterator[Connection]:
     """Conexão para uma leitura: a da unidade (em savepoint, vê as escritas dela) ou uma própria.
 
     Dentro da unidade a leitura também vai em savepoint: uma leitura que falha (um
     `statement_timeout`, por exemplo) abortaria a transação da unidade do mesmo
     jeito que uma escrita.
     """
-    conexao = _conexao_da_unidade(engine)
-    if conexao is None:
-        with engine.connect() as propria:
-            yield propria
+    connection = _unit_connection(engine)
+    if connection is None:
+        with engine.connect() as own:
+            yield own
         return
-    with conexao.begin_nested():
-        yield conexao
+    with connection.begin_nested():
+        yield connection
 
 
 # ---- publicação, de uso exclusivo do `PostgresUnitOfWork` ----
 
 
-def ha_unidade_aberta() -> bool:
+def has_open_unit() -> bool:
     """Há unidade aberta neste contexto de execução, de qualquer engine (lei L5)."""
-    return _unidade_ativa.get() is not None
+    return _active_unit.get() is not None
 
 
-def publicar(engine: Engine, conexao: Connection) -> Token[tuple[Engine, Connection] | None]:
-    """Torna `conexao` a conexão da unidade para os repositórios deste `engine`."""
-    return _unidade_ativa.set((engine, conexao))
+def publish(engine: Engine, connection: Connection) -> Token[tuple[Engine, Connection] | None]:
+    """Torna `connection` a conexão da unidade para os repositórios deste `engine`."""
+    return _active_unit.set((engine, connection))
 
 
-def retirar(marca: Token[tuple[Engine, Connection] | None]) -> None:
+def unpublish(reset_token: Token[tuple[Engine, Connection] | None]) -> None:
     """Desfaz a publicação — chamado em `finally`, mesmo se o commit falhar."""
-    _unidade_ativa.reset(marca)
+    _active_unit.reset(reset_token)

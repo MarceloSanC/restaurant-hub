@@ -1,6 +1,6 @@
 """Adapter Postgres de `UnitOfWork` (ADR 2.6.0001 §3).
 
-Abre **uma** transação (`engine.begin()`) e a publica em `conexao_da_unidade`, de
+Abre **uma** transação (`engine.begin()`) e a publica em `unit_connection`, de
 onde os repositórios de identity montados sobre o **mesmo** engine a tiram — cada
 chamada num savepoint próprio. Saída normal comita; saída por exceção desfaz e
 deixa a exceção subir intacta (leis L1 e L2 do port): quem faz isso é o
@@ -21,7 +21,7 @@ from contextlib import contextmanager
 
 from sqlalchemy import Engine
 
-from restaurant_hub.features.identity.adapters.out.postgres import conexao_da_unidade
+from restaurant_hub.features.identity.adapters.out.postgres import unit_connection
 
 
 class PostgresUnitOfWork:
@@ -32,11 +32,11 @@ class PostgresUnitOfWork:
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
-        if conexao_da_unidade.ha_unidade_aberta():
+        if unit_connection.has_open_unit():
             raise RuntimeError("unidade de trabalho já aberta neste contexto (L5)")
-        with self._engine.begin() as conexao:
-            marca = conexao_da_unidade.publicar(self._engine, conexao)
+        with self._engine.begin() as connection:
+            reset_token = unit_connection.publish(self._engine, connection)
             try:
                 yield
             finally:
-                conexao_da_unidade.retirar(marca)
+                unit_connection.unpublish(reset_token)

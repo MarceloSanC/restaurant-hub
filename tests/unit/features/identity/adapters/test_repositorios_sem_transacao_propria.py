@@ -1,14 +1,14 @@
 """Nenhum repositório Postgres de identity abre transação por conta própria (Stage 2.6, CA3).
 
 A atomicidade da unidade de trabalho depende de **todo** método de repositório
-pedir a conexão a `conexao_da_unidade`. Um método esquecido com
+pedir a conexão a `unit_connection`. Um método esquecido com
 `self._engine.begin()` não quebra teste nenhum fora de unidade — e, dentro dela,
 falha em silêncio de três jeitos: a escrita comita sozinha; a leitura não vê as
 escritas da unidade; e um `UPDATE` numa linha que a unidade já travou espera numa
 **segunda** conexão do pool, uma trava que o Postgres não enxerga como deadlock.
 
 A checagem é **positiva**, não uma lista de padrões proibidos: todo uso do engine
-num `*_repository.py` tem de ser o argumento de `para_escrita`/`para_leitura` ou a
+num `*_repository.py` tem de ser o argumento de `for_write`/`for_read` ou a
 atribuição `self._engine = engine` do construtor. Qualquer outra forma — alias
 local, método ligado guardado numa variável, `raw_connection()`, o engine guardado
 sob outro nome — reprova, porque cada uma é uma saída silenciosa da unidade.
@@ -23,7 +23,7 @@ import restaurant_hub.features.identity.adapters.out.postgres as pacote_postgres
 
 _PASTA = pathlib.Path(pacote_postgres.__file__).parent
 _REPOSITORIOS = sorted(_PASTA.glob("*_repository.py"))
-_HELPERS = {"para_escrita", "para_leitura"}
+_HELPERS = {"for_write", "for_read"}
 
 
 def _usos_indevidos_do_engine(arquivo: pathlib.Path) -> list[str]:
@@ -51,9 +51,7 @@ def _usos_indevidos_do_engine(arquivo: pathlib.Path) -> list[str]:
 
     for no in ast.walk(arvore):
         if isinstance(no, ast.Attribute) and no.attr == "_engine" and id(no) not in permitidos:
-            achados.append(
-                f"{arquivo.name}:{no.lineno} `_engine` fora de para_escrita/para_leitura"
-            )
+            achados.append(f"{arquivo.name}:{no.lineno} `_engine` fora de for_write/for_read")
         if (
             isinstance(no, ast.Attribute)
             and isinstance(no.value, ast.Name)
@@ -119,10 +117,10 @@ def test_o_detector_aprova_o_uso_pelos_helpers(tmp_path: pathlib.Path) -> None:
         "    def __init__(self, engine):\n"
         "        self._engine = engine\n"
         "    def add(self):\n"
-        "        with para_escrita(self._engine) as c:\n"
+        "        with for_write(self._engine) as c:\n"
         "            pass\n"
         "    def find(self):\n"
-        "        with para_leitura(self._engine) as c:\n"
+        "        with for_read(self._engine) as c:\n"
         "            pass\n",
         encoding="utf-8",
     )

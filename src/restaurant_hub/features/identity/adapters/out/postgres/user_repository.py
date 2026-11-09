@@ -30,10 +30,6 @@ from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.postgres import mappers
-from restaurant_hub.features.identity.adapters.out.postgres.conexao_da_unidade import (
-    para_escrita,
-    para_leitura,
-)
 from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors import (
     nome_da_constraint,
     traduzir,
@@ -41,6 +37,10 @@ from restaurant_hub.features.identity.adapters.out.postgres.integrity_errors imp
 from restaurant_hub.features.identity.adapters.out.postgres.tables import (
     unit_memberships,
     users,
+)
+from restaurant_hub.features.identity.adapters.out.postgres.unit_connection import (
+    for_read,
+    for_write,
 )
 from restaurant_hub.features.identity.application.dtos.credentials import UserCredentials
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
@@ -67,8 +67,8 @@ class PostgresUserRepository:
     ) -> None:
         """Grava usuário, credencial e vínculos como **uma única** unidade."""
         try:
-            with para_escrita(self._engine) as conexao:
-                self._add(conexao, user, password_hash, memberships)
+            with for_write(self._engine) as connection:
+                self._add(connection, user, password_hash, memberships)
         except IntegrityError as erro:
             # Qual valor entra na mensagem depende de QUAL regra foi violada: o
             # e-mail para o conflito de e-mail, o id para os demais. Uma mensagem
@@ -77,8 +77,8 @@ class PostgresUserRepository:
             raise traduzir(erro, detalhe) from erro
 
     def find_by_id(self, user_id: UserId) -> User | None:
-        with para_leitura(self._engine) as conexao:
-            return self._find_by_id(conexao, user_id)
+        with for_read(self._engine) as connection:
+            return self._find_by_id(connection, user_id)
 
     def exists_by_email(self, email: Email) -> bool:
         """Unicidade é **global**, não escopada por tenant (kickoff #2).
@@ -87,16 +87,18 @@ class PostgresUserRepository:
         mesmo login existir em dois restaurantes, e passaria em qualquer teste que
         só usasse um tenant.
         """
-        with para_leitura(self._engine) as conexao:
-            achado = conexao.execute(
+        with for_read(self._engine) as connection:
+            achado = connection.execute(
                 select(users.c.id).where(users.c.email == email.value)
             ).one_or_none()
             return achado is not None
 
     def find_credentials_by_email(self, email: Email) -> UserCredentials | None:
         """Usuário + hash numa ida só — `authenticate_user` precisa dos dois."""
-        with para_leitura(self._engine) as conexao:
-            linha = conexao.execute(select(users).where(users.c.email == email.value)).one_or_none()
+        with for_read(self._engine) as connection:
+            linha = connection.execute(
+                select(users).where(users.c.email == email.value)
+            ).one_or_none()
             if linha is None:
                 return None
             return UserCredentials(
@@ -105,8 +107,8 @@ class PostgresUserRepository:
             )
 
     def list_memberships(self, user_id: UserId) -> tuple[UnitMembership, ...]:
-        with para_leitura(self._engine) as conexao:
-            linhas = conexao.execute(
+        with for_read(self._engine) as connection:
+            linhas = connection.execute(
                 select(unit_memberships).where(unit_memberships.c.user_id == user_id)
             ).all()
             return tuple(mappers.linha_para_vinculo(linha) for linha in linhas)
@@ -115,12 +117,12 @@ class PostgresUserRepository:
 
     def _add(
         self,
-        conexao: Connection,
+        connection: Connection,
         user: User,
         password_hash: PasswordHash,
         memberships: Sequence[UnitMembership],
     ) -> None:
-        conexao.execute(users.insert().values(**mappers.usuario_para_linha(user, password_hash)))
+        connection.execute(users.insert().values(**mappers.usuario_para_linha(user, password_hash)))
         vinculos = list(memberships)
         if not vinculos:
             return
@@ -135,7 +137,7 @@ class PostgresUserRepository:
         # `User.link_to_unit` levanta `PlatformAdminMembershipError` antes (domínio,
         # 2.1); e se chegasse, a coluna é `NOT NULL` sob FK composta. Estreitar o tipo
         # exigiria um `assert` reafirmando invariante que o domínio já garante.
-        conexao.execute(
+        connection.execute(
             unit_memberships.insert(),
             [mappers.vinculo_para_linha(v, user.tenant_id) for v in vinculos],  # type: ignore[arg-type]
         )
@@ -149,17 +151,17 @@ class PostgresUserRepository:
         sucesso: uma redefinição de senha que reporta "pronto" sem ter gravado
         nada.
         """
-        with para_escrita(self._engine) as conexao:
-            resultado = conexao.execute(
+        with for_write(self._engine) as connection:
+            resultado = connection.execute(
                 users.update().where(users.c.id == user_id).values(password_hash=password_hash)
             )
             if resultado.rowcount == 0:
                 raise UserNotFoundError(user_id)
 
-    def _find_by_id(self, conexao: Connection, user_id: UserId) -> User | None:
+    def _find_by_id(self, connection: Connection, user_id: UserId) -> User | None:
         # Colunas explícitas, sem `password_hash`: material de credencial que não é
         # carregado não vaza em log nem em traceback.
-        linha = conexao.execute(
+        linha = connection.execute(
             select(users.c.id, users.c.email, users.c.role, users.c.tenant_id).where(
                 users.c.id == user_id
             )
