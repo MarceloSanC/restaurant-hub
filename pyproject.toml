@@ -126,8 +126,10 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
-omit = ["*/migrations/*", "*/scripts/*"]
+# `scripts/` e `.claude/hooks/` entram desde a issue #91: são os gates e os hooks
+# que decidem se o código entra. O `make test-gate` os relata à parte do `src/`.
+source = ["src", "scripts", ".claude/hooks"]
+omit = ["*/migrations/*"]
 # Cobertura de branch, não só de linha (Stage 2.2). Sem isso, uma condição
 # composta conta como coberta assim que a linha executa uma vez — e é justamente
 # em guarda de autorização (`authorize_action` tem 20 branches) que o ramo não
@@ -141,6 +143,10 @@ branch = true
 fail_under = 90
 show_missing = true
 skip_covered = false
+# O bloco `if __name__ == "__main__":` dos scripts (e do `main.py`) só chama o
+# `main()`, que os testes exercitam in-process; o bloco em si só roda por
+# subprocess, que o coverage não mede (issue #91).
+exclude_also = ['if __name__ == "__main__":']
 
 # ---------------------------------------------------------------------------
 # Mutmut — teste de mutação nos módulos que DECIDEM ACESSO (M2 da issue #45)

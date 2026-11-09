@@ -216,9 +216,17 @@ test:
 
 # ---------------------------------------------------------------------------
 # test-gate — suite com cobertura; falha se < 90% (fail_under do pyproject)
+#
+# Uma execução da suíte, dois relatórios, cada um com o `fail_under` (issue #91):
+# o código do produto (`src/`) e o tooling que decide se o código entra
+# (`scripts/` e `.claude/hooks/`). Um gate só sobre o total deixaria o `src/`
+# cair abaixo de 90% escondido atrás dos scripts, e vice-versa. O pytest-cov
+# ainda cobra o total, que fica acima de 90% sempre que as duas partes ficam.
 # ---------------------------------------------------------------------------
 test-gate:
-	uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
+	uv run pytest tests/ --cov=src/restaurant_hub --cov=scripts --cov=.claude/hooks --cov-report=
+	uv run coverage report --include="src/*"
+	uv run coverage report --include="scripts/*,.claude/hooks/*"
 
 # ---------------------------------------------------------------------------
 # test-fast — pula testes marcados como slow (CI rápido / loop local)
@@ -230,7 +238,7 @@ test-fast:
 # test-cov — testes com relatório de cobertura em HTML (gate ≥ 90% via pyproject)
 # ---------------------------------------------------------------------------
 test-cov:
-	uv run pytest tests/ --cov=src/restaurant_hub --cov-report=html --cov-report=term-missing
+	uv run pytest tests/ --cov=src/restaurant_hub --cov=scripts --cov=.claude/hooks --cov-report=html --cov-report=term-missing
 	@echo Relatorio gerado em: htmlcov/index.html
 
 # ---------------------------------------------------------------------------

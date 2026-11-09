@@ -464,3 +464,97 @@ def test_mypy_configuration_does_not_skip_what_typecheck_names() -> None:
         f"`[[tool.mypy.overrides]]` com `ignore_errors` em {silenced}: o mypy lê esses "
         f"módulos e não reporta erro nenhum, o que equivale a excluí-los"
     )
+
+
+# ---------------------------------------------------------------------------
+# O que o `make test-gate` mede (issue #91)
+#
+# Até a #91 a cobertura media só `src/` (`omit = */scripts/*`), e um gate podia
+# perder teste sem que o `make check` acusasse. O alvo roda a suíte uma vez e
+# relata duas partes, cada uma sob o `fail_under` do pyproject: um gate só sobre
+# o total esconderia uma parte abaixo de 90% atrás da outra.
+# ---------------------------------------------------------------------------
+
+# As partes relatadas à parte, cada uma com o seu `coverage report --include`.
+_COVERAGE_PARTS = (
+    frozenset({"src/*"}),
+    frozenset({"scripts/*", ".claude/hooks/*"}),
+)
+_MAIN_GUARD = 'if __name__ == "__main__":'
+
+
+def _coverage_config() -> dict[str, Any]:
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    coverage: dict[str, Any] = config["tool"]["coverage"]
+    return coverage
+
+
+@pytest.mark.unit
+def test_test_gate_measures_every_versioned_python_outside_the_exemptions() -> None:
+    """O pytest do `test-gate` mede todo `.py` versionado fora de `tests/` e `migrations/`."""
+    assert "test-gate" in _check_prerequisites(), (
+        "o `make check` não roda o `test-gate`: o CI roda `make check` literalmente"
+    )
+    pytest_command = _recipe("test-gate")[0]
+    assert pytest_command[:3] == ["uv", "run", "pytest"], (
+        f"o primeiro comando do `make test-gate` precisa ser a suíte: {pytest_command}"
+    )
+    roots = [
+        token.removeprefix("--cov=").rstrip("/") + "/"
+        for token in pytest_command
+        if token.startswith("--cov=")
+    ]
+    unmeasured = sorted(
+        path
+        for path in _versioned_python_files()
+        if not path.startswith(_TYPECHECK_EXEMPT) and not path.startswith(tuple(roots))
+    )
+    assert unmeasured == [], (
+        f"o `make test-gate` ({shlex.join(pytest_command)}) não mede {unmeasured}: um "
+        f"gate pode perder teste sem que o `make check` acuse (issue #91)"
+    )
+
+
+@pytest.mark.unit
+def test_test_gate_reports_each_part_under_the_configured_threshold() -> None:
+    """Um `coverage report --include` por parte, sem flag que mude limiar ou escopo."""
+    reports = _recipe("test-gate")[1:]
+    parts: list[frozenset[str]] = []
+    for command in reports:
+        assert command[:4] == ["uv", "run", "coverage", "report"], (
+            f"o `make test-gate` roda {command}; depois da suíte só cabem os relatórios"
+        )
+        flags = [token for token in command[4:] if token.startswith("-")]
+        includes = [flag for flag in flags if flag.startswith("--include=")]
+        assert len(includes) == 1 and flags == includes, (
+            f"`{shlex.join(command)}` passa {flags}: só o `--include` da parte é "
+            f"permitido — `--fail-under` ou `--omit` mudariam o veredito do gate"
+        )
+        parts.append(frozenset(includes[0].removeprefix("--include=").split(",")))
+    assert sorted(parts, key=sorted) == sorted(_COVERAGE_PARTS, key=sorted), (
+        f"o `make test-gate` relata as partes {[sorted(p) for p in parts]}; o gate "
+        f"espera {[sorted(p) for p in _COVERAGE_PARTS]}"
+    )
+    threshold = 90
+    assert _coverage_config()["report"]["fail_under"] >= threshold
+
+
+@pytest.mark.unit
+def test_coverage_configuration_does_not_drop_tooling() -> None:
+    """Nem `omit` nem `exclude` tiram de volta o que o `test-gate` mede.
+
+    `omit` só para `migrations/` (geradas pelo Alembic) e, como exclusão de
+    linha, só o bloco `if __name__ == "__main__":`, que roda por subprocess e
+    apenas chama o `main()` testado in-process.
+    """
+    coverage = _coverage_config()
+    assert coverage["run"].get("omit", []) == ["*/migrations/*"], (
+        f"`[tool.coverage.run] omit = {coverage['run'].get('omit')}`: arquivo omitido "
+        f"some do relatório e do gate"
+    )
+    report = coverage["report"]
+    assert report.get("exclude_lines", []) == [], "`exclude_lines` troca as exclusões padrão"
+    assert report.get("exclude_also", []) == [_MAIN_GUARD], (
+        f"`exclude_also = {report.get('exclude_also')}`: exclusão nova precisa de "
+        f"justificativa e de entrar aqui por decisão"
+    )
