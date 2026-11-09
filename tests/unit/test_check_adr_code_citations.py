@@ -353,3 +353,115 @@ def test_main_sai_2_sem_adr(
 ) -> None:
     assert _main(monkeypatch, _repo(tmp_path, {}, adrs={})) == _SAIDA_FATAL
     assert "FATAL" in capsys.readouterr().err
+
+
+# --- Auditoria de mutação (sobreviventes da primeira rodada) ----------------------------
+
+_ADR_4 = "# ADR 4.1.0004\n\n## Decision\n\nhr reads schedules in member units.\n"
+_EXTRAS = {"pyproject.toml": "[project]\n", "uv.lock": "version = 1\n"}
+
+
+def _repo2(tmp_path: pathlib.Path, texto: str) -> list[str]:
+    adrs = {"docs/adr/4_1_0003-politica.md": _ADR, "docs/adr/4_1_0004-rh.md": _ADR_4}
+    return list(gate.problemas(_repo(tmp_path, {**_EXTRAS, "docs/x.md": texto}, adrs)))
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "ver [`employee.py`](../src/restaurant_hub/staff/employee.py#L113) antes",
+        "o [ADR 4.1.0003](./4_1_0003-politica.md#L79) diz",
+        "ver [`4_1_0003-politica.md`](./4_1_0003-politica.md#L12).",
+        "o guard ([`employee.py`](../src/restaurant_hub/staff/employee.py) 113–116) recusa",
+        "o guard (`employee.py` 113 e 120) recusa",
+        "o guard (``employee.py``:113) recusa",
+        "`employee.py` (`Employee`, linha 3) recusa",
+        "o guard (`employee.py` L113) recusa",
+        "`employee.py` (`Employee`, l. 113) recusa",
+        "`employee.py` (`Employee`, ln 113) recusa",
+        "`employee.py` (`Employee`, line ~113) recusa",
+        "ADR 4.1.0003 (c), 95.",
+        "ADR 4.1.0003 (c) 95 e 97 diz",
+        "ADR 4.1.0003 (c) 79: o corte",
+        "ADR 4.1.0003 (c, l. 79) diz",
+        "ADRs 4.1.0003 95–97.",
+        "a regra (`pyproject.toml:12`) liga",
+        "o lock (`uv.lock:40`) fixa",
+    ],
+)
+def test_formas_de_linha_que_escapavam_reprovam(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _repo2(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha" in achados[0]
+
+
+@pytest.mark.parametrize(
+    ("texto", "alvo"),
+    [
+        ("ADR 4.1.0003 (c) e ADR 4.1.0004 95.", "ao ADR 4.1.0004"),
+        ("ADR 4.1.0003 (c) e `check_layout.py` 130.", "a check_layout.py"),
+    ],
+)
+def test_o_trecho_acaba_na_proxima_fonte(tmp_path: pathlib.Path, texto: str, alvo: str) -> None:
+    achados = _repo2(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert alvo in achados[0]
+
+
+@pytest.mark.parametrize(
+    ("texto", "motivo"),
+    [
+        ('ADRs 4.1.0003 e 4.1.0004 › "zzz".', 'trecho "zzz" não existe'),
+        ('ver [`4_1_0003-politica.md`](./4_1_0003-politica.md) › "zzz".', 'trecho "zzz"'),
+        ('ADR 4.1.0003 Alternative B › "zzz".', 'trecho "zzz"'),
+        ('ADR 4.1.0003 §Decision 2 › "zzz".', 'trecho "zzz"'),
+        ('ADR 4.1.0003 (c) -> "block".', "fora da forma"),
+        ('ADRs 4.1.0003/0009 › "block".', "ADR 4.1.0009 não existe"),
+    ],
+)
+def test_trechos_que_escapavam_reprovam(tmp_path: pathlib.Path, texto: str, motivo: str) -> None:
+    achados = _repo2(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert motivo in achados[0]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "ADRs 4.1.0003 e 0004, ambos aceitos.",
+        'ADRs 4.1.0003/0004 › "hr reads schedules in member units".',
+        "ADR 4.1.0003 › `**unavailability**`.",
+        'ADR 4.1.0003 › "".',
+        "o `aff/employee.py:113` de outro projeto",
+        "veja `/employee.py:113` no container",
+        "~~~\nemployee.py:113: in execute\n~~~",
+        "- item\n\n  ```\n  employee.py:113: in execute\n  ```",
+        'ADR 4.1.0003 diz "até 44, no máximo".',
+        "ADR 4.1.0003 diz *até 44, no máximo*.",
+        "ADR 4.1.0003 fixa `limite(44)` aqui.",
+        "ADR 4.1.0003 (Steps 10–12) entrou.",
+        "ADR 4.1.0003 (Tasks 10–12) aplicam.",
+        "ADR 4.1.0003 (corte às 22:30) vale.",
+    ],
+)
+def test_o_que_nao_e_linha_passa(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _repo2(tmp_path, texto) == []
+
+
+def test_achados_saem_em_ordem_de_linha(tmp_path: pathlib.Path) -> None:
+    achados = _repo2(tmp_path, "`employee.py:1` e ADR 4.1.0003 95.")
+    assert [a.split(": ", 1)[1][:30] for a in achados] == sorted(
+        a.split(": ", 1)[1][:30] for a in achados
+    )
+    assert "employee.py" in achados[0]
+
+
+def test_errata_de_subtitulo_nao_e_poupada(tmp_path: pathlib.Path) -> None:
+    adr = _ADR.replace("## Errata", "### Errata")
+    achados = gate.problemas(_repo(tmp_path, {}, {"docs/adr/4_1_0003-politica.md": adr}))
+    assert len(achados) == 1, achados
+
+
+def test_a_errata_vai_ate_o_proximo_titulo_de_nivel_2(tmp_path: pathlib.Path) -> None:
+    adr = _ADR.replace("| References |", "### 2026-07\n\n- `employee.py:113`\n\n| References |")
+    assert gate.problemas(_repo(tmp_path, {}, {"docs/adr/4_1_0003-politica.md": adr})) == []

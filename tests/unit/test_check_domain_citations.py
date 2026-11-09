@@ -659,3 +659,47 @@ def test_o_repositorio_real_tem_ancoras_ao_overview() -> None:
         for ref in regex.finditer(texto):
             ancoras += len(gate.cadeia_de_ancoras(texto, ref.end()))
     assert ancoras > 100  # noqa: PLR2004
+
+
+# --- Auditoria de mutação da #154 (sobreviventes da primeira rodada) ---------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Resolve overview  44 contra o roadmap",
+        "Resolve overview\t44 contra o roadmap",
+        "como `overview.md 46\nx` diz",
+        "um ` solto\nveja overview.md 44 e `x`.",
+        "veja overview.md 44 e `x`.",
+    ],
+    ids=[
+        "dois-espacos",
+        "tab",
+        "literal-nao-atravessa-linha",
+        "crase-de-outra-linha",
+        "fora-de-literal",
+    ],
+)
+def test_linha_ao_overview_que_escapava_reprova(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _com_overview(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha a docs/overview.md" in achados[0]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["segundo o overview\n10 pessoas entram.", "`overview.md` §9 (abre às 8:30)."],
+    ids=["numero-na-linha-seguinte", "hora-sem-zero"],
+)
+def test_o_que_nao_e_linha_do_overview_passa(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _com_overview(tmp_path, texto) == []
+
+
+def test_nome_repetido_nomeia_o_doc_de_dominio_primeiro(tmp_path: pathlib.Path) -> None:
+    repo = _repo(
+        tmp_path,
+        {"docs/overview.md": _OVERVIEW},
+        dominio={"docs/domain/x/overview.md": _ESCALA, "docs/domain/staff/equipe.md": _EQUIPE},
+    )
+    assert "docs/domain/x/overview.md e docs/overview.md" in gate.problemas(repo)[0]
