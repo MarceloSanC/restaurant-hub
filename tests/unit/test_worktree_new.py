@@ -416,7 +416,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     def _create_worktree(_branch: str, _base: str, path: Path, _local: bool, _remote: bool) -> None:
         path.mkdir(parents=True)
 
-    monkeypatch.setattr(wn, "git_top", lambda: main_checkout)
+    monkeypatch.setattr(wn, "main_checkout_root", lambda: main_checkout)
     monkeypatch.setattr(wn, "ensure_issue", lambda num, **_kwargs: num)
     monkeypatch.setattr(wn, "branch_exists", lambda _branch: (False, False))
     monkeypatch.setattr(wn, "create_worktree", _create_worktree)
@@ -989,14 +989,27 @@ def git_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return principal
 
 
-def test_git_top_from_a_subdirectory_is_the_checkout_root(
+def test_main_checkout_root_from_a_subdirectory_is_the_checkout_root(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sub = git_repo / "a" / "b"
     sub.mkdir(parents=True)
     monkeypatch.chdir(sub)
 
-    assert wn.git_top() == git_repo.resolve()
+    assert wn.main_checkout_root() == git_repo.resolve()
+    assert wn.git_common_dir() == (git_repo / ".git").resolve()
+
+
+def test_main_checkout_root_from_a_linked_worktree_is_the_main_checkout(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Não a raiz da worktree atual, que o `--show-toplevel` devolvia (issue #143)."""
+    linked = tmp_path / "linked"
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    (linked / "sub").mkdir()
+    monkeypatch.chdir(linked / "sub")
+
+    assert wn.main_checkout_root() == git_repo.resolve()
 
 
 def test_git_common_dir_from_a_linked_worktree_is_the_main_git_dir(
@@ -1009,6 +1022,36 @@ def test_git_common_dir_from_a_linked_worktree_is_the_main_git_dir(
     monkeypatch.chdir(linked)
 
     assert wn.git_common_dir() == (git_repo / ".git").resolve()
+
+
+def test_main_run_from_a_linked_worktree_creates_beside_the_main_checkout(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """De dentro de uma worktree, a nova nasce ao lado do principal com o `.env` dele (#143)."""
+    _git(git_repo, "update-ref", "refs/remotes/origin/develop", "HEAD")
+    _write_env(git_repo, "DEBUG=principal")
+    linked = tmp_path / "principal-worktrees" / "feat-1-x"
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    _write_env(linked, "DEBUG=worktree-atual")
+    monkeypatch.chdir(linked)
+    monkeypatch.setattr(wn, "ensure_issue", lambda num, **_kwargs: num)
+    flags = ["--no-fetch", "--no-setup", "--no-vscode", "--no-port-assign"]
+    monkeypatch.setattr(sys, "argv", ["worktree-new.py", "feat/2-yy", *flags])
+
+    assert wn.main() == 0
+
+    new = tmp_path / "principal-worktrees" / "feat-2-yy"
+    assert _env_lines(new) == ["DEBUG=principal"]
+    assert not (tmp_path / "principal-worktrees" / "feat-1-x-worktrees").exists()
+    porcelain = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
+    assert f"worktree {new.resolve().as_posix()}" in porcelain
 
 
 def test_branch_exists_tells_local_from_remote(git_repo: Path) -> None:

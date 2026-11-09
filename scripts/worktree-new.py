@@ -8,7 +8,8 @@ sem `git stash`/checkout no checkout principal. Em um único comando:
      (gate "issue-first" — GIT-WORKFLOW.md §Princípios fundamentais #1).
      Opcionalmente cria a issue antes via `gh issue create`.
   3. Cria a worktree em `../<repo>-worktrees/<branch-slug>/` saindo de
-     `origin/<base>` (default `develop`; `main` para `hotfix/...`).
+     `origin/<base>` (default `develop`; `main` para `hotfix/...`). `<repo>`
+     é o checkout principal, mesmo rodado de dentro de outra worktree.
   4. Copia `.env` (e `.env.local` se existir) do checkout principal e gera
      portas livres no `.env` da worktree (`APP_PORT`/`POSTGRES_PORT`/
      `REDIS_PORT`), levando para elas as URLs que as embutem com host
@@ -217,16 +218,20 @@ def default_base(branch_type: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def git_top() -> Path:
-    """Raiz do worktree principal (não da worktree atual, se aninhada)."""
-    cp = _run(["git", "rev-parse", "--show-toplevel"], capture=True)
-    return Path(cp.stdout.strip()).resolve()
-
-
 def git_common_dir() -> Path:
-    """`.git/` comum (no main checkout). Útil pra checar refs/branches."""
-    cp = _run(["git", "rev-parse", "--git-common-dir"], capture=True)
+    """O `.git` comum a todas as worktrees — o do checkout principal —, absoluto."""
+    cp = _run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture=True)
     return Path(cp.stdout.strip()).resolve()
+
+
+def main_checkout_root() -> Path:
+    """Raiz do checkout principal, rodado dele ou de dentro de uma worktree.
+
+    É o pai do `.git` comum (repositório não bare). O `--show-toplevel` dava a
+    raiz da worktree atual: rodado de dentro de uma, a nova ia para
+    `<worktree-atual>-worktrees/` com o `.env` da atual (issue #143).
+    """
+    return git_common_dir().parent
 
 
 def branch_exists(branch: str) -> tuple[bool, bool]:
@@ -786,7 +791,7 @@ def main() -> int:
     _info(f"base remota: origin/{base}")
 
     _section("2. Verificando repositório git")
-    repo_root = git_top()
+    repo_root = main_checkout_root()
     _info(f"repositório raiz: {repo_root}")
 
     if not args.no_fetch:

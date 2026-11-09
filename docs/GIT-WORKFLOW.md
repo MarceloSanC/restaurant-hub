@@ -5,7 +5,7 @@ when-use: Consultar antes de qualquer mudança de código. Todos os membros do t
 keywords: [git, github, workflow, ci-cd, pr, code-review, deploy]
 status: done
 created_at: 2026-05-12
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 ---
 
 # Git Workflow Padrão
@@ -526,7 +526,11 @@ O script, num único comando:
 - confere que a issue existe no GitHub (`gh issue view`);
 - cria a worktree em `../<repo>-worktrees/<branch>/` saindo de
   `origin/<base>` (auto: `develop`, ou `main` para `hotfix/...`);
-- copia `.env`/`.env.local` do checkout principal;
+  `<repo>` é o checkout principal, achado pelo `.git` comum — rodado de
+  dentro de outra worktree, a nova nasce ao lado dele, não dentro de
+  `<worktree-atual>-worktrees/` (issue #143);
+- copia `.env`/`.env.local` do checkout principal (nunca o da worktree de
+  onde rodou);
 - **gera portas livres no `.env` da worktree** (`APP_PORT`,
   `POSTGRES_PORT`, `REDIS_PORT`) para o devcontainer/docker compose da
   paralela não brigar com o da principal por bind no host, e **leva a
