@@ -31,7 +31,7 @@ depends on the state model chosen by the first. Both were decided by the **human
 
 The ratified sources pulled in two directions:
 
-- `overview.md` §3 (line 44) fixes **"salvar = publicar"**, and the glossary (line 137) defines
+- `overview.md` §3 › "salvar = publicar" fixes **"salvar = publicar"**, and the glossary (`overview.md` §9 › "Publicar: salvar a escala tornando-a visível") defines
   *publicar* as "salvar a escala tornando-a visível". Overview outranks roadmap.
 - `roadmap.md` describes the editor flow as "editar → avaliar → aceitar violações warn → publicar"
   (§Stage 4.3 › "Descrição humana"; §Stage 4.5 › `definition_of_done`), and Stage 5.2 (§Stage 5.2 › "Descrição humana") says the auto-fill "grava
@@ -61,7 +61,7 @@ Sponsor, verbatim: *"toda alteracao salva é a escala vigente, simple e direto"*
 - A **`block` violation refuses the mutation itself**. The live schedule is never in an invalid
   state, and the editor cannot pass through an invalid state while rearranging.
 - A **`warn` violation is presented and acknowledged in the act of saving**. The conscious
-  acknowledgement (`overview.md` line 43) is part of the mutation, and it is audited (who
+  acknowledgement (`overview.md` §3 › "o editor corrige ou aceita conscientemente") is part of the mutation, and it is audited (who
   acknowledged what, when). The roadmap's "editar → avaliar → aceitar warn → publicar" reads as:
   evaluate live, then save **with** the acknowledgement of the warnings the change introduces.
 - **"Version" is not an immutable snapshot.** The history of the schedule is the **audit log**
@@ -172,8 +172,8 @@ the fork into four Stage concepts.
   (no `Clock`/timestamps in staff); [ADR 0.0.0003](./0_0_0003-formalize-domain-and-audits-doc-categories.md)
   (domain-doc category); [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md)
   (block/warn policy set).
-- [`overview.md`](../overview.md) — §3 line 43 ("o editor corrige ou aceita conscientemente"),
-  line 44 ("salvar = publicar"), line 38 (audit trail); §9 line 137 (*publicar*).
+- [`overview.md`](../overview.md) — §3 › "o editor corrige ou aceita conscientemente", "salvar = publicar",
+  "trilha de auditoria das alterações" (audit trail); §9 › "Publicar: salvar a escala tornando-a visível" (*publicar*).
 - [`roadmap.md`](../roadmap.md) — §Stage 4.3 › "Descrição humana"; §Stage 4.4 › "Descrição humana", `definition_of_done`;
   §Stage 4.5 › `definition_of_done`; §Stage 5.2 › "Descrição humana", `non_goals`; Step 5 (§Stage 5.1 ›
   `contratos_consumidos`); optimistic control gap (§Stage 3.4 › nota 2026-08-12).

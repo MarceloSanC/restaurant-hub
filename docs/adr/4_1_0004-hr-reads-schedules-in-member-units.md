@@ -43,7 +43,7 @@ Forces:
   authorization axes fail closed ([ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md)).
   So "any permission" literally denies hr the schedule screen — including the case where hr has
   just registered an unavailability and wants to see whether it collides with an allocation.
-- `overview.md` §5 (line 92, 2026-07-23 — earlier than the decision) still lists "Gerente / RH"
+- `overview.md` §5 › "Montar/ajustar escala rápido" (2026-07-23 — earlier than the decision) still lists "Gerente / RH"
   as primary users who "montam/ajustam escala". Overview outranks the ADR in the doc hierarchy,
   but the ADR is the later, sponsor-made decision; the skeptic review (finding #7) required this
   contradiction to be resolved by a dated note in the overview **in the same PR**, not by a
@@ -71,7 +71,7 @@ Sponsor: *"Sim — leitura nas suas unidades"*.
    by visibility bypass — [ADR 2.1.0001](./2_1_0001-identity-aggregates-and-membership.md)).
 4. **`employee` receives `own`** (a new permission, created by the Stage that exposes "my
    schedule"). **`platform_admin`** receives nothing.
-5. **Reconciliation, in this PR:** ADR 3.4.0006 gets the errata banner; `overview.md` §5 line 92
+5. **Reconciliation, in this PR:** ADR 3.4.0006 gets the errata banner; `overview.md` §5 › "Montar/ajustar escala rápido"
    gets a dated note (hr **consults** the schedule; building/adjusting is manager/owner);
    `workforce.md` §4 gets a dated note (the hr × manager divergence is on the **schedule** —
    read, not manage).
@@ -145,8 +145,8 @@ would have made the read grant a violation without this record.
   (permission set declared per route); [ADR 3.4.0008](./3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)
   (unit exemption by permission); [ADR 2.1.0001](./2_1_0001-identity-aggregates-and-membership.md)
   (owner visibility bypass).
-- [`overview.md`](../overview.md) — §3 line 38 (RBAC), line 44 (employee consults own schedule);
-  §5 line 92 (dated note added in this PR).
+- [`overview.md`](../overview.md) — §3 › "RBAC: papéis dono, gerente, RH e funcionário", "funcionário com login consulta a própria escala" (RBAC; employee
+  consults own schedule); §5 › "RH consulta a escala" (dated note added in this PR).
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §4 (dated note added in this
   PR); `docs/stages/3.6-staff-http/concept.md` 926–933 (finding that asked for it).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.7,

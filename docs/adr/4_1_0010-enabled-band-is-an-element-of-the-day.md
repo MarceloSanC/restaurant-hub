@@ -30,7 +30,7 @@ parcialmente sobrepostas?"* — and §6 lists it for this Stage (`shift-scheduli
 counted per demand or per `(day, band, function)` *"quando a cardinalidade da 4.1
 admitir duas demandas da mesma função em faixas sobrepostas"*.
 
-The ratified material is unusually precise here. `overview.md` line 41 reads:
+The ratified material is unusually precise here. `overview.md` §3 › "Escala com período configurável (default semanal)" reads:
 *"Escala com período configurável (default **semanal**): por dia, **habilitam-se
 faixas de horário livres** e define-se a **demanda por função × faixa** (ex.: qua
 = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h)"*. Three
@@ -39,7 +39,7 @@ facts follow from that single line:
 1. **Two acts, not one:** bands are *enabled* per day; demand is *defined* per
    function × band. The domain doc names the result of the first act "faixas de
    funcionamento — as faixas **habilitadas por dia** na escala" (`shift-scheduling.md` §2 › "Faixas de funcionamento"),
-   the same thing the calendar draws its mini-cards over (`overview.md` 46).
+   the same thing the calendar draws its mini-cards over (`overview.md` §3 › "mini-cards de funcionários sobre as faixas de funcionamento").
 2. **Two functions share one band:** `16h–00h` carries both the cozinheiro and the
    two atendentes.
 3. **Two bands of the same day overlap:** `16h–00h` and `18h–23h` are both
@@ -99,7 +99,7 @@ And the band is what **carries the declared break** that
   visual band can count 8h for the cozinheiro and 7h for the atendentes, which the
   "single counting rule" of ADR 4.1.0002 §3 exists to prevent (the aggregate would
   need a new invariant just to keep the copies equal). Enabling a band before
-  choosing functions is not representable, although `overview.md` 41 describes it
+  choosing functions is not representable, although `overview.md` §3 › "habilitam-se faixas de horário livres" describes it
   as the first act. Moving a band's hours means editing every demand that shares
   it, and a partial edit silently splits one band into two.
 - **Why rejected:** it makes a ratified sentence ("habilitam-se faixas … e
@@ -201,8 +201,8 @@ And the band is what **carries the declared break** that
   [ADR 4.1.0007](./4_1_0007-time-range-as-naive-minute-instants.md) (the range as a
   value); [ADR 4.1.0009](./4_1_0009-schedule-is-the-single-aggregate-root.md)
   (containment and the single root).
-- [`overview.md`](../overview.md) line 41 (two acts and the three-band example),
-  line 46 (calendar over the "faixas de funcionamento").
+- [`overview.md`](../overview.md) §3 › "habilitam-se faixas de horário livres", "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h",
+  "mini-cards de funcionários sobre as faixas de funcionamento" (two acts and the three-band example; calendar over the "faixas de funcionamento").
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
   §2 › "Faixas de funcionamento", §3.3 › "ou duas da mesma função em faixas parcialmente sobrepostas" (the gap), §3.6.8 › "se o aviso conta o excedente por demanda" (the 4.2 gap on how
   the surplus is counted), §6 › "cardinalidade da demanda por (dia, faixa, função)".

@@ -148,7 +148,7 @@ Primeira Stage do **Step 4 — Escala manual publicável** e primeiro código do
 cases) orquestra, a 4.4 persiste com auditoria e versão, a 4.5 expõe, e que o
 Step 5 (auto-fill), o Step 7 (previsto × realizado) e o Step 8 (hub) consomem por
 DTO. Ver `roadmap.md` §"Stage 4.1 — `4.1-scheduling-domain`", a nota
-datada do Step 4 (§Step 4 › nota 2026-09-14) e `overview.md` §3 (41, 44), §9 (130–141).
+datada do Step 4 (§Step 4 › nota 2026-09-14) e `overview.md` §3 › "Escala com período configurável (default semanal)", "salvar = publicar"; §9.
 
 ### Divergências declaradas em relação ao bloco 4.1 do roadmap
 
@@ -174,7 +174,7 @@ declaradas aqui, e a nota datada no `roadmap.md` entra no commit de fechamento.
    `{schedule,shift_demand,assignment}`. A faixa habilitada ganha entidade
    própria (`ShiftBand`) porque o exemplo **ratificado** do overview põe **duas
    funções na mesma faixa** — *"qua = 1 cozinheiro 16h–00h + 1 assistente
-   18h–23h + 2 atendentes 16h–00h"* (`overview.md` 41) — e porque a mesma linha
+   18h–23h + 2 atendentes 16h–00h"* (`overview.md` §3 › "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h") — e porque a mesma linha
    descreve **dois atos distintos**: *"por dia, habilitam-se faixas de horário
    livres **e** define-se a demanda por função × faixa"*. Com a faixa embutida em
    cada demanda, o `16h–00h` de quarta existiria em duas cópias, cada uma com o
@@ -309,8 +309,8 @@ seguintes do Step 4.
   (`OperationalCalendar.default()`).
 - Tenancy row-level por `tenant_id` (ROADMAP-3) é herdada da fundação — a Stage
   só carrega o campo tipado.
-- O volume do piloto (ASSUM-4: **uma unidade** hoje, `overview.md` 70; ASSUM-5:
-  quadro de **dezenas de funcionários, não centenas**, `overview.md` 71) e o
+- O volume do piloto (ASSUM-4: **uma unidade** hoje, `overview.md` §3 › "ASSUM-4"; ASSUM-5:
+  quadro de **dezenas de funcionários, não centenas**, `overview.md` §3 › "ASSUM-5") e o
   **período de 7 dias** (ADR 4.1.0002 §1 — não é ASSUM-5) tornam aceitável
   carregar o agregado inteiro por mutação; a estratégia de carga é decisão da 4.4.
 
@@ -741,7 +741,7 @@ Numeração com a âncora na teoria (`shift-scheduling.md` §3.x) ou no ADR:
     atendentes*") pela qual o ADR 4.1.0010 rejeitou a Alternativa A. Com o
     intervalo por alocação (§5.6), o caso real que a chave larga servia deixou de
     precisar dela. Faixas **distintas** continuam podendo se sobrepor — o exemplo
-    ratificado tem `16h–00h` e `18h–23h` na mesma quarta (`overview.md` 41).
+    ratificado tem `16h–00h` e `18h–23h` na mesma quarta (`overview.md` §3 › "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h").
 11. **Demanda:** no máximo **uma por (faixa, função)** — garantido por
     construção, porque as demandas vivem **dentro** da faixa e o
     `job_function_id` é distinto par a par; `N >= 0`; `N` é **alvo, não teto**
@@ -995,7 +995,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   mesma faixa seriam só `N₁+N₂` e tornariam `alocados(demanda) > N` ambíguo;
   proibir faixas sobrepostas, no outro extremo, impediria o reforço de pico que o
   exemplo ratificado já insinua.
-- **Fonte:** `overview.md` 41 e 46; `shift-scheduling.md` §2 › "Intervalo declarado", §3.3 (lacuna), §3.6.8
+- **Fonte:** `overview.md` §3 › "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h", "horas contratadas × escaladas × cumpridas"; `shift-scheduling.md` §2 › "Intervalo declarado", §3.3 (lacuna), §3.6.8
   (que **antecipa** a 4.1 admitir faixas sobrepostas da mesma função).
 - **ADR:** [`../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md`](../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md)
 
@@ -1042,8 +1042,8 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
 - **Por quê:** os dois valores são **defaults de configuração de tenant**
   (ADR 4.1.0002), não regra: a 4.4 os persiste por restaurante e a 4.5 os edita.
   Default espalhado em campo de dataclass viraria regra silenciosa — exatamente o
-  que `overview.md` §6 linha 111 proíbe para valor de origem trabalhista.
-- **Fonte:** ADR 4.1.0002 §1/§2; `overview.md` 111.
+  que `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded" proíbe para valor de origem trabalhista.
+- **Fonte:** ADR 4.1.0002 §1/§2; `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded".
 
 ### `DemandQuantity` como value-object, não `int` cru
 - **O quê:** `N` é um VO frozen que valida `>= 0`.
@@ -1170,7 +1170,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   no domínio.
 - **Por quê:** é o literal do ADR 4.1.0002 §2 (linhas 70–79 — *"configured per
   restaurant"*, default 05:00 *"with no force of rule"*), e inventar um limite
-  trabalhista sem fonte é o que `overview.md` §6 (111) proíbe. A casa que abre só à
+  trabalhista sem fonte é o que `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded" proíbe. A casa que abre só à
   noite continua representável.
 - **Limite/erro de configuração declarado:** com `at = 23:00`, o jantar de sexta
   22:00 passa a ter dia operacional **quinta** — muda o rótulo do dia, a semana de
@@ -1185,7 +1185,7 @@ alocação são **disjuntas por nível**: a mesma demanda é `DuplicateAssignmen
   §13 Q5.
 - **Fonte:** **decisão do sponsor (2026-09-27, via sessão mestra)** — resposta
   literal: *"Sem teto (Recomendada)"*; ADR 4.1.0002 §2 linhas 70–79;
-  `overview.md` 111; CA4.
+  `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded"; CA4.
 
 ### `function_exception` sem mutação na v1 — por atribuição, não por regra
 - **O quê:** a v1 não expõe caminho para alterar `function_exception` numa alocação
@@ -1298,7 +1298,7 @@ erDiagram
 
 | Risco | Prob. | Impacto | Mitigação |
 |---|---|---|---|
-| A quarta entidade (`ShiftBand`) ser lida como scope creep sobre o bloco do roadmap | A | M | Divergência 3 da §1 com as duas âncoras ratificadas (`overview.md` 41); ADR 4.1.0010 com a alternativa descartada e o custo dela (intervalo declarado em duas cópias) |
+| A quarta entidade (`ShiftBand`) ser lida como scope creep sobre o bloco do roadmap | A | M | Divergência 3 da §1 com as duas âncoras ratificadas (`overview.md` §3 › "habilitam-se faixas de horário livres"); ADR 4.1.0010 com a alternativa descartada e o custo dela (intervalo declarado em duas cópias) |
 | Alguma das oito políticas virar invariante estrutural por descuido, tornando impossível o modo `warn` do tenant | M | A | Invariante 18 enumera a lista fechada **com as duas razões distintas** (modo configurável × dado ausente); CA13 exige que cada uma das **oito** (incluindo descanso entre jornadas) seja **aceita** pelo domínio, derivando a lista de §5.18 |
 | Remover uma faixa montada custar **4 mutações publicadas** (3 desalocações + desabilitar), cada uma auditada, versionada e notificada — o editor percebe como "o sistema me fez avisar 4 vezes" | A | M | Limite **declarado** em §3, §5.21 e §7 (custo da opção escolhida por Q1); a agregação do passo a passo numa ação é **lacuna de UX da 4.5**, e a cascata, se vier, nasce como use case da 4.3 — nunca como batch no domínio |
 | Horas dobradas na **interseção de faixas distintas sobrepostas** do mesmo registro (`16h–00h` + `18h–23h`): teto diário, teto semanal, carga e "horas escaladas" do hub contam a interseção duas vezes | B | A | O caso degenerado da **mesma** faixa foi **eliminado** por invariante (§5.23, `DuplicateAssignmentInBandError`, ADR 4.1.0012), e com ele o dobro sobre o **mesmo** intervalo; o que resta são dois turnos distintos, governados pela política de sobreposição (default `block`, ADR 4.1.0003 (c)) — só existe quando o tenant a põe em `warn` e aceita ciente; o tratamento da interseção é lacuna declarada da 4.2 (§8 (b)) |
@@ -1425,7 +1425,7 @@ erDiagram
 - [x] **CA13 — o domínio NÃO recusa nenhuma das oito situações de política, e a
       lista é derivada de §5.18** `[teste]`: (1) mesmo registro em duas faixas
       **distintas** sobrepostas da **mesma** função (`16h–00h` e `18h–23h` da
-      mesma quarta, `overview.md` 41); (2) mesmo registro em duas **funções
+      mesma quarta, `overview.md` §3 › "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h"); (2) mesmo registro em duas **funções
       diferentes**, em faixas **distintas** parcialmente sobrepostas — o domínio
       não se importa com a diferença de função, e este é o caminho que **substituiu**
       "duas funções na mesma faixa", que a invariante 23 passou a recusar (§5.23;
@@ -1693,8 +1693,8 @@ três em 2026-09-26 e duas em 2026-09-27** — e vivem no corpo. Registro (padr�
 - [`../../domain/scheduling/shift-scheduling.md`](../../domain/scheduling/shift-scheduling.md)
   — teoria canônica consumida (§2, §3.1–§3.5, §3.6.0/§3.6.8/§3.6.10, §3.9, §3.10,
   §5, §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte", "cardinalidade da demanda por (dia, faixa, função)", "Schedule como raiz do agregado — confirmar" — a tabela de lacunas).
-- [`../../overview.md`](../../overview.md) §3 (41, 44, 46), §6 (111),
-  §9 (130–141).
+- [`../../overview.md`](../../overview.md) §3 › "Escala com período configurável (default semanal)", "salvar = publicar", "visão principal é o calendário";
+  §6 › "Regras trabalhistas (CLT) não são hard-coded"; §9.
 - [`../../roadmap.md`](../../roadmap.md) — §Stage 4.1
   (`4.1-scheduling-domain`), nota do Step 4 (§Step 4 › nota 2026-09-14), nota do `depends_on` (§Stage 4.1 › nota 2026-09-26),
   §"Tabela de Stages" › `4.1-scheduling-domain`, grafo (§"Visão geral" › `S31 --> S41`), ROADMAP-1/ROADMAP-3.

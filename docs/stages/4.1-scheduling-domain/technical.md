@@ -496,7 +496,7 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
 - **Detalhes técnicos:**
   - **`at` não tem teto** — decisão do sponsor de 2026-09-27 (Q5), confirmação do
     ADR 4.1.0002 §2. **Não** inventar limite trabalhista (concept §7 "Corte do dia
-    sem teto"; `overview.md` 110).
+    sem teto"; `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded").
   - `from_string` converte texto em erro **de domínio**, nunca `ValueError` cru do
     `StrEnum` — espelho de `DayPeriod.from_string` de staff
     (`staff/domain/value_objects/shift_preference.py` 33).

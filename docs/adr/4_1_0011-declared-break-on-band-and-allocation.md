@@ -33,7 +33,7 @@ The Checkpoint A review of this Stage's concept (2026-09-26) showed that the
 single-level shape is contradictory in practice, and that both ways out of the
 contradiction were broken:
 
-- `overview.md` line 41 puts **two functions on one band**: *"qua = 1 cozinheiro
+- `overview.md` §3 › "Escala com período configurável (default semanal)" puts **two functions on one band**: *"qua = 1 cozinheiro
   16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h"*. With the break only on
   the band, the cozinheiro and the atendentes who share `16h–00h` are **forced to
   share the same declared break**. A manager contradicts that: CLT art. 71 scales
@@ -237,8 +237,8 @@ keep" is a policy with a mode and a boundary interaction, not a structural refus
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
   §2 › "Intervalo declarado", "Horas de uma alocação" (`hours(a)`), §3.2, §3.6.3, §3.6.9
   (intra-shift break as deferred policy), §3.6.10.
-- [`overview.md`](../overview.md) line 41 (two functions on one band — the case that
-  forces the decision), line 46 (the hub's single hours number).
+- [`overview.md`](../overview.md) §3 › "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h", "horas contratadas × escaladas × cumpridas"
+  (two functions on one band — the case that forces the decision; the hub's single hours number).
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)
   §4, §5.6, §5.7, §5.10, §5.13, §7, §13 (Q3, answered).
 - Sponsor decision (2026-09-26, via the master session), verbatim: *"pode ser na
