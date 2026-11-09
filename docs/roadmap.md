@@ -211,7 +211,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#127](https://github.com/MarceloSanC/restaurant-hub/issues/127) | Comentário de `role.py` ainda proíbe toda permissão de escala ao `hr` — superado pelo ADR 4.1.0004 | identity | domain (comentário) | done | #30 |
 | [#128](https://github.com/MarceloSanC/restaurant-hub/issues/128) | ADR 2.5.0002 §5 descreve um reconvite que o concept 2.5 recusa com 409 | identity | docs | done | #30 |
 | [#129](https://github.com/MarceloSanC/restaurant-hub/issues/129) | Numeração das decisões de kickoff diverge entre ADRs, concepts e código | shared | docs | done | #30 |
-| [#132](https://github.com/MarceloSanC/restaurant-hub/issues/132) | Workers do mutmut disputam o mesmo Postgres — mortes falsas na corrida de mutação | shared | tooling + ci | open | #87 |
+| [#132](https://github.com/MarceloSanC/restaurant-hub/issues/132) | Workers do mutmut disputam o mesmo Postgres — mortes falsas na corrida de mutação | shared | tooling + ci | done | #87 |
 | [#134](https://github.com/MarceloSanC/restaurant-hub/issues/134) | Identificadores locais em português na application de scheduling (`_UM_DIA`) | scheduling | application + adapters | done | #105 |
 | [#135](https://github.com/MarceloSanC/restaurant-hub/issues/135) | Identificadores em português na application e nos adapters de staff | staff | application + adapters | done | #105 |
 | [#136](https://github.com/MarceloSanC/restaurant-hub/issues/136) | Identificadores em português no BC identity | identity | todas as camadas | done | #105 |
@@ -219,6 +219,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#139](https://github.com/MarceloSanC/restaurant-hub/issues/139) | `develop` vermelho — detector do `also_copy` toma fixture sob `tmp_path` por citação | shared | tooling + tests | done | #84, #87 |
 | [#143](https://github.com/MarceloSanC/restaurant-hub/issues/143) | `worktree-new`/`worktree-rm` — encoding do git, raiz do checkout principal e issue-first sem `gh` | shared | tooling | done | #91 |
 | [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | open | #116 |
+| [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | open | #132 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

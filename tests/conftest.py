@@ -21,14 +21,16 @@ Postgres em todos esses pontos. Uma suíte verde contra SQLite valeria menos que
 suíte nenhuma, porque inspiraria confiança no que não foi verificado.
 """
 
+import os
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 
 from restaurant_hub.shared.infrastructure.http.app import create_app
@@ -111,7 +113,7 @@ def resolve_test_database_url(compose_dir: Path = _REPO_ROOT) -> str:
 
 
 @pytest.fixture(scope="session")
-def database_url() -> str:
+def database_url() -> Iterator[str]:
     """URL do banco de teste, do ambiente ou do `.env` da worktree.
 
     O `Settings` tem default (`localhost:5432`), e é ele que uma worktree sem
@@ -123,8 +125,84 @@ def database_url() -> str:
     URL loopback fora da porta que o compose deste checkout publica reprova a
     sessão inteira, aqui, sem tocar o banco. Toda suíte que fala com o banco —
     integração, contrato e e2e — resolve a URL por esta fixture.
+
+    **Sob o mutmut, um banco por worker (issue #132).** Ver
+    `mutation_worker_database_url`: o worker recebe um banco só seu, criado ao
+    lado do conferido pela guarda e dropado no fim da sessão.
     """
-    return resolve_test_database_url()
+    with suite_database(
+        resolve_test_database_url(), os.environ.get(MUTMUT_MUTANT_ENV, ""), os.getpid()
+    ) as url:
+        yield url
+
+
+# Variável que o mutmut 3.7.0 põe no ambiente de cada pytest que ele dispara: o
+# nome do mutante no worker (`os.environ["MUTANT_UNDER_TEST"] = mutant_name`,
+# logo depois do `os.fork()`), e `stats`/`fail`/`""` nas corridas do processo
+# pai. Fora do mutmut ela não existe.
+MUTMUT_MUTANT_ENV = "MUTANT_UNDER_TEST"
+
+
+def mutation_worker_database_url(base_url: str, mutant_under_test: str, pid: int) -> str | None:
+    """A URL do banco próprio do processo sob o mutmut, ou None fora dele.
+
+    **O defeito (issue #132).** O mutmut 3.7.0 testa cada mutante num processo
+    filho (`os.fork()`), até um por CPU ao mesmo tempo, e cada filho roda o
+    pytest in-process — uma sessão nova, com a fixture `engine` recriando o
+    schema (`downgrade base` + `upgrade head`). Com todos no mesmo banco, um
+    worker derrubava as tabelas que outro estava usando: o run 41475839122 tem
+    11 `deadlock detected` e 49 `relation ... does not exist` no log do
+    Postgres, e um mutante "morto" assim foi morto pela corrida entre workers,
+    não pela asserção.
+
+    **O conserto.** Com a variável preenchida, o processo usa
+    `<banco>_mutmut_<pid>`: o PID é único entre os processos vivos, então dois
+    workers simultâneos nunca dividem banco. As corridas do pai (`stats`,
+    `fail`) também caem aqui — são sequenciais, e isolá-las não custa nada. A
+    corrida limpa (`""`) e a suíte fora do mutmut seguem no banco da guarda.
+    """
+    if not mutant_under_test:
+        return None
+    url = make_url(base_url)
+    return url.set(database=f"{url.database}_mutmut_{pid}").render_as_string(hide_password=False)
+
+
+@contextmanager
+def suite_database(base_url: str, mutant_under_test: str, pid: int) -> Iterator[str]:
+    """O banco da sessão: o da guarda, ou o próprio do worker do mutmut (criado e dropado)."""
+    worker_url = mutation_worker_database_url(base_url, mutant_under_test, pid)
+    if worker_url is None:
+        yield base_url
+        return
+    with fresh_database(base_url, worker_url):
+        yield worker_url
+
+
+@contextmanager
+def fresh_database(admin_url: str, database_url: str) -> Iterator[None]:
+    """Cria o banco de `database_url` vazio, pela conexão de `admin_url`, e o dropa ao sair.
+
+    O `DROP ... IF EXISTS` antes do `CREATE` cobre o banco que um worker morto
+    por timeout (SIGKILL, sem teardown) deixou para trás: o PID volta a ser
+    usado, e o processo novo herda um nome ocupado. O `WITH (FORCE)` do drop
+    final derruba conexão que algum teste tenha esquecido aberta.
+    """
+    name = make_url(database_url).database
+    admin = create_engine(
+        admin_url, isolation_level="AUTOCOMMIT", connect_args={"connect_timeout": 5}
+    )
+    drop = text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+    try:
+        with admin.connect() as connection:
+            connection.execute(drop)
+            connection.execute(text(f'CREATE DATABASE "{name}"'))
+        try:
+            yield
+        finally:
+            with admin.connect() as connection:
+                connection.execute(drop)
+    finally:
+        admin.dispose()
 
 
 @pytest.fixture(scope="session")

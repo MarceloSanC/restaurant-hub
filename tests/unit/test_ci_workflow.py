@@ -582,9 +582,12 @@ _IN_OTHER_TARGET = {
 #   `make check` não tem mensagem a validar.
 # - `check_mutation_run.py` lê o resumo de uma corrida do mutmut, que só existe
 #   no job noturno do `audit-gate.yml`.
+# - `check_mutation_db_isolation.py` lê o log do service Postgres durante essa
+#   corrida, que também só existe no job noturno (issue #132).
 _OUTSIDE_MAKE = {
     "check_commit_msg.py": ".pre-commit-config.yaml",
     "check_mutation_run.py": ".github/workflows/audit-gate.yml",
+    "check_mutation_db_isolation.py": ".github/workflows/audit-gate.yml",
 }
 
 # `uv run python scripts/<validador>.py`, sem argumento: argumento ou operador de
