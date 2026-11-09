@@ -668,10 +668,20 @@ def test_non_docs_validator_runs_in_its_declared_target(script: str) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("script", sorted(_OUTSIDE_MAKE))
 def test_non_docs_validator_runs_where_declared_outside_make(script: str) -> None:
-    """A exceção fora do Makefile é chamada no arquivo que declara."""
+    """A exceção fora do Makefile é chamada no arquivo que declara.
+
+    Conta só a linha que invoca o script (`python scripts/<x>.py`) fora de
+    comentário YAML: o `audit-gate.yml` cita `scripts/check_mutation_run.py` num
+    comentário, e a simples menção deixava o teste verde com a chamada apagada.
+    """
     assert script in _check_scripts(), f"exceção obsoleta: scripts/{script} não existe"
     where = REPO_ROOT / _OUTSIDE_MAKE[script]
-    assert f"scripts/{script}" in where.read_text(encoding="utf-8"), (
+    invocations = [
+        line
+        for line in where.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#") and f"python scripts/{script}" in line
+    ]
+    assert invocations, (
         f"`{script}` está fora do `docs-check` por rodar em {_OUTSIDE_MAKE[script]}, e "
         f"esse arquivo não o chama"
     )
