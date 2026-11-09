@@ -42,6 +42,7 @@ from restaurant_hub.features.identity.application.errors import (
     InvalidCredentialsError,
     InvalidRefreshTokenError,
     InvalidSetupTokenError,
+    InvitationNotSentError,
     PermissionDeniedError,
     RefreshTokenReuseError,
     RestaurantAlreadyExistsError,
@@ -82,6 +83,7 @@ HTTP_FORBIDDEN: Final = 403
 HTTP_NOT_FOUND: Final = 404
 HTTP_CONFLICT: Final = 409
 HTTP_UNPROCESSABLE: Final = 422
+HTTP_INTERNAL_SERVER_ERROR: Final = 500
 
 # Corpos CONSTANTES das faixas 401 e 403 (concept §5 regra 10).
 #
@@ -96,6 +98,16 @@ HTTP_UNPROCESSABLE: Final = 422
 # não oráculo.
 _BODY_401: Final = {"detail": "não autenticado", "type": "unauthorized"}
 _BODY_403: Final = {"detail": "acesso negado", "type": "forbidden"}
+
+# Corpo CONSTANTE da faixa 5xx (issue #170).
+#
+# Erro desta faixa é falha do lado do servidor — hoje, só a entrega do convite —, e
+# o cliente não tem o que corrigir no que enviou. A causa vai para o log de quem a
+# levanta (`_invitation.deliver_invitation`, só o tipo e o `user_id`); no corpo,
+# nada que varie com a requisição. É o mesmo corpo de antes da #170 em
+# substância — a resposta era o `Internal Server Error` do servidor —, agora em
+# JSON como as demais faixas do BC.
+_BODY_5XX: Final = {"detail": "erro interno", "type": "internal_error"}
 
 # RFC 6750 §3 — resposta 401 de recurso protegido por Bearer anuncia o esquema.
 _HEADERS_401: Final = {"WWW-Authenticate": "Bearer"}
@@ -149,6 +161,14 @@ IDENTITY_ERROR_STATUS: Final[dict[type[IdentityFailure], int]] = {
     PlatformAdminTenantError: HTTP_UNPROCESSABLE,
     PlatformAdminMembershipError: HTTP_UNPROCESSABLE,
     CrossTenantError: HTTP_UNPROCESSABLE,
+    # 500 — a conta foi gravada e o e-mail do convite não saiu (issue #170). É a
+    # ÚNICA entrada fora da família 4xx, e por isso declarada em
+    # `tests/unit/test_status_map.py`: aqui o BC não sabe "exatamente o que houve"
+    # do lado do cliente — o provedor de e-mail falhou, e a culpa é do servidor
+    # (RFC 9110 §15.6.1). Nem 502, que é de quem age como gateway ou proxy
+    # (§15.6.3), nem 503, que promete alívio com espera (§15.6.4): repetir o
+    # convite responde 409, porque a conta já existe.
+    InvitationNotSentError: HTTP_INTERNAL_SERVER_ERROR,
 }
 
 
@@ -290,10 +310,13 @@ def build_error_response(exc: IdentityFailure) -> JSONResponse:
         return JSONResponse(status_code=status, content=_BODY_401, headers=_HEADERS_401)
     if status == HTTP_FORBIDDEN:
         return JSONResponse(status_code=status, content=_BODY_403)
+    if status >= HTTP_INTERNAL_SERVER_ERROR:
+        return JSONResponse(status_code=status, content=_BODY_5XX)
 
-    # 404, 409 e 422 mantêm `str(exc)`: a mensagem descreve um recurso que o
-    # próprio cliente nomeou ou uma invariante que o payload dele violou, e as
-    # checagens de escopo rodam antes, de modo que ela só fala do tenant do ator.
+    # 404, 409 e 422 — as faixas que sobram — mantêm `str(exc)`: a mensagem
+    # descreve um recurso que o próprio cliente nomeou ou uma invariante que o
+    # payload dele violou, e as checagens de escopo rodam antes, de modo que ela
+    # só fala do tenant do ator.
     # A exceção conhecida é `EmailAlreadyRegisteredError` (409), cuja unicidade é
     # global por decisão de kickoff — o sinal ali é o status, não o corpo, e o
     # corpo só ecoa o e-mail que o cliente enviou.
