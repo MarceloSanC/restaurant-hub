@@ -5,7 +5,7 @@ when-use: Reference before changing `POST /restaurants`, `ProvisionRestaurantUse
 keywords: [adr, provisioning, restaurant, owner, tenant, bootstrap, unit-of-work, atomicity, platform-admin, identity, issue-67]
 status: accepted
 created_at: 2026-11-02
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 adr_id: "0.0.0014"
 decision: "`POST /restaurants` takes the restaurant name and its first owner's e-mail and password and runs `ProvisionRestaurantUseCase`, which writes `restaurants.add` + `users.add` inside one identity `UnitOfWork` with the role fixed to `owner` in the use case; `CreateRestaurantUseCase` is removed, so no API path creates a restaurant without an owner; `POST /restaurants/{id}/owners` stays, re-scoped to adding an owner to an existing restaurant; authorization stays at the HTTP boundary as for every identity use case"
 context_stage: 0.0-global
@@ -172,3 +172,18 @@ new one like the others (no allowlist entry).
 - [ADR 2.6.0002](./2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md) §1, §3, §5
 - [ADR 3.7.0001](./3_7_0001-every-staff-use-case-authorizes-its-own-target.md) (scope: staff)
 - `src/restaurant_hub/features/identity/application/use_cases/provision_restaurant.py`
+
+## Supersessão parcial
+
+**2026-11-09 — §Decision 5 (*"The owner gets a password, not an invitation"*), a metade de
+credencial de §Decision 1 e §Decision 2 (o campo `owner_plain_password`, o passo de hash e o
+`password` do corpo `owner`), a frase de §Decision 3 *"Its contract does not change"* e a
+consequência negativa *"The platform admin still chooses the owner's first password"* foram
+superadas por [ADR 0.0.0018](./0_0_0018-restaurant-owner-is-provisioned-by-invitation.md)
+(issue #114).** O dono emitido por `POST /restaurants` e por `POST /restaurants/{id}/owners`
+nasce como conta pendente (hash inutilizável + token de convite) e recebe o link por e-mail
+depois do commit; nenhum dos dois corpos tem campo de senha, e a rota de owners passou a rodar
+`InviteUserUseCase`. Tudo o mais deste ADR — restaurante e dono numa unidade de trabalho, nenhum
+caminho que crie restaurante sem dono, a rota de owners como caminho de suporte, o papel como
+literal no código e a autorização na borda — continua valendo. Nota *append-only*; o corpo acima
+não foi editado.
