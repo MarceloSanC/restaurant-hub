@@ -962,9 +962,9 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 >   paginação), 3.4.0005 (cópia repetida como limite declarado).
 > - **Nota (2026-08-17): o 5º bullet do `definition_of_done` acima foi reescrito
 >   junto com o CA20 do concept.** A Fase 3B mediu que duas asserções de
->   `tests/unit/features/identity/domain/test_role_permission.py` mudam
->   necessariamente — a linha 27 assere o conjunto **exato** dos valores do enum
->   `Permission`, e as linhas 66–78 o conjunto **exato** de permissões por papel.
+>   `tests/unit/features/identity/domain/test_role_permission.py` mudam necessariamente
+>   — `test_permission_e_conjunto_fechado` assere o conjunto **exato** dos valores do enum `Permission`,
+>   e `test_conteudo_exato_do_mapa_por_papel` o conjunto **exato** de permissões por papel.
 >   A redação anterior (*"suite de identity passa sem alteracao de assercao"*) tem
 >   **falso positivo para teste de fechamento**, que existe justamente para exigir
 >   atualização consciente quando o conjunto cresce legitimamente (o mecanismo que
@@ -1012,7 +1012,7 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 > - **CA20: as fixtures de fechamento de vocabulário são TRÊS, não duas.** A
 >   terceira é
 >   `test_http_dependencies.py::test_conjunto_de_permissoes_exigidas_por_papel_alvo`,
->   e ela é **derivada** do mapa de papéis (`dependencies.py:97`), logo cresce
+>   e ela é **derivada** do mapa de papéis (`dependencies.py` › `required_permissions_for_role`), logo cresce
 >   sozinha quando o vocabulário cresce. **O 5º bullet do `definition_of_done`
 >   acima continua verdadeiro** — ele fala da *categoria*, sem contagem, e foi por
 >   isso que esta Stage **não** precisou de regressão do concept; a decisão e as
@@ -1039,8 +1039,8 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 >   travado o caso do `owner` por teste.
 > - **Errata no ADR 3.4.0001** (o ADR segue `accepted`; ver a sua seção
 >   `## Errata`): duas citações de `CA14` para a propriedade "zero
->   `ignore_imports`" eram **CA13**, e o ponteiro `composition_root.py:185-188`
->   passou a `:300-305`. O erro entrou no commit do corte, que renumerou os
+>   `ignore_imports`" eram **CA13**, e o ponteiro por linha a `composition_root.py`
+>   tinha ficado obsoleto (a errata registra o par de números). O erro entrou no commit do corte, que renumerou os
 >   critérios do concept sem reconciliar os ponteiros do ADR.
 > - **Quatro `[finding]` novos escalados**, todos com Stage candidata na §7 do
 >   `technical.md`: (1) **3.6** — o router **não pode** inferir "tenant-wide" de
@@ -1100,7 +1100,7 @@ skills_hint: [fastapi-thin-adapter, composition-root]
 >   classe→status, `UnavailabilityNotFoundError` = **422** e não 404, 409 reservado a
 >   conflito com estado gravado), **3.4.0004** (sem paginação; `L-ORD` fica cursor
 >   preparado; o antídoto de uma linha da regex `_ORDER_BY` de
->   `test_staff_conduct.py:194` é aplicado por quem acrescentar `LIMIT`/`OFFSET`) e
+>   `test_staff_conduct.py` › `_ORDER_BY` é aplicado por quem acrescentar `LIMIT`/`OFFSET`) e
 >   **3.4.0005** (cópia repetida segue limite declarado — nem guarda por nome, que
 >   recusaria homônimos legítimos, nem campo informativo, que mediria homonímia
 >   enquanto o nome sugere duplicata).
