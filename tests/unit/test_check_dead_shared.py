@@ -236,3 +236,82 @@ def test_gate7_shared_infrastructure_fica_de_fora(tmp_path: pathlib.Path) -> Non
     )
 
     assert check_dead_shared.nomes_mortos(raiz) == []
+
+
+def test_gate7_constantes_de_modulo_sao_superficie_publica(tmp_path: pathlib.Path) -> None:
+    """`X = ...` e `Y: int = ...` em `shared/` são contrato tanto quanto uma classe.
+
+    O alvo atributo (`obj.attr = ...`) e o privado (`_Z = ...`) não são nome de
+    módulo, e ficam fora.
+    """
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/constantes.py": (
+                "LIMITE = 10\nTETO: int = 20\n_PRIVADO = 1\n_ANOTADO: int = 2\n"
+                "import types\ntypes.ALVO = 3\n"
+            ),
+            "features/pedidos/application/use_cases/listar.py": "VALOR = 1\n",
+        },
+    )
+
+    mortos = check_dead_shared.nomes_mortos(raiz)
+
+    assert len(mortos) == len(["LIMITE", "TETO"]), mortos
+    assert any("'LIMITE'" in m for m in mortos)
+    assert any("'TETO'" in m for m in mortos)
+
+
+def test_gate7_arquivo_nao_analisavel_e_pulado(tmp_path: pathlib.Path) -> None:
+    """Python com erro de sintaxe não derruba o detector, nem declara nem usa nome."""
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/quebrado.py": "class Quebrado(:\n",
+            "features/pedidos/application/use_cases/quebrado.py": "def (\n",
+            "features/pedidos/application/use_cases/listar.py": "VALOR = 1\n",
+        },
+    )
+
+    assert check_dead_shared.parse(raiz / "shared" / "domain" / "quebrado.py") is None
+    assert check_dead_shared.nomes_mortos(raiz) == []
+
+
+def _rodar_main(monkeypatch: pytest.MonkeyPatch, src: pathlib.Path) -> int:
+    monkeypatch.setattr("sys.argv", ["check_dead_shared.py", "--src", str(src)])
+    return int(check_dead_shared.main())
+
+
+def test_gate7_main_sem_nome_morto_sai_zero(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "shared/domain/erro.py": "class Erro(Exception):\n    pass\n",
+            "features/pedidos/domain/x.py": "from restaurant_hub.shared.domain.erro import Erro\n",
+        },
+    )
+
+    assert _rodar_main(monkeypatch, raiz) == 0
+    assert "nenhum nome público de shared/ sem uso" in capsys.readouterr().out
+
+
+def test_gate7_main_com_nome_morto_sai_um_e_lista_no_stderr(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    raiz = _src_falso(tmp_path, {"shared/domain/vo.py": "class Pagination:\n    pass\n"})
+
+    assert _rodar_main(monkeypatch, raiz) == 1
+    erro = capsys.readouterr().err
+    assert "1 nome(s) público(s) sem uso" in erro
+    assert "MORTO:" in erro
+    assert "'Pagination'" in erro
+
+
+def test_gate7_main_src_inexistente_sai_um(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Caminho errado reprova em vez de passar vazio — o gate falha fechado."""
+    assert _rodar_main(monkeypatch, tmp_path / "nao-existe") == 1
+    assert "ERRO: diretório não encontrado" in capsys.readouterr().err
