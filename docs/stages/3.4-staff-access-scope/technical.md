@@ -65,7 +65,7 @@ torno de uma pergunta só: *este commit deixa `make check` verde?* Duas
 propriedades mecânicas do repositório governam a resposta e precisam estar na
 cabeça de quem executa:
 
-- **`make typecheck` = `mypy src/ tests/fakes/`** (`Makefile:111`). Mudar a
+- **`make typecheck` = `mypy src/ tests/fakes/`** (`Makefile` › `typecheck:`). Mudar a
   assinatura de um método do `Protocol` quebra **no mesmo instante** todo chamador
   em `src/` (os use cases), o adapter Postgres (verificado estruturalmente onde é
   passado aos construtores tipados dos use cases, no `composition_root`) **e** o
@@ -108,7 +108,7 @@ as atravessa.
 > metade é internamente consistente — mypy verde, contrato verde nos dois
 > parâmetros —, e o fake permite porque o seu `delete` resolve pelo privado
 > `_find`, e não pelo `find_by_id` público
-> (`in_memory_employee_repository.py:101`): os dois métodos públicos são de fato
+> (`in_memory_employee_repository.py` › `InMemoryEmployeeRepository.delete`): os dois métodos públicos são de fato
 > desacoplados. **Registrar isto é obrigação** — a alternativa seria uma premissa
 > absoluta falsa sustentando a exceção ao critério de ≤ 5 arquivos.
 >
@@ -163,11 +163,11 @@ registrou como achado, que é exatamente o que o critério mandava.
 
 Medição em `tests/unit/features/identity/domain/test_role_permission.py`:
 
-- **linha 27** — `test_permission_e_conjunto_fechado` assere o conjunto **exato**
+- **`test_permission_e_conjunto_fechado`** assere o conjunto **exato**
   dos valores do enum `Permission` (`{"manage_platform", "manage_tenant",
   "manage_users"}`). Acrescentar `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS` **exige**
   editar esta asserção.
-- **linhas 66–78** — `test_conteudo_exato_do_mapa_por_papel` é parametrizado com o
+- **`test_conteudo_exato_do_mapa_por_papel`** é parametrizado com o
   conjunto **exato** de permissões de cada papel. Dar as duas permissões novas a
   `OWNER`, `MANAGER` e `HR` **exige** editar três dos cinco parâmetros.
 
@@ -233,7 +233,7 @@ descreve. O critério refinado (concept §11) discrimina:
 
 ### Premissas técnicas
 
-- **`mypy` cobre `src/` e `tests/fakes/`** (`Makefile:111`) e **não** cobre o
+- **`mypy` cobre `src/` e `tests/fakes/`** (`Makefile` › `typecheck:`) e **não** cobre o
   restante de `tests/`. É a propriedade que define quais arquivos precisam viajar
   no mesmo commit (§1 Estratégia).
 - **Não há migration nesta Stage.** O schema é o da 3.3 (`0003_staff`); a lei de
@@ -255,7 +255,7 @@ descreve. O critério refinado (concept §11) discrimina:
   `platform_admin`. É a fonte do `tenant_id` do `AuthorizedScope` e o gatilho da
   lei **L-AG3**.
 - **`IdentityGuard` vive sob o pacote `in`** e só é alcançável por `importlib`;
-  o `composition_root` já o guarda como `Any` (linhas 185–188). O tradutor herda
+  o `composition_root` já o guarda como `Any` (`ApplicationDependencies.identity_guard`). O tradutor herda
   essa forma — é a razão medida do ADR 3.4.0001 §Decision 3.
 
 ### Estrutura de pastas afetada
@@ -402,8 +402,8 @@ CA21, e é o que torna esta Stage segura de mergear.
       `git diff -- tests/unit/features/identity/` não mostra edição fora das duas
       fixtures de fechamento.
     - *obrigatório, com aditividade **provada*** — as duas fixtures de fechamento
-      (`test_permission_e_conjunto_fechado`, linha 27; e três dos cinco parâmetros
-      de `test_conteudo_exato_do_mapa_por_papel`, linhas 66–78) acompanham o
+      (`test_permission_e_conjunto_fechado`; e três dos cinco parâmetros
+      de `test_conteudo_exato_do_mapa_por_papel`) acompanham o
       conjunto que cresceu. A prova é positiva, não a ausência de falha: nenhum
       membro removido de `Permission`, nenhum papel perdendo permissão que já
       tinha, e **as duas fixtures listadas nominalmente no corpo do commit**. As
@@ -452,11 +452,11 @@ CA21, e é o que torna esta Stage segura de mergear.
     deve haver aqui.
   - **Byte NUL em `Employee.__post_init__` e `JobFunction.__post_init__`:**
     acrescentar, **junto** da checagem de nome vazio já existente
-    (`employee.py:83-84`, `job_function.py:56-57`), a recusa de `"\x00" in
+    (`employee.py` › `Employee.__post_init__`, `job_function.py` › `JobFunction.__post_init__`), a recusa de `"\x00" in
     self.name` com `InvalidNameError`. Por estar em `__post_init__`, vale para
     **todos** os caminhos de construção — `rename` (que passa por
     `dataclasses.replace`) e a **reidratação do mapper** da 3.3
-    (`mappers.py:103`, `:265`), que é o caminho que a CA16 nomeia.
+    (`mappers.py` › `row_to_job_function`, `row_to_employee`), que é o caminho que a CA16 nomeia.
   - **Escopo da restrição: só o byte NUL** (concept §5.10, ADR 3.4.0003 §2). Nada
     de outros caracteres de controle, normalização de espaço ou limite de
     tamanho — a 3.3 mediu que todo o resto faz round-trip verbatim nos dois lados,
@@ -526,7 +526,7 @@ CA21, e é o que torna esta Stage segura de mergear.
     (`target_unit_id` já existia e é o destino). A docstring do command precisa
     dizer isso em uma linha — é o par em que confundir os dois campos produz
     exatamente a exfiltração cross-unidade que esta Stage fecha.
-  - **`CreateEmployeeCommand` já carrega `unit_id`** (`commands.py:83`) e não muda.
+  - **`CreateEmployeeCommand` já carrega `unit_id`** (`commands.py` › `CreateEmployeeCommand.unit_id`) e não muda.
     **As duas queries não mudam** — `ListEmployeesQuery` já o exige, e
     `ListJobFunctionsQuery` é tenant-scoped por desenho.
   - **Sem default, deliberadamente.** Um `unit_id: UnitId | None = None` faria o
@@ -621,7 +621,7 @@ CA21, e é o que torna esta Stage segura de mergear.
      casar `(tenant_id, unit_id, id)` nos dois métodos. É o ponto do ADR 3.4.0007
      §2: filtrar só no adapter deixaria o fake aceitando o que o real recusa.
   4. **O adapter Postgres** acrescenta `unit_id` ao `WHERE` de `find_by_id` e de
-     `delete` (`employee_repository.py:178`, `:188`), **sem** mudar a ordem das
+     `delete` (`employee_repository.py` › `PostgresEmployeeRepository.delete`, `find_by_id`), **sem** mudar a ordem das
      checagens nem o `FOR UPDATE`/`REPEATABLE READ` que a 3.3 fixou.
   5. **Os dez use cases** passam `command.unit_id` ao port. `copy_employee_to_unit`
      usa a **origem** (`command.unit_id`) na leitura e `target_unit_id` na
@@ -795,7 +795,7 @@ CA21, e é o que torna esta Stage segura de mergear.
     adapter não conseguiria sequer **anotar** o objeto que embrulha, e a supressão
     seriam **três** pares de `ignore_imports`, não um. Aqui são **zero**.
   - **Ele embrulha o MESMO `IdentityGuard`** que já é construído em
-    `wire_dependencies` (linha 299) e exposto como `identity_guard` — não um
+    `wire_dependencies` (`composition_root.py`) e exposto como `identity_guard` — não um
     segundo grafo. É metade do CA15, e o teste assere identidade de objeto.
   - **Tradução de `authorize`:** `permission: str` → `Permission(permission)`;
     `tenant_id`/`unit_id` `str` → os `NewType` de identity; o `AuthorizedActor`

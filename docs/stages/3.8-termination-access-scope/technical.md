@@ -55,10 +55,10 @@ Varreduras que reprovam mudança incremental, e a Task que leva a entrada:
 | Varredura | Onde | Task |
 |---|---|---|
 | `_TOTAL_DE_DTOS = 25` (todo DTO de identity é `frozen`) | `tests/unit/features/identity/application/test_dtos.py` | T01 (→ 27) |
-| `_RESULT_CLASSES` (dataclasses de `results.py` = tupla exata; varredura de segredo/entidade) | `test_dtos.py:60-67`, `:302`, `:314-332` | T01 |
+| `_RESULT_CLASSES` (dataclasses de `results.py` = tupla exata; varredura de segredo/entidade) | `test_dtos.py` › `_RESULT_CLASSES`, `test_nenhum_result_expoe_senha_hash_ou_entidade`, `test_modulo_de_results_declara_exatamente_os_esperados` | T01 |
 | Gate 8: cada classe de `results.py` construída em exatamente 1 sítio | `scripts/check_layout.py` regra 8 | T01 (o use case é o sítio) |
 | Toda construção de `IdentityFacade(...)` (posicional) | `composition_root.py`, `tests/contract/features/staff/conftest.py`, `tests/unit/features/identity/application/test_facade.py` (2×) | T02 |
-| Identidade dos colaboradores da fachada × deps | `tests/unit/features/staff/adapters/test_composition_root_staff.py:315-328` | T02 |
+| Identidade dos colaboradores da fachada × deps | `tests/unit/features/staff/adapters/test_composition_root_staff.py` › `test_ca07_o_gateway_de_identity_e_o_local_sobre_a_fachada_das_rotas` | T02 |
 | Estrutura do `Protocol`: `LocalIdentityGateway` e o fake passados como `IdentityGateway` (mypy) | `composition_root.py`, contrato, unit | T03 (port + duas implementações juntos) |
 | Lei documentada no port, parametrizada | `test_identity_gateway_laws.py::test_a_lei_esta_documentada_no_port` | T03 |
 | Nenhum `if` sobre implementação no corpo do contrato | `test_no_implementation_branching.py` | T03 (arranjos no holder) |

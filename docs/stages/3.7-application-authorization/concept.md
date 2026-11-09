@@ -94,24 +94,24 @@ erro HTTP byte-idênticas às de hoje.
   `grep -rln "AccessGuard" src/restaurant_hub/features/staff/application/use_cases`
   hoje: vazio.
 - **A unidade do registro vem do path**, nunca do escopo (ADR 3.6.0001); o
-  escopo apenas ecoa a unidade pedida (`authorize_action.py:113`).
+  escopo apenas ecoa a unidade pedida (`authorize_action.py` › `AuthorizeActionUseCase.execute`).
 - **Medido: com `tenant_id` nomeado, ator de outro tenant é negado** — pela
   primeira checagem que se aplica a ele: passo 2 (RBAC, `PermissionDeniedError`
   — `employee` e `platform_admin` param aqui para as permissões de staff,
-  `role.py:54,77`), passo 3 (`_assert_tenant_scope`, `TenantNotVisibleError` —
-  `owner`/`manager`/`hr` de outro tenant, `authorize_action.py:116-128`) e, para
-  ator sem tenant que passasse, L-AG3 no tradutor (`composition_root.py:356-363`).
+  `role.py` › `_ROLE_PERMISSIONS`), passo 3 (`_assert_tenant_scope`, `TenantNotVisibleError` —
+  `owner`/`manager`/`hr` de outro tenant, `authorize_action.py` › `AuthorizeActionUseCase._assert_tenant_scope`) e, para
+  ator sem tenant que passasse, L-AG3 no tradutor (`composition_root.py` › `_IdentityAccessGuard.authorize`).
   É isso que permite ao use case **confirmar** o tenant do command em vez de
   derivá-lo.
 - **Medido: as duas autorizações (borda e use case) recebem o mesmo pedido** no
   caminho HTTP — a borda omite o tenant e o tradutor o resolve do ator
-  (`composition_root.py:347`); o use case nomeia o tenant do escopo devolvido,
+  (`composition_root.py` › `_IdentityAccessGuard.authorize`); o use case nomeia o tenant do escopo devolvido,
   que é o mesmo valor. Toda negação acontece na borda antes; nenhuma faixa muda.
 
 ### Premissas
 - Um request HTTP de staff passa a custar duas autorizações; cada uma é
   `users.find_by_id` e, quando há unidade, `units.find_by_id` mais
-  `users.list_memberships` (`authorize_action.py:80,142,153`) — leituras por
+  `users.list_memberships` (`authorize_action.py` › `AuthorizeActionUseCase.execute`, `_assert_unit_visibility`) — leituras por
   chave. Aceitável na escala do piloto (overview §6); não medido sob carga.
 - Nenhum driver não-HTTP de staff existe hoje (`grep -rn "UseCase(" src/` fora do
   `composition_root`: vazio).
@@ -258,7 +258,7 @@ Configuração candidata: nenhuma · Reversível: sim
 ```
 [decision:C] D3 — tenant do command confirmado pelo guard × tenant derivado do escopo
 Escolha: nomear `tenant_id=command.tenant_id` e operar sobre o command · Alternativas: tirar tenant_id dos commands e ler scope.tenant_id; omitir o tenant como a borda faz · Degrau (C): 1
-Base: ADR 0.0.0005 cl. 1 "a declaration confirmed against the token"; ADR 3.2.0002 (commands escopados); ADR 3.6.0001 (endereço ≠ escopo); medição authorize_action.py:85-86,116-128
+Base: ADR 0.0.0005 cl. 1 "a declaration confirmed against the token"; ADR 3.2.0002 (commands escopados); ADR 3.6.0001 (endereço ≠ escopo); medição `authorize_action.py` › `AuthorizeActionUseCase.execute` (passo 2), `_assert_tenant_scope`
 Configuração candidata: nenhuma · Reversível: sim
 ```
 - **ADR:** 3.7.0001 §3, alts. C e G. A alt. G responde às razões com que o ADR
@@ -282,7 +282,7 @@ Configuração candidata: nenhuma · Reversível: sim
   módulo da borda, de onde os testes de borda o leem).
 - **Por quê:** o use case precisa dos valores, e application não importa adapter
   (LAYOUT §3). O docstring do port já cita os valores.
-- **Fonte:** LAYOUT §3; `dependencies.py:92-98`.
+- **Fonte:** LAYOUT §3; `dependencies.py` › constantes `PERMISSION_*`.
 - **ADR:** 3.7.0001 §5.
 
 ### D6 — A borda continua autorizando

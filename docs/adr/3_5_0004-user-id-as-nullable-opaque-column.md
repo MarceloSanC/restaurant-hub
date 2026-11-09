@@ -46,7 +46,7 @@ Forces:
   (there is no "change login" in this Stage).
 - `Employee` is `frozen`; transitions return new instances via
   `dataclasses.replace`; the copy use case constructs the clone **field by
-  field** (`copy_employee_to_unit.py:71`).
+  field** (`copy_employee_to_unit.py` › `CopyEmployeeToUnitUseCase.execute`).
 
 ## Decision
 
@@ -188,7 +188,7 @@ every route that embeds an employee shows the link (concept §5.12, CA06, CA13).
 - ADR 3.1.0001 (iii), ADR 3.2.0003 (exclusion list), ADR 3.2.0006, ADR 3.2.0007,
   ADR 3.3.0002 (no cross-BC FK), ADR 3.3.0005 (indexing follows access),
   ADR 3.5.0003 (termination cuts access)
-- `src/restaurant_hub/features/staff/application/use_cases/copy_employee_to_unit.py:71`
+- `src/restaurant_hub/features/staff/application/use_cases/copy_employee_to_unit.py` › `CopyEmployeeToUnitUseCase.execute`
 
 ## Supersessão parcial
 

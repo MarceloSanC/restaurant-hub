@@ -63,13 +63,13 @@ de totalidade nasceram na Task de wiring, depois de todo o código —, aqui ela
 
 | Varredura (arquivo:linha hoje) | O que deriva | Consequência para o recorte |
 |---|---|---|
-| `test_http_error_handlers.py:71-84` `test_ca17_o_mapa_e_total_sobre_staff_error` | `StaffError.__subclasses__` | toda exceção nova de staff entra **no mesmo commit** que a sua entrada em `STAFF_ERROR_STATUS` — por isso as **cinco exceções e o mapa são a Task 01**, antes do domínio que as levanta |
-| `test_staff_status_bands.py:540-555` `CENARIOS_POR_EXCECAO \| INALCANCAVEIS_POR_HTTP == entradas do mapa` | as chaves do mapa | as cinco entram em `INALCANCAVEIS_POR_HTTP` na Task 01 (é **verdade**: R17 não existe) e migram para `CENARIOS_POR_EXCECAO` na Task 11, quando passam a ser alcançáveis |
-| `test_composition_root_staff.py:136-151` `test_ca18_a_lista_deste_teste_cobre_a_pasta_de_use_cases_inteira` | `use_cases/*.py` (só `__init__` excluído) ↔ lista literal ↔ contêiner | `_results.py` exige excluir módulos `_`-prefixados (Task 03); **um use case novo só pode nascer no commit que o põe no contêiner** — e o contêiner só tem gateway a partir da Task 09 |
-| `composition_root.py:601` constrói `DeactivateEmployeeUseCase(employees=...)`; `test_http_router_job_functions.py:163-190` constrói use cases por reflexão com `disponiveis = {employees, job_functions, id_generator}` | assinatura dos construtores | mudar a assinatura de `Deactivate` quebra `create_app()` (todo e2e) e as cinco `Ambiente` dos testes de router — logo o gateway precisa estar **wired antes** (Task 09) e a mudança de assinatura vai **junto** com o seu wiring e com `disponiveis["gateway"]` (Task 10) |
-| `test_composition_root_staff.py:963-1041` provedores `_get_*` ↔ overrides (17) ↔ rotas (16); `test_staff_authorization.py:364-374` `set(ROTAS) == rotas registradas`; `test_http_boundary_sweeps.py` `_INVOCACOES` total sobre `router.routes`, `_TOTAL_DE_AUTORIZACOES = 17`, `_TOTAL_DE_CAMPOS_ESCALARES = 13`; `test_http_path_addresses_the_record.py:82-88` toda rota com `{unit_id}` | `router.routes` | a rota **nasce no mesmo commit** que o seu override, a sua declaração `INVOCACOES`, a sua entrada em `ROTAS` e as cardinalidades novas (Task 11) |
-| `tests/contract/features/staff/test_no_implementation_branching.py:103` `glob("test_*laws*.py") == _MODULOS_DE_LEI`, mais os quatro guardas de AST sobre cada módulo de lei (todo teste recebe a fixture de implementações; nenhum corpo toca `request`/`param`/`getfixturevalue`; nenhum literal de implementação) | a pasta de contrato | a suíte de leis do gateway (Task 04) entra na lista **e** sob os guardas no mesmo commit — a fixture parametrizada mora no `conftest.py` e o guarda "recebe a fixture" é generalizado por módulo (`repos` para os repositórios, `gateway` para o port novo) |
-| `tests/unit/features/identity/application/test_dtos.py:214` `_TOTAL_DE_DTOS = 21` (igualdade exata sobre seis módulos) e `:264` `vars(results) == _RESULT_CLASSES` (literal de 5) | os DTOs de identity | os três commands e o result novos (Task 07) entram nas duas listas no mesmo commit |
+| `test_http_error_handlers.py` › `test_ca17_o_mapa_e_total_sobre_staff_error` | `StaffError.__subclasses__` | toda exceção nova de staff entra **no mesmo commit** que a sua entrada em `STAFF_ERROR_STATUS` — por isso as **cinco exceções e o mapa são a Task 01**, antes do domínio que as levanta |
+| `test_staff_status_bands.py` › `test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e`: `CENARIOS_POR_EXCECAO \| INALCANCAVEIS_POR_HTTP == entradas do mapa` | as chaves do mapa | as cinco entram em `INALCANCAVEIS_POR_HTTP` na Task 01 (é **verdade**: R17 não existe) e migram para `CENARIOS_POR_EXCECAO` na Task 11, quando passam a ser alcançáveis |
+| `test_composition_root_staff.py` › `test_ca18_a_lista_deste_teste_cobre_a_pasta_de_use_cases_inteira` | `use_cases/*.py` (só `__init__` excluído) ↔ lista literal ↔ contêiner | `_results.py` exige excluir módulos `_`-prefixados (Task 03); **um use case novo só pode nascer no commit que o põe no contêiner** — e o contêiner só tem gateway a partir da Task 09 |
+| `composition_root.py` › `wire_dependencies` constrói `DeactivateEmployeeUseCase(employees=...)`; `test_http_router_job_functions.py` › `overrides_de_use_case` constrói use cases por reflexão com `disponiveis = {employees, job_functions, id_generator}` | assinatura dos construtores | mudar a assinatura de `Deactivate` quebra `create_app()` (todo e2e) e as cinco `Ambiente` dos testes de router — logo o gateway precisa estar **wired antes** (Task 09) e a mudança de assinatura vai **junto** com o seu wiring e com `disponiveis["gateway"]` (Task 10) |
+| `test_composition_root_staff.py` › `test_ca30_as_dezesseis_rotas_de_staff_ficam_montadas_sob_o_prefixo`: provedores `_get_*` ↔ overrides (17) ↔ rotas (16); `test_staff_authorization.py` › `test_a_declaracao_de_rotas_e_total_sobre_o_router`: `set(ROTAS) == rotas registradas`; `test_http_boundary_sweeps.py` `_INVOCACOES` total sobre `router.routes`, `_TOTAL_DE_AUTORIZACOES = 17`, `_TOTAL_DE_CAMPOS_ESCALARES = 13`; `test_http_path_addresses_the_record.py` › `_rotas_de_funcionario`: toda rota com `{unit_id}` | `router.routes` | a rota **nasce no mesmo commit** que o seu override, a sua declaração `INVOCACOES`, a sua entrada em `ROTAS` e as cardinalidades novas (Task 11) |
+| `tests/contract/features/staff/test_no_implementation_branching.py` › `test_a_lista_de_modulos_de_lei_cobre_a_pasta_inteira`: `glob("test_*laws*.py") == _MODULOS_DE_LEI`, mais os quatro guardas de AST sobre cada módulo de lei (todo teste recebe a fixture de implementações; nenhum corpo toca `request`/`param`/`getfixturevalue`; nenhum literal de implementação) | a pasta de contrato | a suíte de leis do gateway (Task 04) entra na lista **e** sob os guardas no mesmo commit — a fixture parametrizada mora no `conftest.py` e o guarda "recebe a fixture" é generalizado por módulo (`repos` para os repositórios, `gateway` para o port novo) |
+| `tests/unit/features/identity/application/test_dtos.py` › `test_todo_dto_da_camada_e_frozen`: `_TOTAL_DE_DTOS = 21` (igualdade exata sobre seis módulos) e `test_modulo_de_results_declara_os_cinco_esperados`: `vars(results) == _RESULT_CLASSES` (literal de 5) | os DTOs de identity | os três commands e o result novos (Task 07) entram nas duas listas no mesmo commit |
 
 Cada Task é **verde sozinha** — é o critério #1 de PIPELINE §4.3 levado a sério
 contra gates que já existem. O preço é que **sete Tasks ultrapassam ~5
@@ -124,9 +124,9 @@ sem entrada em §7; a 13ª Task reabre o corte do concept §13 Q6.
   import-linter 2.13 (wildcard `*` em `ignore_imports` casa nome de módulo).
 - `Employee` e `EmployeeResult` são `frozen`; `EmployeeResult` **não tem nenhum
   campo com default** hoje; a cópia constrói campo a campo
-  (`copy_employee_to_unit.py:71`).
+  (`copy_employee_to_unit.py` › `CopyEmployeeToUnitUseCase.execute`).
 - Contagens transcritas que esta Stage desloca: `STAFF_ERROR_STATUS` 18 → 23
-  (`test_http_error_handlers.py:33`; `test_staff_status_bands.py:530`);
+  (`test_http_error_handlers.py` › `_TOTAL_DE_ERROS_DE_STAFF`; `test_staff_status_bands.py` › `_TOTAL_DE_ENTRADAS_DO_MAPA`);
   `test_composition_root_staff.py` 16 use cases / 17 overrides / 16 rotas /
   10 de identity → 17 / 18 / 17 / 10; `test_staff_authorization.py`
   16/12/10/32/48 e `_TOTAL_DE_ROTAS_COM_ENTRADA = 10` → 17/13/11/34/51 e 11;
@@ -142,11 +142,11 @@ sem entrada em §7; a 13ª Task reabre o corte do concept §13 Q6.
 - A regex de `Email` aceita `\x00`; `users.email` é `TEXT`; **nenhum** teste de
   identity usa NUL em e-mail hoje (`grep -rn "x00" tests/*/features/identity` →
   vazio) — a regra nova não quebra nada existente.
-- `definir-senha` aparece em **dois** módulos de `src/`: `invite_user.py:209` e
-  `request_password_reset.py:147`; **nenhum** teste hoje assere o formato do
+- `definir-senha` aparece em **dois** módulos de `src/`: `invite_user.py` › `InviteUserUseCase._enviar_convite`
+  e `request_password_reset.py` › `RequestPasswordResetUseCase._enviar`; **nenhum** teste hoje assere o formato do
   link (só `"token=" in body`).
-- `test_http_boundary_sweeps.py:150-181` deriva `_INVOCACOES` dos módulos
-  `test_http_router_*` (dict `INVOCACOES`); `test_application_guards.py:39-44`
+- `test_http_boundary_sweeps.py` › `_invocacoes_declaradas` deriva `_INVOCACOES` dos módulos
+  `test_http_router_*` (dict `INVOCACOES`); `test_application_guards.py` › `_modulos_de_use_case`
   e (após a Task 03) `test_composition_root_staff.py` excluem módulos
   `_`-prefixados da pasta de use cases.
 
@@ -318,7 +318,7 @@ tests/
   `user_id` (via `link_login`) ⇒ clone com `user_id is None` e origem relida
   mantém o seu (CA04). Em `test_composition_root_staff.py`,
   `test_ca18_a_lista_deste_teste_cobre_a_pasta_de_use_cases_inteira` passa a
-  excluir módulos `_`-prefixados (mesma forma de `test_application_guards.py:39-44`).
+  excluir módulos `_`-prefixados (mesma forma de `test_application_guards.py` › `_modulos_de_use_case`).
 - **Detalhes técnicos:** o mapper preenche **todos** os campos a partir da
   entidade; nenhum use case passa `user_id` à mão. `copy_employee_to_unit.py`
   continua construindo o clone campo a campo **sem** nomear `user_id` (trava de
@@ -378,8 +378,8 @@ tests/
   `conftest.py` da 3.3. Em `test_no_implementation_branching.py`: o módulo novo
   entra em `_MODULOS_DE_LEI`; a lista vira mapa módulo → nome da fixture
   (`"repos"` para os dois de repositório, `"gateway"` para o novo) e os dois
-  guardas que hoje hardcodam `"repos"` — "todo teste recebe a fixture" (`:188`)
-  e "nenhum corpo inspeciona o tipo do repositório" (`:179`) — leem o nome do
+  guardas que hoje hardcodam `"repos"` — "todo teste recebe a fixture" (`test_todo_teste_de_lei_recebe_a_fixture`)
+  e "nenhum corpo inspeciona o tipo do repositório" (`test_nenhum_corpo_inspeciona_o_tipo_de_um_repositorio`) — leem o nome do
   mapa; o guarda de literais ganha `"real"` ao lado de `"fake"`/`"postgres"`.
   É generalização do guarda pelo seu próprio princípio (nenhuma ramificação por
   implementação), não afrouxamento: os três módulos ficam sob as mesmas quatro
@@ -493,7 +493,7 @@ tests/
   **idênticos** aos de `InviteUserUseCase._enviar_convite`). `invite_user.py`:
   o import e o corpo de `_enviar_convite` passa a delegar
   (`self._email_sender.send(invitation_message(destinatario, setup_link(self._base_url,
-  valor_do_token)))`); `request_password_reset.py`: o import e a linha 147 —
+  valor_do_token)))`); `request_password_reset.py`: o import e a linha do link em `RequestPasswordResetUseCase._enviar` —
   **nada mais** nos dois módulos (construtores, ordem e testes intactos).
   Commands: `ProvisionAccountCommand(email: Email, role: Role, tenant_id,
   unit_ids, handed_over: bool)`, `SendInvitationCommand(email: Email, setup_link:
@@ -788,9 +788,9 @@ tests/
   `test_toda_autorizacao_do_router_nomeia_um_requisito_declarado` passa a
   reconhecer o requisito novo; `_VALORES_ADVERSARIAIS` ganha
   `"nul\x00@dentro.com"` **e `_ADVERSARIAIS_RECUSADOS_PELO_VALIDADOR` também**
-  — `validate_identifier` recusa qualquer string com NUL (`dependencies.py:110`),
-  e sem a segunda entrada a transcrição do validador (`:1333`) e o eixo de path
-  (`:1254`) reprovam; aqui só se prova "sem 500", o 422 é de T06/T12; a
+  — `validate_identifier` recusa qualquer string com NUL (`dependencies.py` › `validate_identifier`),
+  e sem a segunda entrada a transcrição do validador (`test_a_transcricao_do_que_o_validador_recusa_bate_com_o_validador`) e o eixo de path
+  (`test_ca24_nenhum_identificador_de_path_adversarial_devolve_500`) reprovam; aqui só se prova "sem 500", o 422 é de T06/T12; a
   derivação de CA13 — rotas cujo `response_model` é ou embute
   `EmployeeResponse`, contagem 12); `test_http_path_addresses_the_record.py`
   (`_resultado_para` reconhece `EmployeeLoginResult`; a cláusula de

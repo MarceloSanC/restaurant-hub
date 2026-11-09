@@ -125,7 +125,7 @@ critérios de conduta em §11.
   imagem, um `ORDER BY` com e sem `COLLATE "C"` — ver §9 e CA10b.
 - `Settings.database_url` **tem** default embutido
   (`postgresql+psycopg://user:pass@localhost:5432/restaurant_hub`,
-  `settings.py:42`), sobrescrito pelo `.env` da worktree. Sem `.env`, a suíte roda
+  `settings.py` › `Settings.database_url`), sobrescrito pelo `.env` da worktree. Sem `.env`, a suíte roda
   contra o banco default — o que é exatamente o risco que o docstring da fixture
   `engine` descreve para worktrees paralelas. Esta Stage **não** muda isso; a
   premissa fica registrada para que ninguém a leia ao contrário.
@@ -202,7 +202,7 @@ ON_WRITE_EMPLOYEE: ConstraintMap
    mesmo registro.
 5. **Em `add` de funcionário, L-E1 precede L-E4.** A colisão **global** de id é
    verificada antes da validade referencial do conjunto de funções, replicando a
-   ordem do fake (`in_memory_employee_repository.py:41-43`). No adapter isso exige
+   ordem do fake (`in_memory_employee_repository.py` › `InMemoryEmployeeRepository.add`). No adapter isso exige
    um `SELECT 1 FROM employees WHERE id = :id` explícito **antes** da pré-checagem
    referencial: a ordem natural do SQL é a inversa (a colisão de id só apareceria
    no `INSERT`), e uma entrada que viola as duas leis responderia
@@ -263,7 +263,7 @@ ON_WRITE_EMPLOYEE: ConstraintMap
     `frozenset` itera em ordem dependente de `PYTHONHASHSEED` e o teste
     `test_l_e4_reporta_a_id_ausente_de_forma_deterministica` (que exige `"f97"`)
     falharia **de forma intermitente** contra `[postgres]`. O fake já o faz
-    (`in_memory_employee_repository.py:126`); a lei o torna exigível do adapter.
+    (`in_memory_employee_repository.py` › `InMemoryEmployeeRepository._guard_job_functions`); a lei o torna exigível do adapter.
 16. **`exists_by_job_function` é tenant-wide e ignora estado** (L-E7):
     `SELECT EXISTS(SELECT 1 FROM employee_job_functions WHERE tenant_id = :t AND
     job_function_id = :f)` — sem join, sem filtro de `active`.
@@ -357,7 +357,7 @@ de qual das duas camadas de guarda respondeu.
 - **O quê:** `employees.tenant_id` e `employees.unit_id` **não** têm FK para
   `restaurants`/`units` de identity. Continuam `Text NOT NULL`, opacos.
 - **Por quê:** cada BC descreve o seu schema num `MetaData` próprio, e o
-  comentário de `migrations/env.py:39-41` manda **combinar** os metadatas; os
+  comentário de `migrations/env.py` › `target_metadata` manda **combinar** os metadatas; os
   identificadores de staff são declarados como strings opacas que atravessam a
   fronteira entre BCs (`domain/value_objects/identifiers.py`); e o contrato
   `[importlinter:contract:bc-independence]` existe para que staff não dependa de
@@ -367,7 +367,7 @@ de qual das duas camadas de guarda respondeu.
 - **Limite honesto:** o banco não impede um funcionário apontando para unidade
   inexistente, e apagar uma unidade em identity deixa órfãos. Quem valida na
   escrita é a 3.4; a reconciliação operacional está escalada em §10.
-- **Fonte:** `migrations/env.py:39-41`; `identifiers.py`; `.importlinter:223`;
+- **Fonte:** `migrations/env.py` › `target_metadata`; `identifiers.py`; `.importlinter` › `[importlinter:contract:bc-independence]`;
   concept 3.2 §3.
 - **ADR:** [`3_3_0002`](../../adr/3_3_0002-no-cross-bounded-context-foreign-keys.md)
 
@@ -484,7 +484,7 @@ de qual das duas camadas de guarda respondeu.
   toda linha de construção mudam, e os helpers são re-tipados.
   Além disso, `L-ORD` **acrescenta** testes (as asserções de listagem existentes
   usam **conjuntos** de propósito), e a "Nota deliberada" que hoje declara a ordem
-  como não-travada (`test_employee_repository_laws.py:317-322`) fica falsa e sai
+  como não-travada (`test_employee_repository_laws.py` › "Nota deliberada") fica falsa e sai
   no mesmo commit.
 - **Por quê:** a skill `pytest-with-fakes` é literal — "don't duplicate contract
   tests inside unit (defeats the point: the contract is single)" — e o precedente
@@ -574,7 +574,7 @@ de qual das duas camadas de guarda respondeu.
   ele não diz". `L-ORD` **acrescenta**, não emenda: nenhuma das doze muda, e o
   non-goal da issue (não redefinir comportamento de use case) é respeitado, mas a
   âncora precisa existir para que o respeito seja verificável.
-- **Fonte:** `job_function_repository.py:4`, `employee_repository.py:4`;
+- **Fonte:** `job_function_repository.py` e `employee_repository.py` › docstring do módulo;
   `docs/stages/3.2-staff-application/concept.md` §4; CONVENTIONS §3.4 (revisões
   posteriores ao fechamento vão para seção datada).
 

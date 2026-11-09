@@ -193,7 +193,7 @@ as an access error — fail-closed, untyped.
 - **Cons:** contradicts ADR 3.2.0002's command contract and makes the use case
   read the scope that ADR 3.6.0001 forbids the boundary to read for the unit —
   two rules for the same object. For the unit there is no such option at all
-  (the scope echoes the requested unit, `authorize_action.py:113`), so the
+  (the scope echoes the requested unit, `authorize_action.py` › `AuthorizeActionUseCase.execute`), so the
   address would come from two different sources.
 - **Why rejected:** confirming the declared target keeps one address source (the
   command) and one authority (the guard).
@@ -248,8 +248,8 @@ as an access error — fail-closed, untyped.
 - **Every staff HTTP request authorizes twice** (router + use case). The 17 use
   cases add 19 `authorize` calls (copy and create-login make two each) on top of
   the router's 19. Each call is `users.find_by_id` and, when a unit is named,
-  `units.find_by_id` plus `users.list_memberships` (`authorize_action.py:80,142,
-  153`). Accepted: the boundary call is a non-goal of #49, and the reads are by
+  `units.find_by_id` plus `users.list_memberships` (`authorize_action.py` › `AuthorizeActionUseCase.execute`,
+  `AuthorizeActionUseCase._assert_unit_visibility`). Accepted: the boundary call is a non-goal of #49, and the reads are by
   key; not measured under load.
 - Every command construction now names an actor; test suites pay a mechanical
   churn once.

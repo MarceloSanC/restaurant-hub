@@ -82,7 +82,7 @@ com pressa.
 ("a unidade que chega ao use case é a do **path**") fala de independência entre
 duas fontes, e as **duas** implementações existentes do port — o tradutor de
 produção e o `InMemoryAccessGuard` — **ecoam** a unidade pedida
-(`authorize_action.py:113`, `scope_unit_id=command.unit_id`). Com qualquer uma
+(`authorize_action.py` › `AuthorizeActionUseCase.execute`, `scope_unit_id=command.unit_id`). Com qualquer uma
 delas, "o router usou o path" e "o router usou o escopo" são o **mesmo objeto**:
 a mutação sobrevive e a cobertura fecha em 100%. O domínio quantificado tem, no
 sistema inteiro, **um único valor observável** — então o segundo é **fabricado**.
@@ -228,7 +228,7 @@ tests/
      concept já mediu como correto.
   2. **`_IdentityAccessGuard.authorize`:** quando o chamador não nomeia
      `tenant_id`, preencher com o tenant do ator autenticado **antes de delegar ao
-     `IdentityGuard`** (`composition_root.py:258-263` — quem monta o
+     `IdentityGuard`** (`composition_root.py` › `_IdentityAccessGuard.authorize` — quem monta o
      `AuthorizeActionCommand` é o guard de identity, não o tradutor). L-AG3
      continua imposta **depois**, como está: ator sem tenant é **negado**, jamais
      coagido para `""`.
@@ -246,11 +246,11 @@ tests/
     sem ler atributo de ator.
   - **`platform_admin` com tenant omitido continua negado — mas pela matriz RBAC,
     não por L-AG3, e a distinção é a diferença entre teste e teatro.**
-    `role.py:54` dá a `PLATFORM_ADMIN` apenas `MANAGE_PLATFORM`, então ele é
+    `role.py` › `_ROLE_PERMISSIONS` dá a `PLATFORM_ADMIN` apenas `MANAGE_PLATFORM`, então ele é
     recusado no **passo 2** de `AuthorizeActionUseCase`, antes de o tradutor
     chegar ao `if not actor_tenant_id`. É exatamente por isso que a suíte mergeada
     monta o pior caso com `_SpyIdentityGuard` — identity **autorizou** e devolveu
-    ator sem tenant (`test_composition_root_staff.py:485-492`). **O eixo novo
+    ator sem tenant (`test_composition_root_staff.py` › `test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor`). **O eixo novo
     ("tenant omitido") tem de usar o mesmo spy**: sem ele o verde vem da
     permissão ausente, e a lei fica sem trava enquanto a suíte parece cobri-la.
   - **Como o tradutor lê o tenant do ator sob `Actor = object` e mypy strict.** O
@@ -400,7 +400,7 @@ tests/
     `RequestValidationError` do framework, que o handler compartilhado renderiza
     com corpo **constante** — `{"detail": "requisição inválida", "type":
     "validation_error"}`, em
-    `shared/infrastructure/http/error_handlers.py:37`. O ADR 3.6.0002, ao
+    `shared/infrastructure/http/error_handlers.py` › `_CORPO_422_VALIDACAO`. O ADR 3.6.0002, ao
     rejeitar a Alternativa A, já nomeava a diferença: *"a **different body
     shape**"*, *"dois formatos **distinguíveis** para a mesma classe de
     defeito"*. É esse discriminador que as varreduras da Task 05 asserem — sem
@@ -752,7 +752,7 @@ tests/
   - **Esta é a Task que muda a forma de um objeto compartilhado.** Call sites de
     `build_http_wiring`/`HttpWiring` medidos hoje: `app.py` (em `src/`, **coberto**
     pelo mypy) e `tests/unit/features/staff/adapters/test_composition_root_staff.py`
-    (linhas 615–622) — **fora** do alcance de `make typecheck`, e portanto só o
+    (`test_ca21_nenhuma_rota_de_staff_nasceu_nesta_stage`) — **fora** do alcance de `make typecheck`, e portanto só o
     `pytest` os pega. Nenhum outro arquivo em `tests/` referencia os dois nomes.
   - **Sem ADR, e a razão não é "não há alternativa"** (concept §7 D5): campos
     plurais e uma **lista de `HttpWiring`** são equivalentes em consequência e
@@ -766,7 +766,7 @@ tests/
     de identity continuam respondendo exatamente como antes (nenhuma regressão de
     path, status ou corpo).
   - **CA31** — nenhuma suíte já mergeada regride, e **sem alteração da regex
-    `_ORDER_BY`** de `tests/integration/features/staff/adapters/out/postgres/test_staff_conduct.py:194`
+    `_ORDER_BY`** de `tests/integration/features/staff/adapters/out/postgres/test_staff_conduct.py` › `_ORDER_BY`
     (consequência do ADR 3.4.0004): `git diff` sobre esse arquivo tem de vir vazio.
   - A app sobe: `uv run uvicorn restaurant_hub.main:app` inicia com as duas
     superfícies montadas.
@@ -1140,7 +1140,7 @@ Task 01 (tenant no token: port + tradutor + fake + as duas suítes de lei)
 | A validação de identificador ser posta **depois** do guard "porque o status é o mesmo" | CA21 assere a **ausência** de `authorize(` em `calls` — o status não distingue as duas ordens, e é por isso que a asserção é sobre o efeito colateral |
 | R16 inverter origem e destino sem que nada falhe | CA34 nas duas metades (command na 08, unidade de destino na 10) + a mutação (d) de CA33 |
 | A Stage estourar 12 Tasks durante a execução | **PARAR e devolver proposta.** A subdivisão de e2e **já foi usada** (Tasks 11 e 12); o próximo sinal é subdividir o inventário de rotas (Tasks 06–08), **não** cortar a Stage de novo: ela já é produto de um corte |
-| O eixo novo de Task 01 ("tenant omitido") ficar verde pela matriz RBAC em vez de pela lei | `platform_admin` é negado no **passo 2** por não deter permissão de staff (`role.py:54`), antes de L-AG3. O cenário tem de usar `_SpyIdentityGuard` — identity **autorizou** e devolveu ator sem tenant —, como a suíte mergeada já faz (`test_composition_root_staff.py:485-492`) |
+| O eixo novo de Task 01 ("tenant omitido") ficar verde pela matriz RBAC em vez de pela lei | `platform_admin` é negado no **passo 2** por não deter permissão de staff (`role.py` › `_ROLE_PERMISSIONS`), antes de L-AG3. O cenário tem de usar `_SpyIdentityGuard` — identity **autorizou** e devolveu ator sem tenant —, como a suíte mergeada já faz (`test_composition_root_staff.py` › `test_l_ag3_ator_sem_tenant_e_negado_pelo_tradutor`) |
 | `user_id` entrar num schema na 3.5 sem que nada reclame | A lista negra de CA02(a) inclui `user_id` e `employee_user_id` desde a Task 02. Sem isso a célula do `non_goal` seria declaração, não trava |
 | `weekly_hours` como string quebrar cliente que espera número | Declarado no contrato e no ADR 3.6.0003; não há cliente (frontend é Step futuro) |
 
