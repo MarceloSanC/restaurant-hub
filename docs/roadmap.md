@@ -214,7 +214,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#132](https://github.com/MarceloSanC/restaurant-hub/issues/132) | Workers do mutmut disputam o mesmo Postgres — mortes falsas na corrida de mutação | shared | tooling + ci | open | #87 |
 | [#134](https://github.com/MarceloSanC/restaurant-hub/issues/134) | Identificadores locais em português na application de scheduling (`_UM_DIA`) | scheduling | application + adapters | done | #105 |
 | [#135](https://github.com/MarceloSanC/restaurant-hub/issues/135) | Identificadores em português na application e nos adapters de staff | staff | application + adapters | done | #105 |
-| [#136](https://github.com/MarceloSanC/restaurant-hub/issues/136) | Identificadores em português no BC identity | identity | todas as camadas | open | #105 |
+| [#136](https://github.com/MarceloSanC/restaurant-hub/issues/136) | Identificadores em português no BC identity | identity | todas as camadas | done | #105 |
 | [#137](https://github.com/MarceloSanC/restaurant-hub/issues/137) | Identificadores em português no kernel compartilhado | shared | infrastructure | done | #105 |
 | [#139](https://github.com/MarceloSanC/restaurant-hub/issues/139) | `develop` vermelho — detector do `also_copy` toma fixture sob `tmp_path` por citação | shared | tooling + tests | done | #84, #87 |
 | [#143](https://github.com/MarceloSanC/restaurant-hub/issues/143) | `worktree-new`/`worktree-rm` — encoding do git, raiz do checkout principal e issue-first sem `gh` | shared | tooling | open | #91 |
