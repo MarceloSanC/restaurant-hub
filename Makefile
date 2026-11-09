@@ -139,9 +139,16 @@ fmt-check:
 # pyproject fixa `files = ["src"]`, então uma anotação dentro de um teste some
 # em runtime e nunca é verificada. Como os fakes são a especificação que os
 # adapters reais (2.3/2.4) reimplementam, a divergência seria herdada em silêncio.
+#
+# Inclui scripts/ e .claude/hooks/ (desde a issue #91): são os gates e os hooks
+# que decidem se o código entra, e uma regressão de tipo neles passava no
+# `make check`. Os scripts de nome com hífen (`worktree-new.py`) não são módulos
+# importáveis, mas o mypy os acha pela varredura do diretório. O
+# `tests/unit/test_ci_workflow.py` cobra que o alvo alcance todo `.py` versionado
+# fora de `tests/` (exceto os fakes) e `migrations/`.
 # ---------------------------------------------------------------------------
 typecheck:
-	uv run mypy src/ tests/fakes/
+	uv run mypy src/ tests/fakes/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # layout-check — valida as regras de arquitetura que NÃO são arestas de import
@@ -209,9 +216,17 @@ test:
 
 # ---------------------------------------------------------------------------
 # test-gate — suite com cobertura; falha se < 90% (fail_under do pyproject)
+#
+# Uma execução da suíte, dois relatórios, cada um com o `fail_under` (issue #91):
+# o código do produto (`src/`) e o tooling que decide se o código entra
+# (`scripts/` e `.claude/hooks/`). Um gate só sobre o total deixaria o `src/`
+# cair abaixo de 90% escondido atrás dos scripts, e vice-versa. O pytest-cov
+# ainda cobra o total, que fica acima de 90% sempre que as duas partes ficam.
 # ---------------------------------------------------------------------------
 test-gate:
-	uv run pytest tests/ --cov=src/restaurant_hub --cov-report=term-missing
+	uv run pytest tests/ --cov=src/restaurant_hub --cov=scripts --cov=.claude/hooks --cov-report=
+	uv run coverage report --include="src/*"
+	uv run coverage report --include="scripts/*,.claude/hooks/*"
 
 # ---------------------------------------------------------------------------
 # test-fast — pula testes marcados como slow (CI rápido / loop local)
@@ -223,7 +238,7 @@ test-fast:
 # test-cov — testes com relatório de cobertura em HTML (gate ≥ 90% via pyproject)
 # ---------------------------------------------------------------------------
 test-cov:
-	uv run pytest tests/ --cov=src/restaurant_hub --cov-report=html --cov-report=term-missing
+	uv run pytest tests/ --cov=src/restaurant_hub --cov=scripts --cov=.claude/hooks --cov-report=html --cov-report=term-missing
 	@echo Relatorio gerado em: htmlcov/index.html
 
 # ---------------------------------------------------------------------------

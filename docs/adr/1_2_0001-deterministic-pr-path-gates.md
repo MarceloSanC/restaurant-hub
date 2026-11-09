@@ -5,7 +5,7 @@ when-use: Reference before adding a gate to `make check` that talks to a network
 keywords: [adr, ci, gate, pr-path, determinism, fail-open, fetch-depth, shallow-clone, github-actions, scheduled-scan]
 status: accepted
 created_at: 2026-07-16
-updated_at: 2026-07-16
+updated_at: 2026-11-09
 adr_id: "1.2.0001"
 decision: The PR path stays network-free (network validation lives in the scheduled scan), and a check that belongs on the PR path must be given what it needs to actually run — determinism is never bought by letting a check skip itself.
 context_stage: 1.2-ci
@@ -13,6 +13,8 @@ bounded_context: shared
 ---
 
 # ADR 1.2.0001 — Deterministic PR-path gates: no network, and no silent degradation either
+
+> ⚠️ **Errata (2026-11-09):** §Consequences › *Neutral / trade-offs accepted* — the first bullet (`scripts/` outside coverage measurement and outside `mypy`, `make typecheck` running `mypy src/` only) no longer holds: since issue #91 `make typecheck` runs `mypy src/ tests/fakes/ scripts/ .claude/hooks/`, `[tool.coverage.run] source` includes `scripts` and `.claude/hooks`, and `make test-gate` holds `src/` and the tooling to `fail_under` in separate `coverage report --include` runs. The decision (network-free, non-degrading PR path) is unchanged — ver issue #91 / PR #140
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

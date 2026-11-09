@@ -46,10 +46,10 @@ repos:
       # dos pacotes tipados).
       - id: mypy
         name: mypy (make typecheck)
-        entry: uv run mypy src/ tests/fakes/
+        entry: uv run mypy src/ tests/fakes/ scripts/ .claude/hooks/
         language: system
         pass_filenames: false
-        files: ^(src/|tests/fakes/|pyproject\.toml$|uv\.lock$)
+        files: ^(src/|tests/fakes/|scripts/|\.claude/hooks/|pyproject\.toml$|uv\.lock$)
 
   - repo: local
     hooks:

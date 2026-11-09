@@ -10,7 +10,7 @@ apagá-la deixaria `make check` inteiro verde, ressuscitando o bug sem nenhum
 sinal. Um gate protegido só por prosa é exatamente o defeito que a Stage 1.2
 cataloga.
 
-Escopo deliberadamente estreito, em duas classes:
+Escopo deliberadamente estreito, nestas classes:
 
 1. **Invariantes cuja quebra é silenciosa** — o caso original, `fetch-depth: 0`.
 2. **Requisitos de ambiente dos quais o veredito do gate depende** (Stage 2.3):
@@ -25,6 +25,8 @@ Escopo deliberadamente estreito, em duas classes:
    esquecer um diretório com `.py` nos alvos de ruff deixa o CI verde sobre o que
    o hook do pre-commit reprovaria — e código commitado com `--no-verify`, ou de
    uma worktree sem hook, passa.
+4. **O que o `make typecheck` confere** (issue #91): o mypy alcança todo `.py`
+   versionado fora das exceções declaradas, e a configuração não o tira de volta.
 
 Não testar aqui estilo, nomes de step ou coisas que qualquer leitura do diff
 pega.
@@ -372,4 +374,203 @@ def test_ruff_configuration_does_not_skip_versioned_python() -> None:
     assert silenced == [], (
         f"`per-file-ignores` com `ALL` em {silenced}: o lint vê esses arquivos e não "
         f"cobra regra nenhuma, o que equivale a excluí-los"
+    )
+
+
+# ---------------------------------------------------------------------------
+# O que o `make typecheck` confere (issue #91)
+#
+# A paridade hook↔target (`test_precommit_config.py`) não pega a remoção
+# simultânea de um diretório nos dois lados: o hook continua rodando "o comando
+# do target", e o diretório sai do mypy sem nenhum teste vermelho. Foi assim que
+# `scripts/` ficou fora do `mypy --strict` até a #91, acumulando 23 erros.
+# ---------------------------------------------------------------------------
+
+# Versionado em Python e fora do `mypy --strict`, por decisão: os testes (exceto
+# os fakes, que implementam os ports por tipagem estrutural) e as migrations,
+# geradas pelo Alembic. Entrada nova aqui é decisão, editando o teste.
+_TYPECHECK_EXEMPT = ("tests/", "migrations/")
+_TYPECHECK_REQUIRED_INSIDE_EXEMPT = ("tests/fakes/",)
+
+# `uv run mypy`: os tokens antes dos caminhos.
+_MYPY_PREFIX_LEN = 3
+
+
+def _typechecked(path: str, roots: list[str]) -> bool:
+    return path.startswith(tuple(roots))
+
+
+@pytest.mark.unit
+def test_typecheck_covers_every_versioned_python_outside_the_exemptions() -> None:
+    """O `make typecheck` alcança todo `.py` versionado fora de `tests/` e `migrations/`.
+
+    A cobrança é sobre o que está versionado, não sobre uma lista fixa: um
+    diretório novo com Python (ou um script novo fora de `scripts/`) reprova aqui
+    até entrar no alvo. Os fakes de `tests/fakes/` são cobrados mesmo dentro da
+    exceção (Stage 2.2).
+    """
+    assert "typecheck" in _check_prerequisites(), (
+        "o `make check` não roda o `typecheck`: o CI roda `make check` literalmente"
+    )
+    [command] = _recipe("typecheck")
+    assert command[:_MYPY_PREFIX_LEN] == ["uv", "run", "mypy"], (
+        f"o `make typecheck` roda {command}, que não é o mypy do projeto"
+    )
+    roots = [
+        token.rstrip("/") + "/" for token in command[_MYPY_PREFIX_LEN:] if not token.startswith("-")
+    ]
+    not_dirs = [root for root in roots if not (REPO_ROOT / root).is_dir()]
+    assert not_dirs == [], (
+        f"o `make typecheck` passa {not_dirs} ao mypy, que não são diretórios do "
+        f"repositório: operador de shell na receita muda o veredito"
+    )
+    files = _versioned_python_files()
+    unchecked = sorted(
+        path
+        for path in files
+        if not _typechecked(path, roots)
+        and (
+            not path.startswith(_TYPECHECK_EXEMPT)
+            or path.startswith(_TYPECHECK_REQUIRED_INSIDE_EXEMPT)
+        )
+    )
+    assert unchecked == [], (
+        f"o `make typecheck` ({shlex.join(command)}) não alcança {unchecked}: erro de "
+        f"tipo nesses arquivos passa no gate (issue #91)"
+    )
+
+
+@pytest.mark.unit
+def test_mypy_configuration_does_not_skip_what_typecheck_names() -> None:
+    """A configuração do mypy não tira de volta o que o `make typecheck` nomeia.
+
+    Um `exclude` em `[tool.mypy]` pula arquivo mesmo quando o diretório é passado
+    na linha de comando, e um override com `ignore_errors` deixa o mypy ler o
+    módulo sem reportar nada: nos dois casos o alvo nomeia o diretório e o erro
+    de tipo passa.
+    """
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    mypy = config.get("tool", {}).get("mypy", {})
+    assert mypy.get("strict") is True, "`[tool.mypy]` precisa de `strict = true`"
+    assert "exclude" not in mypy, (
+        f"`[tool.mypy] exclude = {mypy['exclude']!r}` pula arquivos que o `make typecheck` nomeia"
+    )
+    silenced = [
+        override.get("module")
+        for override in mypy.get("overrides", [])
+        if override.get("ignore_errors")
+    ]
+    assert silenced == [], (
+        f"`[[tool.mypy.overrides]]` com `ignore_errors` em {silenced}: o mypy lê esses "
+        f"módulos e não reporta erro nenhum, o que equivale a excluí-los"
+    )
+
+
+# ---------------------------------------------------------------------------
+# O que o `make test-gate` mede (issue #91)
+#
+# Até a #91 a cobertura media só `src/` (`omit = */scripts/*`), e um gate podia
+# perder teste sem que o `make check` acusasse. O alvo roda a suíte uma vez e
+# relata duas partes, cada uma sob o `fail_under` do pyproject: um gate só sobre
+# o total esconderia uma parte abaixo de 90% atrás da outra.
+# ---------------------------------------------------------------------------
+
+# As partes relatadas à parte, cada uma com o seu `coverage report --include`.
+_COVERAGE_PARTS = (
+    frozenset({"src/*"}),
+    frozenset({"scripts/*", ".claude/hooks/*"}),
+)
+_MAIN_GUARD = 'if __name__ == "__main__":'
+
+
+def _coverage_config() -> dict[str, Any]:
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    coverage: dict[str, Any] = config["tool"]["coverage"]
+    return coverage
+
+
+@pytest.mark.unit
+def test_test_gate_measures_every_versioned_python_outside_the_exemptions() -> None:
+    """O pytest do `test-gate` mede todo `.py` versionado fora de `tests/` e `migrations/`."""
+    assert "test-gate" in _check_prerequisites(), (
+        "o `make check` não roda o `test-gate`: o CI roda `make check` literalmente"
+    )
+    pytest_command = _recipe("test-gate")[0]
+    assert pytest_command[:3] == ["uv", "run", "pytest"], (
+        f"o primeiro comando do `make test-gate` precisa ser a suíte: {pytest_command}"
+    )
+    roots = [
+        token.removeprefix("--cov=").rstrip("/") + "/"
+        for token in pytest_command
+        if token.startswith("--cov=")
+    ]
+    unmeasured = sorted(
+        path
+        for path in _versioned_python_files()
+        if not path.startswith(_TYPECHECK_EXEMPT) and not path.startswith(tuple(roots))
+    )
+    assert unmeasured == [], (
+        f"o `make test-gate` ({shlex.join(pytest_command)}) não mede {unmeasured}: um "
+        f"gate pode perder teste sem que o `make check` acuse (issue #91)"
+    )
+
+
+@pytest.mark.unit
+def test_test_gate_reports_each_part_under_the_configured_threshold() -> None:
+    """Um `coverage report --include` por parte, sem flag que mude limiar ou escopo."""
+    reports = _recipe("test-gate")[1:]
+    parts: list[frozenset[str]] = []
+    for command in reports:
+        assert command[:4] == ["uv", "run", "coverage", "report"], (
+            f"o `make test-gate` roda {command}; depois da suíte só cabem os relatórios"
+        )
+        flags = [token for token in command[4:] if token.startswith("-")]
+        includes = [flag for flag in flags if flag.startswith("--include=")]
+        assert len(includes) == 1 and flags == includes, (
+            f"`{shlex.join(command)}` passa {flags}: só o `--include` da parte é "
+            f"permitido — `--fail-under` ou `--omit` mudariam o veredito do gate"
+        )
+        parts.append(frozenset(includes[0].removeprefix("--include=").split(",")))
+    assert sorted(parts, key=sorted) == sorted(_COVERAGE_PARTS, key=sorted), (
+        f"o `make test-gate` relata as partes {[sorted(p) for p in parts]}; o gate "
+        f"espera {[sorted(p) for p in _COVERAGE_PARTS]}"
+    )
+    threshold = 90
+    assert _coverage_config()["report"]["fail_under"] >= threshold
+
+
+@pytest.mark.unit
+def test_coverage_configuration_does_not_drop_tooling() -> None:
+    """Nem `omit` nem `exclude` tiram de volta o que o `test-gate` mede.
+
+    `omit` só para `migrations/` (geradas pelo Alembic) e, como exclusão de
+    linha, só o bloco `if __name__ == "__main__":`, que roda por subprocess e
+    apenas chama o `main()` testado in-process.
+    """
+    coverage = _coverage_config()
+    assert coverage["run"].get("omit", []) == ["*/migrations/*"], (
+        f"`[tool.coverage.run] omit = {coverage['run'].get('omit')}`: arquivo omitido "
+        f"some do relatório e do gate"
+    )
+    report = coverage["report"]
+    assert report.get("exclude_lines", []) == [], "`exclude_lines` troca as exclusões padrão"
+    assert report.get("exclude_also", []) == [_MAIN_GUARD], (
+        f"`exclude_also = {report.get('exclude_also')}`: exclusão nova precisa de "
+        f"justificativa e de entrar aqui por decisão"
+    )
+
+
+@pytest.mark.unit
+def test_test_gate_pytest_passes_only_measurement_flags() -> None:
+    """No pytest do `test-gate`, só `--cov=` e `--cov-report=`.
+
+    `--cov-fail-under` ou `--cov-config` apontando para outro arquivo mudariam o
+    limiar sem tocar o pyproject que os outros testes leem.
+    """
+    pytest_command = _recipe("test-gate")[0]
+    flags = [token for token in pytest_command[3:] if token.startswith("-")]
+    unexpected = [flag for flag in flags if not flag.startswith(("--cov=", "--cov-report="))]
+    assert unexpected == [], (
+        f"o pytest do `make test-gate` passa {unexpected}: flag que muda o limiar ou a "
+        f"configuração da cobertura muda o veredito do gate"
     )

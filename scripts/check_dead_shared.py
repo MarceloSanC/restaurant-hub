@@ -83,9 +83,9 @@ def nomes_publicos(arvore: ast.Module) -> set[str]:
     """
     encontrados: set[str] = set()
     for no in arvore.body:
-        e_definicao = isinstance(no, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef)
-        if e_definicao and not no.name.startswith("_"):
-            encontrados.add(no.name)
+        if isinstance(no, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            if not no.name.startswith("_"):
+                encontrados.add(no.name)
         elif isinstance(no, ast.Assign):
             encontrados.update(
                 alvo.id
@@ -119,7 +119,7 @@ def identificadores(arvore: ast.Module) -> set[str]:
             nomes.add(no.name.split(".")[-1])
             if no.asname:
                 nomes.add(no.asname)
-        elif isinstance(no, ast.arg) or (isinstance(no, ast.keyword) and no.arg is not None):
+        elif isinstance(no, ast.arg | ast.keyword) and no.arg is not None:
             nomes.add(no.arg)
     return nomes
 

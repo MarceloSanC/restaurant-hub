@@ -70,3 +70,62 @@ def test_overrides_must_point_to_existing_skills(tmp_path: Path) -> None:
     assert ch.check_overrides(settings, {"real"}) == [
         "skillOverrides aponta skill inexistente: `ghost`"
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("name: x\n", "sem frontmatter"),
+        ("---\nname: x\n", "sem `---` de fechamento"),
+        ("---\n- a\n- b\n---\ncorpo\n", "não é um mapa YAML"),
+    ],
+)
+def test_malformed_frontmatter_is_reported(tmp_path: Path, text: str, expected: str) -> None:
+    path = tmp_path / "SKILL.md"
+    path.write_text(text, encoding="utf-8")
+    found = ch.check_file(path, ch.SKILL_FIELDS, ())
+    assert len(found) == 1
+    assert expected in found[0]
+
+
+def test_missing_settings_has_no_override_findings(tmp_path: Path) -> None:
+    assert ch.check_overrides(tmp_path / "settings.json", set()) == []
+
+
+def _harness(root: Path, skill_fm: str, agent_fm: str, overrides: dict[str, str]) -> None:
+    skill = root / ".claude" / "skills" / "real" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(f"---\n{skill_fm}\n---\ncorpo\n", encoding="utf-8")
+    agent = root / ".claude" / "agents" / "revisor.md"
+    agent.parent.mkdir(parents=True)
+    agent.write_text(f"---\n{agent_fm}\n---\nprompt\n", encoding="utf-8")
+    settings = root / ".claude" / "settings.json"
+    settings.write_text(json.dumps({"skillOverrides": overrides}), encoding="utf-8")
+
+
+def test_main_clean_harness_exits_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _harness(tmp_path, "description: X.", "name: r\ndescription: Y.", {"real": "off"})
+    monkeypatch.setattr(ch, "ROOT", tmp_path)
+    assert ch.main() == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "0 achado(s)" in captured.err
+
+
+def test_main_reports_findings_with_relative_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Skill, agente e override com defeito: um achado de cada, exit 1."""
+    _harness(tmp_path, "description: x\nbogus: 1", "description: Y.", {"ghost": "off"})
+    monkeypatch.setattr(ch, "ROOT", tmp_path)
+    assert ch.main() == 1
+    captured = capsys.readouterr()
+    lines = captured.out.splitlines()
+    skill_rel = str(Path(".claude/skills/real/SKILL.md"))
+    agent_rel = str(Path(".claude/agents/revisor.md"))
+    assert any(line.startswith(f"{skill_rel}: campo desconhecido") for line in lines)
+    assert any(line.startswith(f"{agent_rel}: campo obrigatório ausente: `name`") for line in lines)
+    assert "skillOverrides aponta skill inexistente: `ghost`" in lines
+    assert f"{len(lines)} achado(s)" in captured.err

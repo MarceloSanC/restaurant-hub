@@ -5,7 +5,7 @@ when-use: After hardening the CI gate (a new tool joins the chain); when auditin
 keywords: [runbook, ci, gate, validation, make-check, lint, fmt-check, typecheck, layout-check, import-check, lock-check, docs-check, test, coverage, fetch-depth, freeze-secao-7, depends-on]
 status: accepted
 created_at: 2026-06-23
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 runbook_id: validate-ci-gate
 triggers:
   - Hardening of the CI gate (new tool joining the chain — e.g., bandit, import-linter)
@@ -36,8 +36,10 @@ check: lint fmt-check typecheck layout-check import-check lock-check docs-check 
 
 where `fmt-check` runs `ruff format --check` (formatting is checked, never applied — issue #99), `import-check` runs `lint-imports` (import-linter contracts in
 [`.importlinter`](../../.importlinter)), `lock-check` runs `uv lock --check`
-(lockfile drift), `test-gate` runs pytest with `--cov` (the `fail_under = 90`
-coverage gate fires inside `make check`), and `make docs-check` expands to:
+(lockfile drift), `test-gate` runs pytest with `--cov` over `src/`, `scripts/` and
+`.claude/hooks/` and then one `coverage report` per part (the `fail_under = 90`
+coverage gate fires inside `make check`, for each part — issue #91), and
+`make docs-check` expands to:
 
 ```
 docs-check:
@@ -161,6 +163,8 @@ Exit code: **1**.
 ```bash
 git restore src/restaurant_hub/__init__.py
 ```
+
+> Since issue #91 `make typecheck` runs `mypy src/ tests/fakes/ scripts/ .claude/hooks/`, so the same patch appended to a script (e.g. `scripts/clean.py`) fails the gate as well — measured: `uv run mypy src/ tests/fakes/ scripts/ .claude/hooks/` → `scripts\clean.py:67: error: Function is missing a type annotation  [no-untyped-def]`, exit **1**. `tests/unit/test_ci_workflow.py` keeps every versioned `.py` outside `tests/` (except `tests/fakes/`) and `migrations/` inside the target.
 
 ---
 
@@ -327,7 +331,7 @@ git restore tests/test_smoke.py
 
 ### Class 7 — `coverage` (`make test-gate`, fail_under inside `make check`)
 
-The coverage gate is configured in [`pyproject.toml`](../../pyproject.toml) `[tool.coverage.report] fail_under = 90` and fires inside `make check` via the `test-gate` target (pytest with `--cov`). A coverage drop below 90 % causes a non-zero exit, which fails the gate.
+The coverage gate is configured in [`pyproject.toml`](../../pyproject.toml) `[tool.coverage.report] fail_under = 90` and fires inside `make check` via the `test-gate` target: one pytest run with `--cov` over `src/restaurant_hub`, `scripts/` and `.claude/hooks/`, then `coverage report --include="src/*"` and `coverage report --include="scripts/*,.claude/hooks/*"` (issue #91). Each part is held to the threshold on its own, so tooling below 90 % cannot hide behind `src/`, nor the reverse. A coverage drop below 90 % in either part causes a non-zero exit, which fails the gate.
 
 **Patch** (drop a tested block — move the shared-kernel unit tests out of the collection root temporarily so coverage falls):
 ```powershell
@@ -348,6 +352,11 @@ Exit code: non-zero (pytest coverage failure; observed 54.37% when exercised in 
 **Revert:**
 ```powershell
 Move-Item $env:TEMP/_shared_tests_bak tests/unit/shared
+```
+
+When the suite total still clears 90 % but one part does not, pytest passes and the failing `coverage report` prints instead:
+```
+Coverage failure: total of N is less than fail-under=90
 ```
 
 > The `90` threshold must match `fail_under` in `pyproject.toml`. If the project raises or lowers the coverage gate, update the fingerprint in this class. Note: removing a single small test file may not drop coverage below 90 % — the patch must remove a block large enough to cross the threshold.

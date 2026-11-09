@@ -21,6 +21,7 @@ tocar no documento real.
 
 import importlib.util
 import pathlib
+import sys
 import types
 
 import pytest
@@ -41,6 +42,9 @@ def _carregar_script() -> types.ModuleType:
 
 
 check_docs_claims = _carregar_script()
+
+# Exit 2: bloco de árvore não localizável (fail closed).
+_EXIT_FAIL_CLOSED = 2
 
 
 def _repo_falso(
@@ -257,3 +261,63 @@ def test_gate5_o_conjunto_de_planejados_do_layout_real_nao_cresceu() -> None:
         f"só no LAYOUT: {sorted(planejados - _PLANEJADOS_DO_LAYOUT_REAL)}; "
         f"só nesta lista: {sorted(_PLANEJADOS_DO_LAYOUT_REAL - planejados)}"
     )
+
+
+# --- bordas do parser e o `main()` nos três códigos de saída (issue #91) ---
+
+
+def test_gate5_linha_so_de_comentario_nao_vira_claim() -> None:
+    bloco = "src/\n    # comentário solto na árvore\n└── main.py"
+    assert [c.caminho for c in check_docs_claims.claims(bloco)] == ["src", "src/main.py"]
+
+
+def test_gate5_claim_tem_repr_legivel() -> None:
+    [claim] = check_docs_claims.claims("docs/   # [planejado]")
+    assert repr(claim) == "Claim('docs', planejado=True)"
+
+
+def test_gate5_sem_pasta_de_features_o_placeholder_nao_resolve(tmp_path: pathlib.Path) -> None:
+    assert check_docs_claims.features(tmp_path) == []
+    assert not check_docs_claims.resolve(tmp_path, "src/<feature>/domain", [])
+
+
+def test_gate5_entidade_sem_arquivo_que_case_nao_resolve(tmp_path: pathlib.Path) -> None:
+    repo = _repo_falso(tmp_path, "x", ("src/restaurant_hub/features/staff/domain/",))
+    caminho = "src/restaurant_hub/features/<feature>/domain/<entity>.py"
+    assert not check_docs_claims.resolve(repo, caminho, ["staff"])
+
+
+def test_gate5_layout_ausente_falha_fechado(tmp_path: pathlib.Path) -> None:
+    [problema] = check_docs_claims.claims_falsas(tmp_path)
+    assert problema.startswith("FATAL:")
+    assert "LAYOUT.md não existe" in problema
+
+
+def _main(monkeypatch: pytest.MonkeyPatch, repo: pathlib.Path) -> int:
+    monkeypatch.setattr(sys, "argv", ["check_docs_claims.py", "--repo", str(repo)])
+    return int(check_docs_claims.main())
+
+
+def test_gate5_main_arvore_conferida_sai_zero(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo_falso(tmp_path, "src/\n└── main.py", ("src/main.py",))
+    assert _main(monkeypatch, repo) == 0
+    assert "confere com o repositório" in capsys.readouterr().out
+
+
+def test_gate5_main_claim_falsa_sai_um(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo_falso(tmp_path, "src/\n└── main.py", ("src/",))
+    assert _main(monkeypatch, repo) == 1
+    err = capsys.readouterr().err
+    assert "1 claim(s) falsa(s)" in err
+    assert "AUSENTE:" in err and "'src/main.py'" in err
+
+
+def test_gate5_main_sem_layout_sai_dois(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _main(monkeypatch, tmp_path) == _EXIT_FAIL_CLOSED
+    assert "check_docs_claims: FATAL:" in capsys.readouterr().err

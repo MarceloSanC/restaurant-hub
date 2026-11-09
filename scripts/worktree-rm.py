@@ -55,11 +55,13 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib.util
+import io
 import json
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any, NoReturn
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -91,8 +93,11 @@ def _force_utf8_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         if stream.encoding and stream.encoding.lower() == "utf-8":
             continue
-        with contextlib.suppress(AttributeError, OSError):
-            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        # `sys.stdout` é `TextIO` no typeshed; só o `TextIOWrapper` tem `reconfigure`
+        # (sob captura do pytest, o stream é outro objeto e fica como está).
+        if isinstance(stream, io.TextIOWrapper):
+            with contextlib.suppress(OSError):
+                stream.reconfigure(encoding="utf-8")
 
 
 def _run(
@@ -130,7 +135,7 @@ def _section(title: str) -> None:
     print(f"== {title} ==")
 
 
-def _fail(msg: str, *, exit_code: int = 1) -> None:
+def _fail(msg: str, *, exit_code: int = 1) -> NoReturn:
     print(f"ERRO: {msg}", file=sys.stderr)
     sys.exit(exit_code)
 
@@ -290,9 +295,9 @@ def _path_variants(p: Path) -> list[str]:
     return variants
 
 
-def find_containers_for_worktree(wt_path: Path) -> list[dict]:
+def find_containers_for_worktree(wt_path: Path) -> list[dict[str, Any]]:
     """Busca containers via labels que o VS Code Dev Containers injeta."""
-    found: dict[str, dict] = {}
+    found: dict[str, dict[str, Any]] = {}
     label_keys = ("vsch.local.folder", "devcontainer.local_folder")
 
     for label_key in label_keys:

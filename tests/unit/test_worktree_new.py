@@ -18,7 +18,9 @@ resto (cópia do `.env`, escolha de porta, escrita) é o código real em `tmp_pa
 from __future__ import annotations
 
 import importlib.util
+import io
 import socket
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -692,3 +694,934 @@ def test_docker_reserved_ports_does_not_swallow_other_errors(
     monkeypatch.setattr(wn.worktree_docker, "published_host_ports", _bug)
     with pytest.raises(RuntimeError):
         _REAL_DOCKER_RESERVED_PORTS()
+
+
+# ---------------------------------------------------------------------------
+# helpers de processo — `_run`, git e gh com o subprocess substituído
+# ---------------------------------------------------------------------------
+
+EXIT_VALIDATION = 1
+EXIT_SUBPROCESS = 2
+ISSUE_NUM = 42
+CREATED_NUM = 77
+FAILED_RC = 3
+
+
+class _FakeRun:
+    """`subprocess.run` falso: registra `(cmd, kwargs)` e devolve `returncode`/`stdout`."""
+
+    def __init__(
+        self, *, returncode: int = 0, stdout: str = "", exc: Exception | None = None
+    ) -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.exc = exc
+        self.calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def __call__(self, cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        self.calls.append((cmd, kwargs))
+        if self.exc is not None:
+            raise self.exc
+        return subprocess.CompletedProcess(cmd, self.returncode, stdout=self.stdout, stderr="")
+
+
+def test_run_echoes_the_command_and_forwards_the_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = _FakeRun(stdout="ok")
+    monkeypatch.setattr(wn.subprocess, "run", fake)
+
+    cp = wn._run(["git", "status"], cwd=tmp_path, check=False)
+
+    assert cp.stdout == "ok"
+    assert fake.calls == [
+        (
+            ["git", "status"],
+            {"cwd": str(tmp_path), "check": False, "text": True, "capture_output": False},
+        )
+    ]
+    assert capsys.readouterr().out == "  $ git status\n"
+
+
+def test_run_captured_is_silent_and_without_cwd_passes_none(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = _FakeRun()
+    monkeypatch.setattr(wn.subprocess, "run", fake)
+
+    wn._run(["git", "rev-parse"], capture=True)
+
+    assert fake.calls == [
+        (["git", "rev-parse"], {"cwd": None, "check": True, "text": True, "capture_output": True})
+    ]
+    assert capsys.readouterr().out == ""
+
+
+def test_run_missing_executable_exits_2(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(wn.subprocess, "run", _FakeRun(exc=FileNotFoundError("sem gh")))
+
+    with pytest.raises(SystemExit) as exc:
+        wn._run(["gh", "issue", "view"], capture=True)
+
+    assert exc.value.code == EXIT_SUBPROCESS
+    assert "ERRO: executável não encontrado: gh (sem gh)" in capsys.readouterr().err
+
+
+def test_run_failed_command_with_capture_shows_its_output(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    error = subprocess.CalledProcessError(FAILED_RC, ["gh"], output="saida-x", stderr="erro-y")
+    monkeypatch.setattr(wn.subprocess, "run", _FakeRun(exc=error))
+
+    with pytest.raises(SystemExit) as exc:
+        wn._run(["gh", "issue", "create"], capture=True)
+
+    assert exc.value.code == EXIT_SUBPROCESS
+    err = capsys.readouterr().err
+    assert f"ERRO: comando falhou (exit {FAILED_RC}): gh issue create" in err
+    assert "saida-x" in err
+    assert "erro-y" in err
+
+
+def test_run_failed_command_without_capture_does_not_repeat_output(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Sem captura, a saída já foi para o terminal; o erro não a repete."""
+    error = subprocess.CalledProcessError(FAILED_RC, ["git"], output="saida-x", stderr="erro-y")
+    monkeypatch.setattr(wn.subprocess, "run", _FakeRun(exc=error))
+
+    with pytest.raises(SystemExit) as exc:
+        wn._run(["git", "fetch"])
+
+    assert exc.value.code == EXIT_SUBPROCESS
+    err = capsys.readouterr().err
+    assert f"comando falhou (exit {FAILED_RC}): git fetch" in err
+    assert "saida-x" not in err
+    assert "erro-y" not in err
+
+
+def test_run_failed_command_with_capture_but_empty_output(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    error = subprocess.CalledProcessError(FAILED_RC, ["git"], output="", stderr="")
+    monkeypatch.setattr(wn.subprocess, "run", _FakeRun(exc=error))
+
+    with pytest.raises(SystemExit):
+        wn._run(["git", "x"], capture=True)
+
+    assert capsys.readouterr().err == f"ERRO: comando falhou (exit {FAILED_RC}): git x\n"
+
+
+def test_force_utf8_stdio_reconfigures_only_non_utf8_text_wrappers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cp1252 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    utf8 = io.TextIOWrapper(io.BytesIO(), encoding="UTF-8")
+    monkeypatch.setattr(sys, "stdout", cp1252)
+    monkeypatch.setattr(sys, "stderr", utf8)
+
+    wn._force_utf8_stdio()
+
+    assert cp1252.encoding == "utf-8"
+    assert utf8.encoding == "UTF-8"  # já era UTF-8: nem tocado
+
+
+class _NotAWrapper:
+    encoding = "cp1252"
+
+
+class _BrokenWrapper(io.TextIOWrapper):
+    def reconfigure(self, **_kwargs: object) -> None:
+        raise OSError("console não deixa")
+
+
+def test_force_utf8_stdio_leaves_other_streams_and_swallows_oserror(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    other = _NotAWrapper()
+    broken = _BrokenWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", other)
+    monkeypatch.setattr(sys, "stderr", broken)
+
+    wn._force_utf8_stdio()
+
+    assert other.encoding == "cp1252"
+    assert broken.encoding == "cp1252"
+
+
+def test_gh_available_without_gh_binary_skips_auth_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeRun()
+    monkeypatch.setattr(wn.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(wn.subprocess, "run", fake)
+
+    assert wn.gh_available() is False
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize(("returncode", "expected"), [(0, True), (1, False)])
+def test_gh_available_follows_auth_status(
+    monkeypatch: pytest.MonkeyPatch, returncode: int, expected: bool
+) -> None:
+    fake = _FakeRun(returncode=returncode)
+    looked_up: list[str] = []
+
+    def _which(name: str) -> str:
+        looked_up.append(name)
+        return "/bin/gh"
+
+    monkeypatch.setattr(wn.shutil, "which", _which)
+    monkeypatch.setattr(wn.subprocess, "run", fake)
+
+    assert wn.gh_available() is expected
+    assert looked_up == ["gh"]
+    assert [cmd for cmd, _kw in fake.calls] == [["gh", "auth", "status"]]
+    assert fake.calls[0][1]["check"] is False
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "expected"),
+    [
+        (0, f'{{"number": {ISSUE_NUM}, "state": "OPEN"}}', True),
+        (0, f'{{"number": {ISSUE_NUM}, "state": "CLOSED"}}', True),
+        (0, '{"number": 7, "state": "OPEN"}', False),  # número divergente
+        (0, '{"state": "OPEN"}', False),
+        (0, "não é json", False),
+        (1, f'{{"number": {ISSUE_NUM}}}', False),  # gh falhou: stdout nem é lido
+    ],
+)
+def test_gh_issue_exists(
+    monkeypatch: pytest.MonkeyPatch, returncode: int, stdout: str, expected: bool
+) -> None:
+    fake = _FakeRun(returncode=returncode, stdout=stdout)
+    monkeypatch.setattr(wn.subprocess, "run", fake)
+
+    assert wn.gh_issue_exists(ISSUE_NUM) is expected
+    assert [cmd for cmd, _kw in fake.calls] == [
+        ["gh", "issue", "view", str(ISSUE_NUM), "--json", "number,state"]
+    ]
+
+
+class _FakeCapturedRun:
+    """`_run` falso para `gh issue create`: registra a chamada e devolve `stdout`."""
+
+    def __init__(self, stdout: str) -> None:
+        self.stdout = stdout
+        self.calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def __call__(self, cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        self.calls.append((cmd, kwargs))
+        return subprocess.CompletedProcess(cmd, 0, stdout=self.stdout, stderr="")
+
+
+def test_gh_issue_create_returns_the_number_from_the_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeCapturedRun(
+        f"Creating issue in o/r\n\nhttps://github.com/o/r/issues/{CREATED_NUM}  \n"
+    )
+    monkeypatch.setattr(wn, "_run", fake)
+
+    assert wn.gh_issue_create("feat: título", "corpo") == CREATED_NUM
+    assert fake.calls == [
+        (["gh", "issue", "create", "--title", "feat: título", "--body", "corpo"], {"capture": True})
+    ]
+
+
+@pytest.mark.parametrize(
+    "last_line",
+    ["https://github.com/o/r/pull/12", "https://github.com/o/r/issues/12/extra", "ok"],
+)
+def test_gh_issue_create_without_issue_url_exits_2(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], last_line: str
+) -> None:
+    monkeypatch.setattr(wn, "_run", _FakeCapturedRun(f"linha\n{last_line}\n"))
+
+    with pytest.raises(SystemExit) as exc:
+        wn.gh_issue_create("t", "b")
+
+    assert exc.value.code == EXIT_SUBPROCESS
+    assert f"não foi possível extrair o número da issue criada: {last_line!r}" in (
+        capsys.readouterr().err
+    )
+
+
+# ---------------------------------------------------------------------------
+# git de verdade, num repositório em tmp_path
+# ---------------------------------------------------------------------------
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
+
+
+@pytest.fixture
+def git_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Repositório com um commit em `develop`; o cwd do processo vai para ele."""
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        monkeypatch.delenv(var, raising=False)
+    principal = tmp_path / "principal"
+    principal.mkdir()
+    _git(principal, "init", "-q", "-b", "develop")
+    _git(principal, "config", "user.name", "Teste")
+    _git(principal, "config", "user.email", "teste@example.com")
+    _git(principal, "config", "commit.gpgsign", "false")
+    _git(principal, "commit", "-q", "--allow-empty", "--no-verify", "-m", "init")
+    monkeypatch.chdir(principal)
+    return principal
+
+
+def test_git_top_from_a_subdirectory_is_the_checkout_root(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sub = git_repo / "a" / "b"
+    sub.mkdir(parents=True)
+    monkeypatch.chdir(sub)
+
+    assert wn.git_top() == git_repo.resolve()
+
+
+def test_git_common_dir_from_a_linked_worktree_is_the_main_git_dir(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert wn.git_common_dir() == (git_repo / ".git").resolve()
+
+    linked = tmp_path / "linked"
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+    monkeypatch.chdir(linked)
+
+    assert wn.git_common_dir() == (git_repo / ".git").resolve()
+
+
+def test_branch_exists_tells_local_from_remote(git_repo: Path) -> None:
+    _git(git_repo, "branch", "feat/1-local")
+    _git(git_repo, "update-ref", "refs/remotes/origin/feat/2-remote", "HEAD")
+
+    assert wn.branch_exists("feat/1-local") == (True, False)
+    assert wn.branch_exists("feat/2-remote") == (False, True)
+    assert wn.branch_exists("feat/3-nada") == (False, False)
+
+
+def test_list_worktree_paths_lists_main_and_linked(git_repo: Path, tmp_path: Path) -> None:
+    linked = tmp_path / "com espaco"  # espaço no caminho: o porcelain não o cita
+    _git(git_repo, "worktree", "add", "-q", "-b", "feat/1-x", str(linked))
+
+    paths = [p.resolve() for p in wn._list_worktree_paths()]
+
+    assert paths == [git_repo.resolve(), linked.resolve()]
+
+
+def test_list_worktree_paths_outside_git_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeRun(returncode=128, stdout="worktree /nao/vale\n")
+    monkeypatch.setattr(wn.subprocess, "run", fake)
+
+    assert wn._list_worktree_paths() == []
+    assert [cmd for cmd, _kw in fake.calls] == [["git", "worktree", "list", "--porcelain"]]
+
+
+# ---------------------------------------------------------------------------
+# _collect_used_ports — o que os `.env` das worktrees já tomam
+# ---------------------------------------------------------------------------
+
+
+def test_collect_used_ports_skips_noise_and_the_new_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    one, new, no_env = tmp_path / "one", tmp_path / "new", tmp_path / "no-env"
+    for d in (one, new, no_env):
+        d.mkdir()
+    _write_env(
+        one,
+        "",
+        "# APP_PORT=8100",
+        "SEM_IGUAL",
+        "APP_PORT=8101  # comentário",
+        "POSTGRES_PORT=abc",
+        "REDIS_PORT=",
+        "OUTRA=1",
+    )
+    _write_env(new, "APP_PORT=8200")
+    monkeypatch.setattr(wn, "_list_worktree_paths", lambda: [one, new, no_env])
+
+    used = wn._collect_used_ports(skip=new)
+
+    assert used == {"APP_PORT": {8000, 8101}, "POSTGRES_PORT": {5432}, "REDIS_PORT": {6379}}
+
+
+# `type(Path())` é `WindowsPath`/`PosixPath` conforme o SO: base dinâmica que o mypy recusa [misc].
+class _UnresolvablePath(type(Path())):  # type: ignore[misc]
+    """Worktree registrada cujo caminho não resolve mais (disco removido, permissão)."""
+
+    def resolve(self, strict: bool = False) -> Path:
+        raise OSError("caminho sumiu")
+
+
+def test_collect_used_ports_ignores_worktrees_it_cannot_resolve_or_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    _write_env(gone, "APP_PORT=8300")
+    unreadable = tmp_path / "unreadable"
+    unreadable.mkdir()
+    _write_env(unreadable, "APP_PORT=8400")
+    readable = tmp_path / "readable"
+    readable.mkdir()
+    _write_env(readable, "APP_PORT=8500")
+    monkeypatch.setattr(
+        wn, "_list_worktree_paths", lambda: [_UnresolvablePath(gone), unreadable, readable]
+    )
+    real_read_text = Path.read_text
+
+    def _read_text(self: Path, *args: object, **kwargs: object) -> str:
+        if self.parent.name == "unreadable":
+            raise OSError("sem permissão")
+        # os `*args`/`**kwargs` chegam como `object`; o `read_text` real os tipa [arg-type].
+        return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", _read_text)
+
+    used = wn._collect_used_ports(skip=tmp_path / "new")
+
+    assert used["APP_PORT"] == {8000, 8500}
+
+
+def test_collect_used_ports_without_skip_reads_every_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_env(tmp_path, "REDIS_PORT=6390")
+    monkeypatch.setattr(wn, "_list_worktree_paths", lambda: [tmp_path])
+
+    assert wn._collect_used_ports()["REDIS_PORT"] == {6379, 6390}
+
+
+# ---------------------------------------------------------------------------
+# a sonda sem `SO_EXCLUSIVEADDRUSE` (fora do Windows)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingSocket(_FakeSocket):
+    options: ClassVar[list[tuple[object, ...]]] = []
+
+    def setsockopt(self, *args: object) -> None:
+        self.options.append(args)
+
+
+@pytest.mark.parametrize("has_exclusive", [True, False])
+def test_host_port_busy_sets_exclusive_addr_only_where_it_exists(
+    monkeypatch: pytest.MonkeyPatch, has_exclusive: bool
+) -> None:
+    monkeypatch.setattr(_RecordingSocket, "options", [])
+    monkeypatch.setattr(_RecordingSocket, "connects", [])
+    monkeypatch.setattr(_RecordingSocket, "timeouts", [])
+    monkeypatch.setattr(_RecordingSocket, "answer", 1)
+    monkeypatch.setattr(wn.socket, "socket", _RecordingSocket)
+    exclusive = -5  # valor que nenhuma outra opção tem
+    if has_exclusive:
+        monkeypatch.setattr(wn.socket, "SO_EXCLUSIVEADDRUSE", exclusive, raising=False)
+    else:
+        monkeypatch.delattr(wn.socket, "SO_EXCLUSIVEADDRUSE", raising=False)
+
+    assert wn.host_port_busy(5434) is False
+
+    expected = [(wn.socket.SOL_SOCKET, exclusive, 1)] * 2 if has_exclusive else []
+    assert _RecordingSocket.options == expected
+
+
+# ---------------------------------------------------------------------------
+# ensure_issue — o gate issue-first
+# ---------------------------------------------------------------------------
+
+
+class _Gh:
+    """`gh` falso: disponível ou não, com as issues que existem e o número da criada."""
+
+    def __init__(self, *, available: bool = True, existing: frozenset[int] = frozenset()) -> None:
+        self.available = available
+        self.existing = existing
+        self.viewed: list[int] = []
+        self.created: list[tuple[str, str]] = []
+
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> _Gh:
+        monkeypatch.setattr(wn, "gh_available", lambda: self.available)
+        monkeypatch.setattr(wn, "gh_issue_exists", self._exists)
+        monkeypatch.setattr(wn, "gh_issue_create", self._create)
+        return self
+
+    def _exists(self, num: int) -> bool:
+        self.viewed.append(num)
+        return num in self.existing
+
+    def _create(self, title: str, body: str) -> int:
+        self.created.append((title, body))
+        return CREATED_NUM
+
+
+@pytest.mark.parametrize("title", [None, "feat: algo"])
+def test_ensure_issue_without_gh_warns_and_goes_on(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], title: str | None
+) -> None:
+    gh = _Gh(available=False).install(monkeypatch)
+
+    assert wn.ensure_issue(ISSUE_NUM, create_title=title, create_body=None) == ISSUE_NUM
+    assert gh.viewed == []
+    assert gh.created == []
+    assert "AVISO: `gh` indisponível ou não autenticado" in capsys.readouterr().err
+
+
+def test_ensure_issue_existing_issue_passes(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    gh = _Gh(existing=frozenset({ISSUE_NUM})).install(monkeypatch)
+
+    assert wn.ensure_issue(ISSUE_NUM, create_title=None, create_body=None) == ISSUE_NUM
+    assert gh.viewed == [ISSUE_NUM]
+    assert f"issue #{ISSUE_NUM} OK" in capsys.readouterr().out
+
+
+def test_ensure_issue_missing_issue_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    gh = _Gh().install(monkeypatch)
+
+    with pytest.raises(SystemExit) as exc:
+        wn.ensure_issue(ISSUE_NUM, create_title=None, create_body=None)
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert gh.viewed == [ISSUE_NUM]
+    assert f"issue #{ISSUE_NUM} não encontrada no GitHub" in capsys.readouterr().err
+
+
+def test_ensure_issue_without_number_and_without_create_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    gh = _Gh().install(monkeypatch)
+
+    with pytest.raises(SystemExit) as exc:
+        wn.ensure_issue(0, create_title=None, create_body=None)
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert gh.viewed == []
+    assert "nome de branch sem número de issue" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_body"),
+    [
+        (None, "_criada via scripts/worktree-new.py_"),
+        ("", "_criada via scripts/worktree-new.py_"),
+        ("corpo próprio", "corpo próprio"),
+    ],
+)
+def test_ensure_issue_creates_when_branch_has_no_number(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    body: str | None,
+    expected_body: str,
+) -> None:
+    gh = _Gh().install(monkeypatch)
+
+    assert wn.ensure_issue(0, create_title="feat: nova", create_body=body) == CREATED_NUM
+    assert gh.created == [("feat: nova", expected_body)]
+    assert gh.viewed == []  # a recém-criada não é revalidada
+    assert f"issue criada: #{CREATED_NUM}" in capsys.readouterr().out
+
+
+def test_ensure_issue_create_is_ignored_when_branch_has_a_number(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Com número no nome, `--create-issue` não cria nada — e a issue ainda é conferida."""
+    gh = _Gh().install(monkeypatch)
+
+    with pytest.raises(SystemExit) as exc:
+        wn.ensure_issue(ISSUE_NUM, create_title="feat: nova", create_body=None)
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert gh.created == []
+    assert gh.viewed == [ISSUE_NUM]
+    assert f"--create-issue ignorado: já há issue #{ISSUE_NUM}" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# nome do branch, path, `git worktree add`, cópia do `.env`, VS Code
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("branch", "message"),
+    [
+        ("feat/1-" + "a" * wn.BRANCH_MAX_LEN, f"chars (limite {wn.BRANCH_MAX_LEN})"),
+        ("feat/sem-numero", "nome de branch inválido: 'feat/sem-numero'"),
+        ("feat/1-Maiuscula", "nome de branch inválido"),
+        ("foo/1-bar", "tipo de branch inválido: 'foo'"),
+    ],
+)
+def test_parse_branch_rejects(
+    capsys: pytest.CaptureFixture[str], branch: str, message: str
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        wn.parse_branch(branch)
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert message in capsys.readouterr().err
+
+
+def test_parse_branch_accepts_the_max_length() -> None:
+    branch = "feat/1-" + "a" * (wn.BRANCH_MAX_LEN - len("feat/1-"))
+    assert wn.parse_branch(branch)["full"] == branch
+
+
+def test_parse_branch_decomposes_a_stage_branch() -> None:
+    assert wn.parse_branch("feat/89-2-3-s3-adapter") == {
+        "type": "feat",
+        "num": "89",
+        "stage": "2-3",
+        "slug": "s3-adapter",
+        "full": "feat/89-2-3-s3-adapter",
+    }
+
+
+@pytest.mark.parametrize(
+    ("branch", "create_issue", "expected"),
+    [
+        ("feat/-add-foo", True, (0, True, "add-foo", "")),
+        ("feat/-2-3-add-foo", True, (0, True, "add-foo", "2-3")),
+        ("feat/42-add-foo", True, (ISSUE_NUM, False, "add-foo", "")),
+        ("feat/42-add-foo", False, (ISSUE_NUM, False, "add-foo", "")),
+    ],
+)
+def test_validate_branch_accepts_placeholder_only_in_create_mode(
+    branch: str, create_issue: bool, expected: tuple[int, bool, str, str]
+) -> None:
+    parts, num, create_mode = wn._validate_branch(branch, create_issue=create_issue)
+    assert (num, create_mode, parts["slug"], parts["stage"]) == expected
+
+
+def test_validate_branch_placeholder_without_create_is_invalid() -> None:
+    with pytest.raises(SystemExit):
+        wn._validate_branch("feat/-add-foo", create_issue=False)
+
+
+@pytest.mark.parametrize(
+    ("stage", "expected"),
+    [("", f"feat/{CREATED_NUM}-add-foo"), ("2-3", f"feat/{CREATED_NUM}-2-3-add-foo")],
+)
+def test_assemble_branch(stage: str, expected: str) -> None:
+    parts = {"type": "feat", "slug": "add-foo", "stage": stage}
+    assert wn._assemble_branch(parts, CREATED_NUM) == expected
+
+
+@pytest.mark.parametrize(("branch_type", "base"), [("hotfix", "main"), ("feat", "develop")])
+def test_default_base(branch_type: str, base: str) -> None:
+    assert wn.default_base(branch_type) == base
+
+
+def test_compute_worktree_path_default_is_beside_the_repo(tmp_path: Path) -> None:
+    repo_root = tmp_path / "restaurant-hub"
+
+    path = wn.compute_worktree_path(repo_root, "feat/42-add-foo", None)
+
+    assert path == (tmp_path / "restaurant-hub-worktrees" / "feat-42-add-foo").resolve()
+    assert wn.compute_worktree_path(repo_root, "feat/42-add-foo", "") == path
+
+
+def test_compute_worktree_path_override_wins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    path = wn.compute_worktree_path(tmp_path / "repo", "feat/42-x", "outro/lugar")
+
+    assert path == (tmp_path / "outro" / "lugar").resolve()
+
+
+@pytest.mark.parametrize(
+    ("local", "remote", "expected_cmd"),
+    [
+        (True, True, ["git", "worktree", "add", "{path}", "feat/42-x"]),
+        (
+            False,
+            True,
+            ["git", "worktree", "add", "--track", "-b", "feat/42-x", "{path}", "origin/feat/42-x"],
+        ),
+        (False, False, ["git", "worktree", "add", "-b", "feat/42-x", "{path}", "origin/develop"]),
+    ],
+)
+def test_create_worktree_picks_the_add_form(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    local: bool,
+    remote: bool,
+    expected_cmd: list[str],
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(wn, "_run", lambda cmd, **_kw: calls.append(cmd))
+    path = tmp_path / "pai-novo" / "wt"
+
+    wn.create_worktree("feat/42-x", "develop", path, local, remote)
+
+    assert path.parent.is_dir()  # o pai é criado; a worktree, o git cria
+    assert not path.exists()
+    assert calls == [[str(path) if arg == "{path}" else arg for arg in expected_cmd]]
+
+
+@pytest.mark.parametrize(
+    ("present", "copied"),
+    [((), []), ((".env",), [".env"]), ((".env", ".env.local"), [".env", ".env.local"])],
+)
+def test_copy_env_files(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    present: tuple[str, ...],
+    copied: list[str],
+) -> None:
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    (src / ".env.example").write_text("X=1\n", encoding="utf-8")
+    for name in present:
+        (src / name).write_text(f"{name}=conteúdo\n", encoding="utf-8")
+
+    wn.copy_env_files(src, dst)
+
+    assert sorted(p.name for p in dst.iterdir()) == copied
+    for name in copied:
+        assert (dst / name).read_text(encoding="utf-8") == f"{name}=conteúdo\n"
+    out = capsys.readouterr().out
+    assert [line for line in out.splitlines() if "copiado" in line] == [
+        f"  • copiado {name}" for name in copied
+    ]
+
+
+def test_copy_env_files_skips_a_directory_named_env(tmp_path: Path) -> None:
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    (src / ".env").mkdir(parents=True)
+    dst.mkdir()
+
+    wn.copy_env_files(src, dst)
+
+    assert list(dst.iterdir()) == []
+
+
+def test_open_vscode_without_code_prints_the_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(wn.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(wn, "_run", lambda cmd, **_kw: calls.append(cmd))
+
+    wn.open_vscode(tmp_path)
+
+    assert calls == []
+    assert f"Abra manualmente:\n     {tmp_path}" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("found", "expected"),
+    [
+        ({"code": "/bin/code", "code.cmd": "/bin/code.cmd"}, "/bin/code"),
+        ({"code.cmd": "C:/code.cmd"}, "C:/code.cmd"),
+    ],
+)
+def test_open_vscode_opens_a_new_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, found: dict[str, str], expected: str
+) -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(wn.shutil, "which", found.get)
+    monkeypatch.setattr(wn, "_run", lambda cmd, **kw: calls.append((cmd, kw)))
+
+    wn.open_vscode(tmp_path)
+
+    assert calls == [([expected, "-n", str(tmp_path)], {"check": False})]
+
+
+@pytest.mark.parametrize(("issue", "shown"), [(ISSUE_NUM, True), (0, False)])
+def test_print_summary_shows_issue_only_when_known(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], issue: int, shown: bool
+) -> None:
+    wn._print_summary(branch="feat/42-x", path=tmp_path, issue=issue, base="main")
+
+    out = capsys.readouterr().out
+    assert (f"  ✓ Issue: #{issue}" in out) is shown
+    assert "  ✓ Base: origin/main" in out
+    assert "gh pr create --base main" in out
+
+
+# ---------------------------------------------------------------------------
+# main() — os trechos que o fluxo feliz não passa
+# ---------------------------------------------------------------------------
+
+_NEW_WT = ("restaurant-hub-worktrees", "chore-58-db-url")
+
+
+def test_main_fetches_origin_unless_no_fetch(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(wn, "_run", lambda cmd, **_kw: calls.append(cmd))
+    argv = ["worktree-new.py", "chore/58-db-url", "--no-setup", "--no-vscode"]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert wn.main() == 0
+    assert calls == [["git", "fetch", "--prune", "origin"]]
+
+
+def test_main_create_issue_requires_a_title(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        _run_main(monkeypatch, "--create-issue")
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert "--create-issue requer --issue-title" in capsys.readouterr().err
+    assert not repo.parent.joinpath(*_NEW_WT).exists()
+
+
+def test_main_create_issue_names_the_branch_with_the_new_number(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    received: list[tuple[int, dict[str, object]]] = []
+
+    def _ensure(num: int, **kwargs: object) -> int:
+        received.append((num, kwargs))
+        return CREATED_NUM
+
+    created: list[tuple[str, str]] = []
+
+    def _create(branch: str, base: str, path: Path, _local: bool, _remote: bool) -> None:
+        created.append((branch, base))
+        path.mkdir(parents=True)
+
+    monkeypatch.setattr(wn, "ensure_issue", _ensure)
+    monkeypatch.setattr(wn, "create_worktree", _create)
+    argv = [
+        "worktree-new.py",
+        "chore/-db-url",
+        "--create-issue",
+        "--issue-title",
+        "chore: banco",
+        "--issue-body",
+        "corpo",
+        "--no-fetch",
+        "--no-setup",
+        "--no-vscode",
+        "--no-port-assign",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert wn.main() == 0
+    final = f"chore/{CREATED_NUM}-db-url"
+    assert received == [(0, {"create_title": "chore: banco", "create_body": "corpo"})]
+    assert created == [(final, "develop")]
+    assert repo.parent.joinpath("restaurant-hub-worktrees", f"chore-{CREATED_NUM}-db-url").is_dir()
+    out = capsys.readouterr().out
+    assert f"nome final do branch: {final}" in out
+    assert f"✓ Issue: #{CREATED_NUM}" in out
+
+
+def test_main_title_without_create_issue_is_not_passed_on(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    received: list[dict[str, object]] = []
+
+    def _ensure(num: int, **kwargs: object) -> int:
+        received.append(kwargs)
+        return num
+
+    monkeypatch.setattr(wn, "ensure_issue", _ensure)
+
+    _run_main(monkeypatch, "--issue-title", "chore: x", "--no-port-assign")
+
+    assert received == [{"create_title": None, "create_body": None}]
+    assert "nome final do branch" not in capsys.readouterr().out
+
+
+def test_main_hotfix_branches_from_main(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bases: list[str] = []
+
+    def _create(_branch: str, base: str, path: Path, _local: bool, _remote: bool) -> None:
+        bases.append(base)
+        path.mkdir(parents=True)
+
+    monkeypatch.setattr(wn, "create_worktree", _create)
+    flags = ["--no-fetch", "--no-setup", "--no-vscode", "--no-port-assign"]
+    monkeypatch.setattr(sys, "argv", ["worktree-new.py", "hotfix/9-prod", *flags])
+    assert wn.main() == 0
+    monkeypatch.setattr(
+        sys, "argv", ["worktree-new.py", "hotfix/10-prod", *flags, "--base", "develop"]
+    )
+    assert wn.main() == 0
+
+    assert bases == ["main", "develop"]
+
+
+def test_main_passes_branch_existence_to_create_worktree(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[tuple[str, bool, bool]] = []
+    queried: list[str] = []
+
+    def _create(branch: str, _base: str, path: Path, local: bool, remote: bool) -> None:
+        seen.append((branch, local, remote))
+        path.mkdir(parents=True)
+
+    def _exists(branch: str) -> tuple[bool, bool]:
+        queried.append(branch)
+        return False, True
+
+    monkeypatch.setattr(wn, "branch_exists", _exists)
+    monkeypatch.setattr(wn, "create_worktree", _create)
+
+    _run_main(monkeypatch, "--no-port-assign")
+
+    assert queried == ["chore/58-db-url"]
+    assert seen == [("chore/58-db-url", False, True)]
+
+
+def test_main_refuses_an_existing_path(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    existing = repo.parent.joinpath(*_NEW_WT)
+    existing.mkdir(parents=True)
+    created: list[str] = []
+    monkeypatch.setattr(wn, "create_worktree", lambda branch, *_a: created.append(branch))
+
+    with pytest.raises(SystemExit) as exc:
+        _run_main(monkeypatch)
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert f"path já existe: {existing.resolve()}" in capsys.readouterr().err
+    assert created == []
+
+
+def test_main_no_env_does_not_copy_the_main_env(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_env(repo, "DEBUG=true", f"DATABASE_URL={URL_5432}")
+
+    _run_main(monkeypatch, "--no-env")
+
+    lines = _env_lines(repo.parent.joinpath(*_NEW_WT))
+    assert "DEBUG=true" not in lines
+    assert lines[0] == HEADER
+
+
+def test_main_no_env_and_no_port_assign_leaves_no_env_file(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_env(repo, "DEBUG=true")
+
+    _run_main(monkeypatch, "--no-env", "--no-port-assign")
+
+    assert not repo.parent.joinpath(*_NEW_WT, ".env").exists()
+
+
+def test_main_opens_vscode_unless_no_vscode(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[Path] = []
+    monkeypatch.setattr(wn, "open_vscode", opened.append)
+    flags = ["--no-fetch", "--no-setup", "--no-port-assign"]
+    monkeypatch.setattr(sys, "argv", ["worktree-new.py", "chore/58-db-url", *flags])
+
+    assert wn.main() == 0
+    assert opened == [repo.parent.joinpath(*_NEW_WT).resolve()]
+
+    monkeypatch.setattr(sys, "argv", ["worktree-new.py", "chore/59-other", *flags, "--no-vscode"])
+    assert wn.main() == 0
+    assert len(opened) == 1

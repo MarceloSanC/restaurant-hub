@@ -480,9 +480,9 @@ def check_result_construction_sites(src_root: Path) -> list[str]:
         tree = parse(py_file)
         if tree is None:
             continue
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                declaradas[node.name] = py_file
+        for stmt in tree.body:
+            if isinstance(stmt, ast.ClassDef):
+                declaradas[stmt.name] = py_file
 
     sitios: dict[str, list[str]] = {nome: [] for nome in declaradas}
     for py_file in sorted(src_root.rglob("*.py")):
