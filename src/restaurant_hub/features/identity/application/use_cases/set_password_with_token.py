@@ -103,30 +103,30 @@ class SetPasswordWithTokenUseCase:
             InvalidSetupTokenError: token desconhecido, expirado, já consumido ou
                 de usuário inexistente — **uma** exceção para as quatro causas.
         """
-        agora = self._clock.now()
+        now = self._clock.now()
 
         token = self._tokens.find_by_fingerprint(self._token_issuer.fingerprint(command.token))
-        if token is None or not token.is_usable(agora):
+        if token is None or not token.is_usable(now):
             # `is_usable` é a checagem barata que evita ir ao banco à toa. Não é
             # a trava: quem decide a corrida é o `consume` abaixo.
             raise InvalidSetupTokenError()
 
         # Antes da unidade — ver a nota 2 do módulo (R5).
-        hash_novo = self._hasher.hash(command.plain_password)
+        new_hash = self._hasher.hash(command.plain_password)
 
         with self._unit_of_work.transaction():
-            if not self._tokens.consume(token.id, agora):
+            if not self._tokens.consume(token.id, now):
                 # Perdeu a corrida para outra redenção do mesmo token. É aqui, e
                 # só aqui, que o replay morre.
                 raise InvalidSetupTokenError()
 
             # As duas evicções ANTES da escrita — ver a nota 2 do módulo.
-            self._sessions.revoke_all_for_user(token.user_id, agora)
+            self._sessions.revoke_all_for_user(token.user_id, now)
             # Sem `purpose`: nada do usuário sobrevive à troca de senha.
-            self._tokens.invalidate_all_for_user(token.user_id, agora)
+            self._tokens.invalidate_all_for_user(token.user_id, now)
 
             try:
-                self._users.set_password_hash(token.user_id, hash_novo)
+                self._users.set_password_hash(token.user_id, new_hash)
             except UserNotFoundError as exc:
                 # Regra 16. Sem esta conversão o mapa da 2.4 responderia 404 com
                 # corpo falante, e o 401/404 distinguiria token real de chutado.

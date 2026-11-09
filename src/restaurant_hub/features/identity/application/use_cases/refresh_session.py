@@ -71,7 +71,7 @@ from restaurant_hub.shared.application.ports.out.clock import Clock
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
 
 
-class _RotacaoPerdida(Exception):
+class _LostRotation(Exception):
     """A rotação perdeu a corrida dentro da unidade (`revoke` devolveu `False`).
 
     Classe privada do módulo, fora da hierarquia de erros de identity: só existe
@@ -166,7 +166,7 @@ class RefreshSessionUseCase:
             )
         )
 
-        nova = Session(
+        new_session = Session(
             id=new_session_id,
             user_id=user.id,
             refresh_token_fingerprint=issued_refresh.fingerprint,
@@ -180,9 +180,9 @@ class RefreshSessionUseCase:
         try:
             with self._unit_of_work.transaction():
                 if not self._sessions.revoke(session.id, now):
-                    raise _RotacaoPerdida()
-                self._sessions.add(nova)
-        except _RotacaoPerdida:
+                    raise _LostRotation()
+                self._sessions.add(new_session)
+        except _LostRotation:
             # Fora da unidade (já desfeita): esta revogação precisa comitar.
             self._sessions.revoke_all_for_user(session.user_id, now)
             raise RefreshTokenReuseError() from None

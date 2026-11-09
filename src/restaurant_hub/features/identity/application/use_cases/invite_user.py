@@ -156,10 +156,10 @@ class InviteUserUseCase:
         # dessa string abrir a conta da pessoa convidada.
         with self._unit_of_work.transaction():
             self._users.add(user, self._hasher.unusable_hash(), memberships)
-            valor_do_token = self._emitir_token(user.id)
+            token_value = self._issue_token(user.id)
 
         # Depois do commit — ver o docstring do módulo (ADR 2.6.0002 §3).
-        self._enviar_convite(command.email.value, valor_do_token)
+        self._send_invitation_email(command.email.value, token_value)
 
         return to_user_result(user, memberships)
 
@@ -182,28 +182,28 @@ class InviteUserUseCase:
             memberships.append(user.link_to_unit(unit))
         return tuple(memberships)
 
-    def _emitir_token(self, user_id: UserId) -> str:
+    def _issue_token(self, user_id: UserId) -> str:
         """Emite e persiste o token, devolvendo **só** o valor a enviar.
 
         O valor não entra em nenhum campo do result, de nenhum DTO persistido, de
         nenhuma mensagem de erro: ele existe entre esta linha e o corpo do
         e-mail, e em nenhum outro lugar (concept §5 regra 1).
         """
-        agora = self._clock.now()
-        emitido = self._token_issuer.issue()
+        now = self._clock.now()
+        issued = self._token_issuer.issue()
         self._tokens.add(
             PasswordSetupToken(
                 id=SetupTokenId(str(self._id_generator.next_id())),
                 user_id=user_id,
                 purpose=SetupTokenPurpose.INVITATION,
-                token_fingerprint=emitido.fingerprint,
-                issued_at=agora,
-                expires_at=agora + self._invitation_ttl,
+                token_fingerprint=issued.fingerprint,
+                issued_at=now,
+                expires_at=now + self._invitation_ttl,
             )
         )
-        return emitido.value
+        return issued.value
 
-    def _enviar_convite(self, destinatario: str, valor_do_token: str) -> None:
+    def _send_invitation_email(self, recipient: str, token_value: str) -> None:
         """Compõe e envia a mensagem.
 
         Desde a Stage 3.5 a composição vive em `_invitation.py`, a única casa do
@@ -212,5 +212,5 @@ class InviteUserUseCase:
         Assunto, corpo e link são byte-idênticos aos da 2.5 (CA16 da 3.5).
         """
         self._email_sender.send(
-            invitation_message(destinatario, setup_link(self._base_url, valor_do_token))
+            invitation_message(recipient, setup_link(self._base_url, token_value))
         )

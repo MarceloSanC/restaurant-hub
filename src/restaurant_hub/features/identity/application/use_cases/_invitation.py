@@ -17,7 +17,7 @@ o literal antigo e o compara com `setup_link(...)` (CA16).
 
 from restaurant_hub.shared.application.ports.out.email_sender import EmailMessage
 
-_ASSUNTO = "Convite para o Restaurant Hub"
+_SUBJECT = "Convite para o Restaurant Hub"
 
 
 def setup_link(base_url: str, token_value: str) -> str:
@@ -37,7 +37,7 @@ def invitation_message(to: str, link: str) -> EmailMessage:
     """
     return EmailMessage(
         to=to,
-        subject=_ASSUNTO,
+        subject=_SUBJECT,
         body_text=(
             "Você foi convidado para o Restaurant Hub.\n\n"
             f"Defina a sua senha por este link:\n{link}\n\n"
