@@ -5,7 +5,7 @@ when-use: Reference before reusing TokenIssuer for anything other than session t
 keywords: [adr, token, invitation, password-reset, single-use, replay, identity, security]
 status: accepted
 created_at: 2026-07-20
-updated_at: 2026-07-20
+updated_at: 2026-11-09
 adr_id: "2.5.0002"
 decision: Invitation and password-reset tokens get their own SetupTokenIssuer port and their own persisted password_setup_tokens table with an atomic conditional consume, instead of reusing the session TokenIssuer or deriving a stateless token from the current password hash.
 context_stage: 2.5-email-invite
@@ -13,6 +13,8 @@ bounded_context: identity
 ---
 
 # ADR 2.5.0002 — Password setup tokens use a dedicated, persisted, single-use mechanism
+
+> ⚠️ **Errata (2026-11-09):** §Decision 5 — the example *"re-inviting leaves exactly one live invitation"* has no path in the code: inviting an e-mail that is already registered answers `EmailAlreadyRegisteredError` (409) and issues no token — concept 2.5 §5 rule 6 (and rule 13; §6 error table, "Convite com e-mail já cadastrado → 409"). Both invitation-issuing use cases (`invite_user.py`, `provision_account.py`) check e-mail uniqueness before issuing, so the only path that issues a second token to the same user is the reset request (`request_password_reset.py`). The decision is unchanged: issuing invalidates outstanding tokens of the same purpose only, which today governs the reset and governs any future flow that issues an invitation to an existing user. Example only; no decision content changes — ver issue #128 (finding C5 of `docs/domain/identity/tenancy-and-access.md` §7)
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
