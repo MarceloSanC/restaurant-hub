@@ -230,6 +230,64 @@ async def test_dono_provisionado_opera_o_proprio_restaurante_e_so_ele(
     assert no_alheio.status_code == HTTPStatus.FORBIDDEN
 
 
+# ---------------------------------------------------------------------------
+# Issue #114 — a senha do dono não transita pela API de plataforma (ADR 0.0.0018)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rota", ["provisionamento", "rota-de-owner"])
+async def test_senha_enviada_pela_plataforma_nao_abre_a_conta_do_dono(
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
+    engine: Engine,
+    rota: str,
+) -> None:
+    """O critério de aceite da #114, pelo entrypoint real e contra o banco real.
+
+    O admin manda uma senha no corpo, como um cliente antigo faria. Ela é
+    descartada: o login com ela é 401, nada dela chega ao banco nem ao e-mail, e
+    a conta só abre depois que o próprio dono define a senha pelo link do convite.
+    """
+    admin = await fazer_login(client, admin_semeado.email.value)
+    senha_da_plataforma = "senha-escolhida-pela-plataforma"
+    email = "dono-convidado@x.com"
+    if rota == "provisionamento":
+        corpo = corpo_tenant("Cantina", email)
+        corpo["owner"]["password"] = senha_da_plataforma
+        resposta = await client.post(f"{API}/restaurants", json=corpo, headers=auth(admin))
+    else:
+        restaurante = (
+            await client.post(
+                f"{API}/restaurants",
+                json=corpo_tenant("Cantina", "primeiro@x.com"),
+                headers=auth(admin),
+            )
+        ).json()["id"]
+        resposta = await client.post(
+            f"{API}/restaurants/{restaurante}/owners",
+            json={"email": email, "password": senha_da_plataforma},
+            headers=auth(admin),
+        )
+    assert resposta.status_code == HTTPStatus.CREATED, resposta.text
+
+    com_a_senha_da_plataforma = await client.post(
+        f"{API}/auth/login", json={"email": email, "password": senha_da_plataforma}
+    )
+    assert com_a_senha_da_plataforma.status_code == HTTPStatus.UNAUTHORIZED
+    convite = next(m for m in caixa_de_entrada.sent if m.to == email)
+    assert senha_da_plataforma not in convite.body_text
+    assert "token" not in resposta.text
+    with engine.connect() as conexao:
+        hash_gravado = conexao.execute(
+            text("SELECT password_hash FROM users WHERE email = :e"), {"e": email}
+        ).scalar_one()
+    assert senha_da_plataforma not in hash_gravado
+
+    dono = await login_do_dono(client, caixa_de_entrada, email, "senha-escolhida-pelo-dono")
+    assert dono["access_token"]
+
+
 async def test_rota_de_owner_acrescenta_dono_a_restaurante_existente(
     client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
 ) -> None:
