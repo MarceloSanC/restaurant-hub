@@ -110,7 +110,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 
 # Ordem total do port (`L-ORD`). As duas colunas levam a colação explícita — ver
 # o docstring do módulo.
-_ORDEM_TOTAL = (
+_TOTAL_ORDER = (
     employees.c.name.collate("C"),
     employees.c.id.collate("C"),
 )
@@ -120,7 +120,7 @@ _ORDEM_TOTAL = (
 # é imutável (L-E3) e já foi conferido contra o gravado — deixá-lo no `SET`
 # tornaria "mover o funcionário de unidade" um estado produzível por uma escrita
 # que se parece com uma edição de cadastro.
-_COLUNAS_IMUTAVEIS = frozenset({"id", "tenant_id", "unit_id"})
+_IMMUTABLE_COLUMNS = frozenset({"id", "tenant_id", "unit_id"})
 
 # Colunas que o `update` também não grava, mas por outro motivo: têm escrita
 # **própria** no port. `user_id` é escrito só por `link_login` (`L-LINK`, issue
@@ -128,10 +128,10 @@ _COLUNAS_IMUTAVEIS = frozenset({"id", "tenant_id", "unit_id"})
 # apagaria o vínculo gravado depois dela — e a conta criada em identity ficaria
 # órfã. Não é imutável (nasce `NULL` e é definido uma vez); só não é deste
 # método.
-_COLUNAS_COM_ESCRITA_PROPRIA = frozenset({"user_id"})
+_COLUMNS_WITH_OWN_WRITE = frozenset({"user_id"})
 
 # `REPEATABLE READ` nas leituras de agregado (§5.18) — ver a nota 4 do docstring.
-_SNAPSHOT_UNICO = "REPEATABLE READ"
+_SINGLE_SNAPSHOT = "REPEATABLE READ"
 
 
 class PostgresEmployeeRepository:
@@ -145,14 +145,14 @@ class PostgresEmployeeRepository:
     def add(self, employee: Employee) -> None:
         """L-E1 (inserção, id global) + L-E4 (validade referencial), nesta ordem."""
         try:
-            with self._engine.begin() as conexao:
-                self._add(conexao, employee)
-        except IntegrityError as erro:
-            # `from erro` preserva a cadeia de causa: sem ela, o diagnóstico de
+            with self._engine.begin() as connection:
+                self._add(connection, employee)
+        except IntegrityError as error:
+            # `from error` preserva a cadeia de causa: sem ela, o diagnóstico de
             # um conflito de integridade perde o SQL e a constraint originais.
             raise translate(
-                erro, ON_WRITE_EMPLOYEE, self._detalhe_do_conflito(erro, employee)
-            ) from erro
+                error, ON_WRITE_EMPLOYEE, self._conflict_detail(error, employee)
+            ) from error
 
     def update(self, employee: Employee) -> None:
         """L-E2 (`UPDATE`, não upsert) + L-E3 (localização imutável) + L-E4.
@@ -163,12 +163,12 @@ class PostgresEmployeeRepository:
         concorrência (§5.4).
         """
         try:
-            with self._engine.begin() as conexao:
-                self._update(conexao, employee)
-        except IntegrityError as erro:
+            with self._engine.begin() as connection:
+                self._update(connection, employee)
+        except IntegrityError as error:
             raise translate(
-                erro, ON_WRITE_EMPLOYEE, self._detalhe_do_conflito(erro, employee)
-            ) from erro
+                error, ON_WRITE_EMPLOYEE, self._conflict_detail(error, employee)
+            ) from error
 
     def link_login(
         self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId
@@ -198,8 +198,8 @@ class PostgresEmployeeRepository:
         sugeria seria redundante sob o lock: nenhuma escrita concorrente alcança
         a linha entre a guarda e a escrita.
         """
-        with self._engine.begin() as conexao:
-            linha = conexao.execute(
+        with self._engine.begin() as connection:
+            row = connection.execute(
                 select(employees)
                 .where(
                     employees.c.id == employee_id,
@@ -208,16 +208,16 @@ class PostgresEmployeeRepository:
                 )
                 .with_for_update()
             ).one_or_none()
-            if linha is None:
+            if row is None:
                 raise EmployeeNotFoundError(employee_id)
-            vinculado = self._montar_agregados(conexao, [linha])[0].link_login(user_id)
-            conexao.execute(
+            linked = self._build_aggregates(connection, [row])[0].link_login(user_id)
+            connection.execute(
                 employees.update()
                 .where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
                 )
-                .values(user_id=vinculado.user_id)
+                .values(user_id=linked.user_id)
             )
 
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
@@ -248,8 +248,8 @@ class PostgresEmployeeRepository:
         Por isso não há tradução aqui: uma `IntegrityError` neste `DELETE` hoje
         é bug, e vesti-la de erro de negócio esconderia o defeito.
         """
-        with self._engine.begin() as conexao:
-            linha = conexao.execute(
+        with self._engine.begin() as connection:
+            row = connection.execute(
                 select(employees.c.user_id)
                 .where(
                     employees.c.id == employee_id,
@@ -258,11 +258,11 @@ class PostgresEmployeeRepository:
                 )
                 .with_for_update()
             ).one_or_none()
-            if linha is None:
+            if row is None:
                 raise EmployeeNotFoundError(employee_id)
-            if linha.user_id is not None:
+            if row.user_id is not None:
                 raise EmployeeHasLoginError(employee_id)
-            conexao.execute(
+            connection.execute(
                 employees.delete().where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
@@ -285,34 +285,34 @@ class PostgresEmployeeRepository:
         Sob snapshot único (§5.18): os quatro statements que montam o agregado
         enxergam **o mesmo** estado do banco.
         """
-        with self._sob_snapshot_unico() as conexao:
-            linha = conexao.execute(
+        with self._in_single_snapshot() as connection:
+            row = connection.execute(
                 select(employees).where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
                     employees.c.unit_id == unit_id,
                 )
             ).one_or_none()
-            if linha is None:
+            if row is None:
                 return None
-            return self._montar_agregados(conexao, [linha])[0]
+            return self._build_aggregates(connection, [row])[0]
 
     def list_by_unit(
         self, tenant_id: TenantId, unit_id: UnitId, *, include_inactive: bool = False
     ) -> tuple[Employee, ...]:
         """L-E6 — só a unidade pedida, só ativos por default; `L-ORD` — em ordem total."""
-        condicoes = [
+        conditions = [
             employees.c.tenant_id == tenant_id,
             employees.c.unit_id == unit_id,
         ]
         if not include_inactive:
             # No SQL, não em Python — ver a nota 6 do docstring do módulo.
-            condicoes.append(employees.c.active.is_(True))
-        with self._sob_snapshot_unico() as conexao:
-            linhas = conexao.execute(
-                select(employees).where(*condicoes).order_by(*_ORDEM_TOTAL)
+            conditions.append(employees.c.active.is_(True))
+        with self._in_single_snapshot() as connection:
+            rows = connection.execute(
+                select(employees).where(*conditions).order_by(*_TOTAL_ORDER)
             ).all()
-            return self._montar_agregados(conexao, linhas)
+            return self._build_aggregates(connection, rows)
 
     def exists_by_job_function(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> bool:
         """L-E7 — tenant-wide, **sem join e sem filtro de `active`** (§5.16).
@@ -322,8 +322,8 @@ class PostgresEmployeeRepository:
         ausência do join com `employees` não é otimização — é o que mantém a
         consulta sobre a tabela de vínculo, que é onde a referência vive.
         """
-        with self._engine.connect() as conexao:
-            achado = conexao.execute(
+        with self._engine.connect() as connection:
+            found = connection.execute(
                 select(
                     exists().where(
                         employee_job_functions.c.tenant_id == tenant_id,
@@ -331,23 +331,23 @@ class PostgresEmployeeRepository:
                     )
                 )
             ).scalar_one()
-        return bool(achado)
+        return bool(found)
 
     # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) -----
 
-    def _add(self, conexao: Connection, employee: Employee) -> None:
-        self._guard_id_livre(conexao, employee.id)
-        self._guard_job_functions(conexao, employee)
-        conexao.execute(employees.insert().values(**mappers.employee_to_row(employee)))
-        self._inserir_filhas(conexao, employee)
+    def _add(self, connection: Connection, employee: Employee) -> None:
+        self._guard_free_id(connection, employee.id)
+        self._guard_job_functions(connection, employee)
+        connection.execute(employees.insert().values(**mappers.employee_to_row(employee)))
+        self._insert_children(connection, employee)
 
-    def _update(self, conexao: Connection, employee: Employee) -> None:
+    def _update(self, connection: Connection, employee: Employee) -> None:
         # (1) Lookup por `(tenant_id, id)`, com `FOR UPDATE`. Precede a
         # comparação de unidade DE PROPÓSITO (§5.4 vence a L-E3): com tenant
         # alheio o registro não existe naquele escopo, e responder
         # `EmployeeRelocationError` confirmaria a existência do registro de
         # outro restaurante — e ainda vazaria a unidade dele na mensagem.
-        gravado = conexao.execute(
+        stored = connection.execute(
             select(employees.c.unit_id)
             .where(
                 employees.c.id == employee.id,
@@ -355,33 +355,33 @@ class PostgresEmployeeRepository:
             )
             .with_for_update()
         ).one_or_none()
-        if gravado is None:
+        if stored is None:
             raise EmployeeNotFoundError(employee.id)
         # (2) Localização imutável — erro INTRA-tenant (L-E3).
-        if gravado.unit_id != employee.unit_id:
-            raise EmployeeRelocationError(employee.id, gravado.unit_id, employee.unit_id)
+        if stored.unit_id != employee.unit_id:
+            raise EmployeeRelocationError(employee.id, stored.unit_id, employee.unit_id)
         # (3) Validade referencial do conjunto (L-E4).
-        self._guard_job_functions(conexao, employee)
+        self._guard_job_functions(connection, employee)
 
-        mutaveis = {
-            coluna: valor
-            for coluna, valor in mappers.employee_to_row(employee).items()
-            if coluna not in _COLUNAS_IMUTAVEIS | _COLUNAS_COM_ESCRITA_PROPRIA
+        mutable = {
+            column: value
+            for column, value in mappers.employee_to_row(employee).items()
+            if column not in _IMMUTABLE_COLUMNS | _COLUMNS_WITH_OWN_WRITE
         }
-        conexao.execute(
+        connection.execute(
             employees.update()
             .where(
                 employees.c.id == employee.id,
                 employees.c.tenant_id == employee.tenant_id,
             )
-            .values(**mutaveis)
+            .values(**mutable)
         )
-        self._sincronizar_filhas(conexao, employee)
+        self._sync_children(connection, employee)
 
     # ---- guardas ----------------------------------------------------------
 
     @staticmethod
-    def _guard_id_livre(conexao: Connection, employee_id: EmployeeId) -> None:
+    def _guard_free_id(connection: Connection, employee_id: EmployeeId) -> None:
         """L-E1 — colisão de id, checada **globalmente** e **antes** de L-E4.
 
         Sem `tenant_id` no `WHERE`: a PK não o inclui, e um lookup escopado
@@ -389,14 +389,14 @@ class PostgresEmployeeRepository:
         erro certo, mas depois de a pré-checagem referencial já ter respondido
         outro (§5.5).
         """
-        achado = conexao.execute(
+        found = connection.execute(
             select(employees.c.id).where(employees.c.id == employee_id)
         ).one_or_none()
-        if achado is not None:
+        if found is not None:
             raise EmployeeAlreadyExistsError(employee_id)
 
     @staticmethod
-    def _guard_job_functions(conexao: Connection, employee: Employee) -> None:
+    def _guard_job_functions(connection: Connection, employee: Employee) -> None:
         """L-E4 — toda id do conjunto existe **no mesmo tenant**.
 
         Id existente em outro tenant conta como **ausente**: a resolução é
@@ -408,24 +408,24 @@ class PostgresEmployeeRepository:
         construção (`EmptyJobFunctionsError`) —, então não há caminho de
         `IN ()` a defender.
         """
-        pedidas = sorted(employee.job_function_ids)
-        existentes = {
-            linha.id
-            for linha in conexao.execute(
+        requested = sorted(employee.job_function_ids)
+        existing = {
+            row.id
+            for row in connection.execute(
                 select(job_functions.c.id).where(
                     job_functions.c.tenant_id == employee.tenant_id,
-                    job_functions.c.id.in_(pedidas),
+                    job_functions.c.id.in_(requested),
                 )
             ).all()
         }
-        for job_function_id in pedidas:
-            if job_function_id not in existentes:
+        for job_function_id in requested:
+            if job_function_id not in existing:
                 raise JobFunctionNotFoundError(job_function_id)
 
     # ---- filhas: inserção e sincronização por diferença --------------------
 
     @staticmethod
-    def _inserir_filhas(conexao: Connection, employee: Employee) -> None:
+    def _insert_children(connection: Connection, employee: Employee) -> None:
         """As três filhas de um agregado novo.
 
         O `executemany` do SQLAlchemy recusa lista vazia, e duas das três podem
@@ -433,15 +433,17 @@ class PostgresEmployeeRepository:
         vínculos nunca é, porque o conjunto de funções é não-vazio por
         invariante de `Employee`.
         """
-        conexao.execute(employee_job_functions.insert(), mappers.job_function_link_rows(employee))
-        periodos = mappers.unavailability_rows(employee)
-        if periodos:
-            conexao.execute(employee_unavailabilities.insert(), periodos)
-        preferencias = mappers.shift_preference_rows(employee)
-        if preferencias:
-            conexao.execute(employee_shift_preferences.insert(), preferencias)
+        connection.execute(
+            employee_job_functions.insert(), mappers.job_function_link_rows(employee)
+        )
+        periods = mappers.unavailability_rows(employee)
+        if periods:
+            connection.execute(employee_unavailabilities.insert(), periods)
+        preferences = mappers.shift_preference_rows(employee)
+        if preferences:
+            connection.execute(employee_shift_preferences.insert(), preferences)
 
-    def _sincronizar_filhas(self, conexao: Connection, employee: Employee) -> None:
+    def _sync_children(self, connection: Connection, employee: Employee) -> None:
         """Escrita por **diferença** nas três filhas — ver a nota 3 do módulo.
 
         A regra é a mesma nas três: apaga só o que saiu, insere só o que entrou,
@@ -449,106 +451,106 @@ class PostgresEmployeeRepository:
         do `INSERT` porque as chaves podem se cruzar: um período cujo `end`
         mudou tem o mesmo `start_at` (que é a PK) na linha velha e na nova.
         """
-        self._sincronizar_funcoes(conexao, employee)
-        self._sincronizar_indisponibilidades(conexao, employee)
-        self._sincronizar_preferencia(conexao, employee)
+        self._sync_job_functions(connection, employee)
+        self._sync_unavailabilities(connection, employee)
+        self._sync_shift_preference(connection, employee)
 
     @staticmethod
-    def _sincronizar_funcoes(conexao: Connection, employee: Employee) -> None:
-        gravadas = {
-            JobFunctionId(linha.job_function_id)
-            for linha in conexao.execute(
+    def _sync_job_functions(connection: Connection, employee: Employee) -> None:
+        stored_ids = {
+            JobFunctionId(row.job_function_id)
+            for row in connection.execute(
                 select(employee_job_functions.c.job_function_id).where(
                     employee_job_functions.c.employee_id == employee.id
                 )
             ).all()
         }
-        removidas = gravadas - employee.job_function_ids
-        acrescentadas = employee.job_function_ids - gravadas
-        if removidas:
-            conexao.execute(
+        removed_ids = stored_ids - employee.job_function_ids
+        added_ids = employee.job_function_ids - stored_ids
+        if removed_ids:
+            connection.execute(
                 employee_job_functions.delete().where(
                     employee_job_functions.c.employee_id == employee.id,
-                    employee_job_functions.c.job_function_id.in_(sorted(removidas)),
+                    employee_job_functions.c.job_function_id.in_(sorted(removed_ids)),
                 )
             )
-        if acrescentadas:
+        if added_ids:
             # Filtra as linhas do mapper em vez de montá-las aqui: é lá que vive
             # a denormalização do `tenant_id` ancorada pelas duas FKs compostas,
             # e reescrevê-la aqui criaria a segunda fonte.
-            conexao.execute(
+            connection.execute(
                 employee_job_functions.insert(),
                 [
-                    linha
-                    for linha in mappers.job_function_link_rows(employee)
-                    if linha["job_function_id"] in acrescentadas
+                    row
+                    for row in mappers.job_function_link_rows(employee)
+                    if row["job_function_id"] in added_ids
                 ],
             )
 
     @staticmethod
-    def _sincronizar_indisponibilidades(conexao: Connection, employee: Employee) -> None:
-        gravados = {
-            (linha.start_at, linha.end_at)
-            for linha in conexao.execute(
+    def _sync_unavailabilities(connection: Connection, employee: Employee) -> None:
+        stored_keys = {
+            (row.start_at, row.end_at)
+            for row in connection.execute(
                 select(employee_unavailabilities).where(
                     employee_unavailabilities.c.employee_id == employee.id
                 )
             ).all()
         }
-        desejados = {(periodo.start, periodo.end) for periodo in employee.unavailabilities}
-        removidos = gravados - desejados
-        acrescentados = desejados - gravados
-        if removidos:
-            conexao.execute(
+        desired_keys = {(period.start, period.end) for period in employee.unavailabilities}
+        removed_keys = stored_keys - desired_keys
+        added_keys = desired_keys - stored_keys
+        if removed_keys:
+            connection.execute(
                 employee_unavailabilities.delete().where(
                     employee_unavailabilities.c.employee_id == employee.id,
                     # Por `start_at`, que é a PK junto do funcionário.
                     employee_unavailabilities.c.start_at.in_(
-                        sorted(inicio for inicio, _ in removidos)
+                        sorted(start for start, _ in removed_keys)
                     ),
                 )
             )
-        if acrescentados:
-            conexao.execute(
+        if added_keys:
+            connection.execute(
                 employee_unavailabilities.insert(),
                 [
-                    linha
-                    for linha in mappers.unavailability_rows(employee)
-                    if (linha["start_at"], linha["end_at"]) in acrescentados
+                    row
+                    for row in mappers.unavailability_rows(employee)
+                    if (row["start_at"], row["end_at"]) in added_keys
                 ],
             )
 
     @staticmethod
-    def _sincronizar_preferencia(conexao: Connection, employee: Employee) -> None:
-        gravados = {
-            linha.period
-            for linha in conexao.execute(
+    def _sync_shift_preference(connection: Connection, employee: Employee) -> None:
+        stored_keys = {
+            row.period
+            for row in connection.execute(
                 select(employee_shift_preferences.c.period).where(
                     employee_shift_preferences.c.employee_id == employee.id
                 )
             ).all()
         }
-        linhas_desejadas = mappers.shift_preference_rows(employee)
-        desejados = {linha["period"] for linha in linhas_desejadas}
-        removidos = gravados - desejados
-        acrescentados = desejados - gravados
-        if removidos:
-            conexao.execute(
+        desired_rows = mappers.shift_preference_rows(employee)
+        desired_keys = {row["period"] for row in desired_rows}
+        removed_keys = stored_keys - desired_keys
+        added_keys = desired_keys - stored_keys
+        if removed_keys:
+            connection.execute(
                 employee_shift_preferences.delete().where(
                     employee_shift_preferences.c.employee_id == employee.id,
-                    employee_shift_preferences.c.period.in_(sorted(removidos)),
+                    employee_shift_preferences.c.period.in_(sorted(removed_keys)),
                 )
             )
-        if acrescentados:
-            conexao.execute(
+        if added_keys:
+            connection.execute(
                 employee_shift_preferences.insert(),
-                [linha for linha in linhas_desejadas if linha["period"] in acrescentados],
+                [row for row in desired_rows if row["period"] in added_keys],
             )
 
     # ---- montagem do agregado ---------------------------------------------
 
     @contextmanager
-    def _sob_snapshot_unico(self) -> Iterator[Connection]:
+    def _in_single_snapshot(self) -> Iterator[Connection]:
         """Conexão em `REPEATABLE READ`, com a transação aberta explicitamente.
 
         O nível é execution option da **conexão** e precisa ser posto antes de
@@ -556,14 +558,16 @@ class PostgresEmployeeRepository:
         snapshot esteja escrita, e não implícita no autobegin (§5.18).
         """
         with (
-            self._engine.connect().execution_options(isolation_level=_SNAPSHOT_UNICO) as conexao,
-            conexao.begin(),
+            self._engine.connect().execution_options(
+                isolation_level=_SINGLE_SNAPSHOT
+            ) as connection,
+            connection.begin(),
         ):
-            yield conexao
+            yield connection
 
     @staticmethod
-    def _montar_agregados(
-        conexao: Connection, linhas: Sequence[mappers.Row]
+    def _build_aggregates(
+        connection: Connection, rows: Sequence[mappers.Row]
     ) -> tuple[Employee, ...]:
         """Monta N agregados em **quatro** statements, não em `1 + 3N`.
 
@@ -573,50 +577,50 @@ class PostgresEmployeeRepository:
         singular e a listagem — e a divergência apareceria como bug de
         apresentação, não como falha de teste.
         """
-        if not linhas:
+        if not rows:
             return ()
-        ids = [linha.id for linha in linhas]
+        ids = [row.id for row in rows]
 
-        funcoes: dict[str, list[str]] = defaultdict(list)
-        for vinculo in conexao.execute(
+        function_ids: dict[str, list[str]] = defaultdict(list)
+        for link in connection.execute(
             select(
                 employee_job_functions.c.employee_id,
                 employee_job_functions.c.job_function_id,
             ).where(employee_job_functions.c.employee_id.in_(ids))
         ).all():
-            funcoes[vinculo.employee_id].append(vinculo.job_function_id)
+            function_ids[link.employee_id].append(link.job_function_id)
 
         # `ORDER BY start_at` é a cláusula normativa (§5.13); agrupar por
         # `append` preserva essa ordem dentro de cada funcionário.
-        periodos: dict[str, list[mappers.Row]] = defaultdict(list)
-        for periodo in conexao.execute(
+        periods: dict[str, list[mappers.Row]] = defaultdict(list)
+        for period in connection.execute(
             select(employee_unavailabilities)
             .where(employee_unavailabilities.c.employee_id.in_(ids))
             .order_by(employee_unavailabilities.c.start_at)
         ).all():
-            periodos[periodo.employee_id].append(periodo)
+            periods[period.employee_id].append(period)
 
-        preferencias: dict[str, list[str]] = defaultdict(list)
-        for preferencia in conexao.execute(
+        preferences: dict[str, list[str]] = defaultdict(list)
+        for preference in connection.execute(
             select(
                 employee_shift_preferences.c.employee_id,
                 employee_shift_preferences.c.period,
             ).where(employee_shift_preferences.c.employee_id.in_(ids))
         ).all():
-            preferencias[preferencia.employee_id].append(preferencia.period)
+            preferences[preference.employee_id].append(preference.period)
 
         return tuple(
             mappers.row_to_employee(
-                linha,
-                job_function_ids=funcoes[linha.id],
-                unavailabilities=periodos[linha.id],
-                shift_periods=preferencias[linha.id],
+                row,
+                job_function_ids=function_ids[row.id],
+                unavailabilities=periods[row.id],
+                shift_periods=preferences[row.id],
             )
-            for linha in linhas
+            for row in rows
         )
 
     @staticmethod
-    def _detalhe_do_conflito(erro: IntegrityError, employee: Employee) -> str:
+    def _conflict_detail(error: IntegrityError, employee: Employee) -> str:
         """Qual valor entra na mensagem depende de **qual** regra foi violada.
 
         `translate` recebe um `detail` só (contrato do concept §4), e as
@@ -632,6 +636,6 @@ class PostgresEmployeeRepository:
         (§5.15). É essa diferença de forma — id exato contra conjunto — que torna
         observável qual das duas camadas de guarda respondeu (CA8c).
         """
-        if constraint_name(erro) == "fk_employee_job_functions_job_function":
+        if constraint_name(error) == "fk_employee_job_functions_job_function":
             return str(sorted(employee.job_function_ids))
         return employee.id

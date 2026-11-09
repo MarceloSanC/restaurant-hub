@@ -839,11 +839,11 @@ def test_o_backstop_de_identidade_responde_pelo_metodo_publico_e_cita_a_id(
 ) -> None:
     """A corrida de L-E1: o id é tomado **entre** a guarda e o `INSERT`.
 
-    Fecha o outro ramo de `_detalhe_do_conflito` — o que devolve a id — e a
+    Fecha o outro ramo de `_conflict_detail` — o que devolve a id — e a
     outra entrada de `ON_WRITE_EMPLOYEE`. Aqui a mensagem cita a id porque o
     adapter **sabe** qual é: é a que ele tentou gravar, e a constraint violada é
     de identidade, não de referência. É o contraste com o teste do conjunto que
-    torna a escolha de `_detalhe_do_conflito` observável em vez de estilística.
+    torna a escolha de `_conflict_detail` observável em vez de estilística.
     """
     motor = motores()
     motor_concorrente = motores()
