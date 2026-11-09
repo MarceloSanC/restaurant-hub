@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, restaurantes, escala, saas, hub, multi-tenant]
 status: done
 created_at: 2026-07-10
-updated_at: 2026-09-13
+updated_at: 2026-11-09
 project_name: restaurant-hub
 stakeholders:
   - Sponsor / Desenvolvedor / Admin da plataforma: Marcelo (Whaka)
@@ -69,6 +69,30 @@ Escala em planilha/papel. O piloto já opera com **Control ID** (ponto por recon
 - **ASSUM-3**: free tier de e-mail transacional (Resend 3k/mês, Brevo 300/dia ou SendGrid 100/dia) cobre o volume de notificações do piloto.
 - **ASSUM-4**: o piloto opera 1 unidade hoje (multi-unidade modelado desde já, exercitado quando existir a 2ª).
 - **ASSUM-5**: quadro do piloto em porte pequeno/médio (dezenas de funcionários, não centenas).
+
+### Decisões de kickoff (2026-07)
+Decisões do sponsor registradas no kickoff do loop autônomo de Stages 1.2 → 3.5, em três rodadas. Esta lista é a **numeração canônica**: toda citação "kickoff #N" no repositório aponta para o item N daqui. As decisões foram incorporadas aos concepts e ADRs das Stages que as consumiram.
+
+*Rodada 1 — 2026-07-16:*
+1. **Usuário ↔ unidade:** papel **único** no tenant + tabela de vínculo usuário↔unidade para visibilidade; dono e admin de plataforma enxergam todo o tenant e ignoram o vínculo. Papel por unidade evolui depois como coluna no vínculo.
+2. **E-mail de login:** único **global**; a conta pertence a um tenant; login sem seletor de tenant.
+3. **Admin de plataforma:** vive **fora de qualquer tenant** — exceção explícita às invariantes de isolamento.
+4. **Refresh token:** **persistido e rotacionado** (revogável), com tabela de sessões; logout e desligamento cortam o acesso.
+5. **Jornada fixa:** carga = **horas por semana** + preferência de turno.
+6. **Preferência de turno:** **períodos nomeados do dia** (manhã, tarde, noite, madrugada).
+7. **E-mail real:** provedor **Resend**; ConsoleSender em dev.
+8. **Cadência do loop** (processo, não produto): merge automático por Stage após auditoria verde; pausa humana no fim de cada Step.
+
+*Rodada 2 — 2026-07-19:*
+9. **Gerente** vê **apenas as unidades atribuídas** a ele — sem bypass de escopo; só dono e admin de plataforma fazem bypass.
+10. **Mantidos os 5 papéis** no modelo; ouro/prata/bronze é linguagem de produto; RH é variante de gerente (prata).
+11. **Valor monetário por período extra** fica **fora da v1**: o período extra é uma classificação ("conta ou não para a carga"), sem dinheiro.
+
+*Rodada 3 — 2026-07-19 (Stage 2.4):*
+12. Só o **admin de plataforma** cria **restaurante**; o dono cria e gerencia **unidades**.
+13. **Janela de revogação** fechada por **TTL curto do access token** (15 min), sem introspecção por request; o TTL é configuração.
+
+> **Numeração legada (issue #129).** Artefatos das Stages 2.1 e 2.2 citaram "kickoff #N" pela **posição** na lista "Decisões já fechadas" da issue da Stage, não por esta numeração. O 4º item da issue #17 ("papéis RBAC fixos", o RBAC desta §3, ratificado depois pela decisão 10) aparece como "kickoff #4" no concept 2.1 §3 e §7. O 1º item da issue #20 (sessão revogável — decisão **4**) aparece como "kickoff #1" no [ADR 2.2.0001](./adr/2_2_0001-revocable-refresh-session-port.md) e no concept 2.2 §1, §4 e §7.1. O 4º item da issue #20 ("dois eixos de acesso", modelagem da Stage 2.1 no [ADR 2.1.0001](./adr/2_1_0001-identity-aggregates-and-membership.md), derivada da decisão 1) aparece como "kickoff #4" no [ADR 2.2.0002](./adr/2_2_0002-authorization-two-axes-fail-closed.md) e no concept 2.2 §7.2. Os ADRs têm errata; os concepts `done` ficam como estão e se leem por este mapa.
 
 ## 4. Objetivos
 
