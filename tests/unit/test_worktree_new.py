@@ -1047,6 +1047,7 @@ def test_collect_used_ports_skips_noise_and_the_new_worktree(
     assert used == {"APP_PORT": {8000, 8101}, "POSTGRES_PORT": {5432}, "REDIS_PORT": {6379}}
 
 
+# `type(Path())` é `WindowsPath`/`PosixPath` conforme o SO: base dinâmica que o mypy recusa [misc].
 class _UnresolvablePath(type(Path())):  # type: ignore[misc]
     """Worktree registrada cujo caminho não resolve mais (disco removido, permissão)."""
 
@@ -1074,6 +1075,7 @@ def test_collect_used_ports_ignores_worktrees_it_cannot_resolve_or_read(
     def _read_text(self: Path, *args: object, **kwargs: object) -> str:
         if self.parent.name == "unreadable":
             raise OSError("sem permissão")
+        # os `*args`/`**kwargs` chegam como `object`; o `read_text` real os tipa [arg-type].
         return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(Path, "read_text", _read_text)

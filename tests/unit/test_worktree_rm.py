@@ -961,11 +961,13 @@ def test_path_variants_have_both_slashes_and_the_resolved_path(
     assert variants == list(dict.fromkeys(spellings))
 
 
+# `type(Path())` é `WindowsPath`/`PosixPath` conforme o SO: base dinâmica que o mypy recusa [misc].
 class _UnresolvablePath(type(Path())):  # type: ignore[misc]
     def resolve(self, strict: bool = False) -> Path:
         raise OSError("caminho inacessível")
 
 
+# `type(Path())` é `WindowsPath`/`PosixPath` conforme o SO: base dinâmica que o mypy recusa [misc].
 class _AlreadyResolvedPath(type(Path())):  # type: ignore[misc]
     def resolve(self, strict: bool = False) -> Path:
         return self
