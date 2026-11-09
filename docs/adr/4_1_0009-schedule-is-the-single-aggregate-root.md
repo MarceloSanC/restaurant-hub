@@ -25,8 +25,8 @@ bounded_context: scheduling
 [`shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.1 lists
 `Schedule`, `ShiftDemand` and `Assignment` as the entities of this Stage and says
 that `Schedule` being the **aggregate root** is a *"proposta do gate (†), a
-confirmar na 4.1"* (line 159); §6 lists the confirmation for this Stage
-(line 1088), together with where the allocation flags and the hours counting
+confirmar na 4.1"* (`shift-scheduling.md` §3.1 › "a confirmar na 4.1"); §6 lists the confirmation for this Stage
+(`shift-scheduling.md` §6 › "Schedule como raiz do agregado — confirmar"), together with where the allocation flags and the hours counting
 live.
 
 What has to be guarded, from the ratified invariants:
@@ -171,7 +171,7 @@ Two further forces:
 
 ### Alternative E — Do nothing / leave the root unconfirmed
 - **Why not acceptable:** the doc explicitly asked this Stage to confirm the root
-  (§6, line 1088); without it, 4.3 would have to guess the transaction boundary and
+  (`shift-scheduling.md` §6 › "Schedule como raiz do agregado — confirmar"); without it, 4.3 would have to guess the transaction boundary and
   4.4 the write granularity.
 
 ## Consequences
@@ -235,9 +235,9 @@ Two further forces:
   derived divergence mark, and the two extra mutations that take the count from
   nine to eleven).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
-  §3.1 (line 159, the gate's proposal that `Schedule` is the root, to be confirmed
-  here; line 166, the period invariant that Decision 6 now enforces), §3.3, §3.4,
-  §3.5, §6 (line 1088).
+  §3.1 › "a confirmar na 4.1", "O período é não vazio, contíguo e alinhado" (the gate's proposal that `Schedule` is the root, to be
+  confirmed here; the period invariant that Decision 6 now enforces), §3.3, §3.4,
+  §3.5, §6 › "Schedule como raiz do agregado — confirmar".
 - Code: `features/staff/domain/entities/employee.py` 113–116 (pairwise validation on
   every construction path, including rehydration).
 - Skill `ddd-tactical-patterns` (§Aggregate, §Invariants, §DON'T).
