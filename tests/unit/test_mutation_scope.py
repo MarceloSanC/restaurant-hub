@@ -27,6 +27,7 @@ import pathlib
 import subprocess
 import sys
 import tomllib
+from collections.abc import Iterable
 
 import pytest
 
@@ -160,7 +161,12 @@ def test_o_gate_estrutural_do_check_layout_fica_fora_da_corrida() -> None:
 # `tmp_path` — e não lê a raiz. A derivação é um ponto fixo sobre as
 # atribuições da função (`=`, `:=`, `for`, `with … as`), só para alvos que são
 # nomes; o mesmo literal sob `_REPO_ROOT`, na mesma linha ou em outra função,
-# continua contando.
+# continua contando. **Na dúvida, a raiz vence:** um nome só é temporário se
+# **toda** ligação dele na função deriva de tmp; o nome ligado a um valor que
+# menciona um nome ancorado em `__file__` (`_REPO_ROOT`, `ROOT`…) é da raiz, e
+# a base que menciona a raiz não está sob tmp; e `a, b = x, y` liga elemento a
+# elemento. Assim `p = tmp_path; p = R`, `base = tmp_path if c else R` e
+# `dst, src = tmp_path, R` seguem cobrando.
 # ---------------------------------------------------------------------------
 
 # Os defaults que o mutmut 3.7.0 soma ao `also_copy` (`configuration.py`, no
@@ -257,31 +263,76 @@ def _nomes_ligados(alvo: ast.AST) -> set[str]:
     return set()
 
 
-def _derivados_de_temporario(funcao: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
-    """Os nomes da função que guardam um caminho derivado de um diretório temporário.
+def _ligacao(alvo: ast.AST, valor: ast.AST) -> list[tuple[set[str], set[str]]]:
+    """`a, b = x, y` liga elemento a elemento; o resto liga todo alvo a todo o valor."""
+    if (
+        isinstance(alvo, ast.Tuple | ast.List)
+        and isinstance(valor, ast.Tuple | ast.List)
+        and len(alvo.elts) == len(valor.elts)
+        and not any(isinstance(e, ast.Starred) for e in (*alvo.elts, *valor.elts))
+    ):
+        return [par for a, v in zip(alvo.elts, valor.elts, strict=True) for par in _ligacao(a, v)]
+    return [(_nomes_ligados(alvo), _nomes(valor))]
 
-    Ponto fixo: parte de `_TEMPORARIOS`; todo nome ligado por uma atribuição cujo
-    valor menciona um nome derivado também é derivado.
-    """
+
+def _ligacoes(nos: Iterable[ast.AST]) -> list[tuple[set[str], set[str]]]:
+    """(nomes ligados, nomes usados no valor) de cada atribuição entre `nos`."""
     ligacoes: list[tuple[set[str], set[str]]] = []
-    for no in ast.walk(funcao):
+    for no in nos:
         if isinstance(no, ast.Assign):
-            ligacoes.extend((_nomes_ligados(alvo), _nomes(no.value)) for alvo in no.targets)
-        elif isinstance(no, ast.AnnAssign | ast.AugAssign | ast.NamedExpr) and no.value:
-            ligacoes.append((_nomes_ligados(no.target), _nomes(no.value)))
+            for alvo in no.targets:
+                ligacoes.extend(_ligacao(alvo, no.value))
+        elif isinstance(no, ast.AugAssign):
+            ligacoes.append((_nomes_ligados(no.target), _nomes(no.value) | _nomes(no.target)))
+        elif isinstance(no, ast.AnnAssign | ast.NamedExpr) and no.value:
+            ligacoes.extend(_ligacao(no.target, no.value))
         elif isinstance(no, ast.For | ast.AsyncFor | ast.comprehension):
             ligacoes.append((_nomes_ligados(no.target), _nomes(no.iter)))
         elif isinstance(no, ast.withitem) and no.optional_vars is not None:
             ligacoes.append((_nomes_ligados(no.optional_vars), _nomes(no.context_expr)))
-    derivados = set(_TEMPORARIOS)
+    return ligacoes
+
+
+def _fecho(sementes: set[str], ligacoes: list[tuple[set[str], set[str]]]) -> set[str]:
+    """Ponto fixo: todo nome ligado a um valor que menciona um nome do conjunto entra nele."""
+    conjunto = set(sementes)
     mudou = True
     while mudou:
         mudou = False
         for ligados, usados in ligacoes:
-            if ligados - derivados and usados & derivados:
-                derivados |= ligados
+            if ligados - conjunto and usados & conjunto:
+                conjunto |= ligados
                 mudou = True
-    return derivados
+    return conjunto
+
+
+def _ancorados_do_modulo(arvore: ast.Module) -> set[str]:
+    """`__file__` e os nomes de módulo ancorados nele — `_REPO_ROOT = Path(__file__)…`."""
+    return _fecho({"__file__"}, _ligacoes(arvore.body))
+
+
+def _derivados_de_temporario(
+    funcao: ast.FunctionDef | ast.AsyncFunctionDef, ancorados_do_modulo: set[str]
+) -> tuple[set[str], set[str]]:
+    """(temporários, ancorados) da função — os nomes que guardam um caminho de tmp e os da raiz.
+
+    Dois pontos fixos: o dos ancorados parte dos nomes de módulo ancorados em
+    `__file__`; o dos temporários, de `_TEMPORARIOS`. Um nome com alguma ligação
+    que não deriva de tmp deixa de ser tmp (`p = tmp_path; p = Path.cwd()`). Quem
+    decide entre os dois é `_literais_sob_temporario`: a base que menciona um
+    ancorado não está sob tmp — a raiz vence.
+    """
+    ligacoes = _ligacoes(ast.walk(funcao))
+    ancorados = _fecho(ancorados_do_modulo, ligacoes)
+    derivados = _fecho(set(_TEMPORARIOS), ligacoes)
+    mudou = True
+    while mudou:
+        mudou = False
+        for ligados, usados in ligacoes:
+            if ligados & derivados and not usados & derivados:
+                derivados -= ligados
+                mudou = True
+    return derivados, ancorados
 
 
 def _base_da_cadeia(no: ast.BinOp) -> ast.expr:
@@ -291,20 +342,23 @@ def _base_da_cadeia(no: ast.BinOp) -> ast.expr:
     return no.left
 
 
-def _literais_sob_temporario(arvore: ast.AST) -> set[ast.AST]:
+def _literais_sob_temporario(arvore: ast.Module) -> set[ast.AST]:
     """Os literais que montam um caminho sob um diretório temporário (issue #139)."""
     literais: set[ast.AST] = set()
+    ancorados_do_modulo = _ancorados_do_modulo(arvore)
     for funcao in ast.walk(arvore):
         if not isinstance(funcao, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        derivados = _derivados_de_temporario(funcao)
+        derivados, ancorados = _derivados_de_temporario(funcao, ancorados_do_modulo)
         for no in ast.walk(funcao):
-            if (
+            if not (
                 isinstance(no, ast.BinOp)
                 and isinstance(no.op, ast.Div)
                 and isinstance(no.right, ast.Constant)
-                and _nomes(_base_da_cadeia(no)) & derivados
             ):
+                continue
+            base = _nomes(_base_da_cadeia(no))
+            if base & derivados and not base & ancorados:
                 literais.add(no.right)
     return literais
 
@@ -551,6 +605,10 @@ _CITA_CLAUDE = [
 ]
 
 
+# Um módulo que ancora `R` na raiz, como os testes reais fazem com `_REPO_ROOT`.
+_RAIZ = "R = Path(__file__).resolve().parents[2]\n"
+
+
 def _cita_claude(linha: int) -> list[str]:
     return [achado.format(linha=linha) for achado in _CITA_CLAUDE]
 
@@ -614,6 +672,49 @@ def _cita_claude(linha: int) -> list[str]:
         ('def t(tmp_path):\n    ".claude" / tmp_path\n', _cita_claude(2)),
         # Fora de função não há derivação: o literal conta.
         ('tmp_path / ".claude"\n', _cita_claude(1)),
+        # Na dúvida, a raiz vence: nome que também liga à raiz não é tmp.
+        (
+            _RAIZ + 'def t(tmp_path):\n    p = tmp_path\n    p = R\n    p / ".claude"\n',
+            _cita_claude(5),
+        ),
+        (
+            _RAIZ
+            + 'def t(tmp_path):\n    p = tmp_path\n    p = p if c else R\n    p / ".claude"\n',
+            _cita_claude(5),
+        ),
+        (
+            _RAIZ + 'def t(tmp_path):\n    b = tmp_path if c else R\n    b / ".claude"\n',
+            _cita_claude(4),
+        ),
+        (
+            _RAIZ + 'def t(tmp_path):\n    b = _copia(tmp_path, R)\n    b / ".claude"\n',
+            _cita_claude(4),
+        ),
+        (
+            _RAIZ + 'def t(tmp_path):\n    for d, s in [(tmp_path, R)]:\n        s / ".claude"\n',
+            _cita_claude(4),
+        ),
+        # `a, b = x, y` liga elemento a elemento: só `d` é tmp.
+        (
+            _RAIZ + 'def t(tmp_path):\n    d, s = tmp_path / "c", R\n'
+            '    s / ".claude"\n    d / ".claude"\n',
+            _cita_claude(4),
+        ),
+        # A âncora vale também declarada dentro da função.
+        (
+            "def t(tmp_path):\n    R = Path(__file__).parents[2]\n"
+            '    p = tmp_path\n    p = R\n    p / ".claude"\n',
+            _cita_claude(5),
+        ),
+        # Religar a algo que não é tmp nem âncora também tira o nome de tmp.
+        (
+            'def t(tmp_path):\n    p = tmp_path\n    p = Path.cwd()\n    p / ".claude"\n',
+            _cita_claude(4),
+        ),
+        # A base da cadeia que menciona a raiz não está sob tmp.
+        (_RAIZ + 'def t(tmp_path):\n    (tmp_path if c else R) / ".claude"\n', _cita_claude(3)),
+        # `p /= …` mantém `p` em tmp: o alvo também é lido.
+        ('def t(tmp_path):\n    p = tmp_path\n    p /= "x"\n    p / ".claude"\n', []),
     ],
 )
 def test_caminho_montado_sob_diretorio_temporario_nao_e_leitura_da_raiz(
