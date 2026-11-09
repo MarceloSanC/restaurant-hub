@@ -136,3 +136,32 @@ def test_git_invocation_reads_global_options() -> None:
     )
     assert ss.git_invocation(["git", "status"], HERE) == (HERE, [], ["status"])
     assert ss.git_invocation(["git", "--git-dir", "-x", "log"], HERE) == (HERE, [], ["log"])
+
+
+# --- caminho do Git Bash no Windows (auditoria do PR #161) ---
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        ("/c/Users/repo", "c:/Users/repo"),
+        ("/D/repo", "D:/repo"),
+        ("/c", "c:"),
+        ("/cdrive/repo", "/cdrive/repo"),  # pasta de nome longo não é drive
+        ("sub", "sub"),
+    ],
+)
+def test_windows_reads_git_bash_drive_paths(
+    monkeypatch: pytest.MonkeyPatch, target: str, expected: str
+) -> None:
+    """`cd /c/...` no Git Bash é o drive `C:`; lido como pasta `c`, o hook liberava o comando."""
+    monkeypatch.setattr(ss, "WINDOWS", True)
+    got = list(ss.commands(f"cd {target} && git status", HERE))
+    assert got == [((HERE / expected).resolve(), ["git", "status"])]
+    toks = ["git", "-C", target, "status"]
+    assert ss.git_invocation(toks, HERE)[0] == (HERE / expected).resolve()
+
+
+def test_posix_keeps_single_letter_root_dirs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ss, "WINDOWS", False)
+    assert ss.resolve(HERE, "/c/repo") == (HERE / "/c/repo").resolve()

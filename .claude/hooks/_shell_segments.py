@@ -10,6 +10,8 @@ A permissão do Claude Code é avaliada por subcomando, então o hook precisa ve
 - diretório efetivo = `cwd` do hook, seguido de `cd`/`Set-Location`/`pushd` anteriores no mesmo
   comando (`popd` volta) e de `git -C <dir>`. `cd` dentro de `( … )`/`$( … )` vale só até o `)`:
   subshell no bash; no PowerShell o `cd` persistiria, e esquecê-lo erra para o lado de recusar.
+  No Windows, caminho do Git Bash (`/c/Users/...`) vira `C:/Users/...`: sem isso o `pathlib` o lia
+  como a pasta `c` na raiz de `C:`, inexistente, e o hook liberava o comando (#65, auditoria).
 
 Fora do alcance (o classificador cobre): `bash -c`/`pwsh -c`/`cmd /c`, `eval`, aliases, scripts.
 Não é hook: o nome com `_` o deixa fora de `.claude/settings.json`. Portado do
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import re
 import shlex
+import sys
 from collections.abc import Iterator
 from pathlib import Path, PureWindowsPath
 
@@ -34,6 +37,18 @@ _CD = ("cd", "Set-Location", "pushd", "Push-Location")
 _PUSH = ("pushd", "Push-Location")
 _POP = ("popd", "Pop-Location")
 _GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+_MSYS_DRIVE = re.compile(r"^/([A-Za-z])(?=/|$)")
+WINDOWS = sys.platform == "win32"
+
+
+def resolve(here: Path, target: str) -> Path:
+    """Diretório de `cd <target>`/`git -C <target>` a partir de `here`.
+
+    No Windows, `/c/...` (Git Bash/MSYS) é o drive `C:`; fora dele é caminho POSIX comum.
+    """
+    if WINDOWS:
+        target = _MSYS_DRIVE.sub(lambda m: f"{m.group(1)}:", target)
+    return (here / target).resolve()
 
 
 def tokens(segment: str) -> list[str]:
@@ -75,7 +90,7 @@ def commands(command: str, cwd: Path) -> Iterator[tuple[Path, list[str]]]:
             if toks[0] in _PUSH:
                 pushed.append(here)
             dirs = [t for t in toks[1:] if t not in ("-Path", "-LiteralPath")]
-            here = (here / dirs[0]).resolve() if dirs else here
+            here = resolve(here, dirs[0]) if dirs else here
         elif toks and toks[0] in _POP:
             here = pushed.pop() if pushed else here
         elif toks:
@@ -94,7 +109,7 @@ def git_invocation(toks: list[str], here: Path) -> tuple[Path, list[str], list[s
     target, i, config = here, 1, []
     while i < len(toks) and toks[i].startswith("-"):
         if toks[i] == "-C" and i + 1 < len(toks):
-            target = (here / toks[i + 1]).resolve()
+            target = resolve(here, toks[i + 1])
         if toks[i] == "-c" and i + 1 < len(toks):
             config.append(toks[i + 1])
         i += 2 if toks[i] in _GIT_OPTS_WITH_VALUE else 1
