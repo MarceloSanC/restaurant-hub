@@ -94,51 +94,51 @@ from .schemas import (
 router = APIRouter(tags=["identity"])
 
 
-def _nao_conectado(nome: str) -> Never:
+def _not_wired(name: str) -> Never:
     raise RuntimeError(
-        f"dependência {nome!r} não foi conectada pelo composition root — "
+        f"dependência {name!r} não foi conectada pelo composition root — "
         "veja wire_dependencies() e create_app()"
     )
 
 
 def _get_authenticate_user() -> AuthenticateUserUseCase:
-    _nao_conectado("authenticate_user")
+    _not_wired("authenticate_user")
 
 
 def _get_refresh_session() -> RefreshSessionUseCase:
-    _nao_conectado("refresh_session")
+    _not_wired("refresh_session")
 
 
 def _get_revoke_session() -> RevokeSessionUseCase:
-    _nao_conectado("revoke_session")
+    _not_wired("revoke_session")
 
 
 def _get_provision_restaurant() -> ProvisionRestaurantUseCase:
-    _nao_conectado("provision_restaurant")
+    _not_wired("provision_restaurant")
 
 
 def _get_create_unit() -> CreateUnitUseCase:
-    _nao_conectado("create_unit")
+    _not_wired("create_unit")
 
 
 def _get_create_user() -> CreateUserUseCase:
-    _nao_conectado("create_user")
+    _not_wired("create_user")
 
 
 def _get_invite_user() -> InviteUserUseCase:
-    _nao_conectado("invite_user")
+    _not_wired("invite_user")
 
 
 def _get_request_password_reset() -> RequestPasswordResetUseCase:
-    _nao_conectado("request_password_reset")
+    _not_wired("request_password_reset")
 
 
 def _get_set_password_with_token() -> SetPasswordWithTokenUseCase:
-    _nao_conectado("set_password_with_token")
+    _not_wired("set_password_with_token")
 
 
 def _get_guard() -> IdentityGuard:
-    _nao_conectado("identity_guard")
+    _not_wired("identity_guard")
 
 
 def _authenticated_actor(
@@ -162,34 +162,34 @@ def _authenticated_actor(
     return guard.authenticate(request)
 
 
-def _unit_response(resultado: UnitResult) -> UnitResponse:
-    return UnitResponse(id=resultado.id, restaurant_id=resultado.restaurant_id, name=resultado.name)
+def _unit_response(result: UnitResult) -> UnitResponse:
+    return UnitResponse(id=result.id, restaurant_id=result.restaurant_id, name=result.name)
 
 
-def _user_response(resultado: UserResult) -> UserResponse:
+def _user_response(result: UserResult) -> UserResponse:
     return UserResponse(
-        id=resultado.id,
-        email=resultado.email.value,
-        role=resultado.role.value,
-        tenant_id=resultado.tenant_id,
-        unit_ids=list(resultado.unit_ids),
+        id=result.id,
+        email=result.email.value,
+        role=result.role.value,
+        tenant_id=result.tenant_id,
+        unit_ids=list(result.unit_ids),
     )
 
 
 def _provisioned_restaurant_response(
-    resultado: ProvisionedRestaurantResult,
+    result: ProvisionedRestaurantResult,
 ) -> ProvisionedRestaurantResponse:
     return ProvisionedRestaurantResponse(
-        id=resultado.id, name=resultado.name, owner=_user_response(resultado.owner)
+        id=result.id, name=result.name, owner=_user_response(result.owner)
     )
 
 
-def _token_response(resultado: AuthenticationResult) -> TokenResponse:
+def _token_response(result: AuthenticationResult) -> TokenResponse:
     return TokenResponse(
-        access_token=resultado.access_token,
-        refresh_token=resultado.refresh_token,
-        access_token_expires_at=resultado.access_token_expires_at,
-        refresh_token_expires_at=resultado.refresh_token_expires_at,
+        access_token=result.access_token,
+        refresh_token=result.refresh_token,
+        access_token_expires_at=result.access_token_expires_at,
+        refresh_token_expires_at=result.refresh_token_expires_at,
     )
 
 
@@ -208,13 +208,13 @@ def login(
     Pública por definição. E-mail malformado levanta `InvalidEmailError` (422)
     antes de qualquer consulta — sem custo e sem tocar o banco.
     """
-    resultado = use_case.execute(
+    result = use_case.execute(
         AuthenticateUserCommand(
             email=Email(payload.email),
             plain_password=payload.password.get_secret_value(),
         )
     )
-    return _token_response(resultado)
+    return _token_response(result)
 
 
 @router.post("/auth/refresh", response_model=TokenResponse)
@@ -229,10 +229,10 @@ def refresh(
     um refresh já rotacionado dispara a detecção de reuso e derruba as sessões do
     usuário (concept §5 regra 5).
     """
-    resultado = use_case.execute(
+    result = use_case.execute(
         RefreshSessionCommand(refresh_token=payload.refresh_token.get_secret_value())
     )
-    return _token_response(resultado)
+    return _token_response(result)
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -262,7 +262,7 @@ def logout(
 )
 def provision_restaurant(
     payload: ProvisionRestaurantRequest,
-    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
+    actor: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[ProvisionRestaurantUseCase, Depends(_get_provision_restaurant)],
 ) -> ProvisionedRestaurantResponse:
@@ -283,16 +283,16 @@ def provision_restaurant(
     O papel não vem do request: é o literal `Role.OWNER` dentro do use case, e é
     isso que mantém "nenhuma rota emite `platform_admin`" (ADR 2.4.0003 §2b).
     """
-    guard.authorize(ator, Permission.MANAGE_PLATFORM)
+    guard.authorize(actor, Permission.MANAGE_PLATFORM)
 
-    resultado = use_case.execute(
+    result = use_case.execute(
         ProvisionRestaurantCommand(
             name=payload.name,
             owner_email=Email(payload.owner.email),
             owner_plain_password=payload.owner.password.get_secret_value(),
         )
     )
-    return _provisioned_restaurant_response(resultado)
+    return _provisioned_restaurant_response(result)
 
 
 @router.post(
@@ -303,7 +303,7 @@ def provision_restaurant(
 def create_restaurant_owner(
     restaurant_id: str,
     payload: CreateOwnerRequest,
-    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
+    actor: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
 ) -> UserResponse:
@@ -331,9 +331,9 @@ def create_restaurant_owner(
     (`RestaurantNotFoundError` → 404), ao contrário de um campo de corpo, que
     seria afirmação não verificada do cliente.
     """
-    guard.authorize(ator, Permission.MANAGE_PLATFORM)
+    guard.authorize(actor, Permission.MANAGE_PLATFORM)
 
-    resultado = use_case.execute(
+    result = use_case.execute(
         CreateUserCommand(
             email=Email(payload.email),
             plain_password=payload.password.get_secret_value(),
@@ -341,7 +341,7 @@ def create_restaurant_owner(
             tenant_id=RestaurantId(restaurant_id),
         )
     )
-    return _user_response(resultado)
+    return _user_response(result)
 
 
 @router.post(
@@ -352,7 +352,7 @@ def create_restaurant_owner(
 def create_unit(
     restaurant_id: str,
     payload: CreateUnitRequest,
-    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
+    actor: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateUnitUseCase, Depends(_get_create_unit)],
 ) -> UnitResponse:
@@ -367,10 +367,10 @@ def create_unit(
     escrita.
     """
     tenant_id = RestaurantId(restaurant_id)
-    guard.authorize(ator, Permission.MANAGE_TENANT, tenant_id=tenant_id)
+    guard.authorize(actor, Permission.MANAGE_TENANT, tenant_id=tenant_id)
 
-    resultado = use_case.execute(CreateUnitCommand(restaurant_id=tenant_id, name=payload.name))
-    return _unit_response(resultado)
+    result = use_case.execute(CreateUnitCommand(restaurant_id=tenant_id, name=payload.name))
+    return _unit_response(result)
 
 
 @router.post(
@@ -380,7 +380,7 @@ def create_unit(
 )
 def create_user(
     payload: CreateUserRequest,
-    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
+    actor: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
 ) -> UserResponse:
@@ -399,26 +399,26 @@ def create_user(
        (404) ou `CrossTenantError` (422), reabrindo o oráculo de enumeração.
     3. **O tenant vem do ator**, nunca do corpo — o schema sequer tem o campo.
     """
-    papel_alvo = Role.from_string(payload.role)
+    target_role = Role.from_string(payload.role)
     unit_ids = tuple(UnitId(unit_id) for unit_id in payload.unit_ids)
 
-    autorizado = guard.authorize_all(
-        ator,
-        required_permissions_for_role(papel_alvo),
-        tenant_id=ator.claims.tenant_id,
+    authorized = guard.authorize_all(
+        actor,
+        required_permissions_for_role(target_role),
+        tenant_id=actor.claims.tenant_id,
         unit_ids=unit_ids,
     )
 
-    resultado = use_case.execute(
+    result = use_case.execute(
         CreateUserCommand(
             email=Email(payload.email),
             plain_password=payload.password.get_secret_value(),
-            role=papel_alvo,
-            tenant_id=autorizado.actor_tenant_id,
+            role=target_role,
+            tenant_id=authorized.actor_tenant_id,
             unit_ids=unit_ids,
         )
     )
-    return _user_response(resultado)
+    return _user_response(result)
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +433,7 @@ def create_user(
 )
 def invite_user(
     payload: InviteUserRequest,
-    ator: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
+    actor: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
     use_case: Annotated[InviteUserUseCase, Depends(_get_invite_user)],
 ) -> UserResponse:
@@ -449,25 +449,25 @@ def invite_user(
     A resposta é o `UserResponse` de sempre: **nenhum campo de token**. O link
     existe apenas dentro do e-mail (concept §5 regra 1).
     """
-    papel_alvo = Role.from_string(payload.role)
+    target_role = Role.from_string(payload.role)
     unit_ids = tuple(UnitId(unit_id) for unit_id in payload.unit_ids)
 
-    autorizado = guard.authorize_all(
-        ator,
-        required_permissions_for_role(papel_alvo),
-        tenant_id=ator.claims.tenant_id,
+    authorized = guard.authorize_all(
+        actor,
+        required_permissions_for_role(target_role),
+        tenant_id=actor.claims.tenant_id,
         unit_ids=unit_ids,
     )
 
-    resultado = use_case.execute(
+    result = use_case.execute(
         InviteUserCommand(
             email=Email(payload.email),
-            role=papel_alvo,
-            tenant_id=autorizado.actor_tenant_id,
+            role=target_role,
+            tenant_id=authorized.actor_tenant_id,
             unit_ids=unit_ids,
         )
     )
-    return _user_response(resultado)
+    return _user_response(result)
 
 
 @router.post(
