@@ -306,8 +306,20 @@ def gh_issue_create(title: str, body: str) -> int:
 
 
 def ensure_issue(num: int, *, create_title: str | None, create_body: str | None) -> int:
-    """Garante que a issue existe; cria se solicitado. Retorna o número final."""
+    """Garante que a issue existe; cria se solicitado. Retorna o número final.
+
+    Sem `gh`, o número do nome segue sem conferência (aviso, best-effort); sem
+    número — o placeholder do `--create-issue` —, não há issue a criar nem a
+    conferir, e o script para antes de criar `<tipo>/0-<slug>` (issue #143).
+    """
     if not gh_available():
+        if num == 0:
+            _fail(
+                "sem `gh` (indisponível ou não autenticado), a issue do `--create-issue`\n"
+                "não pode ser criada, e a branch nasceria sem issue — GIT-WORKFLOW.md\n"
+                "§Princípios fundamentais #1. Instale o `gh` e rode `gh auth login`, ou\n"
+                "crie a issue à mão e passe o número no nome do branch."
+            )
         print(
             "  AVISO: `gh` indisponível ou não autenticado — não posso validar a issue\n"
             "  no GitHub. Prosseguindo (best-effort). Para ativar, instale `gh` e\n"

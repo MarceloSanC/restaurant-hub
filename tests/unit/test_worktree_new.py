@@ -56,6 +56,7 @@ def _load() -> ModuleType:
 wn = _load()
 # antes de a fixture `repo` o trocar: o teste do Docker parado usa o real
 _REAL_DOCKER_RESERVED_PORTS = wn.docker_reserved_ports
+_REAL_ENSURE_ISSUE = wn.ensure_issue  # a fixture `repo` o troca; o gate sem `gh` usa o real
 
 
 def _write_env(directory: Path, *lines: str) -> Path:
@@ -1278,6 +1279,22 @@ def test_ensure_issue_without_gh_warns_and_goes_on(
     assert "AVISO: `gh` indisponível ou não autenticado" in capsys.readouterr().err
 
 
+def test_ensure_issue_without_gh_and_without_number_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Sem `gh`, não há como criar nem conferir: `<tipo>/0-<slug>` não nasce (issue #143)."""
+    gh = _Gh(available=False).install(monkeypatch)
+
+    with pytest.raises(SystemExit) as exc:
+        wn.ensure_issue(0, create_title="feat: algo", create_body=None)
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert gh.created == []
+    err = capsys.readouterr().err
+    assert "sem `gh`" in err
+    assert "--create-issue" in err
+
+
 def test_ensure_issue_existing_issue_passes(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1624,6 +1641,26 @@ def test_main_create_issue_names_the_branch_with_the_new_number(
     out = capsys.readouterr().out
     assert f"nome final do branch: {final}" in out
     assert f"✓ Issue: #{CREATED_NUM}" in out
+
+
+def test_main_create_issue_without_gh_creates_no_worktree(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`feat/-slug --create-issue` sem `gh` sai com 1 antes do `git worktree add` (#143)."""
+    created: list[str] = []
+    monkeypatch.setattr(wn, "ensure_issue", _REAL_ENSURE_ISSUE)
+    monkeypatch.setattr(wn, "gh_available", lambda: False)
+    monkeypatch.setattr(wn, "create_worktree", lambda branch, *_a: created.append(branch))
+    flags = ["--create-issue", "--issue-title", "chore: banco", "--no-fetch", "--no-vscode"]
+    monkeypatch.setattr(sys, "argv", ["worktree-new.py", "chore/-db-url", *flags])
+
+    with pytest.raises(SystemExit) as exc:
+        wn.main()
+
+    assert exc.value.code == EXIT_VALIDATION
+    assert created == []
+    assert not repo.parent.joinpath("restaurant-hub-worktrees", "chore-0-db-url").exists()
+    assert "chore/0-db-url" not in capsys.readouterr().out
 
 
 def test_main_title_without_create_issue_is_not_passed_on(

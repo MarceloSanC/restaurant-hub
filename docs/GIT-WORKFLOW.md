@@ -547,7 +547,10 @@ O script, num único comando:
 Flags úteis (passar via `ARGS='...'`):
 
 - `--create-issue --issue-title "feat: ..."` — cria a issue antes
-  (substitui o `<num>` por placeholder `-`, ex.: `feat/-add-foo`).
+  (substitui o `<num>` por placeholder `-`, ex.: `feat/-add-foo`). Exige
+  o `gh` autenticado: sem ele, sai com 1 sem criar a worktree, em vez de
+  nascer `feat/0-add-foo` sem issue (issue #143). Com número no nome e
+  sem `gh`, o script só avisa que não conferiu a issue.
 - `--no-setup` (pula o `uv sync`) / `--no-vscode` / `--no-env` /
   `--no-port-assign` — opt-outs.
 - `--base main` — força base remota (default já cuida de hotfix).
