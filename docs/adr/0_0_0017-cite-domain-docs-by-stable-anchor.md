@@ -75,10 +75,11 @@ Configuração candidata: nenhuma · Reversível: sim (convert anchors back to n
      the paragraph or another source (`x.md`, `ADR N`, `overview`, `concept`, `technical`), no 2–4
      digit number may remain once section numbers, issue numbers, dates, versions, URLs, HTTP
      statuses and quoted text are set aside; a number right after the reference, `linha N`/`line
-     N`/`l. N`, and `<doc>.md#LN` are lines always.
+     N`/`l. N`/`ln N`, `LN` and `<doc>.md#LN` are lines always.
    - **The anchor resolves.** The chain of anchors right after the reference (separated by `,`,
      `;`, `/`, `–`, `e`/`and`, with parenthetical notes between them) must exist in the cited
-     doc, each label inside its section. Prose between two `§` ends the chain, so `workforce
+     doc, each label inside its section; a label glued to an anchor outside the ` › ` form
+     (`§3.1 > "x"`) fails instead of passing unchecked. Prose between two `§` ends the chain, so `workforce
      §3.8; as docstrings de §8` does not read the citing concept's §8 as the domain doc's.
    - Domain docs are discovered from the folder: a new one is covered without editing the gate.
      Two domain docs with the same filename make a reference ambiguous and fail closed (exit 2).
