@@ -195,7 +195,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#90](https://github.com/MarceloSanC/restaurant-hub/issues/90) | Hook `commit-msg` aceita a Stage como escopo de commit | shared | tooling | done | — |
 | [#91](https://github.com/MarceloSanC/restaurant-hub/issues/91) | `scripts/` fora do `mypy --strict` e do gate de cobertura | shared | tooling | done | — |
 | [#93](https://github.com/MarceloSanC/restaurant-hub/issues/93) | Política de fim de linha do editor — VS Code grava CRLF em arquivo novo (especulativa; disparo: aviso no uso diário ou primeiro colaborador externo) | shared | repo | open | #8 |
-| [#97](https://github.com/MarceloSanC/restaurant-hub/issues/97) | Nenhum teste trava a ligação dos validadores de docs no target `docs-check` do `Makefile` | shared | tooling + tests | open | #12 |
+| [#97](https://github.com/MarceloSanC/restaurant-hub/issues/97) | Nenhum teste trava a ligação dos validadores de docs no target `docs-check` do `Makefile` | shared | tooling + tests | done | #12 |
 | [#98](https://github.com/MarceloSanC/restaurant-hub/issues/98) | Passo 1 do RUNBOOK usa `$issue` antes de defini-la | shared | docs | open | — |
 | [#99](https://github.com/MarceloSanC/restaurant-hub/issues/99) | `make check` sem conferência de formatação e lint fora de `migrations/` | shared | tooling | done | #7 |
 | [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | done | #7 |

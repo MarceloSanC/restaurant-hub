@@ -39,11 +39,12 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.unit._makefile import recipe as _recipe
+
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PRECOMMIT_CONFIG = _REPO_ROOT / ".pre-commit-config.yaml"
-_MAKEFILE = _REPO_ROOT / "Makefile"
 
 # `uv run <ferramenta>` e `uv run ruff <subcomando>`: os tokens que identificam o
 # binário (e, no ruff, o modo). O que vem depois são flags ou os caminhos do target.
@@ -94,26 +95,6 @@ def config() -> dict[str, Any]:
 def hooks(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Os hooks de todos os repositórios, por `id` (a unicidade tem teste próprio)."""
     return {hook["id"]: hook for repo in config["repos"] for hook in repo["hooks"]}
-
-
-def _recipe(target: str) -> list[list[str]]:
-    """Os comandos da receita de `target` no Makefile, já quebrados em tokens."""
-    lines = _MAKEFILE.read_text(encoding="utf-8").splitlines()
-    header = f"{target}:"
-    if header not in lines:
-        pytest.fail(f"o Makefile não tem mais o target `{target}`")
-    # Uma segunda regra com o mesmo alvo troca a receita (o make avisa "overriding
-    # recipe" e roda a última); comparar o hook com a primeira seria cobrar a morta.
-    assert lines.count(header) == 1, (
-        f"o Makefile declara o target `{target}` {lines.count(header)} vezes"
-    )
-    commands: list[list[str]] = []
-    for line in lines[lines.index(header) + 1 :]:
-        if not line.startswith("\t"):
-            break
-        commands.append(shlex.split(line))
-    assert commands, f"o target `{target}` do Makefile não tem receita"
-    return commands
 
 
 def _hook(hooks: dict[str, dict[str, Any]], hook_id: str) -> dict[str, Any]:

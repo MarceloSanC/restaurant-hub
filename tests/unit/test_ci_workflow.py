@@ -27,6 +27,9 @@ Escopo deliberadamente estreito, nestas classes:
    uma worktree sem hook, passa.
 4. **O que o `make typecheck` confere** (issue #91): o mypy alcança todo `.py`
    versionado fora das exceções declaradas, e a configuração não o tira de volta.
+5. **O que o `make docs-check` roda** (issue #97): todo `scripts/check_*.py` é
+   validador de docs ligado no `docs-check`, salvo as exceções declaradas, cada
+   uma conferida onde diz rodar. Um validador novo que ninguém liga reprova aqui.
 
 Não testar aqui estilo, nomes de step ou coisas que qualquer leitura do diff
 pega.
@@ -44,9 +47,11 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.unit._makefile import prerequisites
+from tests.unit._makefile import recipe as _recipe
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-MAKEFILE = REPO_ROOT / "Makefile"
 
 # Cadeia real do target `check` (Makefile). O step do CI roda literalmente
 # `make check` — invariante I3 do concept da Stage 1.2: política específica de CI
@@ -206,33 +211,9 @@ _GATE_RUFF_TARGETS = {
 _RUFF_TARGETS = ("lint", "fmt-check", "fmt")
 
 
-def _makefile_lines() -> list[str]:
-    return MAKEFILE.read_text(encoding="utf-8").splitlines()
-
-
-def _recipe(target: str) -> list[list[str]]:
-    """Os comandos da receita de `target` no Makefile, já quebrados em tokens."""
-    lines = _makefile_lines()
-    header = f"{target}:"
-    # Uma segunda regra com o mesmo alvo troca a receita (o make avisa "overriding
-    # recipe" e roda a última); ler só a primeira seria cobrar a receita morta.
-    assert lines.count(header) == 1, (
-        f"o Makefile precisa declarar o target `{target}` exatamente uma vez; tem "
-        f"{lines.count(header)}"
-    )
-    commands: list[list[str]] = []
-    for line in lines[lines.index(header) + 1 :]:
-        if not line.startswith("	"):
-            break
-        commands.append(shlex.split(line))
-    assert commands, f"o target `{target}` do Makefile não tem receita"
-    return commands
-
-
 def _check_prerequisites() -> list[str]:
     """Os pré-requisitos do target `check`: a cadeia que o CI roda."""
-    [line] = [line for line in _makefile_lines() if line.startswith("check:")]
-    return line.removeprefix("check:").split()
+    return prerequisites("check")
 
 
 def _versioned_python_files() -> list[str]:
@@ -573,4 +554,134 @@ def test_test_gate_pytest_passes_only_measurement_flags() -> None:
     assert unexpected == [], (
         f"o pytest do `make test-gate` passa {unexpected}: flag que muda o limiar ou a "
         f"configuração da cobertura muda o veredito do gate"
+    )
+
+
+# ---------------------------------------------------------------------------
+# O que o `make docs-check` roda (issue #97)
+#
+# Cada validador de docs tem teste unitário próprio, mas o teste do script não
+# vê o Makefile: apagar a linha dele do `docs-check` deixava a suíte verde e o
+# gate inerte — definido, testado, nunca chamado no `make check` nem no CI.
+# ---------------------------------------------------------------------------
+
+_SCRIPTS = REPO_ROOT / "scripts"
+
+# Os `scripts/check_*.py` que NÃO são validador de docs, cada um com o lugar onde
+# roda. Fora destas exceções, todo `check_*.py` é validador de docs e precisa
+# estar no `docs-check`: o conjunto esperado é derivado da pasta, e o teste não
+# muda a cada validador novo. Exceção nova é decisão, editando o teste.
+#
+# - `check_layout.py` e `check_dead_shared.py` validam o código de `src/`, não
+#   docs: rodam no `layout-check`, que também está na cadeia do `check`.
+_IN_OTHER_TARGET = {
+    "check_layout.py": "layout-check",
+    "check_dead_shared.py": "layout-check",
+}
+# - `check_commit_msg.py` lê a mensagem do commit: é o hook `commit-msg`, e o
+#   `make check` não tem mensagem a validar.
+# - `check_mutation_run.py` lê o resumo de uma corrida do mutmut, que só existe
+#   no job noturno do `audit-gate.yml`.
+_OUTSIDE_MAKE = {
+    "check_commit_msg.py": ".pre-commit-config.yaml",
+    "check_mutation_run.py": ".github/workflows/audit-gate.yml",
+}
+
+# `uv run python scripts/<validador>.py`, sem argumento: argumento ou operador de
+# shell na receita (`|| true`, `; exit 0`) muda o que o validador confere ou o
+# veredito do target.
+_PYTHON_SCRIPT_PREFIX = ["uv", "run", "python"]
+
+
+def _check_scripts() -> set[str]:
+    return {path.name for path in _SCRIPTS.glob("check_*.py")}
+
+
+def _docs_validators() -> set[str]:
+    return _check_scripts() - set(_IN_OTHER_TARGET) - set(_OUTSIDE_MAKE)
+
+
+def _scripts_run_by(target: str) -> list[str]:
+    """Os scripts que a receita de `target` roda, conferindo a forma do comando."""
+    scripts: list[str] = []
+    for command in _recipe(target):
+        *prefix, path = command
+        assert prefix == _PYTHON_SCRIPT_PREFIX, (
+            f"o `make {target}` roda `{shlex.join(command)}`; cada linha precisa ser "
+            f"`uv run python scripts/<validador>.py`, sem argumento nem operador de shell"
+        )
+        assert path.startswith("scripts/"), f"o `make {target}` roda {path}, fora de scripts/"
+        scripts.append(path.removeprefix("scripts/"))
+    return scripts
+
+
+@pytest.mark.unit
+def test_check_depends_on_docs_check() -> None:
+    """O `check` roda o `docs-check`: fora da cadeia, nenhum validador de docs roda no CI."""
+    assert "docs-check" in _check_prerequisites(), (
+        "o `make check` não roda o `docs-check`: o CI roda `make check` literalmente, e "
+        "os validadores de docs deixam de ser conferidos no runner (issue #97)"
+    )
+
+
+@pytest.mark.unit
+def test_docs_check_runs_every_docs_validator() -> None:
+    """O `docs-check` roda exatamente os validadores de docs de `scripts/`.
+
+    O esperado é derivado da pasta (`scripts/check_*.py` menos as exceções), e a
+    comparação é de conjunto: tirar uma linha do `docs-check` reprova, um
+    `check_*.py` novo sem linha reprova, e uma linha que aponta para script que
+    não existe (renomeado, apagado) também.
+    """
+    expected = _docs_validators()
+    assert expected, "nenhum validador de docs em scripts/: o teste não teria o que cobrar"
+    run = _scripts_run_by("docs-check")
+    repeated = sorted({script for script in run if run.count(script) > 1})
+    assert repeated == [], f"o `make docs-check` roda {repeated} mais de uma vez"
+    missing = sorted(expected - set(run))
+    assert missing == [], (
+        f"o `make docs-check` não roda {missing}: validador fora do target é gate inerte "
+        f"— testado e nunca chamado no `make check` nem no CI. Ligue-o no `docs-check` "
+        f"ou declare a exceção em `_IN_OTHER_TARGET`/`_OUTSIDE_MAKE` (issue #97)"
+    )
+    unexpected = sorted(set(run) - expected)
+    assert unexpected == [], (
+        f"o `make docs-check` roda {unexpected}, que não são validadores de docs em "
+        f"scripts/ (script inexistente ou declarado como exceção)"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("script", sorted(_IN_OTHER_TARGET))
+def test_non_docs_validator_runs_in_its_declared_target(script: str) -> None:
+    """A exceção de Makefile roda no target que declara, e o target está no `check`."""
+    assert script in _check_scripts(), f"exceção obsoleta: scripts/{script} não existe"
+    target = _IN_OTHER_TARGET[script]
+    assert target in _check_prerequisites(), (
+        f"o `make check` não roda o `{target}`, onde `{script}` diz rodar"
+    )
+    assert script in _scripts_run_by(target), (
+        f"`{script}` está fora do `docs-check` por rodar no `{target}`, e não roda lá"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("script", sorted(_OUTSIDE_MAKE))
+def test_non_docs_validator_runs_where_declared_outside_make(script: str) -> None:
+    """A exceção fora do Makefile é chamada no arquivo que declara.
+
+    Conta só a linha que invoca o script (`python scripts/<x>.py`) fora de
+    comentário YAML: o `audit-gate.yml` cita `scripts/check_mutation_run.py` num
+    comentário, e a simples menção deixava o teste verde com a chamada apagada.
+    """
+    assert script in _check_scripts(), f"exceção obsoleta: scripts/{script} não existe"
+    where = REPO_ROOT / _OUTSIDE_MAKE[script]
+    invocations = [
+        line
+        for line in where.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#") and f"python scripts/{script}" in line
+    ]
+    assert invocations, (
+        f"`{script}` está fora do `docs-check` por rodar em {_OUTSIDE_MAKE[script]}, e "
+        f"esse arquivo não o chama"
     )
