@@ -36,7 +36,11 @@ Stage `done` (issue #37).
 8. Nenhuma "Lacuna para o concept da Stage N.M" fica aberta com uma Stage listada
    (`N.M`, `N.M/P.Q`) `done` na Tabela de Stages do roadmap. Lacuna fechada se
    reescreve no lugar ("Lacuna fechada pela Stage N.M (fonte)"); a parte que sobra
-   para outra Stage se reendereça a ela.
+   para outra Stage se reendereça a ela. A mesma regra vale para a **linha de tabela de
+   lacunas** cuja primeira célula é a Stage dona em negrito (`| **4.3** |`,
+   `| **4.3 / 4.4** |`, `| **4.1 (technical)** |`): cada Stage `done` da célula exige,
+   na mesma linha, "fechada pela Stage N.M" (ou "fechada pelas Stages N.M e P.Q");
+   a parte que sobra fica dita na linha ou a célula é reendereçada (issue #117).
 
 **Sem válvula.** Até a issue #116 o `shift-scheduling.md` tinha uma exceção à
 regra 7 (`VALVULA_REFERENCES`, ADR 0.0.0015 §Decision 5): 16 ADRs linkados fora do
@@ -80,6 +84,17 @@ _CERCA = re.compile(r"^\s*(```|~~~)")
 _LACUNA = re.compile(
     r"lacuna para o concept da stages? (\d+\.\d+(?:\s*/\s*\d+\.\d+)*)", re.IGNORECASE
 )
+# Linha de tabela de lacunas: 1ª célula abre com a(s) Stage(s) dona(s) em negrito, com
+# nota opcional entre parênteses dentro do negrito e texto livre depois dele —
+# `| **4.3 / 4.4** |`, `| **4.1 (technical)** |`, `| **4.4** (reendereçada da 4.1) |`.
+# Só o que está no negrito é Stage dona: a origem de um reendereçamento fica fora dele.
+_LINHA_LACUNA = re.compile(
+    r"^\s*\|\s*\*\*\s*(\d+\.\d+(?:\s*/\s*\d+\.\d+)*)(?:\s*\([^)|]*\))?\s*\*\*[^|]*\|"
+)
+_FECHADA = re.compile(
+    r"fechada pelas? stages? (\d+\.\d+(?:\s*(?:/|,|\be\b)\s*\d+\.\d+)*)", re.IGNORECASE
+)
+_NUMERO_STAGE = re.compile(r"\d+\.\d+")
 _LINHA_STAGE = re.compile(r"^\|\s*`(\d+\.\d+)-[^`]+`\s*\|")
 
 
@@ -255,7 +270,25 @@ def _lacunas(rel: str, fm: Frontmatter, feitas: set[str]) -> list[str]:
                     f" mas {', '.join(fechadas)} já está done — feche-a no lugar"
                     " ou reenderece o que sobrou"
                 )
+        saida.extend(_linha_de_tabela(rel, fm.linha_corpo + i, texto_linha, feitas))
     return saida
+
+
+def _linha_de_tabela(rel: str, linha: int, texto: str, feitas: set[str]) -> list[str]:
+    """Regra 8 na tabela de lacunas: Stage dona `done` sem "fechada pela Stage N.M" na linha."""
+    m = _LINHA_LACUNA.match(texto)
+    if m is None:
+        return []
+    donas = _NUMERO_STAGE.findall(m.group(1))
+    fechadas = {s for f in _FECHADA.finditer(texto) for s in _NUMERO_STAGE.findall(f.group(1))}
+    pendentes = [s for s in donas if s in feitas and s not in fechadas]
+    if not pendentes:
+        return []
+    return [
+        f"{rel}:{linha}: linha da tabela de lacunas da Stage {m.group(1)} sem"
+        f' "fechada pela Stage {", ".join(pendentes)}", mas já está done — feche-a no lugar'
+        " ou reenderece a Stage dona"
+    ]
 
 
 def problemas_dominio(repo_root: Path, feitas: set[str]) -> list[str]:
