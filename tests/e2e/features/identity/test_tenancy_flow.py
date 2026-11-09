@@ -6,6 +6,7 @@ O `platform_admin` provisiona o restaurante e o seu primeiro `owner`; o `owner`
 opera dali em diante.
 """
 
+import logging
 from http import HTTPStatus
 
 import pytest
@@ -236,22 +237,30 @@ async def test_dono_provisionado_opera_o_proprio_restaurante_e_so_ele(
 
 
 @pytest.mark.parametrize("rota", ["provisionamento", "rota-de-owner"])
-async def test_senha_enviada_pela_plataforma_nao_abre_a_conta_do_dono(
+async def test_senha_enviada_pela_plataforma_nao_abre_a_conta_do_dono(  # noqa: PLR0913 — as fixtures do cenário, o log e o eixo da rota
     client: AsyncClient,
     admin_semeado: User,
     caixa_de_entrada: RecordingEmailSender,
     engine: Engine,
+    caplog: pytest.LogCaptureFixture,
     rota: str,
 ) -> None:
     """O critério de aceite da #114, pelo entrypoint real e contra o banco real.
 
     O admin manda uma senha no corpo, como um cliente antigo faria. Ela é
-    descartada: o login com ela é 401, nada dela chega ao banco nem ao e-mail, e
-    a conta só abre depois que o próprio dono define a senha pelo link do convite.
+    descartada: o login com ela é 401, nada dela chega ao banco, ao e-mail nem ao
+    log da requisição, e a conta só abre depois que o próprio dono define a senha
+    pelo link do convite.
     """
     admin = await fazer_login(client, admin_semeado.email.value)
     senha_da_plataforma = "senha-escolhida-pela-plataforma"
     email = "dono-convidado@x.com"
+    # DEBUG no root e no `sqlalchemy.engine` — que o boot fixa em WARNING
+    # (`configure_logging`) e que, aberto, registra os parâmetros de cada
+    # statement: uma senha que chegasse ao banco apareceria no log.
+    caplog.clear()
+    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG, logger="sqlalchemy.engine")
     if rota == "provisionamento":
         corpo = corpo_tenant("Cantina", email)
         corpo["owner"]["password"] = senha_da_plataforma
@@ -270,6 +279,11 @@ async def test_senha_enviada_pela_plataforma_nao_abre_a_conta_do_dono(
             headers=auth(admin),
         )
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
+    # Antes do login abaixo, que manda a senha de propósito pela rota pública. O
+    # e-mail no log prova que a captura vê os parâmetros do INSERT — sem ele, a
+    # ausência da senha seria verdade vazia.
+    assert email in caplog.text
+    assert senha_da_plataforma not in caplog.text
 
     com_a_senha_da_plataforma = await client.post(
         f"{API}/auth/login", json={"email": email, "password": senha_da_plataforma}
