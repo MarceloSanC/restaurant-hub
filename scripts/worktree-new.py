@@ -42,8 +42,8 @@ Convenções respeitadas:
     - Formato `<tipo>/<num-issue>-<slug>` ou Stage
       `<tipo>/<num-issue>-<N-M>-<slug>` — CONVENTIONS.md §4.
     - Base remota: `develop` (feat/fix/refactor/...) ou `main` (hotfix).
-    - Toda branch nasce numa worktree criada por este script; até duas
-      em execução, sem conflito; o checkout principal fica livre em
+    - Toda branch nasce numa worktree criada por este script; sem teto
+      de quantidade, só sem conflito; o checkout principal fica livre em
       `develop` (o hook `.claude/hooks/git_guard.py` recusa
       `git checkout -b` e `git worktree add` nele). Ver GIT-WORKFLOW.md
       §"Branches em execução".

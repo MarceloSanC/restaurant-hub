@@ -28,9 +28,10 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
 4. **GitHub CLI (`gh`) preferencial**: usar quando disponível. Fallback para `git` puro se necessário.
 5. **Sem deploy manual**: produção só via merge em `main`. Dev só via merge em `develop`. SSH em prod é proibido.
 6. **Merge commit preserva história**: NUNCA squash, NUNCA rebase no merge. Branches trazem toda sua contexto.
-7. **Até duas branches em execução, cada uma na sua worktree**: no
-   máximo **duas** branches ainda sem PR aberto ao mesmo tempo, e só se
-   **não conflitam** (critérios em §"Branches em execução"). **Toda**
+7. **Branches em paralelo só sem conflito, cada uma na sua worktree**:
+   não há teto de branches em execução; uma branch nova só começa se
+   **não conflita** com nenhuma em execução ou em review (critérios em
+   §"Branches em execução"). **Toda**
    implementação roda numa worktree própria criada por
    `scripts/worktree-new.py`; o **checkout principal fica sempre em
    `develop`, limpo** — nunca se cria nem se troca de branch nele (o hook
@@ -461,12 +462,13 @@ Quando a equipe decide promover `develop` para `main`:
 
 ## Branches em execução
 
-**Regra (Princípios fundamentais #7):** até **duas** branches em
-execução (ainda sem PR aberto), **cada uma na sua worktree**, e o
-checkout principal sempre livre em `develop`. Branch com PR aberto
-aguardando review não conta no teto de duas, mas continua contando no
-critério de conflito abaixo. O limite existe porque paralelismo sem
-isolamento costuma:
+**Regra (Princípios fundamentais #7):** branches em execução sem teto
+de quantidade, **cada uma na sua worktree**, e o checkout principal
+sempre livre em `develop`. O que bloqueia uma branch nova é **conflito
+direto** com outra em execução ou com PR aberto aguardando review
+(critérios abaixo) — não a contagem (decisão do sponsor na issue #65,
+2026-10-19, que removeu o teto anterior). A regra existe porque
+paralelismo sem isolamento costuma:
 
 - misturar commits dos escopos via working tree não-limpo
   (`git stash` muitas vezes vira `git stash drop` errado);
@@ -474,8 +476,8 @@ isolamento costuma:
 - esconder progresso real — branch antiga vai ficando esquecida
   enquanto a "urgente" cresce e nunca volta.
 
-A worktree resolve o primeiro; o teto de duas e o critério de conflito
-resolvem os outros dois.
+A worktree resolve o primeiro; o critério de conflito resolve os
+outros dois.
 
 **Orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md),
 [`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)):
@@ -486,7 +488,8 @@ outra é removida pelo auditor, e só se não conflitar com as em voo
 (critérios abaixo). A branch de docs de processo do próprio orquestrador
 não conta.
 
-**Duas branches só voam juntas se não conflitam** — todas as condições:
+**Duas branches só voam juntas se não conflitam** — todas as condições,
+conferidas contra **cada** branch em execução ou em review:
 
 - nenhuma depende da outra (roadmap "Depende de", issue, ou uma consome
   contrato que a outra cria);
@@ -494,7 +497,11 @@ não conta.
   disjuntos;
 - nenhuma das duas mexe em ponto compartilhado: port/contrato público,
   schema persistido ou migration Alembic, `.importlinter`,
-  `pyproject.toml`/`uv.lock`, `composition_root.py`.
+  `pyproject.toml`/`uv.lock`, `composition_root.py`;
+- não disputam o mesmo Postgres: worktree que roda a integração contra o
+  banco do checkout principal (sem banco próprio — §"Banco e containers da
+  worktree") conflita com qualquer outra que faça o mesmo, porque a
+  fixture `engine` recria o schema e derruba a suíte da outra.
 
 A exceção é a tabela de issues/Stages do `docs/roadmap.md`, que quase
 toda branch toca: o conflito de linha se resolve no rebase antes do push
@@ -910,7 +917,7 @@ Exemplo de feedback construtivo:
 - Push de branch com carona de outro escopo: `git log origin/<base>..HEAD` mostra commits que não pertencem ao escopo declarado do branch (ver Etapa 4)
 - Mensagem de commit fora do padrão Conventional Commits **em português** (descrição em PT, escopo em snake/kebab ASCII) ou sem `Refs #<num-issue>` no rodapé quando há issue associada
 - Nome de branch **fora de inglês ASCII kebab-case** (ex.: `feat/42-adicionar-login` ou `feat/42-Add-Login` — deve ser `feat/42-add-google-login`; ver §Princípios fundamentais #3 e [`./CONVENTIONS.md`](./CONVENTIONS.md) §1)
-- Branch criada ou trocada **no checkout principal**, terceira branch em execução, ou duas branches em execução que **conflitam** (critérios em §"Branches em execução"). Exceções: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em execução" → §Quando precisar trocar de escopo no meio); na orquestração autônoma (ADR 0.0.0008) o teto é de **três** worktrees de implementação, contando as com PR aberto — bloqueia a **quarta**
+- Branch criada ou trocada **no checkout principal**, ou branch nova que **conflita** com uma em execução ou em review (critérios em §"Branches em execução"). Exceções: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em execução" → §Quando precisar trocar de escopo no meio); na orquestração autônoma (ADR 0.0.0008) o teto é de **três** worktrees de implementação, contando as com PR aberto — bloqueia a **quarta**
 - Body de commit de Task sem bullets, ou commit agrupando vários escopos diferentes (deve quebrar em commits separados por escopo mínimo)
 - Iniciar uma Stage (criar branch da Stage, pasta `docs/stages/N.M-<slug>/`, ou rodar prompt da Fase 3A) **sem que a issue correspondente já exista** no backlog do GitHub. Verificação: `gh issue view <num>` deve retornar a issue. Issue-first é Princípio fundamental #1; sem issue verificável, parar e criar a issue primeiro (ver [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passo 1 + `scripts/check_stage_issue.py` em `make docs-check`)
 
