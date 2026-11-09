@@ -193,7 +193,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#86](https://github.com/MarceloSanC/restaurant-hub/issues/86) | `migrations/env.py` ignora a `sqlalchemy.url` passada pelo chamador | shared | migrations + tests | done | #58 |
 | [#87](https://github.com/MarceloSanC/restaurant-hub/issues/87) | Mutação noturna morre na coleta — `.claude/` fora do `also_copy` | shared | tooling + ci | done | — |
 | [#90](https://github.com/MarceloSanC/restaurant-hub/issues/90) | Hook `commit-msg` aceita a Stage como escopo de commit | shared | tooling | done | — |
-| [#91](https://github.com/MarceloSanC/restaurant-hub/issues/91) | `scripts/` fora do `mypy --strict` e do gate de cobertura | shared | tooling | open | — |
+| [#91](https://github.com/MarceloSanC/restaurant-hub/issues/91) | `scripts/` fora do `mypy --strict` e do gate de cobertura | shared | tooling | done | — |
 | [#93](https://github.com/MarceloSanC/restaurant-hub/issues/93) | Política de fim de linha do editor — VS Code grava CRLF em arquivo novo (especulativa; disparo: aviso no uso diário ou primeiro colaborador externo) | shared | repo | open | #8 |
 | [#97](https://github.com/MarceloSanC/restaurant-hub/issues/97) | Nenhum teste trava a ligação dos validadores de docs no target `docs-check` do `Makefile` | shared | tooling + tests | open | #12 |
 | [#98](https://github.com/MarceloSanC/restaurant-hub/issues/98) | Passo 1 do RUNBOOK usa `$issue` antes de defini-la | shared | docs | open | — |
