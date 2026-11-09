@@ -92,13 +92,13 @@ HTTP_UNPROCESSABLE: Final = 422
 # e ainda revelaria qual tenant é dono do recurso.
 #
 # A mensagem específica não se perde: ela continua na exceção, e o handler a
-# grava no log do servidor (`_registrar_causa_suprimida`), onde é diagnóstico e
+# grava no log do servidor (`_log_suppressed_cause`), onde é diagnóstico e
 # não oráculo.
-_CORPO_401: Final = {"detail": "não autenticado", "type": "unauthorized"}
-_CORPO_403: Final = {"detail": "acesso negado", "type": "forbidden"}
+_BODY_401: Final = {"detail": "não autenticado", "type": "unauthorized"}
+_BODY_403: Final = {"detail": "acesso negado", "type": "forbidden"}
 
 # RFC 6750 §3 — resposta 401 de recurso protegido por Bearer anuncia o esquema.
-_CABECALHOS_401: Final = {"WWW-Authenticate": "Bearer"}
+_HEADERS_401: Final = {"WWW-Authenticate": "Bearer"}
 
 IDENTITY_ERROR_STATUS: Final[dict[type[IdentityFailure], int]] = {
     # 401 — quem você é não foi estabelecido.
@@ -161,23 +161,23 @@ def resolve_status(exc: IdentityFailure) -> int:
     herança existe só para que um erro não classificado degrade para algo
     sensato em produção em vez de virar 500.
     """
-    for classe in type(exc).__mro__:
-        status = IDENTITY_ERROR_STATUS.get(classe)
+    for exc_type in type(exc).__mro__:
+        status = IDENTITY_ERROR_STATUS.get(exc_type)
         if status is not None:
             return status
     return HTTP_UNPROCESSABLE
 
 
 # Faixas cujo corpo esconde a causa — e por isso são as que a registram no log.
-_FAIXAS_SUPRIMIDAS: Final = frozenset({HTTP_UNAUTHORIZED, HTTP_FORBIDDEN})
+_SUPPRESSED_STATUSES: Final = frozenset({HTTP_UNAUTHORIZED, HTTP_FORBIDDEN})
 
 # Teto da cadeia de causas percorrida. As cadeias reais têm até dois elos
 # (`UnitNotVisibleError` <- `UnitNotFoundError`); o teto só impede que uma
 # cadeia patológica transforme uma linha de log em um laço.
-_ELOS_MAXIMOS: Final = 5
+_MAX_LINKS: Final = 5
 
 
-def _neutralizar(texto: str) -> str:
+def _neutralize(text: str) -> str:
     """Escapa caractere não imprimível — CR/LF incluídos — antes de ir ao log.
 
     As mensagens deste BC já interpolam valores com `!r`, mas a garantia contra
@@ -185,32 +185,32 @@ def _neutralizar(texto: str) -> str:
     lembrar disso.
     """
     return "".join(
-        c if c.isprintable() else c.encode("unicode_escape").decode("ascii") for c in texto
+        c if c.isprintable() else c.encode("unicode_escape").decode("ascii") for c in text
     )
 
 
-def _neutralizar_campo(texto: str) -> str:
-    """`_neutralizar` e também o espaço, que é o delimitador dos campos da linha.
+def _neutralize_field(text: str) -> str:
+    """`_neutralize` e também o espaço, que é o delimitador dos campos da linha.
 
     Vale para o que o cliente controla e vem **antes** de `ator=`/`causa=` na
     mensagem — método e path. O path chega decodificado (`%20` vira espaço), e
     sem isto `/x ator=vitima causa=Forjada` atribuiria a linha a outro ator. Os
-    demais espaços em branco já não são imprimíveis e saem por `_neutralizar`.
+    demais espaços em branco já não são imprimíveis e saem por `_neutralize`.
     """
-    return _neutralizar(texto).replace(" ", "\\x20")
+    return _neutralize(text).replace(" ", "\\x20")
 
 
-def _nome_da_classe(exc: BaseException) -> str:
+def _class_name(exc: BaseException) -> str:
     """Nome da classe — qualificado pelo módulo, salvo para as `builtins`."""
-    classe = type(exc)
-    if classe.__module__ == "builtins":
-        return classe.__qualname__
+    exc_type = type(exc)
+    if exc_type.__module__ == "builtins":
+        return exc_type.__qualname__
     if isinstance(exc, IdentityError | IdentityApplicationError):
-        return classe.__name__
-    return f"{classe.__module__}.{classe.__qualname__}"
+        return exc_type.__name__
+    return f"{exc_type.__module__}.{exc_type.__qualname__}"
 
 
-def _proximo_elo(exc: BaseException) -> BaseException | None:
+def _next_link(exc: BaseException) -> BaseException | None:
     """A causa explícita (`from`), ou o contexto implícito se não foi suprimido."""
     if exc.__cause__ is not None:
         return exc.__cause__
@@ -238,17 +238,17 @@ def describe_suppressed_cause(exc: IdentityFailure) -> str:
     `InvalidSetupTokenError` se recusa a interpolar, iria ao log de uma rota
     pública. O nome da classe já separa "expirado" de "assinatura inválida".
     """
-    elos = [f"{_nome_da_classe(exc)}: {exc}"]
-    vistos = {id(exc)}
-    atual = _proximo_elo(exc)
-    while atual is not None and id(atual) not in vistos and len(elos) < _ELOS_MAXIMOS:
-        vistos.add(id(atual))
-        elos.append(_nome_da_classe(atual))
-        atual = _proximo_elo(atual)
-    return _neutralizar(" <- ".join(elos))
+    links = [f"{_class_name(exc)}: {exc}"]
+    seen = {id(exc)}
+    current = _next_link(exc)
+    while current is not None and id(current) not in seen and len(links) < _MAX_LINKS:
+        seen.add(id(current))
+        links.append(_class_name(current))
+        current = _next_link(current)
+    return _neutralize(" <- ".join(links))
 
 
-def _registrar_causa_suprimida(request: Request, exc: IdentityFailure, status: int) -> None:
+def _log_suppressed_cause(request: Request, exc: IdentityFailure, status: int) -> None:
     """Grava a causa de um 401/403 — o que o corpo constante não diz ao cliente.
 
     Fica **de fora**: o token, o header `Authorization`, a senha, o e-mail do
@@ -256,28 +256,28 @@ def _registrar_causa_suprimida(request: Request, exc: IdentityFailure, status: i
     sujeito do token **já verificado** (`authenticated_actor_id`), e falta nos
     401 que nascem antes da verificação.
     """
-    ator = authenticated_actor_id(request)
+    actor = authenticated_actor_id(request)
     # O path concreto, e não o molde da rota: o molde que o FastAPI expõe em
     # `scope["route"]` muda de forma entre versões (sem o prefixo do
     # `include_router` na 0.139), e o path diz **qual** recurso foi sondado. Ele
     # não carrega credencial — nenhuma rota leva token no path; o de definição
     # de senha viaja no corpo — e chega neutralizado.
-    rota = _neutralizar_campo(request.url.path)
-    metodo = _neutralizar_campo(request.method)
-    causa = describe_suppressed_cause(exc)
+    route = _neutralize_field(request.url.path)
+    method = _neutralize_field(request.method)
+    cause = describe_suppressed_cause(exc)
     _log.warning(
         "resposta %d com causa suprimida: %s %s ator=%s causa=%s",
         status,
-        metodo,
-        rota,
-        ator if ator is not None else "-",
-        causa,
+        method,
+        route,
+        actor if actor is not None else "-",
+        cause,
         extra={
             "auth_status": status,
-            "auth_method": metodo,
-            "auth_route": rota,
-            "auth_actor": ator,
-            "auth_cause": causa,
+            "auth_method": method,
+            "auth_route": route,
+            "auth_actor": actor,
+            "auth_cause": cause,
         },
     )
 
@@ -287,9 +287,9 @@ def build_error_response(exc: IdentityFailure) -> JSONResponse:
     status = resolve_status(exc)
 
     if status == HTTP_UNAUTHORIZED:
-        return JSONResponse(status_code=status, content=_CORPO_401, headers=_CABECALHOS_401)
+        return JSONResponse(status_code=status, content=_BODY_401, headers=_HEADERS_401)
     if status == HTTP_FORBIDDEN:
-        return JSONResponse(status_code=status, content=_CORPO_403)
+        return JSONResponse(status_code=status, content=_BODY_403)
 
     # 404, 409 e 422 mantêm `str(exc)`: a mensagem descreve um recurso que o
     # próprio cliente nomeou ou uma invariante que o payload dele violou, e as
@@ -315,6 +315,6 @@ def register_identity_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(IdentityError)
     async def identity_error_handler(request: Request, exc: IdentityFailure) -> JSONResponse:
         status = resolve_status(exc)
-        if status in _FAIXAS_SUPRIMIDAS:
-            _registrar_causa_suprimida(request, exc, status)
+        if status in _SUPPRESSED_STATUSES:
+            _log_suppressed_cause(request, exc, status)
         return build_error_response(exc)
