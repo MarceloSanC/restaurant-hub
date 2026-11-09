@@ -40,6 +40,9 @@ from tests.fakes.shared.recording_email_sender import (
 pytestmark = pytest.mark.e2e
 
 _SENHA_DO_FUNCIONARIO = "senha-escolhida-pela-pessoa"
+# O dono que o cenário provisiona: o convite dele é o primeiro e-mail da caixa
+# (ADR 0.0.0018).
+_DONO = "dono@cantina.com"
 _TABELAS_DE_STAFF = (
     "job_functions",
     "employees",
@@ -209,8 +212,8 @@ async def test_ca22_canal_email_do_convite_ao_login_do_funcionario(
     assert corpo["employee"]["id"] == employee_id
     user_id = corpo["employee"]["user_id"]
     assert user_id
-    assert len(caixa_de_entrada.sent) == 1
-    assert caixa_de_entrada.sent[0].to == "maria@cantina.com"
+    # O primeiro é o convite do dono, que o cenário provisionou (ADR 0.0.0018).
+    assert [m.to for m in caixa_de_entrada.sent] == [_DONO, "maria@cantina.com"]
 
     token = _token_de(_link_do_ultimo_email(caixa_de_entrada))
     await _definir_senha(client, token)
@@ -247,7 +250,7 @@ async def test_ca23_canal_link_devolve_o_link_e_nao_envia_email(
         client, cabecalho, cenario.unidade_a, employee_id, email="joao@cantina.com", delivery="link"
     )
 
-    assert caixa_de_entrada.sent == ()
+    assert [m.to for m in caixa_de_entrada.sent] == [_DONO]
     link = corpo["setup_link"]
     assert link and "definir-senha?token=" in link
     assert link.startswith("http://localhost:8000/")  # `app_base_url` default
@@ -441,7 +444,7 @@ async def test_ca25_segundo_login_para_o_mesmo_registro_e_409_ja_vinculado(
         assert segundo.status_code == HTTPStatus.CONFLICT, segundo.text
         assert segundo.json()["type"] == "staff_error"
         assert "já tem login vinculado" in segundo.json()["detail"]
-    assert len(caixa_de_entrada.sent) == 0
+    assert [m.to for m in caixa_de_entrada.sent] == [_DONO]
 
 
 async def test_ca25_email_do_gerente_e_409_em_uso_com_o_email_no_detail(
@@ -461,7 +464,7 @@ async def test_ca25_email_do_gerente_e_409_em_uso_com_o_email_no_detail(
         "detail": "e-mail já usado como login: 'gerente@cantina.com'",
         "type": "staff_error",
     }
-    assert caixa_de_entrada.sent == ()
+    assert [m.to for m in caixa_de_entrada.sent] == [_DONO]
     registro = await _registro(client, cabecalho, cenario.unidade_a, employee_id)
     assert registro["user_id"] is None
 
@@ -536,12 +539,6 @@ async def test_ca26_a_copia_de_um_vinculado_nasce_sem_login(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "caixa_de_entrada",
-    [RecordingEmailSender(fail_with=EmailSenderFailure("smtp fora"))],
-    indirect=True,
-    ids=["smtp-fora"],
-)
 async def test_ca30_falha_do_envio_e_500_e_o_vinculo_ja_esta_gravado(
     client_500: AsyncClient, cenario: Cenario, caixa_de_entrada: RecordingEmailSender
 ) -> None:
@@ -549,7 +546,12 @@ async def test_ca30_falha_do_envio_e_500_e_o_vinculo_ja_esta_gravado(
 
     O caminho de recuperação é o pedido público de redefinição de senha — não um
     segundo R17, que responde 409 (ADR 3.5.0002 §4).
+
+    A caixa quebra **depois** do cenário: o provisionamento do dono também manda
+    e-mail (ADR 0.0.0018), e uma caixa quebrada desde o início derrubaria o
+    cenário antes de chegar ao que este teste mede.
     """
+    caixa_de_entrada.start_failing(EmailSenderFailure("smtp fora"))
     cabecalho = auth(cenario.manager)
     employee_id = await _criar_funcionario(client_500, cabecalho, cenario.unidade_a, "Iara")
 

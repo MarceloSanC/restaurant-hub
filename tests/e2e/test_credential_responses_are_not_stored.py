@@ -67,6 +67,7 @@ from tests.e2e.features.identity.conftest import (
     auth,
     corpo_tenant,
     fazer_login,
+    login_do_dono,
 )
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
@@ -174,7 +175,9 @@ async def _criar(client: AsyncClient, caminho: str, corpo: dict[str, Any], token
 
 
 @pytest.fixture
-async def cenario(client: AsyncClient, admin_semeado: User) -> Cenario:
+async def cenario(
+    client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
+) -> Cenario:
     """A cadeia inteira pela API: admin → restaurante → owner → unidade → funcionários.
 
     O `owner` faz R17 porque detém `manage_staff` e `manage_users` e enxerga toda
@@ -185,7 +188,7 @@ async def cenario(client: AsyncClient, admin_semeado: User) -> Cenario:
     restaurante = await _criar(
         client, "/restaurants", corpo_tenant("Cantina sem cache", "dono-no-store@x.com"), admin
     )
-    owner = await fazer_login(client, "dono-no-store@x.com")
+    owner = await login_do_dono(client, caixa_de_entrada, "dono-no-store@x.com")
     unidade = await _criar(client, f"/restaurants/{restaurante}/units", {"name": "Centro"}, owner)
     funcao = await _criar(client, "/job-functions", {"name": "Cozinha"}, owner)
 
@@ -257,7 +260,11 @@ async def test_r17_no_canal_email_tambem_responde_sem_cache(
 
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
     assert resposta.json()["setup_link"] is None
-    assert len(caixa_de_entrada.sent) == 1
+    # O primeiro é o convite do dono, que o cenário provisionou (ADR 0.0.0018).
+    assert [m.to for m in caixa_de_entrada.sent] == [
+        "dono-no-store@x.com",
+        "bruno-no-store@x.com",
+    ]
     assert _cabecalhos_que_faltam(resposta) == []
 
 

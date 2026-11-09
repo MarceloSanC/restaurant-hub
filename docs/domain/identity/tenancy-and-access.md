@@ -15,6 +15,7 @@ references:
   - ../../adr/0_0_0005-tenant-comes-from-the-token-unless-it-is-the-resource.md
   - ../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md
   - ../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md
+  - ../../adr/0_0_0018-restaurant-owner-is-provisioned-by-invitation.md
   - ../../adr/2_1_0001-identity-aggregates-and-membership.md
   - ../../adr/2_1_0002-platform-admin-without-tenant.md
   - ../../adr/2_2_0001-revocable-refresh-session-port.md
@@ -351,9 +352,14 @@ id nem papel do dono) — fechar isso exigiria rever a unicidade global (idem, �
   pendente (§3.7), pela composição de §3.4. O **login de funcionário** é criado a partir do
   registro de staff, sempre como conta pendente de papel `employee`
   ([ADR 3.5.0002](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) §1).
-- **O dono provisionado recebe senha, não convite** — a forma da credencial que a rota de
-  plataforma já tinha ([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md)
-  §5). Que a plataforma conheça a senha inicial do dono é lacuna aberta (issue #114; §5).
+- **O dono provisionado é convidado, não recebe senha.** Nas duas rotas de plataforma o dono nasce
+  como conta pendente (§3.7) e recebe o link de definição de senha por e-mail, enviado depois de a
+  unidade comitar; nenhum corpo leva senha, e a plataforma nunca escolhe, conhece ou transporta a
+  credencial do dono do tenant. Falha de envio propaga com o tenant comitado, e a recuperação é a
+  redefinição pública
+  ([ADR 0.0.0018](../../adr/0_0_0018-restaurant-owner-is-provisioned-by-invitation.md) §1–§4,
+  que supera em parte o
+  [ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) §5).
 
 ### 3.6 Login, sessão e janela de revogação
 
@@ -530,11 +536,6 @@ id nem papel do dono) — fechar isso exigiria rever a unicidade global (idem, �
 Pontos em que os insumos ratificados **não fixam** a regra. Nenhum é decidido aqui; cada um tem a
 sua âncora de origem.
 
-- **Credencial inicial do dono** — a plataforma escolhe a senha do dono provisionado e nada obriga a
-  troca. Convite, troca obrigatória ou senha mantida é decisão P do sponsor — issue #114, aberta
-  a partir do achado F1 da issue #67
-  ([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md),
-  Alternative E e §Negative).
 - **Autorização dentro dos use cases de identity** — hoje só na borda HTTP; um segundo driver (CLI,
   job, console) não herdaria a checagem. "A decision for the whole bounded
   context" ([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) §4)

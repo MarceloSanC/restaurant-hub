@@ -26,7 +26,9 @@ from tests.e2e.features.identity.conftest import (
     auth,
     corpo_tenant,
     fazer_login,
+    login_do_dono,
 )
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.e2e
 
@@ -41,21 +43,27 @@ def _campo(registro: logging.LogRecord, nome: str) -> object:
     return registro.__dict__[nome]
 
 
-async def _owner_de(client: AsyncClient, admin: dict, nome: str) -> tuple[str, dict]:
-    """Cria restaurante + owner e devolve o id do restaurante e o login do owner."""
+async def _owner_de(
+    client: AsyncClient, caixa: RecordingEmailSender, admin: dict, nome: str
+) -> tuple[str, dict]:
+    """Cria restaurante + owner e devolve o id do restaurante e o login do owner,
+    que entra pelo convite (ADR 0.0.0018)."""
     email = f"dono-{nome.lower()}@x.com"
     restaurante = (
         await client.post(f"{API}/restaurants", json=corpo_tenant(nome, email), headers=auth(admin))
     ).json()["id"]
-    return restaurante, await fazer_login(client, email)
+    return restaurante, await login_do_dono(client, caixa, email)
 
 
 async def test_403_de_causas_diferentes_corpo_igual_e_log_distinto(
-    client: AsyncClient, admin_semeado: User, caplog: pytest.LogCaptureFixture
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     admin = await fazer_login(client, ADMIN_EMAIL)
-    restaurante_a, _ = await _owner_de(client, admin, "Alfa")
-    _, owner_b = await _owner_de(client, admin, "Beta")
+    restaurante_a, _ = await _owner_de(client, caixa_de_entrada, admin, "Alfa")
+    _, owner_b = await _owner_de(client, caixa_de_entrada, admin, "Beta")
     caplog.clear()
     caplog.set_level(logging.DEBUG)
 

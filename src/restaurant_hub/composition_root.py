@@ -464,7 +464,13 @@ def wire_dependencies(
             restaurants=restaurants,
             users=users,
             hasher=hasher,
+            tokens=setup_tokens,
+            token_issuer=setup_token_issuer,
+            email_sender=sender,
             id_generator=id_generator,
+            clock=clock,
+            invitation_ttl=invitation_ttl,
+            base_url=cfg.app_base_url,
             unit_of_work=identity_unit_of_work,
         ),
         identity_create_unit=CreateUnitUseCase(

@@ -5,7 +5,7 @@ when-use: Reference before adding a route that creates or elevates a user, when 
 keywords: [adr, authorization, rbac, privilege-escalation, bootstrap, tenancy, provisioning, boundary, identity]
 status: accepted
 created_at: 2026-07-19
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 adr_id: 2.4.0003
 decision: The HTTP adapter declares which permissions an action requires (including every permission of the role being granted, so no actor can grant what it does not hold) and delegates every decision to AuthorizeActionUseCase; tenant provisioning gets a dedicated manage_platform route that creates the restaurant's first owner, which is what makes the roadmap's end-to-end chain reachable at all
 context_stage: 2.4-identity-http
@@ -237,3 +237,11 @@ plataforma que acrescenta um `owner` a restaurante existente. São agora **duas*
 emitem papel sem a composição de §2, ambas exigindo `manage_platform` e ambas com o literal
 `Role.OWNER` (no router e no use case). Tudo o mais deste ADR — §1, §2, §2b ("nenhuma rota emite
 `platform_admin`"), §3 e §4 — continua valendo. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-09 — em §4 e §5, a menção a `CreateUserUseCase` como o use case por trás de
+`POST /restaurants/{restaurant_id}/owners` foi superada por
+[ADR 0.0.0018](./0_0_0018-restaurant-owner-is-provisioned-by-invitation.md) (issue #114).** A rota
+roda agora `InviteUserUseCase`: o `owner` nasce como conta pendente e define a própria senha pelo
+link do convite. O papel continua o literal `Role.OWNER` no router, o tenant continua vindo do
+path e o restaurante inexistente continua respondendo 404 (`RestaurantNotFoundError`, agora
+levantado pelo use case de convite). Nota *append-only*; o corpo acima não foi editado.

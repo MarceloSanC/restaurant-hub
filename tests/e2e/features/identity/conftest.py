@@ -12,6 +12,11 @@ atalho de teste: **nenhuma rota o cria** (concept §5 regra 8), porque criar um
 papéis da 2.1 não dá os dois a ninguém. A raiz de confiança nasce fora da API,
 como em qualquer sistema; o `[finding]` de um comando de seed está registrado
 para o Step 6.
+
+**O dono provisionado entra pelo convite** (issue #114, ADR 0.0.0018): `POST
+/restaurants` não leva senha, então a app é montada com o `EmailSender` que
+captura (`caixa_de_entrada`), e `login_do_dono` faz o que o dono de verdade faria
+— lê o link do e-mail, define a senha em `POST /auth/password` e faz login.
 """
 
 from collections.abc import AsyncIterator
@@ -34,6 +39,7 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 from restaurant_hub.shared.infrastructure.config.settings import Settings
 from restaurant_hub.shared.infrastructure.http.app import create_app
 from tests.conftest import truncar_tudo
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 SENHA_PADRAO = "s3nha-de-teste-e2e"
 ADMIN_EMAIL = "admin@plataforma.com"
@@ -56,14 +62,24 @@ def settings_e2e(database_url: str) -> Settings:
 
 
 @pytest.fixture
-def app_e2e(engine: Engine, settings_e2e: Settings) -> object:
+def caixa_de_entrada() -> RecordingEmailSender:
+    """O sender que captura tudo — nada sai da máquina (ADR 0.0.0004 §7)."""
+    return RecordingEmailSender()
+
+
+@pytest.fixture
+def app_e2e(
+    engine: Engine, settings_e2e: Settings, caixa_de_entrada: RecordingEmailSender
+) -> object:
     """App real, montada pelo composition root de produção, com banco limpo.
 
     O `TRUNCATE` roda **antes** do teste: quando um teste falha, o estado que ele
-    deixou permanece para diagnóstico, e ainda assim o próximo começa limpo.
+    deixou permanece para diagnóstico, e ainda assim o próximo começa limpo. Só o
+    `EmailSender` é trocado, pela costura do composition root — o resto é o
+    wiring real.
     """
     truncar_tudo(engine)
-    return create_app(settings_e2e)
+    return create_app(settings_e2e, email_sender=caixa_de_entrada)
 
 
 @pytest.fixture
@@ -100,13 +116,38 @@ async def fazer_login(client: AsyncClient, email: str, senha: str = SENHA_PADRAO
     return resposta.json()
 
 
-def corpo_tenant(nome: str, email_do_dono: str, senha: str = SENHA_PADRAO) -> dict:
-    """Corpo de `POST /restaurants`: o restaurante **e** o seu primeiro dono.
+def corpo_tenant(nome: str, email_do_dono: str) -> dict:
+    """Corpo de `POST /restaurants`: o restaurante **e** o e-mail do primeiro dono.
 
     Desde a issue #67 (ADR 0.0.0014) o restaurante nasce com o dono, numa unidade
-    de trabalho — não há mais chamada que crie restaurante sozinho.
+    de trabalho; desde a #114 (ADR 0.0.0018) sem senha — o dono é convidado.
     """
-    return {"name": nome, "owner": {"email": email_do_dono, "password": senha}}
+    return {"name": nome, "owner": {"email": email_do_dono}}
+
+
+def token_do_convite(caixa: RecordingEmailSender, email: str) -> str:
+    """O valor do token no último e-mail enviado a `email`, como a pessoa o leria."""
+    mensagem = next(m for m in reversed(caixa.sent) if m.to == email)
+    _, _, resto = mensagem.body_text.partition("token=")
+    return resto.split()[0]
+
+
+async def ativar_conta(
+    client: AsyncClient, caixa: RecordingEmailSender, email: str, senha: str = SENHA_PADRAO
+) -> None:
+    """Define a senha de uma conta pendente pelo link do convite que ela recebeu."""
+    resposta = await client.post(
+        f"{API}/auth/password", json={"token": token_do_convite(caixa, email), "password": senha}
+    )
+    assert resposta.status_code == HTTPStatus.NO_CONTENT, resposta.text
+
+
+async def login_do_dono(
+    client: AsyncClient, caixa: RecordingEmailSender, email: str, senha: str = SENHA_PADRAO
+) -> dict:
+    """O dono provisionado define a senha pelo convite e faz login (ADR 0.0.0018)."""
+    await ativar_conta(client, caixa, email, senha)
+    return await fazer_login(client, email, senha)
 
 
 def auth(tokens: dict) -> dict[str, str]:

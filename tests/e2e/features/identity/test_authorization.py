@@ -23,13 +23,20 @@ from tests.e2e.features.identity.conftest import (
     auth,
     corpo_tenant,
     fazer_login,
+    login_do_dono,
 )
+from tests.fakes.shared.recording_email_sender import RecordingEmailSender
 
 pytestmark = pytest.mark.e2e
 
 
-async def _montar_tenant(client: AsyncClient, admin_tokens: dict, nome: str) -> dict:
-    """Cria restaurante + owner + unidade, e devolve os ids e o login do owner."""
+async def _montar_tenant(
+    client: AsyncClient, caixa: RecordingEmailSender, admin_tokens: dict, nome: str
+) -> dict:
+    """Cria restaurante + owner + unidade, e devolve os ids e o login do owner.
+
+    O owner entra pelo convite (ADR 0.0.0018): define a senha pelo link e faz login.
+    """
     email_owner = f"dono-{nome.lower()}@x.com"
     restaurante_id = (
         await client.post(
@@ -38,7 +45,7 @@ async def _montar_tenant(client: AsyncClient, admin_tokens: dict, nome: str) -> 
             headers=auth(admin_tokens),
         )
     ).json()["id"]
-    owner = await fazer_login(client, email_owner)
+    owner = await login_do_dono(client, caixa, email_owner)
     unidade_id = (
         await client.post(
             f"{API}/restaurants/{restaurante_id}/units",
@@ -55,7 +62,9 @@ async def _montar_tenant(client: AsyncClient, admin_tokens: dict, nome: str) -> 
 
 
 async def test_unidade_inexistente_e_de_outro_tenant_sao_indistinguiveis(
-    client: AsyncClient, admin_semeado: User
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
 ) -> None:
     """CA22 — o teste central de não-vazamento desta Stage.
 
@@ -74,8 +83,8 @@ async def test_unidade_inexistente_e_de_outro_tenant_sao_indistinguiveis(
     comentário no corpo.
     """
     admin = await fazer_login(client, ADMIN_EMAIL)
-    tenant_a = await _montar_tenant(client, admin, "Alfa")
-    tenant_b = await _montar_tenant(client, admin, "Beta")
+    tenant_a = await _montar_tenant(client, caixa_de_entrada, admin, "Alfa")
+    tenant_b = await _montar_tenant(client, caixa_de_entrada, admin, "Beta")
 
     # Um manager do tenant A, vinculado à unidade de A.
     await client.post(
@@ -151,7 +160,9 @@ async def test_unidade_inexistente_e_de_outro_tenant_sao_indistinguiveis(
 
 
 async def test_owner_de_outro_tenant_nao_enxerga_o_restaurante(
-    client: AsyncClient, admin_semeado: User
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
 ) -> None:
     """O tenant alvo vem do path; um owner alheio não passa da checagem de escopo.
 
@@ -159,8 +170,8 @@ async def test_owner_de_outro_tenant_nao_enxerga_o_restaurante(
     do path existe.
     """
     admin = await fazer_login(client, ADMIN_EMAIL)
-    tenant_a = await _montar_tenant(client, admin, "Alfa")
-    tenant_b = await _montar_tenant(client, admin, "Beta")
+    tenant_a = await _montar_tenant(client, caixa_de_entrada, admin, "Alfa")
+    tenant_b = await _montar_tenant(client, caixa_de_entrada, admin, "Beta")
 
     invasao = await client.post(
         f"{API}/restaurants/{tenant_a['restaurante']}/units",
@@ -185,11 +196,14 @@ async def test_owner_de_outro_tenant_nao_enxerga_o_restaurante(
 
 @pytest.mark.parametrize("papel_alvo", ["platform_admin", "owner"])
 async def test_manager_nao_escala_privilegio(
-    client: AsyncClient, admin_semeado: User, papel_alvo: str
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
+    papel_alvo: str,
 ) -> None:
     """CA20/CA14 — "não se concede o que não se detém", contra o banco real."""
     admin = await fazer_login(client, ADMIN_EMAIL)
-    tenant = await _montar_tenant(client, admin, "Alfa")
+    tenant = await _montar_tenant(client, caixa_de_entrada, admin, "Alfa")
     await client.post(
         f"{API}/users",
         json={
@@ -271,7 +285,9 @@ async def test_token_valido_de_usuario_removido_e_401(
 
 
 async def test_corpos_de_403_sao_constantes_entre_causas_diferentes(
-    client: AsyncClient, admin_semeado: User
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
 ) -> None:
     """CA26 — três causas distintas de 403, um só corpo.
 
@@ -280,8 +296,8 @@ async def test_corpos_de_403_sao_constantes_entre_causas_diferentes(
     recurso, que é pior do que revelar que ele existe.
     """
     admin = await fazer_login(client, ADMIN_EMAIL)
-    tenant_a = await _montar_tenant(client, admin, "Alfa")
-    tenant_b = await _montar_tenant(client, admin, "Beta")
+    tenant_a = await _montar_tenant(client, caixa_de_entrada, admin, "Alfa")
+    tenant_b = await _montar_tenant(client, caixa_de_entrada, admin, "Beta")
 
     sem_permissao = await client.post(
         f"{API}/restaurants",
@@ -346,7 +362,11 @@ async def test_corpos_de_401_sao_constantes_entre_causas_diferentes(
     )
 
 
-async def test_tenant_id_no_corpo_e_descartado(client: AsyncClient, admin_semeado: User) -> None:
+async def test_tenant_id_no_corpo_e_descartado(
+    client: AsyncClient,
+    admin_semeado: User,
+    caixa_de_entrada: RecordingEmailSender,
+) -> None:
     """CA13 contra o grafo real — a defesa nº 3 do `POST /users`.
 
     O corpo tenta injetar o tenant de OUTRO restaurante. A resposta é 201 (o
@@ -358,8 +378,8 @@ async def test_tenant_id_no_corpo_e_descartado(client: AsyncClient, admin_semead
     gravando outra.
     """
     admin = await fazer_login(client, ADMIN_EMAIL)
-    tenant_a = await _montar_tenant(client, admin, "Alfa")
-    tenant_b = await _montar_tenant(client, admin, "Beta")
+    tenant_a = await _montar_tenant(client, caixa_de_entrada, admin, "Alfa")
+    tenant_b = await _montar_tenant(client, caixa_de_entrada, admin, "Beta")
 
     resposta = await client.post(
         f"{API}/users",

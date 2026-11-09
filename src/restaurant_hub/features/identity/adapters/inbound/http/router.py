@@ -75,9 +75,9 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 from .dependencies import AuthenticatedActor, IdentityGuard, required_permissions_for_role
 from .schemas import (
-    CreateOwnerRequest,
     CreateUnitRequest,
     CreateUserRequest,
+    InviteOwnerRequest,
     InviteUserRequest,
     LoginRequest,
     LogoutRequest,
@@ -268,6 +268,12 @@ def provision_restaurant(
 ) -> ProvisionedRestaurantResponse:
     """Provisiona um tenant: o restaurante **e** o seu primeiro `owner`, tudo ou nada.
 
+    **O dono é convidado** (ADR 0.0.0018): o corpo leva só o e-mail dele, a conta
+    nasce pendente e o link de definição de senha sai por e-mail depois do
+    commit. A resposta não carrega token nem link. Se o envio falha, a resposta é
+    500 com o tenant já comitado, e o dono recupera pelo pedido público de
+    redefinição de senha.
+
     Exige `manage_platform`, isto é: **só `platform_admin`** (decisão do sponsor
     de 2026-07-19). `tenant_id=None` no comando de autorização porque esta é uma
     ação de plataforma, não de tenant — e um ator com tenant falha antes disso,
@@ -289,7 +295,6 @@ def provision_restaurant(
         ProvisionRestaurantCommand(
             name=payload.name,
             owner_email=Email(payload.owner.email),
-            owner_plain_password=payload.owner.password.get_secret_value(),
         )
     )
     return _provisioned_restaurant_response(result)
@@ -302,12 +307,17 @@ def provision_restaurant(
 )
 def create_restaurant_owner(
     restaurant_id: str,
-    payload: CreateOwnerRequest,
+    payload: InviteOwnerRequest,
     actor: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
-    use_case: Annotated[CreateUserUseCase, Depends(_get_create_user)],
+    use_case: Annotated[InviteUserUseCase, Depends(_get_invite_user)],
 ) -> UserResponse:
-    """Acrescenta um `owner` a um restaurante existente — ação de **plataforma**.
+    """Convida um `owner` para um restaurante existente — ação de **plataforma**.
+
+    **O dono é convidado, não recebe senha** (ADR 0.0.0018): a rota roda o
+    `InviteUserUseCase`, a conta nasce pendente e o link de definição de senha
+    sai só no e-mail. Antes da issue #114 ela rodava `CreateUserUseCase` com a
+    senha escolhida pelo `platform_admin`.
 
     Até a issue #67 esta rota **era** o bootstrap: o restaurante nascia sozinho em
     `POST /restaurants` e o dono vinha aqui, numa segunda chamada. Hoje o
@@ -334,9 +344,8 @@ def create_restaurant_owner(
     guard.authorize(actor, Permission.MANAGE_PLATFORM)
 
     result = use_case.execute(
-        CreateUserCommand(
+        InviteUserCommand(
             email=Email(payload.email),
-            plain_password=payload.password.get_secret_value(),
             role=Role.OWNER,
             tenant_id=RestaurantId(restaurant_id),
         )
