@@ -856,6 +856,8 @@ verde — são regra de execução, já ancorada acima):
 
 - `git-versioning-pointer` — antes de qualquer operação git/GitHub
   pós-auditoria (push, PR, merge).
+- `didatic-explanation` — antes de escrever o relatório da Fase E: a
+  "linguagem clara" das seções 1–6 segue as regras dela.
 - `hex-arch-python` — para julgar imports/camadas no diff.
 - `ddd-tactical-patterns` — para julgar Entity vs VO, agregados.
 - `pytest-with-fakes` — para julgar se teste de application usa fake

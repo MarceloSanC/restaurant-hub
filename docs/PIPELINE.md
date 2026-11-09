@@ -963,6 +963,7 @@ categoria de doc.
 | `stage-audit` | Sessão de auditoria de Stage, pré-PR/merge (§11.1) | Julgamento read-only + fase de aplicação; conceitos de falso verde | accepted |
 | `issue-audit` | Sessão de auditoria de issue avulsa, pré-PR/merge | Irmã da stage-audit para issues (critério↔evidência; disciplina de escopo) | draft |
 | `skill-builder` | Criar/melhorar uma skill | Codificar de execução real (não de imaginação); loop recursivo de melhoria | draft |
+| `didatic-explanation` | Antes de explicar ao humano (kickoff, walkthrough, veredito de auditoria, justificativa em relatório/PR) | Um assunto por vez; o que é → o que faz → por que importa; termo técnico explicado na 1ª ocorrência; sem metáfora | draft |
 
 ### Formato de cada skill (formato β)
 

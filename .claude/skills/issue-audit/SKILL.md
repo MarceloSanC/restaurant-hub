@@ -602,6 +602,8 @@ verde — são regra de execução, já ancorada acima):
   de falso verde são compartilhados.
 - `git-versioning-pointer` — antes de qualquer git/GitHub pós-auditoria
   (push, PR, merge, abrir issue de follow-up).
+- `didatic-explanation` — antes de escrever o relatório da Fase E: a
+  "linguagem clara" das seções 1–6 segue as regras dela.
 - `hex-arch-python`, `ddd-tactical-patterns`, `pytest-with-fakes`,
   `repository-pattern`, `fastapi-thin-adapter`, `composition-root` —
   para julgar o diff por camada na Fase D.
