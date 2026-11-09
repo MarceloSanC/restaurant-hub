@@ -44,9 +44,11 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.unit._makefile import prerequisites
+from tests.unit._makefile import recipe as _recipe
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-MAKEFILE = REPO_ROOT / "Makefile"
 
 # Cadeia real do target `check` (Makefile). O step do CI roda literalmente
 # `make check` — invariante I3 do concept da Stage 1.2: política específica de CI
@@ -206,33 +208,9 @@ _GATE_RUFF_TARGETS = {
 _RUFF_TARGETS = ("lint", "fmt-check", "fmt")
 
 
-def _makefile_lines() -> list[str]:
-    return MAKEFILE.read_text(encoding="utf-8").splitlines()
-
-
-def _recipe(target: str) -> list[list[str]]:
-    """Os comandos da receita de `target` no Makefile, já quebrados em tokens."""
-    lines = _makefile_lines()
-    header = f"{target}:"
-    # Uma segunda regra com o mesmo alvo troca a receita (o make avisa "overriding
-    # recipe" e roda a última); ler só a primeira seria cobrar a receita morta.
-    assert lines.count(header) == 1, (
-        f"o Makefile precisa declarar o target `{target}` exatamente uma vez; tem "
-        f"{lines.count(header)}"
-    )
-    commands: list[list[str]] = []
-    for line in lines[lines.index(header) + 1 :]:
-        if not line.startswith("	"):
-            break
-        commands.append(shlex.split(line))
-    assert commands, f"o target `{target}` do Makefile não tem receita"
-    return commands
-
-
 def _check_prerequisites() -> list[str]:
     """Os pré-requisitos do target `check`: a cadeia que o CI roda."""
-    [line] = [line for line in _makefile_lines() if line.startswith("check:")]
-    return line.removeprefix("check:").split()
+    return prerequisites("check")
 
 
 def _versioned_python_files() -> list[str]:
