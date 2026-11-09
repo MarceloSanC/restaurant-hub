@@ -1,8 +1,8 @@
 """Value object Role — papel fixo de acesso (RBAC) e o seu conjunto de permissões.
 
-Conjunto **fechado** de 5 papéis (kickoff #4). Não confundir com **função de
-trabalho** (cozinheiro, atendente…), que é 100% customizável por restaurante e
-pertence ao BC `staff` (Step 3) — vocabulários distintos (overview §9).
+Conjunto **fechado** de 5 papéis (overview §3; kickoff #10). Não confundir com
+**função de trabalho** (cozinheiro, atendente…), que é 100% customizável por
+restaurante e pertence ao BC `staff` (Step 3) — vocabulários distintos (overview §9).
 
 O mapa `Role -> frozenset[Permission]` é fixo e **total**: todo papel tem entrada,
 mesmo que vazia (concept §5, regra 6). A totalidade é guardada por teste — papel
