@@ -402,7 +402,7 @@ skills_hint: [pytest-with-fakes, task-ordering-hex, hex-arch-python]
 > Nota (2026-07-19): bloco corrigido durante a execução da Stage (issue #20) —
 > o recorte real extrapolou o bloco em três eixos, todos **aditivos**.
 > **Contratos:** entrou um sexto port-out, `SessionRepository`, exigido pela
-> decisão de kickoff #1 (refresh persistido e rotacionado, para que logout e
+> decisão de kickoff #4 (refresh persistido e rotacionado, para que logout e
 > demissão cortem acesso de verdade); a issue #20 autoriza explicitamente
 > modelá-lo e registrá-lo em ADR (2.2.0001). Junto dele vieram os DTOs
 > `Session`/`IssuedRefreshToken`/`AccessTokenClaims`/`UserCredentials`, e
