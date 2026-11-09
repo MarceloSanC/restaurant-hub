@@ -207,7 +207,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#114](https://github.com/MarceloSanC/restaurant-hub/issues/114) | Provisionar o dono do restaurante por convite em vez de senha escolhida pela plataforma | identity | application + adapters/inbound/http | open | #67 |
 | [#115](https://github.com/MarceloSanC/restaurant-hub/issues/115) | Autorizar o próprio alvo nos use cases de identity (formato da 3.7) | identity | application | open | #67 |
 | [#116](https://github.com/MarceloSanC/restaurant-hub/issues/116) | Citações por número de linha a `docs/domain/**` sem gate; válvula de `references` do `shift-scheduling.md` depende delas | shared | tooling | done | #102 |
-| [#117](https://github.com/MarceloSanC/restaurant-hub/issues/117) | Tabela consolidada de lacunas do `shift-scheduling.md` §6 sem guarda, com linhas de Stages `done` | scheduling | docs | open | #102 |
+| [#117](https://github.com/MarceloSanC/restaurant-hub/issues/117) | Tabela consolidada de lacunas do `shift-scheduling.md` §6 sem guarda, com linhas de Stages `done` | scheduling | docs | done | #102 |
 | [#127](https://github.com/MarceloSanC/restaurant-hub/issues/127) | Comentário de `role.py` ainda proíbe toda permissão de escala ao `hr` — superado pelo ADR 4.1.0004 | identity | domain (comentário) | done | #30 |
 | [#128](https://github.com/MarceloSanC/restaurant-hub/issues/128) | ADR 2.5.0002 §5 descreve um reconvite que o concept 2.5 recusa com 409 | identity | docs | done | #30 |
 | [#129](https://github.com/MarceloSanC/restaurant-hub/issues/129) | Numeração das decisões de kickoff diverge entre ADRs, concepts e código | shared | docs | done | #30 |
