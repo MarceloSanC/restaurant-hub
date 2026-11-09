@@ -353,6 +353,15 @@ def test_nao_ha_excecao_a_regra_dos_references() -> None:
     assert not hasattr(gate, "VALVULA_REFERENCES")
 
 
+def test_o_doc_da_antiga_valvula_nao_e_excecao(tmp_path: pathlib.Path) -> None:
+    """Exceção reintroduzida com outro nome, pelo caminho do doc, também reprova."""
+    arquivos = _com_adrs(f"{_LINK_A}\n", "references: []\n")
+    arquivos["docs/domain/scheduling/shift-scheduling.md"] = arquivos.pop(_DOMINIO)
+    [achado] = gate.problemas(_repo(tmp_path, arquivos))
+    assert achado.startswith("docs/domain/scheduling/shift-scheduling.md:")
+    assert "ADR 4_1_0001-a.md linkado no corpo e ausente do `references`" in achado
+
+
 def test_o_doc_da_antiga_valvula_lista_todo_adr_que_linka() -> None:
     """Os 16 ADRs que a válvula deixava de fora estão no `references` do `shift-scheduling.md`."""
     doc = _REPO_ROOT / "docs" / "domain" / "scheduling" / "shift-scheduling.md"

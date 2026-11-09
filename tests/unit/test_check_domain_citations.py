@@ -412,3 +412,106 @@ def test_main_sai_2_com_dois_docs_de_mesmo_nome(
     dominio = {"docs/domain/a/escala.md": _ESCALA, "docs/domain/b/escala.md": _ESCALA}
     assert _main(monkeypatch, _repo(tmp_path, {}, dominio)) == _SAIDA_FATAL
     assert "mesmo nome" in capsys.readouterr().err
+
+
+# --- Auditoria de testes (mutações que sobreviviam) ---------------------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        '`escala.md` §3.1 ("vale de 120, como antes").',
+        "`escala.md` §3.1 (*a regra 120, antiga*).",
+        "`escala.md` §3.1 (`faixas = [120, 130]` no código)",
+        "`escala.md` §3.1 (Step 12, ainda)",
+        "`escala.md` §3.1 (https://example.com/a/120, ver)",
+        "| `escala.md` §3.1 | 120, 130 |",
+        "`escala.md` §3.1; overview 46, 130.",
+        "`escala.md` §3.1; CLT art. 71, 120.",
+        "`escala.md` §3.1 e `outro.md` 120, 130",
+        "Ver `escala.md` (nota\n\nno outro parágrafo) §9.",
+        "ver `subescala.md` 171 e `my-escala.md` 171.",
+        "`escala.md` §3.1 " + "palavra " * 40 + "120, x",
+    ],
+    ids=[
+        "aspas",
+        "italico",
+        "literal",
+        "step-de-dois-digitos",
+        "url",
+        "celula-de-tabela",
+        "overview-sem-extensao",
+        "clt",
+        "outro-md",
+        "parentese-nao-atravessa-paragrafo",
+        "nome-dentro-de-outro-nome",
+        "teto-do-trecho",
+    ],
+)
+def test_numeros_neutros_passam(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _problemas(tmp_path, texto) == []
+
+
+def test_secao_de_dois_digitos_e_neutra(tmp_path: pathlib.Path) -> None:
+    dominio = {"docs/domain/d/dez.md": "# D\n\n## 10. Dez\n\nok\n\n## 11. Onze\n\nok\n"}
+    assert gate.problemas(_repo(tmp_path, {"docs/x.md": "`dez.md` §10, §11."}, dominio)) == []
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "`escala.md` §3.1, linha 171 diz",
+        "`escala.md` §3.1, 171.",
+        "`escala.md` §3.1, 12.",
+        "`escala.md` §3.1, l. 166 diz",
+        "`escala.md` (171 e seguintes)",
+        "`escala.md` §3.1, 171 e 172 diz",
+        "`escala.md` §3.1 L171 diz",
+        "`escala.md`:L171-L180 diz",
+        "`escala.md` §3.1 ln 171 diz",
+        "`escala.md` §3.1 line ~171 diz",
+    ],
+    ids=[
+        "linha-depois-da-ancora",
+        "numero-solto-no-fim",
+        "dois-digitos",
+        "l-ponto-depois-da-ancora",
+        "parentese-imediato",
+        "lista-com-e",
+        "l-maiusculo-github",
+        "faixa-l-github",
+        "ln",
+        "line-til",
+    ],
+)
+def test_linha_em_outras_posicoes_reprova(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _problemas(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha" in achados[0]
+
+
+@pytest.mark.parametrize(
+    ("texto", "motivo"),
+    [
+        ("Ver `escala.md` §3.6.", "seção §3.6 não existe"),
+        ('Ver `escala.md` §3.9 › "x".', "seção §3.9 não existe"),
+        ("Ver `escala.md` §3.1 › `está dentro`.", "rótulo `está dentro` não existe"),
+        ("Ver `escala.md` §3.1 e §9.", "seção §9 não existe"),
+        ('Ver `escala.md` §3.1 > "Inexistente".', "fora da forma"),
+        ('Ver `escala.md` §3.1 -> "Inexistente".', "fora da forma"),
+        ('Ver `escala.md` §3.1 ›"Inexistente".', "fora da forma"),
+    ],
+    ids=[
+        "numero-e-exato-nao-prefixo",
+        "secao-inexistente-com-rotulo",
+        "literal-e-cru",
+        "cadeia-com-e",
+        "seta-maior",
+        "seta-ascii",
+        "sem-espaco",
+    ],
+)
+def test_ancoras_que_escapavam_reprovam(tmp_path: pathlib.Path, texto: str, motivo: str) -> None:
+    achados = _problemas(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert motivo in achados[0]

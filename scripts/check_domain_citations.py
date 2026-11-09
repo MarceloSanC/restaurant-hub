@@ -100,7 +100,10 @@ _NEUTROS = (
 _NUMERO_DE_LINHA = re.compile(r"(?<![\w])\d{2,4}(?=\s*(?:[,;:)/–\]-]|$|\(|(?:e|and)\s+\d))")
 # A palavra "linha" antes do número tira a dúvida, em qualquer ponto do trecho
 # fora de texto citado (`*"…line 1086…"*` é citação, não ponteiro).
-_LINHA_EXPLICITA = re.compile(r"\b(?:linhas?|lines?|l\.)\s*\d{2,4}\b", re.IGNORECASE)
+# `L171` (estilo GitHub, sem o `#`), `ln 171` e `line ~171` também.
+_LINHA_EXPLICITA = re.compile(
+    r"\b(?:linhas?|lines?|l\.|ln)\s*~?\d{2,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
+)
 # Número logo depois da referência (`x.md` 171, `x.md:171`) é linha sempre.
 _NUMERO_IMEDIATO = re.compile(
     r"^\s*:?\s*\(?\s*(?:(?:linhas?|lines?|l\.)\s*)?\d{2,4}\b", re.IGNORECASE
@@ -114,6 +117,9 @@ _ANCORA = re.compile(
     rf"(?: › (?P<rotulos>{_ROTULO}(?:, {_ROTULO})*))?"
 )
 _ROTULO_ITEM = re.compile(_ROTULO)
+# Rótulo colado à âncora fora da forma ` › ` (`§3.1 > "x"`, `§3.1 -> "x"`, `§3.1 ›"x"`):
+# a regex da âncora não o lê, e a âncora pareceria conferida sem o rótulo ter sido.
+_ROTULO_MAL_FORMADO = re.compile(r'[ \t]*(?:->|>|›)[ \t]*["`]')
 # O que pode haver entre a referência e a 1ª âncora, ou entre duas âncoras da
 # mesma cadeia (`§2, §3.2 (a lacuna), §3.6.0/§3.6.8`, `§3.1–§3.5`, `§3.3(b) e
 # §3.5`): um parêntese (com um nível de parêntese dentro) e um separador. Prosa
@@ -277,6 +283,8 @@ def problemas_no_texto(texto: str, docs: dict[str, Doc]) -> list[tuple[int, str]
             nome = m.group("secao")
             secao = acha_secao(doc.secoes, nome)
             linha_da_ancora = _linha_de(texto, m.start())
+            if _ROTULO_MAL_FORMADO.match(texto, m.end()):
+                achados.append((linha_da_ancora, f'rótulo de §{nome} fora da forma ` › "trecho"`'))
             if secao is None:
                 achados.append((linha_da_ancora, f"seção §{nome} não existe em {doc.rel}"))
                 continue
