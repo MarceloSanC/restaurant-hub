@@ -60,7 +60,7 @@ async def _cenario_404(client: AsyncClient, admin: dict, _caixa: RecordingEmailS
     """Restaurante do path não existe (o ator é global, então chega ao use case)."""
     return await client.post(
         f"{API}/restaurants/restaurante-inexistente/owners",
-        json={"email": "dono@x.com", "password": SENHA_PADRAO},
+        json={"email": "dono@x.com"},
         headers=auth(admin),
     )
 
@@ -74,7 +74,7 @@ async def _cenario_409(client: AsyncClient, admin: dict, _caixa: RecordingEmailS
             headers=auth(admin),
         )
     ).json()["id"]
-    corpo = {"email": "duplicado@x.com", "password": SENHA_PADRAO}
+    corpo = {"email": "duplicado@x.com"}
     return await client.post(
         f"{API}/restaurants/{restaurante}/owners", json=corpo, headers=auth(admin)
     )

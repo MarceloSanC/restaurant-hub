@@ -105,7 +105,7 @@ async def test_restaurante_inexistente_devolve_404_e_nao_grava_usuario(
 
     resposta = await client.post(
         f"{API}/restaurants/restaurante-que-nao-existe/owners",
-        json={"email": "fantasma@x.com", "password": SENHA_PADRAO},
+        json={"email": "fantasma@x.com"},
         headers=auth(admin),
     )
 
@@ -157,7 +157,7 @@ async def test_email_duplicado_entre_tenants_e_409(
 
     resposta = await client.post(
         f"{API}/restaurants/{segundo}/owners",
-        json={"email": "repetido@x.com", "password": SENHA_PADRAO},
+        json={"email": "repetido@x.com"},
         headers=auth(admin),
     )
 
@@ -231,10 +231,11 @@ async def test_dono_provisionado_opera_o_proprio_restaurante_e_so_ele(
 
 
 async def test_rota_de_owner_acrescenta_dono_a_restaurante_existente(
-    client: AsyncClient, admin_semeado: User
+    client: AsyncClient, admin_semeado: User, caixa_de_entrada: RecordingEmailSender
 ) -> None:
     """`POST /restaurants/{id}/owners` deixou de ser o bootstrap e segue como o
-    caminho de suporte da plataforma (ADR 0.0.0014 §3)."""
+    caminho de suporte da plataforma (ADR 0.0.0014 §3) — e convida o dono, que
+    define a própria senha pelo link (ADR 0.0.0018)."""
     admin = await fazer_login(client, admin_semeado.email.value)
     restaurante = (
         await client.post(
@@ -246,10 +247,10 @@ async def test_rota_de_owner_acrescenta_dono_a_restaurante_existente(
 
     resposta = await client.post(
         f"{API}/restaurants/{restaurante}/owners",
-        json={"email": "segundo@x.com", "password": SENHA_PADRAO},
+        json={"email": "segundo@x.com"},
         headers=auth(admin),
     )
 
     assert resposta.status_code == HTTPStatus.CREATED
     assert (resposta.json()["role"], resposta.json()["tenant_id"]) == ("owner", restaurante)
-    await fazer_login(client, "segundo@x.com")
+    await login_do_dono(client, caixa_de_entrada, "segundo@x.com")

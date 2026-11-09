@@ -107,23 +107,13 @@ class UnitResponse(BaseModel):
 class InviteOwnerRequest(BaseModel):
     """O `owner` convidado de um restaurante (ação de plataforma).
 
-    Campo `owner` de `ProvisionRestaurantRequest` (ADR 0.0.0014). **Sem campo de
-    senha** (ADR 0.0.0018): o dono nasce como conta pendente e define a própria
-    senha pelo link do convite — a plataforma não escolhe, não conhece e não
-    transporta a credencial dele. Uma `password` enviada por cliente antigo é
-    ignorada, como todo campo extra (nota 3 do módulo).
-
-    Sem campo `role`: o papel é fixado em `Role.OWNER` no código. É o que garante
-    que **nenhuma rota emite `platform_admin`** (ADR 2.4.0003 §2b).
-    """
-
-    email: str
-
-
-class CreateOwnerRequest(BaseModel):
-    """O `owner` de um restaurante (ação de plataforma).
-
-    Corpo de `POST /restaurants/{id}/owners` (ADR 0.0.0014).
+    Corpo de `POST /restaurants/{id}/owners` e campo `owner` de
+    `ProvisionRestaurantRequest` — as duas rotas que emitem `owner` (ADR
+    0.0.0014). **Sem campo de senha** (ADR 0.0.0018): o dono nasce como conta
+    pendente e define a própria senha pelo link do convite — a plataforma não
+    escolhe, não conhece e não transporta a credencial dele. Uma `password`
+    enviada por cliente antigo é ignorada, como todo campo extra (nota 3 do
+    módulo).
 
     Sem campo `role`: o papel é fixado em `Role.OWNER` no código (no router e no
     use case de provisionamento). É o que garante que **nenhuma rota emite
@@ -132,7 +122,6 @@ class CreateOwnerRequest(BaseModel):
     """
 
     email: str
-    password: SecretStr
 
 
 class ProvisionRestaurantRequest(BaseModel):

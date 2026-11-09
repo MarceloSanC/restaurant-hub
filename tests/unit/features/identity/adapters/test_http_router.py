@@ -445,13 +445,37 @@ async def test_platform_admin_provisiona_owner_com_tenant_do_path(
 
     resposta = await client.post(
         f"/api/v1/restaurants/{_TENANT}/owners",
-        json={"email": "dono@x.com", "password": _SENHA},
+        json={"email": "dono@x.com"},
         headers=ambiente.auth(admin),
     )
 
     assert resposta.status_code == HTTPStatus.CREATED
     assert resposta.json()["tenant_id"] == _TENANT
     assert resposta.json()["role"] == "owner"
+
+
+async def test_rota_de_owner_convida_o_dono_e_ignora_senha_enviada(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """ADR 0.0.0018 — a rota de suporte também convida: conta pendente, link só no
+    e-mail, e uma `password` enviada por cliente antigo nunca vira a senha."""
+    ambiente.com_restaurante()
+    admin = ambiente.com_usuario(user_id="admin", role=Role.PLATFORM_ADMIN, tenant_id=None)
+
+    resposta = await client.post(
+        f"/api/v1/restaurants/{_TENANT}/owners",
+        json={"email": "dono@x.com", "password": _SENHA},
+        headers=ambiente.auth(admin),
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    gravado = ambiente.users.password_hashes[UserId(resposta.json()["id"])]
+    assert gravado.startswith("unusable::")
+    assert ambiente.hasher.verify(_SENHA, gravado) is False
+    assert [m.to for m in ambiente.sender.sent] == ["dono@x.com"]
+    _, _, resto = ambiente.sender.sent[0].body_text.partition("token=")
+    assert resto.split()[0] not in resposta.text
+    assert len(ambiente.setup_tokens.tokens) == 1
 
 
 async def test_restaurante_inexistente_devolve_404_sem_gravar_usuario(
@@ -463,12 +487,14 @@ async def test_restaurante_inexistente_devolve_404_sem_gravar_usuario(
 
     resposta = await client.post(
         "/api/v1/restaurants/rest-que-nao-existe/owners",
-        json={"email": "dono@x.com", "password": _SENHA},
+        json={"email": "dono@x.com"},
         headers=ambiente.auth(admin),
     )
 
     assert resposta.status_code == HTTPStatus.NOT_FOUND
     assert len(ambiente.users.users) == antes
+    assert ambiente.setup_tokens.tokens == {}
+    assert ambiente.sender.sent == ()
 
 
 async def test_owner_nao_provisiona_outro_owner_pela_rota_de_plataforma(
@@ -479,11 +505,12 @@ async def test_owner_nao_provisiona_outro_owner_pela_rota_de_plataforma(
 
     resposta = await client.post(
         f"/api/v1/restaurants/{_TENANT}/owners",
-        json={"email": "outro@x.com", "password": _SENHA},
+        json={"email": "outro@x.com"},
         headers=ambiente.auth(owner),
     )
 
     assert resposta.status_code == HTTPStatus.FORBIDDEN
+    assert ambiente.sender.sent == ()
 
 
 # ---------------------------------------------------------------------------

@@ -8,9 +8,11 @@ depender de o autor lembrar deste arquivo.
 """
 
 import pytest
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, SecretStr
 
 from restaurant_hub.features.identity.adapters.inbound.http import schemas
+from restaurant_hub.features.identity.adapters.inbound.http.router import router
 from restaurant_hub.shared.infrastructure.http.credential_no_store import (
     CREDENTIAL_MARK,
     declares_credential,
@@ -78,7 +80,6 @@ def test_nenhum_schema_de_resposta_carrega_credencial() -> None:
         ("RefreshRequest", "refresh_token"),
         ("LogoutRequest", "refresh_token"),
         ("CreateUserRequest", "password"),
-        ("CreateOwnerRequest", "password"),
     ],
 )
 def test_credencial_em_request_e_secret_str(schema_nome: str, campo: str) -> None:
@@ -119,21 +120,30 @@ def test_create_user_request_nao_aceita_tenant_id() -> None:
     assert "tenant_id" not in schemas.CreateUserRequest.model_fields
 
 
-def test_create_owner_request_nao_aceita_role() -> None:
-    """O papel é literal no router — é o que impede uma rota de emitir platform_admin."""
-    assert "role" not in schemas.CreateOwnerRequest.model_fields
-
-
-def test_dono_convidado_no_provisionamento_so_tem_o_email() -> None:
+def test_dono_convidado_so_tem_o_email() -> None:
     """ADR 0.0.0018 — a senha do dono não transita pela API de plataforma.
 
-    Conjunto **exato**: um campo `password` (ou `role`) que voltasse ao schema
-    reprova aqui, antes de qualquer rota o ler.
+    Conjunto **exato**: um campo `password` — ou `role`, que deixaria uma rota
+    emitir `platform_admin` (ADR 2.4.0003 §2b) — que voltasse ao schema reprova
+    aqui, antes de qualquer rota o ler.
     """
     assert set(schemas.InviteOwnerRequest.model_fields) == {"email"}
     assert schemas.ProvisionRestaurantRequest.model_fields["owner"].annotation is (
         schemas.InviteOwnerRequest
     )
+
+
+def test_as_duas_rotas_de_owner_recebem_o_dono_convidado() -> None:
+    """As duas rotas que emitem `owner` (ADR 0.0.0014 §3) usam o mesmo schema sem
+    senha — nenhuma das duas ficou para trás com a forma antiga."""
+    corpos = {
+        rota.path: rota.body_field.field_info.annotation
+        for rota in router.routes
+        if isinstance(rota, APIRoute) and rota.body_field is not None
+    }
+
+    assert corpos["/restaurants/{restaurant_id}/owners"] is schemas.InviteOwnerRequest
+    assert corpos["/restaurants"] is schemas.ProvisionRestaurantRequest
 
 
 def test_campo_extra_no_corpo_e_ignorado_e_nao_rejeitado() -> None:
