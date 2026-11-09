@@ -217,6 +217,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#136](https://github.com/MarceloSanC/restaurant-hub/issues/136) | Identificadores em português no BC identity | identity | todas as camadas | open | #105 |
 | [#137](https://github.com/MarceloSanC/restaurant-hub/issues/137) | Identificadores em português no kernel compartilhado | shared | infrastructure | open | #105 |
 | [#139](https://github.com/MarceloSanC/restaurant-hub/issues/139) | `develop` vermelho — detector do `also_copy` toma fixture sob `tmp_path` por citação | shared | tooling + tests | done | #84, #87 |
+| [#143](https://github.com/MarceloSanC/restaurant-hub/issues/143) | `worktree-new`/`worktree-rm` — encoding do git, raiz do checkout principal e issue-first sem `gh` | shared | tooling | open | #91 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
