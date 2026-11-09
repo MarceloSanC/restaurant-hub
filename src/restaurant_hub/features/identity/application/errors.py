@@ -239,10 +239,16 @@ class RestaurantNotFoundError(IdentityApplicationError):
 
 
 class UnitNotFoundError(IdentityApplicationError):
-    """Unidade inexistente."""
+    """Unidade inexistente.
+
+    Guarda o `unit_id` procurado: `authorize_at_boundary` traduz esta exceção em
+    `UnitNotVisibleError` e nomeia a unidade a partir daqui, não do command, cujo
+    `unit_id` é opcional no tipo (issue #155).
+    """
 
     def __init__(self, unit_id: str) -> None:
         super().__init__(f"unidade não encontrada: {unit_id!r}")
+        self.unit_id = unit_id
 
 
 class UserNotFoundError(IdentityApplicationError):

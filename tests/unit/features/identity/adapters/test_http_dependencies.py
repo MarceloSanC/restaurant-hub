@@ -152,6 +152,41 @@ def test_esquema_bearer_e_case_insensitive() -> None:
     assert dependencies.extract_bearer_token(_request({"Authorization": "BEARER abc"})) == "abc"
 
 
+@pytest.mark.parametrize("separador", [" ", "   ", "\t", " \t "])
+@pytest.mark.parametrize(
+    "credencial",
+    [
+        "abc",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1In0.c2ln",
+        "com espaco",
+        "varios  espacos\te tab",
+        "Bearer repetido",
+    ],
+)
+def test_credencial_e_todo_o_resto_depois_do_esquema(separador: str, credencial: str) -> None:
+    """O esquema é a **primeira** palavra; a credencial é o resto, sem reinterpretação.
+
+    O extrator só reconhece o esquema. Se a credencial vale é decisão do
+    `TokenIssuer`, num lugar só: cortar a credencial no espaço (ou ler o esquema
+    a partir do fim) recusaria aqui o que deveria ser recusado lá, e um token com
+    espaço interno passaria a depender de qual dos dois o examinou primeiro
+    (issue #155, mutantes `rsplit` e `maxsplit=2`).
+    """
+    header = f"Bearer{separador}{credencial}"
+
+    assert dependencies.extract_bearer_token(_request({"Authorization": header})) == credencial
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["abc Bearer", "Token Bearer abc", "Basic Bearer abc", "x Bearer"],
+)
+def test_bearer_fora_da_primeira_posicao_nao_e_esquema(header: str) -> None:
+    """`Bearer` só conta como esquema na primeira palavra do header."""
+    with pytest.raises(InvalidAccessTokenError):
+        dependencies.extract_bearer_token(_request({"Authorization": header}))
+
+
 def test_token_nao_emitido_e_recusado() -> None:
     fixture = _Fixture()
 

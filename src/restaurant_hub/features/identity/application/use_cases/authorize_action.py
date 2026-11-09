@@ -186,5 +186,8 @@ def authorize_at_boundary(
     except UnitNotFoundError as exc:
         # A mensagem construída aqui nunca chega ao cliente: a faixa 403 tem
         # corpo constante (error_handlers). Ela existe para o log, que o
-        # handler grava junto com a causa encadeada (`from exc`).
-        raise UnitNotVisibleError(command.actor_id, command.unit_id or "<sem unidade>") from exc
+        # handler grava junto com a causa encadeada (`from exc`). A unidade vem da
+        # exceção, não de `command.unit_id`: o passo 5 só roda com unidade
+        # declarada, e o `or "<sem unidade>"` que estreitava o `None` para o
+        # type-checker só rotulava, em runtime, o id vazio (issue #155).
+        raise UnitNotVisibleError(command.actor_id, exc.unit_id) from exc
