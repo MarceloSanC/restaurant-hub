@@ -20,6 +20,7 @@ que existe em `src/`. É o par do
 `tests/unit/features/staff/adapters/test_composition_root_staff.py`.
 """
 
+import ast
 import importlib.util
 import pathlib
 import types
@@ -315,3 +316,13 @@ def test_gate7_main_src_inexistente_sai_um(
     """Caminho errado reprova em vez de passar vazio — o gate falha fechado."""
     assert _rodar_main(monkeypatch, tmp_path / "nao-existe") == 1
     assert "ERRO: diretório não encontrado" in capsys.readouterr().err
+
+
+def test_gate7_identificadores_inclui_parametro_e_keyword_mas_nao_kwargs() -> None:
+    """Nome de parâmetro e de keyword argument contam como uso; `**kwargs` não tem nome."""
+    arvore = ast.parse("def g(Parametro, **resto):\n    pass\nf(Chave=1, **extra)\n")
+
+    nomes = check_dead_shared.identificadores(arvore)
+
+    assert {"Parametro", "Chave"} <= nomes
+    assert None not in nomes

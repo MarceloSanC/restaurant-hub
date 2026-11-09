@@ -288,3 +288,13 @@ def test_main_explicit_target(
     monkeypatch.setattr(csi.subprocess, "run", _fake_gh({1}))
     assert csi.main() == 0
     assert "OK — 1 stage(s) checada(s)" in capsys.readouterr().out
+
+
+def test_issue_exists_false_when_gh_fails_even_with_matching_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O código de saída decide antes do JSON: `gh` que falha não confirma a issue."""
+    monkeypatch.setattr(
+        csi.subprocess, "run", lambda *_a, **_k: _completed(1, json.dumps({"number": 42}))
+    )
+    assert csi.issue_exists(42) is False

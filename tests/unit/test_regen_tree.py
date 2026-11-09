@@ -106,3 +106,18 @@ def test_force_utf8_swallows_oserror_from_reconfigure(monkeypatch: pytest.Monkey
     rt._force_utf8_stdio()
 
     assert stubborn.encoding == "cp1252"
+
+
+def test_nested_directory_lists_subdirs_before_files(tmp_path: Path) -> None:
+    """Num nível aninhado, `zpkg/` vem antes de `a.py` apesar da ordem alfabética."""
+    src = tmp_path / "src"
+    (src / "zpkg").mkdir(parents=True)
+    (src / "zpkg" / "m.py").write_text("", encoding="utf-8")
+    (src / "a.py").write_text("", encoding="utf-8")
+
+    assert rt._tree(src) == [
+        "└── src",
+        "    ├── zpkg",
+        "    │   └── m.py",
+        "    └── a.py",
+    ]

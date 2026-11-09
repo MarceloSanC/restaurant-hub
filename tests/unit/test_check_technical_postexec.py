@@ -294,3 +294,41 @@ def test_main_reports_every_error_and_exits_1(
     assert "marcadores de §7 inválidos" in err
     assert f"{missing}: arquivo não encontrado." in err
     assert "2 erro(s) em 2 arquivo(s)." in err
+
+
+# --- fronteira da janela (auditoria de testes da #91) ----------------------
+
+
+def _with_section_7(post_lines: list[str], after_end: list[str]) -> str:
+    return (
+        "---\nstatus: done\n---\n\n# Technical\n\nplano\n\n## 7. Pós-execução\n\n"
+        + "\n".join([ctp.BEGIN_MARKER, *post_lines, ctp.END_MARKER, *after_end])
+        + "\n"
+    )
+
+
+def test_content_moved_past_the_end_marker_is_rejected(repo: Path) -> None:
+    """Um lado dentro da janela não basta: a linha que sai da §7 para fora reprova.
+
+    O `delete` da linha cai dentro das duas janelas, mas o `insert` depois do END
+    está dentro da janela da baseline e fora da atual — os dois lados precisam
+    estar dentro.
+    """
+    _approve_on_stage_branch(repo, _with_section_7(["nada ainda"], []))
+    (repo / _REL).write_text(_with_section_7([], ["nada ainda"]), encoding="utf-8")
+
+    assert ctp.check_file(_REL) != []
+
+
+def test_line_appended_at_the_end_of_section_7_is_allowed(repo: Path) -> None:
+    _approve_on_stage_branch(repo, _with_section_7(["a"], ["", "rodapé"]))
+    (repo / _REL).write_text(_with_section_7(["a", "b"], ["", "rodapé"]), encoding="utf-8")
+
+    assert ctp.check_file(_REL) == []
+
+
+def test_line_added_right_after_the_end_marker_is_rejected(repo: Path) -> None:
+    _approve_on_stage_branch(repo, _with_section_7(["a"], ["", "rodapé"]))
+    (repo / _REL).write_text(_with_section_7(["a"], ["fora", "", "rodapé"]), encoding="utf-8")
+
+    assert ctp.check_file(_REL) != []

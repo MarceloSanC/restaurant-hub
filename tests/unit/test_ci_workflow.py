@@ -558,3 +558,19 @@ def test_coverage_configuration_does_not_drop_tooling() -> None:
         f"`exclude_also = {report.get('exclude_also')}`: exclusão nova precisa de "
         f"justificativa e de entrar aqui por decisão"
     )
+
+
+@pytest.mark.unit
+def test_test_gate_pytest_passes_only_measurement_flags() -> None:
+    """No pytest do `test-gate`, só `--cov=` e `--cov-report=`.
+
+    `--cov-fail-under` ou `--cov-config` apontando para outro arquivo mudariam o
+    limiar sem tocar o pyproject que os outros testes leem.
+    """
+    pytest_command = _recipe("test-gate")[0]
+    flags = [token for token in pytest_command[3:] if token.startswith("-")]
+    unexpected = [flag for flag in flags if not flag.startswith(("--cov=", "--cov-report="))]
+    assert unexpected == [], (
+        f"o pytest do `make test-gate` passa {unexpected}: flag que muda o limiar ou a "
+        f"configuração da cobertura muda o veredito do gate"
+    )
