@@ -38,7 +38,7 @@ from restaurant_hub.shared.domain.exceptions.base import DomainError
 # usabilidade de API, e é o preço aceito: o cliente controla o que envia, e
 # nenhuma rota deste sistema tem schema complexo o bastante para que a
 # adivinhação seja cara.
-_CORPO_422_VALIDACAO: Final = {"detail": "requisição inválida", "type": "validation_error"}
+_VALIDATION_422_BODY: Final = {"detail": "requisição inválida", "type": "validation_error"}
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -60,10 +60,10 @@ def register_error_handlers(app: FastAPI) -> None:
 
         Substitui o handler default, que ecoaria o corpo da requisição — e com
         ele o token de definição de senha — de volta ao cliente. Ver a nota de
-        `_CORPO_422_VALIDACAO`.
+        `_VALIDATION_422_BODY`.
 
         Registrado em `shared` porque vale para a app inteira: a rota que vaza
         credencial hoje é de identity, mas o defeito é do handler default, não da
         feature.
         """
-        return JSONResponse(status_code=422, content=_CORPO_422_VALIDACAO)
+        return JSONResponse(status_code=422, content=_VALIDATION_422_BODY)
