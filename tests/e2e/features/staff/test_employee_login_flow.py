@@ -23,7 +23,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import Engine, text
 
 from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
-    _SENTINELA_DUMMY,
+    _DUMMY_SENTINEL,
 )
 from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway import (
     LocalIdentityGateway,
@@ -253,7 +253,7 @@ async def test_ca23_canal_link_devolve_o_link_e_nao_envia_email(
     assert link.startswith("http://localhost:8000/")  # `app_base_url` default
 
     # Antes de definir a senha, nenhuma senha abre a conta — nem a sentinela do dummy.
-    for chute in (_SENTINELA_DUMMY, "qualquer-coisa"):
+    for chute in (_DUMMY_SENTINEL, "qualquer-coisa"):
         tentativa = await client.post(
             f"{API}/auth/login", json={"email": "joao@cantina.com", "password": chute}
         )
