@@ -293,7 +293,10 @@ def gh_issue_create(title: str, body: str) -> int:
     )
     # `gh issue create` imprime a URL no stdout, no formato:
     #   https://github.com/<owner>/<repo>/issues/<num>
-    last_line = cp.stdout.strip().splitlines()[-1]
+    lines = cp.stdout.strip().splitlines()
+    if not lines:  # exit 0 sem a URL: erro tratado, não `IndexError` (issue #143)
+        _fail("`gh issue create` não imprimiu a URL da issue criada.", exit_code=2)
+    last_line = lines[-1]
     m = re.search(r"/issues/(\d+)\s*$", last_line)
     if m is None:
         _fail(f"não foi possível extrair o número da issue criada: {last_line!r}", exit_code=2)

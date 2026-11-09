@@ -965,6 +965,20 @@ def test_gh_issue_create_without_issue_url_exits_2(
     )
 
 
+@pytest.mark.parametrize("stdout", ["", "  \n\n"])
+def test_gh_issue_create_with_empty_output_exits_2_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stdout: str
+) -> None:
+    """`gh` que sai com 0 e nada no stdout: erro tratado, não `IndexError` (issue #143)."""
+    monkeypatch.setattr(wn, "_run", _FakeCapturedRun(stdout))
+
+    with pytest.raises(SystemExit) as exc:
+        wn.gh_issue_create("t", "b")
+
+    assert exc.value.code == EXIT_SUBPROCESS
+    assert "`gh issue create` não imprimiu a URL da issue criada" in capsys.readouterr().err
+
+
 # ---------------------------------------------------------------------------
 # git de verdade, num repositório em tmp_path
 # ---------------------------------------------------------------------------
