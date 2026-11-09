@@ -72,11 +72,13 @@ Mudanças de classe (são as únicas):
    o resumo do WebFetch). Uma chamada por comando, sem laço/`cd`/`&&`. Citação que não se confirma
    sai, nunca fica.
 2. Decisão que entra num **port**, num **schema persistido**, no **contrato OpenAPI** ou numa
-   **regra de segurança/tenant**: despachar um `evidence-verifier` com só
-   `{afirmação, trecho literal, localizador, fonte}` por item; ele lê a fonte bruta e responde
-   `sustenta | parcial | não sustenta`. Verificação por perguntas independentes da resposta
+   **regra de segurança/tenant**: despachar um `evidence-verifier` por lote de até 6 itens (mais
+   itens → verificadores em paralelo) com só `{afirmação, trecho literal, localizador, fonte}`
+   por item; ele lê a fonte bruta e responde `sustenta | parcial | não sustenta`. Verificação por perguntas independentes da resposta
    original reduz alucinação (Chain-of-Verification, Dhuliawala et al. 2024). "Não sustenta" →
-   volta ao §3 sem aquela evidência.
+   volta ao §3 sem aquela evidência. "Fonte inacessível" (PDF escaneado, paywall) não sustenta
+   decisão **E**: troque a fonte ou decida como **C** pela escada, sem ela. "Não conferido"
+   (teto de turnos) volta num lote novo.
 3. **Completude** (decisões do item 2): despachar um `decision-reviewer` com os registros
    `[decision]` e os caminhos do doc/código; ele responde só "o que isto ignora ou contradiz no
    projeto?". Verificar citação não pega omissão — no eval de origem, a decisão citada com rigor
@@ -94,6 +96,7 @@ doc de domínio) neste formato — é por ele que o humano audita, sem ser inter
 [decision:E|C] <id> — <pergunta em 1 linha>
 Escolha: <opção> · Alternativas: <…> · Degrau (C): <1–5>
 Base: <fonte, localizador> "<trecho ≤2 frases>" · <pkg@versão arquivo:linha: default=…>
+Verificado: sustenta | parcial→corrigido | não verificado (§4.2)
 Configuração candidata: <alternativa> | nenhuma · Reversível: sim | não (motivo)
 ```
 
