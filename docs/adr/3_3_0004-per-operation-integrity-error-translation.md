@@ -5,7 +5,7 @@ when-use: Reference before adding a constraint to the staff schema, before mappi
 keywords: [adr, integrity-error, constraint-name, psycopg, diag, foreign-key, restrict, translation, staff, error-mapping, race-condition]
 status: accepted
 created_at: 2026-08-10
-updated_at: 2026-08-10
+updated_at: 2026-11-09
 adr_id: 3.3.0004
 decision: the staff translator takes a per-operation constraint map instead of a single module-level dictionary, because fk_employee_job_functions_job_function means JobFunctionNotFoundError when inserting a link and JobFunctionInUseError when deleting the parent; and that one foreign key is translated, unlike identity's rule, because port law L-E4 requires it
 context_stage: 3.3-staff-persistence
@@ -13,6 +13,8 @@ bounded_context: staff
 ---
 
 # ADR 3.3.0004 — Per-operation translation of integrity errors
+
+> ⚠️ **Errata (2026-11-09):** §Decision, "The names are in English, diverging from identity's `traduzir`" — issue #136 renamed identity's `traduzir` to `translate` (and `nome_da_constraint` to `constraint_name`) in `identity/adapters/out/postgres/integrity_errors.py`, pure rename, no behaviour change; the debt this paragraph records is paid and the two modules no longer diverge in language. Pointer only; no decision content changes — ver issue #136
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
