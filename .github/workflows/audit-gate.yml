@@ -135,8 +135,25 @@ jobs:
 
       # O escopo vem do `[tool.mutmut]` do pyproject (`only_mutate`): os quatro
       # arquivos que decidem acesso, e nada mais.
+      #
+      # Os workers rodam em paralelo (um por CPU, o default do mutmut 3.7.0), e
+      # cada um usa um banco próprio, `<banco>_mutmut_<pid>`, que a fixture
+      # `database_url` de `tests/conftest.py` cria e dropa (issue #132). O
+      # instante de início delimita o log do Postgres que o passo seguinte lê.
       - name: Rodar mutmut nos módulos de acesso
-        run: uv run mutmut run
+        run: |
+          echo "MUTMUT_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          uv run mutmut run
+
+      # Com um banco só, um worker recriava o schema sob os testes de outro: o
+      # run 41475839122 matou 581/581 com 11 deadlocks e 49 tabelas sumidas no
+      # log, e mutante morto por concorrência não mede a suíte (issue #132).
+      # O log do service desde o início do `mutmut run` não pode ter nenhum dos
+      # dois.
+      - name: Workers do mutmut sem disputa de Postgres
+        run: |
+          docker logs --since "$MUTMUT_STARTED_AT" "${{ job.services.postgres.id }}" > postgres-mutmut.log 2>&1
+          uv run python scripts/check_mutation_db_isolation.py postgres-mutmut.log
 
       # `mutmut run` com saída 0 não garante que mediu: zero mutantes gerados ou
       # mutante sem desfecho também saem verdes. O resumo do mutmut cobra os dois.
@@ -165,5 +182,6 @@ jobs:
           path: |
             .mutmut-cache
             mutants/
+            postgres-mutmut.log
           retention-days: 14
           if-no-files-found: ignore
