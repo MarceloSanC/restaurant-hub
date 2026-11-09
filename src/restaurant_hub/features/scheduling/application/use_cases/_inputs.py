@@ -55,7 +55,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
 
 MAX_RANGE_DAYS = 42  # grade de mês de 6 semanas (concept §7 D-CAL)
 MAX_PAST_LIMIT = 52  # um ano de semanas (concept §7 D-PAST)
-_UM_DIA = timedelta(days=1)
+_ONE_DAY = timedelta(days=1)
 
 
 def settings_of(config: ScheduleConfigRepository, tenant_id: TenantId) -> SchedulingSettings:
@@ -97,8 +97,8 @@ def neighbours_of(
     schedules: ScheduleRepository, schedule: Schedule
 ) -> tuple[Schedule | None, Schedule | None]:
     """A escala que termina no dia anterior e a que começa no dia seguinte (§5.13)."""
-    prior = schedule.period.first_day - _UM_DIA
-    evaluated_after = schedule.period.last_day + _UM_DIA
+    prior = schedule.period.first_day - _ONE_DAY
+    evaluated_after = schedule.period.last_day + _ONE_DAY
     previous = next(
         (
             e
