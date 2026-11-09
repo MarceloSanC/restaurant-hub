@@ -90,7 +90,7 @@ Decisões do sponsor registradas no kickoff do loop autônomo de Stages 1.2 → 
 
 *Rodada 3 — 2026-07-19 (Stage 2.4):*
 12. Só o **admin de plataforma** cria **restaurante**; o dono cria e gerencia **unidades**.
-13. **Janela de revogação** fechada por **TTL curto do access token** (15 min), sem introspecção por request; o TTL é configuração.
+13. **Janela de revogação** fechada por **TTL curto do access token** (15 min), sem introspecção por request; o TTL é configuração. Logout e desligamento cortam o refresh na hora e o access em até 15 min.
 
 > **Numeração legada (issue #129).** Artefatos das Stages 2.1 e 2.2 citaram "kickoff #N" pela **posição** na lista "Decisões já fechadas" da issue da Stage, não por esta numeração. O 4º item da issue #17 ("papéis RBAC fixos", o RBAC desta §3, ratificado depois pela decisão 10) aparece como "kickoff #4" no concept 2.1 §3 e §7. O 1º item da issue #20 (sessão revogável — decisão **4**) aparece como "kickoff #1" no [ADR 2.2.0001](./adr/2_2_0001-revocable-refresh-session-port.md) e no concept 2.2 §1, §4 e §7.1. O 4º item da issue #20 ("dois eixos de acesso", modelagem da Stage 2.1 no [ADR 2.1.0001](./adr/2_1_0001-identity-aggregates-and-membership.md), derivada da decisão 1) aparece como "kickoff #4" no [ADR 2.2.0002](./adr/2_2_0002-authorization-two-axes-fail-closed.md) e no concept 2.2 §7.2. Os ADRs têm errata; os concepts `done` ficam como estão e se leem por este mapa.
 
