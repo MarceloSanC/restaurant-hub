@@ -24,7 +24,7 @@ from typing import TextIO
 
 from restaurant_hub.shared.application.ports.out.email_sender import EmailMessage
 
-_SEPARADOR = "-" * 72
+_SEPARATOR = "-" * 72
 
 
 class ConsoleSender:
@@ -43,11 +43,11 @@ class ConsoleSender:
         lido na hora, o buffer atrasado equivale a não ter enviado.
         """
         self._stream.write(
-            f"{_SEPARADOR}\n"
+            f"{_SEPARATOR}\n"
             f"To: {message.to}\n"
             f"Subject: {message.subject}\n"
             f"\n"
             f"{message.body_text}\n"
-            f"{_SEPARADOR}\n"
+            f"{_SEPARATOR}\n"
         )
         self._stream.flush()

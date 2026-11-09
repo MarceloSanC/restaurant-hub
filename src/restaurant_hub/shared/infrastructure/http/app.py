@@ -104,8 +104,8 @@ def _register_feature_routers(app: FastAPI, deps: ApplicationDependencies) -> No
     # na Stage 3.6 foi a cardinalidade — dois bounded contexts com superfície
     # HTTP em vez de um —, e não o que este módulo sabe: ele registra o que o
     # composition root montou, na ordem em que veio.
-    for registrar in wiring.register_error_handlers:
-        registrar(app)
+    for register in wiring.register_error_handlers:
+        register(app)
 
     app.dependency_overrides.update(wiring.dependency_overrides)
 
