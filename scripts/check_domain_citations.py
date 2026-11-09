@@ -98,7 +98,8 @@ _NEUTROS = (
 # outra faixa/lista ou parêntese. Número seguido de palavra ("16 ADRs") é
 # quantidade, não linha.
 _NUMERO_DE_LINHA = re.compile(r"(?<![\w])\d{2,4}(?=\s*(?:[,;:)/–\]-]|$|\(|(?:e|and)\s+\d))")
-# A palavra "linha" antes do número tira a dúvida, em qualquer ponto do trecho.
+# A palavra "linha" antes do número tira a dúvida, em qualquer ponto do trecho
+# fora de texto citado (`*"…line 1086…"*` é citação, não ponteiro).
 _LINHA_EXPLICITA = re.compile(r"\b(?:linhas?|lines?|l\.)\s*\d{2,4}\b", re.IGNORECASE)
 # Número logo depois da referência (`x.md` 171, `x.md:171`) é linha sempre.
 _NUMERO_IMEDIATO = re.compile(
@@ -243,7 +244,7 @@ def _tem_numero_de_linha(resto: str, trecho: str) -> bool:
     # `(l. 171)` encerraria o trecho antes do número.
     return bool(
         _NUMERO_IMEDIATO.match(resto)
-        or _LINHA_EXPLICITA.search(trecho)
+        or _LINHA_EXPLICITA.search(limpo)
         or _NUMERO_DE_LINHA.search(limpo)
     )
 

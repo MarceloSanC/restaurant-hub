@@ -187,6 +187,7 @@ def test_numero_de_linha_depois_de_doc_de_dominio_reprova(
         "equipe §3.8: R17 responde 409, como antes",
         "keywords: [domain, escala, equipe, 2026]",
         "o `escala.md` §3.1 e o concept §5.2 (linha 40 do concept)",
+        '`escala.md` §3.1 (o ADR antigo dizia *"§6 (line 1086)"*)',
     ],
     ids=[
         "ancora",
@@ -201,6 +202,7 @@ def test_numero_de_linha_depois_de_doc_de_dominio_reprova(
         "status-http",
         "nome-solto-nao-e-referencia",
         "concept-encerra-o-trecho",
+        "linha-dentro-de-citacao",
     ],
 )
 def test_citacao_por_ancora_e_numeros_que_nao_sao_linha_passam(
