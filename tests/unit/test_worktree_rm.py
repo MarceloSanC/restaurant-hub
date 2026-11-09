@@ -1210,6 +1210,27 @@ def test_devcontainer_failures_are_warned_not_fatal(
     assert "→ removido: wt-old" not in captured.out
 
 
+def test_devcontainer_entry_without_id_is_skipped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    devcontainer: _FakeDocker,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Sem ID, nada de `docker inspect ""`/`stop ""`/`rm ""` — os outros seguem (#143)."""
+    no_id = [{"Names": "sem-id", "State": "running"}, {"ID": "", "Id": "", "Names": "vazio"}]
+    monkeypatch.setattr(wr, "find_containers_for_worktree", lambda _p: [*no_id, *CONTAINERS])
+    _answers(monkeypatch, "apagar volumes", "apagar imagens")
+
+    assert wr.docker_cleanup(tmp_path / PROJECT, dry_run=False) is True
+
+    assert [c for c in devcontainer.calls if "" in c] == []
+    assert ["docker", "rm", "fff000"] in devcontainer.destructive()
+    captured = capsys.readouterr()
+    assert "container sem ID ignorado: sem-id" in captured.err
+    assert "container sem ID ignorado: vazio" in captured.err
+    assert "container: sem-id" not in captured.out
+
+
 def test_devcontainer_without_volumes_or_image_asks_nothing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

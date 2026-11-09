@@ -408,7 +408,15 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> bool:  # noqa: PLR0912, P
     if not _docker_available():
         return compose
 
-    containers = find_containers_for_worktree(wt_path)
+    # Sem ID, `docker inspect ""`/`docker rm ""` não miram nada; o
+    # `find_containers_for_worktree` já descarta esses, e a guarda vale para
+    # quem o trocar (issue #143).
+    containers: list[dict[str, Any]] = []
+    for c in find_containers_for_worktree(wt_path):
+        if c.get("ID") or c.get("Id"):
+            containers.append(c)
+        else:
+            _warn(f"container sem ID ignorado: {c.get('Names') or c.get('Name') or '?'}")
 
     if not containers:
         _info("nenhum container Docker encontrado para esta worktree")
