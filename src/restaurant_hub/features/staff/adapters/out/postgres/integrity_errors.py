@@ -27,12 +27,10 @@ investigar. A ambiguidade é resolvida pela **intenção do chamador**, que é
 sempre conhecida, e nunca por inspeção de texto (`diag.message_detail` seria
 parsing de mensagem com outro nome).
 
-**Idioma: inglês**, divergindo do `traduzir` de identity. Estes nomes são **API
-de módulo**, não identificadores locais; CONVENTIONS §1 é literal e a §7 do
-technical da 3.2 já registrou o `[finding]` cuja direção é renomear os
-identificadores PT deste BC. A divergência fica registrada aqui para que uma
-varredura futura trate o módulo de identity como a dívida, e não como o padrão a
-replicar.
+**Idioma: inglês.** Estes nomes são **API de módulo**, não identificadores
+locais; CONVENTIONS §1 é literal e a §7 do technical da 3.2 já registrou o
+`[finding]` cuja direção é renomear os identificadores PT deste BC. O módulo de
+identity divergia (`traduzir`) até a issue #136, que o passou para `translate`.
 
 **Só constraint com significado de negócio é traduzida** (precedente: concept
 2.3 §7 Decisão 7). Sobem intactas, deliberadamente:
@@ -128,7 +126,7 @@ def constraint_name(error: IntegrityError) -> str | None:
 def translate(error: IntegrityError, constraint_map: ConstraintMap, detail: str) -> Exception:
     """Devolve a exceção de aplicação correspondente à operação, ou o próprio `error`.
 
-    **Devolve** em vez de levantar, como o `traduzir` de identity: o
+    **Devolve** em vez de levantar, como o `translate` de identity: o
     `raise … from error` fica no repositório, onde preserva o `__cause__` — e
     perder a cadeia de causa custaria caro justamente no diagnóstico de um
     conflito de integridade.
