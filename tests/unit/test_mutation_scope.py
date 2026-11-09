@@ -152,6 +152,15 @@ def test_o_gate_estrutural_do_check_layout_fica_fora_da_corrida() -> None:
 # nada; o contrário custaria a corrida. Fica fora o caminho montado só em tempo
 # de execução, sem nenhum literal que o nomeie — o limite de qualquer varredura
 # estática.
+#
+# **O que não é leitura do repositório (issue #139):** o literal que é operando
+# de uma cadeia `/` cuja base deriva de um diretório temporário (`tmp_path`, as
+# outras fixtures de tmp do pytest, `tempfile`) dentro da mesma função. Ele
+# monta uma fixture — `parent / "wt" / ".devcontainer"`, com `parent` vindo de
+# `tmp_path` — e não lê a raiz. A derivação é um ponto fixo sobre as
+# atribuições da função (`=`, `:=`, `for`, `with … as`), só para alvos que são
+# nomes; o mesmo literal sob `_REPO_ROOT`, na mesma linha ou em outra função,
+# continua contando.
 # ---------------------------------------------------------------------------
 
 # Os defaults que o mutmut 3.7.0 soma ao `also_copy` (`configuration.py`, no
@@ -168,6 +177,8 @@ _DEFAULTS_DO_MUTMUT = (
 )
 _GLOB_DE_RAIZ_DO_MUTMUT = "test*.py"
 _CURINGAS = frozenset("*?[")
+# As fixtures de diretório temporário do pytest e o módulo `tempfile` (issue #139).
+_TEMPORARIOS = frozenset({"tmp_path", "tmp_path_factory", "tmpdir", "tmpdir_factory", "tempfile"})
 
 
 def _sem_variaveis_do_git() -> dict[str, str]:
@@ -231,6 +242,73 @@ def _copiado(caminho: str, copia: list[str]) -> bool:
     return any(_dentro(caminho, entrada) for entrada in copia)
 
 
+def _nomes(no: ast.AST) -> set[str]:
+    return {filho.id for filho in ast.walk(no) if isinstance(filho, ast.Name)}
+
+
+def _nomes_ligados(alvo: ast.AST) -> set[str]:
+    """Os nomes que um alvo de atribuição liga — `x[i] = …` e `o.a = …` não ligam nenhum."""
+    if isinstance(alvo, ast.Name):
+        return {alvo.id}
+    if isinstance(alvo, ast.Starred):
+        return _nomes_ligados(alvo.value)
+    if isinstance(alvo, ast.Tuple | ast.List):
+        return set().union(*(_nomes_ligados(elemento) for elemento in alvo.elts))
+    return set()
+
+
+def _derivados_de_temporario(funcao: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Os nomes da função que guardam um caminho derivado de um diretório temporário.
+
+    Ponto fixo: parte de `_TEMPORARIOS`; todo nome ligado por uma atribuição cujo
+    valor menciona um nome derivado também é derivado.
+    """
+    ligacoes: list[tuple[set[str], set[str]]] = []
+    for no in ast.walk(funcao):
+        if isinstance(no, ast.Assign):
+            ligacoes.extend((_nomes_ligados(alvo), _nomes(no.value)) for alvo in no.targets)
+        elif isinstance(no, ast.AnnAssign | ast.AugAssign | ast.NamedExpr) and no.value:
+            ligacoes.append((_nomes_ligados(no.target), _nomes(no.value)))
+        elif isinstance(no, ast.For | ast.AsyncFor | ast.comprehension):
+            ligacoes.append((_nomes_ligados(no.target), _nomes(no.iter)))
+        elif isinstance(no, ast.withitem) and no.optional_vars is not None:
+            ligacoes.append((_nomes_ligados(no.optional_vars), _nomes(no.context_expr)))
+    derivados = set(_TEMPORARIOS)
+    mudou = True
+    while mudou:
+        mudou = False
+        for ligados, usados in ligacoes:
+            if ligados - derivados and usados & derivados:
+                derivados |= ligados
+                mudou = True
+    return derivados
+
+
+def _base_da_cadeia(no: ast.BinOp) -> ast.expr:
+    """O operando mais à esquerda de `a / b / c` — o `a`."""
+    while isinstance(no.left, ast.BinOp) and isinstance(no.left.op, ast.Div):
+        no = no.left
+    return no.left
+
+
+def _literais_sob_temporario(arvore: ast.AST) -> set[ast.AST]:
+    """Os literais que montam um caminho sob um diretório temporário (issue #139)."""
+    literais: set[ast.AST] = set()
+    for funcao in ast.walk(arvore):
+        if not isinstance(funcao, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        derivados = _derivados_de_temporario(funcao)
+        for no in ast.walk(funcao):
+            if (
+                isinstance(no, ast.BinOp)
+                and isinstance(no.op, ast.Div)
+                and isinstance(no.right, ast.Constant)
+                and _nomes(_base_da_cadeia(no)) & derivados
+            ):
+                literais.add(no.right)
+    return literais
+
+
 def _leituras_fora_da_copia(
     fontes: dict[str, str], rastreados: list[str], copia: list[str]
 ) -> list[str]:
@@ -242,8 +320,12 @@ def _leituras_fora_da_copia(
     raizes = {caminho.split("/")[0] for caminho in rastreados}
     achados: set[str] = set()
     for fonte, texto in fontes.items():
-        for no in ast.walk(ast.parse(texto, filename=fonte)):
+        arvore = ast.parse(texto, filename=fonte)
+        sob_temporario = _literais_sob_temporario(arvore)
+        for no in ast.walk(arvore):
             if not (isinstance(no, ast.Constant) and isinstance(no.value, str)):
+                continue
+            if no in sob_temporario:
                 continue
             citado = _caminho_citado(no.value)
             if citado is None or citado.split("/")[0] not in raizes:
@@ -461,6 +543,115 @@ def test_a_varredura_acusa_o_que_a_copia_deixa_de_fora(
     codigo: str, copia: list[str], esperado: list[str]
 ) -> None:
     assert _leituras_fora_da_copia({"t.py": codigo}, _RASTREADOS_DE_EXEMPLO, copia) == esperado
+
+
+_CITA_CLAUDE = [
+    "t.py:{linha} '.claude' -> .claude/hooks/git_guard.py",
+    "t.py:{linha} '.claude' -> .claude/settings.json",
+]
+
+
+def _cita_claude(linha: int) -> list[str]:
+    return [achado.format(linha=linha) for achado in _CITA_CLAUDE]
+
+
+@pytest.mark.parametrize(
+    ("codigo", "esperado"),
+    [
+        # A forma da #139: o diretório-pai vem de um helper que recebeu `tmp_path`.
+        (
+            "def t(tmp_path):\n"
+            "    principal, wts, parent = _worktrees(tmp_path)\n"
+            '    parent / "wt" / ".claude"\n',
+            [],
+        ),
+        ('def t(tmp_path):\n    tmp_path / ".claude"\n', []),
+        ('async def t(tmp_path):\n    tmp_path / ".claude"\n', []),
+        ('def t(tmpdir):\n    tmpdir / ".claude"\n', []),
+        ('def t(tmp_path_factory):\n    tmp_path_factory.mktemp("x") / ".claude"\n', []),
+        # Derivação em cadeia e por cada forma de ligar um nome.
+        ('def t(tmp_path):\n    a = tmp_path\n    b = a / "x"\n    b / ".claude"\n', []),
+        ('def t(tmp_path):\n    a: Path = tmp_path\n    a / ".claude"\n', []),
+        ('def t(tmp_path):\n    a = b = tmp_path\n    b / ".claude"\n', []),
+        ('def t(tmp_path):\n    *a, = [tmp_path]\n    a[0] / ".claude"\n', []),
+        ('def t(tmp_path):\n    if (a := tmp_path):\n        a / ".claude"\n', []),
+        ('def t(tmp_path):\n    for d in tmp_path.iterdir():\n        d / ".claude"\n', []),
+        ('def t(tmp_path):\n    [d / ".claude" for d in tmp_path.iterdir()]\n', []),
+        (
+            'def t():\n    with tempfile.TemporaryDirectory() as d:\n        Path(d) / ".claude"\n',
+            [],
+        ),
+        # A leitura de verdade continua contando — o caso da #87.
+        ('def t():\n    R / ".claude" / "hooks"\n', _cita_claude(2)),
+        # …mesmo na função que também monta fixture sob `tmp_path`.
+        (
+            'def t(tmp_path):\n    tmp_path / ".claude"\n    R / ".claude"\n',
+            _cita_claude(3),
+        ),
+        (
+            "def t(tmp_path):\n"
+            "    shutil.copytree(\n"
+            '        R / ".claude",\n'
+            '        tmp_path / ".claude",\n'
+            "    )\n",
+            _cita_claude(3),
+        ),
+        # A derivação é por função: o mesmo nome em outra função não é tmp.
+        (
+            'def a(tmp_path):\n    p = tmp_path\ndef b():\n    p / ".claude"\n',
+            _cita_claude(4),
+        ),
+        # Nome que não deriva de tmp não vira derivado por estar na mesma função.
+        ('def t(tmp_path):\n    p = R\n    q = tmp_path\n    p / ".claude"\n', _cita_claude(4)),
+        # Atribuição a subscrito ou atributo não liga nome nenhum.
+        (
+            'def t(tmp_path):\n    o.p = tmp_path\n    c["k"] = tmp_path\n    o / ".claude"\n',
+            _cita_claude(4),
+        ),
+        # Fora de uma cadeia `/`, o literal conta mesmo na função de tmp.
+        ('def t(tmp_path):\n    open(".claude")\n', _cita_claude(2)),
+        # Literal à esquerda da cadeia não está sob tmp.
+        ('def t(tmp_path):\n    ".claude" / tmp_path\n', _cita_claude(2)),
+        # Fora de função não há derivação: o literal conta.
+        ('tmp_path / ".claude"\n', _cita_claude(1)),
+    ],
+)
+def test_caminho_montado_sob_diretorio_temporario_nao_e_leitura_da_raiz(
+    codigo: str, esperado: list[str]
+) -> None:
+    """Issue #139: fixture sob `tmp_path` não é citação; leitura da raiz continua sendo."""
+    assert _leituras_fora_da_copia({"t.py": codigo}, _RASTREADOS_DE_EXEMPLO, []) == esperado
+
+
+_FIXTURE_DA_84 = "tests/unit/test_worktree_docker.py:"
+
+
+def test_a_fixture_da_issue_84_nao_e_citacao_e_a_leitura_real_continua(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O falso positivo que deixou o `develop` vermelho, sobre o arquivo de verdade.
+
+    `test_worktree_docker.py` monta o diretório do devcontainer sob `tmp_path`.
+    Sem o filtro a guarda o cobraria no `also_copy` (controle negativo abaixo);
+    com ele, não. Com `.claude/hooks` fora da cópia, a mesma varredura ainda
+    acusa o `test_git_guard.py` — o caso da #87. O nome do diretório não aparece
+    como literal aqui: este arquivo também é varrido.
+    """
+    fontes, rastreados, copia = _repositorio()
+    sem_hooks = [entrada for entrada in copia if entrada != ".claude/hooks"]
+
+    achados = _leituras_fora_da_copia(fontes, rastreados, sem_hooks)
+
+    assert not any(achado.startswith(_FIXTURE_DA_84) for achado in achados), achados
+    assert any(
+        achado.startswith("tests/unit/test_git_guard.py:")
+        and achado.endswith("-> .claude/hooks/git_guard.py")
+        for achado in achados
+    ), achados
+
+    monkeypatch.setattr(sys.modules[__name__], "_literais_sob_temporario", lambda _: set())
+    sem_filtro = _leituras_fora_da_copia(fontes, rastreados, sem_hooks)
+    assert any(achado.startswith(_FIXTURE_DA_84) for achado in sem_filtro), sem_filtro
 
 
 def test_a_copia_declarada_soma_also_copy_source_paths_e_defaults() -> None:
