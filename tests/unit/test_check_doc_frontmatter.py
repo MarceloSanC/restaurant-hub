@@ -415,6 +415,91 @@ def test_lacuna_sem_stage_done_passa(tmp_path: pathlib.Path, marca: str) -> None
     assert gate.problemas(repo) == []
 
 
+# --- domínio: tabela de lacunas (issue #117) ------------------------------------
+
+_TABELA = "\n| Stage dona | Lacuna (§) |\n|---|---|\n"
+
+
+@pytest.mark.parametrize(
+    ("linha", "pendentes"),
+    [
+        ("| **4.1** | a pergunta (§3.2) |", "4.1"),
+        ("| **4.1 (technical)** | a pergunta |", "4.1"),
+        ("|**4.2**| a pergunta |", "4.2"),
+        ("| **4.4/4.2** | a pergunta |", "4.2"),
+        ("| **4.1 / 4.2** | a pergunta |", "4.1, 4.2"),
+        ("| **4.1 / 4.2** | a pergunta — *fechada pela Stage 4.1 (ADR)* |", "4.2"),
+        ("| **4.1** | a pergunta — *fechada pela Stage 4.4 (ADR)* |", "4.1"),
+        ("| **4.1** | a pergunta — *fechada pela Stage 4.11 (ADR)* |", "4.1"),
+        ("| **4.1** | a pergunta — *Lacuna da Stage 4.1 (ADR)* |", "4.1"),
+        ("| **4.1** | a pergunta — fechada pela 4.1 |", "4.1"),
+    ],
+)
+def test_linha_da_tabela_com_stage_done_sem_marca_reprova(
+    tmp_path: pathlib.Path, linha: str, pendentes: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(_TABELA + linha + "\n")})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f"{_DOMINIO}:9: linha da tabela de lacunas da Stage ")
+    assert f'sem "fechada pela Stage {pendentes}", mas já está done' in achado
+
+
+@pytest.mark.parametrize(
+    "linha",
+    [
+        "| **4.1** | a pergunta — *fechada pela Stage 4.1 (ADR 4.1.0007)* |",
+        "| **4.1 (technical)** | a pergunta — *Fechada pela Stage 4.1 (concept)* |",
+        "| **4.1/4.2** | a pergunta — *fechada pelas Stages 4.1 e 4.2 (ADRs)* |",
+        "| **4.1/4.2** | a pergunta — *fechada pelas Stages 4.2, 4.1 (ADRs)* |",
+        "| **4.1/4.2** | a pergunta — *fechada pelas Stages 4.1/4.2 (ADRs)* |",
+        "| **4.1/4.2** | x — *fechada pela Stage 4.1 (a)*; *fechada pela Stage 4.2 (b)* |",
+        "| **4.1 / 4.4** | a pergunta — *fechada pela Stage 4.1: a 4.4 implementa* |",
+        "| **4.4 / 4.5** | a pergunta |",  # nenhuma done
+        "| **9.9** | a pergunta |",  # "done" só na Tabela de Issues
+        "| **sem Stage (roadmap)** | a pergunta |",
+        "| **4.4** (reendereçada da 4.1) | a pergunta |",  # 4.1 fora do negrito
+        "| 4.1 | sem negrito na célula dona |",
+        "| a 1ª célula | **4.1** em outra célula |",
+    ],
+)
+def test_linha_da_tabela_fechada_ou_sem_stage_done_passa(
+    tmp_path: pathlib.Path, linha: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(_TABELA + linha + "\n")})
+    assert gate.problemas(repo) == []
+
+
+def test_linha_da_tabela_dentro_de_bloco_cercado_e_exemplo(tmp_path: pathlib.Path) -> None:
+    corpo = "```markdown\n| **4.1** | a pergunta |\n```\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    assert gate.problemas(repo) == []
+
+
+def test_tabela_real_reprova_se_uma_linha_done_perde_a_marca(tmp_path: pathlib.Path) -> None:
+    """A mutação do critério de aceite da #117, sobre o doc e o roadmap reais."""
+    rel = "docs/domain/scheduling/shift-scheduling.md"
+    texto = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+    alvo = next(
+        linha
+        for linha in texto.splitlines()
+        if linha.startswith("| **4.3** | DTO próprio do `StaffReadPort`")
+    )
+    sem_marca = alvo.split(" — *fechada pela Stage")[0] + " |"
+    repo = _repo(
+        tmp_path,
+        {
+            "docs/roadmap.md": (_REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8"),
+            rel: texto.replace(alvo, sem_marca),
+        },
+    )
+    achados = [a for a in gate.problemas(repo) if "tabela de lacunas" in a]
+    numero = texto.splitlines().index(alvo) + 1
+    assert achados == [
+        f'{rel}:{numero}: linha da tabela de lacunas da Stage 4.3 sem "fechada pela Stage 4.3",'
+        " mas já está done — feche-a no lugar ou reenderece a Stage dona"
+    ]
+
+
 # --- roadmap --------------------------------------------------------------------
 
 
