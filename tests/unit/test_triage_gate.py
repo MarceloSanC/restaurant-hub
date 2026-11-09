@@ -7,6 +7,8 @@ Casos reais: as mensagens de fim de turno vêm das sessões da Stage 5.4 e da #7
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -138,3 +140,35 @@ def test_stop_blocks_on_local_fork_shapes(msg: str) -> None:
 )
 def test_stop_passes_on_findings_and_tagged_or_settled_recommendations(msg: str) -> None:
     assert tg.decide(_stop(msg)) is None
+
+
+# --- `main()`: stdin em bytes, saída JSON só quando bloqueia (issue #91) ---
+
+
+def _stdin(monkeypatch: pytest.MonkeyPatch, raw: bytes) -> None:
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw), encoding="utf-8"))
+
+
+def test_main_prints_the_decision_when_it_blocks(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    payload = _ask("Escopo")
+    expected = tg.decide(payload)
+    assert expected is not None, "o caso precisa bloquear para o teste valer"
+    _stdin(monkeypatch, json.dumps(payload).encode("utf-8"))
+
+    assert tg.main() == 0
+    assert json.loads(capsys.readouterr().out) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [json.dumps(_ask("P: escopo")).encode("utf-8"), b"nao e json", b"\xff\xfe"],
+    ids=["permitido", "json-invalido", "utf8-invalido"],
+)
+def test_main_is_silent_when_it_does_not_block(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], raw: bytes
+) -> None:
+    _stdin(monkeypatch, raw)
+    assert tg.main() == 0
+    assert capsys.readouterr().out == ""
