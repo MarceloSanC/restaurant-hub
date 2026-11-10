@@ -561,10 +561,12 @@ def test_l_jf1_add_grava_a_habilitacao_e_toda_leitura_a_reidrata(
 def test_l_jf1_insercao_recusada_nao_deixa_vinculo_de_unidade_para_tras(
     repos: RepositoriosDeStaff,
 ) -> None:
-    """A inserção é atômica: o nome repetido recusa a função **e** as unidades dela.
+    """Nome repetido recusa a função **e** as unidades dela.
 
     Se os vínculos de `f2` sobrevivessem à recusa, a próxima `f2` (em todas as
-    unidades) seria lida com flag **e** vínculos — incoerente.
+    unidades) seria lida com flag **e** vínculos — incoerente. Prova o caso da
+    recusa na linha da função; a atomicidade entre linha e vínculos é a da
+    transação única do adapter (`_add`), não deste teste.
     """
     _com_funcao_gravada(repos)
     with pytest.raises(JobFunctionNameAlreadyExistsError):
@@ -661,8 +663,13 @@ def test_l_jf6_list_by_unit_de_tenant_sem_funcoes_e_vazia(repos: RepositoriosDeS
 def test_l_jf7_update_enablement_substitui_a_habilitacao_inteira(
     antes: UnitEnablement, depois: UnitEnablement, repos: RepositoriosDeStaff
 ) -> None:
-    """L-JF7 — o que saiu deixa de valer, o que entrou passa a valer; o nome fica."""
+    """L-JF7 — o que saiu deixa de valer, o que entrou passa a valer; o nome fica.
+
+    A vizinha `f2` (restrita a u1) existe para reprovar um `DELETE` de vínculos sem
+    o predicado da função: ele apagaria as unidades dela também (Checkpoint C).
+    """
     repos.job_functions.add(_funcao_em(antes))
+    repos.job_functions.add(_funcao_em(_restrita(_U1), id_=_F2, name="Vizinha"))
 
     repos.job_functions.update_enablement(_funcao_em(depois, name="Ignorado"))
 
@@ -673,6 +680,8 @@ def test_l_jf7_update_enablement_substitui_a_habilitacao_inteira(
     for unidade in (_U1, _U2, _U3):
         listada = any(f.id == _F1 for f in repos.job_functions.list_by_unit(_A, unidade))
         assert listada == depois.covers(unidade), unidade
+    assert _habilitacao(repos, _F2) == _restrita(_U1)
+    assert any(f.id == _F2 for f in repos.job_functions.list_by_unit(_A, _U1))
 
 
 def test_l_jf7_update_enablement_de_inexistente_no_tenant_nao_grava_nada(
