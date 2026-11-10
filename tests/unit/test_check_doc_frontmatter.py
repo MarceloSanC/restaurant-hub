@@ -758,41 +758,36 @@ def test_marca_fechada_por_stage_done_ou_fora_da_forma_passa(
 
 
 @pytest.mark.parametrize(
-    ("rel", "fechada", "mutada", "invalidas"),
+    ("rel", "fechada", "stage"),
     [
-        (
-            "docs/domain/scheduling/shift-scheduling.md",
-            "é lacuna fechada pela Stage 4.2: *no avaliador",
-            "é lacuna fechada pela Stage 4.5: *no avaliador",
-            "4.5 (draft)",
-        ),
+        # "{rascunho}": a primeira Stage não done do roadmap real (a 4.5 era draft na #180) —
+        # o teste não quebra quando ela fechar
+        ("docs/domain/scheduling/shift-scheduling.md", "é lacuna fechada pela Stage 4.2: *", None),
         (
             "docs/domain/scheduling/shift-scheduling.md",
             "`StaffReadPort` (§3.10.1) — *fechada pela Stage 4.3",
-            "`StaffReadPort` (§3.10.1) — *fechada pela Stage 4.5",
-            "4.5 (draft)",
+            None,
         ),
-        (
-            "docs/domain/staff/workforce.md",
-            "era **lacuna fechada pela Stage 3.2**",
-            "era **lacuna fechada pela Stage 3.10**",
-            "3.10 (fora da Tabela de Stages)",
-        ),
+        ("docs/domain/staff/workforce.md", "era **lacuna fechada pela Stage 3.2**", "3.99"),
     ],
 )
 def test_doc_real_reprova_se_a_marca_fechada_aponta_stage_nao_done(
-    tmp_path: pathlib.Path, rel: str, fechada: str, mutada: str, invalidas: str
+    tmp_path: pathlib.Path, rel: str, fechada: str, stage: str | None
 ) -> None:
     """A mutação do critério de aceite da #180, sobre os docs e o roadmap reais."""
     texto = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+    roadmap = (_REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8")
+    status = gate.status_das_stages(roadmap)
+    if stage is None:
+        stage = next(s for s, st in status.items() if st != "done")
+        invalidas = f"{stage} ({status[stage]})"
+    else:
+        assert stage not in status
+        invalidas = f"{stage} (fora da Tabela de Stages)"
     assert texto.count(fechada) == 1
-    repo = _repo(
-        tmp_path,
-        {
-            "docs/roadmap.md": (_REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8"),
-            rel: texto.replace(fechada, mutada),
-        },
-    )
+    original = gate._NUMERO_STAGE.findall(fechada)[-1]
+    mutada = fechada.replace(f"Stage {original}", f"Stage {stage}")
+    repo = _repo(tmp_path, {"docs/roadmap.md": roadmap, rel: texto.replace(fechada, mutada)})
     achados = [a for a in gate.problemas(repo) if "marca fechada" in a]
     numero = texto[: texto.index(fechada)].count("\n") + 1
     assert len(achados) == 1
