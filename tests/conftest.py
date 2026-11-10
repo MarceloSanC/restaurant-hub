@@ -67,6 +67,8 @@ TABELAS_EM_ORDEM_DE_LIMPEZA = (
     "employee_unavailabilities",
     "employee_job_functions",
     "employees",
+    # Stage 3.11 — filha de `job_functions` (`CASCADE`), antes da mãe.
+    "job_function_units",
     "job_functions",
 )
 

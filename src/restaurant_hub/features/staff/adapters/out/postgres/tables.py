@@ -55,6 +55,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    true,
 )
 
 from restaurant_hub.features.staff.domain.value_objects.shift_preference import DayPeriod
@@ -109,6 +110,14 @@ job_functions = Table(
     # (ADR 3.3.0002).
     Column("tenant_id", Text, nullable=False),
     Column("name", Text, nullable=False),
+    # Stage 3.11 — metade da habilitação por unidade (ADR 3.11.0001): verdadeiro =
+    # a função vale em **toda** unidade do restaurante, presente e futura, e não há
+    # linha em `job_function_units`. O `DEFAULT true` é o da migration `0005`: as
+    # funções anteriores à Stage nascem em todas as unidades sem que staff leia as
+    # unidades de identity. A coerência entre flag e vínculos (exatamente um dos dois) é
+    # invariante do domínio (`UnitEnablement`), imposta na escrita pelo adapter e na
+    # reidratação pelo `__post_init__` — nenhuma constraint a expressa entre tabelas.
+    Column("enabled_in_all_units", Boolean, nullable=False, server_default=true()),
     # Colisão de id é **global** (L-JF1): a PK não inclui o tenant, e um índice
     # `(tenant_id, id)` no lugar dela aceitaria a inserção que o port recusa.
     PrimaryKeyConstraint("id", name="pk_job_functions"),
@@ -123,6 +132,33 @@ job_functions = Table(
     # `fk_employee_job_functions_job_function` aponta para `(id, tenant_id)`.
     # Sem isto a migration não roda.
     UniqueConstraint("id", "tenant_id", name="uq_job_functions_id_tenant"),
+)
+
+
+# Stage 3.11 — a outra metade da habilitação: as unidades em que uma função **não**
+# habilitada em todas vale (ADR 3.11.0001). Filha do agregado `JobFunction`, não
+# referência a ele: some com a função (`CASCADE`), e o `RESTRICT` de
+# `employee_job_functions` continua sendo quem guarda a remoção (L-JF3).
+job_function_units = Table(
+    "job_function_units",
+    staff_metadata,
+    Column("job_function_id", Text, nullable=False),
+    # `NOT NULL` pela mesma razão de `employee_job_functions`: com a coluna nula a
+    # FK composta MATCH SIMPLE seria ignorada, e o vínculo poderia apontar para
+    # função de outro tenant.
+    Column("tenant_id", Text, nullable=False),
+    # Opaco: a unidade vive em identity, sem FK (ADR 3.3.0002).
+    Column("unit_id", Text, nullable=False),
+    # Conjunto, não multiconjunto: `UnitEnablement.unit_ids` é `frozenset`.
+    PrimaryKeyConstraint("job_function_id", "unit_id", name="pk_job_function_units"),
+    ForeignKeyConstraint(
+        ["job_function_id", "tenant_id"],
+        ["job_functions.id", "job_functions.tenant_id"],
+        name="fk_job_function_units_job_function",
+        ondelete="CASCADE",
+    ),
+    # Serve `list_by_unit` (L-JF6): "funções habilitadas nesta unidade do tenant".
+    Index("ix_job_function_units_tenant_unit", "tenant_id", "unit_id"),
 )
 
 
