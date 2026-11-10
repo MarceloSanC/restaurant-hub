@@ -193,7 +193,7 @@ continuam valendo, byte a byte. Nota *append-only*; o corpo acima não foi edita
 foi revogado.** O `## Context` fala em *"five distinct status bands — 401, 403, 404, 409, 422"*,
 e a decisão 4 trata só dessas cinco. Desde a issue #170 (PR #173) o mapa tem uma entrada fora da
 família 4xx: `InvitationNotSentError → 500`, a falha de entrega do convite **depois** de a conta
-ser comitada (regra 13 da Stage 2.5; ADR 0.0.0018 §4 já dizia 500). O que vale para ela:
+ser comitada (regra 13 da Stage 2.5; o status 500 já estava no ADR 0.0.0018 §4). O que vale para ela:
 
 - **Corpo constante**, como 401/403: `{"detail": "erro interno", "type": "internal_error"}`,
   escolhido pelo status (`status >= 500` em `build_error_response`), nunca `str(exc)`. A causa
