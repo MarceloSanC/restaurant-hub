@@ -1099,7 +1099,7 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 | **4.3/4.5** | unidade de salvamento — uma operação por requisição × lote de edições (§3.5) — *fechada pela Stage 4.3: lote atômico (ADR 4.3.0001; concept 4.3 §7 D-SAVE); a 4.5 fica com a UX "publicar edições acumuladas × gravar a cada ação"* |
 | **4.2/4.3** | identidade da violação para fins de aceite (§3.5) — *fechada pelas Stages 4.2 e 4.3 (ADRs 4.2.0002 e 4.3.0001; nota 2026-11-02 abaixo)* |
 | **4.3** | protocolo do aceite de `warn` na mutação (§3.5) — *fechada pela Stage 4.3 (ADR 4.3.0001; concept 4.3 §7 D-ACK)* |
-| **4.3** | mudança do dia de início / corte com escalas existentes (§3.1) — *fechada pela Stage 4.3: vale só para escalas criadas depois (concept 4.3 §7 D-CONFIG); o requisito da edição da configuração fica com a issue #106* |
+| **4.3** | mudança do dia de início / corte com escalas existentes (§3.1) — *fechada pela Stage 4.3: vale só para escalas criadas depois (concept 4.3 §7 D-CONFIG); o requisito da edição da configuração fica com a Stage 4.8 (`4.8-scheduling-settings`, aberta pela issue #106)* |
 | **4.3** | calendário sobre recortes com várias escalas; resolução ator → `employee_id` (§3.7) — *fechada pela Stage 4.3 (concept 4.3 §7 D-CAL e D-OWN); a 4.5 compõe as unidades do ator (divergência 10 do concept 4.3)* |
 | **4.3** | DTO próprio do `StaffReadPort` (§3.10.1) — *fechada pela Stage 4.3: `StaffMember` (ADR 4.3.0003; concept 4.3 §7 D-STAFFPORT)* |
 | **4.3** | limpar ou não as alocações futuras no desligamento — a recontratação as reexibe (limite (4) de F7, §3.4) — *fechada pela Stage 4.3: não limpar (concept 4.3 §7 D-TERM; ADR 4.1.0006)* |
