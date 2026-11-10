@@ -194,12 +194,13 @@ class IdentityGuard:
         escopado por unidade é negado por `UnitScopeRequiredError`, porque omitir
         a unidade não pode ser caminho de escalada (ADR 2.2.0002).
 
-        **Autorizar por unidade antes de chamar o use case de criação é o que
-        mantém seguras as faixas 404/422.** Sem isto, `CreateUserUseCase` seria
-        alcançado com unidades não-visíveis e responderia `UnitNotFoundError`
-        (404) para inexistente e `CrossTenantError` (422) para unidade de outro
-        tenant — reabrindo, com dois status falantes, o mesmo oráculo que a
-        tradução de `UnitNotFoundError` fecha.
+        **Autorizar por unidade é o que mantém seguras as faixas 404/422.** Uma
+        unidade não-visível levaria a `UnitNotFoundError` (404) para inexistente e
+        a `CrossTenantError` (422) para unidade de outro tenant — reabrindo, com
+        dois status falantes, o mesmo oráculo que a tradução de
+        `UnitNotFoundError` fecha. Desde a Stage 2.7 o use case de criação também
+        autoriza cada unidade antes de qualquer outra instrução; esta chamada
+        continua como a primeira linha (defesa em profundidade).
 
         Devolve o `AuthorizedActor` da primeira checagem; todas validam o mesmo
         ator, então qualquer uma serve para ler o tenant dele.

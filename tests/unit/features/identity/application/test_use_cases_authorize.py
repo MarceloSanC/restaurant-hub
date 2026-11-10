@@ -26,25 +26,36 @@ import pytest
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthorizeActionCommand,
     CreateUnitCommand,
+    CreateUserCommand,
     InviteOwnerCommand,
+    InviteUserCommand,
     ProvisionRestaurantCommand,
 )
 from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.create_user import (
+    CreateUserUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.invite_owner import (
     InviteOwnerUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.invite_user import (
+    InviteUserUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
     ProvisionRestaurantUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
+from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
+    UnitId,
     UserId,
 )
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
+from restaurant_hub.features.identity.domain.value_objects.role import Role
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
 from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.features.identity.in_memory_password_setup_token_repository import (
@@ -69,6 +80,12 @@ pytestmark = pytest.mark.unit
 _AGORA = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
 ATOR = UserId("ator-do-command")
 TENANT = RestaurantId("rest-a")
+U1 = UnitId("unit-1")
+U2 = UnitId("unit-2")
+# O cenário discriminante do CA04: unidades fora de ordem e repetidas. Uma
+# expansão que iterasse as unidades por fora, as ordenasse ou as deduplicasse
+# produziria outra sequência de pedidos.
+UNIDADES_PEDIDAS = (U2, U1, U2)
 # Os parâmetros de construtor que não são port: não têm o que espionar.
 ESCALARES = frozenset({"invitation_ttl", "base_url", "authorizer"})
 
@@ -123,10 +140,13 @@ def _grafo_de_convite() -> dict[str, object]:
     restaurants = InMemoryRestaurantRepository()
     tokens = InMemoryPasswordSetupTokenRepository()
     restaurants.add(Restaurant(id=TENANT, name="Cantina A"))
+    units = InMemoryUnitRepository()
+    for unidade in (U1, U2):
+        units.add(Unit(id=unidade, restaurant_id=TENANT, name=f"Unidade {unidade}"))
     return {
         "users": users,
         "restaurants": restaurants,
-        "units": InMemoryUnitRepository(),
+        "units": units,
         "hasher": FakePasswordHasher(),
         "tokens": tokens,
         "token_issuer": FakeSetupTokenIssuer(),
@@ -183,12 +203,47 @@ def _create_unit(autorizador: object) -> Montagem:
     )
 
 
+def _create_user(autorizador: object) -> Montagem:
+    grafo = _grafo_de_convite()
+    return montar(
+        CreateUserUseCase,
+        CreateUserCommand(
+            actor_id=ATOR,
+            email=Email("novo-dono@x.com"),
+            plain_password="s3nha",
+            role=Role.OWNER,
+            tenant_id=TENANT,
+            unit_ids=UNIDADES_PEDIDAS,
+        ),
+        {k: grafo[k] for k in ("users", "restaurants", "units", "hasher", "id_generator")},
+        autorizador,
+    )
+
+
+def _invite_user(autorizador: object) -> Montagem:
+    return montar(
+        InviteUserUseCase,
+        InviteUserCommand(
+            actor_id=ATOR,
+            email=Email("convidado@x.com"),
+            role=Role.MANAGER,
+            tenant_id=TENANT,
+            unit_ids=UNIDADES_PEDIDAS,
+        ),
+        _grafo_de_convite(),
+        autorizador,
+        _ESCALARES_DE_CONVITE,
+    )
+
+
 # módulo de `use_cases/` → montagem. Cresce por Task; a totalidade contra a pasta
 # nasce na Task 06, quando os cinco estão aqui.
 CENARIOS: dict[str, Callable[[object], Montagem]] = {
     "invite_owner": _invite_owner,
     "provision_restaurant": _provision_restaurant,
     "create_unit": _create_unit,
+    "create_user": _create_user,
+    "invite_user": _invite_user,
 }
 
 
@@ -200,6 +255,13 @@ def _pedido(
     )
 
 
+def _composto(command: object) -> list[AuthorizeActionCommand]:
+    """R3 de `create_user`/`invite_user`: `{manage_users} | role.permissions`, em
+    `sorted`, por fora; as unidades do command, na ordem e sem deduplicar, por dentro."""
+    permissoes = sorted({Permission.MANAGE_USERS} | command.role.permissions)
+    return [_pedido(command, p, command.tenant_id, u) for p in permissoes for u in command.unit_ids]
+
+
 # Transcrição literal do concept 2.7 R3, campo a campo do command. Não importa
 # `required_permissions_for_role` nem `authorize_requirement`: se a regra e o código
 # errarem juntos, esta tabela é a terceira voz.
@@ -207,6 +269,8 @@ _MATRIZ_R3: dict[str, Callable[[object], list[AuthorizeActionCommand]]] = {
     "invite_owner": lambda c: [_pedido(c, Permission.MANAGE_PLATFORM, c.tenant_id)],
     "provision_restaurant": lambda c: [_pedido(c, Permission.MANAGE_PLATFORM, None)],
     "create_unit": lambda c: [_pedido(c, Permission.MANAGE_TENANT, c.restaurant_id)],
+    "create_user": _composto,
+    "invite_user": _composto,
 }
 
 
