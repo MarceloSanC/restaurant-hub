@@ -269,3 +269,21 @@ concept picks one, and the owner role stays a code literal.
 - `src/restaurant_hub/features/identity/adapters/inbound/http/router.py`,
   `src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py` › `required_permissions_for_role`,
   `src/restaurant_hub/features/identity/application/use_cases/`
+
+## Nota — implementado pela Stage 2.7, com uma correção de §Inventory
+
+**2026-11-09 — [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md) (Stage 2.7, issue #184).** A decisão está implementada. Os pontos que
+este ADR deixou para o concept foram fechados lá: o ator é `actor_id: UserId`; os use cases
+dependem de um port estreito (`ActionAuthorizer`) que `AuthorizeActionUseCase` cumpre; as duas
+traduções de `authorize_at_boundary` valem dentro do use case, pela mesma função que a borda
+usa; e o convite de dono tem use case próprio, `InviteOwnerUseCase`. O inventário passou a ter
+quinze use cases, cinco afetados e as mesmas dez exclusões.
+
+**Correção de §Inventory.** O parágrafo do resíduo diz que `IdentityFacade.provision_account`
+aceita `platform_admin` sem tenant. A fachada nunca aceitou: ela recebe `tenant_id: str` e o
+converte para `RestaurantId`, e o `User` recusa `platform_admin` com tenant
+(`PlatformAdminTenantError`). Só o use case aceita. O que a fachada aceitava era `owner`,
+`manager` ou `hr` em qualquer tenant existente, e a Stage 2.7 fechou isso: a fachada só provisiona
+`employee`. No `ProvisionAccountUseCase` o resíduo continua. Um teste garante que só a fachada e o
+composition root importam os use cases facade-only, e o primeiro chamador novo reabre a questão.
+Nota *append-only*; o corpo acima não foi editado.

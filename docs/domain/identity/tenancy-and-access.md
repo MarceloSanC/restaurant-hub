@@ -16,6 +16,7 @@ references:
   - ../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md
   - ../../adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md
   - ../../adr/0_0_0018-restaurant-owner-is-provisioned-by-invitation.md
+  - ../../adr/0_0_0020-identity-use-cases-authorize-their-own-target.md
   - ../../adr/2_1_0001-identity-aggregates-and-membership.md
   - ../../adr/2_1_0002-platform-admin-without-tenant.md
   - ../../adr/2_2_0001-revocable-refresh-session-port.md
@@ -37,6 +38,7 @@ references:
   - ../../adr/2_5_0004-unusable-hash-for-pending-accounts.md
   - ../../adr/2_6_0001-identity-unit-of-work-port-and-ambient-connection.md
   - ../../adr/2_6_0002-unit-of-work-scope-identity-only-no-cross-bc-transaction.md
+  - ../../adr/2_7_0001-identity-authorizes-through-a-narrow-port.md
   - ../../adr/3_4_0001-staff-owned-access-guard-port.md
   - ../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md
   - ../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md
@@ -267,12 +269,23 @@ dispensa retira a *exigência de nomear* a unidade; não retira checagem nenhuma
 
 **Composição na borda de identity.** O adapter declara quais permissões a ação exige e o escopo
 alvo, e delega **toda** decisão à autorização acima — sem tabela de papéis própria, sem bypass
-próprio ([ADR 2.4.0003](../../adr/2_4_0003-authorization-composition-at-boundary.md) §1). Os use
-cases de identity **não** recebem ator nem autorizam: a autorização de identity mora na borda HTTP
-([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) §4) —
-ao contrário de staff, onde todo use case autoriza o próprio alvo
-([ADR 3.7.0001](../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md)). Se identity
-deve seguir staff é decisão aberta para o BC inteiro (issue #115; §5).
+próprio ([ADR 2.4.0003](../../adr/2_4_0003-authorization-composition-at-boundary.md) §1).
+
+**Todo use case que age em nome de um ator autoriza o próprio alvo** — regra transversal, válida
+em staff, scheduling e identity
+([ADR 0.0.0020](../../adr/0_0_0020-identity-use-cases-authorize-their-own-target.md) §Decision 5).
+Em identity são cinco: provisionar restaurante, convidar dono pela plataforma, criar unidade,
+criar usuário e convidar usuário. O ator viaja no command, e a primeira instrução de cada um declara
+o requisito — o mesmo que a borda declara — à mesma autorização
+([ADR 2.7.0001](../../adr/2_7_0001-identity-authorizes-through-a-narrow-port.md) §Decision 3). A
+borda continua autorizando antes (defesa em profundidade). Ficam fora, por exclusão **nomeada**: os
+use cases cuja autoridade é uma credencial (login, refresh, logout, pedido de redefinição, definição
+de senha), a própria decisão de acesso e os quatro que só a fachada chama — esses, quem chama a
+fachada autoriza. Um use case novo entra numa das duas listas ou a suíte reprova. **"Não se concede
+o que não se detém" vale para quem chama o use case direto**, não só pela API: nenhum papel detém
+ao mesmo tempo `manage_users` e `manage_platform`, então ninguém cria um `platform_admin`, e um
+`owner` de outro tenant é negado no passo de tenant. A fachada de provisionamento, que não autoriza,
+só aceita o papel `employee` (ADR 2.7.0001 §Decision 5).
 
 **A mesma decisão, para quem está fora de identity.** Outro BC não recompõe a autorização: ele a
 pede à **fachada de acesso** (`IdentityAccessFacade`, segunda classe de `application/facade.py`),
@@ -536,10 +549,11 @@ id nem papel do dono) — fechar isso exigiria rever a unicidade global (idem, �
 Pontos em que os insumos ratificados **não fixam** a regra. Nenhum é decidido aqui; cada um tem a
 sua âncora de origem.
 
-- **Autorização dentro dos use cases de identity** — hoje só na borda HTTP; um segundo driver (CLI,
-  job, console) não herdaria a checagem. "A decision for the whole bounded
-  context" ([ADR 0.0.0014](../../adr/0_0_0014-restaurant-provisioning-creates-its-owner-in-one-unit.md) §4)
-  — issue #115, aberta a partir do achado F2 da issue #67.
+- **Autenticidade do ator fora da borda HTTP** — os use cases recusam o ator não **autorizado**,
+  não o ator forjado: um driver em processo que fabrique o identificador de um `platform_admin`
+  passa ([ADR 0.0.0020](../../adr/0_0_0020-identity-use-cases-authorize-their-own-target.md)
+  §Consequences). Ator de sistema ou delegado — issue #75; e o seed do primeiro `platform_admin`,
+  que não tem ator que o autorize, fica para a Stage que o criar.
 - **Gestão de vínculo depois da criação** — acrescentar, retirar ou trocar unidade de um usuário,
   e vincular login existente a registro de staff (o gerente ou dono que também trabalha na escala)
   — issue #107; a regra de fim de vínculo a aplicar é a do
