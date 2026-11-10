@@ -39,6 +39,7 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 )
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
+from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -75,6 +76,7 @@ class _Fixture:
 
 def _command(**overrides: object) -> CreateUserCommand:
     base: dict[str, object] = {
+        "actor_id": TEST_ACTOR_ID,
         "email": Email("gerente@x.com"),
         "plain_password": "s3nha",
         "role": Role.MANAGER,

@@ -66,6 +66,7 @@ from tests.fakes.features.identity.in_memory_session_repository import (
 from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
+from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
@@ -131,17 +132,23 @@ def _montar_restaurante_com_gerente() -> tuple[_Sistema, RestaurantId, UnitId, U
 
     restaurante = sistema.provision_restaurant.execute(
         ProvisionRestaurantCommand(
+            actor_id=TEST_ACTOR_ID,
             name="Cantina da Esquina",
             owner_email=Email("fundador@cantina.com"),
         )
     )
     tenant = RestaurantId(restaurante.id)
 
-    centro = sistema.create_unit.execute(CreateUnitCommand(restaurant_id=tenant, name="Centro"))
-    praia = sistema.create_unit.execute(CreateUnitCommand(restaurant_id=tenant, name="Praia"))
+    centro = sistema.create_unit.execute(
+        CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=tenant, name="Centro")
+    )
+    praia = sistema.create_unit.execute(
+        CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=tenant, name="Praia")
+    )
 
     gerente = sistema.create_user.execute(
         CreateUserCommand(
+            actor_id=TEST_ACTOR_ID,
             email=Email("gerente@cantina.com"),
             plain_password=_SENHA_GERENTE,
             role=Role.MANAGER,
@@ -213,6 +220,7 @@ def test_fluxo_com_dono_enxerga_as_duas_unidades_do_tenant() -> None:
 
     dono = sistema.create_user.execute(
         CreateUserCommand(
+            actor_id=TEST_ACTOR_ID,
             email=Email("dono@cantina.com"),
             plain_password="s3nha-dono",
             role=Role.OWNER,
@@ -242,6 +250,7 @@ def test_fluxo_nega_funcionario_por_falta_de_permissao() -> None:
 
     funcionario = sistema.create_user.execute(
         CreateUserCommand(
+            actor_id=TEST_ACTOR_ID,
             email=Email("funcionario@cantina.com"),
             plain_password="s3nha-func",
             role=Role.EMPLOYEE,
@@ -275,11 +284,13 @@ def test_fluxo_isola_tenants_distintos() -> None:
     sistema, _tenant_a, _centro, _praia, gerente_a = _montar_restaurante_com_gerente()
 
     outro = sistema.provision_restaurant.execute(
-        ProvisionRestaurantCommand(name="Outro", owner_email=Email("dono@outro.com"))
+        ProvisionRestaurantCommand(
+            actor_id=TEST_ACTOR_ID, name="Outro", owner_email=Email("dono@outro.com")
+        )
     )
     tenant_b = RestaurantId(outro.id)
     unidade_b = sistema.create_unit.execute(
-        CreateUnitCommand(restaurant_id=tenant_b, name="Filial B")
+        CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=tenant_b, name="Filial B")
     )
 
     # Negado no eixo de tenant, antes mesmo de olhar a visibilidade da unidade.

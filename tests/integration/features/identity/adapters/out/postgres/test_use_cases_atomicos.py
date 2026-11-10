@@ -101,6 +101,7 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
 from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
+from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import (
@@ -487,6 +488,7 @@ def _convidar(
 
 def _convite() -> InviteUserCommand:
     return InviteUserCommand(
+        actor_id=TEST_ACTOR_ID,
         email=Email("novo@x.com"),
         role=Role.MANAGER,
         tenant_id=RestaurantId("rest-a"),
@@ -638,7 +640,9 @@ def _provisionar_tenant(
 
 
 def _tenant(email: Email = _EMAIL_DO_DONO) -> ProvisionRestaurantCommand:
-    return ProvisionRestaurantCommand(name="Cantina Nova", owner_email=email)
+    return ProvisionRestaurantCommand(
+        actor_id=TEST_ACTOR_ID, name="Cantina Nova", owner_email=email
+    )
 
 
 class TestProvisaoDoTenantAtomica:

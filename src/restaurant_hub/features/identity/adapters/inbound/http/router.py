@@ -296,6 +296,7 @@ def provision_restaurant(
 
     result = use_case.execute(
         ProvisionRestaurantCommand(
+            actor_id=actor.claims.subject,
             name=payload.name,
             owner_email=Email(payload.owner.email),
         )
@@ -348,6 +349,7 @@ def create_restaurant_owner(
 
     result = use_case.execute(
         InviteUserCommand(
+            actor_id=actor.claims.subject,
             email=Email(payload.email),
             role=Role.OWNER,
             tenant_id=RestaurantId(restaurant_id),
@@ -381,7 +383,9 @@ def create_unit(
     tenant_id = RestaurantId(restaurant_id)
     guard.authorize(actor, Permission.MANAGE_TENANT, tenant_id=tenant_id)
 
-    result = use_case.execute(CreateUnitCommand(restaurant_id=tenant_id, name=payload.name))
+    result = use_case.execute(
+        CreateUnitCommand(actor_id=actor.claims.subject, restaurant_id=tenant_id, name=payload.name)
+    )
     return _unit_response(result)
 
 
@@ -423,6 +427,7 @@ def create_user(
 
     result = use_case.execute(
         CreateUserCommand(
+            actor_id=actor.claims.subject,
             email=Email(payload.email),
             plain_password=payload.password.get_secret_value(),
             role=target_role,
@@ -473,6 +478,7 @@ def invite_user(
 
     result = use_case.execute(
         InviteUserCommand(
+            actor_id=actor.claims.subject,
             email=Email(payload.email),
             role=target_role,
             tenant_id=authorized.actor_tenant_id,

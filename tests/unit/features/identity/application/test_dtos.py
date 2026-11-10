@@ -54,6 +54,7 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
+from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
 
 pytestmark = pytest.mark.unit
 
@@ -95,6 +96,7 @@ _TOTAL_DE_DTOS = 27
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
     """A maioria dos usuários nasce sem vínculo; exigir a lista seria ruído."""
     command = CreateUserCommand(
+        actor_id=TEST_ACTOR_ID,
         email=Email("dono@x.com"),
         plain_password="s3nha",
         role=Role.OWNER,
@@ -116,7 +118,9 @@ def test_authorize_action_command_tem_alvo_opcional_no_tipo() -> None:
 def test_commands_carregam_os_campos_declarados() -> None:
     """Construção de cada command com todos os campos preenchidos."""
 
-    unit_command = CreateUnitCommand(restaurant_id=RestaurantId("rest-1"), name="Centro")
+    unit_command = CreateUnitCommand(
+        actor_id=TEST_ACTOR_ID, restaurant_id=RestaurantId("rest-1"), name="Centro"
+    )
     assert unit_command.restaurant_id == "rest-1"
 
     auth_command = AuthenticateUserCommand(email=Email("dono@x.com"), plain_password="s3nha")
@@ -234,7 +238,9 @@ def test_authorized_actor_separa_tenant_do_ator_do_tenant_alvo() -> None:
 
 def test_dtos_sao_imutaveis() -> None:
     """DTO mutável permitiria alterar a resposta depois da decisão do use case."""
-    command = CreateUnitCommand(restaurant_id=RestaurantId("rest-1"), name="Centro")
+    command = CreateUnitCommand(
+        actor_id=TEST_ACTOR_ID, restaurant_id=RestaurantId("rest-1"), name="Centro"
+    )
     with pytest.raises(FrozenInstanceError):
         command.name = "Outra"  # type: ignore[misc]
 
@@ -353,3 +359,46 @@ def test_identificadores_da_camada_distinguem_hash_de_senha_em_claro() -> None:
     assert password_hash == "hashed::s3nha"
     assert isinstance(password_hash, str)
     assert isinstance(session_id, str)
+
+
+# Stage 2.7 (concept CA02) — os commands dos use cases que agem em nome de um ator.
+# `AuthorizeActionCommand` também começa por `actor_id`, mas é o pedido de
+# autorização em si (a decisão), não um command que a declara: fica de fora por nome.
+_COMMANDS_QUE_AGEM_POR_ATOR = frozenset(
+    {
+        "ProvisionRestaurantCommand",
+        "CreateUnitCommand",
+        "CreateUserCommand",
+        "InviteUserCommand",
+    }
+)
+
+
+def test_os_commands_com_ator_sao_exatamente_os_que_agem_por_ele() -> None:
+    """CA02 — derivado do módulo, não de uma lista que só cresce à mão.
+
+    Um command novo que ganhe `actor_id` sem entrar aqui, ou um dos que agem por um
+    ator que o perca, reprova: os dois lados da totalidade.
+    """
+    com_ator = {
+        nome
+        for nome, obj in vars(commands).items()
+        if dataclasses.is_dataclass(obj)
+        and isinstance(obj, type)
+        and "actor_id" in {campo.name for campo in dataclasses.fields(obj)}
+    }
+
+    assert com_ator - {"AuthorizeActionCommand"} == _COMMANDS_QUE_AGEM_POR_ATOR
+
+
+@pytest.mark.parametrize("nome", sorted(_COMMANDS_QUE_AGEM_POR_ATOR))
+def test_ator_e_o_primeiro_campo_e_nao_tem_default(nome: str) -> None:
+    """CA02 / concept R6 — sem ator, sem command: quem não o informa nem o forma."""
+    classe = getattr(commands, nome)
+    primeiro = dataclasses.fields(classe)[0]
+
+    assert primeiro.name == "actor_id"
+    assert primeiro.default is dataclasses.MISSING
+    assert primeiro.default_factory is dataclasses.MISSING
+    with pytest.raises(TypeError, match="actor_id"):
+        classe()
