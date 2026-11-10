@@ -21,6 +21,8 @@ tipo da falha e o `user_id` — como `RequestPasswordResetUseCase` faz desde a i
 #26 — e levanta `InvitationNotSentError`. Os dois use cases que convidam depois de
 comitar a conta (`InviteUserUseCase` e `ProvisionRestaurantUseCase`) passam por
 aqui, e por isso as três rotas de convite herdam a mesma garantia de uma vez.
+Desde a issue #175 o terceiro chamador é `SendInvitationUseCase`, a entrega pela
+fachada no canal `email` do login de funcionário (R17 de staff): a quarta rota.
 """
 
 import logging

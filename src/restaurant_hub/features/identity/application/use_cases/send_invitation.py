@@ -10,13 +10,22 @@ reportar sucesso sem que o e-mail tenha saído deixaria uma conta inacessível e
 um gestor convencido de que convidou. A conta já existe quando isto falha — o
 caminho de recuperação é o pedido público de redefinição de senha.
 
+**E propaga trocada, como nos outros convites** (issue #175): o envio passa por
+`_invitation.deliver_invitation`, que registra só o tipo da falha e o `user_id`
+do command e levanta `InvitationNotSentError` sem cadeia até a original — cuja
+mensagem pode ecoar o destinatário e o link. Até a #175 este era o único call
+site de `EmailSender.send` fora dessa política, e a falha chegava crua ao
+servidor ASGI, que a registrava com traceback.
+
 Não emite token, não consulta repositório, não decide nada: recebe o link pronto
 e o coloca na mensagem que `_invitation.invitation_message` compõe — assunto e
-corpo idênticos aos do convite da 2.5.
+corpo idênticos aos do convite da 2.5. O `user_id` também chega pronto, de quem
+provisionou a conta; este use case não o confere contra o e-mail.
 """
 
 from restaurant_hub.features.identity.application.dtos.commands import SendInvitationCommand
 from restaurant_hub.features.identity.application.use_cases._invitation import (
+    deliver_invitation,
     invitation_message,
 )
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
@@ -32,6 +41,11 @@ class SendInvitationUseCase:
         """Envia o convite.
 
         Raises:
-            Exception: qualquer falha do `EmailSender` sobe (regra 13 da 2.5).
+            InvitationNotSentError: o `EmailSender` falhou (regra 13 da 2.5; issue
+                #175).
         """
-        self._email_sender.send(invitation_message(command.email.value, command.setup_link))
+        deliver_invitation(
+            self._email_sender,
+            invitation_message(command.email.value, command.setup_link),
+            command.user_id,
+        )

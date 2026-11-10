@@ -43,6 +43,7 @@ import pytest
 from sqlalchemy import Engine
 
 from restaurant_hub.features.identity.application.errors import (
+    InvitationNotSentError,
     RestaurantNotFoundError,
     UnitNotFoundError,
 )
@@ -115,6 +116,7 @@ from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfW
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
 from tests.fakes.features.staff.in_memory_identity_gateway import (
+    FakeInvitationNotSent,
     FakeTenantUnknown,
     FakeUnitOfAnotherTenant,
     FakeUnitUnknown,
@@ -264,7 +266,11 @@ class GatewaySobContrato:
         unidade_inexistente / unidade_de_outro_tenant / tenant_inexistente:
             **arranjo** — devolvem o valor que produz a falha crua e o tipo que
             sobe deste lado.
-        envio_falha: **arranjo** — faz o próximo envio levantar a instância dada.
+        envio_falha: **arranjo** — faz o próximo envio falhar e devolve o tipo que
+            sobe do gateway. Recebe o texto com que o **provedor** falharia — o
+            pior caso, com destinatário e link (issue #175): o real arma o
+            `EmailSender` com ele, e o que sobe é a `InvitationNotSentError` de
+            identity; o fake, que já modela identity, levanta a sua sentinela.
         login_de_outro_papel: **arranjo** (Stage 3.8, L-IG5) — cria deste lado um
             login **conhecido** do papel dado como **valor** (`"owner"`,
             `"manager"`, `"hr"`, `"platform_admin"`) e devolve o id dele.
@@ -286,7 +292,7 @@ class GatewaySobContrato:
     unidade_inexistente: Callable[[], CenarioCru]
     unidade_de_outro_tenant: Callable[[], CenarioCru]
     tenant_inexistente: Callable[[], CenarioCru]
-    envio_falha: Callable[[Exception], None]
+    envio_falha: Callable[[str], type[Exception]]
     login_de_outro_papel: Callable[[str], UserId]
     consulta_de_papel_falha: Callable[[Exception], None]
 
@@ -316,8 +322,9 @@ def _gateway_fake() -> GatewaySobContrato:
         fake.invalid_emails.update(recusados)
         return recusados
 
-    def envio_falha(excecao: Exception) -> None:
-        fake.fail_send_with = excecao
+    def envio_falha(_eco_do_provedor: str) -> type[Exception]:
+        fake.fail_send_with = FakeInvitationNotSent()
+        return FakeInvitationNotSent
 
     # O fake não guarda o papel dos logins de outro papel — só que não são de
     # funcionário. O holder lembra o valor pedido, para `login_role_of` responder.
@@ -516,6 +523,10 @@ def _gateway_real() -> GatewaySobContrato:
             argumento="unit_id", valor="unidade-fantasma", tipo_esperado=UnitNotFoundError
         )
 
+    def envio_falha(eco_do_provedor: str) -> type[Exception]:
+        sender.falhar_com(RuntimeError(eco_do_provedor))
+        return InvitationNotSentError
+
     outros_papeis = 0
 
     def login_de_outro_papel(papel: str) -> UserId:
@@ -576,7 +587,7 @@ def _gateway_real() -> GatewaySobContrato:
         unidade_inexistente=unidade_inexistente,
         unidade_de_outro_tenant=unidade_de_outro_tenant,
         tenant_inexistente=tenant_inexistente,
-        envio_falha=sender.falhar_com,
+        envio_falha=envio_falha,
         login_de_outro_papel=login_de_outro_papel,
         consulta_de_papel_falha=consulta_de_papel_falha,
     )

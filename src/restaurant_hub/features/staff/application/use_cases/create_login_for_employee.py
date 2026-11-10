@@ -120,7 +120,9 @@ class CreateLoginForEmployeeUseCase:
 
         if command.delivery is LoginDelivery.EMAIL:
             self._gateway.send_login_invitation(
-                email=command.email, setup_link=provisioned.setup_link
+                user_id=provisioned.user_id,
+                email=command.email,
+                setup_link=provisioned.setup_link,
             )
             # O link **não** volta no result: quem o recebe é a caixa de entrada.
             return to_employee_login_result(linked, setup_link=None)

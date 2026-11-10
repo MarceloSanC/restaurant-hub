@@ -240,7 +240,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#171](https://github.com/MarceloSanC/restaurant-hub/issues/171) | O piloto não pode subir com o `ConsoleSender`, que imprime o link de convite no log | shared | infrastructure + composition root | open | #114 |
 | [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
 | [#174](https://github.com/MarceloSanC/restaurant-hub/issues/174) | Citações por número de linha a `LAYOUT.md`, concepts/technicals de Stage e runbooks sem gate | shared | tooling | open | #154 |
-| [#175](https://github.com/MarceloSanC/restaurant-hub/issues/175) | Falha de envio do convite de login de funcionário vai ao log com traceback e pode vazar destinatário e link | staff + identity | application + adapters/out/identity | open | #170 |
+| [#175](https://github.com/MarceloSanC/restaurant-hub/issues/175) | Falha de envio do convite de login de funcionário vai ao log com traceback e pode vazar destinatário e link | staff + identity | application + adapters/out/identity | done | #170 |
 | [#178](https://github.com/MarceloSanC/restaurant-hub/issues/178) | Stage 3.8 fechou como `stage 3.7: complete` e o `check_stage_deps` trava quem depende dela | shared | docs + tooling | open | — |
 | [#180](https://github.com/MarceloSanC/restaurant-hub/issues/180) | Marca fechada "fechada pela Stage N.M" não é conferida contra o roadmap | shared | tooling | open | #158 |
 

@@ -5,7 +5,7 @@ when-use: Reference before any module of one bounded context imports another, be
 keywords: [adr, bounded-context, anticorruption-layer, open-host-service, facade, gateway, import-linter, ignore-imports, bc-independence, composition-root, staff, identity]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 adr_id: 3.5.0001
 decision: identity exposes an in-process Open Host Service (`features/identity/application/facade.py`, primitive types, no authorization, re-exports the errors a consumer must translate); staff implements its `IdentityGateway` port in `features/staff/adapters/out/identity/` importing only that facade; `bc-independence` receives exactly one `ignore_imports` pair (`staff.adapters.out.identity.* -> identity.application.facade`) whose exact list is pinned by test; `_IdentityAccessGuard` remains in `composition_root.py` because the object it wraps is unimportable, and issue #47 is re-scoped accordingly
 context_stage: 3.5-employee-login-link
@@ -266,3 +266,29 @@ par nomeado (§3): o módulo da fachada é o mesmo. A propriedade "a fachada nã
 lê, desde então, como "não autoriza as **próprias** operações": a fachada de acesso **expõe** a
 decisão, não a exige de quem a chama. Nota *append-only*; o corpo acima não foi editado
 (CONVENTIONS §5).
+
+## Nota — a falha do envio chega à aresta já trocada (issue #175)
+
+**2026-11-09 — nada acima foi revogado; a §1 e a §2 se aplicam a um tipo novo.** Desde a
+issue #175, `IdentityFacade.send_invitation` recebe também `user_id` (a conta que o link
+ativa) e, quando o `EmailSender` falha, levanta `InvitationNotSentError`: o
+`SendInvitationUseCase` passa por `_invitation.deliver_invitation`, a política de falha de
+envio da issue #170 (registra só o tipo da falha e o `user_id`, sem traceback, e levanta a
+exceção nova sem cadeia até a original, cuja mensagem pode ecoar o destinatário e o link).
+
+- **A fachada continua sem traduzir (§1).** Quem troca a falha é o use case, dentro de
+  identity; a fachada a deixa subir como veio. `InvitationNotSentError` **não** entra na
+  lista de re-exportações: o consumidor não a traduz.
+- **O gateway continua deixando subir cru (§2).** A razão da §2 — *no second error band for
+  a condition that already has a handler* — vale literalmente: a exceção tem handler, o de
+  identity, registrado na app, que responde status 500 com corpo constante (nota da faixa
+  de status 500 no ADR 2.4.0001). Traduzi-la num erro de staff com entrada própria em
+  `STAFF_ERROR_STATUS` daria dois corpos distinguíveis para a mesma falha. O mapa de staff,
+  a allowlist `_FORA_DA_FAMILIA_4XX` de `tests/unit/test_status_map.py` e o oráculo de
+  faixas de staff não mudam.
+- **L-IG2 ganhou uma cláusula** (`features/staff/application/ports/out/identity_gateway.py`):
+  a falha do envio não carrega destinatário nem link, nem na mensagem, nem na cadeia. A
+  suíte de contrato (`test_l_ig2_a_falha_do_envio_sobe_crua_sem_destinatario_nem_link`) a
+  cobra das duas implementações, com o provedor falhando pelo pior texto.
+
+Nota *append-only*; o corpo acima não foi editado.

@@ -5,7 +5,7 @@ when-use: Reference before adding any credential-delivery path, before letting a
 keywords: [adr, login, invitation, setup-token, setup-link, pending-account, unusable-hash, provisional-password, delivery-channel, staff, identity]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-09-13
+updated_at: 2026-11-09
 adr_id: 3.5.0002
 decision: there is no provisional password — an employee login is born as a pending account (unusable hash + single-use setup token, ADR 2.5.0002/0004) and the manager chooses the delivery channel of the setup link (`email` sent by identity, or `link` returned once in the 201 body to an actor holding `manage_users`); identity exposes `provision_account` and `send_invitation` as separate operations so that staff writes `user_id` between them, the link handed over in person lives under its own configurable TTL (`handover_link_ttl_hours`, default 168h), `InviteUserUseCase` is left intact (only the link/message composition moves to a shared helper), and forced password change is structural because the handed-over secret can only define a password, never authenticate
 context_stage: 3.5-employee-login-link
@@ -234,3 +234,22 @@ The Stage's DoD is the login link. Not acceptable.
   added at Stage close)
 - Kickoff decisions #2 and the derived "both paths" decision (memory
   `loop-kickoff-decisions-2026-07`)
+
+## Nota — a falha da entrega por e-mail (issue #175)
+
+**2026-11-09 — a §4 continua valendo; muda o que sobe quando a entrega falha.** A ordem
+"gravar o vínculo, depois entregar" não mudou, e a falha do e-mail ainda deixa a conta
+existente e vinculada, com a recuperação pelo reset público e um segundo R17 em 409. O que
+mudou é a falha: desde a issue #175 ela sobe como `InvitationNotSentError` de identity, sem
+o destinatário e o link, e a resposta é status 500 com o corpo constante de identity
+(`{"detail": "erro interno", "type": "internal_error"}`), não o erro do servidor ASGI.
+`send_login_invitation` passou a receber o `user_id` do login, que é o único dado do convite
+que vai ao log. A §5 ("never logs it, never puts it in an exception message") passa a valer
+também para a falha do provedor, que antes chegava ao log do servidor com a mensagem.
+
+O concept da 3.5 descreve o estado anterior em três pontos, que esta nota supera: a linha
+"Falha do `EmailSender` no canal `email`" da §6.2 (*a do sender*, *handler genérico*), o
+"sobe cru" do CA08 para a falha do envio e o "mesma instância" do CA30. A prova pela app
+real é `tests/e2e/features/staff/test_login_invitation_send_failure.py`.
+
+Nota *append-only*; o corpo acima não foi editado.

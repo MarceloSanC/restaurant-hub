@@ -19,7 +19,9 @@ Três propriedades definem a fachada:
    que o consumidor não precise de um segundo módulo de identity só para
    nomear o que vai capturar, este módulo **re-exporta** as duas exceções que
    um consumidor é esperado a traduzir: `EmailAlreadyRegisteredError` e
-   `InvalidEmailError`.
+   `InvalidEmailError`. `InvitationNotSentError` (a falha do envio, desde a
+   issue #175) **não** é re-exportada: o consumidor não a traduz — ela já tem
+   handler, o de identity, registrado na app (L-IG2 de staff).
 3. **Não autoriza as próprias operações.** Identity não autoriza na
    application: nenhum use case de identity recebe ator, e a autorização de
    identity mora na borda HTTP (ADR 2.4.0003 §1, mantido pelo ADR 0.0.0014 §4)
@@ -161,10 +163,23 @@ class IdentityFacade:
         )
         return ProvisionedAccount(user_id=result.user.id, setup_link=result.setup_link)
 
-    def send_invitation(self, *, email: str, setup_link: str) -> None:
-        """Envia o convite com o link já emitido; a falha do sender sobe."""
+    def send_invitation(self, *, user_id: str, email: str, setup_link: str) -> None:
+        """Envia o convite com o link já emitido.
+
+        `user_id` é a conta que o link ativa — o que `provision_account` devolveu
+        para este `email`. É o único dado do convite que vai ao log se o envio
+        falhar (issue #175).
+
+        Raises:
+            InvitationNotSentError: o `EmailSender` falhou — trocada pelo use
+                case, sem cadeia até a falha original (issue #175). Sobe sem
+                tradução, como as demais; quem a responde é o handler de
+                identity (status 500, corpo constante).
+        """
         self._send_invitation.execute(
-            SendInvitationCommand(email=Email(email), setup_link=setup_link)
+            SendInvitationCommand(
+                user_id=UserId(user_id), email=Email(email), setup_link=setup_link
+            )
         )
 
     def revoke_all_sessions(self, user_id: str) -> None:
