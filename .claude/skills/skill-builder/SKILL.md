@@ -69,6 +69,8 @@ The first version of the skill will still have gaps. That's expected. When it fa
 
 Each failure → fix → skill-update loop makes the skill materially better. The health metric is **sharpness, not length**: a skill that grows one guardrail per failure gets longer and duller; a skill whose concepts get sharper stays lean and covers more (see Token Economy). This is the **recursive** part of recursive skill building: the skill improves itself through use.
 
+**Editing rule — result per token, governs every update, not just the first draft.** Improve existing text before adding new: an edit that reformulates what's there beats one that appends beside it. Judge each line by **result per token** — how much better the agent acts because of it, divided by the context it costs on every load — and cut the lines that don't clear that bar, including ones the sharper text just made redundant. Net token growth across an update is a smell to justify, not a default; a skill that only ever grows is being maintained wrong. Reach for a new section, concept, or file only when the reformulation genuinely can't carry the load.
+
 ## Skill Anatomy
 
 A skill.md has two parts:

@@ -183,7 +183,10 @@ lock-check:
 # se `gh` não está autenticado), (3) o bounded_context dos ADRs, (4) que a
 # árvore de pastas do LAYOUT §2 descreve o repositório que existe, (5) o
 # frontmatter de skills/subagentes em `.claude/` — o Claude Code não reporta
-# YAML inválido nem descrição truncada (issue #56) —, (6) que toda pasta de
+# YAML inválido nem descrição truncada (issue #56) — e a estrutura do harness:
+# corpo de SKILL.md ≤ 500 linhas, `reference/` de um nível e citada, arquivo
+# citado existente, `skills:` de subagente e script de hook existentes, com
+# débito anterior em `KNOWN_DEBT` que só encolhe (issue #65), (6) que toda pasta de
 # Stage tem as dependências fechadas: `done` no roadmap e `stage N.M: complete`
 # no histórico, com o número derivado do stage_id (issue #12, ADR 0.0.0009) —
 # (7) que doc cita o roadmap por âncora (`§Stage N.M › "Rótulo"`), nunca por

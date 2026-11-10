@@ -374,7 +374,26 @@ Gate: <comando> → <resultado numérico>   (ex.: `make check` → 1779 passed, 
 ### 6. Aprendizados → skills
 <algum padrão novo (falso verde, decisão recorrente, jargão mal
 explicado) que vale virar/atualizar conceito numa skill? Qual skill e
-qual conceito. Se nada novo: dizer "nada novo" explicitamente.>
+qual conceito. Se nada novo: dizer "nada novo" explicitamente.
+
+Antes de propor a atualização, responda os 4 filtros — proposta que
+reprova em qualquer um NÃO entra:
+1. **Classe ou caso?** O aprendizado descreve uma CLASSE que recorre
+   (conceito) ou só este episódio (história)? História não entra —
+   skill fica afiada, não longa.
+2. **Canal de consumo real:** quem vai LER isto e quando? Regra
+   acionável de skill em `skills_hint` vira pergunta adversarial
+   obrigatória no Checkpoint C (consumo mecânico); texto que só o
+   autor leria é advisory — se o único canal é advisory, avalie se o
+   ganho justifica.
+3. **O viés generaliza?** Toda regra enviesa a atenção do revisor —
+   esse é o propósito. Formulada como conceito, o viés cobre a classe;
+   formulada como caso, faz o revisor caçar UM bug específico e cega
+   para o resto.
+4. **Já mora em outro mecanismo?** Se o conceito já vive no
+   questionário de auditoria, num script de gate ou noutra skill,
+   duplicar alonga sem afiar — aponte o mecanismo existente em vez de
+   copiar.>
 
 ### Conclusão
 <2-4 linhas: que valor a issue entregou, quão bem modularizada
@@ -474,6 +493,25 @@ reaparece por outra porta.
   (ex.: catch-all para **qualquer** Exception, não só a do bug que
   originou a issue).
 
+### Solução complexa onde cabia a simples (concern capturado)
+O `## Escopo` cria caso especial/tipo/regra nova para tratar **local** um
+sintoma cujo tratamento direto seria **geral ou a montante** — um concern
+**compartilhado** (isolamento por tenant, fuso/corte do dia operacional,
+calendário, identidade) resolvido dentro de um consumidor só. Na issue
+avulsa isso escapa mais fácil que na Stage: não há `concept.md` — a
+especificação inteira é o corpo da issue, e o card pequeno e coeso
+*parece* bem escopado justamente por ser pequeno.
+- Sintoma: **tipo/regra/nuance nova** + o **mesmo problema recorre** em
+  outros consumidores do mesmo dado.
+- **Pergunta:** "há solução mais direta/geral, ou esta issue está remendando
+  local um concern compartilhado?"
+- **Tratamento:** a geral é o conserto; a local vira **piso declarado +
+  issue transversal** (buscar backlog antes de abrir), nunca solução
+  silenciosa. Blocker se a captura corrompe a semântica para outros
+  consumidores; senão non-blocker. Distinto de "Sintoma ≠ causa": lá a
+  solução é estreita demais **para o próprio problema da issue**; aqui ela
+  resolve o problema da issue e **erra a camada**.
+
 ### Rastro perdido
 Decisão (off-task, silenciador, refactor, doc parcial) sem registro
 onde o reviewer procuraria.
@@ -564,6 +602,8 @@ verde — são regra de execução, já ancorada acima):
   de falso verde são compartilhados.
 - `git-versioning-pointer` — antes de qualquer git/GitHub pós-auditoria
   (push, PR, merge, abrir issue de follow-up).
+- `didatic-explanation` — antes de escrever o relatório da Fase E: a
+  "linguagem clara" das seções 1–6 segue as regras dela.
 - `hex-arch-python`, `ddd-tactical-patterns`, `pytest-with-fakes`,
   `repository-pattern`, `fastapi-thin-adapter`, `composition-root` —
   para julgar o diff por camada na Fase D.

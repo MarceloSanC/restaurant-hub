@@ -481,7 +481,7 @@ def test_setup_runs_only_uv_sync_in_the_worktree(
 
     wn.setup_env(tmp_path)
 
-    assert calls == [(["uv", "sync", "--extra", "dev"], tmp_path)]
+    assert calls == [(["uv", "sync", "--locked", "--extra", "dev"], tmp_path)]
 
 
 def test_setup_without_uv_warns_and_runs_nothing(

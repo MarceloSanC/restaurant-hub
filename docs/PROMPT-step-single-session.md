@@ -5,7 +5,7 @@ when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) trav
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
 created_at: 2026-07-05
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 ---
 
 # Prompt — Orquestração de Step em Sessão Mestra
@@ -402,7 +402,7 @@ Por dentro de cada fase, **tudo** do canônico continua valendo:
 - Fases 3A/3B/4, critérios de Task Atômica, 3–12 (ou ROADMAP-1) Tasks, escopo estrito por Task.
 - **Checkpoints A/B/C** e **auditoria de testes por subagente independente** (loop até todos "sim",
   com mutação real) — aqui são exatamente os subagentes de fase; **nunca** pulados.
-- §7 post-execution (`[decision]`/`[finding]`/`[deviation]`); gates de saída inegociáveis com
+- §7 post-execution (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`); gates de saída inegociáveis com
   **evidência colada**; regra de idioma de código.
 - Hierarquia de contradições e o dever de não silenciá-las.
 

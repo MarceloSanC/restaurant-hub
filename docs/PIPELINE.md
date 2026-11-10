@@ -90,7 +90,7 @@ Para cada Stage, em ordem linear (Chat IDE no projeto destino):
          pré-requisito: concept.status == done E technical.status == done
          produz: código + testes
          gate humano por Task (revisão de diff antes do commit)
-         §7 do technical.md cresce com [decision]/[finding]/[deviation]
+         §7 do technical.md cresce com [decision]/[finding]/[deviation]/[measurement]
 ```
 
 > **Início da Fase 3B é flexível.** O draft do `technical.md` pode
@@ -651,7 +651,7 @@ Após a última Task, executar o checklist de fechamento do
       `technical.md` ficou restrito à seção §7 (entre os marcadores
       `BEGIN/END: post-execution`).
 - [ ] §7 do `technical.md` reflete o que realmente aconteceu na execução
-      (entradas `[decision]`/`[finding]`/`[deviation]` com header `data — [tag] escopo — autor`).
+      (entradas `[decision]`/`[finding]`/`[deviation]`/`[measurement]` com header `data — [tag] escopo — autor`).
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] Commit final `stage N.M: complete` no branch.
 - [ ] PR contra `develop` aberto e mergeado, seguindo os
@@ -963,6 +963,7 @@ categoria de doc.
 | `stage-audit` | Sessão de auditoria de Stage, pré-PR/merge (§11.1) | Julgamento read-only + fase de aplicação; conceitos de falso verde | accepted |
 | `issue-audit` | Sessão de auditoria de issue avulsa, pré-PR/merge | Irmã da stage-audit para issues (critério↔evidência; disciplina de escopo) | draft |
 | `skill-builder` | Criar/melhorar uma skill | Codificar de execução real (não de imaginação); loop recursivo de melhoria | draft |
+| `didatic-explanation` | Antes de explicar ao humano (kickoff, walkthrough, veredito de auditoria, justificativa em relatório/PR) | Um assunto por vez; o que é → o que faz → por que importa; termo técnico explicado na 1ª ocorrência; sem metáfora | draft |
 
 ### Formato de cada skill (formato β)
 

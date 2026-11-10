@@ -18,7 +18,8 @@ sem `git stash`/checkout no checkout principal. Em um único comando:
      container que a publique (inclusive parado) e sem nada ocupando-a no
      host (bind de teste) — o Postgres órfão de uma worktree removida não a
      empresta à nova (issue #84).
-  5. Roda `uv sync --extra dev` na worktree (o venv dela). Os hooks do git
+  5. Roda `uv sync --locked --extra dev` na worktree (o venv dela, do `uv.lock`
+     revisado — lock defasado falha em vez de ser reescrito, issue #65). Os hooks do git
      ficam como estão: são um só para todas as worktrees e só o checkout
      principal os instala (`scripts/install_hooks.py`, issue #100).
   6. Abre uma nova janela do VS Code na worktree (`code -n <path>`).
@@ -41,8 +42,8 @@ Convenções respeitadas:
     - Formato `<tipo>/<num-issue>-<slug>` ou Stage
       `<tipo>/<num-issue>-<N-M>-<slug>` — CONVENTIONS.md §4.
     - Base remota: `develop` (feat/fix/refactor/...) ou `main` (hotfix).
-    - Toda branch nasce numa worktree criada por este script; até duas
-      em execução, sem conflito; o checkout principal fica livre em
+    - Toda branch nasce numa worktree criada por este script; sem teto
+      de quantidade, só sem conflito; o checkout principal fica livre em
       `develop` (o hook `.claude/hooks/git_guard.py` recusa
       `git checkout -b` e `git worktree add` nele). Ver GIT-WORKFLOW.md
       §"Branches em execução".
@@ -395,7 +396,7 @@ def copy_env_files(src: Path, dst: Path) -> None:
 
 
 def setup_env(path: Path) -> None:
-    """Cria o venv da worktree com `uv sync --extra dev` — e não toca nos hooks do git.
+    """Cria o venv da worktree com `uv sync --locked --extra dev` — sem tocar nos hooks do git.
 
     Não roda `make setup`: o `pre-commit install` grava no hook, que é do
     diretório comum e vale para todas as worktrees, o python de quem o rodou.
@@ -405,7 +406,7 @@ def setup_env(path: Path) -> None:
     if shutil.which("uv") is None:
         print("  AVISO: `uv` não encontrado no PATH — pulando setup do venv.", file=sys.stderr)
         return
-    _run(["uv", "sync", "--extra", "dev"], cwd=path, check=False)
+    _run(["uv", "sync", "--locked", "--extra", "dev"], cwd=path, check=False)
 
 
 def open_vscode(path: Path) -> None:
@@ -723,7 +724,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--issue-body", default=None, help="Corpo da issue a criar (markdown PT).")
     parser.add_argument(
-        "--no-setup", action="store_true", help="Pula o `uv sync --extra dev` na nova worktree."
+        "--no-setup",
+        action="store_true",
+        help="Pula o `uv sync --locked --extra dev` na nova worktree.",
     )
     parser.add_argument(
         "--no-env", action="store_true", help="Não copia .env / .env.local do checkout principal."
@@ -848,7 +851,9 @@ def main() -> int:
     if args.no_setup:
         _info("setup pulado (--no-setup)")
     else:
-        _section("9. Instalando dependências (`uv sync --extra dev`; hooks do git intocados)")
+        _section(
+            "9. Instalando dependências (`uv sync --locked --extra dev`; hooks do git intocados)"
+        )
         setup_env(wt_path)
 
     if not args.no_vscode:

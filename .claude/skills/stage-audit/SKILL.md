@@ -80,7 +80,7 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
    §11 (critérios de aceitação A1..AN), §13 (questões em aberto Q1..QN).
 2. Ler **`docs/stages/<N.M>-<slug>/technical.md`** inteiro. Pontos-chave:
    §1 (estratégia, estrutura de pastas), §2 (Tasks), §3 (gate de saída +
-   mapping invariante↔teste), §7 (post-execution `[decision]`/`[finding]`/`[deviation]`).
+   mapping invariante↔teste), §7 (post-execution `[decision]`/`[finding]`/`[deviation]`/`[measurement]`).
 3. Identificar **`camada_alvo`** no frontmatter — muda o checklist da
    Fase D (mono-layer domain ≠ vertical-slice multi).
 4. Ler docs referenciados apenas **sob demanda** (ex.: `LAYOUT.md` §3
@@ -130,6 +130,9 @@ git log --diff-filter=A -- <path>
 # reproduzir o "antes" a partir da base, sem untracked contaminando
 git archive origin/<base> | tar -x -C <tmp> && cd <tmp> && <comando do gate>
 ```
+
+**Hashes citados:** para cada hash da §7 e de artefato de proveniência,
+`git merge-base --is-ancestor <hash> HEAD`; falso é "Rastro perdido".
 
 **Nota — pré-requisito de Stage anterior.** Stage atual pode declarar
 a anterior como pré-requisito. Pré-requisito real é "mergeada em
@@ -319,6 +322,14 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
      definido e nunca plugado no pipeline real. Comando útil:
      `Grep "<nome_do_validator>"` no projeto inteiro, excluindo o
      próprio arquivo de teste. Ver conceito "Definido mas não plugado".
+   - **Sub-bullet — ramo testado × ramo de produção:** se o código novo
+     ramifica por **knob de config** (`if settings.x`, `match backend`…),
+     abrir a **fonte de configuração real** (`Settings`/`.env.example`/
+     composition root) e ler o valor declarado para produção. Se o teste
+     instancia o adapter direto (pegando o **default do construtor**) e
+     esse default **diverge** do valor de produção, o comportamento novo
+     está provado no ramo errado. Exigir o valor de produção no teste (ou
+     parametrizar nos dois ramos). Ver conceito "Verificação assimétrica".
 6. **Caça ao teste preguiçoso:** abra 2-3 arquivos de teste no
    diff novo e leia os asserts. Sinais de preguiça (cada um = finding):
    - `assert result is not None` / `assert len(x) > 0` sem cobrir
@@ -348,6 +359,23 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
    só foi **terceirizado**, não evitado (conceito "Delegação cega").
    Se o prompt do sub-agente não pediu verbatim, re-prompt antes de
    fechar.
+10. **Caça à regra fora do dono.** O import-linter só prova que o
+    import é **permitido** — não que a regra mora no **dono** dela.
+    Para cada regra de negócio nova no diff (predicado de elegibilidade,
+    validação, política de emissão, tradução de erro), perguntar **onde
+    mora** e **quantas vezes existe**:
+    - **Duplicada?** `Grep` no predicado/constante central. A mesma
+      regra em fake **e** adapter, ou em dois slices = finding — sobe
+      para o domínio e ambos consomem.
+    - **Camada errada?** Decisão que muda resultado de negócio vivendo
+      em `adapters/` ou `application/` pertence a `domain/`.
+    - **Atravessando BC?** Um BC consumindo detalhe interno de outro
+      (tipo concreto, nome de coluna, tabela) em vez de port/Protocol
+      público = finding.
+    - **Sem dono?** Exceção, VO de identidade ou tradutor de erro criado
+      num slice e usado por outros: fica no slice dono; `shared/` só se
+      não há dono (LAYOUT §4).
+    Ver conceito "Estrutural ≠ semântico".
 
 ### Fase E — Relatório (explicação do valor entregue + gate)
 
@@ -409,7 +437,26 @@ Gate (concept §11 + technical §3): <comando> → <resultado numérico>
 ### 6. Aprendizados → skills
 <algum padrão novo (falso verde, decisão recorrente, jargão mal
 explicado) que vale virar/atualizar conceito numa skill? Qual skill e
-qual conceito. Se nada novo: dizer "nada novo" explicitamente.>
+qual conceito. Se nada novo: dizer "nada novo" explicitamente.
+
+Antes de propor a atualização, responda os 4 filtros — proposta que
+reprova em qualquer um NÃO entra:
+1. **Classe ou caso?** O aprendizado descreve uma CLASSE que recorre
+   (conceito) ou só este episódio (história)? História não entra —
+   skill fica afiada, não longa.
+2. **Canal de consumo real:** quem vai LER isto e quando? Regra
+   acionável de skill em `skills_hint` vira pergunta adversarial
+   obrigatória no Checkpoint C (consumo mecânico); texto que só o
+   autor leria é advisory — se o único canal é advisory, avalie se o
+   ganho justifica.
+3. **O viés generaliza?** Toda regra enviesa a atenção do revisor —
+   esse é o propósito. Formulada como conceito, o viés cobre a classe;
+   formulada como caso, faz o revisor caçar UM bug específico e cega
+   para o resto.
+4. **Já mora em outro mecanismo?** Se o conceito já vive no
+   questionário de auditoria, num script de gate ou noutra skill,
+   duplicar alonga sem afiar — aponte o mecanismo existente em vez de
+   copiar.>
 
 ### Conclusão
 <2-4 linhas: que valor a Stage entregou, quão bem modularizada
@@ -481,21 +528,35 @@ relaxamento; se sim, §I errado; se não, decisão escondida (D-bis #5).
 
 ### Verificação assimétrica
 
-Confundir presença com ausência, ou execução com asserção. O check
-prova um lado, a auditoria assume o outro.
+Confundir presença com ausência, execução com asserção, **ou o ramo
+testado com o ramo que roda em produção**. O check prova um lado, a
+auditoria assume o outro.
 
 - `assert "field_hash" in dto` prova **presença do hash**, não
   **ausência do raw** — afirmações independentes.
 - Coverage 100% prova **linha executada**, não **resultado
   verificado** (`def test_foo(): foo()` sem assert tem coverage cheio).
+- Teste que instancia o adapter **direto** pega o **default do
+  construtor**; produção o monta pelo composition root, que lê a
+  **config real**. Quando os dois divergem, o teste prova um ramo real,
+  verde e honesto — que **não é o que roda**.
 
-**Pergunta:** "este check prova o que eu queria, ou só a contrapositiva?"
+**Pergunta:** "este check prova o que eu queria, ou só a contrapositiva
+— e prova no **ramo que produção executa**?"
 
 **Tratamento:** para invariante negativa ("X NÃO em Y"), rodar
 `Grep "<X>"` em Y/ e exigir **0 matches**. `check_layout.py` cobre
 algumas estruturais (LAYOUT §3) mas **não** as específicas da Stage.
 Para coverage alto, abrir 2-3 arquivos de teste e ler asserts
-(Fase D-bis #6).
+(Fase D-bis #6). **Quando a Stage estende um enum** consumido por
+classificação em conjuntos (frozensets, whitelists, mapas de família —
+ex.: permissões por papel, tipos de turno por regra de escala): `Grep`
+pelo nome do enum nos **consumidores que o particionam** e conferir que
+cada valor novo caiu em exatamente uma família — o teste do emissor
+prova a **emissão** do valor, não a **classificação** dele. **Quando o
+código ramifica por knob de config:** exigir que o teste do
+comportamento novo use o valor **declarado para produção**, não o
+default do construtor (D-bis #5).
 
 ### Evidência de árvore suja
 
@@ -567,6 +628,9 @@ ficou perdida.
   instâncias diferentes (semântica quebrada).
 - Use case implementa `IPort` (tipo OK), mas comportamento contradiz
   o contrato do Protocol em casos não testados.
+- Import permitido pelo import-linter (estrutural OK), mas a regra
+  mora fora do dono: duplicada entre fake e adapter, decisão de negócio
+  no adapter, BC lendo detalhe interno de outro (Fase D-bis #10).
 
 **Pergunta:** "este tipo/assinatura prova o comportamento que o
 concept prometeu, ou só a forma?"
@@ -575,6 +639,29 @@ concept prometeu, ou só a forma?"
 `composition_root.py` e **contar instanciações** de X (`Grep` por
 `create_engine(`, `httpx.AsyncClient(`, etc.) — exatamente 1
 esperada, com o mesmo handle injetado em ambos os callers.
+
+### Solução complexa onde cabia a simples (concern capturado)
+
+A especificação cria caso especial/tipo/regra nova para tratar **local**
+um sintoma cujo tratamento direto seria uma solução **geral ou a
+montante** — tipicamente um concern **compartilhado** (isolamento por
+tenant, fuso/corte do dia operacional, calendário de feriados,
+identidade, auditoria) capturado dentro de um BC. Passa em §4.2 (um BC
+só, coeso, atômico), nas "fronteiras" e na rastreabilidade — invisível
+ao enforcement estrutural.
+
+- Sintoma: **tipo/regra/nuance nova** + o **mesmo problema recorre** em
+  outros consumidores do dado (ex.: o corte das 05:00 reimplementado
+  num slice em vez de vir do VO `OperationalCalendar`).
+
+**Pergunta:** "há solução mais direta/geral, ou estou remendando local um
+concern compartilhado?"
+
+**Tratamento:** a geral é o conserto; a local vira **piso declarado +
+issue**, nunca solução silenciosa. Blocker se a captura corrompe a
+semântica para outros consumidores; senão non-blocker + issue
+transversal (buscar backlog antes). É o espelho, no eixo de design, de
+"Escopo empurrado pra frente".
 
 ### Rastro perdido
 
@@ -590,6 +677,9 @@ parcialmente atualizado) sem registro onde o reviewer iria procurar.
   `last_reviewed_at`) esquecido — ou inverso.
 - Branch com commit de outro escopo (`fix:` solto, `chore: bump`)
   pegando carona no PR da Stage.
+- Hash citado na §7 ou em artefato de proveniência que não é ancestral
+  do HEAD (`git merge-base --is-ancestor`), típico depois de rebase:
+  exige errata com o mapeamento antigo → novo.
 
 **Pergunta:** "se o reviewer abrir só este arquivo/commit, ele
 entende por que esta linha/commit está aqui?"
@@ -703,6 +793,10 @@ cobre. Cresce sem inflar a seção conceitual.
 | L-AG3 travada só em `tenant_id=None`; a lei diz "vazio **ou** ausente" | Lei universal, representante estreito | Stage 3.4 / PR #42 — fix `5d69846` |
 | L-AG2/L-AG3/L-AG4 travadas só em `"manage_staff"`; as leis valem para **toda** permissão e **todo** alvo | Lei universal, representante estreito | Stage 3.4 / PR #42 — fix `d0fafe0` |
 | Fake e tradutor de produção do mesmo port cobrados por conjuntos de valores diferentes (a assimetria que denunciou as duas linhas acima) | Lei universal, representante estreito (sinal de alerta) | Stage 3.4 / PR #42 |
+| Teste prova o comportamento no default do construtor enquanto a config de produção declara outro valor | Verificação assimétrica | classe importada do financial-forecasting (#65) |
+| Valor novo de enum entra no emissor e no teste dele, mas fica fora das famílias que particionam o enum | Verificação assimétrica | classe importada do financial-forecasting (#65) |
+| Regra no lugar errado com import legal (duplicada em fake e adapter, decisão de negócio no adapter, BC lendo interno de outro) | Estrutural ≠ semântico | classe importada do financial-forecasting (#65) |
+| Critério A* exige teste numa perna onde o comportamento é **inatingível por construção** — pergunta-guia: "esta perna CONSEGUE exibir o comportamento?" | Literal ≠ espírito | classe importada do financial-forecasting (#65); errata em §7 em vez de retocar o concept |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
 pegou algo): **primeiro perguntar qual conceito existente ficou cego**.
@@ -744,7 +838,7 @@ verde — são regra de execução, já ancorada acima):
 | Questões em aberto (Q1..QN) | `concept.md` §13 |
 | Gate de saída + mapping invariante↔teste | `technical.md` §3 |
 | Tasks executadas | `technical.md` §2 |
-| §7 post-execution (`[decision]`/`[finding]`/`[deviation]`) | `technical.md` §7 |
+| §7 post-execution (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`) | `technical.md` §7 |
 | Regras de import / layers | `docs/LAYOUT.md` §3 + `hex-arch-python` skill |
 | Atomicidade da Stage | `docs/PIPELINE.md` §4.2 / §4.3 |
 | Gates de PR (CI verde, ≥90%, aprovação) | `docs/GIT-WORKFLOW.md` §Gates de PR |
@@ -762,6 +856,8 @@ verde — são regra de execução, já ancorada acima):
 
 - `git-versioning-pointer` — antes de qualquer operação git/GitHub
   pós-auditoria (push, PR, merge).
+- `didatic-explanation` — antes de escrever o relatório da Fase E: a
+  "linguagem clara" das seções 1–6 segue as regras dela.
 - `hex-arch-python` — para julgar imports/camadas no diff.
 - `ddd-tactical-patterns` — para julgar Entity vs VO, agregados.
 - `pytest-with-fakes` — para julgar se teste de application usa fake

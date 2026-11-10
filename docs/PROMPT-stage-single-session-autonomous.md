@@ -5,7 +5,7 @@ when-use: Apenas em corrida autônoma overnight autorizada pelo ADR 0.0.0004 (st
 keywords: [prompt, stage, autonomous, overnight, auto-merge, adr-0004, audit-gate]
 status: done
 created_at: 2026-07-12
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 ---
 
 # Prompt — Execução de Stage em Sessão Única (variante AUTÔNOMA)
@@ -153,7 +153,7 @@ verdade).
 - Fases 3A (Concept) e 3B (Technical), critérios de Task Atômica, 3–12 Tasks (≥ 14 = HALT,
   não ADR).
 - Escopo estrito por Task (a resolução da violação muda — §1 — mas a detecção não);
-  §7 post-execution (`[decision]`/`[finding]`/`[deviation]`); arquivo de estado no scratchpad.
+  §7 post-execution (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`); arquivo de estado no scratchpad.
 - **Checkpoints A/B/C** (revisores independentes de contexto zerado, prompt adversarial,
   cap de 3 rodadas, disposição explícita de todo achado) e **Auditoria de Testes por
   subagente independente** (loop até todos "sim", com mutação real nas funções críticas) —

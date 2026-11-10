@@ -178,7 +178,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#58](https://github.com/MarceloSanC/restaurant-hub/issues/58) | `worktree-new.py` não reescreve `DATABASE_URL` — integração da worktree roda contra o Postgres do checkout principal | shared | tooling + docs | done | — |
 | [#59](https://github.com/MarceloSanC/restaurant-hub/issues/59) | Fechar os achados documentais da auditoria pós-merge da Stage 3.5 | staff | docs | done | #51 |
 | [#61](https://github.com/MarceloSanC/restaurant-hub/issues/61) | `Cache-Control: no-store` nas respostas que carregam token ou link de definição de senha | shared | adapters/inbound/http | done | — |
-| [#65](https://github.com/MarceloSanC/restaurant-hub/issues/65) | Trazer do financial-forecasting o harness posterior à #56 | shared | tooling + docs | open | #56 |
+| [#65](https://github.com/MarceloSanC/restaurant-hub/issues/65) | Trazer do financial-forecasting o harness posterior à #56 | shared | tooling + docs | done | #56 |
 | [#67](https://github.com/MarceloSanC/restaurant-hub/issues/67) | Compor o provisionamento restaurante + dono numa unidade de trabalho (gatilho do ADR 2.4.0003) | identity | application + adapters/inbound/http | done | `2.6-identity-unit-of-work` |
 | [#68](https://github.com/MarceloSanC/restaurant-hub/issues/68) | Edição concorrente do registro não pode apagar o vínculo de login (`user_id` condicional) | staff | application + adapters/out | done | — |
 | [#75](https://github.com/MarceloSanC/restaurant-hub/issues/75) | Negar na application de staff ator que o guard não emitiu (drivers fora da borda HTTP) | staff | application | open | `3.7-application-authorization` |
@@ -221,6 +221,14 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | open | #116 |
 | [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | done | #132 |
 | [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | open | #117 |
+| [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | open | #65 |
+| [#163](https://github.com/MarceloSanC/restaurant-hub/issues/163) | Orçamento de 1 a 3 `make check` por Stage no lugar do gate por Task | shared | tooling + docs | open | #65 |
+| [#164](https://github.com/MarceloSanC/restaurant-hub/issues/164) | Fechamento autônomo da auditoria e merge de Step sem OK humano | shared | docs + .claude | open | #65 |
+| [#165](https://github.com/MarceloSanC/restaurant-hub/issues/165) | Hook `publish_guard` trava push e merge fora dos gates | shared | tooling (.claude/hooks) | open | #65, #164 |
+| [#166](https://github.com/MarceloSanC/restaurant-hub/issues/166) | Issue Forms, hook `issue_guard` e roadmap sem Tabela de Issues | shared | tooling + docs + .github | open | #65 |
+| [#167](https://github.com/MarceloSanC/restaurant-hub/issues/167) | Harness de arquitetura com gates AST, skill e revisor | shared | tooling + .claude | open | #65 |
+| [#168](https://github.com/MarceloSanC/restaurant-hub/issues/168) | `pytest-xdist` com banco isolado por worker | shared | tooling + tests | open | #65 |
+| [#169](https://github.com/MarceloSanC/restaurant-hub/issues/169) | Skill `data-shape-evidence` para medir o dado no Postgres antes de decidir | shared | docs (.claude/skills) | open | #65 |
 | [#170](https://github.com/MarceloSanC/restaurant-hub/issues/170) | Falha de envio do convite vai ao log com traceback e pode vazar destinatário e link | identity | application + adapters/inbound/http | open | #114 |
 | [#171](https://github.com/MarceloSanC/restaurant-hub/issues/171) | O piloto não pode subir com o `ConsoleSender`, que imprime o link de convite no log | shared | infrastructure + composition root | open | #114 |
 | [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
