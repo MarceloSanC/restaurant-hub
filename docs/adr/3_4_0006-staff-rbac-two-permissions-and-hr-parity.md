@@ -16,6 +16,8 @@ bounded_context: staff
 
 > ⚠️ **Errata (2026-09-13):** §3 "Stage 4.x must not grant `hr` any permission over the schedule" is superseded in part — the sponsor granted `hr` unit-scoped **read** access on 2026-09-13 (write/publish remain manager/owner only) — ver [ADR 4.1.0004](./4_1_0004-hr-reads-schedules-in-member-units.md)
 
+> ⚠️ **Errata (2026-11-09, Stage 3.11):** `MANAGE_JOB_FUNCTIONS` stays in `TENANT_WIDE_PERMISSIONS` — no unit is **required** — but it is now also exercised **with** a unit named (create for named units, list one unit, change a function's units), which runs identity's visibility step; enabling a function in every unit additionally requires `manage_tenant` — ver [ADR 3.11.0001](./3_11_0001-job-function-unit-enablement-model.md)
+
 ## Status
 
 `accepted`
