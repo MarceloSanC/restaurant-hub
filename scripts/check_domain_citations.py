@@ -278,7 +278,13 @@ def _trecho(texto: str, fim_da_ref: int) -> tuple[str, str]:
     """(resto bruto, trecho até o fim da citação) depois de uma referência."""
     resto = texto[fim_da_ref : fim_da_ref + _MAX_TRECHO]
     fim = _FIM_DO_TRECHO.search(resto)
-    return resto, resto[: fim.start()] if fim else resto
+    if fim:
+        return resto, resto[: fim.start()]
+    if fim_da_ref + _MAX_TRECHO < len(texto):
+        # Janela cortada no meio da frase: a última palavra pode continuar ("404 for"),
+        # e o `$` do número de linha a leria como fim de citação.
+        return resto, resto[: resto.rstrip().rfind(" ") + 1]
+    return resto, resto
 
 
 def _tem_numero_de_linha(resto: str, trecho: str) -> bool:

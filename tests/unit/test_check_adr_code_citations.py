@@ -501,3 +501,22 @@ def test_formas_de_linha_da_auditoria_reprovam(tmp_path: pathlib.Path, texto: st
 )
 def test_quantidade_e_versao_depois_do_arquivo_passam(tmp_path: pathlib.Path, texto: str) -> None:
     assert _repo2(tmp_path, texto) == []
+
+
+def _longo(antes: str) -> str:
+    """`antes` seguido de prosa até a janela do trecho cortar logo depois de "404"."""
+    recheio = "palavra " * ((gate._MAX_TRECHO - 4) // 8)
+    return f"{antes} {recheio}404 for a foreign restaurant\nfim"
+
+
+def test_numero_cortado_pela_janela_do_trecho_nao_e_linha(tmp_path: pathlib.Path) -> None:
+    assert _repo2(tmp_path, _longo("ADR 4.1.0003 §2")) == []
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["ADR 4.1.0003 §2: the response is 500, and it answers 409 on retry"],
+    ids=["status-depois-de-is-e-answers"],
+)
+def test_status_http_em_prosa_inglesa_nao_e_linha(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _repo2(tmp_path, texto) == []

@@ -121,7 +121,7 @@ _NEUTROS = (
     re.compile(r"\b[1-5]\d{2}(?:/[1-5]\d{2})+\b"),  # lista de status (401/403/404)
     re.compile(  # status HTTP depois de verbo ou artigo
         r"\b(?:HTTP|status|responde|devolve|retorna|returns?|produced?|vira|a|o|em|um|uma|do|da|ao|no"
-        r"|the|an?|for|with|by)\s+[1-5]\d{2}\b",
+        r"|the|an?|for|with|by|is|are|same|answers?)\s+[1-5]\d{2}\b",
         re.IGNORECASE,
     ),
     re.compile(  # número de regra, lei, invariante, critério, decisão, divergência
@@ -238,7 +238,13 @@ def _linha_de(texto: str, pos: int) -> int:
 def _trecho(texto: str, fim_da_ref: int) -> tuple[str, str]:
     resto = texto[fim_da_ref : fim_da_ref + _MAX_TRECHO]
     fim = _FIM_DO_TRECHO.search(resto)
-    return resto, resto[: fim.start()] if fim else resto
+    if fim:
+        return resto, resto[: fim.start()]
+    if fim_da_ref + _MAX_TRECHO < len(texto):
+        # Janela cortada no meio da frase: a última palavra pode continuar ("404 for"),
+        # e o `$` do número de linha a leria como fim de citação.
+        return resto, resto[: resto.rstrip().rfind(" ") + 1]
+    return resto, resto
 
 
 def _tem_numero_de_linha(resto: str, trecho: str, *, solto: bool = True) -> bool:

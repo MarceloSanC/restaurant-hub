@@ -721,3 +721,9 @@ def test_linha_ao_overview_da_auditoria_reprova(tmp_path: pathlib.Path, texto: s
 
 def test_ancora_ao_overview_com_maiuscula_resolve(tmp_path: pathlib.Path) -> None:
     assert _com_overview(tmp_path, 'Overview §3 › "salvar = publicar" vale.') == []
+
+
+def test_numero_cortado_pela_janela_do_trecho_nao_e_linha(tmp_path: pathlib.Path) -> None:
+    recheio = "palavra " * ((gate._MAX_TRECHO - 4) // 8)
+    texto = f"o `overview.md` §3 {recheio}404 for a foreign restaurant\nfim"
+    assert _com_overview(tmp_path, texto) == []
