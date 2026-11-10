@@ -91,7 +91,7 @@ class LocalIdentityGateway:
             raise InvalidLoginEmailError(email) from exc
         return ProvisionedLogin(user_id=UserId(account.user_id), setup_link=account.setup_link)
 
-    def send_login_invitation(self, *, email: str, setup_link: str) -> None:
+    def send_login_invitation(self, *, user_id: UserId, email: str, setup_link: str) -> None:
         """Envia o convite; a falha do envio sobe crua e na mesma instância (L-IG2)."""
         self._facade.send_invitation(email=email, setup_link=setup_link)
 

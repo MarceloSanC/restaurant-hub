@@ -151,12 +151,19 @@ class IdentityGateway(Protocol):
         """
         ...
 
-    def send_login_invitation(self, *, email: str, setup_link: str) -> None:
+    def send_login_invitation(self, *, user_id: UserId, email: str, setup_link: str) -> None:
         """Envia o convite com o link para o e-mail (canal `EMAIL`).
 
         Chamada pelo use case **depois** de gravar `user_id` (§5.4): se falhar, a
         conta existe e está vinculada, e a recuperação é o reset público. A
         falha do envio sobe **crua** (L-IG2) — nunca é engolida.
+
+        Args:
+            user_id: o login que `provision_employee_login` devolveu para este
+                `email` — o identificador **não secreto** do convite, o único que
+                a implementação pode registrar quando o envio falha (issue #175).
+            email: o destinatário.
+            setup_link: o segredo a entregar (L-IG3).
         """
         ...
 

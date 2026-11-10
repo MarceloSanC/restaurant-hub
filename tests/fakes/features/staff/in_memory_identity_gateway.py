@@ -176,9 +176,13 @@ class InMemoryIdentityGateway:
         self.used_emails.add(email)
         return ProvisionedLogin(user_id=user_id, setup_link=setup_link)
 
-    def send_login_invitation(self, *, email: str, setup_link: str) -> None:
-        """Registra o envio — ou levanta a instância configurada, **crua** (L-IG2)."""
-        self.record(f"send_login_invitation({email!r})")
+    def send_login_invitation(self, *, user_id: UserId, email: str, setup_link: str) -> None:
+        """Registra o envio — ou levanta a instância configurada, **crua** (L-IG2).
+
+        O `user_id` entra no registro (issue #175): é o que permite asserir que o
+        use case entrega o id do login **recém-provisionado**, e não outro.
+        """
+        self.record(f"send_login_invitation({user_id!r}, {email!r})")
         if self.fail_send_with is not None:
             raise self.fail_send_with
         self.sent.append((email, setup_link))

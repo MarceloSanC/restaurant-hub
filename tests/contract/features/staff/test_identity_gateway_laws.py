@@ -232,7 +232,9 @@ def test_l_ig2_a_falha_do_envio_sobe_crua_e_e_a_mesma_instancia(
     gateway.envio_falha(_FALHA_DO_ENVIO)
 
     with pytest.raises(RuntimeError) as excecao:
-        gateway.gateway.send_login_invitation(email=_EMAIL, setup_link=login.setup_link)
+        gateway.gateway.send_login_invitation(
+            user_id=login.user_id, email=_EMAIL, setup_link=login.setup_link
+        )
     assert excecao.value is _FALHA_DO_ENVIO
     assert gateway.enviados_para(_EMAIL) == []
 
@@ -242,7 +244,9 @@ def test_o_envio_bem_sucedido_entrega_o_link_ao_email(
 ) -> None:
     login = _provisionar(gateway, _EMAIL, delivery=LoginDelivery.EMAIL)
 
-    gateway.gateway.send_login_invitation(email=_EMAIL, setup_link=login.setup_link)
+    gateway.gateway.send_login_invitation(
+        user_id=login.user_id, email=_EMAIL, setup_link=login.setup_link
+    )
 
     assert gateway.enviados_para(_EMAIL) == [login.setup_link]
 

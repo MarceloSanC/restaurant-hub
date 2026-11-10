@@ -153,6 +153,9 @@ def test_canal_email_envia_uma_vez_e_nao_devolve_o_link() -> None:
 
     (user_id,) = gateway.logins
     assert gateway.sent == [(_EMAIL, gateway.logins[user_id].setup_link)]
+    # Issue #175 — o envio leva o id do login recém-provisionado, que é o que
+    # identity registra se a entrega falhar.
+    assert f"send_login_invitation({user_id!r}, {_EMAIL!r})" in gateway.calls
     assert resultado.setup_link is None
 
 
