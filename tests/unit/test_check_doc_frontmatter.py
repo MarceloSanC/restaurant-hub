@@ -446,7 +446,8 @@ def test_linha_da_tabela_com_stage_done_sem_marca_reprova(
     tmp_path: pathlib.Path, linha: str, pendentes: str
 ) -> None:
     repo = _repo(tmp_path, {_DOMINIO: _dominio(_TABELA + linha + "\n")})
-    [achado] = gate.problemas(repo)
+    # a marca fechada para Stage não done tem achado próprio (#180), conferido adiante
+    [achado] = [a for a in gate.problemas(repo) if "tabela de lacunas" in a]
     assert achado.startswith(f"{_DOMINIO}:9: linha da tabela de lacunas da Stage ")
     assert f'sem "fechada pela Stage {pendentes}", mas já está done' in achado
 
@@ -652,7 +653,163 @@ def test_doc_real_reprova_se_uma_lacuna_fechada_volta_a_forma_livre(
     assert "já est" in achados[0]  # a Stage endereçada está done
 
 
+# --- domínio: marca fechada conferida contra o roadmap (issue #180) -------------
+
+_FIM_FECHADA = (
+    " — só Stage done fecha lacuna; corrija o número ou volte a marca para"
+    ' "Lacuna para o concept da Stage N.M"'
+)
+
+
+def test_mensagem_da_marca_fechada_nomeia_a_marca_e_o_status(tmp_path: pathlib.Path) -> None:
+    corpo = "\nÉ lacuna fechada pela Stage 4.5: *x (ADR 4.5.0001)*.\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    assert gate.problemas(repo) == [
+        f'{_DOMINIO}:7: marca fechada "fechada pela Stage 4.5" cita Stage que não está done:'
+        f" 4.5 (draft){_FIM_FECHADA}"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("trecho", "marca", "invalidas"),
+    [
+        ("lacuna fechada pela Stage 4.4: x", "fechada pela Stage 4.4", "4.4 (draft)"),
+        ("> **Lacuna fechada pela Stage 4.5 (ADR):** x", "fechada pela Stage 4.5", "4.5 (draft)"),
+        # Stage inexistente; "9.9" está done só na Tabela de Issues
+        ("lacuna fechada pela Stage 4.9.", "fechada pela Stage 4.9", "4.9 (fora da Tabela"),
+        ("lacuna fechada pela Stage 9.9.", "fechada pela Stage 9.9", "9.9 (fora da Tabela"),
+        ("fechada pela Stage 4.11 (ADR)", "fechada pela Stage 4.11", "4.11 (fora da Tabela"),
+        # na lista, só a Stage não done é nomeada; todas as formas da lista são lidas
+        ("fechada pelas Stages 4.1 e 4.5 (x)", "fechada pelas Stages 4.1 e 4.5", ": 4.5 (draft) "),
+        ("fechada pelas Stages 4.5, 4.1 (x)", "fechada pelas Stages 4.5, 4.1", ": 4.5 (draft) "),
+        ("fechada pelas Stages 4.4/4.5", "fechada pelas Stages 4.4/4.5", "4.4 (draft), 4.5 (dr"),
+        # plural, caixa, ênfase e crase no meio
+        ("lacunas fechadas pela Stage 4.5.", "fechadas pela Stage 4.5", "4.5 (draft)"),
+        ("LACUNA FECHADA PELA STAGE 4.5", "FECHADA PELA STAGE 4.5", "4.5 (draft)"),
+        ("*fechada* pela Stage `4.5`, x", "fechada pela Stage 4.5", "4.5 (draft)"),
+        ("_fechada pela Stage 4.5_, x", "fechada pela Stage 4.5", "4.5 (draft)"),
+    ],
+)
+def test_marca_fechada_com_stage_que_nao_esta_done_reprova(
+    tmp_path: pathlib.Path, trecho: str, marca: str, invalidas: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(f"\n{trecho}\n")})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f'{_DOMINIO}:7: marca fechada "{marca}" cita Stage que não está')
+    assert invalidas in achado
+
+
+def test_marca_fechada_nomeia_o_status_lido_do_roadmap(tmp_path: pathlib.Path) -> None:
+    roadmap = _ROADMAP.replace("| adapters | draft |", "| adapters | in_progress |")
+    corpo = "\nlacuna fechada pela Stage 4.4.\n"
+    repo = _repo(tmp_path, {"docs/roadmap.md": roadmap, _DOMINIO: _dominio(corpo)})
+    [achado] = gate.problemas(repo)
+    assert "cita Stage que não está done: 4.4 (in_progress) — " in achado
+
+
+def test_marca_fechada_quebrada_entre_linhas_reprova_na_linha_onde_comeca(
+    tmp_path: pathlib.Path,
+) -> None:
+    corpo = "\n" * 3 + "> era **lacuna fechada pela\n> Stage 4.5** (ADR), x\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f'{_DOMINIO}:9: marca fechada "fechada pela Stage 4.5" cita')
+
+
+@pytest.mark.parametrize(
+    ("linha", "invalidas"),
+    [
+        # Stage dona draft: a linha de tabela passa, a marca fechada não
+        ("| **4.4** | a pergunta — *fechada pela Stage 4.5 (ADR)* |", "4.5 (draft)"),
+        # Stage dona done e fechada, mas a lista cita também uma Stage draft
+        ("| **4.1** | a pergunta — *fechada pelas Stages 4.1 e 4.4 (ADRs)* |", "4.4 (draft)"),
+    ],
+)
+def test_marca_fechada_na_tabela_de_lacunas_e_conferida(
+    tmp_path: pathlib.Path, linha: str, invalidas: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(_TABELA + linha + "\n")})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f"{_DOMINIO}:9: marca fechada ")
+    assert f"cita Stage que não está done: {invalidas} — " in achado
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        "lacuna fechada pela Stage 4.1 (ADR 4.1.0007).\n",
+        "fechada pelas Stages 4.1 e 4.2 (ADRs).\n",
+        "| **4.1/4.2** | x — *fechada pelas Stages 4.1/4.2 (ADRs)* |\n",
+        # sem número de Stage, a forma não afirma Stage: fica fora (decisão da #180)
+        "era lacuna, fechada em 2026-08-09 pelo ADR 4.5.0001.\n",
+        "fechada pela 4.5 (sem a palavra Stage não é a marca).\n",
+        "fechada pela Stage N.M (fonte) — o molde da marca.\n",
+        "fechada pela Stage 4.5.0001\n",  # id de ADR, não Stage
+        "desfechada pela Stage 4.5\n",  # outra palavra
+        "```markdown\nlacuna fechada pela Stage 4.5\n```\n",  # exemplo citado
+        "fechada pela\n\nStage 4.5\n",  # parágrafo novo corta a marca
+    ],
+)
+def test_marca_fechada_por_stage_done_ou_fora_da_forma_passa(
+    tmp_path: pathlib.Path, corpo: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    assert gate.problemas(repo) == []
+
+
+@pytest.mark.parametrize(
+    ("rel", "fechada", "mutada", "invalidas"),
+    [
+        (
+            "docs/domain/scheduling/shift-scheduling.md",
+            "é lacuna fechada pela Stage 4.2: *no avaliador",
+            "é lacuna fechada pela Stage 4.5: *no avaliador",
+            "4.5 (draft)",
+        ),
+        (
+            "docs/domain/scheduling/shift-scheduling.md",
+            "`StaffReadPort` (§3.10.1) — *fechada pela Stage 4.3",
+            "`StaffReadPort` (§3.10.1) — *fechada pela Stage 4.5",
+            "4.5 (draft)",
+        ),
+        (
+            "docs/domain/staff/workforce.md",
+            "era **lacuna fechada pela Stage 3.2**",
+            "era **lacuna fechada pela Stage 3.10**",
+            "3.10 (fora da Tabela de Stages)",
+        ),
+    ],
+)
+def test_doc_real_reprova_se_a_marca_fechada_aponta_stage_nao_done(
+    tmp_path: pathlib.Path, rel: str, fechada: str, mutada: str, invalidas: str
+) -> None:
+    """A mutação do critério de aceite da #180, sobre os docs e o roadmap reais."""
+    texto = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+    assert texto.count(fechada) == 1
+    repo = _repo(
+        tmp_path,
+        {
+            "docs/roadmap.md": (_REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8"),
+            rel: texto.replace(fechada, mutada),
+        },
+    )
+    achados = [a for a in gate.problemas(repo) if "marca fechada" in a]
+    numero = texto[: texto.index(fechada)].count("\n") + 1
+    assert len(achados) == 1
+    assert achados[0].startswith(f"{rel}:{numero}: marca fechada ")
+    assert f"não está done: {invalidas} — " in achados[0]
+
+
 # --- roadmap --------------------------------------------------------------------
+
+
+def test_status_das_stages_le_toda_linha_da_tabela_de_stages() -> None:
+    assert gate.status_das_stages(_ROADMAP) == {
+        "4.1": "done",
+        "4.2": "done",
+        "4.4": "draft",
+        "4.5": "draft",
+    }
 
 
 def test_stages_done_le_a_coluna_status_da_tabela_de_stages() -> None:

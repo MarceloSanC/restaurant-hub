@@ -54,6 +54,12 @@ Stage `done` (issue #37).
    forma pegaria a prosa histórica que narra lacunas já fechadas ("as lacunas
    endereçadas à 4.2 foram fechadas"). A #158 reescreveu as que havia em
    `docs/domain/**`.
+   **A marca fechada também é conferida** (issue #180): "fechada(s) pela(s) Stage(s) N.M
+   [e P.Q]", no corpo ou na célula da tabela de lacunas, reprova quando uma Stage citada
+   não está na Tabela de Stages ou não está `done` — fechar por Stage que não rodou afirma
+   uma decisão que não existe. A forma sem número de Stage ("fechada em <data> pelo ADR X")
+   não afirma Stage e fica fora; "fechada pela 4.1", sem a palavra Stage, não é a marca e
+   não é lida, nem aqui nem para fechar a linha de tabela.
 
 **Sem válvula.** Até a issue #116 o `shift-scheduling.md` tinha uma exceção à
 regra 7 (`VALVULA_REFERENCES`, ADR 0.0.0015 §Decision 5): 16 ADRs linkados fora do
@@ -122,8 +128,13 @@ _CANONICA = re.compile(r"^lacunas? para o concept da stages? ", re.IGNORECASE)
 _LINHA_LACUNA = re.compile(
     r"^\s*\|\s*\*\*\s*(\d+\.\d+(?:\s*/\s*\d+\.\d+)*)(?:\s*\([^)|]*\))?\s*\*\*[^|]*\|"
 )
+# A marca fechada: "fechada pela Stage N.M", "fechadas pelas Stages N.M e P.Q", com o mesmo
+# separador da menção (ênfase, crase, quebra de linha). Fecha a linha de tabela (#117) e
+# cada Stage citada tem de estar `done` (#180).
 _FECHADA = re.compile(
-    r"fechada pelas? stages? (\d+\.\d+(?:\s*(?:/|,|\be\b)\s*\d+\.\d+)*)", re.IGNORECASE
+    rf"(?<![^\W_])fechad[ao]s?{_SEP}pel[ao]s?{_SEP}stages?{_SEP}"
+    rf"({_STAGE}(?:\s*(?:/|,|\be\b)\s*{_STAGE})*)",
+    re.IGNORECASE,
 )
 _NUMERO_STAGE = re.compile(r"\d+\.\d+")
 _LINHA_STAGE = re.compile(r"^\|\s*`(\d+\.\d+)-[^`]+`\s*\|")
@@ -202,12 +213,17 @@ def problemas_adr(repo_root: Path) -> list[str]:
 
 def stages_done(roadmap: str) -> set[str]:
     """Os `N.M` com status `done` na Tabela de Stages (coluna "Status")."""
+    return {s for s, status in status_das_stages(roadmap).items() if status == "done"}
+
+
+def status_das_stages(roadmap: str) -> dict[str, str]:
+    """`N.M` → célula "Status" de cada Stage da Tabela de Stages."""
     linhas = roadmap.splitlines()
     try:
         inicio = linhas.index("## Tabela de Stages")
     except ValueError:
-        return set()
-    feitas: set[str] = set()
+        return {}
+    status: dict[str, str] = {}
     coluna: int | None = None
     for linha in linhas[inicio + 1 :]:
         if linha.startswith("## "):
@@ -220,9 +236,9 @@ def stages_done(roadmap: str) -> set[str]:
                 coluna = celulas.index("Status")
             continue
         m = _LINHA_STAGE.match(linha)
-        if m and len(celulas) > coluna and celulas[coluna] == "done":
-            feitas.add(m.group(1))
-    return feitas
+        if m and len(celulas) > coluna:
+            status[m.group(1)] = celulas[coluna]
+    return status
 
 
 def linhas_de_prosa(corpo: str) -> list[tuple[int, str]]:
@@ -288,23 +304,24 @@ def _links(
     return saida
 
 
-def _texto_de_lacunas(corpo: str) -> str:
-    """O corpo com código cercado e linhas de tabela de lacunas em branco, mesmas linhas.
+def _texto_de_prosa(corpo: str, *, com_tabela_de_lacunas: bool) -> str:
+    """O corpo com código cercado em branco (e, se pedido, as linhas de tabela de lacunas).
 
     A linha de tabela tem a regra própria (`_linha_de_tabela`); a cerca é exemplo citado.
     Linhas em branco no lugar mantêm a contagem e cortam a menção que tentasse atravessá-las.
     """
     linhas = [""] * len(corpo.splitlines())
     for i, linha in linhas_de_prosa(corpo):
-        if _LINHA_LACUNA.match(linha) is None:
+        if com_tabela_de_lacunas or _LINHA_LACUNA.match(linha) is None:
             linhas[i] = linha
     return "\n".join(linhas)
 
 
-def _lacunas(rel: str, fm: Frontmatter, feitas: set[str]) -> list[str]:
+def _lacunas(rel: str, fm: Frontmatter, status: dict[str, str]) -> list[str]:
     """Regra 8: lacuna aberta endereçada a Stage `done`; menção livre é proibida (issue #158)."""
     saida: list[str] = []
-    texto = _texto_de_lacunas(fm.corpo)
+    feitas = {s for s, st in status.items() if st == "done"}
+    texto = _texto_de_prosa(fm.corpo, com_tabela_de_lacunas=False)
     for m in _MENCAO.finditer(texto):
         linha = fm.linha_corpo + texto.count("\n", 0, m.start())
         listadas = _NUMERO_STAGE.findall(m.group(1))
@@ -327,6 +344,29 @@ def _lacunas(rel: str, fm: Frontmatter, feitas: set[str]) -> list[str]:
         )
     for i, texto_linha in linhas_de_prosa(fm.corpo):
         saida.extend(_linha_de_tabela(rel, fm.linha_corpo + i, texto_linha, feitas))
+    saida.extend(_marcas_fechadas(rel, fm, status))
+    return saida
+
+
+def _marcas_fechadas(rel: str, fm: Frontmatter, status: dict[str, str]) -> list[str]:
+    """Regra 8 na marca fechada (issue #180): cada Stage citada existe e está `done`."""
+    saida: list[str] = []
+    texto = _texto_de_prosa(fm.corpo, com_tabela_de_lacunas=True)
+    for m in _FECHADA.finditer(texto):
+        invalidas = [
+            f"{s} ({status[s]})" if s in status else f"{s} (fora da Tabela de Stages)"
+            for s in _NUMERO_STAGE.findall(m.group(1))
+            if status.get(s) != "done"
+        ]
+        if not invalidas:
+            continue
+        linha = fm.linha_corpo + texto.count("\n", 0, m.start())
+        normalizada = re.sub(r"[\s*_`>]+", " ", m.group(0))
+        saida.append(
+            f'{rel}:{linha}: marca fechada "{normalizada}" cita Stage que não está done:'
+            f" {', '.join(invalidas)} — só Stage done fecha lacuna; corrija o número ou"
+            ' volte a marca para "Lacuna para o concept da Stage N.M"'
+        )
     return saida
 
 
@@ -347,7 +387,7 @@ def _linha_de_tabela(rel: str, linha: int, texto: str, feitas: set[str]) -> list
     ]
 
 
-def problemas_dominio(repo_root: Path, feitas: set[str]) -> list[str]:
+def problemas_dominio(repo_root: Path, status: dict[str, str]) -> list[str]:
     """Regras 5–8 sobre `docs/domain/**/*.md`."""
     saida: list[str] = []
     pasta_adr = (repo_root / ADR_DIR).resolve()
@@ -360,7 +400,7 @@ def problemas_dominio(repo_root: Path, feitas: set[str]) -> list[str]:
         referencias, erros = _referencias(caminho, rel, fm.dados)
         saida.extend(erros)
         saida.extend(_links(caminho, rel, fm, referencias, pasta_adr))
-        saida.extend(_lacunas(rel, fm, feitas))
+        saida.extend(_lacunas(rel, fm, status))
     return saida
 
 
@@ -369,10 +409,10 @@ def problemas(repo_root: Path) -> list[str]:
     caminho_roadmap = repo_root / ROADMAP
     if not caminho_roadmap.exists():
         return [f"FATAL: {ROADMAP.as_posix()} não existe"]
-    feitas = stages_done(caminho_roadmap.read_text(encoding="utf-8-sig"))
-    if not feitas:
+    status = status_das_stages(caminho_roadmap.read_text(encoding="utf-8-sig"))
+    if "done" not in status.values():
         return [f"FATAL: nenhuma Stage `done` legível na Tabela de Stages de {ROADMAP.as_posix()}"]
-    return problemas_adr(repo_root) + problemas_dominio(repo_root, feitas)
+    return problemas_adr(repo_root) + problemas_dominio(repo_root, status)
 
 
 def main() -> int:
