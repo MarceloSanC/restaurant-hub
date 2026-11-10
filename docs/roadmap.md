@@ -42,6 +42,7 @@ graph LR
     S23 --> S24[2.4-identity-http]
     S24 --> S25[2.5-email-invite]
     S26[2.6-identity-unit-of-work]
+    S27[2.7-identity-application-authorization]
   end
   subgraph Step3[Step 3 — Equipe]
     S31[3.1-staff-domain] --> S32[3.2-staff-application]
@@ -85,6 +86,7 @@ graph LR
   S74 --> S81
   S52 --> S81
   S43 --> S39
+  S37 --> S27
 ```
 
 ## Tabela de Steps
@@ -92,7 +94,7 @@ graph LR
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
-| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.6 |
+| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.7 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.9 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
@@ -119,6 +121,7 @@ graph LR
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/inbound/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
 | `2.6-identity-unit-of-work` | Fronteira transacional nos use cases de identity que escrevem mais de uma vez | application + adapters/out/postgres + tooling | done | `3.5-employee-login-link` |
+| `2.7-identity-application-authorization` | Autorização na camada application de identity | application | draft | `3.7-application-authorization`, #170 |
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
@@ -679,6 +682,43 @@ skills_hint: [hex-arch-python, repository-pattern, pytest-with-fakes, compositio
 >   colidia com as Stages paralelas das #49 e #60.
 
 ---
+
+#### Stage 2.7 — `2.7-identity-application-authorization`
+
+**Descrição humana:** a camada application de identity passa a ser fail-closed por si nos quatro use cases que agem em nome de um ator autenticado (`ProvisionRestaurant`, `CreateUnit`, `CreateUser`, `InviteUser`): o ator entra no command e o use case declara o próprio requisito e o passa ao `AuthorizeActionUseCase` antes de qualquer outra instrução. A borda HTTP continua autorizando (defesa em profundidade) e responde igual. Hoje um driver não-HTTP que chame `CreateUserUseCase` ou `InviteUserUseCase` direto cria `platform_admin` ou `owner` em qualquer tenant. Decidida na issue #115 (ADR 0.0.0020, que traz o inventário dos 14 use cases e o motivo de cada exclusão). Espelha a 3.7 de staff e a 4.3 de scheduling. Depende da #170 só porque a #170 mexe nos mesmos arquivos (`invite_user.py`, `provision_restaurant.py`). Precede todo driver não-HTTP de identity: Stage que criar CLI, worker, console ou seed sobre identity lista esta em `depends_on`.
+
+```yaml
+stage_id: 2.7-identity-application-authorization
+bounded_context: identity
+camada_alvo: application (identity) — com o ajuste dos consumidores (router, dependencies, composition_root)
+depends_on: [3.7-application-authorization]
+arquivos_a_criar:
+  - entrada própria para o convite de dono pela plataforma (use case ou command; o concept escolhe)
+  - tests/unit/features/identity/application/test_use_cases_authorize.py (propriedade, forma e totalidade sobre use_cases/, com as exclusões nomeadas do ADR 0.0.0020)
+  - teste da cadeia real por papel, inclusive chamada direta tentando criar platform_admin
+arquivos_a_modificar:
+  - features/identity/application/dtos/commands.py (ator nos quatro commands)
+  - features/identity/application/use_cases/{provision_restaurant,create_unit,create_user,invite_user}.py
+  - required_permissions_for_role sai de adapters/inbound/http/dependencies.py para a application
+  - features/identity/adapters/inbound/http/{router,dependencies}.py; composition_root.py
+  - docstrings que dizem a questão aberta (fachada, get_account_role, provision_restaurant, identity_gateway e local_identity_gateway de staff)
+  - docs: notas append-only em ADR 2.4.0003, 0.0.0014, 0.0.0018 e 3.5.0001; docs/domain/identity/tenancy-and-access.md
+contratos_introduzidos:
+  - campo de ator nos quatro commands; requisito de acesso declarado pelo use case
+contratos_consumidos:
+  - AuthorizeActionUseCase (2.2) e a composição "não se concede o que não se detém" (ADR 2.4.0003 §2)
+definition_of_done:
+  - "todo use case de identity que age em nome de ator autoriza o alvo do próprio command antes de qualquer outra instrução de execute — provado por propriedade sobre a pasta use_cases/ com as exclusões nomeadas do ADR 0.0.0020, com as faixas HTTP inalteradas"
+non_goals:
+  - remover a autorização da borda HTTP
+  - autenticidade do ator e ator de sistema (#75) e validação de identificador fora da borda (#76)
+  - autorizar dentro da fachada de identity (ADR 3.5.0001 §1); o resíduo do provision_account é pergunta do concept
+  - seed do primeiro platform_admin (raiz de confiança; Stage que o criar)
+  - medir sob carga a dupla autorização (#78)
+complexidade_estimada: M
+gate_mode: strict
+skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin-adapter, task-ordering-hex]
+```
 
 ### Step 3 — Equipe da unidade (BC `staff`)
 
