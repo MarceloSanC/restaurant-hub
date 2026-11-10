@@ -216,9 +216,9 @@ O `adr_id` é texto `N.M.NNNN`, igual ao prefixo `N_M_NNNN` do nome do arquivo e
 conflitam no git (os slugs diferem), então o número livre se confere em todas as
 branches abertas, e o choque se resolve renumerando o ADR mais novo. Nos docs de
 `docs/domain/`, o mesmo gate exige que `references` e links relativos resolvam,
-que todo ADR linkado no corpo esteja no `references` e que nenhuma "Lacuna para o
-concept da Stage N.M" fique aberta com a Stage `done`. Gate mecânico:
-`scripts/check_doc_frontmatter.py` (em `make docs-check`).
+que todo ADR linkado no corpo esteja no `references`, que nenhuma "Lacuna para o
+concept da Stage N.M" fique aberta com a Stage `done` e que "fechada pela Stage N.M"
+só cite Stage `done` (issue #180). Gate: `scripts/check_doc_frontmatter.py` (`make docs-check`).
 
 **Runbooks:**
 ```yaml
