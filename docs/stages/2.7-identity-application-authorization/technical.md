@@ -417,4 +417,8 @@ uv run coverage report --fail-under=90 --include="<arquivos de src/ tocados>"   
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-11-09 — [deviation] Task 01 — a borda não reexporta `required_permissions_for_role` — Claude
+**Contexto:** a Task 01 mandava `dependencies.py` reexportar a função do port (`import … as …`), e o CA09 do concept diz que `dependencies.py` "a importa de lá".
+**Razão:** o ruff do projeto recusa o alias redundante (PLC0414) e o `mypy --strict` recusa o reexport implícito; e `dependencies.py` não usa a função. Quem a usa (`router.py`) e os testes de borda (`test_http_dependencies.py`) passaram a importá-la do port. O CA09 fica cumprido no que importa — uma definição só, no port, e a borda sem cópia (teste AST) —, sem a parte "dependencies importa". O docstring do port, que dizia "a borda a reexporta", foi corrigido no `[2.7/task-01-fix]` (Checkpoint C do bloco 01–03).
+
 <!-- END: post-execution -->
