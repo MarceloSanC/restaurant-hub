@@ -1,7 +1,8 @@
 """Entidade JobFunction — função de trabalho customizável do restaurante.
 
 Raiz de agregado própria, escopo **tenant** (a função é do restaurante, não da
-unidade — workforce §3.2); `Employee` a referencia **só por id**. Papel de
+unidade — workforce §3.2), **habilitada por unidade** desde a Stage 3.11
+(`unit_enablement`, ADR 3.11.0001); `Employee` a referencia **só por id**. Papel de
 trabalho, não papel de acesso (RBAC é de identity).
 
 Entidade **frozen**: transições devolvem nova instância via
@@ -16,7 +17,7 @@ guardada**: apagar função referenciada por algum funcionário é recusado
 """
 
 import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     InvalidIdentifierError,
@@ -25,7 +26,9 @@ from restaurant_hub.features.staff.domain.exceptions.errors import (
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
+    UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 
 
 @dataclass(frozen=True, eq=False)
@@ -42,11 +45,18 @@ class JobFunction:
         tenant_id: restaurante dono da função (escopo tenant).
         name: nome verbatim (sem trim/case — ADR 3.1.0002), não-vazio;
             unicidade no tenant é enforcement da 3.2/3.3.
+        unit_enablement: em quais unidades do restaurante a função vale — todas
+            ou um conjunto não-vazio (Stage 3.11, ADR 3.11.0001). A função
+            continua **do restaurante**; isto só diz onde ela vale.
     """
 
     id: JobFunctionId
     tenant_id: TenantId
     name: str
+    # Default = o mesmo da migration `0005`: função construída sem dizer onde vale
+    # se comporta como antes da Stage 3.11 (concept 3.11 D8). Criar e alterar
+    # unidades passam o valor sempre explícito.
+    unit_enablement: UnitEnablement = field(default_factory=UnitEnablement.everywhere)
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -63,6 +73,14 @@ class JobFunction:
     def rename(self, name: str) -> "JobFunction":
         """Renomeia a função — nova instância revalidada (nome verbatim)."""
         return dataclasses.replace(self, name=name)
+
+    def with_enablement(self, unit_enablement: UnitEnablement) -> "JobFunction":
+        """Substitui onde a função vale — nova instância (ADR 3.11.0001 §5)."""
+        return dataclasses.replace(self, unit_enablement=unit_enablement)
+
+    def is_enabled_in(self, unit_id: UnitId) -> bool:
+        """Diz se a função vale na unidade (ADR 3.11.0002)."""
+        return self.unit_enablement.covers(unit_id)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, JobFunction):
