@@ -243,6 +243,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#175](https://github.com/MarceloSanC/restaurant-hub/issues/175) | Falha de envio do convite de login de funcionário vai ao log com traceback e pode vazar destinatário e link | staff + identity | application + adapters/out/identity | done | #170 |
 | [#178](https://github.com/MarceloSanC/restaurant-hub/issues/178) | Stage 3.8 fechou como `stage 3.7: complete` e o `check_stage_deps` trava quem depende dela | shared | docs + tooling | done | — |
 | [#180](https://github.com/MarceloSanC/restaurant-hub/issues/180) | Marca fechada "fechada pela Stage N.M" não é conferida contra o roadmap | shared | tooling | open | #158 |
+| [#185](https://github.com/MarceloSanC/restaurant-hub/issues/185) | Dois `stage 3.7: complete` no histórico: o `check_stage_deps` não distingue qual Stage o commit reservado fechou | shared | tooling | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
