@@ -24,9 +24,10 @@ O que o gateway faz é **tradução de vocabulário**, nas duas direções:
   nem link, com o handler de identity respondendo status 500 de corpo constante),
   e por isso continua subindo sem tradução.
 
-Não autoriza: a fachada não autoriza as próprias operações — identity não
-autoriza na application, só na borda HTTP (ADR 0.0.0014 §4; issue #115) — e
-este adapter tampouco. Quem
+Não autoriza: a fachada não autoriza as próprias operações — os use cases que
+só ela chama são exclusões nomeadas do inventário de identity (ADR 0.0.0020) — e
+este adapter tampouco. A fachada só provisiona o papel `"employee"` desde a Stage
+2.7 (ADR 2.7.0001), o literal que este adapter já passa. Quem
 responde pela autorização é o use case que o chama, antes de chegar aqui (Stage
 3.7, ADR 3.7.0001), e cada operação tem o seu: **provisionar e enviar o convite**
 vêm de `create_login_for_employee`, que autoriza `manage_staff` **e**
