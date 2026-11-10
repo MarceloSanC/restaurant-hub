@@ -237,6 +237,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
 | [#174](https://github.com/MarceloSanC/restaurant-hub/issues/174) | Citações por número de linha a `LAYOUT.md`, concepts/technicals de Stage e runbooks sem gate | shared | tooling | open | #154 |
 | [#175](https://github.com/MarceloSanC/restaurant-hub/issues/175) | Falha de envio do convite de login de funcionário vai ao log com traceback e pode vazar destinatário e link | staff + identity | application + adapters/out/identity | open | #170 |
+| [#180](https://github.com/MarceloSanC/restaurant-hub/issues/180) | Marca fechada "fechada pela Stage N.M" não é conferida contra o roadmap | shared | tooling | open | #158 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
