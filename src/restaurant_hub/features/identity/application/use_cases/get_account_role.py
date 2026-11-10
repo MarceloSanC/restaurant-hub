@@ -16,10 +16,11 @@ pode falhar por isso (L-IG5 de staff). É o primeiro use case de identity a
 devolver `Result | None` — espelha o `find_by_id` do repositório, pelo mesmo
 motivo.
 
-Não autoriza: como todo use case de identity, não recebe ator — a autorização de
-identity mora na borda HTTP (ADR 0.0.0014 §4; se isso muda é a issue #115). Quem
-chama pela fachada responde pela autorização do seu lado: em staff,
-`deactivate_employee` autoriza `manage_staff` antes de perguntar (ADR 3.7.0001).
+Não autoriza e não recebe ator: só a fachada o chama, e é exclusão nomeada do
+inventário do ADR 0.0.0020 (desde a Stage 2.7, os use cases de identity que agem por
+um ator autorizam o próprio alvo; os facade-only, não). Quem chama pela fachada
+responde pela autorização do seu lado: em staff, `deactivate_employee` autoriza
+`manage_staff` antes de perguntar (ADR 3.7.0001).
 """
 
 from restaurant_hub.features.identity.application.dtos.commands import GetAccountRoleCommand

@@ -245,3 +245,16 @@ roda agora `InviteUserUseCase`: o `owner` nasce como conta pendente e define a p
 link do convite. O papel continua o literal `Role.OWNER` no router, o tenant continua vindo do
 path e o restaurante inexistente continua respondendo 404 (`RestaurantNotFoundError`, agora
 levantado pelo use case de convite). Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-09 — §1 (*a composição de autorização mora só na borda; os use cases não recebem
+ator*), a rejeição da Alternativa C (*"duplicates the authorization decision"*) e a consequência
+negativa sobre o segundo adapter de entrada foram superadas por [ADR 0.0.0020](./0_0_0020-identity-use-cases-authorize-their-own-target.md) e [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md) (Stage
+2.7, issue #184).** Os quatro use cases de identity que agem por um ator — e o
+`InviteOwnerUseCase`, que nasceu na Stage para a rota de dono — recebem `actor_id` no command e
+abrem `execute` declarando o próprio requisito a `AuthorizeActionUseCase`, que continua sendo o
+único lugar que decide: a Alternativa C não cria um segundo avaliador. A borda continua
+autorizando como §1 descreve (defesa em profundidade) e nenhuma faixa muda. §2
+(`required_permissions_for_role`) continua valendo, agora no módulo do port
+`application/ports/out/action_authorizer.py`, de onde a borda e os use cases a leem; §2b
+("nenhuma rota emite `platform_admin`") passa a valer também para quem chama os use cases
+direto. Nota *append-only*; o corpo acima não foi editado.

@@ -95,6 +95,9 @@ from restaurant_hub.features.identity.application.use_cases.create_user import (
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.invite_owner import (
+    InviteOwnerUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
 )
@@ -226,6 +229,7 @@ class ApplicationDependencies:
     identity_create_unit: CreateUnitUseCase
     identity_create_user: CreateUserUseCase
     identity_invite_user: InviteUserUseCase
+    identity_invite_owner: InviteOwnerUseCase
     identity_request_password_reset: RequestPasswordResetUseCase
     identity_set_password_with_token: SetPasswordWithTokenUseCase
     identity_authorize_action: AuthorizeActionUseCase
@@ -472,9 +476,13 @@ def wire_dependencies(
             invitation_ttl=invitation_ttl,
             base_url=cfg.app_base_url,
             unit_of_work=identity_unit_of_work,
+            authorizer=authorize_action,
         ),
         identity_create_unit=CreateUnitUseCase(
-            units=units, restaurants=restaurants, id_generator=id_generator
+            units=units,
+            restaurants=restaurants,
+            id_generator=id_generator,
+            authorizer=authorize_action,
         ),
         identity_create_user=CreateUserUseCase(
             users=users,
@@ -482,6 +490,7 @@ def wire_dependencies(
             units=units,
             hasher=hasher,
             id_generator=id_generator,
+            authorizer=authorize_action,
         ),
         identity_invite_user=InviteUserUseCase(
             users=users,
@@ -496,6 +505,24 @@ def wire_dependencies(
             invitation_ttl=invitation_ttl,
             base_url=cfg.app_base_url,
             unit_of_work=identity_unit_of_work,
+            authorizer=authorize_action,
+        ),
+        # Stage 2.7 — o convite de dono pela plataforma, com o **mesmo**
+        # `AuthorizeActionUseCase` do guard das rotas e da fachada de acesso: uma
+        # decisão, não duas (ADR 2.7.0001 §Decision 2).
+        identity_invite_owner=InviteOwnerUseCase(
+            users=users,
+            restaurants=restaurants,
+            hasher=hasher,
+            tokens=setup_tokens,
+            token_issuer=setup_token_issuer,
+            email_sender=sender,
+            id_generator=id_generator,
+            clock=clock,
+            invitation_ttl=invitation_ttl,
+            base_url=cfg.app_base_url,
+            unit_of_work=identity_unit_of_work,
+            authorizer=authorize_action,
         ),
         identity_request_password_reset=RequestPasswordResetUseCase(
             users=users,
@@ -598,6 +625,7 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
         router_module._get_create_unit: lambda: deps.identity_create_unit,
         router_module._get_create_user: lambda: deps.identity_create_user,
         router_module._get_invite_user: lambda: deps.identity_invite_user,
+        router_module._get_invite_owner: lambda: deps.identity_invite_owner,
         router_module._get_request_password_reset: (lambda: deps.identity_request_password_reset),
         router_module._get_set_password_with_token: (lambda: deps.identity_set_password_with_token),
         router_module._get_guard: lambda: deps.identity_guard,

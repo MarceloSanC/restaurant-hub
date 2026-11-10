@@ -12,6 +12,7 @@ o caminho indireto; este teste fecha essa lacuna pelo lado do consumidor.
 """
 
 import ast
+import dataclasses
 import io
 import pathlib
 from collections.abc import Callable
@@ -46,6 +47,9 @@ from restaurant_hub.features.identity.application.use_cases.authenticate_user im
 )
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.invite_owner import (
+    InviteOwnerUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
@@ -99,6 +103,7 @@ def test_wire_dependencies_monta_os_use_cases() -> None:
     assert isinstance(deps.identity_refresh_session, RefreshSessionUseCase)
     assert isinstance(deps.identity_create_user, CreateUserUseCase)
     assert isinstance(deps.identity_invite_user, InviteUserUseCase)
+    assert isinstance(deps.identity_invite_owner, InviteOwnerUseCase)
     assert isinstance(deps.identity_request_password_reset, RequestPasswordResetUseCase)
     assert isinstance(deps.identity_set_password_with_token, SetPasswordWithTokenUseCase)
     assert deps.identity_guard is not None
@@ -163,6 +168,11 @@ _COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[s
     "invite_user": (
         lambda d: d.identity_invite_user,
         {"_users", "_restaurants", "_units", "_tokens"},
+    ),
+    # Stage 2.7 — o convite de dono pela plataforma ganhou use case próprio.
+    "invite_owner": (
+        lambda d: d.identity_invite_owner,
+        {"_users", "_restaurants", "_tokens"},
     ),
     # O da fachada, dentro do gateway de staff — o caminho da travessia entre BCs.
     "provision_account": (
@@ -418,3 +428,37 @@ def test_um_import_proibido_plantado_reprova() -> None:
     alvos = [no.module for no in ast.walk(arvore) if isinstance(no, ast.ImportFrom) and no.module]
 
     assert any(_MODULO_DE_ADAPTERS in alvo for alvo in alvos)
+
+
+# Stage 2.7 (concept CA07) — os use cases que agem por um ator, pelo campo do contêiner.
+_QUE_AUTORIZAM = (
+    "identity_provision_restaurant",
+    "identity_create_unit",
+    "identity_create_user",
+    "identity_invite_user",
+    "identity_invite_owner",
+)
+
+
+@pytest.mark.parametrize("campo", _QUE_AUTORIZAM)
+def test_o_autorizador_dos_use_cases_e_o_mesmo_do_guard(campo: str) -> None:
+    """CA07 — uma decisão, não duas: o use case e a borda autorizam sobre o mesmo
+    `AuthorizeActionUseCase`. Um segundo autorizador passaria em qualquer teste de
+    tipo e faria a borda e a application decidirem sobre estados diferentes."""
+    deps = wire_dependencies(Settings(_env_file=None))
+
+    assert getattr(deps, campo)._authorizer is deps.identity_authorize_action
+    assert deps.identity_guard._authorize_action is deps.identity_authorize_action
+
+
+def test_a_lista_dos_que_autorizam_cobre_todo_use_case_com_autorizador() -> None:
+    """A totalidade de `_QUE_AUTORIZAM`: todo use case do contêiner que tem
+    `_authorizer` está na conferência acima."""
+    deps = wire_dependencies(Settings(_env_file=None))
+    com_autorizador = {
+        campo.name
+        for campo in dataclasses.fields(deps)
+        if hasattr(getattr(deps, campo.name), "_authorizer")
+    }
+
+    assert com_autorizador == set(_QUE_AUTORIZAM)

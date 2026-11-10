@@ -26,9 +26,11 @@ o de **provisionar** (`create_login_for_employee`) autoriza `manage_staff` **e**
 `manage_users` (concept 3.5 §5.3), e a rota R17 autoriza as mesmas duas antes
 dele; o de **perguntar o papel e revogar sessões** (`deactivate_employee`, que
 chama `is_employee_login` antes de `revoke_login_sessions`) autoriza
-`manage_staff`. A fachada de identity não autoriza as próprias operações:
-identity não autoriza na application, só na borda HTTP (ADR 0.0.0014 §4;
-issue #115).
+`manage_staff`. A fachada de identity não autoriza as próprias operações: os
+use cases que só ela chama são exclusões nomeadas do inventário de identity (ADR
+0.0.0020), e quem a chama responde pela autorização. Desde a Stage 2.7 o
+provisionamento pela fachada só aceita o papel `"employee"` (ADR 2.7.0001), o
+mesmo literal que o gateway passa (L-IG1).
 
 **As cinco leis** (concept 3.5 §4; L-IG5 do concept 3.8 §4). Texto normativo
 deste módulo, pareado com a suíte de contrato

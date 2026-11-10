@@ -25,6 +25,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
     AuthenticateUserCommand,
     CreateUnitCommand,
     CreateUserCommand,
+    InviteOwnerCommand,
     InviteUserCommand,
     ProvisionRestaurantCommand,
     RefreshSessionCommand,
@@ -38,6 +39,9 @@ from restaurant_hub.features.identity.application.dtos.results import (
     UnitResult,
     UserResult,
 )
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    required_permissions_for_role,
+)
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
 )
@@ -46,6 +50,9 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 )
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.invite_owner import (
+    InviteOwnerUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
@@ -73,7 +80,7 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
-from .dependencies import AuthenticatedActor, IdentityGuard, required_permissions_for_role
+from .dependencies import AuthenticatedActor, IdentityGuard
 from .schemas import (
     CreateUnitRequest,
     CreateUserRequest,
@@ -127,6 +134,10 @@ def _get_create_user() -> CreateUserUseCase:
 
 def _get_invite_user() -> InviteUserUseCase:
     _not_wired("invite_user")
+
+
+def _get_invite_owner() -> InviteOwnerUseCase:
+    _not_wired("invite_owner")
 
 
 def _get_request_password_reset() -> RequestPasswordResetUseCase:
@@ -293,6 +304,7 @@ def provision_restaurant(
 
     result = use_case.execute(
         ProvisionRestaurantCommand(
+            actor_id=actor.claims.subject,
             name=payload.name,
             owner_email=Email(payload.owner.email),
         )
@@ -310,14 +322,16 @@ def create_restaurant_owner(
     payload: InviteOwnerRequest,
     actor: Annotated[AuthenticatedActor, Depends(_authenticated_actor)],
     guard: Annotated[IdentityGuard, Depends(_get_guard)],
-    use_case: Annotated[InviteUserUseCase, Depends(_get_invite_user)],
+    use_case: Annotated[InviteOwnerUseCase, Depends(_get_invite_owner)],
 ) -> UserResponse:
     """Convida um `owner` para um restaurante existente — ação de **plataforma**.
 
-    **O dono é convidado, não recebe senha** (ADR 0.0.0018): a rota roda o
-    `InviteUserUseCase`, a conta nasce pendente e o link de definição de senha
-    sai só no e-mail. Antes da issue #114 ela rodava `CreateUserUseCase` com a
-    senha escolhida pelo `platform_admin`.
+    **O dono é convidado, não recebe senha** (ADR 0.0.0018): a conta nasce
+    pendente e o link de definição de senha sai só no e-mail. Antes da issue #114
+    a rota criava a conta com a senha escolhida pelo `platform_admin`; até a Stage
+    2.7 ela convidava pelo use case do convite de tenant. Desde então roda o
+    `InviteOwnerUseCase`, que declara o próprio requisito — `manage_platform` — e
+    o autoriza antes de qualquer outra instrução (ADR 2.7.0001 §Decision 4).
 
     Até a issue #67 esta rota **era** o bootstrap: o restaurante nascia sozinho em
     `POST /restaurants` e o dono vinha aqui, numa segunda chamada. Hoje o
@@ -331,8 +345,8 @@ def create_restaurant_owner(
     emite um `owner` sem deter `manage_tenant` nem `manage_users`. O que contém a
     exceção não é a regra, é o conjunto de rotas: são duas (esta e
     `POST /restaurants`), as duas exigem `manage_platform`, e nas duas o papel é o
-    literal `Role.OWNER` — aqui, abaixo; lá, no use case —, nunca vindo do
-    request. É isso que garante que **nenhuma rota emite `platform_admin`**.
+    literal `Role.OWNER`, dentro do use case, nunca vindo do request. É isso que
+    garante que **nenhuma rota emite `platform_admin`**.
 
     **O tenant vem do PATH, não do ator** (concept §5 regra 3, segunda origem):
     o ator é `platform_admin` e o seu `actor_tenant_id` é necessariamente `None`,
@@ -344,9 +358,9 @@ def create_restaurant_owner(
     guard.authorize(actor, Permission.MANAGE_PLATFORM)
 
     result = use_case.execute(
-        InviteUserCommand(
+        InviteOwnerCommand(
+            actor_id=actor.claims.subject,
             email=Email(payload.email),
-            role=Role.OWNER,
             tenant_id=RestaurantId(restaurant_id),
         )
     )
@@ -378,7 +392,9 @@ def create_unit(
     tenant_id = RestaurantId(restaurant_id)
     guard.authorize(actor, Permission.MANAGE_TENANT, tenant_id=tenant_id)
 
-    result = use_case.execute(CreateUnitCommand(restaurant_id=tenant_id, name=payload.name))
+    result = use_case.execute(
+        CreateUnitCommand(actor_id=actor.claims.subject, restaurant_id=tenant_id, name=payload.name)
+    )
     return _unit_response(result)
 
 
@@ -403,9 +419,11 @@ def create_user(
        `manage_tenant`), e ninguém cria um `platform_admin`.
     2. **Autorização por unidade requisitada** — cada `unit_id` do corpo é
        checado. Além de impedir que um `manager` vincule alguém a uma unidade que
-       não enxerga, é o que mantém seguras as faixas 404/422: sem isso o use case
-       seria alcançado com unidade não-visível e responderia `UnitNotFoundError`
-       (404) ou `CrossTenantError` (422), reabrindo o oráculo de enumeração.
+       não enxerga, é o que mantém seguras as faixas 404/422: uma unidade
+       não-visível levaria a `UnitNotFoundError` (404) ou `CrossTenantError`
+       (422), reabrindo o oráculo de enumeração. Desde a Stage 2.7 o use case
+       repete a mesma autorização como primeira instrução, e esta, aqui, é a
+       defesa em profundidade (ADR 2.7.0001).
     3. **O tenant vem do ator**, nunca do corpo — o schema sequer tem o campo.
     """
     target_role = Role.from_string(payload.role)
@@ -420,6 +438,7 @@ def create_user(
 
     result = use_case.execute(
         CreateUserCommand(
+            actor_id=actor.claims.subject,
             email=Email(payload.email),
             plain_password=payload.password.get_secret_value(),
             role=target_role,
@@ -470,6 +489,7 @@ def invite_user(
 
     result = use_case.execute(
         InviteUserCommand(
+            actor_id=actor.claims.subject,
             email=Email(payload.email),
             role=target_role,
             tenant_id=authorized.actor_tenant_id,

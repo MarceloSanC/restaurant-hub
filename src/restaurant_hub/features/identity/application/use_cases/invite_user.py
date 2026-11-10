@@ -5,10 +5,15 @@ escolhe a senha da pessoa convidada**. A conta nasce com um hash inutilizável e
 a pessoa define a própria senha pelo link que recebe — de modo que quem convidou
 jamais conhece, transporta ou digita a credencial de outra pessoa.
 
-**A ordem das checagens é a mesma de `CreateUserUseCase`, e pelas mesmas razões**
-(unicidade global primeiro; rejeição de `platform_admin` com unidades antes de
-tocar no `UnitRepository`, senão a diferença entre `UnitNotFoundError` e
-`PlatformAdminMembershipError` revelaria quais unidades existem). Duplicar a
+**Autoriza antes de qualquer outra instrução, o mesmo requisito de
+`CreateUserUseCase`** (Stage 2.7, ADR 0.0.0020 §Decision 3): convidar concede o mesmo
+acesso que criar. O convite do dono pela plataforma tem use case próprio,
+`InviteOwnerUseCase` (ADR 2.7.0001 §Decision 4) — este serve só o convite de tenant.
+
+**A ordem das checagens que vem depois é a mesma de `CreateUserUseCase`, e pelas
+mesmas razões** (unicidade global primeiro; rejeição de `platform_admin` com
+unidades antes de este use case resolver as unidades — defesa em profundidade desde
+a 2.7, ver `create_user`). Duplicar a
 mecânica é deliberado nesta Stage: extrair um passo compartilhado agora acoplaria
 dois fluxos que ainda podem divergir — o convite não tem senha, e a criação
 direta não tem token nem e-mail.
@@ -48,6 +53,10 @@ from restaurant_hub.features.identity.application.errors import (
     RestaurantNotFoundError,
     UnitNotFoundError,
 )
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    ActionAuthorizer,
+    required_permissions_for_role,
+)
 from restaurant_hub.features.identity.application.ports.out.password_hasher import (
     PasswordHasher,
 )
@@ -71,6 +80,9 @@ from restaurant_hub.features.identity.application.use_cases._invitation import (
     deliver_invitation,
     invitation_message,
     setup_link,
+)
+from restaurant_hub.features.identity.application.use_cases.authorize_action import (
+    authorize_requirement,
 )
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions.errors import (
@@ -106,6 +118,7 @@ class InviteUserUseCase:
         invitation_ttl: timedelta,
         base_url: str,
         unit_of_work: UnitOfWork,
+        authorizer: ActionAuthorizer,
     ) -> None:
         self._users = users
         self._restaurants = restaurants
@@ -119,11 +132,15 @@ class InviteUserUseCase:
         self._invitation_ttl = invitation_ttl
         self._base_url = base_url
         self._unit_of_work = unit_of_work
+        self._authorizer = authorizer
 
     def execute(self, command: InviteUserCommand) -> UserResult:
         """Convida a pessoa.
 
         Raises:
+            InvalidAccessTokenError, PermissionDeniedError, TenantScopeRequiredError,
+                TenantNotVisibleError, UnitScopeRequiredError, UnitNotVisibleError:
+                o ator não detém o requisito (ADR 2.7.0001 §Decision 3).
             EmailAlreadyRegisteredError: e-mail já usado em qualquer tenant.
             PlatformAdminMembershipError: `platform_admin` com `unit_ids`.
             RestaurantNotFoundError: tenant informado não existe.
@@ -132,12 +149,20 @@ class InviteUserUseCase:
             InvitationNotSentError: o `EmailSender` falhou, com a conta e o token
                 já comitados (regra 13; issue #170).
         """
+        authorize_requirement(
+            self._authorizer,
+            command.actor_id,
+            required_permissions_for_role(command.role),
+            tenant_id=command.tenant_id,
+            unit_ids=command.unit_ids,
+        )
+
         if self._users.exists_by_email(command.email):
             raise EmailAlreadyRegisteredError(command.email.value)
 
         is_platform_admin = command.role is Role.PLATFORM_ADMIN
         if is_platform_admin and command.unit_ids:
-            # Antes de tocar no `UnitRepository` — ver `create_user`.
+            # Antes de este use case resolver as unidades — ver `create_user`.
             raise PlatformAdminMembershipError()
 
         tenant_id = command.tenant_id

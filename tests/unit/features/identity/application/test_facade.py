@@ -33,6 +33,7 @@ from restaurant_hub.features.identity.application.dtos.results import (
     ProvisionedAccountResult,
     UserResult,
 )
+from restaurant_hub.features.identity.application.errors import RoleNotProvisionableError
 from restaurant_hub.features.identity.application.facade import (
     AccessGrant,
     AccessPrincipal,
@@ -352,6 +353,29 @@ class TestTransparenciaAExcecoes:
 
         with pytest.raises(InvalidRoleError):
             _provisionar(fachada, role="ceo")
+
+        assert espiao.commands == []
+
+    @pytest.mark.parametrize("papel", ["owner", "manager", "hr", "platform_admin"])
+    def test_papel_que_nao_e_employee_e_recusado_sem_efeito(self, papel: str) -> None:
+        """CA10 (Stage 2.7, ADR 2.7.0001 §Decision 5) — a fachada cria contas sem
+        autorizar, então só serve o login de funcionário. Outro papel válido seria
+        conta privilegiada criada sem "não se concede o que não se detém"."""
+        fachada, espiao, _, _ = _fachada_espia()
+
+        with pytest.raises(RoleNotProvisionableError) as erro:
+            _provisionar(fachada, role=papel)
+
+        assert erro.value.role == papel
+        assert espiao.commands == []
+
+    def test_o_papel_e_checado_antes_do_email(self) -> None:
+        """CA10 — o domínio de entrada decide antes do formato: com e-mail inválido e
+        papel recusado, sobe a recusa do papel."""
+        fachada, espiao, _, _ = _fachada_espia()
+
+        with pytest.raises(RoleNotProvisionableError):
+            _provisionar(fachada, role="owner", email="sem-arroba")
 
         assert espiao.commands == []
 

@@ -187,3 +187,11 @@ depois do commit; nenhum dos dois corpos tem campo de senha, e a rota de owners 
 caminho que crie restaurante sem dono, a rota de owners como caminho de suporte, o papel como
 literal no código e a autorização na borda — continua valendo. Nota *append-only*; o corpo acima
 não foi editado.
+
+**2026-11-09 — em §Decision 4, *"takes no actor, like every identity use case"*, e a ordem de
+checagens de §Decision 1 (o nome, depois a unicidade do e-mail) como **primeiras** instruções de
+`ProvisionRestaurantUseCase` foram superadas por [ADR 0.0.0020](./0_0_0020-identity-use-cases-authorize-their-own-target.md) e [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md) (Stage 2.7, issue
+#184).** O command ganhou `actor_id`, e a primeira instrução de `execute` passou a ser a
+autorização de `manage_platform`, sem tenant; a ordem de §Decision 1 continua valendo **depois**
+dela. A borda continua autorizando o mesmo requisito antes. Nota *append-only*; o corpo acima
+não foi editado.
