@@ -1584,6 +1584,7 @@ Perguntas que a issue deixa para o concept (registradas na #107):
 - **Quem pode.** R17 exige `manage_staff` **e** `manage_users` sobre a unidade (ADR 3.5.0001); vincular conta que já tem papel acima de `employee` pode pedir mais. O gerente pode vincular a própria conta?
 - **Forma da escrita.** Desvincular e trocar precisam de escrita condicional sobre o `user_id` esperado, para não apagar em silêncio um vínculo que mudou (a classe de defeito da #68 e da #108).
 - **Corrida.** Duas transições concorrentes do mesmo login em registros da mesma unidade reabrem a corrida que o ADR 3.8.0001 › "Alternative H" declarou residual; o technical 3.8 §7 sugere lock por `user_id` nesta Stage.
+- **Desligamento × R17 na ordem inversa** (anexo da auditoria do PR #103, comentário na #107). Um R13 que leu o registro sem vínculo e grava depois de um R17 concorrente deixa o registro desligado **e** vinculado, sem revogar sessões (ADR 0.0.0010 › "The reverse order of the termination race is not closed"). Hoje não concede acesso, mas contraria "desligado não recebe login". Ao extrair de `deactivate_employee.py` o ponto único da regra de fim de vínculo, o concept decide se o R13 reconfere o vínculo sob o lock da linha (ADR 3.5.0003 §2) e põe no critério um teste de conduta com duas conexões para esse entrelace.
 - **Paralelismo.** A 4.4 pode tocar o repositório de staff (`find_by_user_id` e índice, guarda reversa); não rodar em paralelo com ela se as pegadas de arquivo se cruzarem.
 
 ---
