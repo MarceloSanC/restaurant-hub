@@ -14,7 +14,8 @@ Achado por revisão, não por sintoma — que é o modo de falha que este arquiv
 existe para tornar barulhento.
 
 **Lista explícita + asserção de que ela cobre a configuração**, o par de sempre.
-A lista aqui é a dos quatro módulos que a issue nomeia; a asserção seguinte cobra
+A lista aqui é a dos módulos que decidem acesso (os quatro da issue e o port da
+Stage 2.7); a asserção seguinte cobra
 o `pyproject.toml` contra ela nos dois sentidos, para que nem um módulo saia do
 escopo por edição distraída, nem um quinto entre sem que a issue que o justifica
 seja escrita neste arquivo.
@@ -36,8 +37,9 @@ pytestmark = pytest.mark.unit
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
-# Os quatro módulos que decidem acesso, como a issue #45 os nomeia. Um quinto
-# entra aqui com a justificativa ao lado — e só então no `pyproject.toml`.
+# Os módulos que decidem acesso: os quatro que a issue #45 nomeia e o port da
+# Stage 2.7. Um novo entra aqui com a justificativa ao lado — e só então no
+# `pyproject.toml`.
 _MODULOS_DE_ACESSO = frozenset(
     {
         # Os quatro passos do guard (ADR 2.2.0002).
@@ -50,6 +52,11 @@ _MODULOS_DE_ACESSO = frozenset(
         "src/restaurant_hub/features/staff/adapters/out/identity/local_access_guard.py",
         # A borda que extrai o Bearer e delega ao use case.
         "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
+        # "Não se concede o que não se detém" — `required_permissions_for_role`, que
+        # saiu de `dependencies.py` na Stage 2.7 para que os use cases de identity
+        # declarem o mesmo requisito (ADR 2.7.0001). Sem esta entrada a regra
+        # deixaria, sem ninguém notar, o conjunto que a mutação mede.
+        "src/restaurant_hub/features/identity/application/ports/out/action_authorizer.py",
     }
 )
 

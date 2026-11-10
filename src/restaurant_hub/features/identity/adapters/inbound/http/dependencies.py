@@ -15,7 +15,10 @@ adapter, e nenhuma delas é política:
 A regra de acesso — quais permissões cada papel tem, quem faz bypass de escopo,
 como a visibilidade de unidade funciona — vive em `Role`, `User` e no use case.
 Não há tabela de papéis neste arquivo, e há teste que verifica isso (ADR 2.2.0002,
-ADR 2.4.0003).
+ADR 2.4.0003). `required_permissions_for_role`, a regra "não se concede o que não
+se detém", mora no port `action_authorizer` desde a Stage 2.7: os use cases de
+identity declaram o mesmo requisito e não podem importar este adapter (ADR 2.7.0001
+§Decision 2).
 
 **As duas traduções de exceção fecham vazamento de informação** (concept §6):
 
@@ -50,13 +53,13 @@ from restaurant_hub.features.identity.application.ports.out.token_issuer import 
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
     authorize_at_boundary,
+    authorize_requirement,
 )
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UnitId,
 )
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
-from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 _BEARER_SCHEME = "bearer"
 
@@ -107,21 +110,6 @@ def extract_bearer_token(request: Request) -> str:
     # morto dentro de um guard de segurança é ruído que esconde o que importa.
     # Verificado empiricamente, inclusive com tab,  e espaços unicode.
     return parts[1].strip()
-
-
-def required_permissions_for_role(target_role: Role) -> frozenset[Permission]:
-    """Permissões exigidas para **criar** um usuário do papel `target_role`.
-
-    "Não se concede o que não se detém" (concept §5 regra 4): quem cria precisa
-    de `manage_users` **e** de tudo o que o papel criado passa a ter. Sem isso um
-    `manager` (que tem `manage_users`) criaria um `owner` (que tem
-    `manage_tenant`) e escalaria privilégio numa requisição.
-
-    **O conjunto é derivado do mapa de papéis da 2.1**, não de uma tabela nova.
-    Duas fontes de verdade sobre o que cada papel pode divergiriam, e a divergência
-    apareceria como escalada silenciosa.
-    """
-    return frozenset({Permission.MANAGE_USERS}) | target_role.permissions
 
 
 @dataclass(frozen=True)
@@ -215,15 +203,16 @@ class IdentityGuard:
 
         Devolve o `AuthorizedActor` da primeira checagem; todas validam o mesmo
         ator, então qualquer uma serve para ler o tenant dele.
+
+        **A expansão não mora aqui** desde a Stage 2.7: é `authorize_requirement`,
+        na application, a mesma função que os use cases de identity chamam como
+        primeira instrução (ADR 2.7.0001 §Decision 3). A ordem (`sorted` sobre as
+        permissões, unidades na ordem dada) e as traduções são as de antes.
         """
-        targets: tuple[UnitId | None, ...] = unit_ids or (None,)
-        # `sorted` para que a ordem das checagens — e portanto qual erro o cliente
-        # vê quando falha em mais de uma — seja determinística entre execuções.
-        # Sem isso, a mensagem de erro dependeria da ordem de iteração de um
-        # frozenset, e um teste de precedência ficaria intermitente.
-        results = [
-            self.authorize(actor, permission, tenant_id=tenant_id, unit_id=unit_id)
-            for permission in sorted(permissions)
-            for unit_id in targets
-        ]
-        return results[0]
+        return authorize_requirement(
+            self._authorize_action,
+            actor.claims.subject,
+            permissions,
+            tenant_id=tenant_id,
+            unit_ids=unit_ids,
+        )

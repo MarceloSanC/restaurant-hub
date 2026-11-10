@@ -38,6 +38,9 @@ from restaurant_hub.features.identity.application.dtos.results import (
     UnitResult,
     UserResult,
 )
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    required_permissions_for_role,
+)
 from restaurant_hub.features.identity.application.use_cases.authenticate_user import (
     AuthenticateUserUseCase,
 )
@@ -73,7 +76,7 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
-from .dependencies import AuthenticatedActor, IdentityGuard, required_permissions_for_role
+from .dependencies import AuthenticatedActor, IdentityGuard
 from .schemas import (
     CreateUnitRequest,
     CreateUserRequest,
