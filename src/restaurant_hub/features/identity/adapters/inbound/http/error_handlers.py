@@ -47,6 +47,7 @@ from restaurant_hub.features.identity.application.errors import (
     RefreshTokenReuseError,
     RestaurantAlreadyExistsError,
     RestaurantNotFoundError,
+    RoleNotProvisionableError,
     SessionAlreadyExistsError,
     SessionFingerprintAlreadyExistsError,
     TenantNotVisibleError,
@@ -161,6 +162,9 @@ IDENTITY_ERROR_STATUS: Final[dict[type[IdentityFailure], int]] = {
     PlatformAdminTenantError: HTTP_UNPROCESSABLE,
     PlatformAdminMembershipError: HTTP_UNPROCESSABLE,
     CrossTenantError: HTTP_UNPROCESSABLE,
+    # Stage 2.7 — papel válido que a fachada não provisiona. Nenhuma rota o alcança;
+    # 422 pela mesma razão de `InvalidRoleError`: o conteúdo pedido é recusado.
+    RoleNotProvisionableError: HTTP_UNPROCESSABLE,
     # 500 — a conta foi gravada e o e-mail do convite não saiu (issue #170). É a
     # ÚNICA entrada fora da família 4xx, e por isso declarada em
     # `tests/unit/test_status_map.py`: aqui o BC não sabe "exatamente o que houve"

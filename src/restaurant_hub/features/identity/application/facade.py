@@ -22,19 +22,20 @@ Três propriedades definem a fachada:
    `InvalidEmailError`. `InvitationNotSentError` (a falha do envio, desde a
    issue #175) **não** é re-exportada: o consumidor não a traduz — ela já tem
    handler, o de identity, registrado na app (L-IG2 de staff).
-3. **Não autoriza as próprias operações.** Identity não autoriza na
-   application: nenhum use case de identity recebe ator, e a autorização de
-   identity mora na borda HTTP (ADR 2.4.0003 §1, mantido pelo ADR 0.0.0014 §4)
-   — ao contrário de staff, onde todo use case autoriza o próprio alvo (ADR
-   3.7.0001). Se identity deve seguir staff é decisão aberta para o BC inteiro
-   (issue #115). Quem chama a fachada responde pela autorização do seu lado —
-   para staff, o use case consumidor (`create_login_for_employee`, ADR
-   3.7.0001) e a rota R17 exigem `manage_staff` **e** `manage_users` (concept
-   3.5 §5.3). A fachada é,
+3. **Não autoriza as próprias operações.** Desde a Stage 2.7 os use cases de
+   identity que agem em nome de um ator autorizam o próprio alvo, como os de
+   staff e de scheduling (ADR 0.0.0020, ADR 2.7.0001); os quatro que só esta
+   fachada chama ficam fora, por exclusão nomeada no inventário do ADR 0.0.0020:
+   quem chama a fachada responde pela autorização do seu lado — para staff, o
+   use case consumidor (`create_login_for_employee`, ADR 3.7.0001) e a rota R17
+   exigem `manage_staff` **e** `manage_users` (concept 3.5 §5.3). A fachada é,
    assumidamente, um segundo caminho de entrada para "criar conta" que não passa
-   por `required_permissions_for_role`; o gateway fecha a brecha fixando o papel
-   como valor (`"employee"`, L-IG1), e o pino em `test_http_dependencies.py`
-   trava que `employee` exige exatamente `manage_users`.
+   por `required_permissions_for_role`; por isso **`provision_account` só aceita
+   o papel `employee`** (ADR 2.7.0001 §Decision 5) — outro papel válido sobe
+   `RoleNotProvisionableError` antes de qualquer porta. O gateway de staff já
+   fixa o papel como valor (`"employee"`, L-IG1), e o pino em
+   `test_http_dependencies.py` trava que `employee` exige exatamente
+   `manage_users`.
 
 **A fachada de acesso (`IdentityAccessFacade`, issue #47, ADR 0.0.0016)** é a
 segunda classe deste módulo, e a propriedade 3 não a contradiz: ela não autoriza
@@ -67,6 +68,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     PermissionDeniedError,
+    RoleNotProvisionableError,
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
@@ -146,16 +148,24 @@ class IdentityFacade:
         """Cria a conta pendente e devolve o link.
 
         Raises:
-            InvalidEmailError: `email` malformado (inclusive byte NUL).
             InvalidRoleError: `role` desconhecido.
+            RoleNotProvisionableError: `role` válido, mas não `employee` — a
+                fachada cria contas sem autorizar e só serve o login de
+                funcionário (ADR 2.7.0001 §Decision 5). Checado primeiro, antes do
+                e-mail e de qualquer porta.
+            InvalidEmailError: `email` malformado (inclusive byte NUL).
             EmailAlreadyRegisteredError: e-mail já usado em qualquer tenant.
             RestaurantNotFoundError, UnitNotFoundError, CrossTenantError,
             PlatformAdminMembershipError: como no use case — sem tradução.
         """
+        papel = Role.from_string(role)
+        if papel is not Role.EMPLOYEE:
+            raise RoleNotProvisionableError(role)
+
         result = self._provision_account.execute(
             ProvisionAccountCommand(
                 email=Email(email),
-                role=Role.from_string(role),
+                role=papel,
                 tenant_id=RestaurantId(tenant_id),
                 unit_ids=tuple(UnitId(unit_id) for unit_id in unit_ids),
                 handed_over=handed_over,
