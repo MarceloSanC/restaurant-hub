@@ -476,9 +476,13 @@ def wire_dependencies(
             invitation_ttl=invitation_ttl,
             base_url=cfg.app_base_url,
             unit_of_work=identity_unit_of_work,
+            authorizer=authorize_action,
         ),
         identity_create_unit=CreateUnitUseCase(
-            units=units, restaurants=restaurants, id_generator=id_generator
+            units=units,
+            restaurants=restaurants,
+            id_generator=id_generator,
+            authorizer=authorize_action,
         ),
         identity_create_user=CreateUserUseCase(
             users=users,

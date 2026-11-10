@@ -33,12 +33,13 @@ registra só o tipo dela e o `user_id` do dono (issue #170).
 caminho emite `platform_admin`" vale para este use case qualquer que seja o
 adapter que o chame (ADR 0.0.0014 §3; ADR 2.4.0003 §2b).
 
-**A autorização fica na borda**, como em todo use case de identity (ADR 2.4.0003
-§1): este use case não recebe ator. O ADR 3.7.0001 trouxe a autorização para
-dentro dos use cases de **staff**, não de identity (ADR 0.0.0014 §4).
+**Autoriza antes de qualquer outra instrução** (Stage 2.7, ADR 0.0.0020 §Decision
+3): o ator do command precisa de `manage_platform`, sem tenant — o tenant é o que
+nasce aqui. A borda HTTP continua autorizando o mesmo requisito antes (defesa em
+profundidade), então nenhuma faixa muda.
 
-Ordem: o nome (invariante do domínio, local e grátis) primeiro; depois a
-unicidade global do e-mail, antes de qualquer escrita; as três escritas numa
+Ordem, depois da autorização: o nome (invariante do domínio, local e grátis); depois
+a unicidade global do e-mail, antes de qualquer escrita; as três escritas numa
 unidade; o envio por último.
 """
 
@@ -57,6 +58,9 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     SetupTokenPurpose,
 )
 from restaurant_hub.features.identity.application.errors import EmailAlreadyRegisteredError
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    ActionAuthorizer,
+)
 from restaurant_hub.features.identity.application.ports.out.password_hasher import (
     PasswordHasher,
 )
@@ -78,12 +82,16 @@ from restaurant_hub.features.identity.application.use_cases._invitation import (
     invitation_message,
     setup_link,
 )
+from restaurant_hub.features.identity.application.use_cases.authorize_action import (
+    authorize_requirement,
+)
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UserId,
 )
+from restaurant_hub.features.identity.domain.value_objects.permission import Permission
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 from restaurant_hub.shared.application.ports.out.clock import Clock
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
@@ -106,6 +114,7 @@ class ProvisionRestaurantUseCase:
         invitation_ttl: timedelta,
         base_url: str,
         unit_of_work: UnitOfWork,
+        authorizer: ActionAuthorizer,
     ) -> None:
         self._restaurants = restaurants
         self._users = users
@@ -118,11 +127,14 @@ class ProvisionRestaurantUseCase:
         self._invitation_ttl = invitation_ttl
         self._base_url = base_url
         self._unit_of_work = unit_of_work
+        self._authorizer = authorizer
 
     def execute(self, command: ProvisionRestaurantCommand) -> ProvisionedRestaurantResult:
         """Provisiona o tenant e convida o dono.
 
         Raises:
+            InvalidAccessTokenError, PermissionDeniedError: o ator não pode agir
+                como plataforma (ADR 2.7.0001 §Decision 3).
             InvalidNameError: nome do restaurante vazio (invariante do domínio).
             EmailAlreadyRegisteredError: e-mail do dono já usado em qualquer tenant —
                 pela checagem prévia ou, numa corrida, pelo índice único dentro da
@@ -130,6 +142,13 @@ class ProvisionRestaurantUseCase:
             InvitationNotSentError: o `EmailSender` falhou, com o tenant já
                 comitado (regra 13 da 2.5; issue #170).
         """
+        authorize_requirement(
+            self._authorizer,
+            command.actor_id,
+            frozenset({Permission.MANAGE_PLATFORM}),
+            tenant_id=None,
+        )
+
         restaurant = Restaurant(
             id=RestaurantId(str(self._id_generator.next_id())),
             name=command.name,

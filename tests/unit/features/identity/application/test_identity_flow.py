@@ -66,7 +66,10 @@ from tests.fakes.features.identity.in_memory_session_repository import (
 from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
-from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
+from tests.fakes.features.identity.stub_action_authorizers import (
+    TEST_ACTOR_ID,
+    RecordingActionAuthorizer,
+)
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import RecordingEmailSender
@@ -117,8 +120,9 @@ class _Sistema:
             invitation_ttl=timedelta(hours=72),
             base_url="https://app.exemplo.com",
             unit_of_work=InMemoryUnitOfWork(restaurants, users, setup_tokens),
+            authorizer=RecordingActionAuthorizer(),
         )
-        self.create_unit = CreateUnitUseCase(units, restaurants, ids)
+        self.create_unit = CreateUnitUseCase(units, restaurants, ids, RecordingActionAuthorizer())
         self.create_user = CreateUserUseCase(users, restaurants, units, hasher, ids)
         self.authenticate = AuthenticateUserUseCase(
             users, sessions, hasher, issuer, ids, clock, _ACCESS_TTL, _REFRESH_TTL

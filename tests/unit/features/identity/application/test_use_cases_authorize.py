@@ -25,10 +25,18 @@ import pytest
 
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthorizeActionCommand,
+    CreateUnitCommand,
     InviteOwnerCommand,
+    ProvisionRestaurantCommand,
+)
+from restaurant_hub.features.identity.application.use_cases.create_unit import (
+    CreateUnitUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.invite_owner import (
     InviteOwnerUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
+    ProvisionRestaurantUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
 from restaurant_hub.features.identity.domain.value_objects.email import Email
@@ -147,10 +155,40 @@ def _invite_owner(autorizador: object) -> Montagem:
     )
 
 
+def _provision_restaurant(autorizador: object) -> Montagem:
+    grafo = _grafo_de_convite()
+    del grafo["units"]
+    return montar(
+        ProvisionRestaurantUseCase,
+        ProvisionRestaurantCommand(
+            actor_id=ATOR, name="Cantina Nova", owner_email=Email("dono-novo@x.com")
+        ),
+        grafo,
+        autorizador,
+        _ESCALARES_DE_CONVITE,
+    )
+
+
+def _create_unit(autorizador: object) -> Montagem:
+    grafo = _grafo_de_convite()
+    return montar(
+        CreateUnitUseCase,
+        CreateUnitCommand(actor_id=ATOR, restaurant_id=TENANT, name="Filial"),
+        {
+            "units": grafo["units"],
+            "restaurants": grafo["restaurants"],
+            "id_generator": grafo["id_generator"],
+        },
+        autorizador,
+    )
+
+
 # módulo de `use_cases/` → montagem. Cresce por Task; a totalidade contra a pasta
 # nasce na Task 06, quando os cinco estão aqui.
 CENARIOS: dict[str, Callable[[object], Montagem]] = {
     "invite_owner": _invite_owner,
+    "provision_restaurant": _provision_restaurant,
+    "create_unit": _create_unit,
 }
 
 
@@ -167,6 +205,8 @@ def _pedido(
 # errarem juntos, esta tabela é a terceira voz.
 _MATRIZ_R3: dict[str, Callable[[object], list[AuthorizeActionCommand]]] = {
     "invite_owner": lambda c: [_pedido(c, Permission.MANAGE_PLATFORM, c.tenant_id)],
+    "provision_restaurant": lambda c: [_pedido(c, Permission.MANAGE_PLATFORM, None)],
+    "create_unit": lambda c: [_pedido(c, Permission.MANAGE_TENANT, c.restaurant_id)],
 }
 
 
