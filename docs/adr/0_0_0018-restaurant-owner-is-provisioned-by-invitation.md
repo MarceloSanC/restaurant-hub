@@ -190,3 +190,14 @@ path) and the same 404 for an unknown restaurant. 2.4.0003 receives an append-on
 - [ADR 3.5.0002](./3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md) Alternative B
 - `src/restaurant_hub/features/identity/application/use_cases/provision_restaurant.py`,
   `src/restaurant_hub/features/identity/application/use_cases/invite_user.py`
+
+## Supersessão parcial
+
+**2026-11-09 — §Decision 3, onde a rota de dono *"reuses"* `InviteUserUseCase`, e a ordem de
+checagens de §Decision 2 como primeiras instruções foram superadas por [ADR 0.0.0020](./0_0_0020-identity-use-cases-authorize-their-own-target.md) e [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md)
+(Stage 2.7, issue #184).** `POST /restaurants/{restaurant_id}/owners` roda agora
+`InviteOwnerUseCase`, entrada própria que exige `manage_platform` com o tenant do path nomeado e
+mantém `Role.OWNER` como literal no código. Depois da autorização a sequência é a mesma de antes
+(unicidade do e-mail, restaurante existente, conta e token numa unidade, e-mail depois do commit),
+travada por um teste de paridade com o caminho anterior. Nota *append-only*; o corpo acima não
+foi editado.

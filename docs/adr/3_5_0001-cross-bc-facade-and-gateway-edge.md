@@ -292,3 +292,17 @@ exceção nova sem cadeia até a original, cuja mensagem pode ecoar o destinatá
   cobra das duas implementações, com o provedor falhando pelo pior texto.
 
 Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — identity autoriza na application, e a fachada só provisiona `employee` (Stage 2.7)
+
+**2026-11-09 — [ADR 0.0.0020](./0_0_0020-identity-use-cases-authorize-their-own-target.md) e [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md) (issue #184).** Nas §Implementation notes, a pergunta
+sobre identity seguir staff está fechada: os use cases de identity que agem por um ator autorizam
+o próprio alvo, como os de staff. §Decision 1 (*a fachada não autoriza as próprias operações*)
+continua verdadeira: os quatro use cases facade-only são exclusões nomeadas do inventário do ADR
+0.0.0020, e quem chama a fachada responde pela autorização. O que muda na aresta é o domínio de
+entrada de `provision_account`: só o papel `employee` é aceito; outro papel válido sobe
+`RoleNotProvisionableError` antes de qualquer porta. O gateway de staff já passava o literal
+`"employee"` (L-IG1), então nada muda do lado de staff, e a proteção que esta página chamava de
+*"a discipline, not a gate"* passa a ser checada na fachada.
+
+Nota *append-only*; o corpo acima não foi editado.
