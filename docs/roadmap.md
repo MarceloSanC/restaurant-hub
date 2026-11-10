@@ -52,6 +52,8 @@ graph LR
     S36 --> S35[3.5-employee-login-link] --> S37[3.7-application-authorization] & S38[3.8-termination-access-scope]
     S36 --> S39[3.9-error-hierarchy]
     S38 --> S310[3.10-login-link-management]
+    S37 --> S311[3.11-job-function-unit-enablement]
+    S39 --> S311
   end
   subgraph Step4[Step 4 — Escala manual]
     S41[4.1-scheduling-domain] --> S42[4.2-validation-policies]
@@ -99,7 +101,7 @@ graph LR
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.7 |
-| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.10 |
+| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.11 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.8 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
 | 6 | Implantação piloto | Sistema no ar para o restaurante piloto usar no dia a dia | not_started | 6.1 → 6.3 |
@@ -136,6 +138,7 @@ graph LR
 | `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
 | `3.9-error-hierarchy` | Hierarquia de exceções sem protocolo HTTP | shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) | done | `3.6-staff-http`, `4.3-scheduling-application`, #45 |
 | `3.10-login-link-management` | Vincular, desvincular e trocar o login de um registro | vertical (staff) + identity (fachada) | draft | `3.8-termination-access-scope`, `2.7-identity-application-authorization`, #178 |
+| `3.11-job-function-unit-enablement` | Habilitação de função de trabalho por unidade | vertical (staff) | draft | `3.7-application-authorization`, `3.9-error-hierarchy` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
@@ -179,7 +182,6 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#30](https://github.com/MarceloSanC/restaurant-hub/issues/30) | Backfill do doc de domínio de identity — pendência do gate do Step 2 | identity | docs | done | — |
 | [#34](https://github.com/MarceloSanC/restaurant-hub/issues/34) | Promover o sufixo `[N.M/task-NN-fix]` de commits de correção de checkpoint a convenção | shared | docs + tooling | done | — |
 | [#37](https://github.com/MarceloSanC/restaurant-hub/issues/37) | Varrer `workforce.md` contra os ADRs 3.1.x — três lacunas declaradas abertas já foram fechadas | staff | docs | done | — |
-| [#41](https://github.com/MarceloSanC/restaurant-hub/issues/41) | Habilitação de função de trabalho por unidade (função segue do restaurante; gerente cria para a sua unidade, alcance extra-unidade para todas) | staff | domain + application + adapters/out | open | `3.4-staff-access-scope` |
 | [#45](https://github.com/MarceloSanC/restaurant-hub/issues/45) | Gates para as violações de arquitetura invisíveis aos contratos de import | shared | tooling + tests | done | — |
 | [#47](https://github.com/MarceloSanC/restaurant-hub/issues/47) | Mover o tradutor de acesso do composition root para `adapters/out/identity` | staff | adapters/out + composition_root | done | #43, #45 |
 | [#52](https://github.com/MarceloSanC/restaurant-hub/issues/52) | Doc de domínio do BC scheduling — gate do Step 4 | scheduling | docs | done | — |
@@ -1592,6 +1594,46 @@ Perguntas que a issue deixa para o concept (registradas na #107):
 
 ---
 
+#### Stage 3.11 — `3.11-job-function-unit-enablement`
+
+**Descrição humana:** cada unidade passa a ver só as funções de trabalho habilitadas nela. A função **continua pertencendo ao restaurante** (decisão do sponsor registrada na issue #41: manter o dono e controlar onde vale) e ganha o conjunto de unidades em que está habilitada. O gerente cria função para as unidades que enxerga; criar uma função que vale em todas as unidades exige alcance sobre o restaurante inteiro. A listagem de uma unidade não mostra função que não vale nela, e as funções que já existem nascem habilitadas em todas as unidades (default seguro da migration). Promovida da issue #41 pelo PIPELINE §4.5: o corpo da issue pede um concept (invariante do conjunto de unidades, revisão das leis L-JF1…L-JF5 + L-ORD do port, regra da cópia de funcionário entre unidades com ADR, unicidade do nome), e toca modelo de dados com migration. Fatia vertical no BC staff (domínio, application, persistência, HTTP), como a 3.10.
+
+```yaml
+stage_id: 3.11-job-function-unit-enablement
+bounded_context: staff
+camada_alvo: vertical (staff — domain, application, adapters/out/postgres, adapters/inbound/http)
+depends_on: [3.7-application-authorization, 3.9-error-hierarchy]
+arquivos_a_criar:
+  - features/staff/domain/value_objects/ (habilitação por unidade da função)
+  - features/staff/application/use_cases/ (alterar as unidades de uma função)
+  - migrations/versions/0005_*.py (habilitação por unidade; o que existe nasce em todas as unidades)
+  - docs/adr/3_11_0001-*.md (modelo da habilitação), docs/adr/3_11_0002-*.md (cópia entre unidades)
+arquivos_a_modificar:
+  - features/staff/domain/entities/job_function.py; features/staff/domain/exceptions/errors.py
+  - features/staff/application/ports/out/{job_function_repository,employee_repository,access_guard}.py
+  - features/staff/application/use_cases/{create_job_function,list_job_functions,create_employee,assign_job_functions,copy_employee_to_unit}.py
+  - features/staff/application/{dtos,errors.py}; composition_root.py
+  - features/staff/adapters/out/postgres/{tables,mappers,job_function_repository,employee_repository}.py
+  - features/staff/adapters/inbound/http/{router,schemas,error_handlers}.py
+  - tests/fakes/features/staff/; tests/contract/features/staff/ (leis revisadas)
+  - docs: overview.md §3 e docs/domain/staff/workforce.md §3.2 e §3.7 (notas datadas)
+contratos_introduzidos:
+  - habilitação por unidade na entidade JobFunction; listagem por unidade no JobFunctionRepository; consulta das unidades que referenciam uma função no EmployeeRepository
+contratos_consumidos:
+  - JobFunctionRepository e EmployeeRepository (3.2, 3.3, 3.4); AccessGuard e ator no command (3.7); hierarquia de erros e mapa de status (3.9); permissão tenant-wide do catálogo (ADR 3.4.0008)
+definition_of_done:
+  - "a listagem de funcoes de uma unidade mostra so as habilitadas nela; gerente cria funcao so para unidades que enxerga e criar para todas exige alcance sobre o restaurante; funcoes pre-existentes seguem visiveis em todas as unidades apos a migration; a regra da copia entre unidades esta em ADR e coberta por teste; o contrato prova fake = real para as leis revisadas"
+non_goals:
+  - mudar o dono da função (rejeitado na issue #41)
+  - noção de escala ou demanda por unidade (Step 4)
+  - granularidade por unidade na autorização de renomear e apagar função
+complexidade_estimada: M
+gate_mode: strict
+skills_hint: [hex-arch-python, ddd-tactical-patterns, pytest-with-fakes, repository-pattern, fastapi-thin-adapter, composition-root, task-ordering-hex]
+```
+
+---
+
 ### Step 4 — Escala manual publicável (BC `scheduling`)
 
 - **Resultado de negócio:** gerente configura faixas por dia e demanda por função, aloca pessoas com validação ao vivo (bloquear/avisar configurável), salva=publica com auditoria; funcionário logado vê a própria escala; e-mail opcional a cada publicação; imagem/tabela gerada sob demanda; escalas anteriores viram referência fácil. **Aposenta a planilha.**
@@ -2259,6 +2301,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-11-02 | Issue #30 concluída (`done`): `docs/domain/identity/tenancy-and-access.md` `accepted` — backfill do gate de domínio do Step 2, consolidando os ADRs de identity sem regra nova (lacunas e achados declarados no doc). **O Step 2 permanece `in_progress`**: o gate de domínio deixa de ser pendência, mas falta a contraparte de frontend (§Escopo deste roadmap; §"Lacunas conhecidas" › "Frontend") e o relatório do Step | Execução da issue #30 |
 | 2026-11-09 | Issue #115 concluída (`done`) com a decisão no ADR 0.0.0020: identity adota o formato da 3.7 nos quatro use cases que agem em nome de ator, e a regra passa a transversal (gatilho do ADR 4.3.0002 §5). Nova **Stage `2.7-identity-application-authorization`** (Step 2, BC identity, `draft`; `depends_on: 3.7-application-authorization`, mais #170 na tabela por arquivos em comum). Step 2 passa a `2.1 → 2.7` | Execução da issue #115 |
 | 2026-11-09 | Issue **#106** promovida a **Stage `4.8-scheduling-settings`** (Step 4, BC scheduling; `depends_on: 4.5-scheduling-http`): linha na Tabela de Stages, nó e aresta no grafo, bloco próprio com os requisitos do concept 4.3 §13; Step 4 passa a 4.1 → 4.8. A linha da #106 fica na Tabela de Issues como `done`, apontando a Stage | O corpo pedia um concept (regra nova de transição do calendário e método de escrita no port, PIPELINE §4.5); alargar a 4.5 misturaria camada-alvo e fatia vertical (PIPELINE §4.2 #1) — issue #106 |
+| 2026-11-09 | Issue **#41** promovida a **Stage `3.11-job-function-unit-enablement`** (Step 3, BC staff; `depends_on: 3.7-application-authorization, 3.9-error-hierarchy`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. O corpo pede concept (invariante do conjunto de unidades, leis do port revisadas, regra da cópia entre unidades com ADR, unicidade do nome) e toca modelo de dados com migration — o litmus de PIPELINE §4.5. Número conferido livre em develop, nas branches remotas e nas worktrees abertas (a #106 cria a 4.8). Step 3 passa a `3.1 → 3.11` | Promoção da issue #41 |
 
 ## Próxima revisão de roadmap
 
