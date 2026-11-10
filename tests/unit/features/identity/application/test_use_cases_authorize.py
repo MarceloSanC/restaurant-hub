@@ -16,10 +16,14 @@ válido. Três propriedades, parametrizadas pela tabela:
   escopo infiel, o result carrega o tenant do command.
 """
 
+import ast
+import importlib
 import inspect
+import pathlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import get_type_hints
 
 import pytest
 
@@ -30,6 +34,9 @@ from restaurant_hub.features.identity.application.dtos.commands import (
     InviteOwnerCommand,
     InviteUserCommand,
     ProvisionRestaurantCommand,
+)
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    ActionAuthorizer,
 )
 from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
@@ -332,3 +339,178 @@ def test_o_use_case_opera_no_command_e_nao_no_escopo_devolvido(nome: str) -> Non
         assert tenant_obtido == resultado.id
     else:
         assert tenant_obtido == tenant_esperado
+
+
+# ---------------------------------------------------------------------------
+# Totalidade, forma e alcance (Task 06) — derivados da pasta, não de uma lista
+# ---------------------------------------------------------------------------
+
+_SRC = pathlib.Path(__file__).resolve().parents[5] / "src" / "restaurant_hub"
+_PASTA = _SRC / "features" / "identity" / "application" / "use_cases"
+
+# As exclusões nomeadas do ADR 0.0.0020 §Inventory (concept 2.7 R1). Um módulo novo
+# da pasta entra aqui, com o motivo, ou em `CENARIOS` — nunca por omissão.
+_EXCLUSOES: dict[str, str] = {
+    "authenticate_user": "a senha é a autoridade; ainda não existe ator",
+    "refresh_session": "a posse do refresh token é a autoridade",
+    "revoke_session": "a posse do refresh token é a autoridade",
+    "request_password_reset": "público por desenho, resposta constante",
+    "set_password_with_token": "o token de setup é a autoridade",
+    "authorize_action": "é a própria decisão",
+    "provision_account": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
+    "send_invitation": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
+    "revoke_all_sessions": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
+    "get_account_role": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
+}
+
+# Os módulos facade-only (CA14): o resíduo de `provision_account` (concept 2.7 §13)
+# é guardado pelo alcance — só a fachada e o composition root os importam.
+_FACADE_ONLY = frozenset(
+    {"provision_account", "send_invitation", "revoke_all_sessions", "get_account_role"}
+)
+_IMPORTADORES_PERMITIDOS = frozenset(
+    {
+        _SRC / "features" / "identity" / "application" / "facade.py",
+        _SRC / "composition_root.py",
+    }
+)
+
+# A forma de R2/R3, em código-fonte: (permissões, tenant_id, unit_ids ou None).
+# `<p>` é o primeiro parâmetro de `execute`. Transcrição do concept, não do código.
+_FORMA_R3: dict[str, tuple[str, str, str | None]] = {
+    "provision_restaurant": ("frozenset({Permission.MANAGE_PLATFORM})", "None", None),
+    "invite_owner": ("frozenset({Permission.MANAGE_PLATFORM})", "<p>.tenant_id", None),
+    "create_unit": ("frozenset({Permission.MANAGE_TENANT})", "<p>.restaurant_id", None),
+    "create_user": (
+        "required_permissions_for_role(<p>.role)",
+        "<p>.tenant_id",
+        "<p>.unit_ids",
+    ),
+    "invite_user": (
+        "required_permissions_for_role(<p>.role)",
+        "<p>.tenant_id",
+        "<p>.unit_ids",
+    ),
+}
+
+
+def _modulos_da_pasta() -> set[str]:
+    return {a.stem for a in _PASTA.glob("*.py") if not a.stem.startswith("_")}
+
+
+def _execute(modulo: str) -> ast.FunctionDef:
+    arvore = ast.parse((_PASTA / f"{modulo}.py").read_text("utf-8"))
+    execs = [
+        m
+        for c in arvore.body
+        if isinstance(c, ast.ClassDef) and c.name.endswith("UseCase")
+        for m in c.body
+        if isinstance(m, ast.FunctionDef) and m.name == "execute"
+    ]
+    assert len(execs) == 1, modulo
+    return execs[0]
+
+
+def _expr(fonte: str, parametro: str) -> str:
+    return ast.dump(ast.parse(fonte.replace("<p>", parametro), mode="eval").body)
+
+
+def test_a_pasta_e_exatamente_afetados_mais_exclusoes_nomeadas() -> None:
+    """CA01 — totalidade nos dois sentidos, e as duas listas disjuntas."""
+    assert set(CENARIOS).isdisjoint(_EXCLUSOES)
+    assert set(CENARIOS) | set(_EXCLUSOES) == _modulos_da_pasta()
+    assert set(_FORMA_R3) == set(CENARIOS) == set(_MATRIZ_R3)
+    assert all(motivo.strip() for motivo in _EXCLUSOES.values())
+
+
+@pytest.mark.parametrize("modulo", sorted(_modulos_da_pasta()))
+def test_so_os_afetados_recebem_o_autorizador(modulo: str) -> None:
+    """CA01 — `authorizer: ActionAuthorizer` em todo afetado e em nenhuma exclusão."""
+    modulo_py = importlib.import_module(
+        f"restaurant_hub.features.identity.application.use_cases.{modulo}"
+    )
+    classes = [
+        c
+        for c in vars(modulo_py).values()
+        if inspect.isclass(c)
+        and c.__module__ == modulo_py.__name__
+        and c.__name__.endswith("UseCase")
+    ]
+    assert len(classes) == 1, modulo
+    dicas = get_type_hints(classes[0].__init__)
+
+    if modulo in CENARIOS:
+        assert dicas.get("authorizer") is ActionAuthorizer
+    else:
+        assert "authorizer" not in dicas
+
+
+@pytest.mark.parametrize("modulo", sorted(_FORMA_R3))
+def test_a_primeira_instrucao_de_execute_e_a_autorizacao_de_r3(modulo: str) -> None:
+    """CA05 — descontado o docstring, a primeira instrução é a chamada de R2 com os
+    argumentos de R3; nenhuma condição, leitura ou checagem antes dela."""
+    funcao = _execute(modulo)
+    p = funcao.args.args[1].arg
+    corpo = funcao.body
+    if (
+        isinstance(corpo[0], ast.Expr)
+        and isinstance(corpo[0].value, ast.Constant)
+        and isinstance(corpo[0].value.value, str)
+    ):
+        corpo = corpo[1:]
+    primeira = corpo[0]
+    permissoes, tenant, unidades = _FORMA_R3[modulo]
+
+    assert isinstance(primeira, ast.Expr), ast.dump(primeira)
+    chamada = primeira.value
+    assert isinstance(chamada, ast.Call)
+    assert isinstance(chamada.func, ast.Name)
+    assert chamada.func.id == "authorize_requirement"
+    assert [ast.dump(a) for a in chamada.args] == [
+        _expr("self._authorizer", p),
+        _expr("<p>.actor_id", p),
+        _expr(permissoes, p),
+    ]
+    palavras = {k.arg: ast.dump(k.value) for k in chamada.keywords}
+    esperadas = {"tenant_id": _expr(tenant, p)}
+    if unidades is not None:
+        esperadas["unit_ids"] = _expr(unidades, p)
+    assert palavras == esperadas
+
+
+@pytest.mark.parametrize("modulo", sorted(_FORMA_R3))
+def test_nao_ha_outra_autorizacao_no_corpo(modulo: str) -> None:
+    """CA05 — uma autorização só, a primeira; nada de `self._authorizer` depois."""
+    funcao = _execute(modulo)
+    chamadas = [
+        n
+        for n in ast.walk(funcao)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "authorize_requirement"
+    ]
+    usos_do_autorizador = [
+        n for n in ast.walk(funcao) if isinstance(n, ast.Attribute) and n.attr == "_authorizer"
+    ]
+
+    assert len(chamadas) == 1
+    assert len(usos_do_autorizador) == 1
+
+
+def test_os_facade_only_so_sao_importados_pela_fachada_e_pelo_composition_root() -> None:
+    """CA14 — o resíduo de `ProvisionAccountUseCase` (aceita qualquer papel) fica
+    guardado pelo alcance: um terceiro importador reabre a decisão (ADR 0.0.0020)."""
+    prefixo = "restaurant_hub.features.identity.application.use_cases"
+    alvos = {f"{prefixo}.{nome}" for nome in _FACADE_ONLY}
+    importadores: set[pathlib.Path] = set()
+    for arquivo in _SRC.rglob("*.py"):
+        for no in ast.walk(ast.parse(arquivo.read_text("utf-8"))):
+            if isinstance(no, ast.ImportFrom) and (
+                no.module in alvos
+                or (no.module == prefixo and {a.name for a in no.names} & _FACADE_ONLY)
+            ):
+                importadores.add(arquivo)
+            if isinstance(no, ast.Import) and {a.name for a in no.names} & alvos:
+                importadores.add(arquivo)
+
+    assert importadores == _IMPORTADORES_PERMITIDOS
