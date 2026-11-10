@@ -29,6 +29,15 @@ Três decisões deste arquivo carregam lei e não são estilo:
    certo" e é o erro mais fácil de cometer aqui — recusaria em silêncio nomes
    que o gerente considera distintos, e CA9 existe para reprovar isso.
 
+**Habilitação por unidade (Stage 3.11, ADR 3.11.0001).** A função é gravada em
+duas metades — a flag `enabled_in_all_units` na linha e as linhas de
+`job_function_units` — e as duas são escritas **na mesma transação** (L-JF1,
+L-JF7). A leitura reidrata as duas numa consulta extra por chamada (não por
+função), e o `__post_init__` de `UnitEnablement` recusa a combinação incoerente.
+`update` (L-JF2) continua gravando **só o nome**: a habilitação tem escrita
+própria, `update_enablement`, para que uma renomeação concorrente a uma alteração
+de unidades não regrave a habilitação antiga.
+
 E a ordem, que é lei do port desde a Stage 3.3 (`L-ORD`, ADR 3.3.0003):
 `ORDER BY name COLLATE "C", id COLLATE "C"` nas duas listagens, com a colação
 **nas duas colunas** — `COLLATE` liga-se ao operando à sua esquerda, e um `id`
@@ -38,7 +47,11 @@ presença da ausência da cláusula; quem reprova a omissão é a asserção sob
 SQL compilado (CA10b).
 """
 
-from sqlalchemy import Connection, Engine, select
+from collections import defaultdict
+from collections.abc import Sequence
+from typing import Any
+
+from sqlalchemy import Connection, Engine, Row, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.staff.adapters.out.postgres import mappers
@@ -49,12 +62,16 @@ from restaurant_hub.features.staff.adapters.out.postgres.integrity_errors import
     constraint_name,
     translate,
 )
-from restaurant_hub.features.staff.adapters.out.postgres.tables import job_functions
+from restaurant_hub.features.staff.adapters.out.postgres.tables import (
+    job_function_units,
+    job_functions,
+)
 from restaurant_hub.features.staff.application.errors import JobFunctionNotFoundError
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
+    UnitId,
 )
 
 # Ordem total do port (`L-ORD`). As duas colunas levam a colação explícita — ver
@@ -84,6 +101,32 @@ class PostgresJobFunctionRepository:
             raise translate(
                 error, ON_INSERT_JOB_FUNCTION, self._conflict_detail(error, job_function)
             ) from error
+
+    def update_enablement(self, job_function: JobFunction) -> None:
+        """L-JF7 — substitui a habilitação; função ausente no tenant ⇒ `NotFound`.
+
+        Flag e vínculos mudam na **mesma** transação: o `UPDATE` da flag é também o
+        lookup por `(tenant_id, id)` — `rowcount == 0` levanta antes de tocar os
+        vínculos, e o rollback garante que nada mudou.
+        """
+        with self._engine.begin() as connection:
+            result = connection.execute(
+                job_functions.update()
+                .where(
+                    job_functions.c.id == job_function.id,
+                    job_functions.c.tenant_id == job_function.tenant_id,
+                )
+                .values(enabled_in_all_units=job_function.unit_enablement.all_units)
+            )
+            if result.rowcount == 0:
+                raise JobFunctionNotFoundError(job_function.id)
+            connection.execute(
+                job_function_units.delete().where(
+                    job_function_units.c.job_function_id == job_function.id,
+                    job_function_units.c.tenant_id == job_function.tenant_id,
+                )
+            )
+            self._insert_units(connection, job_function)
 
     def update(self, job_function: JobFunction) -> None:
         """L-JF2 — `UPDATE` com `rowcount == 0` ⇒ `JobFunctionNotFoundError`.
@@ -134,7 +177,9 @@ class PostgresJobFunctionRepository:
                     job_functions.c.name == name,
                 )
             ).one_or_none()
-        return mappers.row_to_job_function(row) if row is not None else None
+            if row is None:
+                return None
+            return self._hydrate(connection, [row])[0]
 
     def find_all_by_ids(
         self, tenant_id: TenantId, job_function_ids: frozenset[JobFunctionId]
@@ -159,7 +204,7 @@ class PostgresJobFunctionRepository:
                 )
                 .order_by(*_TOTAL_ORDER)
             ).all()
-        return tuple(mappers.row_to_job_function(row) for row in rows)
+            return self._hydrate(connection, rows)
 
     def list_by_tenant(self, tenant_id: TenantId) -> tuple[JobFunction, ...]:
         """L-JF5 — todas as do tenant e nenhuma de outro; `L-ORD` — em ordem total."""
@@ -169,13 +214,71 @@ class PostgresJobFunctionRepository:
                 .where(job_functions.c.tenant_id == tenant_id)
                 .order_by(*_TOTAL_ORDER)
             ).all()
-        return tuple(mappers.row_to_job_function(row) for row in rows)
+            return self._hydrate(connection, rows)
+
+    def list_by_unit(self, tenant_id: TenantId, unit_id: UnitId) -> tuple[JobFunction, ...]:
+        """L-JF6 — as do tenant habilitadas na unidade; `L-ORD` — em ordem total.
+
+        "Habilitada" é a flag de todas as unidades **ou** um vínculo com esta
+        unidade. O vínculo é procurado com o `tenant_id` também, embora a FK
+        composta já o amarre à função do tenant: é o par que o índice
+        `ix_job_function_units_tenant_unit` serve.
+        """
+        enabled_here = select(job_function_units.c.job_function_id).where(
+            job_function_units.c.tenant_id == tenant_id,
+            job_function_units.c.unit_id == unit_id,
+        )
+        with self._engine.connect() as connection:
+            rows = connection.execute(
+                select(job_functions)
+                .where(
+                    job_functions.c.tenant_id == tenant_id,
+                    or_(
+                        job_functions.c.enabled_in_all_units.is_(True),
+                        job_functions.c.id.in_(enabled_here),
+                    ),
+                )
+                .order_by(*_TOTAL_ORDER)
+            ).all()
+            return self._hydrate(connection, rows)
 
     # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) -----
 
     def _add(self, connection: Connection, job_function: JobFunction) -> None:
         connection.execute(
             job_functions.insert().values(**mappers.job_function_to_row(job_function))
+        )
+        self._insert_units(connection, job_function)
+
+    @staticmethod
+    def _insert_units(connection: Connection, job_function: JobFunction) -> None:
+        rows = mappers.job_function_unit_rows(job_function)
+        # Função em todas as unidades não tem vínculo a gravar, e um `executemany`
+        # com lista vazia não é um no-op no SQLAlchemy.
+        if rows:
+            connection.execute(job_function_units.insert(), rows)
+
+    @staticmethod
+    def _hydrate(connection: Connection, rows: Sequence[Row[Any]]) -> tuple[JobFunction, ...]:
+        """Reidrata as funções com os vínculos de unidade, numa consulta só.
+
+        Preserva a ordem de `rows` (a do `ORDER BY` de `L-ORD`): o agrupamento
+        dos vínculos é por id, e a tupla devolvida segue a lista recebida.
+        """
+        if not rows:
+            return ()
+        restricted = sorted(row.id for row in rows if not row.enabled_in_all_units)
+        units_by_function: dict[str, list[str]] = defaultdict(list)
+        if restricted:
+            for link in connection.execute(
+                select(job_function_units.c.job_function_id, job_function_units.c.unit_id).where(
+                    job_function_units.c.job_function_id.in_(restricted)
+                )
+            ):
+                units_by_function[link.job_function_id].append(link.unit_id)
+        return tuple(
+            mappers.row_to_job_function(row, unit_ids=units_by_function.get(row.id, ()))
+            for row in rows
         )
 
     def _update(self, connection: Connection, job_function: JobFunction) -> None:
@@ -214,7 +317,9 @@ class PostgresJobFunctionRepository:
                 job_functions.c.tenant_id == tenant_id,
             )
         ).one_or_none()
-        return mappers.row_to_job_function(row) if row is not None else None
+        if row is None:
+            return None
+        return self._hydrate(connection, [row])[0]
 
     @staticmethod
     def _conflict_detail(error: IntegrityError, job_function: JobFunction) -> str:
