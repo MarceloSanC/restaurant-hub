@@ -43,7 +43,7 @@ Forces:
   authorization axes fail closed ([ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md)).
   So "any permission" literally denies hr the schedule screen — including the case where hr has
   just registered an unavailability and wants to see whether it collides with an allocation.
-- `overview.md` §5 (line 92, 2026-07-23 — earlier than the decision) still lists "Gerente / RH"
+- `overview.md` §5 › "Montar/ajustar escala rápido" (2026-07-23 — earlier than the decision) still lists "Gerente / RH"
   as primary users who "montam/ajustam escala". Overview outranks the ADR in the doc hierarchy,
   but the ADR is the later, sponsor-made decision; the skeptic review (finding #7) required this
   contradiction to be resolved by a dated note in the overview **in the same PR**, not by a
@@ -51,8 +51,8 @@ Forces:
 - `workforce.md` §4 says *"é NO STAFF que hr diverge do manager"*; ADR 3.4.0006 placed the
   divergence on the scheduling axis instead, and the Stage 3.6 concept (finding, lines 926–933)
   asked for a dated note in `workforce.md` §4 when the divergence became text.
-- The `employee` role has an empty permission set today (`role.py` 77) and must gain one to see
-  "my schedule" ([ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md) 231–234) — so a
+- The `employee` role has an empty permission set today (`role.py` › `_ROLE_PERMISSIONS`, entry `Role.EMPLOYEE`) and must gain one to see
+  "my schedule" ([ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md) › "holds no permission at all") — so a
   read-type capability distinct from "manage" is born in Step 4 regardless of hr.
 
 ## Decision
@@ -71,7 +71,7 @@ Sponsor: *"Sim — leitura nas suas unidades"*.
    by visibility bypass — [ADR 2.1.0001](./2_1_0001-identity-aggregates-and-membership.md)).
 4. **`employee` receives `own`** (a new permission, created by the Stage that exposes "my
    schedule"). **`platform_admin`** receives nothing.
-5. **Reconciliation, in this PR:** ADR 3.4.0006 gets the errata banner; `overview.md` §5 line 92
+5. **Reconciliation, in this PR:** ADR 3.4.0006 gets the errata banner; `overview.md` §5 › "Montar/ajustar escala rápido"
    gets a dated note (hr **consults** the schedule; building/adjusting is manager/owner);
    `workforce.md` §4 gets a dated note (the hr × manager divergence is on the **schedule** —
    read, not manage).
@@ -141,18 +141,18 @@ would have made the read grant a violation without this record.
 
 - Related ADRs: [ADR 3.4.0006](./3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)
   (superseded in part — §3; errata 2026-09-13); [ADR 2.2.0002](./2_2_0002-authorization-two-axes-fail-closed.md)
-  (fail-closed axes; `employee` needs a permission, 231–234); [ADR 2.4.0003](./2_4_0003-authorization-composition-at-boundary.md)
+  (fail-closed axes; `employee` needs a permission, ADR 2.2.0002 › "holds no permission at all"); [ADR 2.4.0003](./2_4_0003-authorization-composition-at-boundary.md)
   (permission set declared per route); [ADR 3.4.0008](./3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)
   (unit exemption by permission); [ADR 2.1.0001](./2_1_0001-identity-aggregates-and-membership.md)
   (owner visibility bypass).
-- [`overview.md`](../overview.md) — §3 line 38 (RBAC), line 44 (employee consults own schedule);
-  §5 line 92 (dated note added in this PR).
+- [`overview.md`](../overview.md) — §3 › "RBAC: papéis dono, gerente, RH e funcionário", "funcionário com login consulta a própria escala" (RBAC; employee
+  consults own schedule); §5 › "RH consulta a escala" (dated note added in this PR).
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §4 (dated note added in this
   PR); `docs/stages/3.6-staff-http/concept.md` 926–933 (finding that asked for it).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.7,
   §4, §6.
-- `src/restaurant_hub/features/identity/domain/value_objects/role.py` (lines 50–52, 77);
-  `permission.py` (8–9, 32–44).
+- `src/restaurant_hub/features/identity/domain/value_objects/role.py` › `_ROLE_PERMISSIONS` (its comment; entry `Role.EMPLOYEE`);
+  `permission.py` › `__doc__`, `TENANT_WIDE_PERMISSIONS`.
 - Sponsor decisions: 2026-08-12 (ADR 3.4.0006 — "apenas o gerente ou dono pode mexer na
   escala"); 2026-09-13, fork F5 — *"Sim — leitura nas suas unidades"* (session record
   `gate-decisions.md`).

@@ -30,11 +30,11 @@ constraints that surround the gap are all ratified:
 
 - Half-open `[start, end)` semantics, the same ones staff assumes, so that a
   shift and an unavailability can be crossed without conversion
-  ([ADR 3.1.0001](./3_1_0001-workforce-gate-modeling-decisions.md) 47–51,
-  decision (i); the literal *"adjacent intervals do not conflict"* is on line 50).
+  ([ADR 3.1.0001](./3_1_0001-workforce-gate-modeling-decisions.md) › "Unavailability is a DATETIME interval",
+  decision (i); the literal *"adjacent intervals do not conflict"* is in that decision).
 - Staff's `UnavailabilityPeriod` is literally a pair of **naive** datetimes and
-  rejects tz-aware input (`unavailability_period.py` 31–41;
-  [ADR 3.1.0005](./3_1_0005-naive-wall-clock-unavailability-datetimes.md) 41–46).
+  rejects tz-aware input (`unavailability_period.py` › `UnavailabilityPeriod.__post_init__`;
+  [ADR 3.1.0005](./3_1_0005-naive-wall-clock-unavailability-datetimes.md) › "stores naive datetime values").
 - A band belongs to the **operational day in which it starts**, a 24h window from
   a configurable cutoff, and crossing civil midnight is explicitly *not* a
   special case ([ADR 4.1.0002](./4_1_0002-weekly-period-operational-day-and-allocation-hours.md) §2).
@@ -180,8 +180,8 @@ rehydration by the 4.4 mapper.
   `(start, end)` uniqueness key).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md)
   §2, §3.2 › "a forma interna do TimeRange" (the gap), §3.6.1, §3.6.10, §3.9, §6 › "forma interna do TimeRange; faixa que ultrapassa o corte seguinte".
-- Code: `features/staff/domain/value_objects/unavailability_period.py` 23–49
-  (the shape being mirrored: naive pair at 31–32, tz check before comparison at
-  34–41, half-open `overlaps` at 43–49).
+- Code: `features/staff/domain/value_objects/unavailability_period.py` › `UnavailabilityPeriod`
+  (the shape being mirrored: naive pair `start`/`end`, tz check before comparison
+  in `__post_init__`, half-open `overlaps`).
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)
   §4, §5.5–§5.7, §7.

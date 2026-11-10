@@ -175,7 +175,7 @@ tests/
   campo de cada DTO (docstring do módulo explica por quê — concept R6);
   `router.py` passa `actor=actor` em cada construção; os testes passam
   `actor=TEST_ACTOR` — inclusive o dicionário `argumentos` de
-  `test_construir_sem_a_unidade_e_type_error` (`test_dtos.py:574-587`), que monta
+  `test_construir_sem_a_unidade_e_type_error` (`test_dtos.py` de staff), que monta
   kwargs por reflexão dos campos e daria `KeyError` sem `"actor"`. Use cases
   **não mudam**.
 - **Detalhes técnicos:** varredura derivada dos módulos `commands`/`queries` (sem
@@ -202,7 +202,7 @@ tests/
     (`overrides_de_use_case(fakes)` passa a `overrides_de_use_case(fakes, guard)`
     e o `Ambiente` chama com **`self.guard`** — um `InMemoryAccessGuard` novo
     recusaria o ator, que só é reconhecido pela instância que o emitiu
-    (`in_memory_access_guard.py:161`); sequência exata da linha ~403)
+    (`in_memory_access_guard.py` › `InMemoryAccessGuard.authorize`); sequência exata de `test_as_rotas_de_catalogo_autorizam_sem_nomear_unidade`)
   - `src/restaurant_hub/features/staff/application/ports/out/access_guard.py` —
     §"Onde este port mora" (CA12): `authorize` passa a ter use case como
     consumidor nesta Task, e o texto que diz o contrário sai junto
@@ -242,7 +242,7 @@ tests/
   - `use_cases/{create_employee,list_employees,rename_employee,delete_employee}.py`
   - `composition_root.py` (4 construções)
   - `tests/unit/features/staff/application/test_use_cases_authorize.py` (+4 cenários)
-  - `tests/unit/features/staff/adapters/test_http_router_employees.py` (sequência exata da listagem, linha ~270)
+  - `tests/unit/features/staff/adapters/test_http_router_employees.py` (sequência exata da listagem, `test_o_guard_e_consultado_com_a_unidade_do_path`)
   - `tests/unit/features/staff/application/{test_create_employee,test_list_employees,test_delete_employee,test_employee_edit_use_cases,test_invalid_name_never_reaches_the_port,test_employee_lifecycle,test_staff_flow,test_terminated_employee_edits,test_copy_employee_to_unit}.py`
 - **O que fazer:** igual à Task 03, com `PERMISSION_MANAGE_STAFF`,
   `tenant_id=command.tenant_id, unit_id=command.unit_id`.

@@ -25,14 +25,14 @@ bounded_context: scheduling
 [ADR 4.1.0002](./4_1_0002-weekly-period-operational-day-and-allocation-hours.md) §3
 fixed **one** counting rule for allocation hours — nominal duration minus the
 declared break — consumed by every policy that sums and by the hub's
-"horas contratadas × escaladas × cumpridas" (`overview.md` 46). The domain doc sums
+"horas contratadas × escaladas × cumpridas" (`overview.md` §3 › "horas contratadas × escaladas × cumpridas"). The domain doc sums
 **per allocation**: *"toda alocação `a` … cuja faixa pertence ao dia operacional
 `d`"* (`shift-scheduling.md` §3.6.3).
 
 The Checkpoint A review of this Stage's concept (2026-09-26) found a state in which
 that single rule returns a wrong number. The ratified example puts **two functions
 on one band** — *"qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes
-16h–00h"* (`overview.md` 41) — so one band may carry a cozinheiro demand and an
+16h–00h"* (`overview.md` §3 › "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h") — so one band may carry a cozinheiro demand and an
 atendente demand over the **same** `(start, end)`. Nothing in the aggregate stopped
 the **same** record from taking one slot in each: summing per allocation then
 returned **16h for 8h of clock time**, and that number fed the daily cap, the weekly
@@ -40,8 +40,8 @@ cap, the contracted workload and the hub.
 
 Two forces framed the question:
 
-- The overlap policy's default mode is **`block`**, and ADR 4.1.0003 (c) (lines
-  95–97) states why: `block` is reserved for **physical impossibility** — *"`block`
+- The overlap policy's default mode is **`block`**, and ADR 4.1.0003 (c) ›
+  "block only for physical impossibility" states why: `block` is reserved for **physical impossibility** — *"`block`
   for overlap (one person in two places)"*. Its only configurable dimension is the
   mode, so that a tenant may *"tolerar sobreposição deliberada de troca 'na porta'"*
   (`shift-scheduling.md` §3.6.1 › "Configurável: só o modo").
@@ -215,9 +215,9 @@ aggregate with a dedicated exception, `DuplicateAssignmentInBandError`.
 - Related ADRs:
   [ADR 4.1.0002](./4_1_0002-weekly-period-operational-day-and-allocation-hours.md) §3
   (the single counting rule, correct again without a second definition);
-  [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md) (a)
-  line 73 (the overlap row: *"— (physical impossibility) | **block**"*), (c) lines
-  95–97 (*"`block` for overlap (one person in two places)"*) and (g) (`N` is a
+  [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md) (a) ›
+  "Overlap | same record" (the overlap row: *"— (physical impossibility) | **block**"*), (c) › "block only for physical impossibility"
+  (*"`block` for overlap (one person in two places)"*) and (g) (`N` is a
   target, not a cap, so an uncovered slot is legitimate);
   [ADR 4.1.0007](./4_1_0007-time-range-as-naive-minute-instants.md) (the single hours
   computation site that Alternative B would duplicate);
@@ -234,8 +234,8 @@ aggregate with a dedicated exception, `DuplicateAssignmentInBandError`.
   ratified per-demand invariant this ADR extends), §3.6.1 › "o mesmo registro com duas alocações cujas faixas se sobrepõem", "Configurável: só o modo" (the
   overlap predicate and its configurable mode — narrowed here in the degenerate
   sub-case), §3.6.3 (hours summed per allocation).
-- [`overview.md`](../overview.md) line 41 (two functions on one band), line 46 (the
-  hub's single hours number).
+- [`overview.md`](../overview.md) §3 › "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h", "horas contratadas × escaladas × cumpridas"
+  (two functions on one band; the hub's single hours number).
 - Concept: [`docs/stages/4.1-scheduling-domain/concept.md`](../stages/4.1-scheduling-domain/concept.md)
   §4, §5.7, §5.12, §5.18, §5.23, §6, §7, §10, §11 (CA10, CA12, CA13, CA25), §12,
   §13 (Q4, answered).

@@ -135,13 +135,13 @@ continua valendo e é verificado por `make check`.
 - **Arquivos a modificar:**
   - `.github/workflows/ci.yml`
 - **O que fazer:** o step diz `Run gate completo (lint + typecheck + layout-check
-  + tests)`, mas `make check` roda **sete** targets (`Makefile:81`):
+  + tests)`, mas `make check` roda **sete** targets (`Makefile` › `check:`):
   `lint typecheck layout-check import-check lock-check docs-check test-gate`. O
   nome omite `import-check`, `lock-check`, `docs-check` e o gate de cobertura —
   todos entregues pela Stage 1.1. Alinhar o nome à cadeia real.
 - **Detalhes técnicos:** só o campo `name:` muda; o `run: make check` fica
   intocado (I3).
-- **Critério de aceite:** o nome do step lista a cadeia de `Makefile:81` **e** o
+- **Critério de aceite:** o nome do step lista a cadeia de `Makefile` › `check:` **e** o
   `run:` continua sendo literalmente `make check` (I3 — esta é a única Task que
   edita o step, então é ela quem tem de guardar as duas metades do CA4).
 - **Comando de verificação** (binário, exit code — não inspeção visual):

@@ -214,6 +214,7 @@ docs-check:
 	uv run python scripts/check_stage_deps.py
 	uv run python scripts/check_roadmap_citations.py
 	uv run python scripts/check_domain_citations.py
+	uv run python scripts/check_adr_code_citations.py
 	uv run python scripts/check_doc_frontmatter.py
 
 # ---------------------------------------------------------------------------

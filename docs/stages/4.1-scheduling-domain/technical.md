@@ -42,10 +42,10 @@ leituras** enumeradas no concept §4, e as invariantes estruturais 1–23 do con
 §5 garantidas **por construção em todos os caminhos** (inclusive a reidratação da
 4.4) e provadas por testes unitários sem I/O. Ativa também o enforcement
 estrutural: contrato `scheduling-domain-purity` no `.importlinter` (espelho de
-`staff-domain-purity`, linhas 197–217), inclusão de
-`restaurant_hub.features.scheduling` no contrato `bc-independence` (linhas
-223–228) e os pacotes-placeholder `features/scheduling/{application,adapters}/`
-exigidos por `scripts/check_layout.py` (`REQUIRED_FEATURE_DIRS`, linha 130). Ver
+`.importlinter` › `[importlinter:contract:staff-domain-purity]`), inclusão de
+`restaurant_hub.features.scheduling` no contrato `bc-independence` (`.importlinter` ›
+`[importlinter:contract:bc-independence]`) e os pacotes-placeholder `features/scheduling/{application,adapters}/`
+exigidos por `scripts/check_layout.py` › `REQUIRED_FEATURE_DIRS`. Ver
 [`concept.md`](./concept.md).
 
 ### Estratégia
@@ -93,7 +93,7 @@ Desde a 3.6 este repo usa **varreduras derivadas** em vez de testes sobre um
 representante: o teste enumera um conjunto (o módulo, a superfície pública, a
 tabela do concept) e falha quando o conjunto cresce sem a sua asserção. O
 precedente concreto é
-`tests/unit/features/identity/domain/test_exceptions.py` 45–56, que varre
+`tests/unit/features/identity/domain/test_exceptions.py` › `test_nenhuma_excecao_do_modulo_escapa_de_identity_error`, que varre
 `vars(identity_errors)` e não uma lista fixa. Consequência dura para esta Stage:
 **uma Task que acrescenta membro a um conjunto varrido e não atualiza a varredura
 deixa `make check` vermelho entre commits.** As **sete** varreduras que esta
@@ -175,12 +175,12 @@ lista escrita à mão: a 12ª mutação que a 4.2/4.3 acrescentar passaria verde
   **antes** de comparar, para que `start < end` só rode naive vs. naive).
 - Validação de coleção é **par a par sobre a coleção inteira**, no
   `__post_init__`. Precedente literal:
-  `src/restaurant_hub/features/staff/domain/entities/employee.py` 93–98 (loop
+  `src/restaurant_hub/features/staff/domain/entities/employee.py` › `Employee.__post_init__` (loop
   `enumerate` + fatia `[indice + 1:]`, com o comentário que cita a reidratação).
 - Aritmética de horas em **minutos inteiros** — nunca `float`, nunca `Decimal`
   (ADR 4.1.0007).
 - `make check` = `lint typecheck layout-check import-check lock-check docs-check
-  test-gate` (`Makefile` 85). No Windows roda por PowerShell:
+  test-gate` (`Makefile` › `check`). No Windows roda por PowerShell:
   `$env:PATH += ";C:\msys64\usr\bin"; $env:UV_SYSTEM_CERTS="1"; make check`. Os
   blocos abaixo trazem os comandos diretos (`uv run …`), que rodam em qualquer
   shell; onde aparece `make check`, aplicar o prefixo acima.
@@ -249,7 +249,7 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
   `features/scheduling/` e a entrada do BC no contrato `bc-independence` são
   visíveis para **varreduras de nível de repositório** que já existem e que só
   ficam verdes quando a hierarquia de erro do BC **já existe**:
-  `_raiz_de_erro(bc)` (`tests/unit/test_status_map.py` 96–113) exige
+  `_raiz_de_erro(bc)` (`tests/unit/test_status_map.py` › `_raiz_de_erro`) exige
   **exatamente uma** classe que herde de `DomainError` diretamente;
   `_TOTAIS_MINIMOS[bc]` (60) daria `KeyError` sem entrada e exige um **piso** de
   contagem; e `_bounded_contexts_na_pasta()` (192–194) cobra a pasta contra a
@@ -259,7 +259,7 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
 - **O que fazer:**
   1. **Árvore de pacotes** da feature `scheduling`, incluindo os placeholders
      vazios `application/` e `adapters/` exigidos por `scripts/check_layout.py`
-     (`REQUIRED_FEATURE_DIRS`, linha 130). **Nenhum** `adapters/inbound/` — a
+     › `REQUIRED_FEATURE_DIRS`. **Nenhum** `adapters/inbound/` — a
      ausência é verificada por
      `test_bc_sem_mapa_de_status_tambem_nao_tem_borda_http`
      (`tests/unit/test_status_map.py`), que só admite BC sem mapa de status
@@ -285,7 +285,7 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
      (concept §5.15). **`InvalidSchedulePeriodError` recebe um `reason`**, porque
      a §6 a usa para dois cenários distintos (teto de `days` e desalinhamento).
   4. **`.importlinter`:** (i) acrescentar o contrato `scheduling-domain-purity`,
-     espelho literal de `staff-domain-purity` (linhas 197–217):
+     espelho literal de `staff-domain-purity` (`.importlinter` › `[importlinter:contract:staff-domain-purity]`):
      `type = forbidden`,
      `source_modules = restaurant_hub.features.scheduling.domain`,
      `forbidden_modules` = `restaurant_hub.features.scheduling.application`,
@@ -297,8 +297,8 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
      `restaurant_hub.features` (auto-proibiria imports internos de scheduling)
      nem `restaurant_hub.shared.domain` (dependência legítima: `SchedulingError`
      herda de `DomainError`); (ii) acrescentar
-     `restaurant_hub.features.scheduling` ao contrato `bc-independence` (linhas
-     223–228, hoje só `identity` e `staff`) e atualizar o `name` do contrato para
+     `restaurant_hub.features.scheduling` ao contrato `bc-independence` (`.importlinter` ›
+     `[importlinter:contract:bc-independence]`, hoje só `identity` e `staff`) e atualizar o `name` do contrato para
      citar os três BCs.
   5. **`tests/unit/test_status_map.py` — a varredura de BCs passa a admitir o
      terceiro BC, e o faz sem virar vácuo** (mudança descrita em prosa; o código
@@ -385,7 +385,7 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
   - `test_exceptions.py` cobre — `SchedulingError` é `DomainError`; teste
     **parametrizado** sobre as 20 afirmando `issubclass(..., SchedulingError)`;
     **varredura derivada** `vars(errors)` no molde de
-    `tests/unit/features/identity/domain/test_exceptions.py` 45–56 (nenhuma
+    `tests/unit/features/identity/domain/test_exceptions.py` › `test_nenhuma_excecao_do_modulo_escapa_de_identity_error` (nenhuma
     exceção definida no módulo escapa de `SchedulingError`); o conjunto público
     do módulo é **exatamente** as 20 + a raiz (21); e a mensagem é preservada ao
     levantar (`pytest.raises(..., match=...)`) nas que recebem contexto.
@@ -437,7 +437,7 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
   `with_break` e `with_bounds`.
 - **Detalhes técnicos:**
   - **ordem das checagens:** tz-aware **antes** de comparar `start`/`end`
-    (precedente `unavailability_period.py` 34–36), e `nominal_minutes` só é
+    (precedente `unavailability_period.py` › `UnavailabilityPeriod.__post_init__`), e `nominal_minutes` só é
     calculado depois de o par ser válido — sem isso a validação do
     `break_minutes` roda sobre duração negativa.
   - `worked_minutes` é **método**, não `@property` (mudança declarada no concept
@@ -496,10 +496,10 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
 - **Detalhes técnicos:**
   - **`at` não tem teto** — decisão do sponsor de 2026-09-27 (Q5), confirmação do
     ADR 4.1.0002 §2. **Não** inventar limite trabalhista (concept §7 "Corte do dia
-    sem teto"; `overview.md` 110).
+    sem teto"; `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded").
   - `from_string` converte texto em erro **de domínio**, nunca `ValueError` cru do
     `StrEnum` — espelho de `DayPeriod.from_string` de staff
-    (`staff/domain/value_objects/shift_preference.py` 33).
+    (`staff/domain/value_objects/shift_preference.py` › `DayPeriod.from_string`).
   - a co-locação dos três tipos do calendário num módulo só é decisão do concept
     §7 ("`Weekday` e `DayCutoff` co-locados"), precedente da 3.1 (`DayPeriod`
     dentro de `shift_preference.py`).
@@ -644,7 +644,7 @@ tests/unit/features/staff/test_bc_independence.py   # + scheduling no contrato; 
   `with_assignment` e `without_assignment(assignment_id)`.
 - **Detalhes técnicos:**
   - as duas checagens de duplicidade são **par a par sobre a coleção inteira**, no
-    molde de `employee.py` 93–98 — não só entre pares consecutivos. É a lição do
+    molde de `employee.py` › `Employee.__post_init__` — não só entre pares consecutivos. É a lição do
     Checkpoint C da 3.1 (`3.1-staff-domain/technical.md` §7, 2026-07-29).
   - `with_*` devolvem nova instância e passam de novo pelo `__post_init__` (via
     `dataclasses.replace`), logo `with_assignment` de um `employee_id` repetido
@@ -1233,7 +1233,7 @@ dentro do teto de 12).
 | **Varredura de nível de repositório** reprovar no primeiro commit (o 3º BC entra em `features/` e em `bc-independence`) | é o motivo de a Task 01 ser um commit só e de ela tocar `tests/unit/test_status_map.py` e `tests/unit/features/staff/test_bc_independence.py` (§1, tabela de totalidades + divergência 9). Rodar os dois arquivos **antes** de commitar a Task 01; se a tolerância a `application.errors` ausente for além do `ModuleNotFoundError` do próprio módulo, a varredura vira vácuo — a asserção anti-vácuo (ao menos um módulo de erro por BC) é o que impede |
 | Contrato `bc-independence` acusar violação inesperada ao entrar o 3º BC (import transitivo) | investigar a cadeia com `lint-imports --verbose`; import legítimo **via `shared`** não é proibido pelo contrato `independence` — corrigir só import direto entre `features`; registrar `[deviation]` em §7 |
 | `scheduling-domain-purity` falhar por pacote externo ausente na lista `forbidden` | remover do contrato o pacote não instalado (mantendo os presentes), como previsto na 2.1/3.1; registrar `[deviation]` |
-| `check_layout.py` reclamar de feature sem `application/`/`adapters/` | garantir os `__init__.py` placeholders da Task 01 (`REQUIRED_FEATURE_DIRS`, linha 130) |
+| `check_layout.py` reclamar de feature sem `application/`/`adapters/` | garantir os `__init__.py` placeholders da Task 01 (`scripts/check_layout.py` › `REQUIRED_FEATURE_DIRS`) |
 | Varredura derivada ficar **defasada** entre commits (`make check` vermelho na Task 08/09) | a Task que cresce o conjunto atualiza a varredura **no mesmo commit** (§1, tabela de totalidades); a lista esperada vive numa constante única no topo do arquivo de teste |
 | Teste fixar **precedência** entre validações coincidentes do `__post_init__` (comportamento não especificado — finding da 2.1) | um cenário inválido por teste; nunca construir um objeto que viole duas invariantes ao mesmo tempo |
 | Duplicidade provada só com par **consecutivo** (a mutação "loop restrito a pares vizinhos" sobrevive) | **toda** checagem par a par é provada com par **não consecutivo** em coleção de 3 — lição do Checkpoint C da 3.1 (`3.1-staff-domain/technical.md` §7, 2026-07-29) |
@@ -1259,19 +1259,19 @@ dentro do teto de 12).
   alocação), `0012` (uma vaga por registro em cada faixa).
 - [`../../LAYOUT.md`](../../LAYOUT.md) §2 (linha 38 — `services/` `[planejado]`),
   §3, §7; [`../../CONVENTIONS.md`](../../CONVENTIONS.md) §2, §4.
-- `.importlinter` — `staff-domain-purity` (197–217) e `bc-independence`
-  (223–228), os dois espelhos desta Stage; `scripts/check_layout.py` 130
-  (`REQUIRED_FEATURE_DIRS`); `scripts/check_commit_msg.py`
-  (`MAX_SUBJECT_LEN = 100`); `Makefile` 85 (alvo `check`).
+- `.importlinter` › `[importlinter:contract:staff-domain-purity]`, `[importlinter:contract:bc-independence]`,
+  os dois espelhos desta Stage; `scripts/check_layout.py`
+  › `REQUIRED_FEATURE_DIRS`; `scripts/check_commit_msg.py`
+  (`MAX_SUBJECT_LEN = 100`); `Makefile` › `check` (alvo).
 - Precedente vivo: [`../3.1-staff-domain/technical.md`](../3.1-staff-domain/technical.md)
   (mesma camada `domain`; estrutura de Tasks, contratos de import, placeholders, e
   a §7 com a validação par a par e a idempotência de transição).
 - Precedentes de código:
   `src/restaurant_hub/features/staff/domain/value_objects/unavailability_period.py`
   31–36 (par de `datetime` ingênuos; tz-aware antes de comparar);
-  `src/restaurant_hub/features/staff/domain/entities/employee.py` 93–98 (loop par
+  `src/restaurant_hub/features/staff/domain/entities/employee.py` › `Employee.__post_init__` (loop par
   a par sobre a coleção inteira);
-  `tests/unit/features/identity/domain/test_exceptions.py` 45–56 (varredura
+  `tests/unit/features/identity/domain/test_exceptions.py` › `test_nenhuma_excecao_do_modulo_escapa_de_identity_error` (varredura
   derivada com `vars(...)`).
 - Skills: `task-ordering-hex`, `ddd-tactical-patterns`, `hex-arch-python`.
 

@@ -454,7 +454,7 @@ tests/
     aí `shared` passa a importar feature, quebrando a supressão estreita do
     `.importlinter` que a §7.6 do concept existe para preservar (o único par
     suprimido é `shared...http.app -> composition_root`). O template de `app.py`
-    (linha ~68) descreve o padrão com `app.dependency_overrides[...]`; o que muda
+    (`_register_feature_routers`, docstring) descreve o padrão com `app.dependency_overrides[...]`; o que muda
     é **quem monta o dicionário**.
   - `app.py` só aplica o que recebe: `include_router`, `register_handlers`,
     `dependency_overrides.update(mapa)`. Continua sem conhecer a feature.

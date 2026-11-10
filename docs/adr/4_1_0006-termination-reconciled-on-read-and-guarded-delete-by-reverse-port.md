@@ -239,8 +239,8 @@ before Stage 4.3 designs `StaffReadPort` and Stage 4.4 designs the schema.
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.4
   (rule, five limits), §3.3, §3.7, §3.10.1, §5, §6; [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md)
   §3.1; `docs/stages/3.2-staff-application/concept.md` 301–308 (law L-E5).
-- `.importlinter` (`bc-independence`, lines 251–277);
-  `src/restaurant_hub/features/staff/domain/value_objects/identifiers.py` 5–7.
+- `.importlinter` › `[importlinter:contract:bc-independence]`;
+  `src/restaurant_hub/features/staff/domain/value_objects/identifiers.py` › `__doc__`.
 - Sponsor decisions: 2026-09-13 (product rule; research requested) and 2026-09-14 (F7 →
   reconcile on read; sub-question → keep the guard, inactive invisible) — session record
   `gate-decisions.md`, "Rodada 2". Research: `f7-architecture-research.md` (2026-09-13), whose

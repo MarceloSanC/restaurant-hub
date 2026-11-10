@@ -256,7 +256,7 @@ tests/
   idênticas (CA5); CA7
   com duas threads e barreira dentro da unidade da primeira, nas duas variantes
   (comita / falha depois do `consume`). O docstring de
-  `test_setup_token_http.py:251-257` ("token queimado") é atualizado junto. CA9: teste de bootstrap que confere o
+  `test_setup_token_http.py` › `TestDefinirSenha.test_falha_ao_gravar_a_senha_nao_vira_4xx` ("token queimado") é atualizado junto. CA9: teste de bootstrap que confere o
   `_engine` da unidade e de cada repositório injetado neste use case (o teste é
   parametrizado pelos use cases e cresce nas Tasks seguintes).
 - **Critério de aceite:** CA4, CA5, CA7, CA9 e CA10 para este use case.
@@ -363,7 +363,7 @@ tests/
     `__subclasses__()` (`test_status_map.py`, `test_http_error_handlers.py`) não a
     enxergam.
   - O injetor `_SessionRepositoryInstrumentado.revoke` de `test_refresh_session.py`
-    (`:83-85`) passa a `-> bool` e devolve o valor de `super().revoke(...)`; sem isso
+    (`_SessionRepositoryInstrumentado.revoke`) passa a `-> bool` e devolve o valor de `super().revoke(...)`; sem isso
     toda rotação do teste vira reuso. (O mypy não cobre `tests/unit`.)
 - **Critério de aceite:** CA4, CA5, CA6, CA9, CA10, CA13 para este use case.
 - **Comando de verificação:** idem T06.
@@ -424,8 +424,8 @@ tests/
 ### Task 13 — Docstrings de staff deixam de afirmar que identity não tem unidade
 
 - **Arquivos a modificar:**
-  - `src/restaurant_hub/features/staff/adapters/out/postgres/employee_repository.py` (docstring, `:7-14`)
-  - `src/restaurant_hub/features/staff/adapters/out/postgres/job_function_repository.py` (docstring, `:5-11`)
+  - `src/restaurant_hub/features/staff/adapters/out/postgres/employee_repository.py` (docstring do módulo)
+  - `src/restaurant_hub/features/staff/adapters/out/postgres/job_function_repository.py` (docstring do módulo)
 - **O que fazer:** os dois docstrings dizem que o desvio da fronteira transacional
   "é o mesmo que identity assumiu… sem UoW". Passam a dizer que staff segue com
   transação por método porque nenhum use case de staff escreve duas vezes em staff

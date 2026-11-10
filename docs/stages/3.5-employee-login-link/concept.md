@@ -81,7 +81,7 @@ depends_on: [3.6-staff-http]
     **link**; o TTL depende do canal), `SendInvitationUseCase` (compõe e
     envia), `RevokeAllSessionsUseCase`. A composição do link — hoje inline em
     **dois** módulos, `InviteUserUseCase._enviar_convite` e
-    `RequestPasswordResetUseCase` (`request_password_reset.py:147`) — e a da
+    `RequestPasswordResetUseCase` (`request_password_reset.py` › `RequestPasswordResetUseCase._enviar`) — e a da
     mensagem de convite saem para um **helper compartilhado**, que
     `ProvisionAccount`, `SendInvitation`, `InviteUser` e `RequestPasswordReset`
     passam a usar (duas linhas em cada um dos dois existentes); nenhum dos dois
@@ -256,10 +256,10 @@ hora"* não tem rota) chegou a esta Stage como candidata.
   `AccessGuard` uma `(permissão, alvo)` por chamada (L-AG4). R17 exige **duas**
   permissões sobre o mesmo alvo e faz **duas** chamadas.
 - **`Employee` e `EmployeeResult` são `frozen`; a cópia constrói a entidade
-  campo a campo** (`copy_employee_to_unit.py:71`), nunca por
+  campo a campo** (`copy_employee_to_unit.py` › `CopyEmployeeToUnitUseCase.execute`), nunca por
   `dataclasses.replace` — é isso que faz o default `None` de `user_id` valer
   como "a cópia não carrega" **por construção**, e não por lembrar de zerar.
-- **`users.email` é `TEXT`** (`identity/adapters/out/postgres/tables.py:105`):
+- **`users.email` é `TEXT`** (`identity/adapters/out/postgres/tables.py` › `users`, coluna `email`):
   um e-mail longo é aceito e gravado verbatim, não é 500.
 - **`create_engine` não abre conexão**; montar a fachada e o gateway não muda o
   boot.
@@ -424,8 +424,8 @@ hora"* não tem rota) chegou a esta Stage como candidata.
 - **Helper de composição** (`identity/application/use_cases/_invitation.py`):
   `setup_link(base_url, token_value)` e `invitation_message(to, link)` — o
   formato `{base_url}/definir-senha?token=` passa a ter **uma** casa. Hoje ele
-  vive em **dois** lugares (`invite_user.py:209` e
-  `request_password_reset.py:147`); os dois passam a chamar o helper (duas
+  vive em **dois** lugares (`invite_user.py` › `InviteUserUseCase._enviar_convite`
+  e `request_password_reset.py` › `RequestPasswordResetUseCase._enviar`); os dois passam a chamar o helper (duas
   linhas em cada; comportamento, assinaturas e testes **intactos** — CA16), e
   `ProvisionAccount`/`SendInvitation` nascem chamando-o.
 - **`IdentityFacade`** (`features/identity/application/facade.py`) — o *Open
@@ -764,7 +764,7 @@ nesta Stage: vincular/desvincular login existente (§10).
 - **Fonte:** §13 Q2 (pesquisa + decisão do sponsor, 2026-09-12); ADR 3.4.0001
   §3 e alternativa A; issue #45 (M1/Gate 1) e #47; docs do import-linter
   (`independence`, `ignore_imports`, wildcards); comentário do contrato
-  `bc-independence` no `.importlinter` e `identifiers.py:6-7` ("identificadores
+  `bc-independence` no `.importlinter` e `identifiers.py` › docstring do módulo ("identificadores
   atravessam a fronteira como strings opacas").
 - **ADR:** [`../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md`](../../adr/3_5_0001-cross-bc-facade-and-gateway-edge.md)
 
@@ -787,8 +787,8 @@ nesta Stage: vincular/desvincular login existente (§10).
   a DoD, mudaria o construtor que dois testes da 2.5 e o composition root
   chamam, e é o item que mais mexeria em código mergeado de outro BC; o helper
   fecha a única duplicação que **importa** (o formato do link — que hoje já
-  vive em **dois** módulos, `invite_user.py:209` e
-  `request_password_reset.py:147`, e viraria três), e a duplicação da ordem de
+  vive em **dois** módulos, `invite_user.py` › `InviteUserUseCase._enviar_convite`
+  e `request_password_reset.py` › `RequestPasswordResetUseCase._enviar`, e viraria três), e a duplicação da ordem de
   checagens (`create_user`, `invite_user`, `provision_account`) fica
   **declarada** como finding de identity (§10). O carve-out da regra 1 da 2.5 é **estreito**: só
   `ProvisionAccountUseCase` devolve o segredo, e só R17 no canal `link` o expõe
@@ -798,7 +798,7 @@ nesta Stage: vincular/desvincular login existente (§10).
   de entrega (provisiona e envia dentro).
 - **Fonte:** §13 Q1 (sponsor: *"conta pré-criada… manda o link ou o QR code"*);
   overview §3; workforce §3.8; ADR 2.5.0002/0004; 2.5 concept §5 regra 1 e §7 D5;
-  `invite_user.py:11-14` (a duplicação deliberada da 2.5 e o seu motivo).
+  `invite_user.py` › docstring do módulo (a duplicação deliberada da 2.5 e o seu motivo).
 - **ADR:** [`../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md`](../../adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md)
 
 ### D3 — Desligar revoga as sessões e a conta permanece; remover registro vinculado é recusado; `is_active` fica com gatilho
@@ -896,7 +896,7 @@ credencial — nada aqui é rotina sobre fundação validada.
   está dentro da autorização de §13 Q6.
 - **Alternativas reais descartadas:** guarda na borda de staff só para R17;
   declarar e adiar.
-- **Fonte:** §13 Q4 (sponsor); `email.py:16` (a regex); 3.6 concept §10 e §5.10;
+- **Fonte:** §13 Q4 (sponsor); `email.py` › `_EMAIL_RE` (a regex); 3.6 concept §10 e §5.10;
   ADR 3.4.0003.
 - **Sem ADR próprio:** a decisão de princípio é o ADR 3.4.0003; aqui é a mesma
   regra aplicada a um VO de outro BC, com a autorização registrada em §13.
@@ -914,7 +914,7 @@ credencial — nada aqui é rotina sobre fundação validada.
   identity distinguir conta pendente de ativa (§13 Q5).
 - **Alternativas reais descartadas:** TTL único de 72h; reemissão nesta Stage
   (com sinal de conta pendente + migration em identity).
-- **Fonte:** §13 Q5 (sponsor); `settings.py:115-116`; 2.5 concept §5 regra 15.
+- **Fonte:** §13 Q5 (sponsor); `settings.py` › `Settings.invitation_token_ttl_hours`, `Settings.password_reset_token_ttl_minutes`; 2.5 concept §5 regra 15.
 - **Sem ADR:** configuração, reversível; o desenho da reemissão vai no finding.
 
 ## 8. Integrações
@@ -1194,7 +1194,7 @@ Identity: **nenhuma** mudança de schema (§5.13).
       `revoke_all_for_user(user_id, clock.now())` e é idempotente (id
       desconhecido não levanta). O helper `_invitation.py` é a **única** casa
       do formato do link: `grep -rn "definir-senha" src/` devolve **só** ele —
-      o que exige que `request_password_reset.py:147` também passe a chamá-lo.
+      o que exige que `request_password_reset.py` › `RequestPasswordResetUseCase._enviar` também passe a chamá-lo.
 - [x] **CA18** — `IdentityFacade` converte primitivos em VOs (`Email`,
       `Role.from_string`, `RestaurantId`, `UnitId`), repassa `handed_over`,
       **não** captura exceção nenhuma (o teste passa um use case que levanta e

@@ -160,7 +160,7 @@ porque são decisões **de plano** e não de execução:
   do { Start-Sleep -Seconds 1; docker compose exec -T postgres pg_isready -q } while ($LASTEXITCODE -ne 0)
   ```
 - **Esta worktree não tem `.env`** — só `.env.example`. Consequência **medida**,
-  não suposição: `Settings()` cai no default embutido de `settings.py:42`
+  não suposição: `Settings()` cai no default embutido de `settings.py` › `Settings.database_url`
   (`postgresql+psycopg://user:pass@localhost:5432/restaurant_hub`), e a suíte
   roda contra o banco de `localhost:5432`. O concept §3 registra exatamente isso
   como premissa, e esta Stage **não** a muda. Se em algum momento passar a haver
@@ -357,7 +357,7 @@ docs/roadmap.md                                           (M — fechamento, com
     reconciliado por nota datada no fechamento (D10).
   - `downgrade()` derruba na ordem inversa das dependências de FK (as três filhas,
     depois `employees`, depois `job_functions`).
-  - `migrations/env.py:39-41` **manda** combinar os metadatas quando o 2º BC
+  - `migrations/env.py` › `target_metadata` **manda** combinar os metadatas quando o 2º BC
     chegar — é literalmente o comentário do arquivo. Trocar um pelo outro faria o
     autogenerate propor drop das tabelas de identity.
   - `TABELAS_EM_ORDEM_DE_LIMPEZA` ganha as cinco tabelas de staff, **filhas antes
@@ -530,7 +530,7 @@ docs/roadmap.md                                           (M — fechamento, com
     citação da nova âncora nos `__doc__` dos dois módulos de port — mesma forma
     do `test_l_e5_employee_in_use_error_existe_e_a_lei_esta_documentada_no_port`
     que já existe.
-  - **A "Nota deliberada" de `test_employee_repository_laws.py:317-322` sai neste
+  - **A "Nota deliberada" de `test_employee_repository_laws.py` › "Nota deliberada" sai neste
     commit.** Ela declara que a ordem "NÃO é travada por teste, e isso não é
     esquecimento" — vira **falsa** na linha em que o primeiro `test_l_ord_*`
     entra. Deixá-la seria a Stage afirmar duas coisas contraditórias sobre o

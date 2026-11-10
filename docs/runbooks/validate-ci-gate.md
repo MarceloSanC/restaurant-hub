@@ -164,7 +164,7 @@ Exit code: **1**.
 git restore src/restaurant_hub/__init__.py
 ```
 
-> Since issue #91 `make typecheck` runs `mypy src/ tests/fakes/ scripts/ .claude/hooks/`, so the same patch appended to a script (e.g. `scripts/clean.py`) fails the gate as well — measured: `uv run mypy src/ tests/fakes/ scripts/ .claude/hooks/` → `scripts\clean.py:67: error: Function is missing a type annotation  [no-untyped-def]`, exit **1**. `tests/unit/test_ci_workflow.py` keeps every versioned `.py` outside `tests/` (except `tests/fakes/`) and `migrations/` inside the target.
+> Since issue #91 `make typecheck` runs `mypy src/ tests/fakes/ scripts/ .claude/hooks/`, so the same patch appended to a script (e.g. `scripts/clean.py`) fails the gate as well — measured: `uv run mypy src/ tests/fakes/ scripts/ .claude/hooks/` → `scripts\clean.py` (the appended function): `error: Function is missing a type annotation  [no-untyped-def]`, exit **1**. `tests/unit/test_ci_workflow.py` keeps every versioned `.py` outside `tests/` (except `tests/fakes/`) and `migrations/` inside the target.
 
 ---
 

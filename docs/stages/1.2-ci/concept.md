@@ -210,7 +210,7 @@ que **o CI é um clone raso**.
   issue-first continua na varredura agendada.
 - **Por quê (três razões estruturais, em ordem de peso):**
   1. **O gate é repo-global, não escopado ao PR.** `discover_technicals()`
-     (`check_stage_issue.py:114-123`) varre `docs/stages/*/technical.md` —
+     (`check_stage_issue.py` › `discover_technicals`) varre `docs/stages/*/technical.md` —
      **todas** as Stages, independente do que o PR toca. Qualquer Stage em 3A
      com `issue_id` placeholder reprovaria **todo PR do repo**. Isto não é
      hipótese: é o estado desta branch agora — `make check` local está vermelho
@@ -218,7 +218,7 @@ que **o CI é um clone raso**.
      commitado em `316b88e`). Plugar o token exportaria esse vermelho para todo
      PR aberto durante qualquer 3A alheia.
   2. **O veredito dependeria de rede (I1).** `issue_exists()`
-     (`check_stage_issue.py:66-81`) devolve o mesmo `False` para "a API
+     (`check_stage_issue.py` › `issue_exists`) devolve o mesmo `False` para "a API
      respondeu: não existe" e para "não alcancei a API" (returncode != 0,
      timeout, `OSError`). Um outage reprovaria o PR **acusando um `issue_id`
      válido** — mensagem enganosa, que treina o time a re-rodar vermelho sem ler.
@@ -227,7 +227,7 @@ que **o CI é um clone raso**.
      o token seria detectar um `issue_id` errado até ~6 dias antes; o custo são
      (1) e (2).
 - **Corroboração (não é a razão principal — e não é inequívoca):** o cabeçalho de
-  `stage-issue-audit.yml:3-8` descreve um split de duas metades e dá a razão do
+  `stage-issue-audit.yml` › comentário de cabeçalho descreve um split de duas metades e dá a razão do
   posicionamento, *ipsis litteris*:
   > "O docs-check de PR/local valida só o delta da branch (rápido e
   > determinístico). Esta varredura completa agendada é a segunda metade do
@@ -239,14 +239,14 @@ que **o CI é um clone raso**.
   branch" é **imprecisa** — descreve bem o `check_technical_postexec.py` (que só
   *enforce* na janela de execução da Stage, ou seja, o delta), mas não o
   `check_stage_issue.py`, que varre tudo. E o docstring do script
-  (`check_stage_issue.py:19-22`) diz que "em CI com `gh` autenticado (…) funciona
+  (`check_stage_issue.py` › docstring do módulo, "Best-effort") diz que "em CI com `gh` autenticado (…) funciona
   normalmente" — o que é verdade do CI agendado, mas pode ser lido como
   expectativa de token no PR. Logo o cabeçalho **corrobora** o split sem
   **provar** que a ausência de token no `ci.yml` foi deliberada. A decisão se
   sustenta em (1)–(3), que não dependem dessa leitura. A imprecisão do cabeçalho
   vira `[finding]`.
-- **Fonte:** `scripts/check_stage_issue.py:66-81` e `:114-123`;
-  `.github/workflows/stage-issue-audit.yml:3-8,14,33-36`; `make check` local
+- **Fonte:** `scripts/check_stage_issue.py` › `issue_exists` e `discover_technicals`;
+  `.github/workflows/stage-issue-audit.yml` › comentário de cabeçalho, `permissions`, `jobs.full-scan.steps` "check_stage_issue (todas as stages, com rede)"; `make check` local
   vermelho nesta branch (evidência em §3 da execução).
 - **ADR:** [`../../adr/1_2_0001-deterministic-pr-path-gates.md`](../../adr/1_2_0001-deterministic-pr-path-gates.md)
 
@@ -269,8 +269,8 @@ que **o CI é um clone raso**.
   rodaria: o run ficaria vermelho sem tocar no gate que a Stage conserta.
 - **Custo:** clone completo por run (~1s hoje, 53 commits); cresce com a
   história e é reversível para um fetch dirigido se um dia doer.
-- **Fonte:** `scripts/check_technical_postexec.py:41-49` (limitações declaradas)
-  e `:118-139`; `Makefile:81` (ordem da cadeia); CONVENTIONS §3.4; verificação
+- **Fonte:** `scripts/check_technical_postexec.py` › docstring "Limitações conhecidas" (limitações declaradas) e
+  `_approved_commit_for`; `Makefile` › `check:` (ordem da cadeia); CONVENTIONS §3.4; verificação
   empírica em §3.
 - **ADR:** mesma ADR 1.2.0001.
 
@@ -287,7 +287,7 @@ que **o CI é um clone raso**.
   nada neste repo (sem branch protection — ADR 1.1.0002 — check vermelho deixa o
   PR `UNSTABLE`, não `BLOCKED`). PR para `main` é o único caminho que alcança
   produção (GIT-WORKFLOW §Princípios #5), então a mitigação precisa ser mecânica.
-- **Fonte:** `.github/workflows/ci.yml:15-16` (`if: base.ref == 'main'`);
+- **Fonte:** `.github/workflows/ci.yml` › `jobs.guard-main-source.if` (`if: base.ref == 'main'`);
   `gh run list` — nenhuma execução de `guard-main-source` no histórico.
 
 ## 7. Integrações

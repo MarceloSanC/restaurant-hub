@@ -519,3 +519,211 @@ def test_ancoras_que_escapavam_reprovam(tmp_path: pathlib.Path, texto: str, moti
     achados = _problemas(tmp_path, texto)
     assert len(achados) == 1, achados
     assert motivo in achados[0]
+
+
+# --- O overview como alvo (issue #154, ADR 0.0.0019) ---------------------------------
+
+_OVERVIEW = """\
+---
+title: visão geral
+---
+
+# Visão Geral
+
+## 3. Escopo
+
+### Dentro do escopo
+
+- Publicação: **salvar = publicar**; e-mail opcional.
+
+## 9. Glossário
+
+- **Turno**: faixa de horário demandada/trabalhada num dia (ex.: 16h–00h).
+"""
+
+
+def _com_overview(tmp_path: pathlib.Path, texto: str) -> list[str]:
+    return list(
+        gate.problemas(_repo(tmp_path, {"docs/overview.md": _OVERVIEW, "docs/x.md": texto}))
+    )
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "fixa (`overview.md` 44) a regra",
+        "o glossário ([`overview.md`](../overview.md) line 137).",
+        "`overview.md` §3 (linha 44) diz",
+        "Resolve overview 44/137 contra o roadmap",
+        "ver `docs/overview.md:44` antes",
+        "`overview.md` §3, 41 e 46.",
+    ],
+    ids=["simples", "link-e-line", "linha-depois-da-secao", "nome-curto", "dois-pontos", "lista"],
+)
+def test_numero_de_linha_depois_do_overview_reprova(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _com_overview(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha a docs/overview.md" in achados[0]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        '`overview.md` §3 › "salvar = publicar"; §9 › "Turno: faixa de horário" (16h–00h).',
+        "o fuso (overview §9) vale",
+        '[`overview.md`](../overview.md) — §3 › "Dentro do escopo", "e-mail opcional"; §9.',
+    ],
+    ids=["cadeia", "nome-curto-com-secao", "link-e-titulo-de-subsecao"],
+)
+def test_ancora_ao_overview_que_resolve_passa(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _com_overview(tmp_path, texto) == []
+
+
+@pytest.mark.parametrize(
+    ("texto", "motivo"),
+    [
+        ('`overview.md` §3 › "salvar ≠ publicar".', 'rótulo "salvar ≠ publicar" não existe'),
+        ("`overview.md` §4.", "seção §4 não existe em docs/overview.md"),
+        ('`overview.md` §9 › "salvar = publicar".', "não existe em docs/overview.md §9"),
+    ],
+    ids=["rotulo-inexistente", "secao-inexistente", "rotulo-de-outra-secao"],
+)
+def test_ancora_ao_overview_que_nao_resolve_reprova(
+    tmp_path: pathlib.Path, texto: str, motivo: str
+) -> None:
+    achados = _com_overview(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert motivo in achados[0]
+
+
+def test_sem_doc_de_dominio_o_overview_sozinho_nao_basta(tmp_path: pathlib.Path) -> None:
+    repo = _repo(tmp_path, {"docs/overview.md": _OVERVIEW}, dominio={})
+    assert gate.problemas(repo)[0].startswith("FATAL:")
+
+
+def test_doc_de_dominio_chamado_overview_e_ambiguo(tmp_path: pathlib.Path) -> None:
+    repo = _repo(
+        tmp_path,
+        {"docs/overview.md": _OVERVIEW},
+        dominio={"docs/domain/x/overview.md": _ESCALA, "docs/domain/staff/equipe.md": _EQUIPE},
+    )
+    achados = gate.problemas(repo)
+    assert achados[0].startswith("FATAL:") and "mesmo nome" in achados[0]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Line citations to other docs (`overview.md 46`) are out of this decision.",
+        "como (`escala.md 171`, por exemplo) — a forma antiga.",
+    ],
+    ids=["overview", "dominio"],
+)
+def test_nome_dentro_de_literal_de_exemplo_nao_e_citacao(
+    tmp_path: pathlib.Path, texto: str
+) -> None:
+    assert _com_overview(tmp_path, texto) == []
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        'fuso da unidade (overview §9); os instantes ("indisponível das\n08:00 às 12:00") valem.',
+        "listadas em [`overview.md`](../overview.md) §9 (pesquisa, jul/2026).",
+        "chave IANA (`overview.md` §9; PEP 615; RFC 9557) validada.",
+    ],
+    ids=["hora", "mes-ano", "pep-e-rfc"],
+)
+def test_hora_mes_ano_e_pep_sao_neutros(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _com_overview(tmp_path, texto) == []
+
+
+def test_nome_curto_de_doc_de_dominio_seguido_de_numero_e_linha(tmp_path: pathlib.Path) -> None:
+    achados = _problemas(tmp_path, "como diz equipe 120, a regra")
+    assert len(achados) == 1, achados
+    assert "número de linha a docs/domain/staff/equipe.md" in achados[0]
+
+
+def test_nome_curto_seguido_de_um_digito_nao_e_referencia(tmp_path: pathlib.Path) -> None:
+    assert _problemas(tmp_path, "a equipe 3 entra, e a escala 7 também.") == []
+
+
+def test_o_repositorio_real_tem_ancoras_ao_overview() -> None:
+    """O verde do repositório real não é vazio para o overview: a conversão da #154 deixou ~130."""
+    docs, _ = gate.docs_de_dominio(_REPO_ROOT)
+    assert docs["overview"].rel == "docs/overview.md"
+    regex = gate.regex_de_referencia(["overview"])
+    ancoras = 0
+    for arquivo in gate.arquivos(_REPO_ROOT):
+        texto = gate.texto_varrido(arquivo)
+        for ref in regex.finditer(texto):
+            ancoras += len(gate.cadeia_de_ancoras(texto, ref.end()))
+    assert ancoras > 100  # noqa: PLR2004
+
+
+# --- Auditoria de mutação da #154 (sobreviventes da primeira rodada) ---------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Resolve overview  44 contra o roadmap",
+        "Resolve overview\t44 contra o roadmap",
+        "como `overview.md 46\nx` diz",
+        "um ` solto\nveja overview.md 44 e `x`.",
+        "veja overview.md 44 e `x`.",
+    ],
+    ids=[
+        "dois-espacos",
+        "tab",
+        "literal-nao-atravessa-linha",
+        "crase-de-outra-linha",
+        "fora-de-literal",
+    ],
+)
+def test_linha_ao_overview_que_escapava_reprova(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _com_overview(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha a docs/overview.md" in achados[0]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["segundo o overview\n10 pessoas entram.", "`overview.md` §9 (abre às 8:30)."],
+    ids=["numero-na-linha-seguinte", "hora-sem-zero"],
+)
+def test_o_que_nao_e_linha_do_overview_passa(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _com_overview(tmp_path, texto) == []
+
+
+def test_nome_repetido_nomeia_o_doc_de_dominio_primeiro(tmp_path: pathlib.Path) -> None:
+    repo = _repo(
+        tmp_path,
+        {"docs/overview.md": _OVERVIEW},
+        dominio={"docs/domain/x/overview.md": _ESCALA, "docs/domain/staff/equipe.md": _EQUIPE},
+    )
+    assert "docs/domain/x/overview.md e docs/overview.md" in gate.problemas(repo)[0]
+
+
+# --- Auditoria do PR #157: formas que ainda escapavam --------------------------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["Overview 44 fixa a regra.", "`overview.md` ll. 44–47 fixa a regra."],
+    ids=["maiuscula", "ll"],
+)
+def test_linha_ao_overview_da_auditoria_reprova(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _com_overview(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha a docs/overview.md" in achados[0]
+
+
+def test_ancora_ao_overview_com_maiuscula_resolve(tmp_path: pathlib.Path) -> None:
+    assert _com_overview(tmp_path, 'Overview §3 › "salvar = publicar" vale.') == []
+
+
+def test_numero_cortado_pela_janela_do_trecho_nao_e_linha(tmp_path: pathlib.Path) -> None:
+    recheio = "palavra " * ((gate._MAX_TRECHO - 4) // 8)
+    texto = f"o `overview.md` §3 {recheio}404 for a foreign restaurant\nfim"
+    assert _com_overview(tmp_path, texto) == []

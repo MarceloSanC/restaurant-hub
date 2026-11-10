@@ -142,7 +142,7 @@ escalas anteriores ao montar a nova").
 8. **Concept 4.1 §5.16 / CA11b** enumerava **quatro** mutações idempotentes; passa a **cinco**
    (§7 D2), com errata datada no concept da 4.1 (precedente: errata datada em concept `done`,
    `docs/stages/3.2-staff-application/concept.md`).
-9. **ADR 4.1.0004:79** — *"Permission names (`VIEW_SCHEDULE`, `MANAGE_SCHEDULE`,
+9. **ADR 4.1.0004 › "Permission names (VIEW_SCHEDULE, MANAGE_SCHEDULE, VIEW_OWN_SCHEDULE, …)"** — *"Permission names (`VIEW_SCHEDULE`, `MANAGE_SCHEDULE`,
    `VIEW_OWN_SCHEDULE`, …), whether "save" and "edit" are one permission, and whether the
    tenant-wide validation configuration needs its own permission are gaps for the Stage 4.5
    concept"* — e o doc §3.10.2/§4 (promoção do `AccessGuard` na 4.5). Esta Stage fixa os **valores**
@@ -158,10 +158,10 @@ escalas anteriores ao montar a nova").
     versão"*) e DoD da 4.4: cada operação efetiva incrementa a versão e é registrada, em ordem, na
     `ScheduleChange` com quem/quando; a **granularidade de armazenamento** (uma linha por operação ou
     por lote) continua lacuna da 4.4 (doc §6).
-12. **ADR 4.1.0001:79** (*"the server refuses the mutation and returns the current state"*):
+12. **ADR 4.1.0001 › "the server refuses the mutation and returns the current state"** (*"the server refuses the mutation and returns the current state"*):
     `ScheduleVersionConflictError` carrega a versão atual; o "estado atual" chega pela releitura
     (`get_schedule`) que o cliente faz — a 4.5 decide se o corpo do 409 já a inclui.
-13. **ADR 4.2.0001:10 / doc §3.6.7** (a marca `function_exception` como "registro do aceite"): nesta
+13. **ADR 4.2.0001 › "evaluated against the employee record's functions at evaluation time" / doc §3.6.7** (a marca `function_exception` como "registro do aceite"): nesta
     Stage a marca significa "função não detida **no ato de alocar**" e nasce mesmo com a política
     desabilitada (§7 D-FEXC); o **aceite** é o que vai em `ScheduleChange.acknowledged`. Marca não
     implica aceite — aviso à 4.5/8.1.
@@ -741,7 +741,7 @@ Nenhuma bloqueante. Findings com Stage candidata:
 
 - edição da config de validação/calendário: o resultado do Step 4 promete "bloquear/avisar
   configurável" (roadmap, Step 4) e nenhum bloco tem o use case de escrita — a 4.5 é só borda
-  HTTP, e a permissão da config tenant-wide é lacuna dela (ADR 4.1.0004:79). Candidata: alargar a
+  HTTP, e a permissão da config tenant-wide é lacuna dela (ADR 4.1.0004 › "Permission names (VIEW_SCHEDULE, MANAGE_SCHEDULE, VIEW_OWN_SCHEDULE, …)"). Candidata: alargar a
   4.5 ou Stage própria antes do fechamento do Step 4. Requisitos: violação pré-existente por config
   alterada; mudar o dia de início deixa 1–6 dias sem escala possível (períodos de 7 dias alinhados
   e disjuntos) e corte mais tarde cria janela sem período;

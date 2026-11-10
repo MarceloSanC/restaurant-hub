@@ -31,13 +31,13 @@ here as sub-decisions (f) and (g) because each adds a row to the same policy tab
 
 Forces:
 
-- `overview.md` §3 (line 43) lists the validations with an open "etc." — "sobreposição de
+- `overview.md` §3 › "Validações parametrizáveis por restaurante" lists the validations with an open "etc." — "sobreposição de
   alocação, descanso entre jornadas, tetos de horas **etc.**" — in **block or warn** mode, live,
   with conscious acceptance. `roadmap.md` §Stage 4.2 › "Descrição humana", `arquivos_a_criar` closes the list at four:
   overlap, rest between shifts, daily/weekly cap, contracted workload.
 - `workforce.md` §1/§3.6 and [ADR 3.1.0001](./3_1_0001-workforce-gate-modeling-decisions.md)
   treat **allocation × unavailability** as "validação do Step 4" — it is not one of the four.
-- `overview.md` §6 (line 111): **labour law is not hard-coded**; every legal value is a default
+- `overview.md` §6 › "Regras trabalhistas (CLT) não são hard-coded": **labour law is not hard-coded**; every legal value is a default
   of a per-restaurant parameter, because the collective agreement (CCT) of each restaurant's
   territorial base may change it (CF art. 7º XIII; CLT art. 611-A). The product embeds no CCT.
 - The external-sources pass (2026-09-13) verified, on the Planalto consolidated text, the legal
@@ -47,7 +47,7 @@ Forces:
   compensation/hours bank — CLT 59 §§ 2º/5º/6º).
 - Kickoff decision #11 models the "extra period" as a **classification** ("counts or not toward
   the contracted workload") without money, with the real effect in 4.x; the code
-  (`workload_profile.py` 35–39) places the classification on the **allocation**. Its default and
+  (`workload_profile.py` › `OnDemand`) places the classification on the **allocation**. Its default and
   the direction of the workload policy were open.
 - The skeptic review (finding #2) noted that the same person may hold N employee records in N
   units (`workforce.md` §3.1) while the legal limits belong to the employee vis-à-vis the
@@ -146,7 +146,7 @@ recusado, avisado ou livre?"): it is a policy, and the answer is *avisado*.
 
 ### (e) The subject of every policy is the employee record per unit
 
-Anchored in "Unidades não compartilham funcionários (não se enxergam)" (`overview.md` 37) and
+Anchored in "Unidades não compartilham funcionários (não se enxergam)" (`overview.md` §3 › "Unidades não compartilham funcionários") and
 the single-unit pilot (ASSUM-4). **Declared v1 limit:** the same person copied to two units has
 hours and rest evaluated **per record**, not summed across units, although the legal limits are
 per employee. Evaluating the **person** across units is an evolution conditioned on the
@@ -198,7 +198,7 @@ enters as a new strategy in the same protocol, still configurable per `overview.
   2026-09-26: covering a shift with one extra person is a normal restaurant act; forcing the
   manager to raise `N` first turns the demand into paperwork.
 - **J (over-coverage) — Allow silently.** *Rejected:* the surplus would be invisible, and
-  coverage — the metric the hub reports (`overview.md` 46) — would silently exceed the plan
+  coverage — the metric the hub reports (`overview.md` §3 › "métricas de cobertura da demanda") — would silently exceed the plan
   with no acknowledgement in the audit trail.
 - **K (over-coverage) — Auto-raise `N` on acknowledgement.** *Rejected:* it would rewrite the
   plan to match the exception, losing the record of what was actually demanded (the same
@@ -251,13 +251,13 @@ enters as a new strategy in the same protocol, still configurable per `overview.
   ("hard blocking is unavailability's job"); [ADR 3.2.0003](./3_2_0003-copy-employee-full-duplication.md)
   (copy carries unavailabilities); [ADR 4.1.0002](./4_1_0002-weekly-period-operational-day-and-allocation-hours.md)
   (operational day, `hours(a)`).
-- [`overview.md`](../overview.md) — §3 lines 37, 39, 43, 46, 57; §3 ASSUM-4 (70); §6 line 111;
-  §7 line 115.
+- [`overview.md`](../overview.md) — §3 › "Unidades não compartilham funcionários", "cobre férias/atestados na v1", "Validações parametrizáveis por restaurante", "métricas de cobertura da demanda", "Folha de pagamento / valorização monetária de horas extras", "ASSUM-4";
+  §6 › "Regras trabalhistas (CLT) não são hard-coded"; §7 › "estratégias plugáveis".
 - [`roadmap.md`](../roadmap.md) — §Stage 4.2; Step 5 (§Stage 5.1 › `contratos_consumidos`).
 - [`docs/domain/staff/workforce.md`](../domain/staff/workforce.md) §1, §2, §3.1, §3.3, §3.4, §3.6.
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §3.4,
   §3.6, §6.
-- `src/restaurant_hub/features/staff/domain/value_objects/workload_profile.py` lines 35–39;
+- `src/restaurant_hub/features/staff/domain/value_objects/workload_profile.py` › `OnDemand`;
   kickoff decision #11 (project memory).
 - Sponsor decisions F4 (2026-09-13) and F9 (2026-09-14) — session record `gate-decisions.md`.
 - External (primary; verified on the Planalto consolidated text by direct download on

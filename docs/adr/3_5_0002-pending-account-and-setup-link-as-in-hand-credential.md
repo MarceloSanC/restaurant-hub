@@ -77,7 +77,7 @@ returns the composed link (`{base_url}/definir-senha?token=<value>`);
 `SendInvitationUseCase` composes the message and sends it. The link format and
 the message text move to **one** shared helper
 (`identity/application/use_cases/_invitation.py`). The format lives today in
-**two** modules — `invite_user.py:209` and `request_password_reset.py:147` —
+**two** modules — `invite_user.py` › `InviteUserUseCase._enviar_convite` and `request_password_reset.py` › `RequestPasswordResetUseCase._enviar` —
 and both switch to the helper (two lines each; constructors, check order,
 behaviour and tests stay intact). Recomposing `InviteUserUseCase` over the two new use
 cases is **not** done: it is not needed for the DoD, it would change a

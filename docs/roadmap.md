@@ -218,7 +218,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#137](https://github.com/MarceloSanC/restaurant-hub/issues/137) | Identificadores em português no kernel compartilhado | shared | infrastructure | done | #105 |
 | [#139](https://github.com/MarceloSanC/restaurant-hub/issues/139) | `develop` vermelho — detector do `also_copy` toma fixture sob `tmp_path` por citação | shared | tooling + tests | done | #84, #87 |
 | [#143](https://github.com/MarceloSanC/restaurant-hub/issues/143) | `worktree-new`/`worktree-rm` — encoding do git, raiz do checkout principal e issue-first sem `gh` | shared | tooling | done | #91 |
-| [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | open | #116 |
+| [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | done | #116 |
 | [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | done | #132 |
 | [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | open | #117 |
 | [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | open | #65 |
@@ -232,6 +232,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#170](https://github.com/MarceloSanC/restaurant-hub/issues/170) | Falha de envio do convite vai ao log com traceback e pode vazar destinatário e link | identity | application + adapters/inbound/http | open | #114 |
 | [#171](https://github.com/MarceloSanC/restaurant-hub/issues/171) | O piloto não pode subir com o `ConsoleSender`, que imprime o link de convite no log | shared | infrastructure + composition root | open | #114 |
 | [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
+| [#174](https://github.com/MarceloSanC/restaurant-hub/issues/174) | Citações por número de linha a `LAYOUT.md`, concepts/technicals de Stage e runbooks sem gate | shared | tooling | open | #154 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -962,9 +963,9 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 >   paginação), 3.4.0005 (cópia repetida como limite declarado).
 > - **Nota (2026-08-17): o 5º bullet do `definition_of_done` acima foi reescrito
 >   junto com o CA20 do concept.** A Fase 3B mediu que duas asserções de
->   `tests/unit/features/identity/domain/test_role_permission.py` mudam
->   necessariamente — a linha 27 assere o conjunto **exato** dos valores do enum
->   `Permission`, e as linhas 66–78 o conjunto **exato** de permissões por papel.
+>   `tests/unit/features/identity/domain/test_role_permission.py` mudam necessariamente
+>   — `test_permission_e_conjunto_fechado` assere o conjunto **exato** dos valores do enum `Permission`,
+>   e `test_conteudo_exato_do_mapa_por_papel` o conjunto **exato** de permissões por papel.
 >   A redação anterior (*"suite de identity passa sem alteracao de assercao"*) tem
 >   **falso positivo para teste de fechamento**, que existe justamente para exigir
 >   atualização consciente quando o conjunto cresce legitimamente (o mecanismo que
@@ -1012,7 +1013,7 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 > - **CA20: as fixtures de fechamento de vocabulário são TRÊS, não duas.** A
 >   terceira é
 >   `test_http_dependencies.py::test_conjunto_de_permissoes_exigidas_por_papel_alvo`,
->   e ela é **derivada** do mapa de papéis (`dependencies.py:97`), logo cresce
+>   e ela é **derivada** do mapa de papéis (`dependencies.py` › `required_permissions_for_role`), logo cresce
 >   sozinha quando o vocabulário cresce. **O 5º bullet do `definition_of_done`
 >   acima continua verdadeiro** — ele fala da *categoria*, sem contagem, e foi por
 >   isso que esta Stage **não** precisou de regressão do concept; a decisão e as
@@ -1039,8 +1040,8 @@ skills_hint: [hex-arch-python, composition-root, repository-pattern, pytest-with
 >   travado o caso do `owner` por teste.
 > - **Errata no ADR 3.4.0001** (o ADR segue `accepted`; ver a sua seção
 >   `## Errata`): duas citações de `CA14` para a propriedade "zero
->   `ignore_imports`" eram **CA13**, e o ponteiro `composition_root.py:185-188`
->   passou a `:300-305`. O erro entrou no commit do corte, que renumerou os
+>   `ignore_imports`" eram **CA13**, e o ponteiro por linha a `composition_root.py`
+>   tinha ficado obsoleto (a errata registra o par de números). O erro entrou no commit do corte, que renumerou os
 >   critérios do concept sem reconciliar os ponteiros do ADR.
 > - **Quatro `[finding]` novos escalados**, todos com Stage candidata na §7 do
 >   `technical.md`: (1) **3.6** — o router **não pode** inferir "tenant-wide" de
@@ -1100,7 +1101,7 @@ skills_hint: [fastapi-thin-adapter, composition-root]
 >   classe→status, `UnavailabilityNotFoundError` = **422** e não 404, 409 reservado a
 >   conflito com estado gravado), **3.4.0004** (sem paginação; `L-ORD` fica cursor
 >   preparado; o antídoto de uma linha da regex `_ORDER_BY` de
->   `test_staff_conduct.py:194` é aplicado por quem acrescentar `LIMIT`/`OFFSET`) e
+>   `test_staff_conduct.py` › `_ORDER_BY` é aplicado por quem acrescentar `LIMIT`/`OFFSET`) e
 >   **3.4.0005** (cópia repetida segue limite declarado — nem guarda por nome, que
 >   recusaria homônimos legítimos, nem campo informativo, que mediria homonímia
 >   enquanto o nome sugere duplicata).

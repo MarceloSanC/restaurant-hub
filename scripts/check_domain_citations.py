@@ -1,12 +1,13 @@
-"""Guard: doc cita um doc de domínio (`docs/domain/**`) por âncora estável, nunca por linha.
+"""Guard: doc cita um doc de domínio (`docs/domain/**`) ou o overview por âncora, nunca por linha.
 
 Uso:
     python scripts/check_domain_citations.py
     python scripts/check_domain_citations.py --repo .
 
-Issue #116, ADR 0.0.0017. Ligado em `make docs-check`. Irmão de
-`check_roadmap_citations.py` (issue #79, ADR 0.0.0012): a mesma ideia, com a
-gramática de âncora dos docs de domínio.
+Issue #116, ADR 0.0.0017; o `docs/overview.md` entrou na issue #154 (ADR 0.0.0019)
+porque tem a mesma gramática — títulos numerados (`## 3. Escopo`) e regras em prosa.
+Ligado em `make docs-check`. Irmão de `check_roadmap_citations.py` (issue #79, ADR
+0.0.0012): a mesma ideia, com a gramática de âncora dos docs de domínio.
 
 ---
 
@@ -23,9 +24,11 @@ concept da 4.1.
     `shift-scheduling.md` §3.4 › "não ocupa duas vagas da mesma demanda"
     `workforce.md` §3.1, §3.8
     `shift-scheduling.md` §6 › "Schedule como raiz do agregado"
+    `overview.md` §3 › "salvar = publicar"; §9 › "Turno: faixa de horário"
 
-Referência: o nome do arquivo de um doc de `docs/domain/` (`<nome>.md`, com ou
-sem crase/link, ou o caminho), ou o nome sem `.md` seguido de ` §` (`workforce §3.7`).
+Referência: o nome do arquivo de um doc de `docs/domain/` ou do `docs/overview.md`
+(`<nome>.md`, com ou sem crase/link, ou o caminho), ou o nome sem `.md` seguido
+de ` §` (`workforce §3.7`, `overview §6`).
 Seção: `§N`, `§N.M`, `§N.M.K` (título numerado do doc) ou `§"<título>"`. Rótulo,
 depois de ` › ` e separado por vírgula: `"<trecho>"` — texto da seção, comparado
 sem `*` nem crase e com o espaço normalizado — ou `` `<literal>` `` (cru).
@@ -44,6 +47,11 @@ sem `*` nem crase e com o espaço normalizado — ou `` `<literal>` `` (cru).
 (`doc §2, linha 107`, com o doc implícito no parágrafo) é invisível — por isso a
 forma da CONVENTIONS nomeia o doc em toda âncora com rótulo.
 
+**Exemplo não é citação.** O nome do doc num literal que continua depois dele
+com espaço (`` `overview.md 46` ``) é a forma proibida mencionada como exemplo —
+os ADRs 0.0.0012 e 0.0.0017 a usam assim — e não é conferido. `` `x.md:171` `` e
+`` `x.md` 171 `` continuam sendo linha.
+
 **Fora do escopo:** a §7 dos `technical.md` (do título `## 7.` ao fim) — é
 registro histórico e conta remapeamentos passados por número.
 
@@ -60,6 +68,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DOMAIN_DIR = Path("docs") / "domain"
+# Alvos fixos com a gramática dos docs de domínio (issue #154, ADR 0.0.0019).
+ALVOS_FIXOS = (Path("docs") / "overview.md",)
 
 # Onde moram os docs que citam. A raiz entra só no primeiro nível
 # (CLAUDE.md, README.md); `.venv`, `htmlcov` e afins nunca são varridos.
@@ -74,7 +84,7 @@ _SECAO_7 = re.compile(r"^## 7\.", re.MULTILINE)
 # célula de tabela, parágrafo ou outra fonte. `;` não termina — separa âncoras —,
 # nem o ponto de `l. 166`.
 _FIM_DO_TRECHO = re.compile(
-    r"\||(?<!\bl)\.(?=[\s*_)\]]|$)|\n\s*\n"
+    r"\||(?<!\bl)(?<!\bll)\.(?=[\s*_)\]]|$)|\n\s*\n"
     r"|`?[\w./-]+\.(?:md|py|toml|yml|yaml|ini|cfg)`?|`\.[\w-]+`"
     r"|\bADRs?\s+\d|\boverview\b|\bCLT\b|\b(?:concept|technical)\b"
 )
@@ -93,6 +103,9 @@ _NEUTROS = (
     re.compile(r"https?://\S+"),  # URL
     re.compile(r"\b(?:HTTP|status|responde|devolve|retorna|returns?)\s+\d{3}\b", re.IGNORECASE),
     re.compile(r"\d+(?:\.\d+)+(?:\s*[–-]\s*\d+)?"),  # número de seção/versão/ADR, com faixa
+    re.compile(r"\b\d{1,2}:\d{2}\b"),  # hora (08:00)
+    re.compile(r"\b[^\W\d_]{3,9}/\d{4}\b"),  # mês/ano (jul/2026)
+    re.compile(r"\b(?:PEP|RFC)\s+\d+"),  # PEP 615, RFC 9110
 )
 # Número de linha: 2 a 4 dígitos fechando a citação — seguido de pontuação, fim,
 # outra faixa/lista ou parêntese. Número seguido de palavra ("16 ADRs") é
@@ -102,13 +115,13 @@ _NUMERO_DE_LINHA = re.compile(r"(?<![\w])\d{2,4}(?=\s*(?:[,;:)/–\]-]|$|\(|(?:e
 # fora de texto citado (`*"…line 1086…"*` é citação, não ponteiro).
 # `L171` (estilo GitHub, sem o `#`), `ln 171` e `line ~171` também.
 _LINHA_EXPLICITA = re.compile(
-    r"\b(?:linhas?|lines?|l\.|ln)\s*~?\d{2,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
+    r"\b(?:linhas?|lines?|ll?\.|ln)\s*~?\d{2,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
 )
 # Fragmento de linha no alvo de um link (`...md#L171`, `...md#L171-L175`).
 _FRAGMENTO_DE_LINHA = re.compile(r"#L\d+")
 # Número logo depois da referência (`x.md` 171, `x.md:171`) é linha sempre.
 _NUMERO_IMEDIATO = re.compile(
-    r"^\s*:?\s*\(?\s*(?:(?:linhas?|lines?|l\.)\s*)?\d{2,4}\b", re.IGNORECASE
+    r"^\s*:?\s*\(?\s*(?:(?:linhas?|lines?|ll?\.)\s*)?\d{2,4}\b", re.IGNORECASE
 )
 
 # --- Regra 2: âncora ----------------------------------------------------------
@@ -211,10 +224,14 @@ class Doc:
 
 
 def docs_de_dominio(repo_root: Path) -> tuple[dict[str, Doc], list[str]]:
-    """`nome sem .md` → doc; e os nomes repetidos (que tornariam a referência ambígua)."""
+    """`nome sem .md` → doc (domínio e alvos fixos); e os nomes repetidos (referência ambígua)."""
     docs: dict[str, Doc] = {}
     repetidos: list[str] = []
-    for caminho in sorted((repo_root / DOMAIN_DIR).rglob("*.md")):
+    dominio = sorted((repo_root / DOMAIN_DIR).rglob("*.md"))
+    if not dominio:
+        return docs, repetidos
+    fixos = [repo_root / alvo for alvo in ALVOS_FIXOS if (repo_root / alvo).is_file()]
+    for caminho in [*dominio, *fixos]:
         nome = caminho.stem
         rel = caminho.relative_to(repo_root).as_posix()
         if nome in docs:
@@ -225,11 +242,31 @@ def docs_de_dominio(repo_root: Path) -> tuple[dict[str, Doc], list[str]]:
 
 
 def regex_de_referencia(nomes: list[str]) -> re.Pattern[str]:
-    """Referência a doc de domínio: `<nome>.md` (com crase e link opcionais) ou `<nome> §`."""
+    """Referência a doc de domínio: `<nome>.md` (com crase e link opcionais) ou `<nome> §`.
+
+    O nome sem `.md` seguido de número (`overview 44/137`) também é referência: é a citação
+    por linha com o nome curto, que sem isto passaria invisível. O nome casa sem distinguir
+    maiúscula (`Overview 44` começando a frase).
+    """
     alternativas = "|".join(re.escape(n) for n in sorted(nomes, key=len, reverse=True))
     return re.compile(
-        rf"(?<![\w-])(?P<nome>{alternativas})"
-        r"(?:\.md(?P<fragmento>#L\d+)?`?(?:\]\((?P<alvo>[^)\s]*)\))?|(?= §))"
+        rf"(?<![\w-])(?P<nome>(?i:{alternativas}))"
+        r"(?:\.md(?P<fragmento>#L\d+)?`?(?:\]\((?P<alvo>[^)\s]*)\))?|(?= §)|(?=[ \t]+\d{2,4}\b))"
+    )
+
+
+# Depois do nome, o literal continua com espaço: `` `overview.md 46` `` é exemplo.
+_RESTO_DO_LITERAL = re.compile(r"[ \t][^`\n]*`")
+
+
+def _e_exemplo_em_literal(texto: str, ref: re.Match[str]) -> bool:
+    """A referência está num literal que continua depois do nome (a forma citada como exemplo)."""
+    inicio_da_linha = texto.rfind("\n", 0, ref.start()) + 1
+    dentro = texto.count("`", inicio_da_linha, ref.start()) % 2 == 1
+    return (
+        dentro
+        and not ref.group(0).endswith("`")
+        and _RESTO_DO_LITERAL.match(texto, ref.end()) is not None
     )
 
 
@@ -241,7 +278,13 @@ def _trecho(texto: str, fim_da_ref: int) -> tuple[str, str]:
     """(resto bruto, trecho até o fim da citação) depois de uma referência."""
     resto = texto[fim_da_ref : fim_da_ref + _MAX_TRECHO]
     fim = _FIM_DO_TRECHO.search(resto)
-    return resto, resto[: fim.start()] if fim else resto
+    if fim:
+        return resto, resto[: fim.start()]
+    if fim_da_ref + _MAX_TRECHO < len(texto):
+        # Janela cortada no meio da frase: a última palavra pode continuar ("404 for"),
+        # e o `$` do número de linha a leria como fim de citação.
+        return resto, resto[: resto.rstrip().rfind(" ") + 1]
+    return resto, resto
 
 
 def _tem_numero_de_linha(resto: str, trecho: str) -> bool:
@@ -274,8 +317,11 @@ def cadeia_de_ancoras(texto: str, inicio: int) -> list[re.Match[str]]:
 def problemas_no_texto(texto: str, docs: dict[str, Doc]) -> list[tuple[int, str]]:
     """(linha, motivo) de cada citação por linha e de cada âncora que não resolve."""
     achados: list[tuple[int, str]] = []
+    por_nome = {nome.lower(): doc for nome, doc in docs.items()}
     for ref in regex_de_referencia(list(docs)).finditer(texto):
-        doc = docs[ref.group("nome")]
+        if _e_exemplo_em_literal(texto, ref):
+            continue
+        doc = por_nome[ref.group("nome").lower()]
         linha = _linha_de(texto, ref.start())
         resto, trecho = _trecho(texto, ref.end())
         # `#L171` no alvo do link (`[`x.md`](../x.md#L171)`) é linha: o link inteiro é
@@ -340,8 +386,8 @@ def main() -> int:
     """Varre os docs e reprova citação por linha ou âncora quebrada a um doc de domínio."""
     parser = argparse.ArgumentParser(
         description=(
-            "Reprova citação a docs/domain/** por número de linha ou por âncora que não resolve"
-            " (issue #116)"
+            "Reprova citação a docs/domain/** ou ao overview.md por número de linha ou por"
+            " âncora que não resolve (issues #116 e #154)"
         )
     )
     parser.add_argument("--repo", default=".", help="Raiz do repositório (padrão: .)")
@@ -353,14 +399,18 @@ def main() -> int:
         return 2
     if achados:
         print(
-            f"check_domain_citations: {len(achados)} problema(s). Cite o doc de domínio por âncora "
-            '(`shift-scheduling.md` §3.4 › "trecho") — CONVENTIONS §5, ADR 0.0.0017:\n',
+            f"check_domain_citations: {len(achados)} problema(s). Cite o doc de domínio ou o"
+            ' overview por âncora (`shift-scheduling.md` §3.4 › "trecho") — CONVENTIONS §5,'
+            " ADRs 0.0.0017 e 0.0.0019:\n",
             file=sys.stderr,
         )
         for achado in achados:
             print(f"  {achado}", file=sys.stderr)
         return 1
-    print("check_domain_citations: toda citação a doc de domínio é por âncora, e todas resolvem.")
+    print(
+        "check_domain_citations: toda citação a doc de domínio ou ao overview é por âncora,"
+        " e todas resolvem."
+    )
     return 0
 
 

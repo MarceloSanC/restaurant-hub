@@ -38,14 +38,14 @@ sponsor** (Marcelo, 2026-09-13).
 
 Forces:
 
-- `overview.md` §3 fixes "escala com período configurável (default **semanal**)" (line 41) and
+- `overview.md` §3 › "Escala com período configurável (default semanal)" fixes "escala com período configurável (default **semanal**)" and
   the glossary example "qua = 1 cozinheiro **16h–00h**" — a shift that ends at midnight is listed
   under Wednesday. Nothing ratified says what happens to a shift that ends at 02:00, nor on which
   day the week begins.
 - Three policies sum hours (daily cap, weekly cap, contracted workload) and the hub reports
-  "horas contratadas × escaladas × cumpridas" (`overview.md` 46) — one number, so one counting
+  "horas contratadas × escaladas × cumpridas" (`overview.md` §3 › "horas contratadas × escaladas × cumpridas") — one number, so one counting
   rule. CLT art. 71 § 2º says rest breaks are not counted in the working time; art. 73 § 1º says a
-  night hour counts as 52 min 30 s. The product does not pay hours (`overview.md` 57), so this is
+  night hour counts as 52 min 30 s. The product does not pay hours (`overview.md` §3 › "Folha de pagamento / valorização monetária de horas extras"), so this is
   counting for validation and reporting only.
 - The skeptic review of the draft (finding #3) rejected "the range belongs to the civil day in
   which it starts" as an unanchored extension of the 16h–00h example, and (finding #1) showed
@@ -172,8 +172,8 @@ without knowing which day an allocation belongs to and how many hours it counts.
   `[start, end)` semantics that scheduling assumes — decision (i)); [ADR 3.1.0005](./3_1_0005-naive-wall-clock-unavailability-datetimes.md)
   (wall-clock in the unit's timezone); [ADR 4.1.0003](./4_1_0003-v1-validation-policy-set-defaults-and-modes.md)
   (policies that consume the operational day and `hours(a)`).
-- [`overview.md`](../overview.md) — §3 line 41 (configurable period, default weekly; 16h–00h
-  example), line 46 (one hours number), line 57 (no money); §6 line 111 (CLT not hard-coded).
+- [`overview.md`](../overview.md) — §3 › "Escala com período configurável (default semanal)", "qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h",
+  "horas contratadas × escaladas × cumpridas", "Folha de pagamento / valorização monetária de horas extras" (configurable period, default weekly; 16h–00h example; one hours number; no money); §6 › "Regras trabalhistas (CLT) não são hard-coded" (CLT not hard-coded).
 - [`roadmap.md`](../roadmap.md) — §Stage 4.1 › "Descrição humana", `contratos_introduzidos` (`SchedulePeriod`, `TimeRange`), Stage 4.2
   (policies that sum hours).
 - [`docs/domain/scheduling/shift-scheduling.md`](../domain/scheduling/shift-scheduling.md) §2,

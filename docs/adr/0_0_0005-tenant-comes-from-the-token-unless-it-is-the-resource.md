@@ -14,7 +14,7 @@ bounded_context: transversal
 
 # ADR 0.0.0005 — The tenant comes from the token unless the context owns it as a resource
 
-> ⚠️ **Errata (2026-11-09):** §Decision, the clause on where `identity` resolves the tenant — the router local `ator` was renamed to `actor` in issue #136 (pure rename, no behaviour change), so the read is now `actor.claims.tenant_id`, at `identity/adapters/inbound/http/router.py:408` and `:458` (the cited `:385`/`:435` had already drifted). Pointer only; no decision content changes — ver issue #136
+> ⚠️ **Errata (2026-11-09):** §Decision, the clause on where `identity` resolves the tenant — the router local `ator` was renamed to `actor` in issue #136 (pure rename, no behaviour change), so the read is now `actor.claims.tenant_id`, at `identity/adapters/inbound/http/router.py` › `create_user` and `invite_user` (the cited `:385`/`:435` had already drifted). Pointer only; no decision content changes — ver issue #136
 
 ## Status
 
@@ -172,7 +172,7 @@ Measured against both bounded contexts, route by route:
   `bc-independence` proíbe staff de conhecer `Restaurant` —, e é essa a diferença
   principiada entre os dois BCs, não uma preferência de estilo.
 - **O ponto de resolução não é "o composition root" em toda parte.** `identity`
-  lê `ator.claims.tenant_id` **no próprio router** (`router.py:385` e `:435`), e
+  lê `ator.claims.tenant_id` **no próprio router** (`router.py` › `create_user` e `invite_user`), e
   isso está certo: o token é dela, o ator não lhe é opaco, e o router é o seu
   *trusted layer*. Em `staff` o mesmo lugar é impossível por desenho — o port
   declara `Actor = object` justamente para que staff não leia atributo de ator —,

@@ -30,14 +30,14 @@ and shipped, and the Stage 3.4 test audit measured it to be **false**. There are
   so step 4 of `AuthorizeActionUseCase` waives the unit requirement
   (ADR 3.4.0008);
 - **by role** — `_UNIT_SCOPE_BYPASS_ROLES = {OWNER, PLATFORM_ADMIN}`
-  (`user.py:45`), and step 4 also waives the requirement when
-  `user.bypasses_unit_scope()` is true (`authorize_action.py:99`). An `owner`
+  (`user.py` › `_UNIT_SCOPE_BYPASS_ROLES`), and step 4 also waives the requirement when
+  `user.bypasses_unit_scope()` is true (`authorize_action.py` › `AuthorizeActionUseCase.execute`). An `owner`
   exercising `manage_staff` **without naming a unit** is authorized and comes back
   with `unit_id=None` — over a permission that is unit-scoped.
 
 **What the scope actually carries, measured before this ADR was written.**
 `AuthorizeActionUseCase` returns `scope_unit_id=command.unit_id`
-(`authorize_action.py:113`), and the production translator passes it through. The
+(`authorize_action.py` › `AuthorizeActionUseCase.execute`), and the production translator passes it through. The
 granted scope therefore **echoes the requested unit**: `None` appears **exactly
 when the caller omitted the unit**, for every role. An `owner` that names unit A
 gets `"A"` back, like anyone else; the owner bypass acts on step 5 (visibility),

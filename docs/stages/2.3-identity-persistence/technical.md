@@ -169,7 +169,7 @@ docs/roadmap.md                                  (M — no fechamento, commit `[
 - **Detalhes técnicos:**
   - O cabeçalho do `.importlinter` **exige** que dependência nova entre nas listas de
     pureza no mesmo commit (4 listas com pacotes externos).
-  - **`tests/unit/shared/test_settings.py:26` faz
+  - **`tests/unit/shared/test_settings.py` › `test_defaults_permitem_iniciar_sem_env` faz
     `assert settings.database_url.startswith("postgresql://")`** e passa a falhar com
     o esquema novo. Ajustar para `postgresql+psycopg://`. Sem isso a Task fica
     vermelha — e o `make check` de uma Task posterior é que acusaria.
@@ -211,7 +211,7 @@ docs/roadmap.md                                  (M — no fechamento, commit `[
     `is_active` — concept I9).
   - **Exceção declarada ao critério 4 de Task Atômica** (não misturar port com
     adapter do port): o fake **é** implementação do port, mas
-    `tests/fakes/.../in_memory_session_repository.py:60` declara
+    `tests/fakes/.../in_memory_session_repository.py` › `_conforms` declara
     `_conforms: SessionRepository = InMemorySessionRepository()` e o `make typecheck`
     roda `mypy src/ tests/fakes/`. Declarar `purge_expired` no `Protocol` sem
     implementá-lo no fake **quebra o próprio check desta Task**. O acoplamento é
@@ -550,7 +550,7 @@ docs/roadmap.md                                  (M — no fechamento, commit `[
   - `build_engine` passa `connect_args={"options": "-c timezone=UTC"}` (concept
     Decisão 6 — cinto e suspensório com o `.astimezone(UTC)` do mapper).
   - **`.importlinter` precisa de `ignore_imports` no contrato `shared-independence`.**
-    Hoje `shared/infrastructure/http/app.py:22` já importa `composition_root`; quando
+    Hoje `shared/infrastructure/http/app.py` › "from restaurant_hub.composition_root import" já importa `composition_root`; quando
     o composition_root passar a importar `features.identity.adapters.out.postgres`, a
     cadeia `shared → composition_root → features` viola o contrato e `make
     import-check` fica **vermelho**. O próprio cabeçalho do `.importlinter` previu

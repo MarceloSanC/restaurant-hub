@@ -85,7 +85,7 @@ depends_on: [3.4-staff-access-scope]
 ### Fora do escopo (explicitamente)
 
 - **Paginação** das duas listagens — ADR 3.4.0004, consumido como decidido; a
-  regex `_ORDER_BY` de `test_staff_conduct.py:194` continua correta e o antídoto
+  regex `_ORDER_BY` de `test_staff_conduct.py` › `_ORDER_BY` continua correta e o antídoto
   segue escalado junto com a paginação.
 - **Guarda de duplicidade na cópia** — ADR 3.4.0005, consumido como decidido.
 - **Leitura de funcionário por id** — `non_goals` do bloco 3.6 do roadmap; a
@@ -188,7 +188,7 @@ fechados** — e é por isso que esta Stage pode existir sem reabri-los:
 - **Os handlers genéricos de `shared` continuam registrados** e continuam sendo
   rede de segurança, não caminho principal.
 - **O handler de identity é registrado sobre a app inteira**
-  (`@app.exception_handler(IdentityError)`, `error_handlers.py:171-176`), e
+  (`@app.exception_handler(IdentityError)`, `error_handlers.py` › `register_identity_error_handlers`), e
   Starlette resolve por `type(exc).__mro__`. Logo um `IdentityError` levantado
   dentro de uma rota de **staff** já sai com o corpo constante de identity, sem
   nada novo. É o que sustenta §5.8.
@@ -452,8 +452,8 @@ mutações.
 **5.4 — O `unit_id` de todo command é o da URL, já autorizado; o router não lê
 `AuthorizedScope.unit_id`.**
 
-**O mecanismo real, medido** (`authorize_action.py:113` —
-`scope_unit_id=command.unit_id`; `composition_root.py`, o tradutor repassa):
+**O mecanismo real, medido** (`authorize_action.py` › `AuthorizeActionUseCase.execute`
+— `scope_unit_id=command.unit_id`; `composition_root.py`, o tradutor repassa):
 o escopo devolvido **ecoa a unidade pedida**. Logo `unit_id is None` acontece
 **exatamente quando o chamador omitiu a unidade** — e não por papel. Um `owner`
 que declara a unidade A recebe `unit_id="A"` como qualquer outro papel; o bypass
@@ -526,7 +526,7 @@ são falhas transitórias de infraestrutura, e 500 é a resposta correta para el
 
 **5.11 — A ordem das duas listagens é a do port** (`L-ORD`), e esta Stage não a
 reordena nem a fatia. Sem `LIMIT`/`OFFSET`, a regex `_ORDER_BY` de
-`test_staff_conduct.py:194` continua correta (ADR 3.4.0004).
+`test_staff_conduct.py` › `_ORDER_BY` continua correta (ADR 3.4.0004).
 
 **5.12 — Toda resposta de escrita devolve o estado resultante**, exceto as duas
 remoções definitivas (R04, R15), que devolvem 204. Com o endereço de unidade
@@ -696,7 +696,7 @@ delas contradiziam a primeira versão desta tabela.
   `tenant_id` vem de `AuthorizedScope.tenant_id`; o campo
   `AuthorizedScope.unit_id` **não é lido por nenhuma rota**.
 - **Por quê:** o escopo **ecoa** a unidade pedida
-  (`authorize_action.py:113` — `scope_unit_id=command.unit_id`), então `None` diz
+  (`authorize_action.py` › `AuthorizeActionUseCase.execute` — `scope_unit_id=command.unit_id`), então `None` diz
   apenas que **a chamada** omitiu a unidade — nunca que a **ação** é tenant-wide,
   e nunca por papel. Ler o campo (a) depende de um eco que **nenhuma lei do port
   promete**, (b) fica ambíguo em R16, onde há dois escopos, e (c) mantém viva a
@@ -710,7 +710,7 @@ delas contradiziam a primeira versão desta tabela.
   **duas** implementações a acompanhar, para uma informação que o router já tem.
 - **Fonte:** `access_guard.py` (docstring de `AuthorizedScope.unit_id`);
   `docs/stages/3.4-staff-access-scope/technical.md` §7, `[finding]` de 2026-08-18;
-  `authorize_action.py:99`; `user.py:45`.
+  `authorize_action.py` › `AuthorizeActionUseCase.execute` (`bypasses_unit_scope`); `user.py` › `_UNIT_SCOPE_BYPASS_ROLES`.
 - **ADR:** [`../../adr/3_6_0001-path-addresses-the-record-not-the-authorized-scope.md`](../../adr/3_6_0001-path-addresses-the-record-not-the-authorized-scope.md)
 
 ### D2 — Identificadores de path, query e corpo são validados na borda, antes de autorizar
@@ -913,7 +913,7 @@ Não aplicável — esta Stage não cria nem altera tabela, coluna ou migration.
   dois para `features/staff/adapters/out/identity/`. **Stage candidata:**
   `3.5-employee-login-link`.
 - **`[finding]` — dois resíduos em `identity` que o ADR 0.0.0005 nomeia e não
-  corrige.** (a) O docstring de `create_unit` (`router.py:343`) justifica o
+  corrige.** (a) O docstring de `create_unit` (`router.py` › `create_unit`) justifica o
   `restaurant_id` do path pelo seu **efeito de autorização**, que é o argumento
   **fraco** — e é o mesmo com que o ADR rejeita a Alternativa C em staff; o
   argumento que sustenta a rota é o outro (o path endereça sub-recurso de um
@@ -1257,7 +1257,7 @@ todos os papéis** e o DoD era inalcançável.
 
 **A decisão (sponsor, 2026-08-18):** opção **A** — o tradutor no
 `composition_root` preenche o `tenant_id` a partir do ator autenticado quando a
-rota não o nomeia. **Sem mudança de assinatura**: `access_guard.py:137` já declara
+rota não o nomeia. **Sem mudança de assinatura**: `access_guard.py` › `AccessGuard.authorize` já declara
 `tenant_id: str | None = None`. O inventário de rotas **permanece sem tenant no
 path**, agora por regra e não por omissão. Registrada no **ADR 0.0.0005**
 (global, `bounded_context: transversal`), com as três alternativas, os

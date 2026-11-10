@@ -154,7 +154,7 @@ independentemente pelos dois revisores do Checkpoint A:
 
 1. **`manager` e `hr` não alcançariam o catálogo.** A função de trabalho é
    tenant-scoped (`workforce.md` §3.2), então as rotas de catálogo não têm
-   unidade a declarar — e `authorize_action.py:81-83` nega quem não faz bypass
+   unidade a declarar — e `authorize_action.py` › `AuthorizeActionUseCase.execute` (passo 4) nega quem não faz bypass
    quando `unit_id is None`. Só `owner` passaria, contra o DoD.
 2. **O escopo de unidade não era enforçável na borda.** As rotas seriam
    aninhadas sob `/units/{unit_id}`, mas o `unit_id` do path é autorizado
@@ -428,7 +428,7 @@ decide o que a borda faz com eles é a 3.6.
   `in`, que é keyword Python, então o adapter não conseguiria sequer anotar o
   objeto que embrulha, e a supressão seriam **três** pares, não um. O
   composition root mantém `bc-independence` **sem nenhuma supressão**.
-- **Fonte:** `composition_root.py:24-27` e `:185-188`; `.importlinter`;
+- **Fonte:** `composition_root.py` › docstring do módulo ("Sobre o `importlib`") e `ApplicationDependencies.identity_guard`; `.importlinter`;
   LAYOUT §1, §6; roadmap §Stage 3.5.
 - **ADR:** [`../../adr/3_4_0001-staff-owned-access-guard-port.md`](../../adr/3_4_0001-staff-owned-access-guard-port.md)
 
@@ -484,7 +484,7 @@ decide o que a borda faz com eles é a 3.6.
 - **É o alicerce da issue #41**, que precisa de "gerir o catálogo" como
   capacidade de primeira classe para depois distinguir "minha unidade × todas".
 - **Fonte:** decisão do sponsor, 2026-08-12; `authorize_action.py` passo 4;
-  `user.py:45`; achados C1/S1 do Checkpoint A.
+  `user.py` › `_UNIT_SCOPE_BYPASS_ROLES`; achados C1/S1 do Checkpoint A.
 - **ADR:** [`../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md`](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)
 
 ### D6 — O corte, e por que a fronteira caiu aqui
@@ -648,8 +648,8 @@ consulta, não na estrutura.
 > de asserção; se alguma precisar mudar, a mudança não foi aditiva — é achado,
 > não ajuste"*. A Fase 3B mediu que **duas** asserções de
 > `tests/unit/features/identity/domain/test_role_permission.py` mudam
-> necessariamente: a linha 27 assere o conjunto **exato** dos valores do enum
-> `Permission`, e as linhas 66–78 parametrizam o conjunto **exato** de permissões
+> necessariamente: `test_permission_e_conjunto_fechado` assere o conjunto **exato** dos valores do enum
+> `Permission`, e `test_conteudo_exato_do_mapa_por_papel` parametriza o conjunto **exato** de permissões
 > por papel. **O critério disparou como projetado** — a sua própria cláusula
 > mandava tratar o caso como achado, e é o que ocorreu. O achado é que a
 > inferência *"asserção mudou ⟹ a mudança não foi aditiva"* tem **falso positivo

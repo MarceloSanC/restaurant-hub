@@ -46,7 +46,7 @@ Four forces collide:
   `features/identity/adapters/in/http/dependencies.py`, and `in` is a Python
   keyword: `from ...adapters.in.http.dependencies import IdentityGuard` is a
   **SyntaxError**, not an ImportError. `composition_root.py` already documents this
-  and types the object as `Any` (`identity_guard: Any`, lines 185-188).
+  and types the object as `Any` (`identity_guard: Any`, `composition_root.py` › `ApplicationDependencies.identity_guard`).
 
 A fifth force matters for security: `IdentityGuard.authorize` converts
 `UnitNotFoundError` into `UnitNotVisibleError`, which is what stops a caller from
@@ -196,7 +196,7 @@ would stay unvalidated, which is the finding this Stage inherited. Not acceptabl
 - `docs/roadmap.md` — blocks Stage 3.4 and Stage 3.5
 - `.importlinter` — contract `bc-independence`
 - `docs/LAYOUT.md` §1, §4, §5, §6, §8
-- `src/restaurant_hub/composition_root.py:24-27` (the `in` keyword) and `:300-305`
+- `src/restaurant_hub/composition_root.py` › `__doc__` (the `in` keyword) and `ApplicationDependencies.identity_guard`
   (`identity_guard: Any`)
 - ADR 2.2.0002, ADR 2.4.0001 §5, ADR 2.4.0003
 - `src/restaurant_hub/features/staff/domain/value_objects/identifiers.py`
