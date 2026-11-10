@@ -42,6 +42,7 @@ graph LR
     S23 --> S24[2.4-identity-http]
     S24 --> S25[2.5-email-invite]
     S26[2.6-identity-unit-of-work]
+    S27[2.7-identity-application-authorization]
   end
   subgraph Step3[Step 3 — Equipe]
     S31[3.1-staff-domain] --> S32[3.2-staff-application]
@@ -85,6 +86,7 @@ graph LR
   S74 --> S81
   S52 --> S81
   S43 --> S39
+  S37 --> S27
 ```
 
 ## Tabela de Steps
@@ -92,7 +94,7 @@ graph LR
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
-| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.6 |
+| 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.7 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.9 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
@@ -119,6 +121,7 @@ graph LR
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/inbound/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
 | `2.6-identity-unit-of-work` | Fronteira transacional nos use cases de identity que escrevem mais de uma vez | application + adapters/out/postgres + tooling | done | `3.5-employee-login-link` |
+| `2.7-identity-application-authorization` | Autorização na camada application de identity | application | draft | `3.7-application-authorization`, #170 |
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
@@ -205,7 +208,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário | staff | application + identity (fachada) | open | — |
 | [#108](https://github.com/MarceloSanC/restaurant-hub/issues/108) | Remoção concorrente com R17 não pode apagar registro já vinculado (conta órfã) | staff | application + adapters/out | done | #68 |
 | [#114](https://github.com/MarceloSanC/restaurant-hub/issues/114) | Provisionar o dono do restaurante por convite em vez de senha escolhida pela plataforma | identity | application + adapters/inbound/http | done | #67 |
-| [#115](https://github.com/MarceloSanC/restaurant-hub/issues/115) | Autorizar o próprio alvo nos use cases de identity (formato da 3.7) | identity | application | open | #67 |
+| [#115](https://github.com/MarceloSanC/restaurant-hub/issues/115) | Autorizar o próprio alvo nos use cases de identity (formato da 3.7) — decisão: ADR 0.0.0020, Stage `2.7-identity-application-authorization` | identity | docs (ADR) | done | #67 |
 | [#116](https://github.com/MarceloSanC/restaurant-hub/issues/116) | Citações por número de linha a `docs/domain/**` sem gate; válvula de `references` do `shift-scheduling.md` depende delas | shared | tooling | done | #102 |
 | [#117](https://github.com/MarceloSanC/restaurant-hub/issues/117) | Tabela consolidada de lacunas do `shift-scheduling.md` §6 sem guarda, com linhas de Stages `done` | scheduling | docs | done | #102 |
 | [#127](https://github.com/MarceloSanC/restaurant-hub/issues/127) | Comentário de `role.py` ainda proíbe toda permissão de escala ao `hr` — superado pelo ADR 4.1.0004 | identity | domain (comentário) | done | #30 |
@@ -679,6 +682,43 @@ skills_hint: [hex-arch-python, repository-pattern, pytest-with-fakes, compositio
 >   colidia com as Stages paralelas das #49 e #60.
 
 ---
+
+#### Stage 2.7 — `2.7-identity-application-authorization`
+
+**Descrição humana:** a camada application de identity passa a ser fail-closed por si nos quatro use cases que agem em nome de um ator autenticado (`ProvisionRestaurant`, `CreateUnit`, `CreateUser`, `InviteUser`): o ator entra no command e o use case declara o próprio requisito e o passa ao `AuthorizeActionUseCase` antes de qualquer outra instrução. A borda HTTP continua autorizando (defesa em profundidade) e responde igual. Hoje um driver não-HTTP que chame `CreateUserUseCase` ou `InviteUserUseCase` direto cria `platform_admin` ou `owner` em qualquer tenant. Decidida na issue #115 (ADR 0.0.0020, que traz o inventário dos 14 use cases e o motivo de cada exclusão). Espelha a 3.7 de staff e a 4.3 de scheduling. Depende da #170 só porque a #170 mexe nos mesmos arquivos (`invite_user.py`, `provision_restaurant.py`). Precede todo driver não-HTTP de identity: Stage que criar CLI, worker, console ou seed sobre identity lista esta em `depends_on`.
+
+```yaml
+stage_id: 2.7-identity-application-authorization
+bounded_context: identity
+camada_alvo: application (identity) — com o ajuste dos consumidores (router, dependencies, composition_root)
+depends_on: [3.7-application-authorization]
+arquivos_a_criar:
+  - entrada própria para o convite de dono pela plataforma (use case ou command; o concept escolhe)
+  - tests/unit/features/identity/application/test_use_cases_authorize.py (propriedade, forma e totalidade sobre use_cases/, com as exclusões nomeadas do ADR 0.0.0020)
+  - teste da cadeia real por papel, inclusive chamada direta tentando criar platform_admin
+arquivos_a_modificar:
+  - features/identity/application/dtos/commands.py (ator nos quatro commands)
+  - features/identity/application/use_cases/{provision_restaurant,create_unit,create_user,invite_user}.py
+  - required_permissions_for_role sai de adapters/inbound/http/dependencies.py para a application
+  - features/identity/adapters/inbound/http/{router,dependencies}.py; composition_root.py
+  - docstrings que dizem a questão aberta (fachada, get_account_role, provision_restaurant, identity_gateway e local_identity_gateway de staff)
+  - docs: notas append-only em ADR 2.4.0003, 0.0.0014, 0.0.0018 e 3.5.0001; docs/domain/identity/tenancy-and-access.md
+contratos_introduzidos:
+  - campo de ator nos quatro commands; requisito de acesso declarado pelo use case
+contratos_consumidos:
+  - AuthorizeActionUseCase (2.2) e a composição "não se concede o que não se detém" (ADR 2.4.0003 §2)
+definition_of_done:
+  - "todo use case de identity que age em nome de ator autoriza o alvo do próprio command antes de qualquer outra instrução de execute — provado por propriedade sobre a pasta use_cases/ com as exclusões nomeadas do ADR 0.0.0020, com as faixas HTTP inalteradas"
+non_goals:
+  - remover a autorização da borda HTTP
+  - autenticidade do ator e ator de sistema (#75) e validação de identificador fora da borda (#76)
+  - autorizar dentro da fachada de identity (ADR 3.5.0001 §1); o resíduo do provision_account é pergunta do concept
+  - seed do primeiro platform_admin (raiz de confiança; Stage que o criar)
+  - medir sob carga a dupla autorização (#78)
+complexidade_estimada: M
+gate_mode: strict
+skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin-adapter, task-ordering-hex]
+```
 
 ### Step 3 — Equipe da unidade (BC `staff`)
 
@@ -2112,6 +2152,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-11-02 | Issue **#48** promovida a **Stage `3.9-error-hierarchy`** (Step 3, BC shared; `depends_on: 3.6-staff-http, 4.3-scheduling-application`, #45): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. Supersede o ADR 2.2.0003 e pede uma propriedade sobre a hierarquia inteira dos três BCs (detector de protocolo) — o litmus de PIPELINE §4.5. Step 3 passa a `3.1 → 3.9` | Promoção da issue #48 |
 | 2026-11-02 | Stage 3.9-error-hierarchy concluída (`done`); bloco acrescido de nota datada de fechamento. Uma raiz por significado (`DomainError` × `ApplicationError`, de volta em `shared/application`), status só pelo mapa do adapter, `NotFoundError` removida, regra 11 do `check_layout.py`. ADR 3.9.0001 supera o 2.2.0003, com supersessão parcial datada em 2.3.0003, 2.4.0001 e 3.4.0002; `LAYOUT.md` §2–§4 emendado. Nenhuma faixa nem corpo muda (`tests/e2e/` só perde a sonda 404 do smoke) | Execução da Stage 3.9 — issue #48 |
 | 2026-11-02 | Issue #30 concluída (`done`): `docs/domain/identity/tenancy-and-access.md` `accepted` — backfill do gate de domínio do Step 2, consolidando os ADRs de identity sem regra nova (lacunas e achados declarados no doc). **O Step 2 permanece `in_progress`**: o gate de domínio deixa de ser pendência, mas falta a contraparte de frontend (§Escopo deste roadmap; §"Lacunas conhecidas" › "Frontend") e o relatório do Step | Execução da issue #30 |
+| 2026-11-09 | Issue #115 concluída (`done`) com a decisão no ADR 0.0.0020: identity adota o formato da 3.7 nos quatro use cases que agem em nome de ator, e a regra passa a transversal (gatilho do ADR 4.3.0002 §5). Nova **Stage `2.7-identity-application-authorization`** (Step 2, BC identity, `draft`; `depends_on: 3.7-application-authorization`, mais #170 na tabela por arquivos em comum). Step 2 passa a `2.1 → 2.7` | Execução da issue #115 |
 
 ## Próxima revisão de roadmap
 
