@@ -299,3 +299,23 @@ class InvitationNotSentError(IdentityApplicationError):
     def __init__(self, user_id: str) -> None:
         super().__init__(f"convite não enviado ao usuário {user_id!r}")
         self.user_id = user_id
+
+
+class RoleNotProvisionableError(IdentityApplicationError):
+    """Papel válido que a fachada não provisiona (Stage 2.7, ADR 2.7.0001 §Decision 5).
+
+    `IdentityFacade.provision_account` cria contas **sem autorizar** — quem autoriza é
+    o consumidor (ADR 3.5.0001 §Decision 1) — e por isso só aceita o papel que serve:
+    `employee`, o login de funcionário de staff. Um `owner`, `manager`, `hr` ou
+    `platform_admin` por esse caminho seria conta privilegiada criada sem a regra
+    "não se concede o que não se detém".
+
+    É de aplicação, e não de domínio (ADR 3.9.0001): o papel existe e é válido no
+    domínio; é esta entrada que não o aceita. Papel **desconhecido** continua sendo
+    `InvalidRoleError`, do domínio. Hoje nenhum chamador alcança esta recusa: o
+    gateway de staff passa o literal `"employee"`.
+    """
+
+    def __init__(self, role: str) -> None:
+        super().__init__(f"papel {role!r} não é provisionável por esta entrada")
+        self.role = role
