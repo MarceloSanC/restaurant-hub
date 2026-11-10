@@ -259,3 +259,21 @@ class EmployeeRepository(Protocol):
         referência em qualquer unidade impede a remoção.
         """
         ...
+
+    def units_referencing_job_function(
+        self, tenant_id: TenantId, job_function_id: JobFunctionId
+    ) -> frozenset[UnitId]:
+        """Unidades do tenant em que **algum** registro detém a função (Stage 3.11).
+
+        **L-E8 —** é a consulta que sustenta a guarda de estreitamento da
+        habilitação (ADR 3.11.0002): devolve o conjunto das unidades dos registros
+        do tenant — **ativos e inativos**, como L-E7 — cujo conjunto de funções
+        contém `job_function_id`. Sem referência ⇒ conjunto vazio; referência de
+        **outro** tenant não conta.
+
+        Devolve unidades, não registros: quem chama compara com a habilitação nova
+        e só precisa saber **onde** a função está em uso. As unidades devolvidas
+        são do tenant do chamador, já autorizado sobre o restaurante; nenhum dado
+        de funcionário atravessa.
+        """
+        ...

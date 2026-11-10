@@ -333,6 +333,33 @@ class PostgresEmployeeRepository:
             ).scalar_one()
         return bool(found)
 
+    def units_referencing_job_function(
+        self, tenant_id: TenantId, job_function_id: JobFunctionId
+    ) -> frozenset[UnitId]:
+        """L-E8 — unidades dos registros que detêm a função, **sem filtro de `active`**.
+
+        Aqui o join com `employees` é necessário — a unidade mora no registro, não
+        no vínculo —, e o par `(employee_id, tenant_id)` é o da FK composta: o join
+        não alcança registro de outro tenant nem por coincidência de id.
+        """
+        with self._engine.connect() as connection:
+            rows = connection.execute(
+                select(employees.c.unit_id)
+                .distinct()
+                .select_from(
+                    employee_job_functions.join(
+                        employees,
+                        (employees.c.id == employee_job_functions.c.employee_id)
+                        & (employees.c.tenant_id == employee_job_functions.c.tenant_id),
+                    )
+                )
+                .where(
+                    employee_job_functions.c.tenant_id == tenant_id,
+                    employee_job_functions.c.job_function_id == job_function_id,
+                )
+            ).all()
+        return frozenset(UnitId(row.unit_id) for row in rows)
+
     # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) -----
 
     def _add(self, connection: Connection, employee: Employee) -> None:
