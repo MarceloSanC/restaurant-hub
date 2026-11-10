@@ -223,7 +223,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#143](https://github.com/MarceloSanC/restaurant-hub/issues/143) | `worktree-new`/`worktree-rm` — encoding do git, raiz do checkout principal e issue-first sem `gh` | shared | tooling | done | #91 |
 | [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | done | #116 |
 | [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | done | #132 |
-| [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | open | #117 |
+| [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | done | #117 |
 | [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | open | #65 |
 | [#163](https://github.com/MarceloSanC/restaurant-hub/issues/163) | Orçamento de 1 a 3 `make check` por Stage no lugar do gate por Task | shared | tooling + docs | open | #65 |
 | [#164](https://github.com/MarceloSanC/restaurant-hub/issues/164) | Fechamento autônomo da auditoria e merge de Step sem OK humano | shared | docs + .claude | open | #65 |
@@ -237,6 +237,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
 | [#174](https://github.com/MarceloSanC/restaurant-hub/issues/174) | Citações por número de linha a `LAYOUT.md`, concepts/technicals de Stage e runbooks sem gate | shared | tooling | open | #154 |
 | [#175](https://github.com/MarceloSanC/restaurant-hub/issues/175) | Falha de envio do convite de login de funcionário vai ao log com traceback e pode vazar destinatário e link | staff + identity | application + adapters/out/identity | open | #170 |
+| [#180](https://github.com/MarceloSanC/restaurant-hub/issues/180) | Marca fechada "fechada pela Stage N.M" não é conferida contra o roadmap | shared | tooling | open | #158 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

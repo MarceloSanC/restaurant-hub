@@ -516,6 +516,142 @@ def test_tabela_real_reprova_se_uma_linha_done_perde_a_marca(tmp_path: pathlib.P
     ]
 
 
+# --- domínio: menção livre de lacuna (issue #158) -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("trecho", "mencao", "done"),
+    [
+        ("é lacuna da 4.2.", "lacuna da 4.2", " (4.2 já está done)"),
+        ("é lacuna do concept da 4.1, x.", "lacuna do concept da 4.1", " (4.1 já está done)"),
+        ("(lacuna 4.1/4.4, x)", "lacuna 4.1/4.4", " (4.1 já está done)"),
+        ("as outras lacunas da 4.1.", "lacunas da 4.1", " (4.1 já está done)"),
+        ("Lacuna da Stage 4.2:", "Lacuna da Stage 4.2", " (4.2 já está done)"),
+        ("lacuna para a 4.1/4.2", "lacuna para a 4.1/4.2", " (4.1, 4.2 já estão done)"),
+        ("lacunas da 4.4 e 4.1.", "lacunas da 4.4 e 4.1", " (4.1 já está done)"),
+        ("lacunas da 4.4, 4.2.", "lacunas da 4.4, 4.2", " (4.2 já está done)"),
+        ("lacuna (4.1)", "lacuna (4.1", " (4.1 já está done)"),
+        ("é **lacuna** da 4.1", "lacuna da 4.1", " (4.1 já está done)"),
+        ("é _lacuna da 4.1_, x", "lacuna da 4.1", " (4.1 já está done)"),  # itálico com _
+        ("é lacuna da `4.1`, x", "lacuna da 4.1", " (4.1 já está done)"),  # crase
+        ("é LACUNA DA 4.1, x", "LACUNA DA 4.1", " (4.1 já está done)"),
+        ("é lacuna aberta para a 4.1, x", "lacuna aberta para a 4.1", " (4.1 já está done)"),
+        ("é lacuna em aberto da 4.1, x", "lacuna em aberto da 4.1", " (4.1 já está done)"),
+        ("são lacunas pendentes da 4.1.", "lacunas pendentes da 4.1", " (4.1 já está done)"),
+        ("o ponto, delegado à 4.1, x", "delegado à 4.1", " (4.1 já está done)"),
+        (
+            "delegada ao concept da Stage 4.1, que a fechou",
+            "delegada ao concept da Stage 4.1",
+            " (4.1 já está done)",
+        ),
+        # a forma livre reprova mesmo fechada ao lado, e mesmo com Stage ainda draft
+        ("lacuna da 4.2, *fechada pela Stage 4.2: x*", "lacuna da 4.2", " (4.2 já está done)"),
+        ("**Nomes** são lacuna da 4.5.", "lacuna da 4.5", ""),
+    ],
+)
+def test_mencao_livre_de_lacuna_reprova(
+    tmp_path: pathlib.Path, trecho: str, mencao: str, done: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(f"\nTexto que {trecho}\n")})
+    assert gate.problemas(repo) == [
+        f'{_DOMINIO}:7: menção livre de lacuna "{mencao}"{done} — reescreva na marca'
+        ' canônica: "Lacuna para o concept da Stage N.M" se aberta,'
+        ' "Lacuna fechada pela Stage N.M (fonte)" se fechada'
+    ]
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        "era **lacuna**\n  para o concept da 4.1 (§3.2) — fechada\n",  # quebra + ênfase
+        "> o detalhe era lacuna da\n> 4.2, x\n",  # quebra dentro de citação
+        "o detalhe era lacuna\ndo concept da 4.1\n",
+        "o detalhe era lacuna da\n`4.1`, x\n",  # quebra + crase
+    ],
+)
+def test_mencao_livre_quebrada_entre_linhas_reprova_na_linha_onde_comeca(
+    tmp_path: pathlib.Path, corpo: str
+) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio("\n" * 3 + corpo)})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f"{_DOMINIO}:9: menção livre de lacuna ")
+
+
+def test_marca_canonica_quebrada_entre_linhas_ainda_e_conferida(tmp_path: pathlib.Path) -> None:
+    corpo = "\n> **Lacuna para o\n> concept da Stage 4.1:** a pergunta.\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    [achado] = gate.problemas(repo)
+    assert achado.startswith(f"{_DOMINIO}:7: lacuna para a Stage 4.1 aberta, mas 4.1 já está")
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        "é lacuna fechada pela Stage 4.2: *x (ADR 4.2.0002)*.\n",  # a forma fechada canônica
+        "era lacuna aberta deste doc — lacuna fechada pela Stage 4.1 em 2026.\n",
+        "Fecha a lacuna de cardinalidade de §3.3.\n",  # seção, não Stage
+        "trocar vínculo depois (lacuna, §5).\n",
+        "é lacuna (§3.2) do doc.\n",
+        "é lacuna de escopo do roadmap (§Stage 4.1).\n",
+        "lacuna do Step 8 e do ADR 4.1.0007.\n",
+        "lacuna 4.1.0007\n",  # id de ADR, não Stage
+        "a lacuna\n\nda 4.1 começa outro parágrafo\n",  # parágrafo novo corta a menção
+        "relacunar da 4.1; lacunaria da 4.2; metalacuna da 4.1\n",  # outra palavra
+        "lacuna para o concept da Stage 4.4: aberta, Stage draft.\n",
+        "```markdown\né lacuna da 4.1\n```\n",  # exemplo citado
+        # linha de tabela de lacunas tem a regra própria; menção dentro dela não é contada
+        "\n| Stage dona | Lacuna (§) |\n|---|---|\n"
+        "| **4.1** | lacuna da 4.1 — *fechada pela Stage 4.1 (ADR)* |\n",
+    ],
+)
+def test_mencao_que_nao_e_lacuna_livre_enderecada_passa(tmp_path: pathlib.Path, corpo: str) -> None:
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    assert gate.problemas(repo) == []
+
+
+def test_mencao_livre_e_canonica_na_mesma_linha_sao_lidas_as_duas(tmp_path: pathlib.Path) -> None:
+    corpo = "lacuna da 4.4 e Lacuna para o concept da Stage 4.1.\n"
+    repo = _repo(tmp_path, {_DOMINIO: _dominio(corpo)})
+    livre, canonica = gate.problemas(repo)
+    assert 'menção livre de lacuna "lacuna da 4.4" — ' in livre
+    assert "lacuna para a Stage 4.1 aberta, mas 4.1 já está done" in canonica
+
+
+@pytest.mark.parametrize(
+    ("rel", "fechada", "livre"),
+    [
+        (
+            "docs/domain/scheduling/shift-scheduling.md",
+            "é lacuna fechada pela Stage 4.2: *no avaliador",
+            "é lacuna da 4.2, *no avaliador",
+        ),
+        (
+            "docs/domain/staff/workforce.md",
+            "era **lacuna fechada pela Stage 3.2**\n  (§3.2), **em 2026-08-09**, pelo",
+            "era **lacuna**\n  para o concept da 3.1/3.2 (§3.2) — **fechada em 2026-08-09** pelo",
+        ),
+    ],
+)
+def test_doc_real_reprova_se_uma_lacuna_fechada_volta_a_forma_livre(
+    tmp_path: pathlib.Path, rel: str, fechada: str, livre: str
+) -> None:
+    """A mutação do critério de aceite da #158, sobre os docs e o roadmap reais."""
+    texto = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+    assert texto.count(fechada) == 1
+    repo = _repo(
+        tmp_path,
+        {
+            "docs/roadmap.md": (_REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8"),
+            rel: texto.replace(fechada, livre),
+        },
+    )
+    achados = [a for a in gate.problemas(repo) if "menção livre" in a]
+    numero = texto[: texto.index(fechada)].count("\n") + 1
+    assert len(achados) == 1
+    assert achados[0].startswith(f"{rel}:{numero}: menção livre de lacuna ")
+    assert "já est" in achados[0]  # a Stage endereçada está done
+
+
 # --- roadmap --------------------------------------------------------------------
 
 
