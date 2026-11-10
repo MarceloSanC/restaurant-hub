@@ -200,7 +200,7 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
 > **Lacuna fechada (2026-10-21) —
 > [ADR 3.1.0002](../../adr/3_1_0002-minimal-employee-record-attributes.md):** os **atributos
 > cadastrais mínimos** do registro ("nome, contato, o que identifica o registro dentro da
-> unidade") eram lacuna aberta deste doc, delegada ao concept da Stage 3.1, que a fechou em
+> unidade") eram lacuna aberta deste doc — lacuna fechada pela Stage 3.1 em
 > 2026-07-27 com o cadastro mínimo acima: só o nome, sem unicidade e sem contato; a identidade é o
 > id. A **cardinalidade das funções do registro**, que este doc nem chegou a registrar como lacuna,
 > saiu da mesma Stage como fork e foi decidida pelo sponsor em 2026-07-28
@@ -550,7 +550,7 @@ Quem faz o quê no staff (papéis de **acesso** de identity aplicados a este sub
 
 > **Lacuna fechada (2026-10-21) —
 > [ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md):** o **detalhe da
-> divergência hr × manager** era lacuna aberta deste doc, delegada ao concept da Stage 3.4, que
+> divergência hr × manager** era lacuna aberta deste doc — lacuna fechada pela Stage 3.4, cujo concept
 > perguntava se o RH veria o tenant inteiro ou só o cadastro, sem jornada. O **sponsor** decidiu em
 > 2026-08-12 e **mudou o eixo** — a divergência não é de alcance, é de **família de operação**:
 > *"RH pode mexer nos cadastros dos funcionários (cadastrar, desativar, editar etc). Apenas o
@@ -611,8 +611,8 @@ Decisões tomadas no gate de domínio do Step 3, cada uma com sua âncora duráv
   roadmap, Stage 4.2.
 - Função de trabalho com escopo de **tenant** — overview §3 ("customizável por restaurante").
 - Atributos mínimos da função: nome verbatim único — ADR 2.3.0005; overview §3
-  (parametrização é da demanda da escala). Ciclo de vida (ativo/inativo × remoção) era **lacuna**
-  para o concept da 3.1/3.2 (§3.2) — **fechada em 2026-08-09** pelo
+  (parametrização é da demanda da escala). Ciclo de vida (ativo/inativo × remoção) era **lacuna fechada pela Stage 3.2**
+  (§3.2), **em 2026-08-09**, pelo
   [ADR 3.2.0005](../../adr/3_2_0005-job-function-has-no-lifecycle-state.md): a função **não tem
   estado**, e a remoção guardada é o único caminho de saída.
 - Recorrência de indisponibilidade **fora da v1** — overview §3 (períodos absolutos: férias/atestados).
