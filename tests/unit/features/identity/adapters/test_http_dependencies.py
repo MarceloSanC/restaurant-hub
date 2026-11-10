@@ -9,6 +9,10 @@ Dois grupos importam mais que o resto:
   2.1, não de uma segunda tabela.
 """
 
+import ast
+import inspect
+import pathlib
+import textwrap
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -28,6 +32,9 @@ from restaurant_hub.features.identity.application.errors import (
     UnitScopeRequiredError,
 )
 from restaurant_hub.features.identity.application.facade import AccessPrincipal
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    required_permissions_for_role,
+)
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
@@ -372,7 +379,7 @@ def test_conjunto_de_permissoes_exigidas_por_papel_alvo(
     A não-regressão de **decisão de acesso** é provada logo abaixo, em
     `test_matriz_de_quem_cria_quem_nao_regride`.
     """
-    assert dependencies.required_permissions_for_role(papel_alvo) == esperado
+    assert required_permissions_for_role(papel_alvo) == esperado
 
 
 def test_criar_login_de_employee_exige_so_manage_users() -> None:
@@ -385,9 +392,9 @@ def test_criar_login_de_employee_exige_so_manage_users() -> None:
     com menos do que a rota `/users/invitations` exigiria — este teste é quem
     avisa que as duas portas divergiram.
     """
-    assert dependencies.required_permissions_for_role(Role.EMPLOYEE) == frozenset(
-        {Permission.MANAGE_USERS}
-    ), "R17 (concept 3.5 §5.3) assume que criar um `employee` exige só `manage_users`"
+    assert required_permissions_for_role(Role.EMPLOYEE) == frozenset({Permission.MANAGE_USERS}), (
+        "R17 (concept 3.5 §5.3) assume que criar um `employee` exige só `manage_users`"
+    )
 
 
 # Matriz congelada de **decisão de acesso** — quem pode criar quem, medida antes
@@ -414,9 +421,7 @@ def test_matriz_de_quem_cria_quem_nao_regride(criador: Role) -> None:
     regressão que a fixture derivada acima, sozinha, não detectaria.
     """
     alcance = frozenset(
-        alvo
-        for alvo in Role
-        if dependencies.required_permissions_for_role(alvo) <= criador.permissions
+        alvo for alvo in Role if required_permissions_for_role(alvo) <= criador.permissions
     )
 
     assert alcance == _BASELINE_QUEM_CRIA_QUEM[criador]
@@ -429,7 +434,7 @@ def test_nenhum_papel_pode_criar_platform_admin() -> None:
     mapa da 2.1 não dá os dois a ninguém: `platform_admin` tem só
     `manage_platform` ("acesso de plataforma não é acesso de restaurante").
     """
-    exigido = dependencies.required_permissions_for_role(Role.PLATFORM_ADMIN)
+    exigido = required_permissions_for_role(Role.PLATFORM_ADMIN)
 
     for papel in Role:
         assert not exigido.issubset(papel.permissions), (
@@ -447,7 +452,7 @@ def test_manager_nao_cria_owner() -> None:
     with pytest.raises(PermissionDeniedError):
         fixture.guard.authorize_all(
             ator,
-            dependencies.required_permissions_for_role(Role.OWNER),
+            required_permissions_for_role(Role.OWNER),
             tenant_id=_TENANT,
             unit_ids=(unidade,),
         )
@@ -460,7 +465,7 @@ def test_owner_cria_manager() -> None:
 
     autorizado = fixture.guard.authorize_all(
         fixture.ator(owner),
-        dependencies.required_permissions_for_role(Role.MANAGER),
+        required_permissions_for_role(Role.MANAGER),
         tenant_id=_TENANT,
     )
 
@@ -516,7 +521,44 @@ def test_guard_nao_tem_tabela_de_papeis_propria() -> None:
     """
     esperado = frozenset({Permission.MANAGE_USERS}) | Role.OWNER.permissions
 
-    assert dependencies.required_permissions_for_role(Role.OWNER) == esperado
+    assert required_permissions_for_role(Role.OWNER) == esperado
+
+
+def test_a_regra_de_composicao_mora_no_port_e_a_borda_nao_a_redefine() -> None:
+    """CA09 (Stage 2.7) — uma casa para "não se concede o que não se detém".
+
+    `required_permissions_for_role` desceu para o port `action_authorizer`, de onde
+    os use cases a leem. Uma cópia de volta na borda divergiria em silêncio — e a
+    borda e o use case passariam a exigir coisas diferentes para o mesmo pedido.
+    Prova por AST: nenhum `def` com esse nome em `dependencies.py`.
+    """
+    arvore = ast.parse(pathlib.Path(inspect.getfile(dependencies)).read_text("utf-8"))
+    definidas = {n.name for n in ast.walk(arvore) if isinstance(n, ast.FunctionDef)}
+
+    assert "required_permissions_for_role" not in definidas
+
+
+def test_authorize_all_delega_a_expansao_a_application() -> None:
+    """CA09 (Stage 2.7) — a expansão permissão por unidade tem uma cópia só.
+
+    `IdentityGuard.authorize_all` não itera: o corpo é uma chamada a
+    `authorize_requirement`, a mesma que os use cases fazem como primeira
+    instrução (ADR 2.7.0001 §Decision 3). Um laço próprio aqui reabriria a
+    possibilidade de a borda e a application expandirem o requisito de jeitos
+    diferentes.
+    """
+    fonte = inspect.getsource(dependencies.IdentityGuard.authorize_all)
+    funcao = ast.parse(textwrap.dedent(fonte)).body[0]
+    assert isinstance(funcao, ast.FunctionDef)
+    lacos = [n for n in ast.walk(funcao) if isinstance(n, (ast.For, ast.comprehension))]
+    chamadas = {
+        n.func.id
+        for n in ast.walk(funcao)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+
+    assert lacos == []
+    assert "authorize_requirement" in chamadas
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,8 @@ Nada de `can_view_unit` é reimplementado aqui: a regra de bypass e o casamento
 verdade capazes de divergir.
 """
 
+from collections.abc import Sequence
+
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthorizeActionCommand,
 )
@@ -42,6 +44,9 @@ from restaurant_hub.features.identity.application.errors import (
     UnitScopeRequiredError,
     UserNotFoundError,
 )
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    ActionAuthorizer,
+)
 from restaurant_hub.features.identity.application.ports.out.unit_repository import (
     UnitRepository,
 )
@@ -49,9 +54,14 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
     UserRepository,
 )
 from restaurant_hub.features.identity.domain.entities.user import User
-from restaurant_hub.features.identity.domain.value_objects.identifiers import UnitId
+from restaurant_hub.features.identity.domain.value_objects.identifiers import (
+    RestaurantId,
+    UnitId,
+    UserId,
+)
 from restaurant_hub.features.identity.domain.value_objects.permission import (
     TENANT_WIDE_PERMISSIONS,
+    Permission,
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
@@ -156,17 +166,19 @@ class AuthorizeActionUseCase:
 
 
 def authorize_at_boundary(
-    authorize_action: AuthorizeActionUseCase,
+    authorize_action: ActionAuthorizer,
     command: AuthorizeActionCommand,
 ) -> AuthorizedActor:
-    """Autoriza para um chamador **de fora** de identity, fechando os dois oráculos.
+    """Autoriza o pedido de quem age **por um ator**, fechando os dois oráculos.
 
     É a mesma decisão de `AuthorizeActionUseCase.execute`, com as duas traduções
-    que a borda deve a quem pergunta (concept 2.4 §6). Nasceram dentro do
+    que se devem a quem pergunta (concept 2.4 §6). Nasceram dentro do
     `IdentityGuard` do adapter HTTP e moram aqui desde a issue #47, porque
-    passaram a ter **dois** consumidores — o guard HTTP e a fachada de acesso
-    (`facade.IdentityAccessFacade`) que staff consome — e duas cópias de uma
-    regra de vazamento divergem em silêncio (ADR 0.0.0016):
+    passaram a ter mais de um consumidor — o guard HTTP, a fachada de acesso
+    (`facade.IdentityAccessFacade`) que staff consome e, desde a Stage 2.7, os
+    use cases de identity que agem por um ator, via `authorize_requirement`
+    (ADR 2.7.0001 §Decision 3). Uma regra de vazamento tem uma cópia só (ADR
+    0.0.0016 §Decision 2):
 
     - `UserNotFoundError` só pode se referir ao **ator** (é o único usuário do
       command), e um token cujo sujeito sumiu é credencial inválida, não recurso
@@ -191,3 +203,48 @@ def authorize_at_boundary(
         # declarada, e o `or "<sem unidade>"` que estreitava o `None` para o
         # type-checker só rotulava, em runtime, o id vazio (issue #155).
         raise UnitNotVisibleError(command.actor_id, exc.unit_id) from exc
+
+
+def authorize_requirement(
+    authorizer: ActionAuthorizer,
+    actor_id: UserId,
+    permissions: frozenset[Permission],
+    *,
+    tenant_id: RestaurantId | None,
+    unit_ids: Sequence[UnitId] = (),
+) -> AuthorizedActor:
+    """Autoriza **cada** permissão exigida contra **cada** unidade requisitada.
+
+    É a expansão de um requisito declarado em pedidos a `AuthorizeActionUseCase`,
+    numa cópia só para os dois chamadores (ADR 2.7.0001 §Decision 3): o guard da
+    borda HTTP (`IdentityGuard.authorize_all`) e os use cases de identity que agem
+    por um ator, cuja primeira instrução é uma chamada a esta função.
+
+    - **Permissões em `sorted`, por fora; unidades na ordem dada, por dentro.** A
+      ordem decide qual erro sai quando o ator falha em mais de uma checagem, e
+      uma ordem de iteração de `frozenset` deixaria a precedência intermitente.
+    - **Sem deduplicar as unidades.** A deduplicação é do use case, depois
+      (`_link_units`); aqui cada unidade pedida é autorizada como veio.
+    - **Sem unidade, um pedido com `unit_id=None` por permissão** — e um ator
+      escopado por unidade é negado por `UnitScopeRequiredError`: omitir a unidade
+      não é caminho de escalada (ADR 2.2.0002).
+    - **Cada pedido passa por `authorize_at_boundary`**: ator inexistente vira
+      `InvalidAccessTokenError`; unidade inexistente vira `UnitNotVisibleError`.
+
+    Devolve o `AuthorizedActor` do primeiro pedido; todos validam o mesmo ator.
+    """
+    targets: tuple[UnitId | None, ...] = tuple(unit_ids) or (None,)
+    results = [
+        authorize_at_boundary(
+            authorizer,
+            AuthorizeActionCommand(
+                actor_id=actor_id,
+                permission=permission,
+                tenant_id=tenant_id,
+                unit_id=unit_id,
+            ),
+        )
+        for permission in sorted(permissions)
+        for unit_id in targets
+    ]
+    return results[0]
