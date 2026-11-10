@@ -60,6 +60,7 @@ graph LR
     S44 --> S45[4.5-scheduling-http]
     S45 --> S46[4.6-schedule-notifications]
     S45 --> S47[4.7-schedule-image]
+    S45 --> S48[4.8-scheduling-settings]
   end
   subgraph Step5[Step 5 — Auto-preenchimento]
     S51[5.1-autofill-domain] --> S52[5.2-autofill-delivery]
@@ -99,7 +100,7 @@ graph LR
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.7 |
 | 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.10 |
-| 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
+| 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.8 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
 | 6 | Implantação piloto | Sistema no ar para o restaurante piloto usar no dia a dia | not_started | 6.1 → 6.3 |
 | 7 | Ponto (Control iD) | Previsto × realizado visível sem conferência manual | not_started | 7.1 → 7.4 |
@@ -142,6 +143,7 @@ graph LR
 | `4.5-scheduling-http` | API do editor e consulta de escala | adapters/inbound/http | draft | `4.4-scheduling-persistence`, `3.10-login-link-management` |
 | `4.6-schedule-notifications` | Notificação de publicação por e-mail | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `4.7-schedule-image` | Imagem/tabela da escala sob demanda | vertical (scheduling) | draft | `4.5-scheduling-http` |
+| `4.8-scheduling-settings` | Edição da configuração de escala do restaurante (calendário e validação) | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `5.1-autofill-domain` | Algoritmo de auto-preenchimento | domain | draft | `4.7-schedule-image` |
 | `5.2-autofill-delivery` | Preview e aplicação do auto-fill | vertical (scheduling) | draft | `5.1-autofill-domain` |
 | `6.1-hosting-study` | Estudo de hospedagem (ADR) | bootstrap | draft | `4.5-scheduling-http` |
@@ -208,7 +210,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#100](https://github.com/MarceloSanC/restaurant-hub/issues/100) | Hooks do git compartilhados apontam para o venv de uma worktree — `worktree-rm` quebra os commits das demais | shared | tooling | done | #7 |
 | [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | done | — |
 | [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | done | — |
-| [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
+| [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap — promovida à Stage `4.8-scheduling-settings` | scheduling | docs (roadmap) | open | `4.3-scheduling-application` |
 | [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário — promovida à Stage `3.10-login-link-management` | staff | docs (roadmap) | done | — |
 | [#108](https://github.com/MarceloSanC/restaurant-hub/issues/108) | Remoção concorrente com R17 não pode apagar registro já vinculado (conta órfã) | staff | application + adapters/out | done | #68 |
 | [#114](https://github.com/MarceloSanC/restaurant-hub/issues/114) | Provisionar o dono do restaurante por convite em vez de senha escolhida pela plataforma | identity | application + adapters/inbound/http | done | #67 |
@@ -1594,7 +1596,7 @@ Perguntas que a issue deixa para o concept (registradas na #107):
 
 - **Resultado de negócio:** gerente configura faixas por dia e demanda por função, aloca pessoas com validação ao vivo (bloquear/avisar configurável), salva=publica com auditoria; funcionário logado vê a própria escala; e-mail opcional a cada publicação; imagem/tabela gerada sob demanda; escalas anteriores viram referência fácil. **Aposenta a planilha.**
 - **Depende de:** Step 3.
-- **Tamanho estimado:** M–L (7 Stages; cada uma ≤ M)
+- **Tamanho estimado:** M–L (8 Stages; cada uma ≤ M)
 
 > **Nota (2026-09-14, revista em 2026-09-26): gate de domínio do Step 4 cumprido (issue #52).**
 > `docs/domain/scheduling/shift-scheduling.md` está `accepted` (ratificado pelo sponsor) com os
@@ -1837,6 +1839,52 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [hex-arch-python]
 ```
+
+#### Stage 4.8 — `4.8-scheduling-settings`
+
+**Descrição humana:** o restaurante passa a **gravar** a própria configuração de escala: o calendário operacional (dia de início da semana e horário de corte do dia operacional, ADR 4.1.0002) e a configuração de validação (políticas habilitadas, modo `block`/`warn` e limites, ADR 4.1.0003). É o que torna verdade o "bloquear/avisar configurável" do resultado do Step 4: até aqui só há leitura (`schedule_config_repository.py` › `ScheduleConfigRepository.find_settings`) e todo tenant roda com os defaults de domínio (`_inputs.py` › `settings_of`). Nasce da issue [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106), que reúne o `[finding] Edição da configuração do restaurante sem dono no roadmap` do technical 4.3 §7 e a primeira questão do concept 4.3 §13. Promovida a Stage pelo PIPELINE §4.5: para dizer o que fazer é preciso antes definir regras novas (o que acontece com o período em curso e com as escalas já gravadas quando o calendário muda) e um contrato novo (método de escrita no port de config). Fatia vertical em scheduling: use case, port, adapter Postgres e rota, porque a 4.5 é borda HTTP e alargá-la misturaria camada-alvo e fatia vertical na mesma Stage (PIPELINE §4.2 #1). Uma Stage só, e não calendário e validação em duas: as duas metades dividem o método de escrita, a tabela, a rota e a permissão, e a validação sozinha seria um delta pequeno sobre o mesmo contrato. Depende da 4.5 porque é ela que cria o router de scheduling e decide as permissões, a da configuração inclusive (ADR 4.1.0004 › "whether the tenant-wide validation configuration needs its own permission are gaps for the Stage 4.5 concept"). Não corre em paralelo com a 4.6: a flag "sempre notificar" da 4.6 é outra opção do restaurante, e onde ela persiste é lacuna aberta (doc de domínio §6, tabela de lacunas, linha da 4.6), então as duas tendem a tocar a mesma config do tenant; a segunda a abrir lê o que a primeira gravou. Com a 4.7 pode correr ao lado se as pegadas de arquivo não se cruzarem. O Step 4 só fecha com ela.
+
+```yaml
+stage_id: 4.8-scheduling-settings
+bounded_context: scheduling
+camada_alvo: vertical (scheduling)
+depends_on: [4.5-scheduling-http]
+arquivos_a_criar:
+  - features/scheduling/application/use_cases/ (ler a config vigente com os defaults; gravar a config do tenant)
+  - rotas de leitura e gravação da config no router de scheduling + testes unit com fakes, contrato fake x real do port e e2e
+  - docs/adr/4_8_0001-*.md (regra de transição do calendário; ver perguntas abaixo)
+arquivos_a_modificar:
+  - features/scheduling/application/ports/out/schedule_config_repository.py (método de escrita, com a sua lei ao lado da L-CF1)
+  - features/scheduling/application/ports/out/access_guard.py e o adapter que a 4.4/4.5 criar (o port exige unit_id hoje e não tem alvo "tenant inteiro"; a config é do restaurante)
+  - features/scheduling/adapters/out/postgres/ (escrita na tabela de config criada pela 4.4; migration só se a forma da 4.4 não comportar)
+  - fake do port e suíte de lei em tests/contract/
+  - features/scheduling/adapters/inbound/http/{router,schemas}.py; composition_root.py
+  - docs: nota datada em docs/domain/scheduling/shift-scheduling.md §6 com a regra de transição
+contratos_introduzidos:
+  - método de escrita do ScheduleConfigRepository e a lei que o acompanha; use cases de leitura e gravação da config
+contratos_consumidos:
+  - OperationalCalendar e ValidationConfig (4.1, 4.2); SchedulingSettings, settings_of e o lote que recusa ou pergunta só o que introduz (4.3, ADR 4.3.0001); tabela e adapter de config (4.4); router e a permissão da configuração decidida e gravada no mapa de papéis pela 4.5 (ADR 4.1.0004)
+definition_of_done:
+  - "gravar a configuracao do proprio tenant nunca invalida o que ja foi publicado: a escala gravada guarda o calendario em que nasceu, e a violacao que so existe porque a validacao mudou aparece na avaliacao sem recusar nem pedir aceite numa publicacao que nao a introduziu — travado por teste, inclusive e2e contra Postgres"
+non_goals:
+  - nomes e mapa de papéis das permissões de escala, em identity (4.5, ADR 4.1.0004)
+  - configuração por unidade (a config é do restaurante, ADR 4.1.0003)
+  - política de validação nova ou default novo (ADR 4.1.0003)
+  - migrar ou refatiar escalas já gravadas (D-CONFIG; o snapshot do calendário fica, ADR 4.1.0009)
+  - mapa período nomeado → faixas (lacuna (b) da nota do Step 4; 5.1)
+complexidade_estimada: M
+gate_mode: strict
+skills_hint: [hex-arch-python, pytest-with-fakes, repository-pattern, fastapi-thin-adapter, composition-root, task-ordering-hex]
+```
+
+Requisitos que a issue #106 traz do concept 4.3 §13 e perguntas para o concept:
+
+- **Violação pré-existente por config alterada** (nota D1 do doc de domínio, `shift-scheduling.md` §6 › "A mesma regra vale para uma configuração de validação alterada depois"). É mostrada ao vivo e nunca recusa nem pede aceite numa mudança que não a introduziu (ADR 4.3.0001 › "Pre-existing violations (from staff changes, D1, or from a config changed later) are shown and never refuse nor ask on a change that did not introduce them"). A 4.3 já compara antes e depois com a mesma config; esta Stage põe no critério o teste que trava o caso da config gravada entre duas publicações.
+- **Mudar o dia de início deixa de 1 a 6 dias sem escala possível.** Os períodos têm 7 dias a partir do dia de início (ADR 4.1.0002 §1) e não se sobrepõem (doc de domínio §3.1), e a escala guarda o calendário do dia em que nasceu (ADR 4.1.0009 › "changing the tenant's cutoff cannot silently re-slice a schedule that is already live"). Entre a última semana no início antigo e a primeira no novo sobram de 1 a 6 dias sem período. O concept decide entre declarar o buraco, pedir data de vigência ou abrir um período de transição mais curto, e o que a gerente vê. Escolha visível ao piloto (P).
+- **Corte mais tarde cria janela sem período** (D-CONFIG do concept 4.3 §7: o calendário novo vale só para escalas criadas depois). Com o corte passando de 05:00 a 06:00, a hora entre o fim da última escala e o começo da seguinte não pertence a período nenhum. O sentido inverso também pede regra: com o corte passando de 05:00 a 04:00, a última escala antiga e a primeira nova se sobrepõem por uma hora, contra o invariante de §3.1 do doc de domínio, que a lei L-SC2 do concept 4.3 (dias disjuntos) não pega. Mesma decisão do item anterior; o corte não tem teto (decisão Q5 do sponsor, concept 4.1 §13).
+- **Calendário × validação.** Só o calendário é fotografado na escala (ADR 4.1.0009); a validação é lida a cada avaliação (`_inputs.py` › `settings_of`), inclusive de escala já gravada. Por isso a validação nova vale na hora, e o caso D1 acima é o que impede que ela bloqueie quem não a introduziu.
+- **Permissão tenant-wide.** Segue lacuna da 4.5 (ADR 4.1.0004), que a grava no mapa de papéis em identity; esta Stage a consome. A config vale para todas as unidades do restaurante, e um gerente de uma unidade a alteraria para as outras, como no precedente `MANAGE_JOB_FUNCTIONS` (ADR 3.4.0008). O ADR fala só da configuração de **validação**; o concept da 4.5 decide também o calendário, que é a mesma configuração (`SchedulingSettings`). Se a 4.5 fechar sem a permissão, gravá-la aqui é entrega em identity, e o concept declara a divergência de PIPELINE §4.2 #4, como a 3.10.
+- **Trilha e concorrência.** Se a gravação da config entra na auditoria da 4.4 (quem mudou e quando) e se duas gravações concorrentes pedem checagem otimista como a escala (ADR 4.1.0001).
 
 ---
 
