@@ -12,8 +12,8 @@ negue com um dublê (`tests/fakes/features/identity/stub_action_authorizers.py`)
 
 **`required_permissions_for_role` mora aqui** pelo mesmo motivo que o vocabulário de
 staff mora no módulo do port dele (ADR 3.7.0001 §Decision 5): o use case precisa da
-regra e não pode importar o adapter HTTP, onde ela nasceu (Stage 2.4). A borda a
-reexporta, e o que ela decide continua igual.
+regra e não pode importar o adapter HTTP, onde ela nasceu (Stage 2.4). A borda (o
+router) a importa daqui, e o que ela decide continua igual.
 """
 
 from typing import Protocol
