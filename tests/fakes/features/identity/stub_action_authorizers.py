@@ -30,6 +30,10 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
+# O ator que as suítes de regra de negócio passam no command: com o autorizador que
+# registra, ele só precisa existir; quem confere o ator é a suíte de autorização.
+TEST_ACTOR_ID = UserId("ator-de-teste")
+
 INFIDEL_ACTOR = UserId("ator-infiel-que-nenhum-teste-semeia")
 INFIDEL_TENANT = RestaurantId("tenant-infiel-que-nenhum-teste-semeia")
 INFIDEL_UNIT = UnitId("unidade-infiel-que-nenhum-teste-semeia")

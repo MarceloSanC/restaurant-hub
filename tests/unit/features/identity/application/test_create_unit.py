@@ -19,6 +19,7 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
     InMemoryRestaurantRepository,
 )
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
+from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -42,7 +43,9 @@ def test_cria_unidade_sob_restaurante_existente() -> None:
     """CA2 — caminho feliz."""
     use_case, units, _ = _setup()
 
-    result = use_case.execute(CreateUnitCommand(restaurant_id=_TENANT, name="Centro"))
+    result = use_case.execute(
+        CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name="Centro")
+    )
 
     assert result.id == str(_FIXED_ID)
     assert result.restaurant_id == _TENANT
@@ -53,7 +56,9 @@ def test_unidade_herda_o_tenant_do_restaurante() -> None:
     """É o `tenant_id` da unidade que sustenta o isolamento row-level (ROADMAP-3)."""
     use_case, units, _ = _setup()
 
-    result = use_case.execute(CreateUnitCommand(restaurant_id=_TENANT, name="Centro"))
+    result = use_case.execute(
+        CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name="Centro")
+    )
 
     assert units.units[UnitId(result.id)].tenant_id == _TENANT
 
@@ -64,7 +69,9 @@ def test_restaurante_inexistente_levanta_e_nao_grava_unidade() -> None:
     use_case, units, _ = _setup(com_restaurante=False)
 
     with pytest.raises(RestaurantNotFoundError):
-        use_case.execute(CreateUnitCommand(restaurant_id=_TENANT, name="Centro"))
+        use_case.execute(
+            CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name="Centro")
+        )
 
     assert units.units == {}
 
@@ -74,7 +81,9 @@ def test_restaurante_e_resolvido_antes_de_qualquer_escrita() -> None:
     use_case, units, restaurants = _setup(com_restaurante=False)
 
     with pytest.raises(RestaurantNotFoundError):
-        use_case.execute(CreateUnitCommand(restaurant_id=_TENANT, name="Centro"))
+        use_case.execute(
+            CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name="Centro")
+        )
 
     assert restaurants.find_calls == 1
     assert units.units == {}
@@ -84,6 +93,6 @@ def test_nome_vazio_propaga_erro_de_dominio() -> None:
     use_case, units, _ = _setup()
 
     with pytest.raises(InvalidNameError):
-        use_case.execute(CreateUnitCommand(restaurant_id=_TENANT, name=""))
+        use_case.execute(CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name=""))
 
     assert units.units == {}

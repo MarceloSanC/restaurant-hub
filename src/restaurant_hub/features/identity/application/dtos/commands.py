@@ -1,6 +1,11 @@
 """Commands — a entrada de cada use case do BC identity.
 
-São DTOs `frozen`: o use case recebe dado, não entidade. Value objects imutáveis
+São DTOs `frozen`: o use case recebe dado, não entidade.
+
+**O ator viaja no command** dos use cases que agem em nome dele (Stage 2.7, ADR
+2.7.0001 §Decision 1): `actor_id: UserId`, primeiro campo, sem default — quem não o
+informa não forma o command. É identificador, não credencial, e por isso mantém o
+`repr`. Value objects imutáveis
 do domínio (`Email`, `Role`, `Permission`) trafegam aqui por licença explícita do
 LAYOUT §7 — são valores puros, indistinguíveis de primitivos para o consumidor.
 Entidades, não.
@@ -37,19 +42,26 @@ class ProvisionRestaurantCommand:
     não transporta a credencial dele.
 
     Attributes:
+        actor_id: quem provisiona — o ator que o use case autoriza antes de
+            qualquer outra instrução (Stage 2.7, ADR 2.7.0001).
         name: nome do restaurante.
         owner_email: e-mail de login do dono, para onde vai o convite; a
             unicidade é global.
     """
 
+    actor_id: UserId
     name: str
     owner_email: Email
 
 
 @dataclass(frozen=True)
 class CreateUnitCommand:
-    """Criação de uma unidade sob um restaurante existente."""
+    """Criação de uma unidade sob um restaurante existente.
 
+    `actor_id` é quem cria — o ator que o use case autoriza (Stage 2.7).
+    """
+
+    actor_id: UserId
     restaurant_id: RestaurantId
     name: str
 
@@ -59,6 +71,7 @@ class CreateUserCommand:
     """Criação de uma conta de acesso.
 
     Attributes:
+        actor_id: quem cria — o ator que o use case autoriza (Stage 2.7).
         email: e-mail de login; a unicidade é global, não por tenant.
         plain_password: senha em claro — só atravessa o `PasswordHasher`, nunca
             é persistida nem devolvida.
@@ -68,6 +81,7 @@ class CreateUserCommand:
             Duplicatas são deduplicadas pelo use case.
     """
 
+    actor_id: UserId
     email: Email
     # `repr=False` pelo mesmo motivo dos commands de sessão e de
     # `UserCredentials.password_hash`: o `SecretStr` do schema morre no boundary,
@@ -158,6 +172,7 @@ class InviteUserCommand:
     convidado — o convidado a define pelo link que recebe por e-mail.
 
     Attributes:
+        actor_id: quem convida — o ator que o use case autoriza (Stage 2.7).
         email: e-mail de login e destino do convite; unicidade global.
         role: papel fixo de acesso do convidado.
         tenant_id: restaurante do convidado; vem do **ator**, nunca do corpo da
@@ -165,6 +180,7 @@ class InviteUserCommand:
         unit_ids: unidades a que o convidado fica vinculado.
     """
 
+    actor_id: UserId
     email: Email
     role: Role
     tenant_id: RestaurantId | None
