@@ -497,6 +497,32 @@ def test_nao_ha_outra_autorizacao_no_corpo(modulo: str) -> None:
     assert len(usos_do_autorizador) == 1
 
 
+def _importa_facade_only(no: ast.ImportFrom, prefixo: str, alvos: set[str]) -> bool:
+    """Absoluto (`from <prefixo>.provision_account import …`, `from <prefixo> import
+    provision_account`) **ou relativo** (`from .provision_account import …`, `from .
+    import provision_account`): um import relativo de irmão passa no lint e não pode
+    passar por aqui."""
+    nomes = {a.name for a in no.names}
+    if no.level == 0:
+        return no.module in alvos or (no.module == prefixo and bool(nomes & _FACADE_ONLY))
+    ultimo = (no.module or "").split(".")[-1]
+    return ultimo in _FACADE_ONLY or (not no.module and bool(nomes & _FACADE_ONLY))
+
+
+def test_a_varredura_de_alcance_ve_import_relativo() -> None:
+    """Controle da varredura do CA14: os dois idiomas de import relativo contam."""
+    prefixo = "restaurant_hub.features.identity.application.use_cases"
+    alvos = {f"{prefixo}.{nome}" for nome in _FACADE_ONLY}
+    for fonte in (
+        "from .provision_account import ProvisionAccountUseCase",
+        "from . import get_account_role",
+        "from ..use_cases.send_invitation import SendInvitationUseCase",
+    ):
+        no = ast.parse(fonte).body[0]
+        assert isinstance(no, ast.ImportFrom)
+        assert _importa_facade_only(no, prefixo, alvos), fonte
+
+
 def test_os_facade_only_so_sao_importados_pela_fachada_e_pelo_composition_root() -> None:
     """CA14 — o resíduo de `ProvisionAccountUseCase` (aceita qualquer papel) fica
     guardado pelo alcance: um terceiro importador reabre a decisão (ADR 0.0.0020)."""
@@ -505,10 +531,7 @@ def test_os_facade_only_so_sao_importados_pela_fachada_e_pelo_composition_root()
     importadores: set[pathlib.Path] = set()
     for arquivo in _SRC.rglob("*.py"):
         for no in ast.walk(ast.parse(arquivo.read_text("utf-8"))):
-            if isinstance(no, ast.ImportFrom) and (
-                no.module in alvos
-                or (no.module == prefixo and {a.name for a in no.names} & _FACADE_ONLY)
-            ):
+            if isinstance(no, ast.ImportFrom) and _importa_facade_only(no, prefixo, alvos):
                 importadores.add(arquivo)
             if isinstance(no, ast.Import) and {a.name for a in no.names} & alvos:
                 importadores.add(arquivo)
