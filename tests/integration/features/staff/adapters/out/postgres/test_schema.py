@@ -40,6 +40,7 @@ pytestmark = [pytest.mark.integration]
 
 _TABELAS_DE_STAFF = (
     "job_functions",
+    "job_function_units",
     "employees",
     "employee_job_functions",
     "employee_unavailabilities",
@@ -50,6 +51,8 @@ _CONSTRAINTS_ESPERADAS = {
     "pk_job_functions",
     "uq_job_functions_tenant_name",
     "uq_job_functions_id_tenant",
+    "pk_job_function_units",
+    "fk_job_function_units_job_function",
     "pk_employees",
     "uq_employees_id_tenant",
     "ck_employees_workload_kind_known",
@@ -141,7 +144,11 @@ def test_os_dois_indices_nao_unicos_existem(engine: Engine) -> None:
                 {"tabelas": list(_TABELAS_DE_STAFF)},
             )
         }
-    assert {"ix_employees_tenant_unit", "ix_employee_job_functions_function"} <= indices
+    assert {
+        "ix_employees_tenant_unit",
+        "ix_employee_job_functions_function",
+        "ix_job_function_units_tenant_unit",
+    } <= indices
 
 
 def test_confdeltype_de_cada_fk(engine: Engine) -> None:
@@ -169,6 +176,7 @@ def test_confdeltype_de_cada_fk(engine: Engine) -> None:
         "fk_employee_job_functions_employee": "c",
         "fk_employee_unavailabilities_employee": "c",
         "fk_employee_shift_preferences_employee": "c",
+        "fk_job_function_units_job_function": "c",
     }
 
 
@@ -304,6 +312,7 @@ def test_tenant_id_existe_apenas_onde_ancora_um_cerco(engine: Engine) -> None:
     assert ("employee_unavailabilities", "tenant_id") not in colunas
     assert ("employee_shift_preferences", "tenant_id") not in colunas
     assert colunas[("employee_job_functions", "tenant_id")] == "NO"
+    assert colunas[("job_function_units", "tenant_id")] == "NO"
 
 
 # ---------------------------------------------------------------------------
