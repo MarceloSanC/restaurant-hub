@@ -507,6 +507,19 @@ def test_o_mapa_do_bc_nao_tem_entrada_orfa(bc: str) -> None:
     assert orfas == [], f"{bc}: mapa declara status para erro inexistente: {orfas}"
 
 
+# As entradas fora da família 4xx, declaradas uma a uma — allowlist **contável**.
+#
+# Issue #170: `InvitationNotSentError` é a falha de entrega do convite **depois** do
+# commit. Ali o raciocínio do gate abaixo não vale: o BC não sabe "exatamente o que
+# houve" do lado do cliente — o provedor de e-mail falhou, nada que o cliente
+# enviou está errado, e 500 é a afirmação verdadeira (RFC 9110 §15.6.1). A classe
+# entra pelo nome, com o status exato; qualquer outra entrada 5xx continua
+# reprovando, e uma entrada daqui que deixar de existir no mapa também.
+_FORA_DA_FAMILIA_4XX: dict[str, dict[str, int]] = {
+    "identity": {"InvitationNotSentError": 500},
+}
+
+
 @pytest.mark.parametrize("bc", _COM_BORDA_HTTP)
 def test_o_mapa_do_bc_so_declara_status_da_familia_4xx(bc: str) -> None:
     """Nenhum erro de negócio é classificado como sucesso nem como 5xx.
@@ -514,16 +527,30 @@ def test_o_mapa_do_bc_so_declara_status_da_familia_4xx(bc: str) -> None:
     Um `200` no mapa transformaria uma exceção em resposta bem-sucedida, e um
     `500` diria ao cliente que a culpa foi do servidor num caso em que o BC sabe
     exatamente o que houve — que é o modo de falha do `ValueError` cru que a #45
-    também fechou do lado de `shared/` (Gate 7).
+    também fechou do lado de `shared/` (Gate 7). A exceção é a allowlist
+    `_FORA_DA_FAMILIA_4XX`, que nomeia a classe **e** o status.
     """
     minimo, maximo = 400, 499
+    declaradas = _FORA_DA_FAMILIA_4XX.get(bc, {})
     fora = sorted(
         (classe.__name__, status)
         for classe, status in _mapa_de_status(bc).items()
-        if not minimo <= status <= maximo
+        if not minimo <= status <= maximo and declaradas.get(classe.__name__) != status
     )
 
     assert fora == [], f"{bc}: status fora da família 4xx: {fora}"
+
+
+def test_a_allowlist_fora_da_familia_4xx_nao_tem_entrada_morta() -> None:
+    """Entrada que não corresponde ao mapa é allowlist mentindo — reprova também."""
+    mortas = sorted(
+        (bc, nome, status)
+        for bc, entradas in _FORA_DA_FAMILIA_4XX.items()
+        for nome, status in entradas.items()
+        if {c.__name__: s for c, s in _mapa_de_status(bc).items()}.get(nome) != status
+    )
+
+    assert mortas == [], f"allowlist fora da família 4xx sem entrada no mapa: {mortas}"
 
 
 # ---------------------------------------------------------------------------

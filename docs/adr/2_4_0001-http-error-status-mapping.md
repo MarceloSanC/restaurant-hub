@@ -5,7 +5,7 @@ when-use: Reference when adding an error to the identity hierarchy, when a domai
 keywords: [adr, http, error-handling, status-code, fastapi, starlette, exception-handler, totality, identity]
 status: accepted
 created_at: 2026-07-19
-updated_at: 2026-11-02
+updated_at: 2026-11-09
 adr_id: 2.4.0001
 decision: Register one FastAPI exception handler on IdentityError that resolves the HTTP status by walking the exception's MRO against an explicit type-to-status map, and guard the map's totality with a test that enumerates every concrete IdentityError subclass, so an unmapped error fails the suite instead of silently degrading to 422
 context_stage: 2.4-identity-http
@@ -186,3 +186,25 @@ só `DomainError → 422` (a de `RequestValidationError` não muda):
 ADR descreve a regra "never from `ApplicationError`" do ADR 2.2.0003, também superada. Mapa,
 faixas, corpos constantes 401/403, `WWW-Authenticate` e as conversões do guard (decisão 5)
 continuam valendo, byte a byte. Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — a faixa 500 (issue #170)
+
+**2026-11-09 — o mapa de identity ganhou uma sexta faixa, 500, com corpo constante; nada acima
+foi revogado.** O `## Context` fala em *"five distinct status bands — 401, 403, 404, 409, 422"*,
+e a decisão 4 trata só dessas cinco. Desde a issue #170 (PR #173) o mapa tem uma entrada fora da
+família 4xx: `InvitationNotSentError → 500`, a falha de entrega do convite **depois** de a conta
+ser comitada (regra 13 da Stage 2.5; o status 500 já estava no ADR 0.0.0018 §4). O que vale para ela:
+
+- **Corpo constante**, como 401/403: `{"detail": "erro interno", "type": "internal_error"}`,
+  escolhido pelo status (`status >= 500` em `build_error_response`), nunca `str(exc)`. A causa
+  vai ao log por quem a levanta (`_invitation.deliver_invitation`: só o tipo da falha e o
+  `user_id`, sem traceback), e não pelo handler — a faixa não entra no log de causa suprimida.
+- **A decisão 4 continua literal para 401/403 e para 404/409/422.** A faixa nova não muda o
+  corpo de nenhuma outra resposta.
+- **A família 4xx deixa de ser absoluta, por allowlist contável.** O gate
+  `test_o_mapa_do_bc_so_declara_status_da_familia_4xx` (`tests/unit/test_status_map.py`, issue
+  #45) aceita só as entradas de `_FORA_DA_FAMILIA_4XX`, por classe e status exato, e reprova
+  entrada morta nela. O oráculo `tests/e2e/features/identity/test_status_bands.py` passa a
+  conferir a lista de faixas contra os valores do mapa.
+
+Nota *append-only*; o corpo acima não foi editado.

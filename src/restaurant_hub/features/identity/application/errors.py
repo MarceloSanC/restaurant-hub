@@ -275,3 +275,25 @@ class InvalidSetupTokenError(IdentityApplicationError):
 
     def __init__(self) -> None:
         super().__init__("token de definição de senha inválido")
+
+
+class InvitationNotSentError(IdentityApplicationError):
+    """A conta do convite foi gravada, e o e-mail com o link não saiu (issue #170).
+
+    É de aplicação, e não de domínio: nenhuma regra de produto foi violada — o caso
+    de uso não pôde ser concluído porque a entrega por um port de saída falhou. A
+    conta, o token e (no provisionamento) o restaurante **já estão comitados**
+    quando isto sobe (regra 13 da 2.5); a recuperação é o pedido público de
+    redefinição de senha, não repetir o convite, que esbarra no e-mail já usado.
+
+    **Substitui a exceção do `EmailSender`, não a embrulha.** A mensagem e a cadeia
+    de causas de uma falha de provedor podem ecoar o destinatário ou o corpo — e o
+    corpo leva o link, que é credencial. Por isso quem levanta esta exceção registra
+    só o tipo da falha original e a levanta **fora** do bloco que a capturou: sem
+    `__cause__` nem `__context__`, não há caminho de volta à mensagem original. A
+    mensagem desta classe interpola só o id do usuário, que não é segredo.
+    """
+
+    def __init__(self, user_id: str) -> None:
+        super().__init__(f"convite não enviado ao usuário {user_id!r}")
+        self.user_id = user_id

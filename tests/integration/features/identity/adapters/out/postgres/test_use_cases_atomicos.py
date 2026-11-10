@@ -63,6 +63,7 @@ from restaurant_hub.features.identity.application.dtos.tokens import IssuedRefre
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     InvalidSetupTokenError,
+    InvitationNotSentError,
     RefreshTokenReuseError,
     SessionFingerprintAlreadyExistsError,
 )
@@ -669,7 +670,7 @@ class TestProvisaoDoTenantAtomica:
         falha dele sobe sem desfazer o tenant — a recuperação é a redefinição."""
         sender = RecordingEmailSender(fail_with=EmailSenderFailure("fora"))
 
-        with pytest.raises(EmailSenderFailure):
+        with pytest.raises(InvitationNotSentError):
             _provisionar_tenant(banco_limpo, Registro(), sender=sender).execute(_tenant())
 
         linhas = _linhas(banco_limpo, *_TABELAS_DO_TENANT)
@@ -966,7 +967,7 @@ def test_convite_com_envio_falhando_deixa_conta_e_token_comitados(banco_limpo: E
     _semear_tenant_e_usuario(banco_limpo)
     use_case, _ = _convidar(banco_limpo, Registro(), falha_no_envio=EmailSenderFailure("fora"))
 
-    with pytest.raises(EmailSenderFailure):
+    with pytest.raises(InvitationNotSentError):
         use_case.execute(_convite())
 
     linhas = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)

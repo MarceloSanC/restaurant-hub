@@ -49,6 +49,9 @@ _DE_APLICACAO = frozenset(
         "UnitMembershipAlreadyExistsError",
         "SessionAlreadyExistsError",
         "SessionFingerprintAlreadyExistsError",
+        # Issue #170 — a entrega por um port de saída falhou depois do commit. Não
+        # é regra de produto: é o caso de uso que não pôde ser concluído.
+        "InvitationNotSentError",
     }
 )
 
@@ -71,7 +74,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_vinte_excecoes_esperadas() -> None:
+def test_modulo_declara_as_vinte_e_uma_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -106,6 +109,10 @@ def test_modulo_declara_as_vinte_excecoes_esperadas() -> None:
         # que o levanta é **pública**, então a mensagem é a única superfície de
         # informação que o atacante tem.
         "InvalidSetupTokenError",
+        # Issue #170 — o e-mail do convite não saiu, com a conta já gravada. Classe
+        # própria para que a falha do provedor seja SUBSTITUÍDA, e não embrulhada:
+        # a mensagem dela pode ecoar o destinatário e o link.
+        "InvitationNotSentError",
     }
 
 
@@ -200,6 +207,14 @@ def test_mensagens_identificam_o_recurso_ou_a_regra_violada() -> None:
     unit_not_visible = str(errors.UnitNotVisibleError("user-1", "unit-9"))
     assert "user-1" in unit_not_visible
     assert "unit-9" in unit_not_visible
+
+
+def test_convite_nao_enviado_cita_o_usuario_e_guarda_o_id() -> None:
+    """Issue #170 — o id do usuário é o que a mensagem leva, e nada do envio."""
+    erro = errors.InvitationNotSentError("user-7")
+
+    assert str(erro) == "convite não enviado ao usuário 'user-7'"
+    assert erro.user_id == "user-7"
 
 
 def test_credencial_invalida_nao_revela_qual_lado_falhou() -> None:

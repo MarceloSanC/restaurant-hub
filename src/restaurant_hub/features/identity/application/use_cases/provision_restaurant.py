@@ -25,7 +25,9 @@ regra 13 da 2.5). Um rollback não desenvia e-mail, e um e-mail enviado de
 dentro de uma unidade que depois desfizesse levaria um link para token
 inexistente. Se o envio falha, restaurante, dono e token ficam comitados, e o
 caminho de recuperação é o pedido público de redefinição de senha — repetir o
-provisionamento responde 409, porque o e-mail do dono já existe.
+provisionamento responde 409, porque o e-mail do dono já existe. A falha sobe
+como `InvitationNotSentError`, trocada em `_invitation.deliver_invitation`, que
+registra só o tipo dela e o `user_id` do dono (issue #170).
 
 **O papel é o literal `Role.OWNER`, aqui** — não vem do command. Com ele, "nenhum
 caminho emite `platform_admin`" vale para este use case qualquer que seja o
@@ -72,6 +74,7 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
     UserRepository,
 )
 from restaurant_hub.features.identity.application.use_cases._invitation import (
+    deliver_invitation,
     invitation_message,
     setup_link,
 )
@@ -124,8 +127,8 @@ class ProvisionRestaurantUseCase:
             EmailAlreadyRegisteredError: e-mail do dono já usado em qualquer tenant —
                 pela checagem prévia ou, numa corrida, pelo índice único dentro da
                 unidade (e então o restaurante é desfeito).
-            Exception: qualquer falha do `EmailSender` sobe, com o tenant já
-                comitado (regra 13 da 2.5).
+            InvitationNotSentError: o `EmailSender` falhou, com o tenant já
+                comitado (regra 13 da 2.5; issue #170).
         """
         restaurant = Restaurant(
             id=RestaurantId(str(self._id_generator.next_id())),
@@ -150,8 +153,10 @@ class ProvisionRestaurantUseCase:
             token_value = self._issue_token(owner.id)
 
         # Depois do commit — ver o docstring do módulo (ADR 2.6.0002 §3).
-        self._email_sender.send(
-            invitation_message(command.owner_email.value, setup_link(self._base_url, token_value))
+        deliver_invitation(
+            self._email_sender,
+            invitation_message(command.owner_email.value, setup_link(self._base_url, token_value)),
+            owner.id,
         )
 
         return ProvisionedRestaurantResult(

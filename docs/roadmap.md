@@ -232,10 +232,11 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#167](https://github.com/MarceloSanC/restaurant-hub/issues/167) | Harness de arquitetura com gates AST, skill e revisor | shared | tooling + .claude | open | #65 |
 | [#168](https://github.com/MarceloSanC/restaurant-hub/issues/168) | `pytest-xdist` com banco isolado por worker | shared | tooling + tests | open | #65 |
 | [#169](https://github.com/MarceloSanC/restaurant-hub/issues/169) | Skill `data-shape-evidence` para medir o dado no Postgres antes de decidir | shared | docs (.claude/skills) | open | #65 |
-| [#170](https://github.com/MarceloSanC/restaurant-hub/issues/170) | Falha de envio do convite vai ao log com traceback e pode vazar destinatário e link | identity | application + adapters/inbound/http | open | #114 |
+| [#170](https://github.com/MarceloSanC/restaurant-hub/issues/170) | Falha de envio do convite vai ao log com traceback e pode vazar destinatário e link | identity | application + adapters/inbound/http | done | #114 |
 | [#171](https://github.com/MarceloSanC/restaurant-hub/issues/171) | O piloto não pode subir com o `ConsoleSender`, que imprime o link de convite no log | shared | infrastructure + composition root | open | #114 |
 | [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
 | [#174](https://github.com/MarceloSanC/restaurant-hub/issues/174) | Citações por número de linha a `LAYOUT.md`, concepts/technicals de Stage e runbooks sem gate | shared | tooling | open | #154 |
+| [#175](https://github.com/MarceloSanC/restaurant-hub/issues/175) | Falha de envio do convite de login de funcionário vai ao log com traceback e pode vazar destinatário e link | staff + identity | application + adapters/out/identity | open | #170 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

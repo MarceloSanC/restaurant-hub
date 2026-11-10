@@ -125,6 +125,8 @@ def test_o_mapa_nao_tem_entrada_orfa() -> None:
         (domain_errors.PlatformAdminTenantError(), 422),
         (domain_errors.PlatformAdminMembershipError(), 422),
         (domain_errors.CrossTenantError("a", "b"), 422),
+        # Issue #170 — a conta foi gravada e o e-mail não saiu: culpa do servidor.
+        (application_errors.InvitationNotSentError("u"), 500),
     ],
 )
 def test_status_de_cada_excecao(excecao: IdentityError, status_esperado: int) -> None:
@@ -234,6 +236,7 @@ def test_faixas_404_409_422_preservam_a_mensagem() -> None:
 _MENSAGEM_PLANTADA = "detalhe-plantado"
 _CORPO_401_ESPERADO = {"detail": "não autenticado", "type": "unauthorized"}
 _CORPO_403_ESPERADO = {"detail": "acesso negado", "type": "forbidden"}
+_CORPO_5XX_ESPERADO = {"detail": "erro interno", "type": "internal_error"}
 
 
 def _instancia_com_mensagem(classe: type[Exception]) -> Exception:
@@ -252,7 +255,12 @@ def _instancia_com_mensagem(classe: type[Exception]) -> Exception:
     "classe", sorted(_subclasses_concretas(), key=lambda c: c.__name__), ids=lambda c: c.__name__
 )
 def test_corpo_exato_por_faixa_para_toda_classe_das_duas_raizes(classe: type[Exception]) -> None:
-    """401/403 com corpo constante (e `WWW-Authenticate` só no 401); demais com `str(exc)`."""
+    """401/403/5xx com corpo constante (e `WWW-Authenticate` só no 401); demais com `str(exc)`.
+
+    A faixa 5xx entrou na issue #170: a mensagem plantada não pode aparecer no corpo,
+    e é o que o ramo próprio assere — com a mesma mensagem que o ramo de `str(exc)`
+    exige ver.
+    """
     excecao = _instancia_com_mensagem(classe)
     assert isinstance(excecao, IdentityError | IdentityApplicationError)
     resposta = handlers.build_error_response(excecao)
@@ -265,6 +273,10 @@ def test_corpo_exato_por_faixa_para_toda_classe_das_duas_raizes(classe: type[Exc
         assert resposta.headers["WWW-Authenticate"] == "Bearer"
     elif status == 403:  # noqa: PLR2004
         assert corpo == _CORPO_403_ESPERADO
+        assert "WWW-Authenticate" not in resposta.headers
+    elif status >= 500:  # noqa: PLR2004
+        assert corpo == _CORPO_5XX_ESPERADO
+        assert _MENSAGEM_PLANTADA not in resposta.body.decode()
         assert "WWW-Authenticate" not in resposta.headers
     else:
         assert corpo == {"detail": _MENSAGEM_PLANTADA, "type": "identity_error"}
