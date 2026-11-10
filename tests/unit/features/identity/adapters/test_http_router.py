@@ -133,11 +133,13 @@ class _Ambiente:
                     unit_of_work=InMemoryUnitOfWork(
                         self.restaurants, self.users, self.setup_tokens
                     ),
+                    authorizer=autorizar,
                 ),
                 router_module._get_create_unit: lambda: CreateUnitUseCase(
                     units=self.units,
                     restaurants=self.restaurants,
                     id_generator=FakeIdGenerator(),
+                    authorizer=autorizar,
                 ),
                 router_module._get_create_user: lambda: CreateUserUseCase(
                     users=self.users,

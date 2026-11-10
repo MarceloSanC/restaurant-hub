@@ -19,7 +19,10 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
     InMemoryRestaurantRepository,
 )
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
-from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
+from tests.fakes.features.identity.stub_action_authorizers import (
+    TEST_ACTOR_ID,
+    RecordingActionAuthorizer,
+)
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -35,7 +38,9 @@ def _setup(
     restaurants = InMemoryRestaurantRepository()
     if com_restaurante:
         restaurants.add(Restaurant(id=_TENANT, name="Cantina"))
-    use_case = CreateUnitUseCase(units, restaurants, FakeIdGenerator([_FIXED_ID]))
+    use_case = CreateUnitUseCase(
+        units, restaurants, FakeIdGenerator([_FIXED_ID]), RecordingActionAuthorizer()
+    )
     return use_case, units, restaurants
 
 

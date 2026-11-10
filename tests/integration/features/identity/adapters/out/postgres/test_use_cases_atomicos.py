@@ -101,7 +101,10 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
 from tests.fakes.features.identity.fake_password_hasher import FakePasswordHasher
 from tests.fakes.features.identity.fake_setup_token_issuer import FakeSetupTokenIssuer
 from tests.fakes.features.identity.fake_token_issuer import FakeTokenIssuer
-from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
+from tests.fakes.features.identity.stub_action_authorizers import (
+    TEST_ACTOR_ID,
+    RecordingActionAuthorizer,
+)
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import (
@@ -636,6 +639,7 @@ def _provisionar_tenant(
         invitation_ttl=timedelta(hours=72),
         base_url="https://app.exemplo.com",
         unit_of_work=PostgresUnitOfWork(engine),
+        authorizer=RecordingActionAuthorizer(),
     )
 
 
