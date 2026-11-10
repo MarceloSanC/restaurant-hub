@@ -419,9 +419,11 @@ def create_user(
        `manage_tenant`), e ninguém cria um `platform_admin`.
     2. **Autorização por unidade requisitada** — cada `unit_id` do corpo é
        checado. Além de impedir que um `manager` vincule alguém a uma unidade que
-       não enxerga, é o que mantém seguras as faixas 404/422: sem isso o use case
-       seria alcançado com unidade não-visível e responderia `UnitNotFoundError`
-       (404) ou `CrossTenantError` (422), reabrindo o oráculo de enumeração.
+       não enxerga, é o que mantém seguras as faixas 404/422: uma unidade
+       não-visível levaria a `UnitNotFoundError` (404) ou `CrossTenantError`
+       (422), reabrindo o oráculo de enumeração. Desde a Stage 2.7 o use case
+       repete a mesma autorização como primeira instrução, e esta, aqui, é a
+       defesa em profundidade (ADR 2.7.0001).
     3. **O tenant vem do ator**, nunca do corpo — o schema sequer tem o campo.
     """
     target_role = Role.from_string(payload.role)

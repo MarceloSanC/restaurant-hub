@@ -421,4 +421,21 @@ uv run coverage report --fail-under=90 --include="<arquivos de src/ tocados>"   
 **Contexto:** a Task 01 mandava `dependencies.py` reexportar a função do port (`import … as …`), e o CA09 do concept diz que `dependencies.py` "a importa de lá".
 **Razão:** o ruff do projeto recusa o alias redundante (PLC0414) e o `mypy --strict` recusa o reexport implícito; e `dependencies.py` não usa a função. Quem a usa (`router.py`) e os testes de borda (`test_http_dependencies.py`) passaram a importá-la do port. O CA09 fica cumprido no que importa — uma definição só, no port, e a borda sem cópia (teste AST) —, sem a parte "dependencies importa". O docstring do port, que dizia "a borda a reexporta", foi corrigido no `[2.7/task-01-fix]` (Checkpoint C do bloco 01–03).
 
+### 2026-11-09 — [decision] Task 04 — a integração usa o dublê que concede, não o autorizador real — Claude
+**Contexto:** a Task 04 deixava para a execução escolher, em `test_use_cases_atomicos.py`, entre o `AuthorizeActionUseCase` real sobre os repositórios Postgres (com um ator semeado) e o dublê.
+**Pergunta:** qual autorizador as suítes de atomicidade recebem?
+**Opções:**
+- A — o real, com `platform_admin`/`owner` semeados em cada cenário
+- B — `RecordingActionAuthorizer` ✅ recomendada
+**Decisão:** B
+**Razão:** as suítes medem a atomicidade das escritas (falha na N-ésima escrita ⇒ banco inalterado), não o acesso; o real exigiria semear um ator em cada uma e acrescentaria leituras ao registro de escritas que elas conferem. O acesso pela cadeia real está na suíte unitária da Task 07 e, pelo HTTP com Postgres, no e2e (a borda e o use case decidem sobre o mesmo `AuthorizeActionUseCase`). Reversível e barato, sem âncora de princípio — registrado por isso.
+
+### 2026-11-09 — [measurement] Task 06 — mutações manuais que o CA05 reprova — Claude
+**Contexto:** o critério de aceite da Task 06 pede a prova de que a forma AST reprova uma linha antes da autorização e uma autorização condicional.
+**Medição:** em `create_unit.py`, `if command.name: pass` inserido antes da chamada a `authorize_requirement`; `uv run pytest tests/unit/features/identity -q` → `FAILED …test_use_cases_authorize.py::test_a_primeira_instrucao_de_execute_e_a_autorizacao_de_r3[create_unit]` — `1 failed, 1126 passed`; arquivo restaurado por `git checkout`. A autorização condicional (`if …: authorize_requirement(...)`) cai na mesma asserção, porque a primeira instrução deixa de ser um `ast.Expr` de chamada (`assert isinstance(primeira, ast.Expr)`).
+**Razão:** prova que o CA05 enxerga a ordem e a incondicionalidade, não só a presença da chamada.
+
+### 2026-11-09 — [deviation] Task 06 (fix) — import relativo na varredura de alcance e docstring da rota de usuário — Claude
+Checkpoint C do bloco 04–06: (1) a varredura do CA14 só via import absoluto; `from .provision_account import …` passaria em silêncio. Passou a resolver os dois idiomas relativos, com um teste de controle. (2) O docstring de `router.py` › `create_user` ainda dizia que, sem a autorização da borda, o use case seria alcançado com unidade não-visível — falso desde a Task 05; reescrito como o de `authorize_all`. Commit `[2.7/task-06-fix]`.
+
 <!-- END: post-execution -->
