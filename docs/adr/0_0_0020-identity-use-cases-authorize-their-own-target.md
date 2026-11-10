@@ -229,8 +229,9 @@ concept picks one, and the owner role stays a code literal.
 - **The guarantee is "authorized", not "authentic".** This is the threat model of ADR 3.7.0001:
   an in-process driver that forges an actor still passes. Issue #75 (actor authenticity, including
   a system or delegated actor that identity issues) and issue #76 (identifier validation outside
-  HTTP) were written for staff. Identity has the same two gaps, and a comment on each issue widens
-  it to identity. Both stay non-goals of Stage 2.7.
+  HTTP) were written for staff. Identity has the same two gaps. Widening both issues to identity
+  was still pending on 2026-11-09 (a finding recorded on issue #115). Both stay non-goals of
+  Stage 2.7.
 - **A seed command for the first `platform_admin`** has no actor that can authorize it, by
   definition, since it is the root of trust (ADR 2.4.0003 §2). It needs its own path outside these
   use cases, decided by the Stage that builds it, and it must not reuse `CreateUserUseCase` with a
