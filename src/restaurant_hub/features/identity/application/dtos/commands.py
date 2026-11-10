@@ -188,6 +188,25 @@ class InviteUserCommand:
 
 
 @dataclass(frozen=True)
+class InviteOwnerCommand:
+    """Convite do `owner` de um restaurante existente, pela plataforma (Stage 2.7).
+
+    Sem `role`: o papel é o literal `Role.OWNER`, dentro do use case (ADR 0.0.0018
+    §Decision 3). Sem `unit_ids`: o dono enxerga o restaurante inteiro.
+
+    Attributes:
+        actor_id: quem convida — o ator que o use case autoriza (`manage_platform`).
+        email: e-mail de login do dono e destino do convite; unicidade global.
+        tenant_id: o restaurante do dono — vem do **path**, não do ator, que é
+            `platform_admin` e não tem tenant (concept 2.4 §5 regra 3).
+    """
+
+    actor_id: UserId
+    email: Email
+    tenant_id: RestaurantId
+
+
+@dataclass(frozen=True)
 class SetPasswordWithTokenCommand:
     """Redenção de um token de setup: define a senha da conta.
 

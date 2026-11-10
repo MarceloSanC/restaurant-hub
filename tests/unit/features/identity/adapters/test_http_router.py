@@ -38,6 +38,9 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.invite_owner import (
+    InviteOwnerUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
 )
@@ -156,6 +159,22 @@ class _Ambiente:
                     invitation_ttl=timedelta(hours=72),
                     base_url="https://app.exemplo.com",
                     unit_of_work=InMemoryUnitOfWork(self.users, self.setup_tokens),
+                ),
+                # O **mesmo** `AuthorizeActionUseCase` do guard (Stage 2.7): a rota e
+                # o use case decidem sobre o mesmo estado, como no composition root.
+                router_module._get_invite_owner: lambda: InviteOwnerUseCase(
+                    users=self.users,
+                    restaurants=self.restaurants,
+                    hasher=self.hasher,
+                    tokens=self.setup_tokens,
+                    token_issuer=FakeSetupTokenIssuer(),
+                    email_sender=self.sender,
+                    id_generator=FakeIdGenerator(),
+                    clock=self.clock,
+                    invitation_ttl=timedelta(hours=72),
+                    base_url="https://app.exemplo.com",
+                    unit_of_work=InMemoryUnitOfWork(self.users, self.setup_tokens),
+                    authorizer=autorizar,
                 ),
             }
         )
@@ -760,6 +779,7 @@ async def test_papel_desconhecido_e_422(ambiente: _Ambiente, client: AsyncClient
         "_get_create_unit",
         "_get_create_user",
         "_get_invite_user",
+        "_get_invite_owner",
         "_get_request_password_reset",
         "_get_set_password_with_token",
         "_get_guard",
