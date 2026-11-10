@@ -703,3 +703,21 @@ def test_nome_repetido_nomeia_o_doc_de_dominio_primeiro(tmp_path: pathlib.Path) 
         dominio={"docs/domain/x/overview.md": _ESCALA, "docs/domain/staff/equipe.md": _EQUIPE},
     )
     assert "docs/domain/x/overview.md e docs/overview.md" in gate.problemas(repo)[0]
+
+
+# --- Auditoria do PR #157: formas que ainda escapavam --------------------------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["Overview 44 fixa a regra.", "`overview.md` ll. 44–47 fixa a regra."],
+    ids=["maiuscula", "ll"],
+)
+def test_linha_ao_overview_da_auditoria_reprova(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _com_overview(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha a docs/overview.md" in achados[0]
+
+
+def test_ancora_ao_overview_com_maiuscula_resolve(tmp_path: pathlib.Path) -> None:
+    assert _com_overview(tmp_path, 'Overview §3 › "salvar = publicar" vale.') == []

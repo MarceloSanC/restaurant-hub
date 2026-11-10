@@ -465,3 +465,39 @@ def test_errata_de_subtitulo_nao_e_poupada(tmp_path: pathlib.Path) -> None:
 def test_a_errata_vai_ate_o_proximo_titulo_de_nivel_2(tmp_path: pathlib.Path) -> None:
     adr = _ADR.replace("| References |", "### 2026-07\n\n- `employee.py:113`\n\n| References |")
     assert gate.problemas(_repo(tmp_path, {}, {"docs/adr/4_1_0003-politica.md": adr})) == []
+
+
+# --- Auditoria do PR #157: formas que ainda escapavam --------------------------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "o guard (`employee.py` 113/116) recusa",
+        "o guard (`employee.py`, 113–116) recusa",
+        "o guard (`employee.py` — 113) recusa",
+        "o guard (`employee.py` @113) recusa",
+        "o guard (`employee.py` ll. 113–116) recusa",
+        "ADR 4.1.0003 (c) ll. 95–97 diz",
+        "ADR 4.1.0003 120/125 diz",
+    ],
+    ids=["barra", "virgula", "travessao", "arroba", "ll-codigo", "ll-adr", "barra-tipo-status"],
+)
+def test_formas_de_linha_da_auditoria_reprovam(tmp_path: pathlib.Path, texto: str) -> None:
+    achados = _repo2(tmp_path, texto)
+    assert len(achados) == 1, achados
+    assert "número de linha" in achados[0]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "o guard (`employee.py`, 2 testes) recusa",
+        "o guard (`employee.py` — 3 casos) recusa",
+        "o lock (`pyproject.toml`, 3.12) fixa",
+        "o lock (`uv.lock` 0.5.1) fixa",
+    ],
+    ids=["virgula-quantidade", "travessao-quantidade", "virgula-versao", "versao"],
+)
+def test_quantidade_e_versao_depois_do_arquivo_passam(tmp_path: pathlib.Path, texto: str) -> None:
+    assert _repo2(tmp_path, texto) == []

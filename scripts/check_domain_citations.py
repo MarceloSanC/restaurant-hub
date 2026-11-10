@@ -84,7 +84,7 @@ _SECAO_7 = re.compile(r"^## 7\.", re.MULTILINE)
 # célula de tabela, parágrafo ou outra fonte. `;` não termina — separa âncoras —,
 # nem o ponto de `l. 166`.
 _FIM_DO_TRECHO = re.compile(
-    r"\||(?<!\bl)\.(?=[\s*_)\]]|$)|\n\s*\n"
+    r"\||(?<!\bl)(?<!\bll)\.(?=[\s*_)\]]|$)|\n\s*\n"
     r"|`?[\w./-]+\.(?:md|py|toml|yml|yaml|ini|cfg)`?|`\.[\w-]+`"
     r"|\bADRs?\s+\d|\boverview\b|\bCLT\b|\b(?:concept|technical)\b"
 )
@@ -115,13 +115,13 @@ _NUMERO_DE_LINHA = re.compile(r"(?<![\w])\d{2,4}(?=\s*(?:[,;:)/–\]-]|$|\(|(?:e
 # fora de texto citado (`*"…line 1086…"*` é citação, não ponteiro).
 # `L171` (estilo GitHub, sem o `#`), `ln 171` e `line ~171` também.
 _LINHA_EXPLICITA = re.compile(
-    r"\b(?:linhas?|lines?|l\.|ln)\s*~?\d{2,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
+    r"\b(?:linhas?|lines?|ll?\.|ln)\s*~?\d{2,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
 )
 # Fragmento de linha no alvo de um link (`...md#L171`, `...md#L171-L175`).
 _FRAGMENTO_DE_LINHA = re.compile(r"#L\d+")
 # Número logo depois da referência (`x.md` 171, `x.md:171`) é linha sempre.
 _NUMERO_IMEDIATO = re.compile(
-    r"^\s*:?\s*\(?\s*(?:(?:linhas?|lines?|l\.)\s*)?\d{2,4}\b", re.IGNORECASE
+    r"^\s*:?\s*\(?\s*(?:(?:linhas?|lines?|ll?\.)\s*)?\d{2,4}\b", re.IGNORECASE
 )
 
 # --- Regra 2: âncora ----------------------------------------------------------
@@ -245,11 +245,12 @@ def regex_de_referencia(nomes: list[str]) -> re.Pattern[str]:
     """Referência a doc de domínio: `<nome>.md` (com crase e link opcionais) ou `<nome> §`.
 
     O nome sem `.md` seguido de número (`overview 44/137`) também é referência: é a citação
-    por linha com o nome curto, que sem isto passaria invisível.
+    por linha com o nome curto, que sem isto passaria invisível. O nome casa sem distinguir
+    maiúscula (`Overview 44` começando a frase).
     """
     alternativas = "|".join(re.escape(n) for n in sorted(nomes, key=len, reverse=True))
     return re.compile(
-        rf"(?<![\w-])(?P<nome>{alternativas})"
+        rf"(?<![\w-])(?P<nome>(?i:{alternativas}))"
         r"(?:\.md(?P<fragmento>#L\d+)?`?(?:\]\((?P<alvo>[^)\s]*)\))?|(?= §)|(?=[ \t]+\d{2,4}\b))"
     )
 
@@ -310,10 +311,11 @@ def cadeia_de_ancoras(texto: str, inicio: int) -> list[re.Match[str]]:
 def problemas_no_texto(texto: str, docs: dict[str, Doc]) -> list[tuple[int, str]]:
     """(linha, motivo) de cada citação por linha e de cada âncora que não resolve."""
     achados: list[tuple[int, str]] = []
+    por_nome = {nome.lower(): doc for nome, doc in docs.items()}
     for ref in regex_de_referencia(list(docs)).finditer(texto):
         if _e_exemplo_em_literal(texto, ref):
             continue
-        doc = docs[ref.group("nome")]
+        doc = por_nome[ref.group("nome").lower()]
         linha = _linha_de(texto, ref.start())
         resto, trecho = _trecho(texto, ref.end())
         # `#L171` no alvo do link (`[`x.md`](../x.md#L171)`) é linha: o link inteiro é

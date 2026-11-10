@@ -97,7 +97,7 @@ _REF_CODIGO = re.compile(
 # --- Regra 1: número de linha (mesma leitura dos outros dois gates) ------------
 
 _FIM_DO_TRECHO = re.compile(
-    r"\||(?<!\bl)\.(?=[\s*_)\]]|$)|\n\s*\n"
+    r"\||(?<!\bl)(?<!\bll)\.(?=[\s*_)\]]|$)|\n\s*\n"
     r"|`?[\w./-]+\.(?:md|py|toml|yml|yaml|ini|cfg)`?|`\.[\w-]+`"
     r"|\bADRs?\s+\d|\boverview\b|\bCLT\b|\b(?:concept|technical)\b"
 )
@@ -136,13 +136,14 @@ _NEUTROS = (
 )
 _NUMERO_DE_LINHA = re.compile(r"(?<![\w])\d{2,4}(?=\s*(?:[,;:)/–\]-]|$|\(|(?:e|and)\s+\d))")
 _LINHA_EXPLICITA = re.compile(
-    r"\b(?:linhas?|lines?|l\.|ln)\s*~?\d{1,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
+    r"\b(?:linhas?|lines?|ll?\.|ln)\s*~?\d{1,4}\b|(?<![\w#])L\d{2,4}\b", re.IGNORECASE
 )
 _FRAGMENTO_DE_LINHA = re.compile(r"#L\d+")
-# Logo depois da referência: `x.py:113`, `x.py 113`, `x.py (113)`, `ADR N:79`, `x.py` linha 3.
+# Logo depois da referência: `x.py:113`, `x.py 113`, `x.py (113)`, `ADR N:79`, `x.py` linha 3,
+# `x.py`, 113–116, `x.py` — 113, `x.py` @113 e o par com barra (`x.py` 113/116).
 _NUMERO_IMEDIATO = re.compile(
-    r"^`?[ \t]*:?[ \t]*\(?[ \t]*(?:(?:linhas?|lines?|l\.)[ \t]*)?\d{1,4}\b"
-    r"(?![./]\d|-\d{2}-\d)"  # versão (2.2) e data (2026-07-27) não são linha
+    r"^`?[ \t]*[:,@—]?[ \t]*\(?[ \t]*(?:(?:linhas?|lines?|ll?\.)[ \t]*)?\d{1,4}\b"
+    r"(?!\.\d|-\d{2}-\d)"  # versão (2.2) e data (2026-07-27) não são linha
     r"(?!\s*\N{MULTIPLICATION SIGN}|\s+(?!(?:e|and)\s+\d)[^\W\d_])",  # "(25 tests)": quantidade
     re.IGNORECASE,
 )
