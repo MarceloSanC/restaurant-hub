@@ -51,6 +51,7 @@ graph LR
     S34 --> S36[3.6-staff-http]
     S36 --> S35[3.5-employee-login-link] --> S37[3.7-application-authorization] & S38[3.8-termination-access-scope]
     S36 --> S39[3.9-error-hierarchy]
+    S38 --> S310[3.10-login-link-management]
   end
   subgraph Step4[Step 4 — Escala manual]
     S41[4.1-scheduling-domain] --> S42[4.2-validation-policies]
@@ -87,6 +88,8 @@ graph LR
   S52 --> S81
   S43 --> S39
   S37 --> S27
+  S27 --> S310
+  S310 --> S45
 ```
 
 ## Tabela de Steps
@@ -95,7 +98,7 @@ graph LR
 |---|---|---|---|---|
 | 1 | Fundação do repositório | Repo com scaffolding hexagonal, gates locais e CI verdes | done | 1.1 → 1.2 |
 | 2 | Restaurante e acesso | Restaurante (tenant) e unidades existem no sistema; pessoas entram com papel certo (dono/gerente/RH/funcionário + admin plataforma) | in_progress | 2.1 → 2.7 |
-| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.9 |
+| 3 | Equipe da unidade | Gerente cadastra funções customizadas e funcionários com jornada (fixa/sob demanda), preferências e indisponibilidades | in_progress | 3.1 → 3.10 |
 | 4 | Escala manual publicável | Gerente monta, valida e publica a escala; funcionário consulta; planilha/papel aposentados | in_progress | 4.1 → 4.7 |
 | 5 | Auto-preenchimento | Escala se monta sozinha respeitando regras e justiça distributiva; gerente só ajusta | not_started | 5.1 → 5.2 |
 | 6 | Implantação piloto | Sistema no ar para o restaurante piloto usar no dia a dia | not_started | 6.1 → 6.3 |
@@ -131,11 +134,12 @@ graph LR
 | `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
 | `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
 | `3.9-error-hierarchy` | Hierarquia de exceções sem protocolo HTTP | shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) | done | `3.6-staff-http`, `4.3-scheduling-application`, #45 |
+| `3.10-login-link-management` | Vincular, desvincular e trocar o login de um registro | vertical (staff) + identity (fachada) | draft | `3.8-termination-access-scope`, `2.7-identity-application-authorization`, #178 |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
 | `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
-| `4.5-scheduling-http` | API do editor e consulta de escala | adapters/inbound/http | draft | `4.4-scheduling-persistence` |
+| `4.5-scheduling-http` | API do editor e consulta de escala | adapters/inbound/http | draft | `4.4-scheduling-persistence`, `3.10-login-link-management` |
 | `4.6-schedule-notifications` | Notificação de publicação por e-mail | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `4.7-schedule-image` | Imagem/tabela da escala sob demanda | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `5.1-autofill-domain` | Algoritmo de auto-preenchimento | domain | draft | `4.7-schedule-image` |
@@ -205,7 +209,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#102](https://github.com/MarceloSanC/restaurant-hub/issues/102) | Frontmatter YAML e `references` dos docs de ADR e de domínio sem validação no `docs-check` | shared | tooling | done | — |
 | [#105](https://github.com/MarceloSanC/restaurant-hub/issues/105) | Identificadores locais do domínio de scheduling em inglês | scheduling | domain | done | — |
 | [#106](https://github.com/MarceloSanC/restaurant-hub/issues/106) | Edição da configuração de validação e calendário do restaurante sem dono no roadmap | scheduling | application | open | `4.3-scheduling-application` |
-| [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário | staff | application + identity (fachada) | open | — |
+| [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107) | Vincular login existente a registro de funcionário — promovida à Stage `3.10-login-link-management` | staff | docs (roadmap) | open | — |
 | [#108](https://github.com/MarceloSanC/restaurant-hub/issues/108) | Remoção concorrente com R17 não pode apagar registro já vinculado (conta órfã) | staff | application + adapters/out | done | #68 |
 | [#114](https://github.com/MarceloSanC/restaurant-hub/issues/114) | Provisionar o dono do restaurante por convite em vez de senha escolhida pela plataforma | identity | application + adapters/inbound/http | done | #67 |
 | [#115](https://github.com/MarceloSanC/restaurant-hub/issues/115) | Autorizar o próprio alvo nos use cases de identity (formato da 3.7) — decisão: ADR 0.0.0020, Stage `2.7-identity-application-authorization` | identity | docs (ADR) | done | #67 |
@@ -237,6 +241,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#172](https://github.com/MarceloSanC/restaurant-hub/issues/172) | Corrigir o convite de um dono provisionado com e-mail errado | identity | application + adapters/inbound/http | open | #114 |
 | [#174](https://github.com/MarceloSanC/restaurant-hub/issues/174) | Citações por número de linha a `LAYOUT.md`, concepts/technicals de Stage e runbooks sem gate | shared | tooling | open | #154 |
 | [#175](https://github.com/MarceloSanC/restaurant-hub/issues/175) | Falha de envio do convite de login de funcionário vai ao log com traceback e pode vazar destinatário e link | staff + identity | application + adapters/out/identity | open | #170 |
+| [#178](https://github.com/MarceloSanC/restaurant-hub/issues/178) | Stage 3.8 fechou como `stage 3.7: complete` e o `check_stage_deps` trava quem depende dela | shared | docs + tooling | open | — |
 | [#180](https://github.com/MarceloSanC/restaurant-hub/issues/180) | Marca fechada "fechada pela Stage N.M" não é conferida contra o roadmap | shared | tooling | open | #158 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
@@ -1532,6 +1537,54 @@ skills_hint: [hex-arch-python, fastapi-thin-adapter, pytest-with-fakes]
 > - **8 Tasks + 5 commits de correção** (Checkpoints C) **+ 2 extras** (auditoria de testes, 3 rodadas).
 >   Oráculos e2e de faixa intocados. Findings para a 4.5 na §7 do technical.
 
+
+#### Stage 3.10 — `3.10-login-link-management`
+
+**Descrição humana:** o gerente passa a administrar o vínculo de login de um registro de funcionário além do "criar login" da 3.5: **vincular** a um registro uma conta que já existe no restaurante, **desvincular** e **trocar** o login vinculado. O caso imediato é o gerente ou dono que também trabalha na escala: ele já tem login, R17 responde 409, e "minha escala" (4.5) não o alcança. `get_my_schedule` passa a alcançá-lo sem mudança no dia em que o vínculo existir, porque lê `list_members_of_user`. É também o caminho de recuperação dos limites declarados no concept 3.5 §6.4 (conta criada sem vínculo, e-mail digitado errado) e a única forma de remover um registro que recebeu login por engano, já que R15 recusa o vinculado (ADR 0.0.0013). Nasce da issue [#107](https://github.com/MarceloSanC/restaurant-hub/issues/107), que reúne o finding do concept 3.5 §10 ("Vincular login existente e desvincular/trocar login de um registro"), os dois findings de staff do technical 3.8 §7 e o D-LINK do concept 4.3 §7, que a pôs antes da 4.5. Promovida a Stage pelo PIPELINE §4.5: regra nova (tenant e papel da conta, unidade), mudança de contrato no port de escrita do vínculo e revisão da regra de `workforce.md` §3.8 › "O vínculo é definido uma única vez e só num registro ativo", que hoje diz não haver desvincular nem vincular login existente na v1 (ADR 3.5.0002 › "recovery deferred to the"). Entrega em staff + identity, como a 3.5 e a 3.8 (divergência do PIPELINE §4.2 #4 a declarar no concept). Depende da 2.7 porque a consulta nova na fachada de identity precisa ser classificada no inventário que a 2.7 transforma em propriedade (ADR 0.0.0020 › "A new consumer of any facade-only use case has to be classified against this table"), e porque as duas mexem na fachada e no gateway de staff. A #178 entra em `depends_on` só porque a 3.8 fechou com o commit reservado `stage 3.7: complete` e, sem ela, o `check_stage_deps` reprova a dependência da 3.8.
+
+```yaml
+stage_id: 3.10-login-link-management
+bounded_context: staff
+camada_alvo: vertical (staff, consumindo consulta nova da fachada de identity)
+depends_on: [3.8-termination-access-scope, 2.7-identity-application-authorization]
+arquivos_a_criar:
+  - features/staff/application/use_cases/ (vincular conta existente, desvincular, trocar; o concept decide se trocar é operação própria ou desvincular + vincular)
+  - consulta somente leitura em features/identity/application/use_cases/ (tenant, papel e unidades da conta), atrás da fachada
+  - ponto único da regra de fim de vínculo (ADR 3.8.0001 decisão 5), extraído de deactivate_employee.py
+  - rotas no router de staff + testes unit, contrato fake x real do gateway e e2e
+  - docs/adr/3_10_0001-*.md
+arquivos_a_modificar:
+  - features/identity/application/facade.py; composition_root.py
+  - features/staff/application/ports/out/{identity_gateway,employee_repository}.py (lei nova do gateway; escrita condicional de desvincular/trocar, ao lado de link_login — ADR 0.0.0010)
+  - features/staff/adapters/out/{identity/local_identity_gateway.py,postgres/employee_repository.py}
+  - features/staff/application/use_cases/deactivate_employee.py (passa a usar o ponto único da regra)
+  - features/staff/adapters/inbound/http/{router,schemas,error_handlers}.py
+  - inventário de exclusões do teste de totalidade da 2.7 (a consulta nova é facade-only)
+  - docs: docs/domain/staff/workforce.md §3.8 (nota datada); notas append-only nos ADRs 3.5.0002 e 3.8.0001
+contratos_introduzidos:
+  - operações de vincular/desvincular/trocar no port de escrita do vínculo; lei nova do IdentityGateway; consulta nova da IdentityFacade
+contratos_consumidos:
+  - IdentityFacade e IdentityGateway (3.5, 3.8); link_login condicional (ADR 0.0.0010); regra de fim de vínculo (ADR 3.8.0001); AccessGuard e ator no command (3.7); inventário facade-only (ADR 0.0.0020, Stage 2.7)
+definition_of_done:
+  - "toda transicao do vinculo de login de um registro (vincular conta existente, desvincular, trocar) recusa conta de outro tenant, platform_admin e registro fora do alcance do ator, e toda transicao que encerra um vinculo ativo passa pelo ponto unico da regra do ADR 3.8.0001 — travado por teste, inclusive e2e contra Postgres"
+non_goals:
+  - criar login novo (R17, 3.5) e reemitir o link de definição de senha (finding do concept 3.5 §10, Stage de identity própria)
+  - desativar conta (User.is_active; ADR 3.8.0001 decisão 4) e mudar o papel da conta
+  - "minha escala" e qualquer superfície de scheduling (4.5)
+  - Unit of Work entre staff e identity (ADR 2.6.0002 recusa transação entre BCs); a corrida de transições concorrentes do mesmo login fica para o concept decidir entre declarar e travar
+  - completar perfil no primeiro acesso
+complexidade_estimada: M
+gate_mode: strict
+skills_hint: [hex-arch-python, ddd-tactical-patterns, repository-pattern, pytest-with-fakes, fastapi-thin-adapter, composition-root, task-ordering-hex]
+```
+
+Perguntas que a issue deixa para o concept (registradas na #107):
+
+- **Membership da unidade.** Vincular exige que a conta já seja membro da unidade do registro, ou o vínculo cria a membership? O dono enxerga todas as unidades sem membership (ADR 2.1.0001), e o concept 3.5 §10 diz que vincular **não** exige papel `employee`.
+- **Quem pode.** R17 exige `manage_staff` **e** `manage_users` sobre a unidade (ADR 3.5.0001); vincular conta que já tem papel acima de `employee` pode pedir mais. O gerente pode vincular a própria conta?
+- **Forma da escrita.** Desvincular e trocar precisam de escrita condicional sobre o `user_id` esperado, para não apagar em silêncio um vínculo que mudou (a classe de defeito da #68 e da #108).
+- **Corrida.** Duas transições concorrentes do mesmo login em registros da mesma unidade reabrem a corrida que o ADR 3.8.0001 › "Alternative H" declarou residual; o technical 3.8 §7 sugere lock por `user_id` nesta Stage.
+- **Paralelismo.** A 4.4 pode tocar o repositório de staff (`find_by_user_id` e índice, guarda reversa); não rodar em paralelo com ela se as pegadas de arquivo se cruzarem.
 
 ---
 
