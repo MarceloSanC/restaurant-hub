@@ -233,6 +233,11 @@ def test_downgrade_da_0005_remove_so_o_que_ela_criou(engine: Engine, database_ur
         colunas = _colunas_de(engine, "job_functions")
         assert "enabled_in_all_units" not in colunas
         assert colunas >= {"id", "tenant_id", "name"}
+        with engine.connect() as conexao:
+            indices = {
+                linha[0] for linha in conexao.execute(text("SELECT indexname FROM pg_indexes"))
+            }
+        assert "ix_job_function_units_tenant_unit" not in indices
     finally:
         command.upgrade(config, "head")
     assert "job_function_units" in _tabelas(engine)
