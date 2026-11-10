@@ -90,7 +90,8 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 #
 # 27 até a 3.8; a issue #67 troca `CreateRestaurantCommand` e `RestaurantResult`
 # por `ProvisionRestaurantCommand` e `ProvisionedRestaurantResult`.
-_TOTAL_DE_DTOS = 27
+# 28 desde a Stage 2.7, que acrescenta `InviteOwnerCommand`.
+_TOTAL_DE_DTOS = 28
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -370,6 +371,7 @@ _COMMANDS_QUE_AGEM_POR_ATOR = frozenset(
         "CreateUnitCommand",
         "CreateUserCommand",
         "InviteUserCommand",
+        "InviteOwnerCommand",
     }
 )
 

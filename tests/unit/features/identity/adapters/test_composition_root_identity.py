@@ -47,6 +47,9 @@ from restaurant_hub.features.identity.application.use_cases.authenticate_user im
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.invite_owner import (
+    InviteOwnerUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
 )
@@ -99,6 +102,7 @@ def test_wire_dependencies_monta_os_use_cases() -> None:
     assert isinstance(deps.identity_refresh_session, RefreshSessionUseCase)
     assert isinstance(deps.identity_create_user, CreateUserUseCase)
     assert isinstance(deps.identity_invite_user, InviteUserUseCase)
+    assert isinstance(deps.identity_invite_owner, InviteOwnerUseCase)
     assert isinstance(deps.identity_request_password_reset, RequestPasswordResetUseCase)
     assert isinstance(deps.identity_set_password_with_token, SetPasswordWithTokenUseCase)
     assert deps.identity_guard is not None
@@ -163,6 +167,11 @@ _COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[s
     "invite_user": (
         lambda d: d.identity_invite_user,
         {"_users", "_restaurants", "_units", "_tokens"},
+    ),
+    # Stage 2.7 — o convite de dono pela plataforma ganhou use case próprio.
+    "invite_owner": (
+        lambda d: d.identity_invite_owner,
+        {"_users", "_restaurants", "_tokens"},
     ),
     # O da fachada, dentro do gateway de staff — o caminho da travessia entre BCs.
     "provision_account": (
