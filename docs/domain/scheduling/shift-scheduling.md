@@ -332,9 +332,9 @@ realiza-se assim:
   escopo para os gates dos Steps 7/8; (3) o desligamento **não gera entrada de auditoria na
   escala** (a auditoria do ato é do staff); (4) a **recontratação** (ADR 3.2.0006) faz as
   alocações antigas — inclusive futuras — **reaparecerem**: limpar ou não as alocações futuras no
-  momento do desligamento é lacuna do concept da 4.3, *fechada pela Stage 4.3: não limpar, concept 4.3 §7 D-TERM* (o sponsor não pediu limpeza; default: não
+  momento do desligamento é lacuna fechada pela Stage 4.3: *não limpar, concept 4.3 §7 D-TERM* (o sponsor não pediu limpeza; default: não
   limpar); (5) a regra vale para **toda** leitura, presente e futura — custo por leitura,
-  mitigável por consulta em lote ao `StaffReadPort` (lacuna 4.3/4.4, *fechada pela Stage 4.3: o port só tem leituras em lote, ADR 4.3.0003; a 4.4 as serve*).
+  mitigável por consulta em lote ao `StaffReadPort` (lacuna fechada pela Stage 4.3: *o port só tem leituras em lote, ADR 4.3.0003; a 4.4 as serve*).
 - **Remoção definitiva — guarda L-E5 mantida** (`EmployeeInUseError`; "o Step 4 (alocação) é
   quem os preenche" — `docs/stages/3.2-staff-application/concept.md` 301–308; ADR 3.2.0006 › "the FK becomes the hard half of the delete guard"): apagar só passa se **nenhuma** alocação — nem histórica — referenciar o registro.
   Mecanismo: **port de consulta reverso em staff** ("este registro é referenciado?"),
@@ -591,7 +591,7 @@ config do restaurante e distingue block × warn" (`roadmap.md` §Stage 4.2 › "
   a cópia entre unidades carrega indisponibilidades porque descartá-las *"produces, in the target
   unit, a record that is schedulable during the employee's own vacation"* (ADR 3.2.0003 › "Dropping it produces, in the target unit"). Regra do produto (`overview.md` §3 › "cobre férias/atestados na v1"), não trabalhista.
 - **Não é uma das quatro do roadmap 4.2** — o sponsor a confirmou na tabela de F4 (§3.6.0).
-  Onde vive (avaliador com modo fixo × use case) é lacuna da 4.2, *fechada pela Stage 4.2: no avaliador, com modo fixo `block` (ADR 4.2.0002)*.
+  Onde vive (avaliador com modo fixo × use case) é lacuna fechada pela Stage 4.2: *no avaliador, com modo fixo `block` (ADR 4.2.0002)*.
 
 **Invariante:** a escala vigente nunca contém alocação sobre indisponibilidade.
 
@@ -769,7 +769,7 @@ vigente/impressa é o "quadro sujeito à fiscalização" (premissa, ver H3).
   o mesmo regime da indisponibilidade de staff (ADR 3.1.0005 › "stores naive datetime values whose meaning is wall-clock time"), o que permite cruzar
   alocação × indisponibilidade **sem conversão** (ADR 3.1.0001 (i) › "this is the general form Step 4 consumes without conversion"). "Consumers MUST NOT
   compare staff datetimes with aware datetimes without converting first" (ADR 3.1.0005 › "Consumers MUST NOT compare staff datetimes with aware datetimes without converting first").
-  A **representação** é lacuna da 4.1 (§3.2), *fechada pela Stage 4.1: instantes ingênuos de minuto inteiro (ADR 4.1.0007); a persistida é da 4.4/4.5 (§6)*; este doc fixa só a semântica.
+  A **representação** (§3.2) é lacuna fechada pela Stage 4.1: *instantes ingênuos de minuto inteiro (ADR 4.1.0007); a persistida é da 4.4/4.5 (§6)*; este doc fixa só a semântica.
 - **Conversão wall-clock → instante absoluto** só quando um consumidor precisa (e-mail, ponto,
   hub entre unidades), por quem **conhece o fuso** — "scheduling validations in Step 4"
   (ADR 3.1.0005 › "Conversion wall-clock → absolute instant is performed by the consumer"), agora com o fuso lido de identity. Cópia entre unidades de fusos
@@ -824,7 +824,7 @@ A forma exata (tipos, DTO do port) é do concept da 4.3.
 
 - **Ports**: dados de staff via port-out **`StaffReadPort`** (4.3), adapter local (4.4)
   (`roadmap.md` §Stage 4.3 › "Descrição humana", `arquivos_a_criar`, `contratos_consumidos`; §Stage 4.4 › `arquivos_a_criar`). DTO **próprio de scheduling** (o `EmployeeResult` de
-  staff carrega VOs de staff) — lacuna 4.3, *fechada pela Stage 4.3: `StaffMember`, ADR 4.3.0003*. Onde o adapter mora (`adapters/out/staff/` do roadmap
+  staff carrega VOs de staff) — lacuna fechada pela Stage 4.3: *`StaffMember`, ADR 4.3.0003*. Onde o adapter mora (`adapters/out/staff/` do roadmap
   × tradutor no composition root, ADR 3.4.0001 §Alternative A › "with a narrow ignore_imports") é do `technical.md` da 4.4 — a 3.5
   (`draft`) enfrenta a mesma forma antes.
 - **Desligamento**: reconciliado na leitura — **nenhum crossing de escrita** staff → scheduling
@@ -915,7 +915,7 @@ e alocações, aceitar avisos, salvar) e **própria** ("minha escala").
   **tenant** — capacidade tenant-wide (precedente `MANAGE_JOB_FUNCTIONS`); única candidata.
 - **Uma permissão por família de operação** (ADR 3.4.0006 §1, §4 — famílias `cadastro` ×
   `escala`), declarada por rota no adapter HTTP, que mapeia endpoint → conjunto de permissões
-  exigidas (ADR 2.4.0003 §Decision 1). **Nomes** são lacuna da 4.5.
+  exigidas (ADR 2.4.0003 §Decision 1). **Nomes** são lacuna para o concept da Stage 4.5.
 - **Reconciliações aplicadas neste PR**: `overview.md` §5 › "Montar/ajustar escala rápido" ("Gerente / RH … Montar/ajustar
   escala") ganha nota datada — RH **consulta**; montar/ajustar é gerente/dono (ADR 3.4.0006 +
   4.1.0004); `workforce.md` §4 ("é NO STAFF que hr diverge do manager") ganha nota datada — a
@@ -992,8 +992,8 @@ afirmativa.
   §3.4, §3.6.7.
 - **F10 — Sobre-cobertura da demanda** (2026-09-26) → ADR 4.1.0003 (g): oitava política —
   `N` é **alvo**, não teto; alocar além de `N` é **permitido com aviso** e aceite consciente,
-  `warn` default e `block` configurável; o auto-fill não sobre-cobre. Fecha a lacuna (b) que o
-  rascunho deixava para o concept da 4.1. §3.3, §3.6.8.
+  `warn` default e `block` configurável; o auto-fill não sobre-cobre. É a lacuna (b) do
+  rascunho, fechada pela Stage 4.1. §3.3, §3.6.8.
 - **F5 — RH lê a escala** → [ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md):
   `hr` recebe leitura unit-scoped; sem escrita; supera em parte o ADR 3.4.0006 §3 (errata).
   Resolve o ex-HALT T2 (overview §5 × ADR 3.4.0006) com nota no overview. §4.
@@ -1132,7 +1132,7 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 >   distintas podem se sobrepor, inclusive da mesma função
 >   ([ADR 4.1.0010](../../adr/4_1_0010-enabled-band-is-an-element-of-the-day.md); a chave
 >   `(início, fim)` vem do ADR 4.1.0011). Fecha a lacuna de cardinalidade de §3.3.
-> - **§3.1 e §3.2 — as outras lacunas da 4.1.** `Schedule` é a **raiz única** do agregado, com a
+> - **§3.1 e §3.2 — as outras lacunas fechadas pela Stage 4.1.** `Schedule` é a **raiz única** do agregado, com a
 >   versão e uma fotografia do calendário operacional
 >   ([ADR 4.1.0009](../../adr/4_1_0009-schedule-is-the-single-aggregate-root.md)); o `TimeRange` é
 >   par semiaberto de instantes ingênuos de minuto inteiro
