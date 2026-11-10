@@ -532,6 +532,13 @@ def test_tabela_real_reprova_se_uma_linha_done_perde_a_marca(tmp_path: pathlib.P
         ("lacunas da 4.4, 4.2.", "lacunas da 4.4, 4.2", " (4.2 já está done)"),
         ("lacuna (4.1)", "lacuna (4.1", " (4.1 já está done)"),
         ("é **lacuna** da 4.1", "lacuna da 4.1", " (4.1 já está done)"),
+        ("é _lacuna da 4.1_, x", "lacuna da 4.1", " (4.1 já está done)"),  # itálico com _
+        ("é lacuna da `4.1`, x", "lacuna da 4.1", " (4.1 já está done)"),  # crase
+        ("é LACUNA DA 4.1, x", "LACUNA DA 4.1", " (4.1 já está done)"),
+        ("é lacuna aberta para a 4.1, x", "lacuna aberta para a 4.1", " (4.1 já está done)"),
+        ("é lacuna em aberto da 4.1, x", "lacuna em aberto da 4.1", " (4.1 já está done)"),
+        ("são lacunas pendentes da 4.1.", "lacunas pendentes da 4.1", " (4.1 já está done)"),
+        ("o ponto, delegado à 4.1, x", "delegado à 4.1", " (4.1 já está done)"),
         (
             "delegada ao concept da Stage 4.1, que a fechou",
             "delegada ao concept da Stage 4.1",
@@ -559,6 +566,7 @@ def test_mencao_livre_de_lacuna_reprova(
         "era **lacuna**\n  para o concept da 4.1 (§3.2) — fechada\n",  # quebra + ênfase
         "> o detalhe era lacuna da\n> 4.2, x\n",  # quebra dentro de citação
         "o detalhe era lacuna\ndo concept da 4.1\n",
+        "o detalhe era lacuna da\n`4.1`, x\n",  # quebra + crase
     ],
 )
 def test_mencao_livre_quebrada_entre_linhas_reprova_na_linha_onde_comeca(

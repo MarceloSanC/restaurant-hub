@@ -43,15 +43,17 @@ Stage `done` (issue #37).
    a parte que sobra fica dita na linha ou a célula é reendereçada (issue #117).
    **Fora da tabela, a marca canônica é a única forma** (issue #158): a menção livre —
    "lacuna" ou "delegada" seguida só de conectivos e do número da Stage ("lacuna da
-   4.2", "lacuna do concept da 4.3", "(lacuna 4.3/4.4", "delegada ao concept da Stage
-   3.1"), inclusive quebrada entre duas linhas ou com ênfase no meio — reprova com
-   qualquer status, e se reescreve como "Lacuna para o concept da Stage N.M" (aberta)
-   ou "lacuna fechada pela Stage N.M" (fechada). Proibir em vez de aceitar mais formas
-   mantém o contrato do ADR 0.0.0015 §Decision 4 numa marca só, que um `grep` acha.
+   4.2", "lacuna do concept da 4.3", "(lacuna 4.3/4.4", "lacuna aberta para a 4.2",
+   "delegada ao concept da Stage 3.1"), inclusive quebrada entre linhas ou com ênfase
+   ou crase no meio — reprova com qualquer status, e se reescreve como "Lacuna para o
+   concept da Stage N.M" (aberta) ou "lacuna fechada pela Stage N.M" (fechada). Proibir
+   em vez de aceitar mais formas mantém o contrato do ADR 0.0.0015 §Decision 4 numa
+   marca só, que um `grep` acha.
    *Limite:* texto livre entre a palavra e a Stage ("a lacuna (b) que o rascunho
-   deixava para o concept da 4.1") não é lido — cobrar essa forma pegaria a prosa
-   histórica que narra lacunas já fechadas ("as lacunas endereçadas à 4.2 foram
-   fechadas"). A #158 reescreveu as que havia em `docs/domain/**`.
+   deixava para o concept da 4.1", "lacuna endereçada à 4.2") não é lido — cobrar essa
+   forma pegaria a prosa histórica que narra lacunas já fechadas ("as lacunas
+   endereçadas à 4.2 foram fechadas"). A #158 reescreveu as que havia em
+   `docs/domain/**`.
 
 **Sem válvula.** Até a issue #116 o `shift-scheduling.md` tinha uma exceção à
 regra 7 (`VALVULA_REFERENCES`, ADR 0.0.0015 §Decision 5): 16 ADRs linkados fora do
@@ -95,15 +97,19 @@ _CERCA = re.compile(r"^\s*(```|~~~)")
 # Menção a lacuna endereçada a Stage, em qualquer forma: "lacuna" (ou "delegada", o verbo
 # com que a prosa endereçava a lacuna aberta) seguida só de conectivos e do número da
 # Stage — "lacuna da 4.2", "lacuna do concept da 4.3", "(lacuna 4.3/4.4", "lacunas da 4.1",
-# "delegada ao concept da Stage 3.1" e a própria marca canônica. O separador atravessa
-# ênfase (`*`, `_`) e **uma** quebra de linha (com `>` de citação): a marca quebrada no
-# meio pela largura da linha não escapa. Não é Stage: `§3.2` (seção — o `§` não é
-# separador) nem `4.1.0007` (ADR).
-_SEP = r"(?:[ \t*_]*\n[ \t>]*[ \t*_]*|[ \t*_]+)"
-_CONECTIVOS = r"(?:para|concept|stages?|do|da|de|dos|das|ao|o|a|à)"
+# "lacuna aberta para a 4.2", "lacuna pendente da 4.2", "delegado ao concept da Stage 3.1"
+# e a própria marca canônica. "Aberta"/"pendente" contam como conectivo porque qualificam
+# a lacuna sem tirá-la do endereço; "fechada" não conta — é a forma fechada. O separador
+# atravessa ênfase (`*`, `_`), crase e **uma** quebra de linha por vez (com `>` de
+# citação): a marca quebrada no meio pela largura da linha não escapa; linha em branco
+# corta. A palavra começa onde não há letra nem dígito antes — `_lacuna_` (itálico) conta,
+# `metalacuna` não. Não é Stage: `§3.2` (seção — o `§` não é separador) nem `4.1.0007`
+# (ADR).
+_SEP = r"(?:[ \t*_`]*\n[ \t>]*[ \t*_`]*|[ \t*_`]+)"
+_CONECTIVOS = r"(?:para|concept|stages?|do|da|de|dos|das|ao|o|a|à|em|aberto|abertas?|pendentes?)"
 _STAGE = r"\d+\.\d+(?!\d|\.\d)"
 _MENCAO = re.compile(
-    rf"\b(?:lacunas?|delegadas?)(?:{_SEP}{_CONECTIVOS})*{_SEP}\(?"
+    rf"(?<![^\W_])(?:lacunas?|delegad[ao]s?)(?:{_SEP}{_CONECTIVOS})*{_SEP}\(?"
     rf"({_STAGE}(?:\s*(?:/|,|\be\b)\s*{_STAGE})*)",
     re.IGNORECASE,
 )
@@ -303,7 +309,7 @@ def _lacunas(rel: str, fm: Frontmatter, feitas: set[str]) -> list[str]:
         linha = fm.linha_corpo + texto.count("\n", 0, m.start())
         listadas = _NUMERO_STAGE.findall(m.group(1))
         fechadas = [s for s in listadas if s in feitas]
-        normalizada = re.sub(r"[\s*_>]+", " ", m.group(0))
+        normalizada = re.sub(r"[\s*_`>]+", " ", m.group(0))
         if _CANONICA.match(normalizada):
             if fechadas:
                 saida.append(
