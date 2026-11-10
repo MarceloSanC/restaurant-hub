@@ -144,8 +144,11 @@ def test_commands_da_3_5_carregam_os_campos_declarados() -> None:
     assert provision.unit_ids == ("unit-1",)
 
     send = SendInvitationCommand(
-        email=Email("func@x.com"), setup_link="https://x/definir-senha?token=t"
+        user_id=UserId("user-9"),
+        email=Email("func@x.com"),
+        setup_link="https://x/definir-senha?token=t",
     )
+    assert send.user_id == "user-9"
     assert send.setup_link.endswith("token=t")
     # `repr=False`: o link é credencial bearer viva.
     assert "token=t" not in repr(send)

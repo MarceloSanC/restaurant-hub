@@ -75,6 +75,17 @@ class FakeEmailInvalid(Exception):
     """Sentinela de L-IG2 — o que "identity" levanta para e-mail malformado."""
 
 
+class FakeInvitationNotSent(Exception):
+    """Sentinela de L-IG2 — o que "identity" levanta quando o envio do convite falha.
+
+    Modela a `InvitationNotSentError` de identity (issue #175): a falha já chega
+    ao gateway **sem** o destinatário e o link — nem na mensagem, nem na cadeia.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("convite não enviado")
+
+
 @dataclass(frozen=True)
 class ProvisionedLoginRecord:
     """Uma linha do ledger: o que o fake "criou" para um login."""

@@ -28,6 +28,7 @@ from restaurant_hub.features.identity.application.use_cases.send_invitation impo
     SendInvitationUseCase,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
+from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
 from tests.fakes.shared.recording_email_sender import (
     EmailSenderFailure,
     RecordingEmailSender,
@@ -41,7 +42,7 @@ _ASSUNTO_DA_2_5 = "Convite para o Restaurant Hub"
 
 
 def _comando(email: str = "convidado@x.com", link: str = _LINK) -> SendInvitationCommand:
-    return SendInvitationCommand(email=Email(email), setup_link=link)
+    return SendInvitationCommand(user_id=UserId("user-5"), email=Email(email), setup_link=link)
 
 
 class TestUseCase:
@@ -64,11 +65,38 @@ class TestUseCase:
         assert mensagem.subject == _ASSUNTO_DA_2_5
 
     def test_falha_do_sender_propaga(self) -> None:
-        """Regra 13 da 2.5 — reportar sucesso sem o e-mail ter saído é pior que falhar."""
+        """Regra 13 da 2.5 — reportar sucesso sem o e-mail ter saído é pior que falhar.
+
+        Desde a issue #175 sobe trocada por `InvitationNotSentError`, com o
+        `user_id` do command — e sem cadeia até a falha do provedor.
+        """
         sender = RecordingEmailSender(fail_with=EmailSenderFailure("fora"))
 
-        with pytest.raises(EmailSenderFailure):
+        with pytest.raises(InvitationNotSentError) as excinfo:
             SendInvitationUseCase(sender).execute(_comando())
+
+        assert excinfo.value.user_id == "user-5"
+        assert excinfo.value.__cause__ is None
+        assert excinfo.value.__context__ is None
+
+    def test_falha_que_ecoa_nao_leva_destinatario_nem_link_ao_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Issue #175 — o use case passa pela política de `deliver_invitation`.
+
+        O registro existe (não é silêncio) e leva o `user_id` do command e o tipo
+        da falha; a mensagem do provedor, com destinatário e link, não aparece.
+        """
+        caplog.set_level(logging.DEBUG)
+
+        with pytest.raises(InvitationNotSentError):
+            SendInvitationUseCase(_SenderQueEcoaNaFalha()).execute(_comando(_DESTINATARIO))
+
+        [registro] = [r for r in caplog.records if r.name == _LOGGER]
+        assert registro.exc_info is None
+        assert registro.args == ("user-5", f"{__name__}.FalhaQueEcoa")
+        for vazamento in (_DESTINATARIO, _LINK, "setup-1", "recusado"):
+            assert vazamento not in caplog.text
 
     def test_nao_envia_nada_alem_do_pedido(self) -> None:
         sender = RecordingEmailSender()

@@ -285,6 +285,8 @@ class InvitationNotSentError(IdentityApplicationError):
     conta, o token e (no provisionamento) o restaurante **já estão comitados**
     quando isto sobe (regra 13 da 2.5); a recuperação é o pedido público de
     redefinição de senha, não repetir o convite, que esbarra no e-mail já usado.
+    No login de funcionário (issue #175, pela fachada) a conta também já está
+    vinculada ao registro de staff, e repetir o pedido esbarra no vínculo.
 
     **Substitui a exceção do `EmailSender`, não a embrulha.** A mensagem e a cadeia
     de causas de uma falha de provedor podem ecoar o destinatário ou o corpo — e o

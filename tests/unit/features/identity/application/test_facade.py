@@ -244,9 +244,10 @@ class TestConversaoDePrimitivos:
         fachada, _, espiao, _ = _fachada_espia()
         link = f"{_BASE_URL}/definir-senha?token=setup-7"
 
-        fachada.send_invitation(email="  Joao@Cantina.com ", setup_link=link)
+        fachada.send_invitation(user_id="user-7", email="  Joao@Cantina.com ", setup_link=link)
 
         (command,) = espiao.commands
+        assert command.user_id == UserId("user-7")
         assert command.email == Email("joao@cantina.com")
         assert command.setup_link == link
 
@@ -304,7 +305,9 @@ class TestTransparenciaAExcecoes:
         fachada, _, _, _ = _fachada_espia(send=_EspiaoDeEnvio(levanta=falha))
 
         with pytest.raises(EmailSenderFailure) as excinfo:
-            fachada.send_invitation(email="a@b.com", setup_link="https://x/definir-senha?token=t")
+            fachada.send_invitation(
+                user_id="user-1", email="a@b.com", setup_link="https://x/definir-senha?token=t"
+            )
 
         assert excinfo.value is falha
 
@@ -442,7 +445,9 @@ class TestSobreOsUseCasesReais:
         fachada, users, sender = self._fachada_real()
 
         conta = _provisionar(fachada)
-        fachada.send_invitation(email="maria@cantina.com", setup_link=conta.setup_link)
+        fachada.send_invitation(
+            user_id=conta.user_id, email="maria@cantina.com", setup_link=conta.setup_link
+        )
 
         usuario = users.users[UserId(conta.user_id)]
         assert usuario.email == Email("maria@cantina.com")
@@ -451,6 +456,26 @@ class TestSobreOsUseCasesReais:
         assert [m.unit_id for m in users.memberships] == [UnitId("unit-a1")]
         assert conta.setup_link.startswith(f"{_BASE_URL}/definir-senha?token=")
         assert conta.setup_link in sender.sent[0].body_text
+
+    def test_falha_do_envio_atravessa_trocada_com_o_id_da_conta(self) -> None:
+        """Issue #175 — pelo grafo real, a falha do sender chega à fachada trocada.
+
+        O consumidor recebe `InvitationNotSentError` com o id da conta, sem cadeia
+        até a falha do provedor, cuja mensagem poderia ecoar destinatário e link.
+        """
+        fachada, _, sender = self._fachada_real()
+        conta = _provisionar(fachada)
+        sender.start_failing(EmailSenderFailure(f"recusado: {conta.setup_link}"))
+
+        with pytest.raises(erros_de_application.InvitationNotSentError) as excinfo:
+            fachada.send_invitation(
+                user_id=conta.user_id, email="maria@cantina.com", setup_link=conta.setup_link
+            )
+
+        assert excinfo.value.user_id == conta.user_id
+        assert excinfo.value.__cause__ is None
+        assert excinfo.value.__context__ is None
+        assert conta.setup_link not in str(excinfo.value)
 
     def test_email_repetido_sobe_como_a_excecao_reexportada(self) -> None:
         fachada, _, _ = self._fachada_real()

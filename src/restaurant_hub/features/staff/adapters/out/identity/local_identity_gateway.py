@@ -19,7 +19,10 @@ O que o gateway faz é **tradução de vocabulário**, nas duas direções:
   `InvalidEmailError → InvalidLoginEmailError` — e deixa **tudo o mais** subir
   cru, inclusive a falha do envio. É o mesmo raciocínio de L-AG1/L-AG2 do
   `AccessGuard`: uma condição que já tem handler não ganha uma segunda banda de
-  erro só por ter atravessado a fronteira.
+  erro só por ter atravessado a fronteira. Desde a issue #175 a falha do envio
+  chega aqui já trocada por identity (`InvitationNotSentError`, sem destinatário
+  nem link, com o handler de identity respondendo status 500 de corpo constante),
+  e por isso continua subindo sem tradução.
 
 Não autoriza: a fachada não autoriza as próprias operações — identity não
 autoriza na application, só na borda HTTP (ADR 0.0.0014 §4; issue #115) — e
@@ -92,8 +95,13 @@ class LocalIdentityGateway:
         return ProvisionedLogin(user_id=UserId(account.user_id), setup_link=account.setup_link)
 
     def send_login_invitation(self, *, user_id: UserId, email: str, setup_link: str) -> None:
-        """Envia o convite; a falha do envio sobe crua e na mesma instância (L-IG2)."""
-        self._facade.send_invitation(email=email, setup_link=setup_link)
+        """Envia o convite; a falha do envio sobe crua e na mesma instância (L-IG2).
+
+        A falha que sobe é a que a fachada levanta — `InvitationNotSentError`,
+        já sem o destinatário e o link (issue #175). O `user_id` vai junto
+        porque é o que identity registra nessa falha.
+        """
+        self._facade.send_invitation(user_id=str(user_id), email=email, setup_link=setup_link)
 
     def revoke_login_sessions(self, user_id: UserId) -> None:
         """Corta as sessões do login; idempotente e total (L-IG4)."""

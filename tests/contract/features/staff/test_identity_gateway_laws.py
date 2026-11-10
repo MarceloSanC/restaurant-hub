@@ -47,10 +47,6 @@ pytestmark = pytest.mark.contract
 
 _EMAIL = "ana@cantina.com"
 _OUTRO_EMAIL = "bruno@cantina.com"
-# O tipo do erro do envio é irrelevante para a lei: o que se assere é que **a
-# mesma instância** sobe. `RuntimeError` porque é o que o `RecordingEmailSender`
-# da 2.5 já usa como falha sob demanda.
-_FALHA_DO_ENVIO = RuntimeError("smtp indisponível")
 
 
 def _provisionar(
@@ -224,18 +220,32 @@ def test_l_ig2_qualquer_outra_falha_sobe_crua(gateway: GatewaySobContrato, arran
     assert excecao.value.__context__ is None
 
 
-def test_l_ig2_a_falha_do_envio_sobe_crua_e_e_a_mesma_instancia(
+def test_l_ig2_a_falha_do_envio_sobe_crua_sem_destinatario_nem_link(
     gateway: GatewaySobContrato,
 ) -> None:
-    """A metade de L-IG2 que fecha o "201 sem e-mail" (2.5 §5 regra 13)."""
-    login = _provisionar(gateway, _EMAIL, delivery=LoginDelivery.EMAIL)
-    gateway.envio_falha(_FALHA_DO_ENVIO)
+    """A metade de L-IG2 que fecha o "201 sem e-mail" (2.5 §5 regra 13).
 
-    with pytest.raises(RuntimeError) as excecao:
+    O provedor falha com o pior texto possível — o destinatário e o link na
+    mensagem (issue #175). O que sobe do gateway é o tipo que a implementação
+    levanta (no real, a `InvitationNotSentError` de identity), **sem toque**:
+    nem causa, nem contexto — e nada do convite na mensagem nem nos `args`. Um
+    gateway que engolisse a falha morreria no `raises`; um que a embrulhasse
+    dentro do `except`, no `__context__`; um identity que deixasse a falha do
+    provedor subir crua, na mensagem.
+    """
+    login = _provisionar(gateway, _EMAIL, delivery=LoginDelivery.EMAIL)
+    tipo_esperado = gateway.envio_falha(f"recusado para {_EMAIL}: {login.setup_link}")
+
+    with pytest.raises(tipo_esperado) as excecao:
         gateway.gateway.send_login_invitation(
             user_id=login.user_id, email=_EMAIL, setup_link=login.setup_link
         )
-    assert excecao.value is _FALHA_DO_ENVIO
+    assert type(excecao.value) is tipo_esperado
+    assert excecao.value.__cause__ is None
+    assert excecao.value.__context__ is None
+    for segredo in (_EMAIL, login.setup_link):
+        assert segredo not in str(excecao.value)
+        assert segredo not in repr(excecao.value.args)
     assert gateway.enviados_para(_EMAIL) == []
 
 

@@ -220,12 +220,16 @@ class SendInvitationCommand:
     """Envio do convite para um link já emitido (Stage 3.5).
 
     Attributes:
+        user_id: a conta que o link ativa — o identificador **não secreto** que
+            vai ao log se o envio falhar (issue #175). Destinatário e link não
+            podem ir: a mensagem de um provedor pode ecoá-los.
         email: destinatário — o mesmo e-mail que é login da conta.
         setup_link: o link completo, com o valor do token. `repr=False` pelo
             mesmo motivo de `RefreshSessionCommand.refresh_token`: é credencial
             bearer viva nos locals do frame que levanta a falha do sender.
     """
 
+    user_id: UserId
     email: Email
     setup_link: str = field(repr=False)
 

@@ -48,7 +48,11 @@ deste módulo, pareado com a suíte de contrato
   instância), pela mesma razão de L-AG1/L-AG2: traduzi-la criaria uma segunda
   faixa de erro para uma condição que já tem handler; engoli-la faria o gateway
   responder sucesso sem entrega — o modo de falha que a regra 13 da 2.5 existe
-  para impedir.
+  para impedir. **E a falha do envio não carrega destinatário nem link** (issue
+  #175): nem na mensagem, nem na cadeia (`__cause__`/`__context__`). Na
+  implementação de produção quem garante isso é identity, que troca a falha do
+  provedor por `InvitationNotSentError` antes de ela chegar à fachada; o
+  gateway a deixa subir como chegou.
 - **L-IG3 — `setup_link` é segredo de uso único.** `repr=False`; staff **nunca
   o persiste** (em nenhuma tabela de staff), nunca o loga, nunca o põe em
   mensagem de exceção. Ele existe entre `provision_employee_login` e **um** de
