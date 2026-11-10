@@ -192,6 +192,17 @@ class InMemoryEmployeeRepository:
             for employee in self._store.employees.values()
         )
 
+    def units_referencing_job_function(
+        self, tenant_id: TenantId, job_function_id: JobFunctionId
+    ) -> frozenset[UnitId]:
+        """L-E8 — unidades dos registros do tenant (ativos e inativos) que detêm a função."""
+        self._store.record("employees.units_referencing_job_function")
+        return frozenset(
+            employee.unit_id
+            for employee in self._store.employees.values()
+            if employee.tenant_id == tenant_id and job_function_id in employee.job_function_ids
+        )
+
     # --- internos ------------------------------------------------------------
 
     def _find(self, tenant_id: TenantId, employee_id: EmployeeId) -> Employee | None:
