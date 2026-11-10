@@ -39,7 +39,10 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 )
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
-from tests.fakes.features.identity.stub_action_authorizers import TEST_ACTOR_ID
+from tests.fakes.features.identity.stub_action_authorizers import (
+    TEST_ACTOR_ID,
+    RecordingActionAuthorizer,
+)
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 pytestmark = pytest.mark.unit
@@ -71,6 +74,7 @@ class _Fixture:
             self.units,
             self.hasher,
             FakeIdGenerator([_FIXED_ID]),
+            RecordingActionAuthorizer(),
         )
 
 

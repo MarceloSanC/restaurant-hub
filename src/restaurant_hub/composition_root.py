@@ -490,6 +490,7 @@ def wire_dependencies(
             units=units,
             hasher=hasher,
             id_generator=id_generator,
+            authorizer=authorize_action,
         ),
         identity_invite_user=InviteUserUseCase(
             users=users,
@@ -504,6 +505,7 @@ def wire_dependencies(
             invitation_ttl=invitation_ttl,
             base_url=cfg.app_base_url,
             unit_of_work=identity_unit_of_work,
+            authorizer=authorize_action,
         ),
         # Stage 2.7 — o convite de dono pela plataforma, com o **mesmo**
         # `AuthorizeActionUseCase` do guard das rotas e da fachada de acesso: uma

@@ -96,6 +96,7 @@ class _Grafo:
         use_case = InviteUserUseCase(
             **self.comum,
             units=InMemoryUnitRepository(),
+            authorizer=RecordingActionAuthorizer(),
         )
         return use_case.execute(
             InviteUserCommand(

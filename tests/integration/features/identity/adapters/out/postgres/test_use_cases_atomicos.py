@@ -485,6 +485,7 @@ def _convidar(
         invitation_ttl=timedelta(hours=72),
         base_url="https://app.exemplo.com",
         unit_of_work=PostgresUnitOfWork(engine),
+        authorizer=RecordingActionAuthorizer(),
     )
     return use_case, sender
 

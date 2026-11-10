@@ -147,6 +147,7 @@ class _Ambiente:
                     units=self.units,
                     hasher=self.hasher,
                     id_generator=FakeIdGenerator(),
+                    authorizer=autorizar,
                 ),
                 router_module._get_invite_user: lambda: InviteUserUseCase(
                     users=self.users,
@@ -161,6 +162,7 @@ class _Ambiente:
                     invitation_ttl=timedelta(hours=72),
                     base_url="https://app.exemplo.com",
                     unit_of_work=InMemoryUnitOfWork(self.users, self.setup_tokens),
+                    authorizer=autorizar,
                 ),
                 # O **mesmo** `AuthorizeActionUseCase` do guard (Stage 2.7): a rota e
                 # o use case decidem sobre o mesmo estado, como no composition root.

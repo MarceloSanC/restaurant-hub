@@ -123,7 +123,9 @@ class _Sistema:
             authorizer=RecordingActionAuthorizer(),
         )
         self.create_unit = CreateUnitUseCase(units, restaurants, ids, RecordingActionAuthorizer())
-        self.create_user = CreateUserUseCase(users, restaurants, units, hasher, ids)
+        self.create_user = CreateUserUseCase(
+            users, restaurants, units, hasher, ids, RecordingActionAuthorizer()
+        )
         self.authenticate = AuthenticateUserUseCase(
             users, sessions, hasher, issuer, ids, clock, _ACCESS_TTL, _REFRESH_TTL
         )
