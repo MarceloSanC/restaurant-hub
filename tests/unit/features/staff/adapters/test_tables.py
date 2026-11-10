@@ -30,6 +30,7 @@ from restaurant_hub.features.staff.adapters.out.postgres.tables import (
     employee_shift_preferences,
     employee_unavailabilities,
     employees,
+    job_function_units,
     job_functions,
     staff_metadata,
 )
@@ -72,10 +73,11 @@ def _fks(table: Table) -> dict[str, ForeignKeyConstraint]:
     }
 
 
-def test_metadata_declara_exatamente_as_cinco_tabelas() -> None:
+def test_metadata_declara_exatamente_as_seis_tabelas() -> None:
     """Tabela nova ou removida força revisão consciente — e da migration junto."""
     assert set(staff_metadata.tables) == {
         "job_functions",
+        "job_function_units",
         "employees",
         "employee_job_functions",
         "employee_unavailabilities",
@@ -111,6 +113,10 @@ def test_nomes_de_constraint_de_cada_tabela() -> None:
         "uq_job_functions_tenant_name",
         "uq_job_functions_id_tenant",
     }
+    assert _nomes_de_constraint(job_function_units) == {
+        "pk_job_function_units",
+        "fk_job_function_units_job_function",
+    }
     assert _nomes_de_constraint(employees) == {
         "pk_employees",
         "uq_employees_id_tenant",
@@ -135,7 +141,7 @@ def test_nomes_de_constraint_de_cada_tabela() -> None:
     }
 
 
-def test_sao_tres_indices_e_apenas_tres() -> None:
+def test_os_indices_sao_exatamente_os_declarados() -> None:
     """D5 / ADR 3.3.0005 — índices pelo acesso medido, não por reflexo.
 
     O `UNIQUE (tenant_id, name)` já serve `find_by_name` e `list_by_tenant`; um
@@ -147,6 +153,8 @@ def test_sao_tres_indices_e_apenas_tres() -> None:
     assert indices == {
         "ix_employees_tenant_unit",
         "ix_employee_job_functions_function",
+        # Stage 3.11 — serve `list_by_unit` (L-JF6).
+        "ix_job_function_units_tenant_unit",
     }
     assert [c.name for c in next(iter(employee_job_functions.indexes)).columns] == [
         "job_function_id",
@@ -483,3 +491,38 @@ def test_user_id_e_text_anulavel_sem_fk_sem_unique_e_sem_indice() -> None:
     }
     assert ("user_id",) not in colunas_unicas
     assert all("user_id" not in [c.name for c in indice.columns] for indice in employees.indexes)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.11 — habilitação por unidade (ADR 3.11.0001)
+# ---------------------------------------------------------------------------
+
+
+def test_flag_de_todas_as_unidades_e_not_null_com_default_verdadeiro() -> None:
+    """CA4 — o `DEFAULT true` é o que faz as funções anteriores nascerem em todas.
+
+    Sem default, a migration falharia nas linhas existentes; com default falso,
+    elas sumiriam de toda listagem de unidade (nenhum vínculo, flag falsa).
+    """
+    coluna = job_functions.c.enabled_in_all_units
+    assert coluna.nullable is False
+    assert coluna.server_default is not None
+    assert str(coluna.server_default.arg) == "true"  # type: ignore[attr-defined]
+
+
+def test_vinculo_de_unidade_e_filha_da_funcao_com_cascade_e_cerco_de_tenant() -> None:
+    """O vínculo some com a função; a FK composta impede vínculo de outro tenant."""
+    fk = _fks(job_function_units)["fk_job_function_units_job_function"]
+    assert [c.name for c in fk.columns] == ["job_function_id", "tenant_id"]
+    assert [e.target_fullname for e in fk.elements] == [
+        "job_functions.id",
+        "job_functions.tenant_id",
+    ]
+    assert fk.ondelete == "CASCADE"
+    assert job_function_units.c.tenant_id.nullable is False
+    assert [c.name for c in job_function_units.primary_key.columns] == [
+        "job_function_id",
+        "unit_id",
+    ]
+    indice = next(iter(job_function_units.indexes))
+    assert [c.name for c in indice.columns] == ["tenant_id", "unit_id"]

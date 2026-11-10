@@ -14,6 +14,8 @@ bounded_context: staff
 
 # ADR 3.7.0001 — Every staff use case authorizes its own target through the injected AccessGuard
 
+> ⚠️ **Errata (2026-11-09, Stage 3.11):** the catalogue use cases are now five, and two of them name units — creating a function authorizes each named unit (or `manage_tenant` for every unit), and the new `SetJobFunctionUnitsUseCase` authorizes the tenant, reads the function, and only then authorizes the units that change. That read before the last authorization is a declared exception to §4, with no oracle: it reveals only the enablement the catalogue already shows — ver [ADR 3.11.0001](./3_11_0001-job-function-unit-enablement-model.md)
+
 ## Status
 
 `accepted`

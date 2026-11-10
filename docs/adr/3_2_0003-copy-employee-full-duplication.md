@@ -14,6 +14,8 @@ bounded_context: staff
 
 # ADR 3.2.0003 — Copy to unit duplicates the whole record, with a closed exclusion list
 
+> ⚠️ **Errata (2026-11-09, Stage 3.11):** "The copy does not consume `JobFunctionRepository`" is superseded in part — job functions are now enabled per unit, so the same ids are no longer valid in every unit; the copy resolves the source's functions and refuses a destination where one is not enabled. The closed exclusion list is unchanged — ver [ADR 3.11.0002](./3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md)
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status

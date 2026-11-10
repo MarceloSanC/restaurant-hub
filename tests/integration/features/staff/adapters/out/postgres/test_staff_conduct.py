@@ -211,9 +211,10 @@ def _semear(motor: Engine, *, funcoes: frozenset[JobFunctionId] = frozenset({_F1
 
 _ORDER_BY = re.compile(r"ORDER BY (?P<clausula>.+?)(?:\s*$)", re.DOTALL)
 
-# `list_by_tenant` e `find_all_by_ids` — as duas listagens que `L-ORD` governa no
-# port de função. Se uma terceira nascer, esta constante é o lugar que reclama.
-_LISTAGENS_DO_PORT_DE_FUNCAO = 2
+# `list_by_tenant`, `find_all_by_ids` e, desde a Stage 3.11, `list_by_unit` (L-JF6) —
+# as listagens que `L-ORD` governa no port de função. Se outra nascer, esta
+# constante é o lugar que reclama.
+_LISTAGENS_DO_PORT_DE_FUNCAO = 3
 
 
 def _clausula_de_ordem(statements: list[str], tabela: str) -> str:
@@ -256,6 +257,7 @@ def test_ca10b_o_sql_emitido_pelas_tres_listagens_leva_collate_c_nos_dois_termos
     with _statements_de(motor) as (tentados, _):
         funcoes.list_by_tenant(_A)
         funcoes.find_all_by_ids(_A, frozenset({_F1, _F2}))
+        funcoes.list_by_unit(_A, _U1)
         funcionarios.list_by_unit(_A, _U1)
 
     listagens_de_funcao = [
@@ -264,7 +266,7 @@ def test_ca10b_o_sql_emitido_pelas_tres_listagens_leva_collate_c_nos_dois_termos
         if "FROM job_functions" in statement and "ORDER BY" in statement
     ]
     assert len(listagens_de_funcao) == _LISTAGENS_DO_PORT_DE_FUNCAO, (
-        "as duas listagens de função têm de ordenar"
+        "as três listagens de função têm de ordenar"
     )
     for statement in listagens_de_funcao:
         casamento = _ORDER_BY.search(statement)

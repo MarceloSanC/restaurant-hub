@@ -126,6 +126,12 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
             ),
         ),
         ("job_functions.list_by_tenant", lambda: fakes.job_functions.list_by_tenant(_TENANT)),
+        # Stage 3.11 — L-JF6 e L-JF7.
+        (
+            "job_functions.list_by_unit",
+            lambda: fakes.job_functions.list_by_unit(_TENANT, _UNIDADE),
+        ),
+        ("job_functions.update_enablement", lambda: fakes.job_functions.update_enablement(nova)),
         (
             "job_functions.delete",
             lambda: fakes.job_functions.delete(_TENANT, JobFunctionId("f-nova")),
@@ -148,6 +154,10 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
             lambda: fakes.employees.exists_by_job_function(_TENANT, JobFunctionId("f1")),
         ),
         (
+            "employees.units_referencing_job_function",
+            lambda: fakes.employees.units_referencing_job_function(_TENANT, JobFunctionId("f1")),
+        ),
+        (
             "employees.delete",
             lambda: fakes.employees.delete(_TENANT, _UNIDADE, EmployeeId("e-novo")),
         ),
@@ -155,7 +165,7 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
 
 
 def test_todo_metodo_do_par_registra_exatamente_uma_chamada() -> None:
-    """Cada um dos 14 métodos do par tem o seu `record()` travado por teste.
+    """Cada um dos métodos do par (16 desde a Stage 3.11) tem o seu `record()` travado por teste.
 
     **Por que isto não é zelo excessivo.** `store.calls` sustenta todos os
     critérios "sem tocar o port" das Tasks 07/09/13 — e um critério desses é

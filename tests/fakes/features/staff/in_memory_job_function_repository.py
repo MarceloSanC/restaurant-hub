@@ -29,6 +29,7 @@ from restaurant_hub.features.staff.domain.entities.job_function import JobFuncti
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
+    UnitId,
 )
 from tests.fakes.features.staff.in_memory_staff_store import InMemoryStaffStore
 
@@ -56,6 +57,16 @@ class InMemoryJobFunctionRepository:
         self._guard_name(job_function)
         self._store.job_functions[job_function.id] = job_function
 
+    def update_enablement(self, job_function: JobFunction) -> None:
+        """L-JF7 — substitui só a habilitação; função ausente no tenant ⇒ `NotFound`."""
+        self._store.record("job_functions.update_enablement")
+        gravada = self._find(job_function.tenant_id, job_function.id)
+        if gravada is None:
+            raise JobFunctionNotFoundError(job_function.id)
+        self._store.job_functions[job_function.id] = gravada.with_enablement(
+            job_function.unit_enablement
+        )
+
     def update(self, job_function: JobFunction) -> None:
         """L-JF2 — `UPDATE`, não upsert; a guarda de nome ignora a própria função."""
         self._store.record("job_functions.update")
@@ -73,7 +84,11 @@ class InMemoryJobFunctionRepository:
         if self._find(job_function.tenant_id, job_function.id) is None:
             raise JobFunctionNotFoundError(job_function.id)
         self._guard_name(job_function)
-        self._store.job_functions[job_function.id] = job_function
+        # L-JF2 grava **só o nome** (Stage 3.11): a habilitação gravada sobrevive,
+        # qualquer que seja a da entidade recebida — espelha o `SET name` do
+        # adapter real.
+        gravada = self._store.job_functions[job_function.id]
+        self._store.job_functions[job_function.id] = gravada.rename(job_function.name)
 
     def delete(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> None:
         """L-JF3 — remoção guardada por referências, de registros ativos e inativos."""
@@ -130,6 +145,15 @@ class InMemoryJobFunctionRepository:
             job_function
             for job_function in self._store.job_functions.values()
             if job_function.tenant_id == tenant_id
+        )
+
+    def list_by_unit(self, tenant_id: TenantId, unit_id: UnitId) -> tuple[JobFunction, ...]:
+        """L-JF6 — as do tenant habilitadas na unidade; `L-ORD` — por `(name, id)`."""
+        self._store.record("job_functions.list_by_unit")
+        return _em_ordem(
+            job_function
+            for job_function in self._store.job_functions.values()
+            if job_function.tenant_id == tenant_id and job_function.is_enabled_in(unit_id)
         )
 
     # --- internos ------------------------------------------------------------

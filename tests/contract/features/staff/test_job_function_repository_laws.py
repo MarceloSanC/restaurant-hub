@@ -41,6 +41,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
     UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.conftest import _REPO_ROOT
 from tests.contract.features.staff.conftest import RepositoriosDeStaff
@@ -415,7 +416,11 @@ def test_l_ord_esta_declarada_no_port_com_a_ancora_da_stage_33(repos: Repositori
     assert "concept §4 da Stage 3.2" in texto
     # As duas metades da cláusula de listagem, nomeadas.
     assert 'COLLATE "C"' in texto
-    for metodo in (JobFunctionRepository.list_by_tenant, JobFunctionRepository.find_all_by_ids):
+    for metodo in (
+        JobFunctionRepository.list_by_tenant,
+        JobFunctionRepository.find_all_by_ids,
+        JobFunctionRepository.list_by_unit,
+    ):
         assert "L-ORD" in (metodo.__doc__ or ""), metodo.__name__
 
     # A outra ponta: a fonte citada **contém** a lei. Caminho derivado de
@@ -496,3 +501,200 @@ def test_ca18_nome_adversarial_sem_nul_faz_round_trip_verbatim(
 
     assert lida is not None
     assert lida.name == nome
+
+
+# --- Stage 3.11 — habilitação por unidade (ADR 3.11.0001) -------------------
+#
+# Um corpo só para o fake e o Postgres (ADR 3.3.0007): a habilitação vive em
+# duas metades no banco (flag + vínculos) e numa só no fake, e é esta suíte que
+# prova que as duas reidratam igual.
+
+_U2 = UnitId("u2")
+_U3 = UnitId("u3")
+_F3 = JobFunctionId("f3")
+_F4 = JobFunctionId("f4")
+_TODAS = UnitEnablement.everywhere()
+
+
+def _restrita(*unidades: UnitId) -> UnitEnablement:
+    return UnitEnablement.only(frozenset(unidades))
+
+
+def _funcao_em(
+    habilitacao: UnitEnablement,
+    id_: JobFunctionId = _F1,
+    tenant: TenantId = _A,
+    name: str = "Cozinheiro",
+) -> JobFunction:
+    return JobFunction(id=id_, tenant_id=tenant, name=name, unit_enablement=habilitacao)
+
+
+def _habilitacao(repos: RepositoriosDeStaff, id_: JobFunctionId, tenant: TenantId = _A) -> object:
+    gravada = repos.job_functions.find_by_id(tenant, id_)
+    assert gravada is not None
+    return gravada.unit_enablement
+
+
+@pytest.mark.parametrize(
+    "habilitacao",
+    [_TODAS, _restrita(_U1), _restrita(_U1, _U2)],
+    ids=["todas", "uma", "duas"],
+)
+def test_l_jf1_add_grava_a_habilitacao_e_toda_leitura_a_reidrata(
+    habilitacao: UnitEnablement, repos: RepositoriosDeStaff
+) -> None:
+    """L-JF1 (revisada) e L-JF4/L-JF5 — as quatro leituras devolvem a mesma habilitação."""
+    repos.job_functions.add(_funcao_em(habilitacao))
+
+    por_id = repos.job_functions.find_by_id(_A, _F1)
+    por_nome = repos.job_functions.find_by_name(_A, "Cozinheiro")
+    assert por_id is not None
+    assert por_nome is not None
+    assert por_id.unit_enablement == habilitacao
+    assert por_nome.unit_enablement == habilitacao
+    (por_conjunto,) = repos.job_functions.find_all_by_ids(_A, frozenset({_F1}))
+    assert por_conjunto.unit_enablement == habilitacao
+    (na_lista,) = repos.job_functions.list_by_tenant(_A)
+    assert na_lista.unit_enablement == habilitacao
+
+
+def test_l_jf1_insercao_recusada_nao_deixa_vinculo_de_unidade_para_tras(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Nome repetido recusa a função **e** as unidades dela.
+
+    Se os vínculos de `f2` sobrevivessem à recusa, a próxima `f2` (em todas as
+    unidades) seria lida com flag **e** vínculos — incoerente. Prova o caso da
+    recusa na linha da função; a atomicidade entre linha e vínculos é a da
+    transação única do adapter (`_add`), não deste teste.
+    """
+    _com_funcao_gravada(repos)
+    with pytest.raises(JobFunctionNameAlreadyExistsError):
+        repos.job_functions.add(_funcao_em(_restrita(_U1), id_=_F2, name="Cozinheiro"))
+
+    repos.job_functions.add(_funcao_em(_TODAS, id_=_F2, name="Garçom"))
+    assert _habilitacao(repos, _F2) == _TODAS
+
+
+def test_l_jf2_update_grava_so_o_nome_e_preserva_a_habilitacao_gravada(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """L-JF2 — renomear não regrava onde a função vale (Checkpoint A da 3.11)."""
+    repos.job_functions.add(_funcao_em(_restrita(_U1)))
+
+    repos.job_functions.update(_funcao_em(_TODAS, name="Chef"))
+
+    gravada = repos.job_functions.find_by_id(_A, _F1)
+    assert gravada is not None
+    assert gravada.name == "Chef"
+    assert gravada.unit_enablement == _restrita(_U1)
+
+
+def test_l_jf3_delete_leva_a_habilitacao_junto(repos: RepositoriosDeStaff) -> None:
+    """L-JF3 (revisada) — recriar com o mesmo id não herda unidades da função apagada."""
+    repos.job_functions.add(_funcao_em(_restrita(_U1, _U2)))
+    repos.job_functions.delete(_A, _F1)
+
+    repos.job_functions.add(_funcao_em(_TODAS))
+    assert _habilitacao(repos, _F1) == _TODAS
+
+
+def _com_funcoes_em_unidades(repos: RepositoriosDeStaff) -> None:
+    repos.job_functions.add(_funcao_em(_TODAS, id_=_F1, name="Cozinheiro"))
+    repos.job_functions.add(_funcao_em(_restrita(_U1), id_=_F2, name="Atendente"))
+    repos.job_functions.add(_funcao_em(_restrita(_U2), id_=_F3, name="Barman"))
+    repos.job_functions.add(_funcao_em(_restrita(_U1, _U2), id_=_F4, name="Auxiliar"))
+    # Outro tenant: uma em todas e uma nomeando uma unidade de **mesmo id**.
+    repos.job_functions.add(
+        _funcao_em(_TODAS, id_=JobFunctionId("b1"), tenant=_B, name="Cozinheiro")
+    )
+    repos.job_functions.add(
+        _funcao_em(_restrita(_U1), id_=JobFunctionId("b2"), tenant=_B, name="Atendente")
+    )
+
+
+def test_l_jf6_list_by_unit_devolve_so_as_habilitadas_na_unidade(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """L-JF6 (CA3) — "todas" entra em toda unidade; restrita só nas suas.
+
+    A ordem é a da `L-ORD` (por nome, byte a byte): Atendente, Auxiliar,
+    Cozinheiro — e não a de inserção.
+    """
+    _com_funcoes_em_unidades(repos)
+
+    em_u1 = repos.job_functions.list_by_unit(_A, _U1)
+    em_u2 = repos.job_functions.list_by_unit(_A, _U2)
+    em_u3 = repos.job_functions.list_by_unit(_A, _U3)
+
+    assert [f.id for f in em_u1] == [_F2, _F4, _F1]
+    assert [f.id for f in em_u2] == [_F4, _F3, _F1]
+    assert [f.id for f in em_u3] == [_F1]
+    # Reidratadas, não só filtradas.
+    assert {f.id: f.unit_enablement for f in em_u1}[_F4] == _restrita(_U1, _U2)
+
+
+def test_l_jf6_list_by_unit_nao_atravessa_tenant(repos: RepositoriosDeStaff) -> None:
+    """A unidade `u1` do tenant B tem o mesmo id; nem por isso vaza para A, nem A para B."""
+    _com_funcoes_em_unidades(repos)
+
+    assert [f.id for f in repos.job_functions.list_by_unit(_B, _U1)] == [
+        JobFunctionId("b2"),
+        JobFunctionId("b1"),
+    ]
+    assert all(f.tenant_id == _A for f in repos.job_functions.list_by_unit(_A, _U1))
+
+
+def test_l_jf6_list_by_unit_de_tenant_sem_funcoes_e_vazia(repos: RepositoriosDeStaff) -> None:
+    assert repos.job_functions.list_by_unit(_A, _U1) == ()
+
+
+@pytest.mark.parametrize(
+    ("antes", "depois"),
+    [
+        (_restrita(_U1), _restrita(_U2)),
+        (_restrita(_U1), _restrita(_U1, _U2)),
+        (_restrita(_U1, _U2), _restrita(_U2)),
+        (_restrita(_U1), _TODAS),
+        (_TODAS, _restrita(_U1)),
+    ],
+    ids=["troca", "alarga", "estreita", "para-todas", "de-todas"],
+)
+def test_l_jf7_update_enablement_substitui_a_habilitacao_inteira(
+    antes: UnitEnablement, depois: UnitEnablement, repos: RepositoriosDeStaff
+) -> None:
+    """L-JF7 — o que saiu deixa de valer, o que entrou passa a valer; o nome fica.
+
+    A vizinha `f2` (restrita a u1) existe para reprovar um `DELETE` de vínculos sem
+    o predicado da função: ele apagaria as unidades dela também (Checkpoint C).
+    """
+    repos.job_functions.add(_funcao_em(antes))
+    repos.job_functions.add(_funcao_em(_restrita(_U1), id_=_F2, name="Vizinha"))
+
+    repos.job_functions.update_enablement(_funcao_em(depois, name="Ignorado"))
+
+    gravada = repos.job_functions.find_by_id(_A, _F1)
+    assert gravada is not None
+    assert gravada.unit_enablement == depois
+    assert gravada.name == "Cozinheiro"
+    for unidade in (_U1, _U2, _U3):
+        listada = any(f.id == _F1 for f in repos.job_functions.list_by_unit(_A, unidade))
+        assert listada == depois.covers(unidade), unidade
+    assert _habilitacao(repos, _F2) == _restrita(_U1)
+    assert any(f.id == _F2 for f in repos.job_functions.list_by_unit(_A, _U1))
+
+
+def test_l_jf7_update_enablement_de_inexistente_no_tenant_nao_grava_nada(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """L-JF7 — `UPDATE`, não upsert; função de outro tenant é inexistente aqui."""
+    repos.job_functions.add(_funcao_em(_restrita(_U1)))
+
+    with pytest.raises(JobFunctionNotFoundError):
+        repos.job_functions.update_enablement(_funcao_em(_TODAS, id_=_F2))
+    with pytest.raises(JobFunctionNotFoundError):
+        repos.job_functions.update_enablement(_funcao_em(_TODAS, tenant=_B))
+
+    assert repos.job_functions.find_by_id(_A, _F2) is None
+    assert repos.job_functions.find_by_id(_B, _F1) is None
+    assert _habilitacao(repos, _F1) == _restrita(_U1)

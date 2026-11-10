@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 # tripwire contra a enumeração encolher em silêncio — `__subclasses__` só enxerga
 # o que foi importado, então um módulo de erro novo que ninguém importasse aqui
 # faria a varredura passar sobre um universo menor do que o real.
-_TOTAL_DE_ERROS_DE_STAFF = 23
+_TOTAL_DE_ERROS_DE_STAFF = 24
 _TOTAL_DE_MODULOS_DE_ERRO = 2
 
 # Os dois módulos são importados acima de propósito, e não por acaso: é o import
@@ -92,12 +92,12 @@ def test_o_mapa_nao_tem_entrada_orfa() -> None:
     assert orfas == []
 
 
-def test_o_mapa_tem_exatamente_as_vinte_e_tres_entradas_do_concept() -> None:
-    """A contagem é asserção: 23 entradas, 11 do domínio e 12 da aplicação."""
+def test_o_mapa_tem_exatamente_as_entradas_declaradas() -> None:
+    """A contagem é asserção: 24 entradas, 12 do domínio e 12 da aplicação (Stage 3.11: +1)."""
     assert len(handlers.STAFF_ERROR_STATUS) == _TOTAL_DE_ERROS_DE_STAFF
 
 
-# **As 23 entradas, par a par.** É CA18, e é o único teste deste arquivo que lê o
+# **As entradas do mapa, par a par.** É CA18, e é o único teste deste arquivo que lê o
 # **valor** do mapa. Trocar `JobFunctionInUseError` por 422 e
 # `SameUnitCopyError` por 409 — duas entradas, faixas ambas já exercitadas —
 # sobrevive a tudo o que está acima e morre aqui.
@@ -126,10 +126,12 @@ _STATUS_ESPERADO = [
     (application_errors.LoginEmailAlreadyInUseError("ana@x.com"), 409),
     (application_errors.EmployeeHasLoginError("e1"), 409),
     (application_errors.InvalidLoginEmailError("nao-e-email"), 422),
+    # Stage 3.11 — habilitação por unidade vazia ou incoerente (ADR 3.11.0001 §2).
+    (domain_errors.InvalidUnitEnablementError("exige ao menos uma unidade"), 422),
 ]
 
 
-def test_ca18_a_verificacao_par_a_par_cobre_as_vinte_e_tres_entradas() -> None:
+def test_ca18_a_verificacao_par_a_par_cobre_todas_as_entradas() -> None:
     """A tabela deste arquivo tem de cobrir o mapa inteiro, senão CA18 é amostra."""
     cobertas = {type(excecao) for excecao, _ in _STATUS_ESPERADO}
 

@@ -133,3 +133,17 @@ class TerminatedEmployeeLoginError(StaffError):
 
     def __init__(self, employee_id: str) -> None:
         super().__init__(f"funcionário desligado não pode receber login: {employee_id!r}")
+
+
+class InvalidUnitEnablementError(StaffError):
+    """Habilitação por unidade incoerente (Stage 3.11, ADR 3.11.0001 §2).
+
+    A habilitação de uma função é **todas as unidades** ou um **conjunto não-vazio**
+    de unidades — nunca vazia, nunca as duas coisas, e sem id de unidade em branco.
+    Vale também na reidratação: uma linha persistida com a flag "todas" **e**
+    vínculos, ou sem nenhum dos dois, é recusada aqui em vez de virar uma função
+    que nenhuma listagem de unidade mostra.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"habilitação por unidade inválida: {reason}")

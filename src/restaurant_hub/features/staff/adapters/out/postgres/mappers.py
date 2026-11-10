@@ -66,6 +66,7 @@ from restaurant_hub.features.staff.domain.value_objects.shift_preference import 
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
     UnavailabilityPeriod,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
     FixedSchedule,
     OnDemand,
@@ -91,20 +92,53 @@ Row = Any
 
 
 def job_function_to_row(job_function: JobFunction) -> dict[str, Any]:
-    """`name` vai **verbatim** — a persistência não normaliza (ADR 3.1.0002)."""
+    """`name` vai **verbatim** — a persistência não normaliza (ADR 3.1.0002).
+
+    A flag de todas as unidades é a metade da habilitação que mora na linha; a
+    outra metade são as linhas de `job_function_units` (`job_function_unit_rows`).
+    """
     return {
         "id": job_function.id,
         "tenant_id": job_function.tenant_id,
         "name": job_function.name,
+        "enabled_in_all_units": job_function.unit_enablement.all_units,
     }
 
 
-def row_to_job_function(row: Row) -> JobFunction:
-    """Reidrata pelo construtor: nome vazio na linha levanta `InvalidNameError`."""
+def job_function_unit_rows(job_function: JobFunction) -> list[dict[str, Any]]:
+    """Linhas de `job_function_units` da função, em ordem **determinística**.
+
+    Vazio quando a função vale em todas as unidades — a flag diz isso sozinha. A
+    ordem (`sorted`) só estabiliza o SQL emitido; o conjunto não tem ordem.
+    """
+    return [
+        {
+            "job_function_id": job_function.id,
+            "tenant_id": job_function.tenant_id,
+            "unit_id": unit_id,
+        }
+        for unit_id in sorted(job_function.unit_enablement.unit_ids)
+    ]
+
+
+def row_to_job_function(row: Row, *, unit_ids: Iterable[str]) -> JobFunction:
+    """Reidrata pelo construtor: nome vazio na linha levanta `InvalidNameError`.
+
+    A habilitação passa pelo `__post_init__` de `UnitEnablement`: flag verdadeira
+    **com** vínculos, ou falsa **sem** nenhum, levanta `InvalidUnitEnablementError`
+    em vez de virar uma função que nenhuma listagem de unidade mostraria (CA9b).
+    `unit_ids` é keyword obrigatório de propósito: um chamador que esquecesse os
+    vínculos reidrataria toda função restrita como incoerente — falha alta, e não
+    uma função "em todas" por omissão.
+    """
     return JobFunction(
         id=JobFunctionId(row.id),
         tenant_id=TenantId(row.tenant_id),
         name=row.name,
+        unit_enablement=UnitEnablement(
+            all_units=bool(row.enabled_in_all_units),
+            unit_ids=frozenset(UnitId(unit_id) for unit_id in unit_ids),
+        ),
     )
 
 
