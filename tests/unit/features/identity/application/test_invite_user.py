@@ -17,6 +17,7 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 )
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
+    InvitationNotSentError,
     RestaurantNotFoundError,
     UnitNotFoundError,
 )
@@ -322,13 +323,18 @@ class TestCasosDeErro:
     def test_falha_do_sender_propaga(self) -> None:
         """Regra 13 — reportar sucesso sem o e-mail ter saído é pior que falhar.
 
-        No caminho de **convite** a exceção sobe; no de redefinição de senha ela
-        é absorvida, porque lá deixá-la subir enumeraria contas.
+        No caminho de **convite** a falha sobe; no de redefinição de senha ela
+        é absorvida, porque lá deixá-la subir enumeraria contas. Desde a issue
+        #170 sobe trocada por `InvitationNotSentError`, com o id da conta criada.
         """
         cenario = Cenario(sender=RecordingEmailSender(fail_with=EmailSenderFailure("fora")))
 
-        with pytest.raises(EmailSenderFailure):
-            cenario.use_case.execute(_comando())
+        with pytest.raises(InvitationNotSentError) as excinfo:
+            cenario.use_case.execute(_comando("propaga@x.com"))
+
+        criada = cenario.users.find_credentials_by_email(Email("propaga@x.com"))
+        assert criada is not None
+        assert excinfo.value.user_id == criada.user.id
 
     def test_falha_do_sender_deixa_o_usuario_criado(self) -> None:
         """O usuário existe, então o caminho de recuperação é a redefinição.
@@ -338,7 +344,7 @@ class TestCasosDeErro:
         """
         cenario = Cenario(sender=RecordingEmailSender(fail_with=EmailSenderFailure("fora")))
 
-        with pytest.raises(EmailSenderFailure):
+        with pytest.raises(InvitationNotSentError):
             cenario.use_case.execute(_comando("preso@x.com"))
 
         assert cenario.users.exists_by_email(Email("preso@x.com")) is True

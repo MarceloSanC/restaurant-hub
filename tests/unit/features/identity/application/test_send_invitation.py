@@ -1,6 +1,6 @@
 """Testes do use case `send_invitation` e do helper `_invitation` — Stage 3.5, CA16/CA17.
 
-Dois contratos vivem aqui:
+Três contratos vivem aqui:
 
 1. **O use case** envia exatamente uma mensagem, para o e-mail dado, com o link no
    corpo e o assunto da 2.5; a falha do sender propaga.
@@ -8,12 +8,19 @@ Dois contratos vivem aqui:
    antes de passar a chamá-lo (CA16). Os testes de `invite_user` e do reset só
    asserem `"token=" in body` — o que os protege de uma mudança silenciosa de
    formato é o **literal transcrito** abaixo, não derivado do helper.
+3. **`deliver_invitation`** (issue #170): a falha do sender sobe trocada por
+   `InvitationNotSentError`, sem cadeia de volta à original, e o log leva só o tipo
+   dela e o `user_id` — nunca a mensagem, que pode ecoar destinatário e link.
 """
+
+import logging
 
 import pytest
 
 from restaurant_hub.features.identity.application.dtos.commands import SendInvitationCommand
+from restaurant_hub.features.identity.application.errors import InvitationNotSentError
 from restaurant_hub.features.identity.application.use_cases._invitation import (
+    deliver_invitation,
     invitation_message,
     setup_link,
 )
@@ -105,3 +112,76 @@ class TestHelperByteIdentico:
             f"Defina a sua senha por este link:\n{_LINK}\n\n"
             "Se você não esperava este convite, ignore esta mensagem."
         )
+
+
+# ---------------------------------------------------------------------------
+# deliver_invitation — issue #170
+# ---------------------------------------------------------------------------
+
+_LOGGER = "restaurant_hub.features.identity.application.use_cases._invitation"
+_DESTINATARIO = "vitima@x.com"
+
+
+class FalhaQueEcoa(Exception):
+    """Falha de provedor que repete na mensagem tudo o que recebeu — o pior caso."""
+
+
+class _SenderQueEcoaNaFalha:
+    """Falha com o destinatário e o corpo inteiro (link incluído) na mensagem."""
+
+    def send(self, message: object) -> None:
+        raise FalhaQueEcoa(f"recusado: {message!r}")
+
+
+class TestDeliverInvitation:
+    def test_envia_a_mensagem_e_nao_registra_nada(self, caplog: pytest.LogCaptureFixture) -> None:
+        sender = RecordingEmailSender()
+        mensagem = invitation_message(_DESTINATARIO, _LINK)
+        caplog.set_level(logging.DEBUG)
+
+        deliver_invitation(sender, mensagem, "user-1")
+
+        assert sender.sent == (mensagem,)
+        assert [r for r in caplog.records if r.name == _LOGGER] == []
+
+    def test_falha_sobe_trocada_com_o_user_id(self) -> None:
+        with pytest.raises(InvitationNotSentError) as excinfo:
+            deliver_invitation(
+                _SenderQueEcoaNaFalha(), invitation_message(_DESTINATARIO, _LINK), "user-9"
+            )
+
+        assert excinfo.value.user_id == "user-9"
+
+    def test_a_falha_trocada_nao_carrega_cadeia_ate_a_original(self) -> None:
+        """Levantada fora do `except`: nem `__cause__` nem `__context__`.
+
+        Com `raise ... from None` dentro do `except`, `__context__` ainda guardaria a
+        original — só a impressão dela seria suprimida —, e qualquer código que
+        percorresse a cadeia chegaria à mensagem com o link.
+        """
+        with pytest.raises(InvitationNotSentError) as excinfo:
+            deliver_invitation(
+                _SenderQueEcoaNaFalha(), invitation_message(_DESTINATARIO, _LINK), "user-9"
+            )
+
+        assert excinfo.value.__cause__ is None
+        assert excinfo.value.__context__ is None
+        assert _LINK not in str(excinfo.value)
+        assert _DESTINATARIO not in str(excinfo.value)
+
+    def test_registra_so_o_tipo_e_o_user_id(self, caplog: pytest.LogCaptureFixture) -> None:
+        """O registro existe (não é silêncio) e não carrega mensagem nem traceback."""
+        caplog.set_level(logging.DEBUG)
+
+        with pytest.raises(InvitationNotSentError):
+            deliver_invitation(
+                _SenderQueEcoaNaFalha(), invitation_message(_DESTINATARIO, _LINK), "user-9"
+            )
+
+        [registro] = [r for r in caplog.records if r.name == _LOGGER]
+        assert registro.levelno == logging.ERROR
+        assert registro.exc_info is None
+        assert registro.args == ("user-9", f"{__name__}.FalhaQueEcoa")
+        assert "user_id=user-9" in registro.getMessage()
+        for vazamento in (_DESTINATARIO, _LINK, "setup-1", "recusado"):
+            assert vazamento not in caplog.text

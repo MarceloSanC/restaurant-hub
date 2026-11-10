@@ -29,6 +29,7 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 )
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
+    InvitationNotSentError,
     RestaurantAlreadyExistsError,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_restaurant import (
@@ -374,8 +375,12 @@ class TestUnidadeDeTrabalho:
         falhar. O tenant existe; a recuperação é o pedido público de redefinição."""
         cenario = Cenario(falha_no_envio=EmailSenderFailure("fora"))
 
-        with pytest.raises(EmailSenderFailure):
+        # Issue #170 — a falha sobe trocada, com o id do DONO (não o do restaurante
+        # nem o do token: os três ids do cenário são distintos de propósito).
+        with pytest.raises(InvitationNotSentError) as excinfo:
             cenario.use_case.execute(_comando())
+
+        assert excinfo.value.user_id == str(_ID_DO_DONO)
 
         assert RestaurantId(str(_ID_DO_RESTAURANTE)) in cenario.restaurants.restaurants
         assert cenario.users.exists_by_email(_EMAIL) is True

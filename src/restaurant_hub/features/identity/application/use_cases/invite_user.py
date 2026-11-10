@@ -17,7 +17,10 @@ direta não tem token nem e-mail.
 `tokens.add` falha, o `users.add` é desfeito — nunca nasce conta sem link que a
 abra (o `[finding]` de atomicidade escalado pela 3.5).
 
-**A falha do `EmailSender` propaga** (concept §5 regra 13). Reportar sucesso sem
+**A falha do `EmailSender` propaga** (concept §5 regra 13), trocada por
+`InvitationNotSentError` em `_invitation.deliver_invitation` — que registra só o
+tipo da falha e o `user_id`, porque a mensagem de um provedor pode ecoar o
+destinatário e o link (issue #170). Reportar sucesso sem
 que o e-mail tenha saído deixaria uma conta inacessível e um administrador
 convencido de que convidou. O envio vem **depois** de a unidade comitar (ADR
 2.6.0002 §3) — um rollback não desenvia e-mail, e um e-mail enviado de dentro de
@@ -65,6 +68,7 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
     UserRepository,
 )
 from restaurant_hub.features.identity.application.use_cases._invitation import (
+    deliver_invitation,
     invitation_message,
     setup_link,
 )
@@ -125,7 +129,8 @@ class InviteUserUseCase:
             RestaurantNotFoundError: tenant informado não existe.
             UnitNotFoundError: alguma unidade informada não existe.
             CrossTenantError: unidade pertence a outro tenant.
-            Exception: qualquer falha do `EmailSender` sobe (regra 13).
+            InvitationNotSentError: o `EmailSender` falhou, com a conta e o token
+                já comitados (regra 13; issue #170).
         """
         if self._users.exists_by_email(command.email):
             raise EmailAlreadyRegisteredError(command.email.value)
@@ -159,7 +164,7 @@ class InviteUserUseCase:
             token_value = self._issue_token(user.id)
 
         # Depois do commit — ver o docstring do módulo (ADR 2.6.0002 §3).
-        self._send_invitation_email(command.email.value, token_value)
+        self._send_invitation_email(user.id, command.email.value, token_value)
 
         return to_user_result(user, memberships)
 
@@ -203,14 +208,17 @@ class InviteUserUseCase:
         )
         return issued.value
 
-    def _send_invitation_email(self, recipient: str, token_value: str) -> None:
+    def _send_invitation_email(self, user_id: UserId, recipient: str, token_value: str) -> None:
         """Compõe e envia a mensagem.
 
         Desde a Stage 3.5 a composição vive em `_invitation.py`, a única casa do
         formato do link e do texto do convite — a mesma mensagem que o
         `SendInvitationUseCase` manda quando quem provisiona é o gateway de staff.
-        Assunto, corpo e link são byte-idênticos aos da 2.5 (CA16 da 3.5).
+        Assunto, corpo e link são byte-idênticos aos da 2.5 (CA16 da 3.5). Desde a
+        issue #170 o envio também passa por lá, em `deliver_invitation`.
         """
-        self._email_sender.send(
-            invitation_message(recipient, setup_link(self._base_url, token_value))
+        deliver_invitation(
+            self._email_sender,
+            invitation_message(recipient, setup_link(self._base_url, token_value)),
+            user_id,
         )
