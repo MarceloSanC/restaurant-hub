@@ -147,8 +147,8 @@ Configuração candidata: nenhuma · Reversível: sim
 - The quality of the plan depends on the author's judgement. The budget cap and the justification rule make a bad plan visible. They do not prevent one.
 
 ### Neutral / trade-offs accepted
-- No gate checks that a technical.md has a gate plan or that the plan has 1 to 3 points: the technical gate reviews it. A mechanical check would need a cut-off for the Stages approved before this ADR.
-- The audit skills (`stage-audit`, `issue-audit`) do not yet read the gate plan. They are being reorganized by issue #162, so the change is left as a follow-up.
+- No gate checks that a technical.md has a gate plan or that the plan has 1 to 3 points: the technical gate reviews it. A mechanical check would need a cut-off for the Stages approved before this ADR (issue #201, speculative).
+- The audit skills (`stage-audit`, `issue-audit`) do not yet read the gate plan. They are being reorganized by issue #162, so the change is left as a follow-up (issue #200, which also adds the pointer to the orchestrator prompt).
 
 ## References
 
