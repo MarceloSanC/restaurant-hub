@@ -41,7 +41,7 @@ FF met the same cost and replaced the rule with a planned budget. Two things dif
 - every subclass of a bounded context's error root × the HTTP status map (`test_status_map.py`, `test_http_error_handlers.py`);
 - every module in a `use_cases/` folder × the composition-root container (`test_composition_root_staff.py`, `test_application_guards.py`);
 - `router.routes` × the authorization overrides and the route tables (`test_composition_root_staff.py`, `test_http_boundary_sweeps.py`);
-- the DTO modules × their field tables (`test_dtos.py`).
+- the DTO classes a module declares × the transcribed list and its count (`test_dtos.py`).
 
 These tests reject any incremental change: a new error, use case, route or DTO without its entry turns red a test file that the Task neither wrote nor changed. Under the retired rule the full gate of each commit showed it. If a Task runs only the tests it wrote or changed, nothing shows it until the next full gate.
 
@@ -50,7 +50,7 @@ These tests reject any incremental change: a new error, use case, route or DTO w
 1. **Per Task: only the Task's own tests.** Before each Task commit the executor runs the test files the Task wrote or changed, plus the totality sweeps its files feed (item 5), with `pytest <files> -q --no-cov`. The pre-commit hooks (ruff-format, ruff, mypy, import-linter) run on the commit as before. A red test blocks the commit. Another focused check (for example `check_layout.py` after creating a file in a new folder) is allowed when the Task has a concrete reason for it. It is not a routine step.
 2. **A gate plan in the technical.md.** In Fase 3B the author writes a "Plano de gates" in §1 of the technical.md: a table of the Tasks after which the full `make check` must be green, with the reason for each. The technical gate (RUNBOOK Passo 7, Checkpoint B in the single-session prompt) reviews it.
 3. **Budget: 1 to 3 points per Stage, the exit gate included.** The exit gate (RUNBOOK Passo 10) is always one of them. A 4th or later point needs a justification written in the plan: the concrete break that point catches, and why the next planned point would catch it too late. "To be safe" is not a justification. When the need shows up during execution, the extra point is recorded as a `[deviation]` in §7 with the same justification.
-4. **Where a mid-Stage point goes.** Right after the last Task of a group whose break would invalidate the Tasks that follow. The groups are: a change to a port or contract read by another bounded context or layer; a change to `shared/` or to the composition root; a change to dependencies, tool configuration, gate scripts, a shared `conftest.py` or a migration; and the first Task that feeds a totality (item 5c). The author orders the Tasks so that these changes cluster and one point covers them. A Stage with none of them needs only the exit gate.
+4. **Where a mid-Stage point goes.** Right after the last Task of a group whose break would invalidate the Tasks that follow. The groups are: a change to a port or contract read by another bounded context or layer; a change to `shared/` or to the composition root; a change to dependencies, tool configuration, gate scripts, a shared `conftest.py` or a migration. The author orders the Tasks so that these changes cluster and one point covers them. The totality sweeps add one more candidate, placed after the first Task of its group and not the last (item 5c). A Stage with none of these cases needs only the exit gate.
 5. **Totality sweeps.**
    - (a) **Planned red stays forbidden.** A Task still carries, in the same commit, its entry in every totality its files feed: the new error goes with its line in the status map, the new use case with the container, the new route with its override and route-table rows. `docs/PIPELINE.md` §4.3 criterion 1 ("commitável de forma limpa") is unchanged. What this ADR accepts is accidental red between two points, not red by design.
    - (b) **The sweep is one of the Task's own tests.** The test files of the totalities a Task feeds go in that Task's verification command, next to the tests it wrote. Fase 3B maps them before cutting the Tasks. So the rejection of an incremental change is still seen at the commit, by a focused `pytest` and not by the full gate.
@@ -126,7 +126,7 @@ Configuração candidata: nenhuma · Reversível: sim
 ```
 [decision:C] D4 — Where does the drift guard live?
 Escolha: a new scripts/check_docs_pointers.py holding a table of retired phrasings and a table of required headings · Alternativas: a rule inside check_docs_claims.py (it checks the LAYOUT tree, another question); inside check_harness.py (being edited by issue #162) · Degrau (C): 1
-Base: docs/CONVENTIONS.md §0, "Regra do eco", which already names `scripts/check_docs_pointers.py` as the mechanical guard to create; it is also the name of the FF script
+Base: docs/CONVENTIONS.md §0, "Regra do eco", which before this issue named `scripts/check_docs_pointers.py` as the optional mechanical guard "a criar"; it is also the name of the FF script
 Verificado: não verificado (§4.2) — same reason
 Configuração candidata: nenhuma · Reversível: sim
 ```
@@ -153,7 +153,7 @@ Configuração candidata: nenhuma · Reversível: sim
 ## References
 
 - Issue #163; issue #65 (item 7).
-- FF decision record `0.0.0059` and FF commits `93377c5d`, `1dd3c863`, `ef4349ed`, `6558cd0b` (financial-forecasting repo, issues #110 and #185): the origin.
+- FF decision record `0.0.0059` and FF commits `93377c5d`, `1dd3c863`, `ef4349ed`, `6558cd0b` (financial-forecasting repo, issues #110 and #185): the origin. The record was created as `0.0.0058` in `93377c5d` and renumbered to `0.0.0059` in FF commit `53bbd723`.
 - [ADR 0.0.0008](./0_0_0008-autonomous-orchestrator-parallel-worktrees.md): the full gate on Actions for orchestrated runs.
 - [ADR 2.3.0001](./2_3_0001-integration-tests-require-real-postgres.md): the CI job runs literally `make check`.
 - `docs/PIPELINE.md` §9.6: the operational single source. §4.3: the atomic-Task criteria.
