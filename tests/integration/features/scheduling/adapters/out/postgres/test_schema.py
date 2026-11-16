@@ -127,7 +127,7 @@ def _mudanca(conexao: Connection, sid: str, **campos: object) -> None:
     conexao.execute(schedule_changes.insert().values({**linha, **campos}))
 
 
-def _configuracao(conexao: Connection, **campos: object) -> None:
+def _linha_de_configuracao(**campos: object) -> dict[str, Any]:
     linha: dict[str, Any] = {
         "tenant_id": "t1",
         "week_start": "monday",
@@ -141,7 +141,11 @@ def _configuracao(conexao: Connection, **campos: object) -> None:
     for policy in POLICY_FIELDS:
         linha[f"{policy}_enabled"] = True
         linha[f"{policy}_mode"] = "warn"
-    conexao.execute(scheduling_settings.insert().values({**linha, **campos}))
+    return {**linha, **campos}
+
+
+def _configuracao(conexao: Connection, **campos: object) -> None:
+    conexao.execute(scheduling_settings.insert().values(_linha_de_configuracao(**campos)))
 
 
 @pytest.fixture
@@ -287,7 +291,7 @@ def test_colunas_do_banco_sao_as_de_tables_py_com_a_mesma_nulabilidade(engine: E
 
 @pytest.mark.parametrize(
     ("primeiro_dia", "dias"),
-    [(_SEG, 7), (date(2026, 11, 8), 1), (date(2026, 10, 27), 7), (date(2026, 10, 1), 31)],
+    [(_SEG, 7), (date(2026, 11, 8), 1), (date(2026, 10, 27), 7), (date(2026, 10, 15), 31)],
     ids=["mesmo-periodo", "ultimo-dia", "primeiro-dia", "envolve"],
 )
 def test_periodo_que_cruza_outra_escala_da_unidade_e_recusado(
@@ -525,6 +529,16 @@ def test_toda_coluna_da_configuracao_e_obrigatoria(banco_limpo: Engine) -> None:
     """Nenhum default de servidor completa uma linha: omitir uma coluna é `NOT NULL` violado."""
     colunas = [coluna.name for coluna in scheduling_settings.columns if coluna.name != "tenant_id"]
     for coluna in colunas:
+        linha = _linha_de_configuracao()
+        del linha[coluna]
         with pytest.raises(IntegrityError) as capturado, banco_limpo.begin() as conexao:
-            _configuracao(conexao, **{coluna: None})
+            conexao.execute(scheduling_settings.insert().values(linha))
         assert getattr(capturado.value.orig, "sqlstate", None) == "23502", coluna
+    with banco_limpo.connect() as conexao:
+        defaults = conexao.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'scheduling_settings' AND column_default IS NOT NULL"
+            )
+        ).all()
+    assert defaults == []
