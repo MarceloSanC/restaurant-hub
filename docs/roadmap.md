@@ -230,7 +230,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#154](https://github.com/MarceloSanC/restaurant-hub/issues/154) | Citações por número de linha a `overview.md`, ADRs e código sem gate | shared | tooling | done | #116 |
 | [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | done | #132 |
 | [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | done | #117 |
-| [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | open | #65 |
+| [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | done | #65 |
 | [#163](https://github.com/MarceloSanC/restaurant-hub/issues/163) | Orçamento de 1 a 3 `make check` por Stage no lugar do gate por Task | shared | tooling + docs | open | #65 |
 | [#164](https://github.com/MarceloSanC/restaurant-hub/issues/164) | Fechamento autônomo da auditoria e merge de Step sem OK humano | shared | docs + .claude | open | #65 |
 | [#165](https://github.com/MarceloSanC/restaurant-hub/issues/165) | Hook `publish_guard` trava push e merge fora dos gates | shared | tooling (.claude/hooks) | open | #65, #164 |
@@ -248,6 +248,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#185](https://github.com/MarceloSanC/restaurant-hub/issues/185) | Dois `stage 3.7: complete` no histórico: o `check_stage_deps` não distingue qual Stage o commit reservado fechou | shared | tooling | open | — |
 | [#190](https://github.com/MarceloSanC/restaurant-hub/issues/190) | Subir o teto da orquestração autônoma de 3 para 6 worktrees | shared | docs + .claude | done | — |
 | [#195](https://github.com/MarceloSanC/restaurant-hub/issues/195) | Atualizar os textos de "repo privado" e decidir os Required Status Checks agora que o repo é público | shared | docs + .claude + .github | open | — |
+| [#196](https://github.com/MarceloSanC/restaurant-hub/issues/196) | `check_harness` não lê o conteúdo de `reference/` nem resolve âncora de link de skill | shared | tooling | open | #162 |
+| [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

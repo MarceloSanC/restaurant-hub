@@ -290,6 +290,16 @@ def test_known_debt_tolerates_shrinks_and_needs_an_owner() -> None:
     ]
 
 
+def test_known_debt_stays_empty() -> None:
+    """A lista só encolhe, e zerou na #162: reabri-la é decisão que muda este teste.
+
+    O `reconcile_debt` cobra cada entrada (viva e com dono), nunca o conjunto. Sem esta
+    asserção, uma skill acima do teto entraria em `KNOWN_DEBT` com a suíte verde, e o
+    débito voltaria a crescer calado, como cresceu entre a #65 e a #162.
+    """
+    assert ch.KNOWN_DEBT == {}
+
+
 def test_real_harness_passes() -> None:
     """O harness do repo (skills, subagentes, settings) passa com o débito declarado."""
     assert ch.main() == 0
