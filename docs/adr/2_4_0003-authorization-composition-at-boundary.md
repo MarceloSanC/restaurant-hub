@@ -256,5 +256,8 @@ abrem `execute` declarando o próprio requisito a `AuthorizeActionUseCase`, que 
 autorizando como §1 descreve (defesa em profundidade) e nenhuma faixa muda. §2
 (`required_permissions_for_role`) continua valendo, agora no módulo do port
 `application/ports/out/action_authorizer.py`, de onde a borda e os use cases a leem; §2b
-("nenhuma rota emite `platform_admin`") passa a valer também para quem chama os use cases
-direto. Nota *append-only*; o corpo acima não foi editado.
+("nenhuma rota emite `platform_admin`") passa a valer também para quem chama direto esses cinco
+use cases — não para `ProvisionAccountUseCase`, que só a fachada alcança (resíduo declarado no ADR
+2.7.0001 §Consequences). Na nota de 2026-11-09 acima, *"O papel continua o literal `Role.OWNER` no
+router"* também foi superado: o literal passou do router para `InviteOwnerUseCase`. Nota
+*append-only*; o corpo acima não foi editado.

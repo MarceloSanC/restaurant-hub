@@ -193,5 +193,6 @@ checagens de §Decision 1 (o nome, depois a unicidade do e-mail) como **primeira
 `ProvisionRestaurantUseCase` foram superadas por [ADR 0.0.0020](./0_0_0020-identity-use-cases-authorize-their-own-target.md) e [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md) (Stage 2.7, issue
 #184).** O command ganhou `actor_id`, e a primeira instrução de `execute` passou a ser a
 autorização de `manage_platform`, sem tenant; a ordem de §Decision 1 continua valendo **depois**
-dela. A borda continua autorizando o mesmo requisito antes. Nota *append-only*; o corpo acima
-não foi editado.
+dela. A borda continua autorizando o mesmo requisito antes. Em §Decision 3, dos dois literais
+`Role.OWNER` (*"one in the router, one in `ProvisionRestaurantUseCase`"*), o do router passou
+para `InviteOwnerUseCase`. Nota *append-only*; o corpo acima não foi editado.

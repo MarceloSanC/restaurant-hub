@@ -282,10 +282,11 @@ borda continua autorizando antes (defesa em profundidade). Ficam fora, por exclu
 use cases cuja autoridade é uma credencial (login, refresh, logout, pedido de redefinição, definição
 de senha), a própria decisão de acesso e os quatro que só a fachada chama — esses, quem chama a
 fachada autoriza. Um use case novo entra numa das duas listas ou a suíte reprova. **"Não se concede
-o que não se detém" vale para quem chama o use case direto**, não só pela API: nenhum papel detém
-ao mesmo tempo `manage_users` e `manage_platform`, então ninguém cria um `platform_admin`, e um
-`owner` de outro tenant é negado no passo de tenant. A fachada de provisionamento, que não autoriza,
-só aceita o papel `employee` (ADR 2.7.0001 §Decision 5).
+o que não se detém" vale para quem chama direto esses cinco use cases**, não só pela API: nenhum
+papel detém ao mesmo tempo `manage_users` e `manage_platform`, então por eles ninguém cria um
+`platform_admin`, e um `owner` de outro tenant é negado no passo de tenant. A fachada de
+provisionamento, que não autoriza, só aceita o papel `employee` (ADR 2.7.0001 §Decision 5); o use
+case por trás dela continua aceitando qualquer papel (§5).
 
 **A mesma decisão, para quem está fora de identity.** Outro BC não recompõe a autorização: ele a
 pede à **fachada de acesso** (`IdentityAccessFacade`, segunda classe de `application/facade.py`),
@@ -554,6 +555,11 @@ sua âncora de origem.
   passa ([ADR 0.0.0020](../../adr/0_0_0020-identity-use-cases-authorize-their-own-target.md)
   §Consequences). Ator de sistema ou delegado — issue #75; e o seed do primeiro `platform_admin`,
   que não tem ator que o autorize, fica para a Stage que o criar.
+- **O use case de provisionamento por trás da fachada aceita qualquer papel** — chamado direto,
+  sem passar pela fachada, ainda cria `platform_admin` ou `owner` em qualquer tenant. O que o
+  guarda é o alcance (um teste trava que só a fachada e o composition root o importam), não uma
+  regra; o primeiro chamador novo reabre a decisão
+  ([ADR 2.7.0001](../../adr/2_7_0001-identity-authorizes-through-a-narrow-port.md) §Consequences).
 - **Gestão de vínculo depois da criação** — acrescentar, retirar ou trocar unidade de um usuário,
   e vincular login existente a registro de staff (o gerente ou dono que também trabalha na escala)
   — issue #107; a regra de fim de vínculo a aplicar é a do
@@ -744,7 +750,13 @@ reescreve ADR nem concept — a disposição de cada um está no próprio item):
 - [ADR 3.5.0003](../../adr/3_5_0003-termination-revokes-sessions-account-remains.md) — a conta
   permanece; desativação adiada com gatilho (§3.6, §5).
 - [ADR 3.7.0001](../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md) — staff
-  autoriza dentro do use case; identity não (§3.4).
+  autoriza dentro do use case; a forma de referência que identity adotou na Stage 2.7 (§3.4).
+- [ADR 0.0.0020](../../adr/0_0_0020-identity-use-cases-authorize-their-own-target.md) — todo use
+  case que age por um ator autoriza o próprio alvo; inventário e exclusões nomeadas de identity
+  (§3.4, §5).
+- [ADR 2.7.0001](../../adr/2_7_0001-identity-authorizes-through-a-narrow-port.md) — o port do
+  autorizador, o use case próprio do convite de dono e a fachada que só provisiona `employee`
+  (§3.4, §5).
 - [ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md) — o
   desligamento revoga só o acesso que o registro concede (§3.9).
 - [ADR 3.9.0001](../../adr/3_9_0001-error-roots-by-meaning-status-by-map.md) — negação de acesso e

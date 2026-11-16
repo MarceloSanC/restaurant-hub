@@ -14,6 +14,8 @@ bounded_context: transversal
 
 # ADR 0.0.0020 — Identity use cases that act for an actor authorize their own target
 
+> ⚠️ **Errata (2026-11-09):** §Inventory — `IdentityFacade.provision_account` never accepted `platform_admin`: it takes `tenant_id: str`, and `User` refuses a `platform_admin` with a tenant. Only `ProvisionAccountUseCase` accepts it. What the facade did accept was `owner`, `manager` or `hr` in any existing tenant, which Stage 2.7 closed. No decision content changes — ver a nota no fim deste ADR e o [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md) §Context 4
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
 ## Status
