@@ -285,4 +285,31 @@ T03 depende de T02 (colunas); T06 usa o helper de T05 e a L-E8 de T04; T08 conso
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-11-09 — [decision] Fase 3A — forks P delegados pelo sponsor, todos na opção recomendada — Claude (Fable 5.2)
+**Contexto:** o sponsor delegou as bifurcações de produto da Stage; não houve `AskUserQuestion`.
+**Decisão:** seis `P delegado`, registrados no concept §7 (D2, D3, D4, D6 ×2, D7) e nos ADRs 3.11.0001 e 3.11.0002: habilitação = "todas" ou conjunto não-vazio; nome único no restaurante; "todas" exige `manage_tenant`; catálogo preservado + rota por unidade; a resposta expõe a habilitação inteira; a cópia entre unidades **recusa** (409) destino onde alguma função do registro não vale, sem habilitar junto.
+**Razão:** os motivos de cada um estão no concept §7; os checkpoints humanos ficaram auto-aprovados pela mesma delegação.
+
+### 2026-11-16 — [deviation] Task 03/04 — a consulta da L-E8 ganhou prefixo de leitura — Claude (Fable 5.2)
+O technical (Task 04) nomeia `units_referencing_job_function`; a regra 10 do `check_layout.py` classifica método de repositório pelo prefixo e contava a consulta como escrita (CI vermelho). Virou `list_units_referencing_job_function` (`task-04-fix`), e `update_enablement` entrou na lista de escritas do teste da regra 10 (`task-03-fix`, arquivo de tooling fora da lista da Task 03). Sem mudança de lei nem de comportamento.
+
+### 2026-11-16 — [deviation] Task 07 — testes num arquivo próprio e dois e2e fora da lista — Claude (Fable 5.2)
+A Task 07 lista `test_create_employee`, `test_assign_job_functions` e `test_copy_employee_to_unit`; os CA5/CA6 e a R10 entraram num arquivo novo, `test_employee_holds_only_enabled_functions.py`, que cobre os três use cases sob a mesma invariante (ADR 3.11.0002) — os arquivos listados receberam só o ajuste de construção. A regra nova também tornou 409 duas cópias dos e2e (`test_staff_status_bands.py` no commit da Task e `test_employee_login_flow.py` no `task-07-fix`, CI vermelho): o fixture passou a habilitar a função no destino. Varredura de totalidade levada junto (risco previsto em §5).
+
+### 2026-11-16 — [deviation] Checkpoint C — seis commits de correção — Claude (Fable 5.2)
+Bloco 1 (T01–T04): downgrade da `0005` confere o índice de vínculo; o DELETE de vínculos em `update_enablement` fica travado por uma função vizinha. Bloco 2 (T05–T07): `extra=forbid` no corpo da criação (um `unit_id` no singular seria ignorado e pediria "todas"); a guarda do estreitamento olha só o que a mudança **tira** (registro já fora da habilitação não trava alargar nem repetir); teste da ordem alcance → validação local; conversão única `None` = todas. Bloco 3 (T08–T09): varreduras sem sucesso vazio na rota de unidades; ADR 3.11.0001 diz que `unit_ids` é obrigatório (e anulável) na alteração. Disposições: todos `corrigido`, nos commits `-fix` da Stage.
+
+### 2026-11-16 — [deviation] Auditoria de testes — quatro testes extras (rodada 1) — Claude (Opus 5.5)
+O auditor independente rodou 32 mutações reais; 4 sobreviveram. Cobertos no commit `task-10-extra`: guarda do estreitamento com registros numa unidade que fica e noutra que sai (mutações "recusa só se todas saem" e "olha só a menor"); "todas" → "todas" não pede `manage_tenant` (curto-circuito de R5); a cópia com várias funções apagadas nomeia a menor id; e, no contrato fake ≡ Postgres, cada função de uma leitura de várias linhas volta com os **seus** vínculos (agrupamento em `_hydrate`).
+
+### 2026-11-16 — [decision] Auditoria de testes — sem e2e do 409 em criar funcionário — Claude (Opus 5.5)
+**Contexto:** o auditor notou que o 409 de `JobFunctionNotEnabledInUnitError` chega à API em e2e por copiar e por atribuir, não por criar.
+**Decisão:** não acrescentar. Criar e atribuir chamam a mesma checagem (`require_enabled_in_unit`, mutações CE1/AJ1 mortas em unit) e o status sai do mesmo mapa de erros, travado pela varredura de totalidade.
+**Razão:** o e2e repetiria o que a identidade da checagem e o mapa já travam.
+
+### 2026-11-16 — [decision] Fechamento — rebase em develop e prompt da Stage — Claude (Opus 5.5)
+**Contexto:** a sessão de execução foi interrompida na auditoria de testes; outra sessão concluiu. Develop recebeu #190, #162 e #163 (ADR 0.0.0021, orçamento de `make check`).
+**Decisão:** a Stage fecha pelo `PROMPT-stage-single-session.md` com que começou (o orçamento do ADR 0.0.0021 vale para Stages novas); rebase sem conflito, `make docs-check` verde depois dele.
+**Razão:** PIPELINE §9.6 — Stage que já estava em execução termina pelo prompt com que começou, sem plano de gates.
+
 <!-- END: post-execution -->
