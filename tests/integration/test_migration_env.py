@@ -239,21 +239,28 @@ def test_url_do_chamador_invalida_e_recusada(invalida: object, scratch_url: str)
 
 
 @pytest.mark.parametrize(
-    ("url", "tem_timestamptz"),
-    [("mysql+pymysql://u:p@h/db", False), ("postgresql+psycopg://u:p@h/db", True)],
+    ("url", "alvo", "tem_timestamptz"),
+    [("mysql+pymysql://u:p@h/db", "0004", False), ("postgresql+psycopg://u:p@h/db", "head", True)],
     ids=["mysql", "postgres"],
 )
-def test_offline_gera_o_sql_no_dialeto_da_url_do_chamador(url: str, tem_timestamptz: bool) -> None:
+def test_offline_gera_o_sql_no_dialeto_da_url_do_chamador(
+    url: str, alvo: str, tem_timestamptz: bool
+) -> None:
     """O offline não conecta: a URL do chamador escolhe o dialeto do SQL gerado.
 
     Com uma URL MySQL no atributo, o `TIMESTAMP WITH TIME ZONE` do Postgres some
     — um `env.py` que usasse as Settings (Postgres) no offline o manteria.
+
+    O lado MySQL para na `0004` (Stage 4.4): a `0006_scheduling` usa construções só do
+    Postgres (exclusion constraint, `JSONB`, `CREATE EXTENSION`), que nenhum outro
+    dialeto renderiza. O que o teste mede — o dialeto vem da URL do chamador — não
+    depende de qual revisão é renderizada; o lado Postgres segue até `head`.
     """
     config = alembic_config(url)
     saida = io.StringIO()
     config.output_buffer = saida
 
-    command.upgrade(config, "head", sql=True)
+    command.upgrade(config, alvo, sql=True)
 
     assert "CREATE TABLE users" in saida.getvalue()
     assert ("TIMESTAMP WITH TIME ZONE" in saida.getvalue()) is tem_timestamptz
