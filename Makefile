@@ -194,7 +194,9 @@ lock-check:
 # (8) que o frontmatter dos ADRs e dos docs de domínio é YAML válido, que
 # `adr_id` é único e bate com o nome do arquivo, e que doc de domínio não tem
 # link quebrado, ADR linkado fora do `references` nem lacuna aberta para
-# Stage `done` (issue #102, ADR 0.0.0015).
+# Stage `done` (issue #102, ADR 0.0.0015) — e (9) que os docs normativos não
+# trazem regra aposentada (o `make check` completo amarrado a todo commit) e
+# que as seções do plano de gates existem (issue #163, ADR 0.0.0021).
 #
 # O (4) é o único que compara documento com sistema de arquivos, e é por isso
 # que ele existe: a §2 não ilustra, ela **instrui** — `CLAUDE.md` manda
@@ -216,6 +218,7 @@ docs-check:
 	uv run python scripts/check_domain_citations.py
 	uv run python scripts/check_adr_code_citations.py
 	uv run python scripts/check_doc_frontmatter.py
+	uv run python scripts/check_docs_pointers.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes (sem cobertura — loop rápido local)
