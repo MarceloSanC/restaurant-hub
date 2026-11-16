@@ -79,7 +79,7 @@ nunca o relatório nem o raciocínio do implementador. Roda a skill `stage-audit
      `develop` anda durante a espera); atrás → rebase, push e esperar o Actions de novo;
    - nenhum fork P pendente.
 4. Tudo valendo → executa os passos 4–7 da mesma seção, **do checkout principal**: merge commit sem
-   `--delete-branch`, `git pull`, `docker compose down -v` na worktree,
+   `--delete-branch`, `git pull --ff-only`, `docker compose down -v` na worktree,
    `worktree-rm.py <branch> --delete-remote`, e cola a saída da verificação (remota, local,
    worktree, containers, hooks). Alguma condição falhando → **não mergeia**; reporta o que travou.
 5. Devolve ao orquestrador: veredito, hash do merge (ou o bloqueio), issues abertas, aprendizados.

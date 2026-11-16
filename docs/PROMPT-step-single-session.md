@@ -330,7 +330,7 @@ que travou, e espera. Não force progresso nem “conserte” a condição grava
 Com as condições valendo, executar o fechamento (invocar `git-versioning-pointer` antes das
 operações git) pela sequência de [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Merge e limpeza da
 worktree", passos 3–7, **do checkout principal**: base reconferida, `gh pr merge <num> --merge`
-**sem** `--delete-branch` (com a branch presa à worktree ele não apaga a remota), `git pull`,
+**sem** `--delete-branch` (com a branch presa à worktree ele não apaga a remota), `git pull --ff-only`,
 `docker compose down -v` dentro da worktree, `worktree-rm.py <branch> --delete-remote` e a
 verificação (remota, local, worktree, containers, hooks). O label `complete` do re-auditor (§3.3)
 segue os passos 1–2 da mesma seção: gravado com a branch sem conflito, e conferido o run novo do
