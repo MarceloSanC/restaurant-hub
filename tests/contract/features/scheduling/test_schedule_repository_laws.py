@@ -416,3 +416,62 @@ def test_l_sc1_a_ordem_do_add_e_id_da_escala_periodo_ids_internos(
         schedule_repo.add(
             _escala_com_internos("s2", _SEG, band="f1", demand="d1", assignment="a1"), _mudanca()
         )
+
+
+def _vizinha(sid: str, first_day: date) -> Schedule:
+    """Escala rica com ids internos disjuntos dos de `_escala_rica`, e conteúdo diferente."""
+    return (
+        _escala(sid, first_day)
+        .enable_band(ShiftBandId("g2"), _faixa(first_day, 9, intervalo=15))
+        .enable_band(ShiftBandId("g1"), _faixa(first_day + timedelta(days=1), 18))
+        .declare_demand(
+            ShiftDemandId("e1"), ShiftBandId("g2"), JobFunctionId("atendente"), DemandQuantity(3)
+        )
+        .assign(AssignmentId("b1"), ShiftDemandId("e1"), EmployeeId("dani"))
+    )
+
+
+def test_l_sc8_escalas_vizinhas_da_unidade_nao_se_misturam_nem_sao_tocadas_pelo_save(
+    schedule_repo: ScheduleRepository,
+) -> None:
+    """Fidelidade com **duas** escalas com filhas na unidade (auditoria de testes da 4.4).
+
+    Uma leitura que juntasse as filhas pela unidade, e não pela escala, ou um `save` que
+    reescrevesse as faixas da unidade inteira, passariam por toda suíte de uma escala só.
+    """
+    s1 = _escala_rica("s1")
+    s2 = _vizinha("s2", _SEG + _SEMANA)
+    schedule_repo.add(s1, _mudanca())
+    schedule_repo.add(s2, _mudanca())
+    recorte = schedule_repo.list_in_range(_T, _U, _SEG, _SEG + 2 * _SEMANA)
+    assert [project(e) for e in recorte] == [project(s1), project(s2)]
+    anteriores = schedule_repo.list_ending_before(_T, _U, _SEG + 3 * _SEMANA, 5)
+    assert [project(e) for e in anteriores] == [project(s2), project(s1)]
+
+    s2_alterada = s2.disable_band(ShiftBandId("g1"))
+    schedule_repo.save(s2_alterada, s2.version, _mudanca(s2.version))
+    lida_s1 = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
+    lida_s2 = schedule_repo.find_by_id(_T, _U, ScheduleId("s2"))
+    assert lida_s1 is not None
+    assert lida_s2 is not None
+    assert project(lida_s1) == project(s1)
+    assert project(lida_s2) == project(s2_alterada)
+
+
+def test_l_sc1_id_de_escala_colide_em_outro_tenant(schedule_repo: ScheduleRepository) -> None:
+    schedule_repo.add(_escala("s1"), _mudanca())
+    with pytest.raises(IdentifierInUseError) as excinfo:
+        schedule_repo.add(_escala("s1", tenant="t2"), _mudanca())
+    assert (excinfo.value.id_type, excinfo.value.value) == ("ScheduleId", "s1")
+    assert schedule_repo.find_by_id(TenantId("t2"), _U, ScheduleId("s1")) is None
+
+
+def test_l_sc5_save_no_endereco_de_outro_tenant_e_escala_inexistente(
+    schedule_repo: ScheduleRepository,
+) -> None:
+    schedule_repo.add(_escala("s1"), _mudanca())
+    with pytest.raises(ScheduleNotFoundError):
+        schedule_repo.save(_com_faixa(_escala("s1", tenant="t2")), 1, _mudanca(1))
+    lida = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
+    assert lida is not None
+    assert lida.bands == ()

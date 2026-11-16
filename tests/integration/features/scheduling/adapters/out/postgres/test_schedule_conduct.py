@@ -20,10 +20,12 @@ from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 from sqlalchemy import Engine, event, text
+from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository import (
     PostgresScheduleRepository,
 )
+from restaurant_hub.features.scheduling.adapters.out.postgres.tables import schedules
 from restaurant_hub.features.scheduling.application.errors import (
     IdentifierInUseError,
     SchedulePeriodTakenError,
@@ -315,3 +317,40 @@ def test_save_concorrente_entre_raiz_e_filhas_nao_rasga_o_agregado(
     assert any("FROM schedules" in statement for statement in vistos[:-1]), vistos
     assert project(durante) == project(v1)
     assert project(ler(repo)) == project(v2)
+
+
+def test_escritor_que_contorna_o_lock_faz_o_add_cair_na_exclusion_traduzida(
+    repo: PostgresScheduleRepository, banco_limpo: Engine
+) -> None:
+    """A garantia do banco contra quem não toma o lock, e a sua tradução no `add` (§6).
+
+    Uma conexão grava, por fora do adapter e sem o lock da unidade, uma escala que cobre os
+    mesmos dias, e não comita. O `add` passa pelas checagens (não enxerga a linha não
+    comitada), espera a exclusion constraint resolver (`transactionid`) e, quando a outra
+    comita, cai em `ex_schedules_unit_days_disjoint` — traduzida para
+    `SchedulePeriodTakenError`, com o `IntegrityError` preservado como causa.
+    """
+    with banco_limpo.connect() as intrusa:
+        intrusa.execute(
+            schedules.insert().values(
+                id="s9",
+                tenant_id=_T,
+                unit_id=_U1,
+                first_day=_SEG,
+                days=7,
+                week_start="monday",
+                day_cutoff=time(5),
+                version=1,
+            )
+        )
+        b = _Escritor("escritor-B", lambda: repo.add(_escala("s1"), _mudanca(None)))
+        b.start()
+        try:
+            _espera_lock_nao_concedido(banco_limpo, "transactionid", b)
+        finally:
+            intrusa.commit()
+        b.join(_PRAZO)
+    assert not b.is_alive(), "escritor travado"
+    assert isinstance(b.erro, SchedulePeriodTakenError)
+    assert isinstance(b.erro.__cause__, IntegrityError)
+    assert repo.find_by_id(_T, _U1, ScheduleId("s1")) is None
