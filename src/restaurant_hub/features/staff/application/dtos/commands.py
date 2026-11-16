@@ -82,6 +82,25 @@ class CreateJobFunctionCommand:
 
 
 @dataclass(frozen=True)
+class SetJobFunctionUnitsCommand:
+    """Substituição das unidades em que uma função vale (Stage 3.11).
+
+    Traz o estado final desejado, não um delta (ADR 3.11.0001 §5).
+
+    Attributes:
+        unit_ids: `None` = **todas** as unidades do restaurante; um conjunto
+            nomeia as unidades. **Sem default**, ao contrário da criação: aqui a
+            omissão *alargaria* uma função restrita, e quem não diz onde a função
+            deve valer não forma o pedido.
+    """
+
+    actor: Actor = field(repr=False)
+    tenant_id: TenantId
+    job_function_id: JobFunctionId
+    unit_ids: frozenset[UnitId] | None
+
+
+@dataclass(frozen=True)
 class RenameJobFunctionCommand:
     """Renomeação de uma função existente.
 

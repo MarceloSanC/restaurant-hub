@@ -198,6 +198,9 @@ from restaurant_hub.features.staff.application.use_cases.rename_employee import 
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
+    SetJobFunctionUnitsUseCase,
+)
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
@@ -248,6 +251,8 @@ class ApplicationDependencies:
     staff_rename_job_function: RenameJobFunctionUseCase
     staff_delete_job_function: DeleteJobFunctionUseCase
     staff_list_job_functions: ListJobFunctionsUseCase
+    # Stage 3.11 — o 18º use case de staff: substituir as unidades de uma função.
+    staff_set_job_function_units: SetJobFunctionUnitsUseCase
     staff_create_employee: CreateEmployeeUseCase
     staff_rename_employee: RenameEmployeeUseCase
     staff_list_employees: ListEmployeesUseCase
@@ -530,6 +535,9 @@ def wire_dependencies(
         ),
         staff_list_job_functions=ListJobFunctionsUseCase(
             job_functions=staff_job_functions, guard=staff_access_guard
+        ),
+        staff_set_job_function_units=SetJobFunctionUnitsUseCase(
+            job_functions=staff_job_functions, employees=staff_employees, guard=staff_access_guard
         ),
         staff_create_employee=CreateEmployeeUseCase(
             employees=staff_employees,

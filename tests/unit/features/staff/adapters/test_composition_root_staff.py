@@ -95,6 +95,7 @@ _USE_CASES_DE_STAFF = (
     "staff_rename_job_function",
     "staff_delete_job_function",
     "staff_list_job_functions",
+    "staff_set_job_function_units",
     "staff_create_employee",
     "staff_rename_employee",
     "staff_list_employees",
@@ -110,8 +111,9 @@ _USE_CASES_DE_STAFF = (
     "staff_create_login_for_employee",
 )
 
-# 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17).
-_TOTAL_DE_USE_CASES = 17
+# 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17); a Stage
+# 3.11, `set_job_function_units`.
+_TOTAL_DE_USE_CASES = 18
 
 
 def _dependencias() -> ApplicationDependencies:

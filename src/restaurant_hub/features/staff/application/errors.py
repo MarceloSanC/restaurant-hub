@@ -100,6 +100,11 @@ class JobFunctionInUseError(StaffError):
     **independentemente do estado** do funcionário: registro desligado ainda
     aponta para a função, e apagá-la deixaria o cadastro apontando para função
     inexistente, furando a invariante "ao menos uma função" da 3.1.
+
+    **Também o estreitamento da habilitação** (Stage 3.11, ADR 3.11.0002): tirar a
+    função de uma unidade em que algum registro — ativo ou desligado — a detém é
+    recusado pela mesma razão e com o mesmo erro. Nos dois casos o pedido está
+    correto e é **outro registro** que impede.
     """
 
     def __init__(self, job_function_id: str) -> None:

@@ -35,6 +35,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
+    SetJobFunctionUnitsCommand,
 )
 from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
@@ -103,6 +104,12 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
         actor=TEST_ACTOR, tenant_id=_TENANT, job_function_id=_FUNCAO, name="Chapeiro"
     ),
     DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_TENANT, job_function_id=_FUNCAO),
+    SetJobFunctionUnitsCommand(
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        job_function_id=_FUNCAO,
+        unit_ids=frozenset({_UNIDADE}),
+    ),
     CreateEmployeeCommand(
         actor=TEST_ACTOR,
         tenant_id=_TENANT,
@@ -188,8 +195,8 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
 
 
 # 14 + 2 + 2 até a 3.4; a Stage 3.5 acrescenta `CreateLoginForEmployeeCommand` e
-# `EmployeeLoginResult` (concept 3.5 §4).
-_DTOS_ESPERADOS = 15 + 2 + 3  # commands + queries + results (concept §4)
+# `EmployeeLoginResult` (concept 3.5 §4); a Stage 3.11, `SetJobFunctionUnitsCommand`.
+_DTOS_ESPERADOS = 16 + 2 + 3  # commands + queries + results (concept §4)
 
 
 def _dtos_declarados() -> set[type]:
@@ -261,8 +268,8 @@ def test_todo_dto_tem_igualdade_por_valor(dto: object) -> None:
     assert dataclasses.replace(dto) == dto  # type: ignore[type-var]
 
 
-# 15 commands + 2 queries — a entrada de cada um dos 17 use cases.
-_COMMANDS_E_QUERIES_ESPERADOS = 17
+# 16 commands + 2 queries — a entrada de cada um dos 18 use cases.
+_COMMANDS_E_QUERIES_ESPERADOS = 18
 
 
 def _commands_e_queries() -> list[type]:
@@ -278,7 +285,7 @@ def _commands_e_queries() -> list[type]:
     )
 
 
-def test_a_varredura_de_entrada_alcanca_os_17_dtos() -> None:
+def test_a_varredura_de_entrada_alcanca_todos_os_dtos_de_entrada() -> None:
     """Sem a contagem, uma varredura vazia passaria por ausência de casos."""
     assert len(_commands_e_queries()) == _COMMANDS_E_QUERIES_ESPERADOS
 
