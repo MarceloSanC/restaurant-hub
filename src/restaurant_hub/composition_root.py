@@ -576,7 +576,10 @@ def wire_dependencies(
             employees=staff_employees, guard=staff_access_guard
         ),
         staff_copy_employee_to_unit=CopyEmployeeToUnitUseCase(
-            employees=staff_employees, id_generator=id_generator, guard=staff_access_guard
+            employees=staff_employees,
+            job_functions=staff_job_functions,
+            id_generator=id_generator,
+            guard=staff_access_guard,
         ),
         staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
             employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard

@@ -33,6 +33,9 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._unit_enablement import (
+    require_enabled_in_unit,
+)
 
 
 class AssignJobFunctionsUseCase:
@@ -55,6 +58,8 @@ class AssignJobFunctionsUseCase:
             EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**.
             JobFunctionNotFoundError: alguma id do conjunto não existe no
                 tenant (ou existe em outro).
+            JobFunctionNotEnabledInUnitError: alguma função do conjunto não está
+                habilitada na unidade do registro (Stage 3.11).
             EmptyJobFunctionsError: conjunto vazio (domínio, 3.1).
         """
         # (0) Autorização do alvo do command, antes de qualquer outra instrução
@@ -77,6 +82,8 @@ class AssignJobFunctionsUseCase:
         missing = command.job_function_ids - {job_function.id for job_function in found}
         if missing:
             raise JobFunctionNotFoundError(sorted(missing)[0])
+        # (2b) Habilitação na unidade do registro (Stage 3.11, ADR 3.11.0002).
+        require_enabled_in_unit(found, command.unit_id)
         # (3) Transição e (4) escrita.
         assigned = employee.assign_job_functions(command.job_function_ids)
         self._employees.update(assigned)

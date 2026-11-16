@@ -42,6 +42,8 @@ _DE_DOMINIO = (
     errors.LoginEmailAlreadyInUseError,
     errors.InvalidLoginEmailError,
     errors.EmployeeHasLoginError,
+    # Stage 3.11 — função fora da unidade do registro (ADR 3.11.0002).
+    errors.JobFunctionNotEnabledInUnitError,
 )
 
 
@@ -63,7 +65,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_doze_excecoes_esperadas() -> None:
+def test_modulo_declara_exatamente_as_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -87,6 +89,8 @@ def test_modulo_declara_as_doze_excecoes_esperadas() -> None:
         "LoginEmailAlreadyInUseError",
         "InvalidLoginEmailError",
         "EmployeeHasLoginError",
+        # Stage 3.11 — o registro só detém função habilitada na sua unidade.
+        "JobFunctionNotEnabledInUnitError",
     }
 
 

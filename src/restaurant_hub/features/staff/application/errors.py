@@ -111,6 +111,27 @@ class JobFunctionInUseError(StaffError):
         super().__init__(f"função de trabalho em uso por algum funcionário: {job_function_id!r}")
 
 
+class JobFunctionNotEnabledInUnitError(StaffError):
+    """Função atribuída a um registro de unidade em que ela não vale (Stage 3.11).
+
+    Um registro de funcionário só detém funções **habilitadas na sua unidade**
+    (ADR 3.11.0002). A regra é uma só e tem três produtores: criar o registro,
+    substituir o conjunto de funções dele, e copiá-lo para uma unidade em que
+    alguma das funções não está habilitada — a cópia é **recusada**, sem habilitar
+    a função junto nem deixar a função para trás.
+
+    O pedido está bem-formado e a função existe; é o **estado do catálogo** que
+    impede — daí a mesma faixa de `JobFunctionInUseError`. A mensagem nomeia a
+    função e a unidade para que quem recebe saiba o que habilitar; as duas vêm do
+    próprio pedido, já autorizado.
+    """
+
+    def __init__(self, job_function_id: str, unit_id: str) -> None:
+        super().__init__(
+            f"função de trabalho {job_function_id!r} não está habilitada na unidade {unit_id!r}"
+        )
+
+
 class EmployeeInUseError(StaffError):
     """Remoção de funcionário referenciado por outro agregado (L-E5).
 

@@ -238,3 +238,39 @@ async def test_ca36_o_manager_alcanca_as_rotas_sem_nomear_tenant(
 
     assert catalogo.status_code == HTTPStatus.OK, catalogo.text
     assert equipe.status_code == HTTPStatus.OK, equipe.text
+
+
+async def test_ca5_copia_para_unidade_sem_a_funcao_habilitada_e_409_e_nada_e_gravado(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """CA5 da Stage 3.11, pelo HTTP real — a regra da cópia do ADR 3.11.0002.
+
+    A função vale **só em A**. Copiar para B é recusado com 409 de staff: a cópia
+    não habilita a função no destino, não copia sem ela e não deixa registro em B.
+    Habilitada a função em B, a mesma cópia passa — é o caminho que a recusa
+    aponta.
+    """
+    funcao = await client.post(
+        f"{API}/job-functions",
+        json={"name": "Sushiman", "unit_ids": [cenario.unidade_a]},
+        headers=auth(cenario.manager),
+    )
+    assert funcao.status_code == HTTPStatus.CREATED, funcao.text
+    job_function_id = str(funcao.json()["id"])
+    original = await _criar_funcionario(
+        client, cenario, cenario.unidade_a, "Kenji", job_function_id
+    )
+    destino = {"target_unit_id": cenario.unidade_b}
+    copias = f"{API}/units/{cenario.unidade_a}/employees/{original['id']}/copies"
+
+    recusada = await client.post(copias, json=destino, headers=auth(cenario.manager))
+
+    assert recusada.status_code == HTTPStatus.CONFLICT, recusada.text
+    assert recusada.json()["type"] == "staff_error"
+    assert "não está habilitada na unidade" in recusada.json()["detail"]
+    em_b = await _listar(client, cenario, cenario.unidade_b)
+    assert em_b.json() == []
+    catalogo = await client.get(f"{API}/job-functions", headers=auth(cenario.manager))
+    assert [f["unit_ids"] for f in catalogo.json() if f["id"] == job_function_id] == [
+        [cenario.unidade_a]
+    ]

@@ -348,6 +348,28 @@ async def _habilitacao_sem_unidade(
     )
 
 
+async def _funcao_de_outra_unidade(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`JobFunctionNotEnabledInUnitError` — a função vale só na **outra** unidade.
+
+    O gerente cria uma função habilitada só na unidade de destino do cenário e a
+    atribui ao registro da unidade de origem: o pedido é bem-formado e a função
+    existe no restaurante, mas não vale na unidade do registro (ADR 3.11.0002).
+    """
+    criada = await client.post(
+        f"{API}/job-functions",
+        json={"name": f"Só no destino {recursos.sufixo}", "unit_ids": [recursos.unidade_destino]},
+        headers=cabecalho,
+    )
+    assert criada.status_code == HTTPStatus.CREATED, criada.text
+    return await client.put(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/job-functions",
+        json={"job_function_ids": [criada.json()["id"]]},
+        headers=cabecalho,
+    )
+
+
 async def _funcao_em_uso(
     client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
 ) -> Response:
@@ -624,9 +646,13 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
         _habilitacao_sem_unidade,
         "habilitação por unidade inválida: exige ao menos uma unidade",
     ),
+    "JobFunctionNotEnabledInUnitError": (
+        _funcao_de_outra_unidade,
+        "não está habilitada na unidade",
+    ),
 }
 
-_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 24
+_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 25
 
 # O tamanho do domínio de corpo de CA24 **depois** de a varredura descer por
 # lista. Eram dez caminhos; os três novos são um elemento de `job_function_ids`

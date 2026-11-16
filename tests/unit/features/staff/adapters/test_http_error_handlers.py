@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 # tripwire contra a enumeração encolher em silêncio — `__subclasses__` só enxerga
 # o que foi importado, então um módulo de erro novo que ninguém importasse aqui
 # faria a varredura passar sobre um universo menor do que o real.
-_TOTAL_DE_ERROS_DE_STAFF = 24
+_TOTAL_DE_ERROS_DE_STAFF = 25
 _TOTAL_DE_MODULOS_DE_ERRO = 2
 
 # Os dois módulos são importados acima de propósito, e não por acaso: é o import
@@ -93,7 +93,7 @@ def test_o_mapa_nao_tem_entrada_orfa() -> None:
 
 
 def test_o_mapa_tem_exatamente_as_entradas_declaradas() -> None:
-    """A contagem é asserção: 24 entradas, 12 do domínio e 12 da aplicação (Stage 3.11: +1)."""
+    """A contagem é asserção: 25 entradas, 12 do domínio e 13 da aplicação (Stage 3.11: +2)."""
     assert len(handlers.STAFF_ERROR_STATUS) == _TOTAL_DE_ERROS_DE_STAFF
 
 
@@ -128,6 +128,7 @@ _STATUS_ESPERADO = [
     (application_errors.InvalidLoginEmailError("nao-e-email"), 422),
     # Stage 3.11 — habilitação por unidade vazia ou incoerente (ADR 3.11.0001 §2).
     (domain_errors.InvalidUnitEnablementError("exige ao menos uma unidade"), 422),
+    (application_errors.JobFunctionNotEnabledInUnitError("jf1", "u1"), 409),
 ]
 
 

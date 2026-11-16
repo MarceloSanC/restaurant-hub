@@ -18,14 +18,23 @@ acesso divergem em silêncio.
 
 As duas funções **não** autorizam o tenant com `manage_job_functions`: isso é do
 use case, antes de tudo (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
+
+**E a invariante entre funcionário e unidade** (ADR 3.11.0002), pela mesma razão de não
+ter três cópias: criar o registro, atribuir funções e copiar para outra unidade
+perguntam a mesma coisa — "todas estas funções valem nesta unidade?" — a
+`require_enabled_in_unit`.
 """
 
+from collections.abc import Iterable
+
+from restaurant_hub.features.staff.application.errors import JobFunctionNotEnabledInUnitError
 from restaurant_hub.features.staff.application.ports.out.access_guard import (
     PERMISSION_MANAGE_JOB_FUNCTIONS,
     PERMISSION_MANAGE_TENANT,
     AccessGuard,
     Actor,
 )
+from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import TenantId, UnitId
 
 
@@ -73,3 +82,22 @@ def _authorize_units(
         guard.authorize(
             actor, PERMISSION_MANAGE_JOB_FUNCTIONS, tenant_id=tenant_id, unit_id=unit_id
         )
+
+
+def require_enabled_in_unit(job_functions: Iterable[JobFunction], unit_id: UnitId) -> None:
+    """Recusa o conjunto se alguma função não vale na unidade do registro.
+
+    Recebe as funções **já resolvidas** pelo chamador — a checagem referencial
+    (função inexistente no tenant) vem antes e é dele. Quando há mais de uma fora
+    da unidade, a id reportada é a menor: mensagem instável é ruído em log e em
+    teste, e é o mesmo critério do `JobFunctionNotFoundError` vizinho.
+
+    Raises:
+        JobFunctionNotEnabledInUnitError: alguma função não está habilitada em
+            `unit_id`.
+    """
+    not_enabled = sorted(
+        job_function.id for job_function in job_functions if not job_function.is_enabled_in(unit_id)
+    )
+    if not_enabled:
+        raise JobFunctionNotEnabledInUnitError(not_enabled[0], unit_id)
