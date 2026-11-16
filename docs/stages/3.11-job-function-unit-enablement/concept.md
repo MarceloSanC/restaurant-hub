@@ -320,33 +320,33 @@ erDiagram
 
 ## 11. Critérios de aceitação
 
-- [ ] **CA1** Gerente cria função com `unit_ids` = a unidade dele e ela aparece em
+- [x] **CA1** Gerente cria função com `unit_ids` = a unidade dele e ela aparece em
   `GET /units/{a}/job-functions` e não em `GET /units/{b}/job-functions`.
-- [ ] **CA2** Gerente que pede unidade que não enxerga, ou "todas", recebe 403;
+- [x] **CA2** Gerente que pede unidade que não enxerga, ou "todas", recebe 403;
   dono cria para todas e a função aparece em toda unidade. As unidades são
   autorizadas em ordem `sorted` (teste de chamadas ao guard).
-- [ ] **CA3** A listagem de uma unidade não mostra função não habilitada nela (fake e
+- [x] **CA3** A listagem de uma unidade não mostra função não habilitada nela (fake e
   Postgres, L-JF6); listar unidade que o ator não enxerga é 403.
-- [ ] **CA4** Funções pré-existentes seguem visíveis em todas as unidades após a
+- [x] **CA4** Funções pré-existentes seguem visíveis em todas as unidades após a
   migration (teste de migration).
-- [ ] **CA5** Cópia para unidade onde alguma função não está habilitada é recusada
+- [x] **CA5** Cópia para unidade onde alguma função não está habilitada é recusada
   com `409` e nada é gravado (teste unit e e2e; ADR 3.11.0002); origem inexistente
   (`404`) e mesma unidade (`422`) vencem o `409`.
-- [ ] **CA6** Criar funcionário e atribuir funções recusam função não habilitada na
+- [x] **CA6** Criar funcionário e atribuir funções recusam função não habilitada na
   unidade do registro (409).
-- [ ] **CA7** Substituir unidades: gerente de A habilita em A uma função que vale só
+- [x] **CA7** Substituir unidades: gerente de A habilita em A uma função que vale só
   em B (só A é autorizada); remover unidade que o ator não enxerga é 403; passar de
   ou para "todas" sem `manage_tenant` é 403; função inexistente é 404 antes de
   qualquer autorização de unidade; estreitar com registro — **inclusive desligado** —
   detendo a função em unidade removida é 409.
-- [ ] **CA8** Teste de contrato prova fake ≡ Postgres para L-JF1′, L-JF3′, L-JF4/L-JF5
+- [x] **CA8** Teste de contrato prova fake ≡ Postgres para L-JF1′, L-JF3′, L-JF4/L-JF5
   (habilitação reidratada), L-JF6, L-JF7 e L-E8, com um corpo de teste só; L-JF2
   segue gravando só o nome.
-- [ ] **CA9a** Habilitação vazia é recusada na construção (422 na borda).
-- [ ] **CA9b** Linha incoerente é recusada na reidratação (teste do mapper).
-- [ ] **CA11** O catálogo (`GET /job-functions`) devolve `all_units`/`unit_ids` de cada
+- [x] **CA9a** Habilitação vazia é recusada na construção (422 na borda).
+- [x] **CA9b** Linha incoerente é recusada na reidratação (teste do mapper).
+- [x] **CA11** O catálogo (`GET /job-functions`) devolve `all_units`/`unit_ids` de cada
   função.
-- [ ] **CA10** Varreduras de totalidade verdes: mapa de erros, pasta de use cases no
+- [x] **CA10** Varreduras de totalidade verdes: mapa de erros, pasta de use cases no
   composition root, `router.routes`, DTOs.
 
 ## 12. Checklist de validação interna
