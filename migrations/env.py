@@ -38,6 +38,9 @@ from sqlalchemy import create_engine, pool
 from restaurant_hub.features.identity.adapters.out.postgres.tables import (
     identity_metadata,
 )
+from restaurant_hub.features.scheduling.adapters.out.postgres.tables import (
+    scheduling_metadata,
+)
 from restaurant_hub.features.staff.adapters.out.postgres.tables import (
     staff_metadata,
 )
@@ -103,7 +106,9 @@ if config.config_file_name is not None and config.attributes.get(CONFIGURE_LOGGE
 # O 2º BC chegou na Stage 3.3 (staff), e a instrução acima foi seguida
 # literalmente: **lista**, não substituição. Trocar um pelo outro faria o
 # autogenerate deste BC propor o drop das tabelas do outro.
-target_metadata = [identity_metadata, staff_metadata]
+#
+# O 3º (scheduling) chegou na Stage 4.4, pela mesma regra.
+target_metadata = [identity_metadata, staff_metadata, scheduling_metadata]
 
 
 def run_migrations_offline() -> None:

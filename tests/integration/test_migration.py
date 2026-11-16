@@ -14,12 +14,18 @@ par (CA13): as cinco tabelas do BC existem após o `upgrade` e **nenhuma**
 sobrevive ao `downgrade base`. O detalhe de constraint, índice e tipo daquele
 schema fica em `features/staff/adapters/out/postgres/test_schema.py`; aqui só a
 existência e a reversibilidade.
+
+A Stage 4.4 acrescentou a `0006_scheduling` (CA10): as seis tabelas de scheduling e a
+extensão `btree_gist` existem após o `upgrade`; o `downgrade` de **um passo** remove as
+seis, deixa as de staff e **deixa a extensão**, que pode ter existido antes. O detalhe
+fica em `features/scheduling/adapters/out/postgres/test_schema.py`.
 """
 
 import logging
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, text
 
 from tests.conftest import alembic_config
@@ -43,6 +49,17 @@ _TABELAS_DE_STAFF = {
     "employee_shift_preferences",
     # Stage 3.11 — criada pela `0005_job_function_units`.
     "job_function_units",
+}
+
+
+# Stage 4.4 — as seis do BC scheduling, criadas pela `0006_scheduling`.
+_TABELAS_DE_SCHEDULING = {
+    "schedules",
+    "schedule_bands",
+    "schedule_demands",
+    "schedule_assignments",
+    "schedule_changes",
+    "scheduling_settings",
 }
 
 
@@ -158,13 +175,15 @@ def test_downgrade_remove_o_que_o_upgrade_criou(engine: Engine, database_url: st
 
     try:
         command.downgrade(config, "base")
-        restantes = _tabelas(engine) & (_TABELAS_ESPERADAS | _TABELAS_DE_STAFF)
+        restantes = _tabelas(engine) & (
+            _TABELAS_ESPERADAS | _TABELAS_DE_STAFF | _TABELAS_DE_SCHEDULING
+        )
         assert restantes == set(), f"downgrade deixou tabelas para trás: {sorted(restantes)}"
     finally:
         command.upgrade(config, "head")
 
     # E o upgrade de volta reconstrói tudo — o par é reversível, não só destrutivo.
-    assert _tabelas(engine) >= _TABELAS_ESPERADAS | _TABELAS_DE_STAFF
+    assert _tabelas(engine) >= _TABELAS_ESPERADAS | _TABELAS_DE_STAFF | _TABELAS_DE_SCHEDULING
 
 
 def _colunas_de_employees(engine: Engine) -> set[str]:
@@ -301,3 +320,42 @@ def test_rodar_as_migrations_nao_desliga_logger_que_ja_existe(
         root.setLevel(nivel)
 
     assert not logger.disabled
+
+
+def _extensoes(engine: Engine) -> set[str]:
+    with engine.connect() as conexao:
+        return {linha[0] for linha in conexao.execute(text("SELECT extname FROM pg_extension"))}
+
+
+def test_migration_criou_as_seis_tabelas_de_scheduling_e_a_extensao(engine: Engine) -> None:
+    """CA10, metade do `upgrade` — a `0006_scheduling` chegou ao banco, com `btree_gist`."""
+    assert _tabelas(engine) >= _TABELAS_DE_SCHEDULING
+    assert "btree_gist" in _extensoes(engine)
+
+
+@pytest.mark.slow
+def test_downgrade_da_0006_remove_as_seis_tabelas_e_deixa_a_extensao(
+    engine: Engine, database_url: str
+) -> None:
+    """CA10, metade do `downgrade` — descer **um passo**, até a revisão anterior à `0006`.
+
+    O alvo é lido do `down_revision` da própria `0006`, não escrito à mão: a `0005` da
+    Stage 3.11 nasce em paralelo, e quem mergear por último reencadeia as duas. Descer
+    até `base` não mediria nada: a `0003.downgrade` derruba staff junto, e uma
+    `0006.downgrade` vazia sobreviveria. A extensão fica — pode ter existido antes, e
+    outro objeto pode depender dela.
+    """
+    config = alembic_config(database_url)
+    anterior = ScriptDirectory.from_config(config).get_revision("0006").down_revision
+    assert isinstance(anterior, str), anterior
+
+    try:
+        command.downgrade(config, anterior)
+        tabelas = _tabelas(engine)
+        assert tabelas & _TABELAS_DE_SCHEDULING == set(), sorted(tabelas & _TABELAS_DE_SCHEDULING)
+        assert tabelas >= _TABELAS_DE_STAFF | _TABELAS_ESPERADAS
+        assert "btree_gist" in _extensoes(engine)
+    finally:
+        command.upgrade(config, "head")
+
+    assert _tabelas(engine) >= _TABELAS_DE_SCHEDULING
