@@ -279,6 +279,14 @@ exceção que já tiveram (`_IdentityAccessGuard` e o seu helper `_tenant_id_do_
 entrada nova reprova até ser justificada citando a issue que a remove, e entrada
 que já não corresponde a nada em `src/` reprova também.
 
+**Exceção provisória ao item 5 (2026-11-16, Stage 4.4).** O contêiner
+`ApplicationDependencies` expõe, além de use cases, três **ports de dados** de scheduling —
+`scheduling_schedules`, `scheduling_settings` e `scheduling_staff_read` —, porque os sete use
+cases do BC exigem o `AccessGuard` de scheduling, que nasce na Stage 4.5 (concept 4.4 §7
+D-WIRING). A 4.5 monta os use cases sobre eles e remove os três campos. Até lá nenhum
+provedor de `build_http_wiring` os entrega a uma rota, o que
+`tests/unit/features/scheduling/adapters/test_composition_root_scheduling.py` trava.
+
 **Por que isso importa:**
 - Mantém o domínio e a application totalmente desacoplados de implementações concretas
 - Facilita trocar uma implementação (ex: Postgres → DynamoDB) sem tocar em nenhuma regra de negócio
