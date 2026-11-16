@@ -138,7 +138,7 @@ graph LR
 | `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
 | `3.9-error-hierarchy` | Hierarquia de exceções sem protocolo HTTP | shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) | done | `3.6-staff-http`, `4.3-scheduling-application`, #45 |
 | `3.10-login-link-management` | Vincular, desvincular e trocar o login de um registro | vertical (staff) + identity (fachada) | draft | `3.8-termination-access-scope`, `2.7-identity-application-authorization`, #178 |
-| `3.11-job-function-unit-enablement` | Habilitação de função de trabalho por unidade | vertical (staff) | draft | `3.7-application-authorization`, `3.9-error-hierarchy` |
+| `3.11-job-function-unit-enablement` | Habilitação de função de trabalho por unidade | vertical (staff) | done | `3.7-application-authorization`, `3.9-error-hierarchy` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
@@ -1638,6 +1638,20 @@ gate_mode: strict
 skills_hint: [hex-arch-python, ddd-tactical-patterns, pytest-with-fakes, repository-pattern, fastapi-thin-adapter, composition-root, task-ordering-hex]
 ```
 
+> **Nota (2026-11-16): fechamento da Stage 3.11** (issue #41; concept e technical em
+> `docs/stages/3.11-job-function-unit-enablement/`; ADRs 3.11.0001 e 3.11.0002). O que a execução fixou:
+>
+> - **Habilitação = "todas" ou conjunto não-vazio** (`UnitEnablement`); migration `0005` põe as
+>   funções existentes em todas as unidades. O nome segue único no restaurante.
+> - **Alcance:** criar ou alterar nomeia cada unidade que muda ao `AccessGuard`; "todas" exige
+>   `manage_tenant`. Rotas novas: `GET /units/{unit_id}/job-functions` e
+>   `PUT /job-functions/{job_function_id}/units` (substitui a habilitação inteira).
+> - **Funcionário só detém função habilitada na sua unidade:** criar, atribuir, copiar e estreitar
+>   recusam com 409; a cópia entre unidades recusa, sem habilitar junto (forks P delegados ao
+>   recomendado, concept §7).
+> - **9 Tasks + 9 commits de correção** (Checkpoints C e CI) **+ 1 extra** (auditoria de testes,
+>   2 rodadas, 32 mutações reais). Registro em §7 do technical.
+
 ---
 
 ### Step 4 — Escala manual publicável (BC `scheduling`)
@@ -2308,6 +2322,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-11-09 | Issue #115 concluída (`done`) com a decisão no ADR 0.0.0020: identity adota o formato da 3.7 nos quatro use cases que agem em nome de ator, e a regra passa a transversal (gatilho do ADR 4.3.0002 §5). Nova **Stage `2.7-identity-application-authorization`** (Step 2, BC identity, `draft`; `depends_on: 3.7-application-authorization`, mais #170 na tabela por arquivos em comum). Step 2 passa a `2.1 → 2.7` | Execução da issue #115 |
 | 2026-11-09 | Issue **#106** promovida a **Stage `4.8-scheduling-settings`** (Step 4, BC scheduling; `depends_on: 4.5-scheduling-http`): linha na Tabela de Stages, nó e aresta no grafo, bloco próprio com os requisitos do concept 4.3 §13; Step 4 passa a 4.1 → 4.8. A linha da #106 fica na Tabela de Issues como `done`, apontando a Stage | O corpo pedia um concept (regra nova de transição do calendário e método de escrita no port, PIPELINE §4.5); alargar a 4.5 misturaria camada-alvo e fatia vertical (PIPELINE §4.2 #1) — issue #106 |
 | 2026-11-09 | Issue **#41** promovida a **Stage `3.11-job-function-unit-enablement`** (Step 3, BC staff; `depends_on: 3.7-application-authorization, 3.9-error-hierarchy`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. O corpo pede concept (invariante do conjunto de unidades, leis do port revisadas, regra da cópia entre unidades com ADR, unicidade do nome) e toca modelo de dados com migration — o litmus de PIPELINE §4.5. Número conferido livre em develop, nas branches remotas e nas worktrees abertas (a #106 cria a 4.8). Step 3 passa a `3.1 → 3.11` | Promoção da issue #41 |
+| 2026-11-16 | Stage `3.11-job-function-unit-enablement` concluída (`done`): função de trabalho com habilitação por unidade (todas ou conjunto), listagem por unidade, alteração das unidades com guarda do estreitamento e a invariante funcionário × unidade em criar, atribuir e copiar (ADRs 3.11.0001 e 3.11.0002, migration `0005`); bloco acrescido de nota datada de fechamento. |
 
 ## Próxima revisão de roadmap
 
