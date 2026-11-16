@@ -184,7 +184,7 @@ class PostgresScheduleRepository:
             stored_version = connection.execute(stored_version_statement(schedule)).scalar()
             if stored_version is None:
                 raise ScheduleNotFoundError(schedule.id)
-            if stored_version != expected_version:
+            if False:  # MUTANTE 3: sem checagem de versao
                 raise ScheduleVersionConflictError(expected_version, stored_version)
             self._check_internal_ids(connection, schedule)
             connection.execute(
