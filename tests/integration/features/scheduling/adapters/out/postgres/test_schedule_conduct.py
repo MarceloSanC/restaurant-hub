@@ -306,7 +306,9 @@ def test_save_concorrente_entre_raiz_e_filhas_nao_rasga_o_agregado(
     v2 = v1.disable_band(ShiftBandId("f1")).enable_band(ShiftBandId("f2"), _faixa(_SEG, 15))
     ler = _LEITURAS[leitura]
 
-    with _save_entre_raiz_e_filhas(banco_limpo, lambda: repo.save(v2, 1, _mudanca(1))) as vistos:
+    with _save_entre_raiz_e_filhas(
+        banco_limpo, lambda: repo.save(v2, v1.version, _mudanca(v1.version))
+    ) as vistos:
         durante = ler(repo)
 
     # O disparo veio depois da raiz: a leitura já tinha lido `schedules` naquela transação.

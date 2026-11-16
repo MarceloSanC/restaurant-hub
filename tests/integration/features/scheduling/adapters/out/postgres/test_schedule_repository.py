@@ -279,7 +279,7 @@ def test_falha_no_insert_da_trilha_desfaz_o_save(
     antes = _contagens(banco_limpo)
     v2 = v1.disable_band(ShiftBandId("f1")).enable_band(ShiftBandId("f2"), _faixa(_SEG, 15))
     with _statements(banco_limpo) as emitidos, pytest.raises(DataError):
-        repo.save(v2, 1, _mudanca(_FORA_DO_INTEGER))
+        repo.save(v2, v1.version, _mudanca(_FORA_DO_INTEGER))
     escritas = [s.split(" ")[0] + " " + s.split(" ")[1] + " " + s.split(" ")[2] for s in emitidos]
     assert "UPDATE schedules SET" in escritas
     assert "DELETE FROM schedule_bands" in escritas
