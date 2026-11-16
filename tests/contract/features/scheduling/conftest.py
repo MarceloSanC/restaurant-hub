@@ -3,6 +3,14 @@
 A ramificação por implementação mora **aqui**, não nos módulos de teste (precedente de
 staff, `tests/contract/features/staff/conftest.py`): a 4.4 acrescenta o adapter real ao
 `params` e a sua semeadura, e as leis não mudam.
+
+**Uma tupla de implementações por fixture** (Stage 4.4). Constantes nomeadas, e não
+literais em `params`, porque é sobre elas que `test_no_implementation_branching.py` assere:
+retirar `"postgres"` de uma delas faria a suíte voltar a exercitar uma implementação só,
+com tudo verde. Cada fixture é promovida pela Task que entrega o seu adapter.
+
+O ramo `postgres` trunca **no setup** (convenção do projeto, conftest de staff) e falha
+alto sem banco: a fixture `engine` não tem caminho de skip (ADR 2.3.0001).
 """
 
 from collections.abc import Callable, Iterator
@@ -10,7 +18,11 @@ from datetime import time
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import Engine
 
+from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_config_repository import (
+    PostgresScheduleConfigRepository,
+)
 from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
     ScheduleConfigRepository,
     SchedulingSettings,
@@ -38,6 +50,8 @@ from restaurant_hub.features.scheduling.domain.value_objects.operational_calenda
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import (
     ValidationConfig,
 )
+from tests.conftest import truncar_tudo
+from tests.contract.features.scheduling.support import seed_settings
 from tests.fakes.features.scheduling.in_memory_schedule_config_repository import (
     InMemoryScheduleConfigRepository,
 )
@@ -47,6 +61,10 @@ from tests.fakes.features.scheduling.in_memory_schedule_repository import (
 from tests.fakes.features.scheduling.in_memory_staff_read import InMemoryStaffRead
 
 T1, T2 = TenantId("t1"), TenantId("t2")
+
+CONFIG_IMPLEMENTATIONS = ("fake", "postgres")
+SCHEDULE_IMPLEMENTATIONS = ("fake",)
+STAFF_READ_IMPLEMENTATIONS = ("fake",)
 U1, U2 = UnitId("u1"), UnitId("u2")
 
 
@@ -78,7 +96,7 @@ def _semear(fake: InMemoryStaffRead) -> None:
     fake.add_job_function(T2, JobFunctionEntry(JobFunctionId("garcom"), "Garçom"))
 
 
-@pytest.fixture(params=["fake"])
+@pytest.fixture(params=STAFF_READ_IMPLEMENTATIONS)
 def mundo(request: pytest.FixtureRequest) -> Iterator[StaffReadPort]:
     assert request.param == "fake"
     fake = InMemoryStaffRead()
@@ -86,7 +104,7 @@ def mundo(request: pytest.FixtureRequest) -> Iterator[StaffReadPort]:
     yield fake
 
 
-@pytest.fixture(params=["fake"])
+@pytest.fixture(params=SCHEDULE_IMPLEMENTATIONS)
 def schedule_repo(request: pytest.FixtureRequest) -> Iterator[ScheduleRepository]:
     assert request.param == "fake"
     yield InMemoryScheduleRepository()
@@ -101,16 +119,24 @@ def trail_of(
     return schedule_repo.changes_of
 
 
-@pytest.fixture(params=["fake"])
+@pytest.fixture(params=CONFIG_IMPLEMENTATIONS)
 def config_world(
     request: pytest.FixtureRequest,
 ) -> Iterator[tuple[ScheduleConfigRepository, SchedulingSettings]]:
     """O port e a configuração gravada para o tenant `t1` (o `t2` não tem nenhuma)."""
-    assert request.param == "fake"
-    fake = InMemoryScheduleConfigRepository()
     gravada = SchedulingSettings(
         calendar=OperationalCalendar(week_start=Weekday.SUNDAY, day_cutoff=DayCutoff(at=time(4))),
         validation=ValidationConfig.default(),
     )
-    fake.set_settings(T1, gravada)
-    yield fake, gravada
+    if request.param == "fake":
+        fake = InMemoryScheduleConfigRepository()
+        fake.set_settings(T1, gravada)
+        yield fake, gravada
+        return
+    if request.param == "postgres":
+        engine: Engine = request.getfixturevalue("engine")
+        truncar_tudo(engine)
+        seed_settings(engine, T1, gravada)
+        yield PostgresScheduleConfigRepository(engine), gravada
+        return
+    raise AssertionError(f"implementação desconhecida: {request.param!r}")
