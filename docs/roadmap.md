@@ -249,9 +249,12 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#180](https://github.com/MarceloSanC/restaurant-hub/issues/180) | Marca fechada "fechada pela Stage N.M" não é conferida contra o roadmap | shared | tooling | done | #158 |
 | [#185](https://github.com/MarceloSanC/restaurant-hub/issues/185) | Dois `stage 3.7: complete` no histórico: o `check_stage_deps` não distingue qual Stage o commit reservado fechou | shared | tooling | open | — |
 | [#190](https://github.com/MarceloSanC/restaurant-hub/issues/190) | Subir o teto da orquestração autônoma de 3 para 6 worktrees | shared | docs + .claude | done | — |
+| [#194](https://github.com/MarceloSanC/restaurant-hub/issues/194) | Dar dono à guarda de remoção definitiva por port reverso e ao reparo do registro ausente | staff | docs (roadmap) | open | `4.4-scheduling-persistence` |
 | [#195](https://github.com/MarceloSanC/restaurant-hub/issues/195) | Atualizar os textos de "repo privado" e decidir os Required Status Checks agora que o repo é público | shared | docs + .claude + .github | open | — |
 | [#196](https://github.com/MarceloSanC/restaurant-hub/issues/196) | `check_harness` não lê o conteúdo de `reference/` nem resolve âncora de link de skill | shared | tooling | done | #162 |
 | [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
+| [#198](https://github.com/MarceloSanC/restaurant-hub/issues/198) | Fuso por unidade em `Unit.timezone` (ADR 4.1.0005) | identity | domain + adapters/out | open | `4.4-scheduling-persistence` |
+| [#199](https://github.com/MarceloSanC/restaurant-hub/issues/199) | Write skew de fronteira entre publicações em semanas adjacentes | scheduling | application + adapters/out | open | `4.4-scheduling-persistence` |
 | [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | open | #163, #162 |
 | [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | open | #163 |
 | [#205](https://github.com/MarceloSanC/restaurant-hub/issues/205) | Decidir a extração da emissão do token de convite, hoje em cinco use cases de identity | identity | application | open | #184 |
@@ -1847,6 +1850,26 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [repository-pattern, composition-root]
 ```
+
+> Nota (2026-11-16): fechamento da Stage 4.4 — o que a 4.5 herda e o que ficou fora.
+> **Divergências do bloco:** a migration é `0006_scheduling.py` (a `0003` é de staff e a `0005` é
+> da 3.11, sobre a qual a `0006` foi encadeada); `arquivos_a_modificar` cresceu (env do Alembic,
+> lista de limpeza da suíte, testes de migration, `.importlinter`, os dois
+> `test_bc_independence.py`, a suíte de contrato de scheduling, o docstring do port de escala,
+> `docs/LAYOUT.md` §6); e nasceu um arquivo em staff, a `StaffReadFacade`
+> (`features/staff/application/facade.py`), lado fornecedor da aresta scheduling → staff (ADR
+> 4.4.0004).
+> **A 4.5 herda:** o adapter do `AccessGuard` de scheduling em `adapters/out/identity/`, o par
+> scheduling → identity no `bc-independence`, o wiring dos sete use cases sobre os três campos
+> provisórios do contêiner (`scheduling_schedules`, `scheduling_settings`,
+> `scheduling_staff_read`) e a remoção desses campos (LAYOUT §6); a forma dos instantes na borda
+> HTTP; e a validação de entrada que o fake aceita e o Postgres recusa (id com byte NUL,
+> quantidade acima do `INTEGER`).
+> **Antes de a edição da escala ir a produção**, a guarda de remoção definitiva por port reverso
+> e o reparo do registro ausente têm de fechar (issue #194): até lá, apagar um registro com
+> alocação gravada faz a escala recusar com `MissingStaffRecordsError`, e apagar uma função
+> demandada deixa a demanda sem nome. Fora da Stage, com dono: `Unit.timezone` (#198) e o write
+> skew de fronteira (#199).
 
 #### Stage 4.5 — `4.5-scheduling-http`
 

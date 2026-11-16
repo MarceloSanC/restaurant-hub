@@ -16,6 +16,8 @@ bounded_context: staff
 
 > ⚠️ **Errata (2026-11-03):** §Decision 4 and `## Supersessão parcial` — the constant `_COLUNAS_IMUTAVEIS` of `staff/adapters/out/postgres/employee_repository.py` was renamed to `_IMMUTABLE_COLUMNS` in issue #135 (pure rename, no behaviour change). Pointer only; no decision content changes — ver issue #135
 
+> ⚠️ **Errata (2026-11-16):** §Consequences and `when-use` — the `find_by_user_id` with its index announced for Step 4 was not added: Stage 4.4 serves the only access by login (scheduling's L-ST4, unit-scoped) through `list_by_unit(include_inactive=True)` filtered in `staff/application/facade.py` › `StaffReadFacade.list_records_of_user`, so `employees.user_id` stays unindexed (ADR 3.3.0005: an index follows a measured access). The column decision is unchanged — ver ADR 4.4.0004 (concept 4.4 §7 D-USERID)
+
 ## Status
 
 `accepted`

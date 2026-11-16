@@ -16,6 +16,8 @@ bounded_context: scheduling
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
+> ⚠️ **Errata (2026-11-16):** §Decision 3 — "the reverse guard that makes the state unreachable is Stage 4.4's" and "a repair use case is a 4.4 finding" no longer hold: both moved to issue #194 (ADR 4.4.0004, concept 4.4 §7 D-REVERSE). And the `find_by_user_id` with its index that this ADR expected from Step 4 was not added: Stage 4.4 serves L-ST4 by unit, filtering the unit listing in the staff facade (concept 4.4 §7 D-USERID). Pointer only for the rest of the decision — ver ADR 4.4.0004 e issue #194
+
 ## Status
 
 `accepted` — 2026-11-01. D1 (product) delegated by the sponsor and ratified on 2026-11-01.
