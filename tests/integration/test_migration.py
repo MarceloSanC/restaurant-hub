@@ -16,10 +16,9 @@ schema fica em `features/staff/adapters/out/postgres/test_schema.py`; aqui só a
 existência e a reversibilidade.
 
 A Stage 4.4 acrescentou a `0006_scheduling`, sobre a `0005` (CA10): as seis tabelas de
-scheduling e a
-extensão `btree_gist` existem após o `upgrade`; o `downgrade` de **um passo** remove as
-seis, deixa as de staff e **deixa a extensão**, que pode ter existido antes. O detalhe
-fica em `features/scheduling/adapters/out/postgres/test_schema.py`.
+scheduling e a extensão `btree_gist` existem após o `upgrade`; o `downgrade` de **um
+passo** remove as seis, deixa as de staff e **deixa a extensão**, que pode ter existido
+antes. O detalhe fica em `features/scheduling/adapters/out/postgres/test_schema.py`.
 """
 
 import logging
