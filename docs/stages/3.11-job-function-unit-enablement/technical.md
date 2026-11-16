@@ -312,4 +312,15 @@ O auditor independente rodou 32 mutações reais; 4 sobreviveram. Cobertos no co
 **Decisão:** a Stage fecha pelo `PROMPT-stage-single-session.md` com que começou (o orçamento do ADR 0.0.0021 vale para Stages novas); rebase sem conflito, `make docs-check` verde depois dele.
 **Razão:** PIPELINE §9.6 — Stage que já estava em execução termina pelo prompt com que começou, sem plano de gates.
 
+### 2026-11-16 — [finding] Auditoria — os findings que o ADR 3.11.0001 e o concept apontam para esta seção — Claude (Opus 5.5)
+O ADR 3.11.0001 (§5 "Declared limit", Alternative E, "Neutral / trade-offs accepted") e o concept (§7 D8b, §8) dizem "finding in the technical §7", e a seção não os tinha. Registrados aqui, cada um com pouso:
+- **Duas alterações concorrentes das unidades** de uma função podem tirar uma unidade por ator sem alcance sobre ela (lost update; staff sem lock otimista, ADR 3.3.0006) → issue #206.
+- **Renomear e apagar** função restrita seguem tenant-wide (ADR 3.4.0008): o gerente tira a função de unidade que não enxerga apagando e recriando → issue #207.
+- **Docstring de `permission.py`** (identity) ainda descreve `manage_job_functions` só sem unidade (D8b) → issue #208.
+- **Scheduling não consulta a habilitação** (§8, nota de 2026-11-16 em `shift-scheduling.md`) → issue #209.
+- **Alternative E** (identity expor "alcança o restaurante" na concessão de acesso): evolução condicional, sem issue; gatilho no próprio ADR — um papel futuro com alcance multi-unidade sem `manage_tenant`.
+
+### 2026-11-16 — [finding] Auditoria — disposições dos Checkpoints A e B fora de artefato — Claude (Opus 5.5)
+As disposições item a item dos Checkpoints A e B só existiam no relatório final da sessão de execução, interrompida; as do C estão nos commits `-fix` e na `[deviation]` acima. O prompt manda as disposições para o relatório final, que não é artefato do repo → issue de processo #210. Não bloqueia a Stage: os efeitos dos dois checkpoints estão no concept (R5, L-JF2) e no technical (§1, exceção de arquivos).
+
 <!-- END: post-execution -->
