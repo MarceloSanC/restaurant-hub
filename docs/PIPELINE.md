@@ -807,7 +807,7 @@ e [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
 **Orquestração autônoma** ([`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md),
 [ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)):
 as duas sessões acima viram subagentes de contexto zerado despachados por
-uma sessão mestra, cada Stage/issue na sua worktree (até três ao mesmo
+uma sessão mestra, cada Stage/issue na sua worktree (até seis ao mesmo
 tempo); o `make check` completo roda no GitHub Actions do PR (draft desde o
 primeiro push) e o **auditor**, validado o PR, faz rebase, merge e limpeza.
 

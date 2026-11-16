@@ -5,7 +5,7 @@ when-use: Consultar antes de qualquer mudança de código. Todos os membros do t
 keywords: [git, github, workflow, ci-cd, pr, code-review, deploy]
 status: done
 created_at: 2026-05-12
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 ---
 
 # Git Workflow Padrão
@@ -38,7 +38,7 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
    `.claude/hooks/git_guard.py` recusa). Ver §"Branches em execução" para
    critérios, comando, limpeza e o procedimento de PR parcial.
    **Na orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md))
-   o teto continua: **três worktrees de implementação**, contando as com
+   há teto: **seis worktrees de implementação**, contando as com
    PR aberto ainda não mergeado (§"Branches em execução"); a remoção do
    teto na #65 não o alcança.
 
@@ -482,8 +482,9 @@ outros dois.
 
 **Orquestração autônoma** ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md),
 [`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md)):
-vale um teto de **três worktrees de implementação existindo ao
-mesmo tempo** (fixado pelo sponsor e mantido pela #65), contando as com
+vale um teto de **seis worktrees de implementação existindo ao
+mesmo tempo** (fixado pelo sponsor em 2026-11-16, issue #190; o motivo
+está na nota datada do ADR; a #65 não removeu este teto), contando as com
 PR aberto ainda não mergeado (cada uma segura uma sessão viva — o teto
 é de custo). Uma nova só abre quando
 outra é removida pelo auditor, e só se não conflitar com as em voo
@@ -919,7 +920,7 @@ Exemplo de feedback construtivo:
 - Push de branch com carona de outro escopo: `git log origin/<base>..HEAD` mostra commits que não pertencem ao escopo declarado do branch (ver Etapa 4)
 - Mensagem de commit fora do padrão Conventional Commits **em português** (descrição em PT, escopo em snake/kebab ASCII) ou sem `Refs #<num-issue>` no rodapé quando há issue associada
 - Nome de branch **fora de inglês ASCII kebab-case** (ex.: `feat/42-adicionar-login` ou `feat/42-Add-Login` — deve ser `feat/42-add-google-login`; ver §Princípios fundamentais #3 e [`./CONVENTIONS.md`](./CONVENTIONS.md) §1)
-- Branch criada ou trocada **no checkout principal**, ou branch nova que **conflita** com uma em execução ou em review (critérios em §"Branches em execução"). Exceções: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em execução" → §Quando precisar trocar de escopo no meio); na orquestração autônoma (ADR 0.0.0008) o teto é de **três** worktrees de implementação, contando as com PR aberto — bloqueia a **quarta**
+- Branch criada ou trocada **no checkout principal**, ou branch nova que **conflita** com uma em execução ou em review (critérios em §"Branches em execução"). Exceções: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em execução" → §Quando precisar trocar de escopo no meio); na orquestração autônoma (ADR 0.0.0008) o teto é de **seis** worktrees de implementação, contando as com PR aberto — bloqueia a **sétima**
 - Body de commit de Task sem bullets, ou commit agrupando vários escopos diferentes (deve quebrar em commits separados por escopo mínimo)
 - Iniciar uma Stage (criar branch da Stage, pasta `docs/stages/N.M-<slug>/`, ou rodar prompt da Fase 3A) **sem que a issue correspondente já exista** no backlog do GitHub. Verificação: `gh issue view <num>` deve retornar a issue. Issue-first é Princípio fundamental #1; sem issue verificável, parar e criar a issue primeiro (ver [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passo 1 + `scripts/check_stage_issue.py` em `make docs-check`)
 

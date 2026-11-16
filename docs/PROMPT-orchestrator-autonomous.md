@@ -1,11 +1,11 @@
 ---
 title: Prompt — Orquestrador Autônomo de Stages e Issues
-description: Sessão mestra que despacha uma sessão de implementação por Stage/issue (PROMPT-stage-single-session ou PROMPT-issue-single-session), cada uma na sua worktree, até 3 em paralelo, responde aos forks delas pela triagem evidence-resolution e, ao fim de cada uma, despacha um auditor de contexto limpo que audita e, validado, faz rebase, merge e limpeza
+description: Sessão mestra que despacha uma sessão de implementação por Stage/issue (PROMPT-stage-single-session ou PROMPT-issue-single-session), cada uma na sua worktree, até 6 em paralelo, responde aos forks delas pela triagem evidence-resolution e, ao fim de cada uma, despacha um auditor de contexto limpo que audita e, validado, faz rebase, merge e limpeza
 when-use: Avançar o backlog aberto do roadmap (Stages e issues) sem acompanhamento humano contínuo, com o humano só nos forks P
 keywords: [prompt, orchestrator, autonomous, worktree, parallel, subagents, audit, auto-merge, github-actions]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-02
+updated_at: 2026-11-16
 ---
 
 # Prompt — Orquestrador Autônomo de Stages e Issues
@@ -22,11 +22,12 @@ subagentes de contexto zerado e responde aos forks deles.
    do git são do checkout principal; a worktree não os toca
    ([`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Hooks do git"). Isso vale também para docs de
    processo do próprio orquestrador.
-2. **Teto: 3 worktrees de implementação** existindo ao mesmo tempo, **contando as com PR aberto
-   ainda não mergeado**. Abrir uma nova só quando outra for removida e só se ela **não conflitar**
-   com as em voo (critérios em [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Branches em execução":
-   dependência, arquivos disjuntos, ponto compartilhado). A branch de docs de processo do próprio
-   orquestrador não conta no teto.
+2. **Teto: 6 worktrees de implementação** existindo ao mesmo tempo, **contando as com PR aberto
+   ainda não mergeado** (o número vem da nota de 2026-11-16 do ADR 0.0.0008, issue #190). Abrir
+   uma nova só quando outra for removida e só se ela **não conflitar** com as em voo (critérios em
+   [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Branches em execução": dependência, arquivos
+   disjuntos, ponto compartilhado, disputa pelo mesmo Postgres). A branch de docs de processo do
+   próprio orquestrador não conta no teto.
 3. **CI no GitHub Actions.** O `make check` completo (com Postgres) é o job `lint-and-test` do
    `ci.yml`, que roda em todo `pull_request`. Os implementadores abrem o PR como **draft** no
    primeiro push e empurram a cada Task; localmente rodam só checks focados (ruff/mypy nos
