@@ -250,6 +250,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#195](https://github.com/MarceloSanC/restaurant-hub/issues/195) | Atualizar os textos de "repo privado" e decidir os Required Status Checks agora que o repo é público | shared | docs + .claude + .github | open | — |
 | [#196](https://github.com/MarceloSanC/restaurant-hub/issues/196) | `check_harness` não lê o conteúdo de `reference/` nem resolve âncora de link de skill | shared | tooling | open | #162 |
 | [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
+| [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | open | #163, #162 |
+| [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | open | #163 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
