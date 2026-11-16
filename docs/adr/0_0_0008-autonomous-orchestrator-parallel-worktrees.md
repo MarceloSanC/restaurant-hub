@@ -5,7 +5,7 @@ when-use: Reference before running docs/PROMPT-orchestrator-autonomous.md, when 
 keywords: [adr, process, orchestrator, autonomous, worktree, parallel, auditor, auto-merge, github-actions, git]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-02
+updated_at: 2026-11-16
 adr_id: "0.0.0008"
 decision: An orchestrator session dispatches one fresh implementer session per stage or issue (PROMPT-stage-single-session / PROMPT-issue-single-session), each in its own worktree, at most three worktrees at once; the full CI gate runs on GitHub Actions; when the implementation ends, a fresh clean-context auditor audits the PR and, if it validates, rebases, merges and cleans up the branch and worktree.
 context_stage: 0.0-global
@@ -76,3 +76,29 @@ Three constraints shaped the rules:
 - `docs/PIPELINE.md` §11.1
 - `.github/workflows/ci.yml`, `.github/workflows/audit-gate.yml`
 - [ADR 0.0.0004](./0_0_0004-autonomous-overnight-mode.md), [ADR 0.0.0007](./0_0_0007-step-orchestrator-self-merges.md)
+
+## Nota — o teto passa de três para seis worktrees (issue #190)
+
+**2026-11-16 — o número de §Decision 2 muda de três para seis; o resto da decisão continua
+valendo.** Decisão do sponsor (Marcelo) em 2026-11-16, registrada na issue #190: a orquestração
+autônoma passa a ter no máximo **seis** worktrees de implementação ao mesmo tempo. Onde este
+ADR dá *three* como o teto, leia-se seis: o título, o campo `decision` do frontmatter,
+§Decision 2 (*"Cap: three worktrees"*), o motivo da rejeição da Alternativa C (*"the sponsor
+fixed three worktrees as the cost ceiling"*) e a consequência positiva *"three items at a
+time"*.
+
+**Por quê.** O três era um teto de custo. A issue #190 registra o motivo: ele foi fixado quando
+o CI consumia a cota do GitHub Actions (§Decision 3 manda o `make check` completo para o
+Actions a cada push de cada PR, e o repositório era privado); o repositório passou a público
+em 2026-11-02 e o Actions deixou de ser o limite de custo. Com isso o sponsor subiu o teto
+para seis.
+
+**O que não muda.** Continua havendo teto, porque cada worktree em voo ainda segura uma sessão
+viva (§Context, *Cost*) e a máquina local continua rodando só checks focados (§Context, *Local
+machine*; §Decision 3). O PR aberto e ainda não mergeado continua contando na vaga. Uma
+worktree nova só abre quando outra é removida, e só se não conflita com nenhuma das em voo,
+pelos critérios de `GIT-WORKFLOW.md` §"Branches em execução" (dependência, arquivos disjuntos,
+ponto compartilhado e disputa pelo mesmo Postgres). A branch de docs de processo do próprio
+orquestrador continua fora da conta. Os itens 1, 3, 4 e 5 de §Decision não foram tocados.
+
+Nota *append-only*; o corpo acima não foi editado.
