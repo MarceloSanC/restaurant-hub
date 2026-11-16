@@ -52,9 +52,11 @@ from restaurant_hub.features.staff.adapters.inbound.http import router as router
 from restaurant_hub.features.staff.application.dtos.results import (
     EmployeeLoginResult,
     EmployeeResult,
+    JobFunctionResult,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
+    JobFunctionId,
     TenantId,
     UnitId,
 )
@@ -116,6 +118,15 @@ _RESULTADO_DE_FUNCIONARIO = EmployeeResult(
 )
 
 
+_RESULTADO_DE_FUNCAO = JobFunctionResult(
+    id=JobFunctionId("jf-1"),
+    tenant_id=TenantId(_TENANT),
+    name="Garçom",
+    all_units=False,
+    unit_ids=(UnitId(_UNIDADE_PEDIDA),),
+)
+
+
 def _resultado_para(anotacao: object) -> object:
     """O valor que o espião devolve, **derivado** do retorno do use case real.
 
@@ -126,6 +137,10 @@ def _resultado_para(anotacao: object) -> object:
     if anotacao is None or anotacao is type(None):
         return None
     if typing.get_origin(anotacao) is tuple:
+        # Stage 3.11 — a listagem de funções **da unidade** também endereça uma
+        # unidade pelo path; o espião devolve o que o use case dela devolve.
+        if typing.get_args(anotacao)[0] is JobFunctionResult:
+            return (_RESULTADO_DE_FUNCAO,)
         return (_RESULTADO_DE_FUNCIONARIO,)
     if anotacao is EmployeeLoginResult:
         # R17 (3.5) embrulha o registro; o link é `None` porque o canal declarado
@@ -227,7 +242,11 @@ async def test_ca15_a_unidade_do_use_case_e_a_do_path(
     if resposta.content:  # R15 responde 204 sem corpo
         corpo = resposta.json()
         registro = corpo.get("employee", corpo) if isinstance(corpo, dict) else corpo[0]
-        assert registro["unit_id"] == _UNIDADE_PEDIDA
+        if "unit_ids" in registro:
+            # Função de trabalho (Stage 3.11): não mora numa unidade — vale nelas.
+            assert _UNIDADE_PEDIDA in registro["unit_ids"]
+        else:
+            assert registro["unit_id"] == _UNIDADE_PEDIDA
 
 
 def _alvos_de_unidade_declarados(rota: APIRoute) -> set[str]:

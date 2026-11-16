@@ -624,6 +624,9 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
             staff_dependencies_module.get_access_guard: lambda: deps.staff_access_guard,
             staff_router_module._get_create_job_function: (lambda: deps.staff_create_job_function),
             staff_router_module._get_list_job_functions: lambda: deps.staff_list_job_functions,
+            staff_router_module._get_set_job_function_units: (
+                lambda: deps.staff_set_job_function_units
+            ),
             staff_router_module._get_rename_job_function: (lambda: deps.staff_rename_job_function),
             staff_router_module._get_delete_job_function: (lambda: deps.staff_delete_job_function),
             staff_router_module._get_create_employee: lambda: deps.staff_create_employee,

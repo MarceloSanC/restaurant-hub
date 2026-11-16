@@ -50,6 +50,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
     UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import OnDemand
 from restaurant_hub.shared.infrastructure.http.error_handlers import register_error_handlers
 from tests.fakes.features.staff.in_memory_access_guard import (
@@ -107,6 +108,24 @@ INVOCACOES: dict[tuple[str, str], dict[str, object]] = {
         "body": None,
         "sucesso": HTTPStatus.NO_CONTENT,
     },
+    # Stage 3.11 — substituir as unidades de uma função, e o catálogo visto da unidade.
+    # `semear`: o alcance sobre as unidades do corpo depende da habilitação
+    # **gravada** (ADR 3.11.0001 §5), então a função tem de existir para que um
+    # `unit_ids` não concedido chegue ao guard — sem ela a resposta é o 404 da
+    # existência, e a varredura de CA24 mediria a ausência do dado.
+    ("PUT", "/job-functions/{job_function_id}/units"): {
+        "path": {"job_function_id": "jf-1"},
+        "query": {},
+        "body": {"unit_ids": [_UNIDADE]},
+        "sucesso": HTTPStatus.OK,
+        "semear": lambda ambiente: ambiente.com_funcao("jf-1"),
+    },
+    ("GET", "/units/{unit_id}/job-functions"): {
+        "path": {"unit_id": _UNIDADE},
+        "query": {},
+        "body": None,
+        "sucesso": HTTPStatus.OK,
+    },
 }
 
 
@@ -155,6 +174,17 @@ class Ambiente:
     def com_funcao(self, job_function_id: str = "jf-1", name: str = "Garçom") -> JobFunction:
         funcao = JobFunction(
             id=JobFunctionId(job_function_id), tenant_id=TenantId(_TENANT), name=name
+        )
+        self.fakes.job_functions.add(funcao)
+        return funcao
+
+    def com_funcao_em(self, job_function_id: str, name: str, *unidades: str) -> JobFunction:
+        """Função habilitada só nas unidades dadas (Stage 3.11)."""
+        funcao = JobFunction(
+            id=JobFunctionId(job_function_id),
+            tenant_id=TenantId(_TENANT),
+            name=name,
+            unit_enablement=UnitEnablement.only(frozenset(UnitId(u) for u in unidades)),
         )
         self.fakes.job_functions.add(funcao)
         return funcao
@@ -548,6 +578,170 @@ async def test_ca11_o_catalogo_devolve_a_habilitacao_de_cada_funcao(
         ("Cozinheiro", True, []),
         ("Garçom", False, [_UNIDADE]),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.11 — listagem por unidade e substituição das unidades de uma função
+# ---------------------------------------------------------------------------
+
+_OUTRA = "unit-2"
+_UNIDADES = "/api/v1/job-functions/jf-1/units"
+
+
+async def test_ca3_a_listagem_da_unidade_mostra_so_o_que_vale_nela(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """Em todas as unidades e na própria entram; a restrita a outra unidade não."""
+    ambiente.com_funcao("jf-todas", "Cozinheiro")
+    ambiente.com_funcao_em("jf-aqui", "Atendente", _UNIDADE)
+    ambiente.com_funcao_em("jf-la", "Barman", _OUTRA)
+
+    resposta = await client.get(f"/api/v1/units/{_UNIDADE}/job-functions")
+
+    assert resposta.status_code == HTTPStatus.OK
+    assert [item["id"] for item in resposta.json()] == ["jf-aqui", "jf-todas"]
+
+
+async def test_ca3_a_listagem_da_unidade_autoriza_a_unidade_do_path_nas_duas_camadas(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    ambiente.guard.calls.clear()
+
+    await client.get(f"/api/v1/units/{_UNIDADE}/job-functions")
+
+    assert ambiente.guard.calls == [
+        "authenticate",
+        f"authorize(manage_job_functions,None,{_UNIDADE})",
+        f"authorize(manage_job_functions,{_TENANT},{_UNIDADE})",
+    ]
+
+
+async def test_ca3_listar_unidade_que_o_ator_nao_enxerga_e_negado_pelo_guard(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """O catálogo no tenant não dá a listagem de uma unidade alheia (L-AG4)."""
+    ambiente.com_funcao_em("jf-la", "Barman", _OUTRA)
+
+    with pytest.raises(FakeAuthorizationRejected) as excinfo:
+        await client.get(f"/api/v1/units/{_OUTRA}/job-functions")
+
+    assert excinfo.value is ambiente.guard.authorization_error
+
+
+async def test_ca7_gerente_habilita_na_sua_unidade_uma_funcao_de_outra(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """O caminho que a unicidade do nome exige — sem alcançar a outra unidade."""
+    ambiente.com_funcao_em("jf-1", "Barman", _OUTRA)
+
+    resposta = await client.put(_UNIDADES, json={"unit_ids": [_UNIDADE, _OUTRA]})
+
+    assert resposta.status_code == HTTPStatus.OK
+    assert resposta.json() == {
+        "id": "jf-1",
+        "tenant_id": _TENANT,
+        "name": "Barman",
+        "all_units": False,
+        "unit_ids": [_UNIDADE, _OUTRA],
+    }
+    listada = await client.get(f"/api/v1/units/{_UNIDADE}/job-functions")
+    assert [item["id"] for item in listada.json()] == ["jf-1"]
+
+
+async def test_ca7_tirar_a_funcao_de_unidade_que_o_ator_nao_enxerga_e_negado(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    ambiente.com_funcao_em("jf-1", "Barman", _OUTRA)
+
+    with pytest.raises(FakeAuthorizationRejected):
+        await client.put(_UNIDADES, json={"unit_ids": [_UNIDADE]})
+
+    gravada = ambiente.fakes.job_functions.find_by_id(TenantId(_TENANT), JobFunctionId("jf-1"))
+    assert gravada is not None
+    assert gravada.unit_enablement.unit_ids == frozenset({UnitId(_OUTRA)})
+
+
+async def test_ca7_null_pede_todas_as_unidades_e_exige_alcance_sobre_o_restaurante(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    ambiente.com_funcao_em("jf-1", "Barman", _UNIDADE)
+
+    with pytest.raises(FakeAuthorizationRejected):
+        await client.put(_UNIDADES, json={"unit_ids": None})
+
+    ambiente.guard.grant("manage_tenant", tenant_id=_TENANT)
+    resposta = await client.put(_UNIDADES, json={"unit_ids": None})
+
+    assert resposta.status_code == HTTPStatus.OK
+    assert resposta.json()["all_units"] is True
+    assert resposta.json()["unit_ids"] == []
+
+
+@pytest.mark.parametrize("corpo", [{}, {"unit_id": ["unit-1"]}, {"unit_ids": "unit-1"}])
+async def test_corpo_sem_unit_ids_explicito_e_422_do_framework_e_nada_muda(
+    client: AsyncClient, ambiente: Ambiente, corpo: dict[str, object]
+) -> None:
+    """`{}` não alarga a função: `unit_ids` é obrigatório (e `null` é dizer "todas")."""
+    ambiente.guard.grant("manage_tenant", tenant_id=_TENANT)
+    ambiente.com_funcao_em("jf-1", "Barman", _UNIDADE)
+
+    resposta = await client.put(_UNIDADES, json=corpo)
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["type"] != "staff_error"
+    gravada = ambiente.fakes.job_functions.find_by_id(TenantId(_TENANT), JobFunctionId("jf-1"))
+    assert gravada is not None
+    assert gravada.unit_enablement.all_units is False
+
+
+async def test_ca7_funcao_inexistente_recebe_404_de_staff(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    resposta = await client.put(_UNIDADES, json={"unit_ids": [_UNIDADE]})
+
+    assert resposta.status_code == HTTPStatus.NOT_FOUND
+    assert resposta.json()["type"] == "staff_error"
+
+
+async def test_ca7_estreitar_com_funcionario_na_unidade_removida_recebe_409(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """O registro do ambiente está em `unit-1`; tirar a função dela é recusado."""
+    ambiente.guard.grant("manage_job_functions", tenant_id=_TENANT, unit_id=_OUTRA)
+    ambiente.com_funcao_em("jf-1", "Barman", _UNIDADE, _OUTRA)
+    ambiente.com_funcionario_usando("jf-1")
+
+    resposta = await client.put(_UNIDADES, json={"unit_ids": [_OUTRA]})
+
+    assert resposta.status_code == HTTPStatus.CONFLICT
+    assert resposta.json()["type"] == "staff_error"
+    gravada = ambiente.fakes.job_functions.find_by_id(TenantId(_TENANT), JobFunctionId("jf-1"))
+    assert gravada is not None
+    assert gravada.unit_enablement.unit_ids == frozenset({UnitId(_UNIDADE), UnitId(_OUTRA)})
+
+
+async def test_lista_vazia_na_substituicao_recebe_422_de_staff(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    ambiente.com_funcao_em("jf-1", "Barman", _UNIDADE)
+
+    resposta = await client.put(_UNIDADES, json={"unit_ids": []})
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["type"] == "staff_error"
+
+
+async def test_id_de_unidade_invalido_na_substituicao_e_422_antes_do_guard(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    ambiente.com_funcao_em("jf-1", "Barman", _UNIDADE)
+    ambiente.guard.calls.clear()
+
+    resposta = await client.put(_UNIDADES, json={"unit_ids": [_UNIDADE, "   "]})
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["type"] == "staff_error"
+    assert ambiente.guard.calls == ["authenticate"]
 
 
 # ---------------------------------------------------------------------------

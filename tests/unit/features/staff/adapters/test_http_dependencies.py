@@ -282,6 +282,18 @@ def test_o_catalogo_de_funcoes_declara_alvo_sem_unidade() -> None:
     assert dependencies.MANAGE_JOB_FUNCTIONS_ACCESS.names_unit is False
 
 
+def test_as_funcoes_da_unidade_declaram_o_catalogo_com_unidade() -> None:
+    """Stage 3.11 — a mesma permissão do catálogo, com a unidade do path nomeada.
+
+    A permissão segue tenant-wide em identity (nenhuma unidade é exigida); o que
+    muda é que **esta rota** a nomeia, e é o passo de visibilidade que recusa a
+    unidade que o ator não enxerga (ADR 3.11.0001 §6).
+    """
+    requisito = dependencies.MANAGE_JOB_FUNCTIONS_IN_UNIT_ACCESS
+    assert requisito.permission == "manage_job_functions"
+    assert requisito.names_unit is True
+
+
 def test_a_equipe_declara_alvo_com_unidade() -> None:
     """`manage_staff` endereça a unidade do path (ADR 3.4.0007)."""
     assert dependencies.MANAGE_STAFF_IN_UNIT_ACCESS.permission == "manage_staff"

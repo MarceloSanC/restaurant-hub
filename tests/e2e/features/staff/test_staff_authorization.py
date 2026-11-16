@@ -63,18 +63,21 @@ pytestmark = pytest.mark.e2e
 # transforma "toda rota satisfaz P" numa afirmação com conteúdo: sem ela, um
 # `_rotas()` que devolvesse a lista vazia deixaria todo `parametrize` deste
 # módulo sem um único caso, e a suíte ficaria verde por não medir nada.
-# 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`).
-_TOTAL_DE_ROTAS: Final = 17
+# 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`); a Stage 3.11, a
+# substituição das unidades de uma função e a listagem de funções da unidade.
+_TOTAL_DE_ROTAS: Final = 19
 
 # As três partições do inventário e os dois produtos que os critérios nomeiam.
 # São **números transcritos do concept**, não derivados do código: derivá-los faria
 # a expectativa acompanhar qualquer encolhimento do domínio, que é precisamente o
 # modo de falha que estas contagens existem para pegar.
-_TOTAL_DE_RJF: Final = 4
-_TOTAL_DE_REMP: Final = 13
+# Stage 3.11: +1 no catálogo (`PUT .../units`) e +1 nas rotas com unidade no path
+# (`GET /units/{unit_id}/job-functions`); os produtos são 2 x 19 e 3 x 19.
+_TOTAL_DE_RJF: Final = 5
+_TOTAL_DE_REMP: Final = 14
 _TOTAL_COM_EMPLOYEE_ID: Final = 11
-_CASOS_DE_CA09: Final = 34
-_CASOS_DE_CA36: Final = 51
+_CASOS_DE_CA09: Final = 38
+_CASOS_DE_CA36: Final = 57
 
 # Os corpos constantes de identity (`identity/adapters/inbound/http/error_handlers.py`).
 # **Transcritos, e não importados**: o critério é sobre o contrato que o cliente
@@ -128,7 +131,9 @@ class Recursos:
         job_function_id: a função atribuída a esse funcionário.
         job_function_livre: uma segunda função, **sem** nenhum funcionário — R04
             a remove, e removê-la é 204; remover a primeira seria 409
-            (`JobFunctionInUseError`), que mediria outra coisa.
+            (`JobFunctionInUseError`), que mediria outra coisa. Desde a Stage 3.11
+            é habilitada **só em `unidade`**: é o que dá à listagem de funções da
+            unidade um efeito que discrimina uma unidade da outra (CA11).
         sufixo: discrimina os nomes quando dois conjuntos isomorfos coexistem
             (CA12) ou quando duas unidades são semeadas lado a lado (CA11).
     """
@@ -158,6 +163,20 @@ async def _efeito_listagem_so_da_unidade_do_path(
     itens = resposta.json()
     assert itens, "a listagem da unidade do path veio vazia — não há efeito a observar"
     assert {item["unit_id"] for item in itens} == {recursos.unidade}
+
+
+async def _efeito_funcoes_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """Stage 3.11 — a listagem de funções de uma unidade só traz o que vale nela.
+
+    `job_function_livre` é semeada **só** na unidade do cenário: tem de estar na
+    listagem dela, e a de qualquer outra semeadura (habilitada só na outra unidade)
+    não pode. Cada item ou vale em todas as unidades, ou nomeia a do path.
+    """
+    itens = resposta.json()
+    assert recursos.job_function_livre in {item["id"] for item in itens}
+    assert all(item["all_units"] or recursos.unidade in item["unit_ids"] for item in itens), itens
 
 
 async def _efeito_removido_da_unidade_do_path(
@@ -266,6 +285,16 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         body=_sem_corpo,
         sucesso=HTTPStatus.NO_CONTENT,
     ),
+    # Stage 3.11 — substituir as unidades de uma função. A função do cenário vale
+    # em todas as unidades e o corpo pede "todas": nada muda, então o alcance
+    # exigido é só o do catálogo, que os três papéis com permissão detêm. Quem pode
+    # **mudar** o quê (gerente ou dono) é do e2e de fluxo, não da matriz.
+    ("PUT", "/job-functions/{job_function_id}/units"): Rota(
+        path=lambda r: {"job_function_id": r.job_function_id},
+        query=_sem_query,
+        body=lambda _r: {"unit_ids": None},
+        sucesso=HTTPStatus.OK,
+    ),
     # --- REMP: funcionário, unit-scoped, unidade no path --------------------
     ("POST", _EMPLOYEES): Rota(
         path=lambda r: {"unit_id": r.unidade},
@@ -284,6 +313,14 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         body=_sem_corpo,
         sucesso=HTTPStatus.OK,
         efeito=_efeito_listagem_so_da_unidade_do_path,
+    ),
+    # Stage 3.11 — as funções habilitadas na unidade do path.
+    ("GET", "/units/{unit_id}/job-functions"): Rota(
+        path=lambda r: {"unit_id": r.unidade},
+        query=_sem_query,
+        body=_sem_corpo,
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_funcoes_da_unidade_do_path,
     ),
     ("PATCH", f"{_EMPLOYEES}/{{employee_id}}"): Rota(
         path=_do_funcionario,
@@ -504,8 +541,18 @@ async def platform_admin(client: AsyncClient, cenario: Cenario) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def _criar_funcao(client: AsyncClient, cabecalho: dict[str, str], nome: str) -> str:
-    resposta = await client.post(f"{API}/job-functions", json={"name": nome}, headers=cabecalho)
+async def _criar_funcao(
+    client: AsyncClient,
+    cabecalho: dict[str, str],
+    nome: str,
+    *,
+    unidades: list[str] | None = None,
+) -> str:
+    """Cria a função em todas as unidades (default) ou só nas `unidades` dadas."""
+    corpo: dict[str, Any] = {"name": nome}
+    if unidades is not None:
+        corpo["unit_ids"] = unidades
+    resposta = await client.post(f"{API}/job-functions", json=corpo, headers=cabecalho)
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
     return str(resposta.json()["id"])
 
@@ -521,7 +568,9 @@ async def _semear(
     """
     cabecalho = auth(cenario.owner)
     job_function_id = await _criar_funcao(client, cabecalho, f"Função {sufixo}")
-    job_function_livre = await _criar_funcao(client, cabecalho, f"Função livre {sufixo}")
+    job_function_livre = await _criar_funcao(
+        client, cabecalho, f"Função livre {sufixo}", unidades=[unidade]
+    )
 
     criado = await client.post(
         f"{API}/units/{unidade}/employees",
@@ -659,8 +708,8 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # sozinha. `include_inactive` fica de fora porque tem default — omiti-lo não
 # produz 422, e um caso que não degrada não mede a corrida.
 
-# Dez até a 3.6; R17 (3.5) tem corpo — onze.
-_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 11
+# Dez até a 3.6; R17 (3.5) tem corpo — onze; `PUT .../units` (3.11) — doze.
+_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 12
 
 # O corpo que nenhum `*Request` aceita. Não é um campo com valor errado: é a
 # **ausência** dos campos obrigatórios, que é o 422 mais barato de produzir e o

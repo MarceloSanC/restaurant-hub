@@ -357,9 +357,11 @@ def test_o_conteiner_de_staff_tem_exatamente_os_campos_declarados() -> None:
 
 # Cardinalidades declaradas — piso contra a varredura encolher em silencio.
 # 17 overrides (16 `_get_*` + `get_access_guard`) e 16 rotas até a 3.6; a Stage
-# 3.5 acrescenta o provedor e a rota de R17.
-_TOTAL_DE_OVERRIDES_DE_STAFF = 18
-_TOTAL_DE_ROTAS_DE_STAFF = 17
+# 3.5 acrescenta o provedor e a rota de R17; a Stage 3.11, o provedor de
+# `set_job_function_units` e duas rotas (a dele e a listagem por unidade, que reusa
+# o provedor de `list_job_functions`).
+_TOTAL_DE_OVERRIDES_DE_STAFF = 19
+_TOTAL_DE_ROTAS_DE_STAFF = 19
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.inbound.http"
 _PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"

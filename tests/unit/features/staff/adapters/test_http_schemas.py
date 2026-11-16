@@ -572,3 +572,20 @@ def test_campo_desconhecido_na_criacao_de_funcao_e_recusado_e_nao_ignorado() -> 
     """
     with pytest.raises(ValidationError):
         schemas.CreateJobFunctionRequest.model_validate({"name": "Sushiman", "unit_id": ["u1"]})
+
+
+def test_unit_ids_e_obrigatorio_e_anulavel_na_substituicao_de_unidades() -> None:
+    """`{}` é recusado: com default, ele alargaria a função para todas as unidades.
+
+    `null` é o cliente **dizendo** "todas"; a ausência não diz nada, e uma
+    substituição que não diz onde a função deve valer não forma o pedido.
+    """
+    with pytest.raises(ValidationError):
+        schemas.SetJobFunctionUnitsRequest.model_validate({})
+    with pytest.raises(ValidationError):
+        schemas.SetJobFunctionUnitsRequest.model_validate({"unit_ids": None, "name": "x"})
+
+    assert schemas.SetJobFunctionUnitsRequest.model_validate({"unit_ids": None}).unit_ids is None
+    assert schemas.SetJobFunctionUnitsRequest.model_validate({"unit_ids": ["u1"]}).unit_ids == [
+        "u1"
+    ]

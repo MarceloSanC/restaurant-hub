@@ -147,6 +147,15 @@ class AccessRequirement:
 MANAGE_JOB_FUNCTIONS_ACCESS: Final = AccessRequirement(
     permission=PERMISSION_MANAGE_JOB_FUNCTIONS, names_unit=False
 )
+# Stage 3.11 — o catálogo **com unidade nomeada**: listar as funções habilitadas
+# numa unidade. A permissão é a mesma do catálogo (segue tenant-wide em identity —
+# nenhuma unidade é *exigida*), mas aqui a rota a nomeia, e é o passo de
+# visibilidade de identity que recusa a unidade que o ator não enxerga (ADR
+# 3.11.0001 §6). Dois requisitos para a mesma permissão porque `names_unit` é da
+# **rota**, não da permissão.
+MANAGE_JOB_FUNCTIONS_IN_UNIT_ACCESS: Final = AccessRequirement(
+    permission=PERMISSION_MANAGE_JOB_FUNCTIONS, names_unit=True
+)
 MANAGE_STAFF_IN_UNIT_ACCESS: Final = AccessRequirement(
     permission=PERMISSION_MANAGE_STAFF, names_unit=True
 )

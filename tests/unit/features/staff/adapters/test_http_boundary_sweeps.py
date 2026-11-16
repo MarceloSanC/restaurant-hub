@@ -31,7 +31,7 @@ import importlib
 import pathlib
 import pkgutil
 import urllib.parse
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, get_args, get_origin
@@ -66,8 +66,8 @@ Caminho = tuple[str | int, ...]
 # `shift_preference`. A contagem é transcrita, e não derivada: é ela que faz um
 # encolhimento do domínio reprovar em vez de reduzir em silêncio os casos rodados.
 # 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17; a Stage 3.11,
-# o elemento de `unit_ids` da criação de função.
-_TOTAL_DE_CAMPOS_ESCALARES = 16
+# o elemento de `unit_ids` da criação de função e o da substituição de unidades.
+_TOTAL_DE_CAMPOS_ESCALARES = 17
 
 # Alias local do tipo devolvido por `identifier_fields`: o módulo entra como
 # objeto (`dependencies_module`), então o nome não está no espaço de nomes
@@ -140,6 +140,11 @@ class Invocacao:
     query: dict[str, str]
     body: dict[str, Any] | None
     sucesso: int
+    # Stage 3.11 — estado que a rota precisa encontrar para que um **alvo de
+    # autorização do corpo** chegue ao guard. Opcional e declarado pela Task da
+    # rota: só `PUT .../units` o usa, porque lá o alcance sobre as unidades é
+    # decidido contra a habilitação gravada, depois da existência.
+    semear: Callable[[Ambiente], None] | None = None
 
 
 def _rotas() -> list[APIRoute]:
@@ -182,6 +187,7 @@ def _invocacoes_declaradas() -> dict[ChaveDeRota, Invocacao]:
                 query=dict(bruta["query"]),
                 body=bruta["body"],
                 sucesso=int(bruta["sucesso"]),
+                semear=bruta.get("semear"),
             )
     return reunidas
 
@@ -470,8 +476,9 @@ def test_ca14_nenhum_handler_le_o_unit_id_do_escopo_autorizado() -> None:
 #
 # 17 até a 3.6 (16 rotas + a segunda autorização de R16); a Stage 3.5 acrescenta
 # R17, que autoriza **duas** vezes sobre o mesmo alvo (`manage_staff` e
-# `manage_users`, concept 3.5 §5.3) — 19.
-_TOTAL_DE_AUTORIZACOES = 19
+# `manage_users`, concept 3.5 §5.3) — 19. A Stage 3.11 acrescenta duas rotas, uma
+# autorização cada (o catálogo no tenant; a listagem na unidade do path) — 21.
+_TOTAL_DE_AUTORIZACOES = 21
 
 
 def _requisitos_declarados() -> dict[str, object]:
@@ -1134,6 +1141,8 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
     invocacao = _INVOCACOES[chave_da_rota]
     assert invocacao.body is not None
     corpo = _com_valor_em(dict(invocacao.body), caminho, valor)
+    if invocacao.semear is not None:
+        invocacao.semear(ambiente)
 
     # Mesma espécie do eixo de path: um identificador de **unidade** que chega
     # pelo corpo (o `target_unit_id` de R16) é o segundo alvo de autorização, e
@@ -1252,7 +1261,10 @@ def test_os_elementos_de_lista_sao_do_lado_de_staff_no_dominio_de_ca24() -> None
         for chave_da_rota, caminho in novos
         if _e_alvo_de_autorizacao(_nome_do_campo(caminho))
     }
-    assert alvos_em_lista == {(("POST", "/job-functions"), ("unit_ids", 0))}
+    assert alvos_em_lista == {
+        (("POST", "/job-functions"), ("unit_ids", 0)),
+        (("PUT", "/job-functions/{job_function_id}/units"), ("unit_ids", 0)),
+    }
 
 
 def test_a_classificacao_de_quem_parseia_nao_colapsou_para_um_lado_so() -> None:

@@ -191,6 +191,21 @@ class RenameJobFunctionRequest(BaseModel):
     name: str
 
 
+class SetJobFunctionUnitsRequest(BaseModel):
+    """Substituição das unidades em que uma função vale (Stage 3.11, ADR 3.11.0001 §5).
+
+    `unit_ids` é **obrigatório e anulável**: `null` = todas as unidades, uma lista
+    nomeia as unidades — e não há default. Com default, o corpo `{}` alargaria uma
+    função restrita para o restaurante inteiro sem que o cliente o tivesse dito; é a
+    mesma razão de `DeclareShiftPreferenceRequest`. `extra="forbid"` pela mesma
+    razão da criação: campo desconhecido é erro, não ruído.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit_ids: list[str] | None
+
+
 class CreateEmployeeRequest(BaseModel):
     """Criação de funcionário na unidade do endereço.
 

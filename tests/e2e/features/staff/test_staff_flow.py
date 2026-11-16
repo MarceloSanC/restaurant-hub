@@ -22,6 +22,7 @@ import pytest
 from httpx import AsyncClient, Response
 
 from tests.e2e.features.staff.conftest import API, Cenario, auth
+from tests.e2e.features.staff.test_staff_authorization import _CORPO_403, _criar_ator
 
 pytestmark = pytest.mark.e2e
 
@@ -274,3 +275,157 @@ async def test_ca5_copia_para_unidade_sem_a_funcao_habilitada_e_409_e_nada_e_gra
     assert [f["unit_ids"] for f in catalogo.json() if f["id"] == job_function_id] == [
         [cenario.unidade_a]
     ]
+
+    # O caminho que a recusa aponta: habilitar a função no destino e repetir.
+    habilitada = await client.put(
+        f"{API}/job-functions/{job_function_id}/units",
+        json={"unit_ids": [cenario.unidade_a, cenario.unidade_b]},
+        headers=auth(cenario.manager),
+    )
+    assert habilitada.status_code == HTTPStatus.OK, habilitada.text
+    aceita = await client.post(copias, json=destino, headers=auth(cenario.manager))
+    assert aceita.status_code == HTTPStatus.CREATED, aceita.text
+    assert aceita.json()["unit_id"] == cenario.unidade_b
+    assert aceita.json()["job_function_ids"] == [job_function_id]
+
+
+async def _funcoes_da_unidade(
+    client: AsyncClient, tokens: dict, unidade: str
+) -> tuple[HTTPStatus, list[str]]:
+    resposta = await client.get(f"{API}/units/{unidade}/job-functions", headers=auth(tokens))
+    ids = [item["id"] for item in resposta.json()] if resposta.status_code == HTTPStatus.OK else []
+    return HTTPStatus(resposta.status_code), ids
+
+
+async def test_ca1_ca2_gerente_cria_para_a_sua_unidade_e_o_dono_para_todas(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """CA1 e CA2 da Stage 3.11 — os dois primeiros critérios da issue #41, pelo HTTP real.
+
+    O gerente **só de A** cria uma função para a unidade dele: ela aparece na
+    listagem de A e não na de B. Pedir a unidade B, que ele não enxerga, ou "todas
+    as unidades" (sem `unit_ids`) é 403 com o corpo constante de identity. O dono
+    cria sem nomear unidade, e a função vale nas duas.
+    """
+    gerente_de_a = await _criar_ator(
+        client, cenario, "gerente-so-de-a@cantina.com", "manager", (cenario.unidade_a,)
+    )
+    funcoes = f"{API}/job-functions"
+
+    da_unidade = await client.post(
+        funcoes,
+        json={"name": "Pizzaiolo", "unit_ids": [cenario.unidade_a]},
+        headers=auth(gerente_de_a),
+    )
+    assert da_unidade.status_code == HTTPStatus.CREATED, da_unidade.text
+    assert da_unidade.json()["all_units"] is False
+    assert da_unidade.json()["unit_ids"] == [cenario.unidade_a]
+
+    de_outra = await client.post(
+        funcoes,
+        json={"name": "Barista", "unit_ids": [cenario.unidade_a, cenario.unidade_b]},
+        headers=auth(gerente_de_a),
+    )
+    para_todas = await client.post(funcoes, json={"name": "Barista"}, headers=auth(gerente_de_a))
+    for negada in (de_outra, para_todas):
+        assert negada.status_code == HTTPStatus.FORBIDDEN, negada.text
+        assert negada.json() == _CORPO_403
+
+    do_dono = await client.post(
+        funcoes, json={"name": "Gerente de salão"}, headers=auth(cenario.owner)
+    )
+    assert do_dono.status_code == HTTPStatus.CREATED, do_dono.text
+    assert do_dono.json()["all_units"] is True
+    assert do_dono.json()["unit_ids"] == []
+
+    # Listagem por unidade: A vê as duas; B só a do dono (CA1, CA3). O gerente de
+    # A não lista B — a unidade é alvo de autorização.
+    status_a, em_a = await _funcoes_da_unidade(client, gerente_de_a, cenario.unidade_a)
+    status_b, em_b = await _funcoes_da_unidade(client, cenario.owner, cenario.unidade_b)
+    status_negado, _ = await _funcoes_da_unidade(client, gerente_de_a, cenario.unidade_b)
+
+    assert (status_a, status_b, status_negado) == (
+        HTTPStatus.OK,
+        HTTPStatus.OK,
+        HTTPStatus.FORBIDDEN,
+    )
+    assert set(em_a) == {da_unidade.json()["id"], do_dono.json()["id"]}
+    assert em_b == [do_dono.json()["id"]]
+    # Nenhuma das recusas gravou a função pedida.
+    catalogo = await client.get(funcoes, headers=auth(cenario.owner))
+    assert sorted(f["name"] for f in catalogo.json()) == ["Gerente de salão", "Pizzaiolo"]
+
+
+async def test_ca7_o_gerente_habilita_na_sua_unidade_e_so_mexe_no_que_enxerga(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """CA7 da Stage 3.11 — alterar onde a função vale exige alcance sobre o que muda.
+
+    A função nasce só em B (criada pelo dono). O gerente só de A a habilita em A —
+    só A é autorizada — e passa a listá-la; tirar B, ou pedir "todas", é 403 e nada
+    muda. O dono alarga para todas. A persistência é a real: flag e vínculos.
+    """
+    gerente_de_a = await _criar_ator(
+        client, cenario, "gerente-so-de-a@cantina.com", "manager", (cenario.unidade_a,)
+    )
+    criada = await client.post(
+        f"{API}/job-functions",
+        json={"name": "Sommelier", "unit_ids": [cenario.unidade_b]},
+        headers=auth(cenario.owner),
+    )
+    assert criada.status_code == HTTPStatus.CREATED, criada.text
+    funcao_id = str(criada.json()["id"])
+    unidades = f"{API}/job-functions/{funcao_id}/units"
+    as_duas = sorted([cenario.unidade_a, cenario.unidade_b])
+
+    _, antes = await _funcoes_da_unidade(client, gerente_de_a, cenario.unidade_a)
+    habilitada = await client.put(unidades, json={"unit_ids": as_duas}, headers=auth(gerente_de_a))
+    _, depois = await _funcoes_da_unidade(client, gerente_de_a, cenario.unidade_a)
+
+    assert antes == []
+    assert habilitada.status_code == HTTPStatus.OK, habilitada.text
+    assert habilitada.json()["unit_ids"] == as_duas
+    assert depois == [funcao_id]
+
+    tirando_b = await client.put(
+        unidades, json={"unit_ids": [cenario.unidade_a]}, headers=auth(gerente_de_a)
+    )
+    para_todas = await client.put(unidades, json={"unit_ids": None}, headers=auth(gerente_de_a))
+    for negada in (tirando_b, para_todas):
+        assert negada.status_code == HTTPStatus.FORBIDDEN, negada.text
+        assert negada.json() == _CORPO_403
+    _, em_b = await _funcoes_da_unidade(client, cenario.owner, cenario.unidade_b)
+    assert em_b == [funcao_id]
+
+    do_dono = await client.put(unidades, json={"unit_ids": None}, headers=auth(cenario.owner))
+    assert do_dono.status_code == HTTPStatus.OK, do_dono.text
+    assert do_dono.json()["all_units"] is True
+    assert do_dono.json()["unit_ids"] == []
+
+    inexistente = await client.put(
+        f"{API}/job-functions/funcao-que-nunca-existiu/units",
+        json={"unit_ids": [cenario.unidade_a]},
+        headers=auth(gerente_de_a),
+    )
+    assert inexistente.status_code == HTTPStatus.NOT_FOUND, inexistente.text
+    assert inexistente.json()["type"] == "staff_error"
+
+
+async def test_ca7_estreitar_com_funcionario_na_unidade_removida_e_409(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """ADR 3.11.0002 — a função não sai de uma unidade em que algum registro a detém."""
+    job_function_id = await _criar_funcao(client, cenario, "Maître")
+    await _criar_funcionario(client, cenario, cenario.unidade_b, "Bruno", job_function_id)
+
+    recusada = await client.put(
+        f"{API}/job-functions/{job_function_id}/units",
+        json={"unit_ids": [cenario.unidade_a]},
+        headers=auth(cenario.manager),
+    )
+
+    assert recusada.status_code == HTTPStatus.CONFLICT, recusada.text
+    assert recusada.json()["type"] == "staff_error"
+    assert "função de trabalho em uso por algum funcionário" in recusada.json()["detail"]
+    _, em_b = await _funcoes_da_unidade(client, cenario.manager, cenario.unidade_b)
+    assert em_b == [job_function_id]
