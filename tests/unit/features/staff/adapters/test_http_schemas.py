@@ -363,13 +363,48 @@ def test_o_instante_com_z_e_parsado_como_tz_aware_e_nao_convertido_em_silencio()
     assert pedido.start.tzinfo is not None
 
 
-def test_a_resposta_de_funcao_sai_do_result_com_os_tres_campos() -> None:
+def test_a_resposta_de_funcao_sai_do_result_com_a_habilitacao() -> None:
     """`JobFunctionResponse` não tem campo de estado — a função não tem ciclo de vida."""
     corpo = schemas.JobFunctionResponse.from_result(
-        JobFunctionResult(id=JobFunctionId("jf1"), tenant_id=TenantId("t1"), name="Garçom")
+        JobFunctionResult(
+            id=JobFunctionId("jf1"),
+            tenant_id=TenantId("t1"),
+            name="Garçom",
+            all_units=True,
+            unit_ids=(),
+        )
     ).model_dump()
 
-    assert corpo == {"id": "jf1", "tenant_id": "t1", "name": "Garçom"}
+    assert corpo == {
+        "id": "jf1",
+        "tenant_id": "t1",
+        "name": "Garçom",
+        "all_units": True,
+        "unit_ids": [],
+    }
+
+
+def test_a_resposta_de_funcao_restrita_leva_as_unidades_na_ordem_do_result() -> None:
+    """CA11 — a resposta diz onde a função vale; a ordem é a do result (ordenada lá)."""
+    corpo = schemas.JobFunctionResponse.from_result(
+        JobFunctionResult(
+            id=JobFunctionId("jf1"),
+            tenant_id=TenantId("t1"),
+            name="Garçom",
+            all_units=False,
+            unit_ids=(UnitId("u1"), UnitId("u2")),
+        )
+    ).model_dump()
+
+    assert corpo["all_units"] is False
+    assert corpo["unit_ids"] == ["u1", "u2"]
+
+
+def test_unit_ids_e_opcional_na_criacao_e_ausente_significa_todas() -> None:
+    """Ausente e `null` são o mesmo pedido — todas as unidades (ADR 3.11.0001 §4)."""
+    assert schemas.CreateJobFunctionRequest(name="Garçom").unit_ids is None
+    assert schemas.CreateJobFunctionRequest(name="Garçom", unit_ids=None).unit_ids is None
+    assert schemas.CreateJobFunctionRequest(name="Garçom", unit_ids=["u1"]).unit_ids == ["u1"]
 
 
 # ---------------------------------------------------------------------------

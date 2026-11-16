@@ -61,6 +61,11 @@ class JobFunctionResult:
     id: JobFunctionId
     tenant_id: TenantId
     name: str
+    # Stage 3.11 — onde a função vale (ADR 3.11.0001): `all_units` verdadeiro e
+    # `unit_ids` vazio, ou o contrário. Tupla ordenada para a saída ser
+    # determinística (o conjunto do domínio não tem ordem).
+    all_units: bool
+    unit_ids: tuple[UnitId, ...]
 
 
 @dataclass(frozen=True)
@@ -125,6 +130,8 @@ def to_job_function_result(job_function: JobFunction) -> JobFunctionResult:
         id=job_function.id,
         tenant_id=job_function.tenant_id,
         name=job_function.name,
+        all_units=job_function.unit_enablement.all_units,
+        unit_ids=tuple(sorted(job_function.unit_enablement.unit_ids)),
     )
 
 

@@ -92,7 +92,11 @@ async def _criar_funcionario(
     client: AsyncClient, cabecalho: dict[str, str], unidade: str, nome: str
 ) -> str:
     funcao = await client.post(
-        f"{API}/job-functions", json={"name": f"Função de {nome}"}, headers=cabecalho
+        f"{API}/job-functions",
+        # Stage 3.11 — habilitada na unidade do registro: o gerente não cria para
+        # "todas as unidades" (ADR 3.11.0001 §4).
+        json={"name": f"Função de {nome}", "unit_ids": [unidade]},
+        headers=cabecalho,
     )
     assert funcao.status_code == HTTPStatus.CREATED, funcao.text
     criado = await client.post(

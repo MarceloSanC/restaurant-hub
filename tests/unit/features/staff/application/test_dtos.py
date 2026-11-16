@@ -179,7 +179,9 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
     ),
     ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_TENANT),
     ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE),
-    JobFunctionResult(id=_FUNCAO, tenant_id=_TENANT, name="Cozinheiro"),
+    JobFunctionResult(
+        id=_FUNCAO, tenant_id=_TENANT, name="Cozinheiro", all_units=True, unit_ids=()
+    ),
     _RESULTADO_BASE,
     EmployeeLoginResult(employee=_RESULTADO_BASE, setup_link="https://x/definir-senha?token=t"),
 )
@@ -447,7 +449,13 @@ def test_employee_result_carrega_o_vinculo_de_login() -> None:
     assert campos["user_id"].type == UserId | None
     assert campos["user_id"].default is None
     assert _RESULTADO_BASE.user_id is None
-    assert JobFunctionResult.__dataclass_fields__.keys() == {"id", "tenant_id", "name"}
+    assert JobFunctionResult.__dataclass_fields__.keys() == {
+        "id",
+        "tenant_id",
+        "name",
+        "all_units",
+        "unit_ids",
+    }
 
 
 def test_o_mapper_copia_todos_os_campos_inclusive_o_login() -> None:

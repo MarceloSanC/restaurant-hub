@@ -33,8 +33,16 @@ async def _listar(client: AsyncClient, cenario: Cenario, unidade: str, **params:
 
 
 async def _criar_funcao(client: AsyncClient, cenario: Cenario, nome: str) -> str:
+    """Cria a função **nas duas unidades** do gerente (Stage 3.11).
+
+    Sem `unit_ids` o pedido seria "todas as unidades", que exige `manage_tenant`
+    (ADR 3.11.0001 §4) — o gerente nomeia as unidades de que é membro, e os fluxos
+    que cadastram em A e copiam para B encontram a função habilitada nas duas.
+    """
     resposta = await client.post(
-        f"{API}/job-functions", json={"name": nome}, headers=auth(cenario.manager)
+        f"{API}/job-functions",
+        json={"name": nome, "unit_ids": [cenario.unidade_a, cenario.unidade_b]},
+        headers=auth(cenario.manager),
     )
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
     return str(resposta.json()["id"])

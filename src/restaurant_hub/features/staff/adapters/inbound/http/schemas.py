@@ -167,9 +167,15 @@ class UnavailabilityPayload(BaseModel):
 
 
 class CreateJobFunctionRequest(BaseModel):
-    """Criação de função de trabalho no catálogo do tenant."""
+    """Criação de função de trabalho no catálogo do tenant.
+
+    `unit_ids` ausente ou `null` = **todas** as unidades, que exige alcance sobre o
+    restaurante (`manage_tenant`); uma lista nomeia as unidades (Stage 3.11, ADR
+    3.11.0001). Cada id é validado na borda antes de alcançar o guard.
+    """
 
     name: str
+    unit_ids: list[str] | None = None
 
 
 class RenameJobFunctionRequest(BaseModel):
@@ -269,11 +275,21 @@ class JobFunctionResponse(BaseModel):
     id: str
     tenant_id: str
     name: str
+    # Stage 3.11 — onde a função vale: `all_units` verdadeiro e `unit_ids` vazio,
+    # ou o contrário (ADR 3.11.0001).
+    all_units: bool
+    unit_ids: list[str]
 
     @classmethod
     def from_result(cls, result: JobFunctionResult) -> "JobFunctionResponse":
         """Monta a resposta a partir do **result** do use case, nunca da entidade."""
-        return cls(id=result.id, tenant_id=result.tenant_id, name=result.name)
+        return cls(
+            id=result.id,
+            tenant_id=result.tenant_id,
+            name=result.name,
+            all_units=result.all_units,
+            unit_ids=list(result.unit_ids),
+        )
 
 
 class EmployeeResponse(BaseModel):

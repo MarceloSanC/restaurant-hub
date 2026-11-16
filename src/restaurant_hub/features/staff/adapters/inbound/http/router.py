@@ -272,6 +272,18 @@ def _job_function_ids(raw_ids: list[str]) -> frozenset[JobFunctionId]:
     )
 
 
+def _unit_ids(raw_ids: list[str] | None) -> frozenset[UnitId] | None:
+    """Valida cada id de unidade do corpo antes de ele alcançar o guard (ADR 3.6.0002).
+
+    `None` passa como `None` — é "todas as unidades", e não "nenhuma". Um id em
+    branco ou malformado vira 422 aqui, e não a negação do guard que um `""`
+    produziria do lado de identity.
+    """
+    if raw_ids is None:
+        return None
+    return frozenset(UnitId(validate_identifier(raw_id, entity=_UNIT)) for raw_id in raw_ids)
+
+
 # ---------------------------------------------------------------------------
 # Catálogo de funções de trabalho — recurso **tenant-scoped**
 #
@@ -294,10 +306,17 @@ def create_job_function(
     guard: StaffAccessGuard,
     use_case: Annotated[CreateJobFunctionUseCase, Depends(_get_create_job_function)],
 ) -> JobFunctionResponse:
-    """Cria uma função no catálogo do restaurante do ator."""
+    """Cria uma função no catálogo do restaurante do ator, habilitada onde o corpo diz.
+
+    A borda autoriza o catálogo (o tenant); o alcance sobre as unidades pedidas — ou
+    `manage_tenant` para todas — é do use case (ADR 3.11.0001 §4).
+    """
+    unit_ids = _unit_ids(payload.unit_ids)
     scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission)
     result = use_case.execute(
-        CreateJobFunctionCommand(actor=actor, tenant_id=scope.tenant_id, name=payload.name)
+        CreateJobFunctionCommand(
+            actor=actor, tenant_id=scope.tenant_id, name=payload.name, unit_ids=unit_ids
+        )
     )
     return JobFunctionResponse.from_result(result)
 

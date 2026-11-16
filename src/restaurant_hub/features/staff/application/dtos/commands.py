@@ -21,6 +21,14 @@ unidade não consegue formar o pedido.
 (`ListEmployeesQuery` já a exige e `ListJobFunctionsQuery` é tenant-scoped por
 desenho, porque o catálogo pertence ao restaurante).
 
+**As duas exceções com default, e por que não são caminho de escalada** (Stage
+3.11): `CreateJobFunctionCommand.unit_ids` e `ListJobFunctionsQuery.unit_id`
+valem `None` por omissão. Omitir `unit_ids` pede **todas** as unidades, que exige
+`manage_tenant` — o alcance **mais** estrito, então esquecer o campo nega o
+gerente em vez de promovê-lo. Omitir `unit_id` pede o catálogo do restaurante,
+autorizado como sempre foi. Nos dois casos a omissão é fail-closed ou idêntica ao
+contrato anterior, que é a propriedade que a regra "sem default" protege.
+
 A conversão de texto cru para VO (`FixedSchedule(...)`, `ShiftPreference(...)`,
 `UnavailabilityPeriod(...)`) é do adapter que recebe a requisição (Stage 3.4):
 o command já chega com o VO **construído**, e quando essa construção falha o
@@ -59,11 +67,18 @@ class CreateJobFunctionCommand:
     """Criação de uma função de trabalho no restaurante.
 
     Não há campo de estado: a função **não tem ciclo de vida** (ADR 3.2.0005).
+
+    Attributes:
+        unit_ids: onde a função nasce habilitada (Stage 3.11). `None` = **todas**
+            as unidades do restaurante, o que exige `manage_tenant`; um conjunto
+            nomeia as unidades, cada uma autorizada. Conjunto vazio é recusado
+            pelo domínio (`InvalidUnitEnablementError`).
     """
 
     actor: Actor = field(repr=False)
     tenant_id: TenantId
     name: str
+    unit_ids: frozenset[UnitId] | None = None
 
 
 @dataclass(frozen=True)

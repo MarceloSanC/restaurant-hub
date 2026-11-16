@@ -245,7 +245,10 @@ ROTAS: dict[ChaveDeRota, Rota] = {
     ("POST", "/job-functions"): Rota(
         path=_sem_path,
         query=_sem_query,
-        body=lambda r: {"name": f"Garçom {r.sufixo}"},
+        # Stage 3.11 — criada **para a unidade do cenário**: é o pedido que os três
+        # papéis com permissão alcançam (o `owner` por bypass, `manager`/`hr` por
+        # membership). Sem `unit_ids` seria "todas as unidades", só do `owner`.
+        body=lambda r: {"name": f"Garçom {r.sufixo}", "unit_ids": [r.unidade]},
         sucesso=HTTPStatus.CREATED,
     ),
     ("GET", "/job-functions"): Rota(

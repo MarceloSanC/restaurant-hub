@@ -65,8 +65,9 @@ Caminho = tuple[str | int, ...]
 # `job_function_ids` em cada uma das duas rotas que o aceitam e o período de
 # `shift_preference`. A contagem é transcrita, e não derivada: é ela que faz um
 # encolhimento do domínio reprovar em vez de reduzir em silêncio os casos rodados.
-# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17.
-_TOTAL_DE_CAMPOS_ESCALARES = 15
+# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17; a Stage 3.11,
+# o elemento de `unit_ids` da criação de função.
+_TOTAL_DE_CAMPOS_ESCALARES = 16
 
 # Alias local do tipo devolvido por `identifier_fields`: o módulo entra como
 # objeto (`dependencies_module`), então o nome não está no espaço de nomes
@@ -850,7 +851,7 @@ def test_o_eixo_de_corpo_de_ca20_nao_esta_vazio() -> None:
         for campo in dependencies_module.identifier_fields(modelo)
     }
 
-    assert campos_existentes == {"target_unit_id", "job_function_ids"}
+    assert campos_existentes == {"target_unit_id", "job_function_ids", "unit_ids"}
     assert _CASOS_DE_CORPO, "o eixo de corpo de CA20 ficou vazio — a varredura não mede nada"
 
 
@@ -1054,7 +1055,7 @@ def _e_alvo_de_autorizacao(nome: str) -> bool:
     um identificador de unidade novo, com outro nome, fica vermelho lá em vez de
     entrar mudo na espécie errada.
     """
-    return nome.endswith("unit_id")
+    return nome.endswith(("unit_id", "unit_ids"))
 
 
 def _quem_parseia(chave_da_rota: ChaveDeRota, caminho: Caminho) -> str:
@@ -1189,7 +1190,8 @@ def test_os_alvos_de_autorizacao_sao_exatamente_os_de_hoje() -> None:
     }
     alvos = {nome for nome in de_path | de_corpo if _e_alvo_de_autorizacao(nome)}
 
-    assert alvos == {"unit_id", "target_unit_id"}
+    # Stage 3.11 — `unit_ids`: as unidades em que uma função nasce habilitada.
+    assert alvos == {"unit_id", "target_unit_id", "unit_ids"}
 
 
 def test_a_varredura_de_ca24_alcanca_os_dois_campos_que_o_criterio_nomeia() -> None:
@@ -1228,11 +1230,13 @@ def test_os_elementos_de_lista_sao_do_lado_de_staff_no_dominio_de_ca24() -> None
     staff — a defesa contra o 422 que não é desta borda — ficaria desligada
     justamente nos caminhos recém-abertos.
 
-    A segunda asserção fecha o outro lado: nenhum elemento de lista é **alvo de
-    autorização**, então nenhum deles pode cair no ramo da sentinela do guard.
-    Hoje isso é verdade porque o único identificador de unidade que chega pelo
-    corpo é escalar (`target_unit_id`); no dia em que uma lista de unidades
-    existir, este teste é quem obriga a revisitar a espécie.
+    A segunda asserção fecha o outro lado, e foi **revisitada na Stage 3.11**,
+    como a redação anterior mandava ("no dia em que uma lista de unidades
+    existir"): os elementos de lista que são **alvo de autorização** são
+    exatamente os de `unit_ids`, e a lista é transcrita. Para eles CA24 aplica o
+    ramo da sentinela do guard — a espécie é decidida pelo **nome** do campo
+    (`_nome_do_campo`), que para `unit_ids.0` é `unit_ids` —; qualquer outro
+    elemento de lista que virasse alvo reprovaria aqui em vez de entrar mudo.
     """
     novos = [
         (chave_da_rota, caminho)
@@ -1243,7 +1247,12 @@ def test_os_elementos_de_lista_sao_do_lado_de_staff_no_dominio_de_ca24() -> None
 
     assert novos, "nenhum elemento de lista no domínio — a descida por lista sumiu"
     assert {_quem_parseia(chave_da_rota, caminho) for chave_da_rota, caminho in novos} == {"staff"}
-    assert not any(_e_alvo_de_autorizacao(_nome_do_campo(caminho)) for _, caminho in novos)
+    alvos_em_lista = {
+        (chave_da_rota, caminho)
+        for chave_da_rota, caminho in novos
+        if _e_alvo_de_autorizacao(_nome_do_campo(caminho))
+    }
+    assert alvos_em_lista == {(("POST", "/job-functions"), ("unit_ids", 0))}
 
 
 def test_a_classificacao_de_quem_parseia_nao_colapsou_para_um_lado_so() -> None:

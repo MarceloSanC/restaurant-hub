@@ -83,7 +83,10 @@ INVOCACOES: dict[tuple[str, str], dict[str, object]] = {
     ("POST", "/job-functions"): {
         "path": {},
         "query": {},
-        "body": {"name": "Garçom"},
+        # Stage 3.11 — o ator do ambiente é o gerente da unidade: cria a função
+        # **para a unidade dele**. Sem `unit_ids` o pedido é "todas as unidades",
+        # que exige `manage_tenant` (ADR 3.11.0001 §4) e ele não detém.
+        "body": {"name": "Garçom", "unit_ids": [_UNIDADE]},
         "sucesso": HTTPStatus.CREATED,
     },
     ("GET", "/job-functions"): {
@@ -123,6 +126,9 @@ class Ambiente:
         self.fakes: StaffFakes = staff_repositories()
         self.guard = InMemoryAccessGuard(credential=FakeActor(id="ator-1", tenant_id=_TENANT))
         self.guard.grant("manage_job_functions", tenant_id=_TENANT)
+        # Stage 3.11 — o catálogo também é exercido **com** unidade nomeada: criar
+        # para a unidade, listar a unidade, mudar as unidades de uma função.
+        self.guard.grant("manage_job_functions", tenant_id=_TENANT, unit_id=_UNIDADE)
         self.guard.grant("manage_staff", tenant_id=_TENANT, unit_id=_UNIDADE)
         # Stage 3.5 — R17 exige também `manage_users` sobre a unidade. O ator do
         # ambiente detém as três, como `manager`/`hr` em produção: as varreduras
@@ -240,11 +246,16 @@ async def test_r01_cria_funcao_com_201_e_o_tenant_do_escopo(
     O corpo não tem como declará-lo — nenhum schema o aceita —, então a asserção
     prova que a rota o tirou do único lugar de onde pode tirar.
     """
-    resposta = await client.post("/api/v1/job-functions", json={"name": "Garçom"})
+    resposta = await client.post(
+        "/api/v1/job-functions", json={"name": "Garçom", "unit_ids": [_UNIDADE]}
+    )
 
     assert resposta.status_code == HTTPStatus.CREATED
     assert resposta.json()["tenant_id"] == _TENANT
     assert resposta.json()["name"] == "Garçom"
+    # Stage 3.11 — a função nasce habilitada só na unidade pedida (CA1).
+    assert resposta.json()["all_units"] is False
+    assert resposta.json()["unit_ids"] == [_UNIDADE]
 
 
 async def test_r02_lista_o_catalogo_do_tenant_com_200(
@@ -266,7 +277,13 @@ async def test_r03_renomeia_funcao_com_200(client: AsyncClient, ambiente: Ambien
     resposta = await client.patch("/api/v1/job-functions/jf-1", json={"name": "Garçom Sênior"})
 
     assert resposta.status_code == HTTPStatus.OK
-    assert resposta.json() == {"id": "jf-1", "tenant_id": _TENANT, "name": "Garçom Sênior"}
+    assert resposta.json() == {
+        "id": "jf-1",
+        "tenant_id": _TENANT,
+        "name": "Garçom Sênior",
+        "all_units": True,
+        "unit_ids": [],
+    }
 
 
 async def test_r04_remove_funcao_com_204_e_corpo_vazio(
@@ -301,7 +318,9 @@ async def test_nome_repetido_recebe_409_com_o_corpo_de_staff(
     """409 é conflito com estado **já gravado** — a chave existe."""
     ambiente.com_funcao("jf-1", "Garçom")
 
-    resposta = await client.post("/api/v1/job-functions", json={"name": "Garçom"})
+    resposta = await client.post(
+        "/api/v1/job-functions", json={"name": "Garçom", "unit_ids": [_UNIDADE]}
+    )
 
     assert resposta.status_code == HTTPStatus.CONFLICT
     assert resposta.json()["type"] == "staff_error"
@@ -332,7 +351,9 @@ async def test_nome_vazio_recebe_422_com_o_corpo_de_staff(client: AsyncClient) -
     `type: "validation_error"`. Sem ele, a asserção não distinguiria "o domínio
     recusou o nome" de "a forma do corpo não casou o schema".
     """
-    resposta = await client.post("/api/v1/job-functions", json={"name": "   "})
+    resposta = await client.post(
+        "/api/v1/job-functions", json={"name": "   ", "unit_ids": [_UNIDADE]}
+    )
 
     assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert resposta.json()["type"] == "staff_error"
@@ -414,6 +435,103 @@ async def test_as_rotas_de_catalogo_autorizam_sem_nomear_unidade(
         "authenticate",
         "authorize(manage_job_functions,None,None)",
         f"authorize(manage_job_functions,{_TENANT},None)",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.11 — habilitação por unidade na criação e no catálogo (ADR 3.11.0001)
+# ---------------------------------------------------------------------------
+
+
+async def test_ca2_gerente_sem_unit_ids_pede_todas_e_o_guard_nega_cru(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """Sem `unit_ids` o pedido é "todas as unidades", e o ator do ambiente não detém
+    `manage_tenant`. A recusa é do **guard**, sobe crua (L-AG2), e nada é gravado."""
+    with pytest.raises(FakeAuthorizationRejected) as excinfo:
+        await client.post("/api/v1/job-functions", json={"name": "Garçom"})
+
+    assert excinfo.value is ambiente.guard.authorization_error
+    assert ambiente.guard.calls[-1] == f"authorize(manage_tenant,{_TENANT},None)"
+    assert ambiente.fakes.job_functions.list_by_tenant(TenantId(_TENANT)) == ()
+
+
+@pytest.mark.parametrize("corpo", [{"name": "Garçom"}, {"name": "Garçom", "unit_ids": None}])
+async def test_ca2_quem_alcanca_o_restaurante_cria_para_todas(
+    client: AsyncClient, ambiente: Ambiente, corpo: dict[str, object]
+) -> None:
+    """Ausente e `null` são o mesmo pedido; com `manage_tenant` a função vale em todas."""
+    ambiente.guard.grant("manage_tenant", tenant_id=_TENANT)
+
+    resposta = await client.post("/api/v1/job-functions", json=corpo)
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    assert resposta.json()["all_units"] is True
+    assert resposta.json()["unit_ids"] == []
+
+
+async def test_ca2_unidade_que_o_ator_nao_enxerga_e_negada_pelo_guard(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    with pytest.raises(FakeAuthorizationRejected) as excinfo:
+        await client.post(
+            "/api/v1/job-functions", json={"name": "Garçom", "unit_ids": [_UNIDADE, "unit-2"]}
+        )
+
+    assert excinfo.value is ambiente.guard.authorization_error
+    assert ambiente.fakes.job_functions.list_by_tenant(TenantId(_TENANT)) == ()
+
+
+async def test_ca9a_lista_de_unidades_vazia_recebe_422_de_staff(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """`[]` não é "todas": é a habilitação vazia que o domínio recusa."""
+    resposta = await client.post("/api/v1/job-functions", json={"name": "Garçom", "unit_ids": []})
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["type"] == "staff_error"
+    assert "habilitação por unidade inválida" in resposta.json()["detail"]
+
+
+@pytest.mark.parametrize("ruim", ["", "   ", "u\x00"])
+async def test_id_de_unidade_invalido_no_corpo_e_422_antes_de_alcancar_o_guard(
+    client: AsyncClient, ambiente: Ambiente, ruim: str
+) -> None:
+    """ADR 3.6.0002 — o validador recusa antes de o valor virar alvo de autorização."""
+    ambiente.guard.calls.clear()
+
+    resposta = await client.post(
+        "/api/v1/job-functions", json={"name": "Garçom", "unit_ids": [_UNIDADE, ruim]}
+    )
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["type"] == "staff_error"
+    assert ambiente.guard.calls == ["authenticate"]
+
+
+async def test_unidades_repetidas_no_corpo_colapsam_no_conjunto(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """R11 do concept — `unit_ids` é conjunto, como `job_function_ids`."""
+    resposta = await client.post(
+        "/api/v1/job-functions", json={"name": "Garçom", "unit_ids": [_UNIDADE, _UNIDADE]}
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    assert resposta.json()["unit_ids"] == [_UNIDADE]
+
+
+async def test_ca11_o_catalogo_devolve_a_habilitacao_de_cada_funcao(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    ambiente.com_funcao("jf-1", "Cozinheiro")
+    await client.post("/api/v1/job-functions", json={"name": "Garçom", "unit_ids": [_UNIDADE]})
+
+    resposta = await client.get("/api/v1/job-functions")
+
+    assert [(i["name"], i["all_units"], i["unit_ids"]) for i in resposta.json()] == [
+        ("Cozinheiro", True, []),
+        ("Garçom", False, [_UNIDADE]),
     ]
 
 
