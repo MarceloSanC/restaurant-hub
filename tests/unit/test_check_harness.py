@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -212,7 +213,7 @@ def test_cited_files_must_exist_relative_to_skill_or_root(tmp_path: Path) -> Non
     (tmp_path / "scripts" / "gate.py").write_text("", encoding="utf-8")
     body = (
         "Roda `scripts/gate.py` e `scripts/ghost.py`; ver [doc](docs/missing.md), "
-        "[site](https://x.org/a.md), [exemplo](caminho) e [âncora](#topo).\n"
+        "[site](https://x.org/a.md) e [exemplo](caminho).\n"
     )
     skill = _skill_dir(tmp_path, body)
 
@@ -220,6 +221,289 @@ def test_cited_files_must_exist_relative_to_skill_or_root(tmp_path: Path) -> Non
         ".claude/skills/demo::missing:scripts/ghost.py",
         ".claude/skills/demo::missing:docs/missing.md",
     }
+
+
+# --- conteúdo de reference/ e âncora de link (issue #196) ---
+
+_DEMO = ".claude/skills/demo"
+_REAL_SKILLS = Path(__file__).resolve().parents[2] / ".claude" / "skills"
+
+
+def _reference(skill: Path, name: str, text: str) -> Path:
+    ref = skill.parent / "reference" / name
+    ref.parent.mkdir(exist_ok=True)
+    ref.write_text(text, encoding="utf-8")
+    return ref
+
+
+def test_reference_content_and_anchors_happy_path(tmp_path: Path) -> None:
+    """Os três sentidos de âncora, link relativo ao próprio arquivo e script: nada a acusar."""
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "gate.py").write_text("", encoding="utf-8")
+    skill = _skill_dir(
+        tmp_path,
+        "## Fase B\n\nVer [Gate inerte](reference/cat.md#gate-inerte-ou-míope), "
+        "[outro](reference/outro.md) e [início](#fase-b).\n",
+    )
+    (skill.parent / "scripts").mkdir()
+    (skill.parent / "scripts" / "run.py").write_text("", encoding="utf-8")
+    _reference(skill, "outro.md", "# Outro\n")
+    _reference(
+        skill,
+        "cat.md",
+        "# Catálogo\n\n- [Gate inerte ou míope](#gate-inerte-ou-míope)\n\n"
+        "### Gate inerte ou míope\n\n"
+        "Usado na [Fase B](../SKILL.md#fase-b); ver [outro](outro.md#outro).\n"
+        "Roda `scripts/gate.py` (raiz) e `scripts/run.py` (da skill).\n",
+    )
+
+    assert _layout(tmp_path, skill) == {}
+
+
+def test_broken_link_inside_reference_is_reported(tmp_path: Path) -> None:
+    """O link de `reference/` resolve da pasta do próprio arquivo, não da pasta da skill."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "guia.md").write_text("# Guia\n", encoding="utf-8")
+    skill = _skill_dir(tmp_path, "[catálogo](reference/cat.md)\n")
+    _reference(
+        skill,
+        "cat.md",
+        "[volta](../SKILL.md), [sumiu](../SKILL-inexistente.md), [irmão](reference/cat.md) "
+        "e [raiz](docs/guia.md).\n",
+    )
+
+    assert set(_layout(tmp_path, skill)) == {
+        f"{_DEMO}/reference/cat.md::missing:../SKILL-inexistente.md",
+        f"{_DEMO}/reference/cat.md::missing:reference/cat.md",
+    }
+
+
+def test_missing_script_cited_inside_reference_is_reported(tmp_path: Path) -> None:
+    """Script citado só em `reference/` é conferido, bloco de código incluso (é onde aparece)."""
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "gate.py").write_text("", encoding="utf-8")
+    skill = _skill_dir(tmp_path, "[mapa](reference/mapa.md)\n")
+    _reference(
+        skill,
+        "mapa.md",
+        "| critério | onde |\n|---|---|\n| layout | `scripts/gate.py` |\n\n"
+        "```bash\nuv run python scripts/nao_existe.py\n```\n",
+    )
+
+    found = _layout(tmp_path, skill)
+
+    assert found == {
+        f"{_DEMO}/reference/mapa.md::missing:scripts/nao_existe.py": (
+            "cita `scripts/nao_existe.py`, que não existe"
+        )
+    }
+
+
+def test_anchor_from_skill_to_reference_must_match_a_heading(tmp_path: Path) -> None:
+    skill = _skill_dir(
+        tmp_path,
+        "[certo](reference/cat.md#gate-inerte-ou-míope) e [morto](reference/cat.md#gate-inerte)\n",
+    )
+    _reference(skill, "cat.md", "### Gate inerte ou míope\n")
+
+    found = _layout(tmp_path, skill)
+
+    assert found == {
+        f"{_DEMO}::anchor:reference/cat.md#gate-inerte": (
+            "âncora `reference/cat.md#gate-inerte` não casa com título de `cat.md`"
+        )
+    }
+
+
+def test_anchor_from_reference_back_to_skill_must_match_a_heading(tmp_path: Path) -> None:
+    skill = _skill_dir(tmp_path, "## Fase B\n\n[catálogo](reference/cat.md)\n")
+    _reference(skill, "cat.md", "[certo](../SKILL.md#fase-b) e [morto](../SKILL.md#fase-z)\n")
+
+    assert set(_layout(tmp_path, skill)) == {f"{_DEMO}/reference/cat.md::anchor:../SKILL.md#fase-z"}
+
+
+def test_internal_anchor_must_match_a_heading_of_the_same_file(tmp_path: Path) -> None:
+    skill = _skill_dir(tmp_path, "## Topo\n\n[certo](#topo) e [morto](#fundo)\n")
+
+    assert set(_layout(tmp_path, skill)) == {f"{_DEMO}::anchor:#fundo"}
+
+
+def test_table_of_contents_with_a_false_anchor_is_reported(tmp_path: Path) -> None:
+    """Sumário que cita título inexistente: o `has_toc` conta o link, não confere o alvo."""
+    skill = _skill_dir(tmp_path, "[catálogo](reference/cat.md)\n")
+    _reference(
+        skill,
+        "cat.md",
+        "# Catálogo\n\n## Sumário\n\n- [Literal ≠ espírito](#literal--espírito)\n"
+        "- [Renomeado](#nome-antigo)\n\n### Literal ≠ espírito\n\n### Nome novo\n",
+    )
+
+    assert set(_layout(tmp_path, skill)) == {f"{_DEMO}/reference/cat.md::anchor:#nome-antigo"}
+
+
+def test_anchor_of_a_missing_file_reports_only_the_file(tmp_path: Path) -> None:
+    skill = _skill_dir(tmp_path, "[morto](reference/sumiu.md#titulo)\n")
+
+    assert set(_layout(tmp_path, skill)) == {f"{_DEMO}::missing:reference/sumiu.md"}
+
+
+def test_fenced_code_block_holds_no_link_and_no_heading(tmp_path: Path) -> None:
+    """Template de relatório em bloco cercado: o link de exemplo não conta, o título também não."""
+    body = (
+        "[a](#titulo-do-template)\n\n"
+        "```markdown\n## Titulo do template\n[arquivo](pasta/sumiu.md) [x](#nao-existe)\n```\n\n"
+        "~~~\n[arquivo](pasta/sumiu-til.md)\n~~~\n\n"
+        "1. passo de lista:\n\n     ```\n     [arquivo](pasta/sumiu-lista.md)\n     ```\n"
+    )
+    skill = _skill_dir(tmp_path, body)
+
+    assert set(_layout(tmp_path, skill)) == {f"{_DEMO}::anchor:#titulo-do-template"}
+
+
+@pytest.mark.parametrize(
+    ("block", "inside"),
+    [
+        # só a mesma marca, de tamanho igual ou maior e sem mais nada na linha, fecha o bloco
+        pytest.param("```\n```bash\n{link}\n```\n", True, id="abertura-nao-fecha"),
+        pytest.param("````\n```\n{link}\n````\n", True, id="cerca-menor-nao-fecha"),
+        pytest.param("```\n~~~\n{link}\n```\n", True, id="outra-marca-nao-fecha"),
+        pytest.param("```\n{link}\n", True, id="sem-fechamento-vai-ate-o-fim"),
+        pytest.param("```\ncódigo\n```\n{link}\n", False, id="depois-do-fechamento"),
+        pytest.param("```\ncódigo\n`````\n{link}\n", False, id="fechamento-maior"),
+        pytest.param("```código``` em linha\n{link}\n", False, id="codigo-em-linha"),
+    ],
+)
+def test_fence_boundaries(tmp_path: Path, block: str, inside: bool) -> None:
+    skill = _skill_dir(tmp_path, block.replace("{link}", "[x](pasta/sumiu.md)"))
+
+    assert (_layout(tmp_path, skill) == {}) is inside
+
+
+def test_placeholder_external_and_non_markdown_targets_do_not_fail(tmp_path: Path) -> None:
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "gate.py").write_text("", encoding="utf-8")
+    body = (
+        "[exemplo](caminho), [exemplo](caminho#secao), [site](https://x.org/a.md#frag), "
+        "[mail](mailto:a@b.c), [linha](scripts/gate.py#L10), [vazio](#) e [nada]().\n"
+    )
+    skill = _skill_dir(tmp_path, "[r](reference/r.md)\n" + body)
+    _reference(skill, "r.md", body)
+
+    assert _layout(tmp_path, skill) == {}
+
+
+def test_percent_encoded_anchor_resolves(tmp_path: Path) -> None:
+    skill = _skill_dir(tmp_path, "## Gate míope\n\n[a](#gate-m%C3%ADope) [b](#gate-m%C3%ADopes)\n")
+
+    assert set(_layout(tmp_path, skill)) == {f"{_DEMO}::anchor:#gate-m%C3%ADopes"}
+
+
+@pytest.mark.parametrize(
+    ("title", "anchor"),
+    [
+        # Pares (título do repo, id que o GitHub gerou), lidos do HTML de
+        # `gh api repos/<repo>/contents/<arquivo> -H "Accept: application/vnd.github.html+json"`.
+        ("Literal ≠ espírito", "literal--espírito"),
+        ("Gate inerte ou míope", "gate-inerte-ou-míope"),
+        ("Definido mas não plugado (dead-config)", "definido-mas-não-plugado-dead-config"),
+        ("Lei universal, representante estreito", "lei-universal-representante-estreito"),
+        (
+            "Referência da stage-audit — catálogo de falsos verdes",
+            "referência-da-stage-audit--catálogo-de-falsos-verdes",
+        ),
+        (
+            "Fase D — Judgment (a parte que NÃO se mecaniza)",
+            "fase-d--judgment-a-parte-que-não-se-mecaniza",
+        ),
+        (
+            "2. O que é → o que faz no sistema → por que importa",
+            "2-o-que-é--o-que-faz-no-sistema--por-que-importa",
+        ),
+        ("DON'T", "dont"),
+        (
+            "🚦 Iniciar uma Stage (antes de qualquer passo do RUNBOOK)",
+            "-iniciar-uma-stage-antes-de-qualquer-passo-do-runbook",
+        ),
+        # o seletor de variação do emoji (U+FE0F, marca combinante) fica no id
+        (
+            "✍\N{VARIATION SELECTOR-16} `git commit -m`",
+            "\N{VARIATION SELECTOR-16}-git-commit--m",
+        ),
+        (
+            "Identificador da Stage — `stage_id` × número",  # noqa: RUF001 — título real
+            "identificador-da-stage--stage_id--número",
+        ),
+        (
+            "(a) Commits de Task — Conventional Commits + `[N.M/task-NN]` + `Refs #<issue>`",
+            "a-commits-de-task--conventional-commits--nmtask-nn--refs-issue",
+        ),
+        # CHANGELOG do keep-a-changelog (link por referência no título), mesma medição
+        ("[1.1.1] - 2023-03-05", "111---2023-03-05"),
+        # da doc do GitHub ("Markup formatting is removed"), sem título no repo para medir
+        ("[Guia](docs/guia.md#topo) rápido", "guia-rápido"),
+    ],
+)
+def test_slug_matches_the_anchor_github_generates(title: str, anchor: str) -> None:
+    assert ch._slug(title) == anchor
+
+
+def test_heading_anchors_number_repeated_titles_and_skip_what_is_not_a_title() -> None:
+    text = (
+        "---\n# comentário do frontmatter\nname: x\n---\n"
+        "# Added\n\n## Added ##\n\n### Added\n\n#sem-espaço\n\n    # código indentado\n\n"
+        "```\n# comentário de shell\n```\n"
+    )
+
+    assert ch.heading_anchors(text) == {"added", "added-1", "added-2"}
+
+
+def _copy_real_skill(name: str, root: Path) -> Path:
+    skill = root / ".claude" / "skills" / name / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    (skill.parent / "reference").mkdir()
+    for source in (_REAL_SKILLS / name).rglob("*.md"):
+        target = skill.parent / source.relative_to(_REAL_SKILLS / name)
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    return skill
+
+
+def _anchor_findings(root: Path, skill: Path) -> set[str]:
+    return {key for key in _layout(root, skill) if "::anchor:" in key}
+
+
+@pytest.mark.parametrize(("name", "floor"), [("stage-audit", 20), ("issue-audit", 16)])
+def test_real_audit_skills_anchors_are_all_checked(tmp_path: Path, name: str, floor: int) -> None:
+    """Piso sobre as skills reais: sem os títulos do catálogo, cada âncora para ele reprova.
+
+    O `test_real_harness_passes` fica verde tanto com as âncoras conferidas quanto com o
+    check cego. Este mede quantas ele enxerga: a cópia intacta não acusa nenhuma, e a
+    cópia com o catálogo sem títulos acusa as do `SKILL.md` e as do sumário (26 na
+    `stage-audit` e 22 na `issue-audit` em 2026-11-16; o piso deixa folga para edição).
+    """
+    skill = _copy_real_skill(name, tmp_path)
+    catalog = skill.parent / "reference" / "falso-verde.md"
+    assert _anchor_findings(tmp_path, skill) == set()
+
+    text = catalog.read_text(encoding="utf-8")
+    catalog.write_text(re.sub(r"(?m)^#+ ", "", text), encoding="utf-8")
+    found = _anchor_findings(tmp_path, skill)
+
+    from_skill = {key for key in found if key.startswith(f".claude/skills/{name}::")}
+    assert len(found) >= floor
+    assert from_skill and found - from_skill  # do SKILL.md e do sumário do próprio catálogo
+
+
+@pytest.mark.parametrize("name", ["stage-audit", "issue-audit"])
+def test_renaming_a_real_catalog_title_is_reported(tmp_path: Path, name: str) -> None:
+    """Critério da #196: renomear um título de conceito do catálogo reprova."""
+    skill = _copy_real_skill(name, tmp_path)
+    catalog = skill.parent / "reference" / "falso-verde.md"
+    lines = catalog.read_text(encoding="utf-8").splitlines()
+    index = next(i for i, line in enumerate(lines) if line.startswith("### "))
+    lines[index] += " renomeado"
+    catalog.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    assert _anchor_findings(tmp_path, skill)
 
 
 def test_agent_skills_must_exist(tmp_path: Path) -> None:
