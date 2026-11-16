@@ -687,8 +687,8 @@ apaga escala na v1.
 - **`constraint_name`/`translate` em três BCs.** Candidata: issue avulsa de refactor para
   `shared/infrastructure/database`.
 - **Função habilitada por unidade (3.11) × catálogo do tenant (L-ST5)**: `DeclareDemand`
-  aceita função do tenant não habilitada na unidade. Candidata: 4.5, ou a Stage que integrar
-  a 3.11 à escala.
+  aceita função do tenant não habilitada na unidade, e a `StaffReadFacade` lê o catálogo do
+  tenant sem a habilitação. Dono: issue #209 (aberta pela 3.11; auditoria da 4.4, 2026-11-16).
 - **Valores que o fake aceita e o Postgres recusa**: id interno com byte NUL (o domínio só
   recusa vazio) e `DemandQuantity` acima do `INTEGER`. São entrada do cliente; candidata: 4.5
   (validação de id e de limites na borda, junto do formato UUID já apontado pela 4.3).
@@ -700,7 +700,7 @@ apaga escala na v1.
 
 ### Contrato — fake ≡ real
 
-- [ ] **CA01** — a suíte `test_schedule_repository_laws.py` (L-SC1 a L-SC8) roda sobre
+- [x] **CA01** — a suíte `test_schedule_repository_laws.py` (L-SC1 a L-SC8) roda sobre
       `("fake", "postgres")` com um corpo só; o leitor da trilha da fixture lê a tabela pelo
       codec. A suíte ganha, para as duas implementações: (a) fidelidade **depois de `save`**
       que altera, remove e reordena nos três níveis (faixa do meio removida, intervalo da
@@ -711,16 +711,16 @@ apaga escala na v1.
       (d) `add` com id de escala repetido **e** período cruzado ⇒ `IdentifierInUseError`, e com
       período cruzado **e** id interno em uso ⇒ `SchedulePeriodTakenError`
       `[contrato; fake local, real no Actions]`.
-- [ ] **CA02** — a suíte de L-CF1 roda sobre `("fake", "postgres")` `[contrato, Actions]`.
-- [ ] **CA03** — a suíte de L-ST1 a L-ST5 roda sobre `("fake", "postgres")`, o real sendo o
+- [x] **CA02** — a suíte de L-CF1 roda sobre `("fake", "postgres")` `[contrato, Actions]`.
+- [x] **CA03** — a suíte de L-ST1 a L-ST5 roda sobre `("fake", "postgres")`, o real sendo o
       `LocalStaffReadAdapter` sobre a `StaffReadFacade` sobre os repositórios Postgres de
       staff, com o mesmo mundo semeado nas duas `[contrato, Actions]`.
-- [ ] **CA04** — nenhum módulo de lei de scheduling ramifica por implementação, e a tupla de
+- [x] **CA04** — nenhum módulo de lei de scheduling ramifica por implementação, e a tupla de
       implementações contém `"postgres"` (teste AST, sem banco) `[unit]`.
 
 ### Trilha de auditoria (o DoD)
 
-- [ ] **CA05** — cada `add` e cada `save` aceito grava **exatamente uma** linha em
+- [x] **CA05** — cada `add` e cada `save` aceito grava **exatamente uma** linha em
       `schedule_changes`, com `seq` 1, 2, 3…, autor, instante aware em UTC, versão anterior,
       versão resultante, operações em ordem e aceites `[integração]`. O codec: (a) cada um dos
       11 tipos de operação e `Violation` vão e voltam com **igualdade e tipo** conferidos campo
@@ -733,14 +733,14 @@ apaga escala na v1.
       alocação não está no estado, e — com o mesmo `assignment_id` alocado, desalocado e
       alocado de novo no lote — `null` no primeiro e a marca no último), e o leitor ignora
       chave desconhecida `[unit]`.
-- [ ] **CA06** — recusa e falha não gravam nada: versão vencida, endereço inexistente, id em
+- [x] **CA06** — recusa e falha não gravam nada: versão vencida, endereço inexistente, id em
       uso e período tomado deixam estado e trilha como estavam; uma falha provocada **no
       banco, no `INSERT` da trilha** (`previous_version` fora do `INTEGER`), depois de os
       comandos de escrita da raiz e das filhas terem rodado (asseridos), desfaz o estado — no
       `add` (a escala não existe) e no `save` (a escala e as filhas antigas continuam lá)
       `[integração]`. O módulo do repositório não tem `UPDATE` nem
       `DELETE` sobre `schedule_changes` (varredura) `[unit]`.
-- [ ] **CA07** — concorrência com intercalação determinística: o escritor A é parado depois
+- [x] **CA07** — concorrência com intercalação determinística: o escritor A é parado depois
       de escrever a raiz e antes do commit, B é observado **esperando** em `pg_locks` (lock não
       concedido), A é liberado. Na mesma unidade B espera o lock `advisory`: dois `save` sobre
       a mesma versão ⇒ A grava, B `ScheduleVersionConflictError`, e a trilha ganha uma linha;
@@ -753,25 +753,25 @@ apaga escala na v1.
 
 ### Banco
 
-- [ ] **CA08** — `tables.py` declara as seis tabelas com toda constraint nomeada, os tipos de
+- [x] **CA08** — `tables.py` declara as seis tabelas com toda constraint nomeada, os tipos de
       §5.12, nenhuma FK para fora do `MetaData`, e a exclusion constraint compila para o SQL de
       D-DISJOINT `[unit]`.
-- [ ] **CA09** — as garantias do banco valem sem o adapter, contra o schema **migrado**:
+- [x] **CA09** — as garantias do banco valem sem o adapter, contra o schema **migrado**:
       `INSERT` direto de período que cruza ⇒ violação de `ex_schedules_unit_days_disjoint`;
       período adjacente e outra unidade passam; id interno repetido na unidade ⇒ violação da
       PK da filha; filha apontando para pai de outra escala ⇒ violação de FK; e as bordas de
       cada `CHECK` (`days` 0, 1, 31 e 32; `version` 0; `start_at = end_at`; intervalo −1;
       quantidade −1 e 0; intervalo de alocação nulo; modo, direção e dia da semana
       desconhecidos; limites nas bordas) `[integração]`.
-- [ ] **CA10** — a migration cria as seis tabelas e a extensão; o `downgrade` até a revisão
+- [x] **CA10** — a migration cria as seis tabelas e a extensão; o `downgrade` até a revisão
       anterior remove as seis tabelas e **não** remove a extensão (ela pode ter existido
       antes); os nomes de constraint e de índice do schema migrado são os de `tables.py`
       `[integração]`.
-- [ ] **CA11** — leitura em snapshot único, nas **três** leituras de agregado: um gancho
+- [x] **CA11** — leitura em snapshot único, nas **três** leituras de agregado: um gancho
       dispara um `save` comitado por outra conexão exatamente uma vez, entre o `SELECT` da raiz
       e o das filhas (asserido); a projeção inteira devolvida é a do estado anterior ao `save`,
       e a leitura seguinte devolve a do estado novo `[integração]`.
-- [ ] **CA12** — fidelidade além da lei, comparada por **projeção em primitivos** (a igualdade
+- [x] **CA12** — fidelidade além da lei, comparada por **projeção em primitivos** (a igualdade
       das entidades é por id e não compara conteúdo), depois de `add` e depois de `save`: ordem
       das tuplas nos três níveis com três itens em ordem diferente da dos ids; `start`, `end`
       e intervalo ≠ 0 da faixa; faixa que cruza a meia-noite e faixa que termina depois do
@@ -782,7 +782,7 @@ apaga escala na v1.
 
 ### Configuração
 
-- [ ] **CA13** — `find_settings` reidrata, campo a campo, a linha gravada: um caso por política
+- [x] **CA13** — `find_settings` reidrata, campo a campo, a linha gravada: um caso por política
       em que **só ela** difere das demais (habilitação e modo), e os quatro limites distintos
       dois a dois, para coluna trocada não passar; tenant sem linha ⇒ `None`; toda coluna de
       `scheduling_settings` é `NOT NULL`; linha que a `CHECK` aceita e o domínio recusa (corte
@@ -790,28 +790,28 @@ apaga escala na v1.
 
 ### Staff
 
-- [ ] **CA14** — `StaffReadFacade`: as quatro leituras devolvem primitivos; `list_records` e
+- [x] **CA14** — `StaffReadFacade`: as quatro leituras devolvem primitivos; `list_records` e
       `list_records_of_user` incluem inativos e não cruzam unidade nem tenant; carga fixa vira
       `Decimal`, sob demanda vira `None`; a fachada não recebe ator `[unit, com os fakes de
       staff]`.
-- [ ] **CA15** — `LocalStaffReadAdapter` traduz para os tipos de scheduling e importa de staff
+- [x] **CA15** — `LocalStaffReadAdapter` traduz para os tipos de scheduling e importa de staff
       só a fachada; o `.importlinter` tem **exatamente** os dois pares; os testes de
       independência de staff e de scheduling asserem a lista exata e a forma da aresta
       `[unit + import-linter]`.
 
 ### Wiring e gates
 
-- [ ] **CA16** — o contêiner expõe os três campos de scheduling, montados sobre os adapters
+- [x] **CA16** — o contêiner expõe os três campos de scheduling, montados sobre os adapters
       reais, o mesmo `Engine` e as mesmas instâncias de repositório de staff dos use cases de
       staff; só o composition root importa os adapters de scheduling (varredura com caso
       plantado); **nenhum** provedor de `build_http_wiring` entrega um dos três campos, e o
       detector reprova um provedor plantado `[unit]`.
-- [ ] **CA17** — os use cases da 4.3 sobre os adapters reais (guard fake), contra Postgres:
+- [x] **CA17** — os use cases da 4.3 sobre os adapters reais (guard fake), contra Postgres:
       criar, publicar um lote com aceite de `warn`, ler a escala e "minha escala"; a trilha
       tem uma linha por escrita, com o autor do escopo `[integração]`.
-- [ ] **CA18** — `make check` verde no run do Actions do head do PR; cobertura ≥ 90% em cada
+- [x] **CA18** — `make check` verde no run do Actions do head do PR; cobertura ≥ 90% em cada
       arquivo de `src/` tocado.
-- [ ] **CA19** — documentação coerente no fechamento: as lacunas da tabela do doc de domínio
+- [x] **CA19** — documentação coerente no fechamento: as lacunas da tabela do doc de domínio
       endereçadas à 4.4 levam a marca canônica no commit que marca a Stage `done`, e as que
       saíram dela apontam para as issues #194 e #198; as três issues (#194, #198, #199) têm
       linha no roadmap; o bloco 4.4 do roadmap ganha a nota de fechamento com o que a 4.5
