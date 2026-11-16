@@ -480,4 +480,26 @@ a 06 e a 09 editam o mesmo conftest e a mesma guarda, nessa ordem.
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-11-16 — [decision] Fase 3A — forks P delegados — Claude (orquestração autônoma)
+**Contexto:** três lacunas da 4.4 são de produto ou de escopo (concept §7).
+**Decisão:** **P delegado** pelo sponsor ao orquestrador, com a opção recomendada em cada uma — D-RET (trilha sem expurgo na v1), D-EMP (o funcionário vê só a escala vigente) e D-REVERSE (a guarda reversa de staff vai para a issue #194).
+**Razão:** concept §7 D-RET, D-EMP, D-REVERSE; ADRs 4.4.0002 e 4.4.0004.
+
+### 2026-11-16 — [decision] Task 02 — exclusion constraint por `literal_column` — Claude
+**Contexto:** o technical sugeria `func.daterange(first_day, first_day + days)`; dentro da declaração da `Table` as colunas ainda não existem como objetos.
+**Decisão:** `literal_column("daterange(first_day, first_day + days)")`. O DDL compilado é o mesmo de D-DISJOINT, e é o DDL que CA08 trava.
+**Razão:** reversível e sem efeito no schema.
+
+### 2026-11-16 — [deviation] Checkpoint C (bloco 1, Tasks 02–04) — três achados corrigidos — Claude
+**Contexto:** revisor independente sobre `4f11144..6da24fe`.
+**Disposições:** (1) blocker — o caso "envolve" de dias disjuntos não cruzava a escala semeada: corrigido em `6c75896`; (2) major — `ix_schedule_assignments_demand` contradizia o ADR 4.4.0001 ("only one non-key index"): índice removido de `tables.py` e da `0006` em `37d13be`; (3) minor — o teste de "sem default de servidor" mandava `NULL` explícito: passou a omitir a coluna e a conferir `column_default` no catálogo, em `6c75896`.
+
+### 2026-11-16 — [deviation] Task 03-fix — `tests/integration/test_migration_env.py` — Claude
+**Contexto:** o caso MySQL do teste de dialeto offline rodava `upgrade head --sql`, e a `0006` usa construções só do Postgres (exclusion constraint, `JSONB`, extensão), que o compilador MySQL não renderiza (run 43951779882).
+**Razão:** o lado MySQL para na `0004`; o lado Postgres segue até `head`. Arquivo fora da lista da Task 03, mesma mudança (`0308a96`).
+
+### 2026-11-16 — [deviation] Checkpoint C (bloco 2, Tasks 05–07) — dois blockers corrigidos — Claude
+**Contexto:** revisor independente sobre `0308a96..234e4a9`.
+**Disposições:** os dois blockers tinham a mesma causa — o `save` de `test_falha_no_insert_da_trilha_desfaz_o_save` e o disparado por `test_save_concorrente_entre_raiz_e_filhas_nao_rasga_o_agregado` usavam `expected_version` 1 sobre escala gravada na versão 2, e caíam no conflito de versão antes do ponto medido. Corrigidos em `aa2f256`. Nenhum achado no adapter de produção.
+
 <!-- END: post-execution -->
