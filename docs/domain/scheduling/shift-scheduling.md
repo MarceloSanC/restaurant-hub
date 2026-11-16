@@ -256,6 +256,7 @@ da demanda** e pertence a scheduling (`workforce.md` §3.2).
   `.importlinter` › `[importlinter:contract:bc-independence]`; §3.10). Função é escopo do **tenant** (`workforce.md` §3.2): qualquer
   função pode ser demandada em qualquer unidade. Habilitação por unidade é a issue #41, não
   decidida (`roadmap.md` §Stage 3.4 › `non_goals`; ADR 3.4.0008 › "It is the foundation issue #41 will need").
+  **Nota (2026-11-16):** a issue #41 foi decidida e entregue em staff pela Stage 3.11 (`workforce.md` §3.2 › "Nota (2026-11-16) — habilitação por unidade"): a função segue do tenant e passou a valer em todas as unidades ou num conjunto delas. Scheduling **ainda não consulta** a habilitação — a demanda continua aceitando qualquer função do tenant; decidir se a demanda de uma unidade se restringe às funções habilitadas nela fica para uma Stage do Step 4.
 - **Cobertura** = `alocados ÷ N`. Cobertura **< 100% é estado legítimo** da escala vigente
   ("vagas não preenchíveis", "vagas descobertas" — `roadmap.md` §Stage 5.1 › "Descrição humana"; §Stage 5.2 › `definition_of_done`; `overview.md` §3 › "métricas de cobertura da demanda").
   **`N` é alvo, não teto:** cobertura **> 100%** também é legítima — a alocação excedente é

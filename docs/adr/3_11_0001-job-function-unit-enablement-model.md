@@ -106,6 +106,16 @@ The write is a port operation of its own (`update_enablement`, law `L-JF7`), sep
 from the rename's `update` (`L-JF2`, which keeps writing only the name): a rename racing
 a change of units must not write the old enablement back.
 
+**Declared limit — two concurrent changes of the same function.** The difference is
+authorized against the enablement that was **read**, and the write replaces it whole.
+Two changes that interleave (read, read, write, write) leave the second writer's set in
+place, including for units that only the first writer was authorized to change: with
+the function in `{A}`, an owner widening to `{A, B}` and a manager of A re-sending
+`{A}` can end with B removed by an actor with no reach over B. Staff has no optimistic
+locking (ADR 3.3.0006), and closing this needs a conditional write on the enablement
+read — the shape ADR 0.0.0010 gave the login link. Not done here; finding in the
+technical §7.
+
 **6. Listing.** `GET /job-functions` stays the restaurant's whole catalogue — the
 function belongs to the restaurant, and the catalogue permission is tenant-wide — and
 each item now says where it is enabled. `GET /units/{unit_id}/job-functions` is new and
@@ -171,7 +181,10 @@ before and after the migration is the same for every existing function.
 
 ### Neutral / trade-offs accepted
 - Renaming and deleting a function keep the tenant-wide authorization of ADR 3.4.0008:
-  a manager can still rename a function enabled only in another unit. Non-goal of this
+  a manager can still rename a function enabled only in another unit — and can delete
+  one that no record holds and recreate it for his own unit, which removes it from a
+  unit he does not see by another path. So "cannot remove a unit he does not see"
+  holds for the change of units, not for the catalogue as a whole. Non-goal of this
   Stage; finding in the technical §7.
 
 ## Implementation notes

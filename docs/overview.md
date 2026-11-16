@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, restaurantes, escala, saas, hub, multi-tenant]
 status: done
 created_at: 2026-07-10
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 project_name: restaurant-hub
 stakeholders:
   - Sponsor / Desenvolvedor / Admin da plataforma: Marcelo (Whaka)
@@ -39,6 +39,7 @@ Escala em planilha/papel. O piloto já opera com **Control ID** (ponto por recon
 - Funcionário cadastrado pelo gerente; **login opcional** ("criar login para este funcionário") via convite por e-mail ou senha provisória entregue em mãos; perfil de jornada **fixa** (carga horária determinada) ou **sob demanda** (extra/gerente/dono), com preferência de turno; períodos de **indisponibilidade** na página do funcionário (cobre férias/atestados na v1).
   > **Nota (2026-09-26, Stage 3.5):** a "senha provisória entregue em mãos" foi implementada como o **mesmo link de definição de senha do convite, entregue em mãos** (impresso/QR/mensagem), com prazo próprio — o gestor nunca conhece a senha da pessoa ([ADR 3.5.0002](./adr/3_5_0002-pending-account-and-setup-link-as-in-hand-credential.md); regras em [`workforce.md` §3.8](./domain/staff/workforce.md)).
 - Escala com período configurável (default **semanal**): por dia, habilitam-se faixas de horário livres e define-se a **demanda por função × faixa** (ex.: qua = 1 cozinheiro 16h–00h + 1 assistente 18h–23h + 2 atendentes 16h–00h). Funções são criadas e parametrizadas pelo gerente — nada é pré-determinado.
+  > **Nota (2026-11-16, Stage 3.11):** a função continua **do restaurante** ("customizável por restaurante", §9) e passou a ter **habilitação por unidade** — vale em todas as unidades ou num conjunto delas. Cada unidade lista só as funções habilitadas nela; o gerente cria e habilita função nas unidades que enxerga, e "todas as unidades" exige alcance sobre o restaurante inteiro. É refinamento, não reversão: o dono da função não mudou ([ADR 3.11.0001](./adr/3_11_0001-job-function-unit-enablement-model.md); regras em [`workforce.md` §3.2](./domain/staff/workforce.md)).
 - **Auto-preenchimento**: respeita carga, preferência de turno e indisponibilidade; prioriza jornada fixa e usa sob demanda como transbordo quando os fixos estouram; busca **justiça distributiva** com base no histórico (rodízio de fins de semana/turnos ruins). Sem otimização de custo na v1.
 - **Validações parametrizáveis por restaurante** (modo bloquear ou avisar): sobreposição de alocação, descanso entre jornadas, tetos de horas etc. Avisos ao vivo durante a edição; o editor corrige ou aceita conscientemente.
 - Publicação: **salvar = publicar**; e-mail opcional a cada atualização (opção "sempre notificar alterações na escala"); **imagem/tabela gerada sob demanda** (botão gerar/imprimir) para divulgação manual; funcionário com login consulta a própria escala.
