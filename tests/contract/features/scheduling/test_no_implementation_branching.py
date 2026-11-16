@@ -25,6 +25,9 @@ from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_config_re
 from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository import (
     PostgresScheduleRepository,
 )
+from restaurant_hub.features.scheduling.adapters.out.staff.local_staff_read_adapter import (
+    LocalStaffReadAdapter,
+)
 from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
     ScheduleConfigRepository,
     SchedulingSettings,
@@ -32,9 +35,13 @@ from restaurant_hub.features.scheduling.application.ports.out.schedule_config_re
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
     ScheduleRepository,
 )
+from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
+    StaffReadPort,
+)
 from tests.contract.features.scheduling.conftest import (
     CONFIG_IMPLEMENTATIONS,
     SCHEDULE_IMPLEMENTATIONS,
+    STAFF_READ_IMPLEMENTATIONS,
 )
 
 pytestmark = pytest.mark.contract
@@ -163,3 +170,13 @@ def test_o_ramo_postgres_de_schedule_repo_e_o_adapter_real(
     schedule_repo: ScheduleRepository,
 ) -> None:
     assert isinstance(schedule_repo, PostgresScheduleRepository)
+
+
+def test_mundo_roda_sobre_o_fake_e_o_postgres() -> None:
+    assert set(STAFF_READ_IMPLEMENTATIONS) == {"fake", "postgres"}
+
+
+@pytest.mark.parametrize("mundo", ["postgres"], indirect=True)
+def test_o_ramo_postgres_de_mundo_e_o_adapter_sobre_a_fachada(mundo: StaffReadPort) -> None:
+    """O real é o `LocalStaffReadAdapter` sobre a fachada sobre os repositórios Postgres."""
+    assert isinstance(mundo, LocalStaffReadAdapter)

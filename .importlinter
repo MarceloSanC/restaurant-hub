@@ -298,6 +298,11 @@ forbidden_modules =
 # — e um BC **fora** da lista não violaria nada, que é por que
 # tests/unit/features/staff/test_bc_independence.py cobra esta lista contra a
 # pasta features/ desde a 4.1.
+#
+# Stage 4.4 (ADR 4.4.0004): o SEGUNDO par, na mesma forma — scheduling lê staff pelo
+# `LocalStaffReadAdapter` (`scheduling/adapters/out/staff/`), que importa só a
+# `StaffReadFacade` de `staff.application.facade`. Os dois `test_bc_independence.py`
+# (staff e scheduling) asserem a lista EXATA dos dois pares.
 [importlinter:contract:bc-independence]
 name = bounded contexts identity, scheduling e staff sao independentes (LAYOUT §1)
 type = independence
@@ -307,4 +312,5 @@ modules =
     restaurant_hub.features.staff
 ignore_imports =
     restaurant_hub.features.staff.adapters.out.identity.* -> restaurant_hub.features.identity.application.facade
+    restaurant_hub.features.scheduling.adapters.out.staff.* -> restaurant_hub.features.staff.application.facade
 unmatched_ignore_imports_alerting = error
