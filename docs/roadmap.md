@@ -142,7 +142,7 @@ graph LR
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
-| `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
+| `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | done | `4.3-scheduling-application` |
 | `4.5-scheduling-http` | API do editor e consulta de escala | adapters/inbound/http | draft | `4.4-scheduling-persistence`, `3.10-login-link-management` |
 | `4.6-schedule-notifications` | Notificação de publicação por e-mail | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `4.7-schedule-image` | Imagem/tabela da escala sob demanda | vertical (scheduling) | draft | `4.5-scheduling-http` |
@@ -249,9 +249,12 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#180](https://github.com/MarceloSanC/restaurant-hub/issues/180) | Marca fechada "fechada pela Stage N.M" não é conferida contra o roadmap | shared | tooling | done | #158 |
 | [#185](https://github.com/MarceloSanC/restaurant-hub/issues/185) | Dois `stage 3.7: complete` no histórico: o `check_stage_deps` não distingue qual Stage o commit reservado fechou | shared | tooling | open | — |
 | [#190](https://github.com/MarceloSanC/restaurant-hub/issues/190) | Subir o teto da orquestração autônoma de 3 para 6 worktrees | shared | docs + .claude | done | — |
+| [#194](https://github.com/MarceloSanC/restaurant-hub/issues/194) | Dar dono à guarda de remoção definitiva por port reverso e ao reparo do registro ausente | staff | docs (roadmap) | open | `4.4-scheduling-persistence` |
 | [#195](https://github.com/MarceloSanC/restaurant-hub/issues/195) | Atualizar os textos de "repo privado" e decidir os Required Status Checks agora que o repo é público | shared | docs + .claude + .github | open | — |
 | [#196](https://github.com/MarceloSanC/restaurant-hub/issues/196) | `check_harness` não lê o conteúdo de `reference/` nem resolve âncora de link de skill | shared | tooling | done | #162 |
 | [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
+| [#198](https://github.com/MarceloSanC/restaurant-hub/issues/198) | Fuso por unidade em `Unit.timezone` (ADR 4.1.0005) | identity | domain + adapters/out | open | `4.4-scheduling-persistence` |
+| [#199](https://github.com/MarceloSanC/restaurant-hub/issues/199) | Write skew de fronteira entre publicações em semanas adjacentes | scheduling | application + adapters/out | open | `4.4-scheduling-persistence` |
 | [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | open | #163, #162 |
 | [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | open | #163 |
 | [#205](https://github.com/MarceloSanC/restaurant-hub/issues/205) | Decidir a extração da emissão do token de convite, hoje em cinco use cases de identity | identity | application | open | #184 |
@@ -262,6 +265,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | open | — |
 | [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | open | #184 |
 | [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
+| [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
+| [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -1848,6 +1853,26 @@ gate_mode: strict
 skills_hint: [repository-pattern, composition-root]
 ```
 
+> Nota (2026-11-16): fechamento da Stage 4.4 — o que a 4.5 herda e o que ficou fora.
+> **Divergências do bloco:** a migration é `0006_scheduling.py` (a `0003` é de staff e a `0005` é
+> da 3.11, sobre a qual a `0006` foi encadeada); `arquivos_a_modificar` cresceu (env do Alembic,
+> lista de limpeza da suíte, testes de migration, `.importlinter`, os dois
+> `test_bc_independence.py`, a suíte de contrato de scheduling, o docstring do port de escala,
+> `docs/LAYOUT.md` §6); e nasceu um arquivo em staff, a `StaffReadFacade`
+> (`features/staff/application/facade.py`), lado fornecedor da aresta scheduling → staff (ADR
+> 4.4.0004).
+> **A 4.5 herda:** o adapter do `AccessGuard` de scheduling em `adapters/out/identity/`, o par
+> scheduling → identity no `bc-independence`, o wiring dos sete use cases sobre os três campos
+> provisórios do contêiner (`scheduling_schedules`, `scheduling_settings`,
+> `scheduling_staff_read`) e a remoção desses campos (LAYOUT §6); a forma dos instantes na borda
+> HTTP; e a validação de entrada que o fake aceita e o Postgres recusa (id com byte NUL,
+> quantidade acima do `INTEGER`).
+> **Antes de a edição da escala ir a produção**, a guarda de remoção definitiva por port reverso
+> e o reparo do registro ausente têm de fechar (issue #194): até lá, apagar um registro com
+> alocação gravada faz a escala recusar com `MissingStaffRecordsError`, e apagar uma função
+> demandada deixa a demanda sem nome. Fora da Stage, com dono: `Unit.timezone` (#198) e o write
+> skew de fronteira (#199).
+
 #### Stage 4.5 — `4.5-scheduling-http`
 
 **Descrição humana:** endpoints do editor (demanda, alocações, avaliação ao vivo, publicar), calendário dia/semana/mês, escalas anteriores e "minha escala" (RBAC: funcionário só vê a própria); e2e do fluxo completo.
@@ -2039,6 +2064,13 @@ skills_hint: [task-ordering-hex, fastapi-thin-adapter]
 #### Stage 6.1 — `6.1-hosting-study`
 
 **Descrição humana:** estudo de custo/viabilidade nuvem (PaaS/VPS) × executável local na máquina do restaurante, considerando a tensão com o SaaS central futuro (Step 13), backup, atualização remota e Control iD; decisão registrada em ADR.
+
+> **Herdado da Stage 4.4 (2026-11-16, auditoria do PR #202):** a migration `0006_scheduling`
+> roda `CREATE EXTENSION IF NOT EXISTS btree_gist` (exclusion constraint de dias disjuntos, ADR
+> 4.4.0001). A extensão é *trusted* no PostgreSQL 16 (basta `CREATE` no banco), mas o
+> hospedeiro escolhido tem de permiti-la — Postgres gerenciado pode exigir lista de extensões
+> liberadas. O ADR desta Stage confere isso; se o hospedeiro recusar, o fallback é a tabela de
+> dias (ADR 4.4.0001, Alternative B).
 
 ```yaml
 stage_id: 6.1-hosting-study

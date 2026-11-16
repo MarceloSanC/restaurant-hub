@@ -8,7 +8,8 @@ Nenhuma regra de negócio deve ser alterada.
 Regra: nenhum outro módulo deve instanciar diretamente classes de `infrastructure/`
 ou de `adapters/`. Há teste mecânico disso **por bounded context** —
 `tests/unit/features/identity/adapters/test_composition_root_identity.py` e
-`tests/unit/features/staff/adapters/test_composition_root_staff.py` — porque a
+`tests/unit/features/staff/adapters/test_composition_root_staff.py` (e, desde a Stage 4.4,
+`tests/unit/features/scheduling/adapters/test_composition_root_scheduling.py`) — porque a
 varredura de cada um é ancorada no seu próprio pacote de adapters: a de identity
 não olha para `features/staff/adapters`, então um BC novo sem o seu teste entra
 descoberto e o gate existente continua verde. A regra é fácil de violar sem
@@ -125,6 +126,26 @@ from restaurant_hub.features.identity.application.use_cases.send_invitation impo
 from restaurant_hub.features.identity.application.use_cases.set_password_with_token import (
     SetPasswordWithTokenUseCase,
 )
+
+# --- scheduling (Stage 4.4) — adapters e ports de dados, num bloco próprio ---------------
+from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_config_repository import (
+    PostgresScheduleConfigRepository,
+)
+from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository import (
+    PostgresScheduleRepository,
+)
+from restaurant_hub.features.scheduling.adapters.out.staff.local_staff_read_adapter import (
+    LocalStaffReadAdapter,
+)
+from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
+    ScheduleConfigRepository,
+)
+from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ScheduleRepository,
+)
+from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
+    StaffReadPort,
+)
 from restaurant_hub.features.staff.adapters.inbound.http import (
     dependencies as staff_dependencies_module,
 )
@@ -146,6 +167,7 @@ from restaurant_hub.features.staff.adapters.out.postgres.employee_repository imp
 from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository import (
     PostgresJobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.facade import StaffReadFacade
 from restaurant_hub.features.staff.application.ports.out.access_guard import AccessGuard
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
     IdentityGateway,
@@ -298,6 +320,20 @@ class ApplicationDependencies:
     # (R17) e `staff_deactivate_employee` (R13) — a **mesma** instância nos dois.
     staff_identity_gateway: IdentityGateway
 
+    # --- scheduling (Stage 4.4) — PROVISÓRIOS --------------------------------
+    #
+    # Três **ports de dados**, contra a regra do docstring acima ("expõe use cases, não
+    # repositórios"), por decisão registrada (concept 4.4 §7 D-WIRING; nota datada no
+    # LAYOUT §6). Os sete use cases de scheduling exigem o `AccessGuard` de scheduling,
+    # cujas permissões ainda não existem em identity: a Stage 4.5 cria o guard, monta os
+    # use cases sobre estes três campos e **remove** os três. Até lá nenhum provedor de
+    # `build_http_wiring` os entrega a uma rota — um port de dados ligado direto a uma rota
+    # leria escala e staff sem passar pela autorização dos use cases (travado por
+    # `test_composition_root_scheduling.py`).
+    scheduling_schedules: ScheduleRepository
+    scheduling_settings: ScheduleConfigRepository
+    scheduling_staff_read: StaffReadPort
+
 
 @dataclass
 class HttpWiring:
@@ -444,6 +480,15 @@ def wire_dependencies(
         get_account_role=GetAccountRoleUseCase(users=users),
     )
     staff_identity_gateway = LocalIdentityGateway(identity_facade)
+
+    # Scheduling (Stage 4.4): os dois repositórios sobre o **mesmo** `Engine`, e o
+    # `StaffReadPort` sobre a fachada de leitura de staff montada sobre as **mesmas**
+    # instâncias de repositório de staff que servem as rotas de staff — um grafo, não dois.
+    scheduling_schedules = PostgresScheduleRepository(engine)
+    scheduling_settings = PostgresScheduleConfigRepository(engine)
+    scheduling_staff_read = LocalStaffReadAdapter(
+        StaffReadFacade(employees=staff_employees, job_functions=staff_job_functions)
+    )
 
     return ApplicationDependencies(
         identity_authenticate_user=AuthenticateUserUseCase(
@@ -613,6 +658,9 @@ def wire_dependencies(
         ),
         staff_access_guard=staff_access_guard,
         staff_identity_gateway=staff_identity_gateway,
+        scheduling_schedules=scheduling_schedules,
+        scheduling_settings=scheduling_settings,
+        scheduling_staff_read=scheduling_staff_read,
     )
 
 

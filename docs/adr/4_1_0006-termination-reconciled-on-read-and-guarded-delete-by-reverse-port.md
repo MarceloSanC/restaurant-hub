@@ -16,6 +16,8 @@ bounded_context: scheduling
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
+> ⚠️ **Errata (2026-11-16):** §Decision, the clause on definitive removal — the reverse query port was expected to be wired by Stage 4.4 ("location decided by the 4.4 technical"). Stage 4.4 did not wire it: the guard is a staff deliverable (new port, changes to `delete_employee` and `delete_job_function`, a third cross-BC edge) and moved to issue #194, which assigns its owner on the roadmap. The 4.4 schema already answers the query (`schedule_assignments.employee_id`, `schedule_demands.job_function_id`, with tenant and unit on the row). The decision itself (keep the guard, through a reverse port, without FK) is unchanged — ver ADR 4.4.0004 e issue #194
+
 ## Status
 
 `accepted`

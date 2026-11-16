@@ -25,6 +25,11 @@ import é sobre os dois prefixos. O contrato `bc-independence` do `.importlinter
 é `type = independence`, que já é par a par entre todos os módulos listados — o
 que este arquivo guarda é que scheduling **está** na lista (a asserção de
 cobertura da pasta vive no arquivo de staff, onde o contrato inteiro é o sujeito).
+
+**A aresta para staff (Stage 4.4, ADR 4.4.0004).** Scheduling lê staff por **um** caminho:
+`adapters/out/staff/` importa **só** `staff.application.facade`, pelo par nomeado no
+`.importlinter`. As varreduras passaram de "nenhum import de vizinho" para "exatamente o
+gateway, só a fachada"; identity continua sem aresta.
 """
 
 import ast
@@ -45,6 +50,16 @@ _MODULOS_VIZINHOS = (
     "restaurant_hub.features.identity",
     "restaurant_hub.features.staff",
 )
+
+# A única aresta (ADR 4.4.0004): qual pacote de scheduling pode importar staff, qual
+# módulo de staff ele pode importar, e o par tal como o `.importlinter` o escreve.
+_PACOTE_DO_GATEWAY = pathlib.PurePosixPath("adapters/out/staff")
+_MODULO_DA_FACHADA = "restaurant_hub.features.staff.application.facade"
+_PAR_DE_SCHEDULING = (
+    "restaurant_hub.features.scheduling.adapters.out.staff.* -> "
+    "restaurant_hub.features.staff.application.facade"
+)
+_GATEWAY = _SCHEDULING / "adapters" / "out" / "staff" / "local_staff_read_adapter.py"
 
 # O vocabulário de decisão dos vizinhos. Não basta não importar: **nomear** o
 # tipo já é conhecer como o outro BC decide, e é o começo de reimplementar a
@@ -133,6 +148,24 @@ def _contrato_bc_independence() -> configparser.SectionProxy:
     return parser[_SECAO_BC_INDEPENDENCE]
 
 
+def _violacoes_da_aresta(caminho_relativo: pathlib.PurePosixPath, alvos: set[str]) -> list[str]:
+    """Por que um módulo de scheduling que importa um vizinho **não** é a aresta permitida.
+
+    Vazio quando nenhum vizinho é importado, ou quando o módulo está sob
+    `adapters/out/staff/` **e** todo import de vizinho é a fachada de staff.
+    """
+    vizinhos = sorted(alvo for alvo in alvos if alvo.startswith(_MODULOS_VIZINHOS))
+    if not vizinhos:
+        return []
+    razoes: list[str] = []
+    if not caminho_relativo.is_relative_to(_PACOTE_DO_GATEWAY):
+        razoes.append(f"fora de {_PACOTE_DO_GATEWAY}/ — só o gateway pode importar staff")
+    alem_da_fachada = [alvo for alvo in vizinhos if alvo != _MODULO_DA_FACHADA]
+    if alem_da_fachada:
+        razoes.append(f"importa vizinho além da fachada de staff: {alem_da_fachada}")
+    return razoes
+
+
 def test_a_varredura_de_modulos_de_scheduling_nao_esta_vazia() -> None:
     """Guarda contra o falso-verde deste arquivo.
 
@@ -147,27 +180,32 @@ def test_a_varredura_de_modulos_de_scheduling_nao_esta_vazia() -> None:
     )
 
 
-def test_ca18_nenhum_modulo_de_scheduling_importa_os_bcs_vizinhos() -> None:
+def test_ca18_so_o_gateway_importa_staff_e_importa_so_a_fachada() -> None:
     """A varredura é sobre o BC inteiro, um arquivo de cada vez.
 
-    `lint-imports` já cobriria isto, mas o faz sobre o grafo que o contrato
-    descreve — e o contrato é editável. Aqui a asserção não passa por ele.
+    `lint-imports` já cobriria isto, mas o faz sobre o grafo que o contrato descreve — e o
+    contrato é editável. Aqui a asserção não passa por ele: o único importador de vizinho é
+    o gateway, e o único módulo importado é a fachada de staff. Identity não tem aresta.
     """
     culpados: dict[str, list[str]] = {}
+    importadores: set[str] = set()
     for arquivo in _modulos_de_scheduling():
         arvore = ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
-        atravessam = sorted(
-            alvo for alvo in _alvos_de_import(arvore) if alvo.startswith(_MODULOS_VIZINHOS)
-        )
-        if atravessam:
-            culpados[str(arquivo.relative_to(_SCHEDULING))] = atravessam
+        relativo = pathlib.PurePosixPath(arquivo.relative_to(_SCHEDULING).as_posix())
+        alvos = _alvos_de_import(arvore)
+        razoes = _violacoes_da_aresta(relativo, alvos)
+        if razoes:
+            culpados[str(relativo)] = razoes
+        if _MODULO_DA_FACHADA in alvos:
+            importadores.add(str(relativo))
 
     assert culpados == {}, (
-        f"módulos de scheduling importando BC vizinho: {culpados}. "
-        f"`EmployeeId`/`JobFunctionId` são tipos **próprios** deste BC; os "
-        f"valores atravessam a fronteira como strings opacas, e o dado de staff "
-        f"chega pelo `StaffReadPort` da 4.3."
+        f"módulos de scheduling atravessando a fronteira fora da aresta: {culpados}. "
+        f"O dado de staff chega pelo `StaffReadPort`, servido pelo gateway sobre a fachada."
     )
+    # O par do `.importlinter` serve ao gateway: se ele deixar de importar a fachada, a
+    # supressão vira erro (`unmatched_ignore_imports_alerting`) — e aqui também.
+    assert importadores == {_GATEWAY.relative_to(_SCHEDULING).as_posix()}
 
 
 def test_ca18_nenhum_modulo_de_scheduling_nomeia_o_vocabulario_dos_vizinhos() -> None:
@@ -208,20 +246,14 @@ def test_o_vocabulario_proibido_nao_contem_identificador_proprio_do_bc() -> None
     )
 
 
-def test_ca18_nenhum_ignore_imports_do_contrato_toca_scheduling() -> None:
-    """A supressão que ninguém escreveu é a que este teste guarda — para scheduling.
+def test_ca18_o_unico_par_que_toca_scheduling_e_o_do_gateway_sobre_a_fachada() -> None:
+    """A supressão que ninguém decidiu é a que este teste guarda — para scheduling.
 
-    O `ignore_imports` é o caminho de menor resistência no dia em que um import
-    cross-BC aparecer: uma linha no `.importlinter` deixa `make check` verde e a
-    fronteira aberta. "Zero" só é uma propriedade se algo o medir.
-
-    **Por que "tocando scheduling", e não "nenhum".** A Stage 3.5 abriu, por
-    decisão registrada, a **única** aresta entre staff e identity (a fachada —
-    ADR 3.5.0001), e `tests/unit/features/staff/test_bc_independence.py` assere
-    essa lista **exata**. O sujeito deste arquivo é scheduling: a propriedade
-    dele é que nenhum par suprimido tem scheduling de nenhum dos dois lados. Um
-    par novo entre staff e identity é assunto do teste de staff; um par
-    envolvendo scheduling reprova aqui.
+    O `ignore_imports` é o caminho de menor resistência no dia em que um import cross-BC
+    aparecer. Desde a Stage 4.4 há **um** par envolvendo scheduling, decidido (ADR
+    4.4.0004): o gateway sobre a fachada de staff. Qualquer outro — scheduling do lado
+    importado, um segundo pacote de scheduling, ou identity — reprova aqui. A lista exata
+    do contrato inteiro é cobrada no teste de staff.
     """
     contrato = _contrato_bc_independence()
     pares = [
@@ -230,9 +262,10 @@ def test_ca18_nenhum_ignore_imports_do_contrato_toca_scheduling() -> None:
 
     tocando_scheduling = [par for par in pares if _MODULO_SCHEDULING in par]
 
-    assert tocando_scheduling == [], (
+    assert tocando_scheduling == [_PAR_DE_SCHEDULING], (
         f"o contrato `bc-independence` suprime import envolvendo scheduling: "
-        f"{tocando_scheduling}. A fronteira de scheduling não tem aresta nomeada."
+        f"{tocando_scheduling}. A única aresta de scheduling é o gateway sobre a "
+        f"fachada de staff (ADR 4.4.0004)."
     )
 
 
@@ -300,3 +333,45 @@ def test_o_detector_de_vocabulario_nao_acusa_o_identificador_proprio() -> None:
 
     assert _identificadores(legitimo) & _VOCABULARIO_DOS_VIZINHOS == set()
     assert not any(alvo.startswith(_MODULOS_VIZINHOS) for alvo in _alvos_de_import(legitimo))
+
+
+@pytest.mark.parametrize(
+    ("caminho", "alvo", "razao_esperada"),
+    [
+        pytest.param(
+            "application/use_cases/get_calendar.py",
+            _MODULO_DA_FACHADA,
+            "fora de",
+            id="fachada-importada-fora-do-gateway",
+        ),
+        pytest.param(
+            "adapters/out/staff/local_staff_read_adapter.py",
+            "restaurant_hub.features.staff.application.ports.out.employee_repository",
+            "além da fachada",
+            id="gateway-importando-o-port-de-staff",
+        ),
+        pytest.param(
+            "adapters/out/staff/local_staff_read_adapter.py",
+            "restaurant_hub.features.identity.application.facade",
+            "além da fachada",
+            id="gateway-importando-identity",
+        ),
+    ],
+)
+def test_o_detector_da_aresta_reprova_os_dois_lados_da_forma(
+    caminho: str, alvo: str, razao_esperada: str
+) -> None:
+    """A forma da aresta tem dois lados (quem importa; o que importa) — cada um reprova só."""
+    razoes = _violacoes_da_aresta(pathlib.PurePosixPath(caminho), {alvo})
+
+    assert len(razoes) == 1
+    assert razao_esperada in razoes[0]
+
+
+def test_o_detector_da_aresta_aceita_exatamente_o_gateway_sobre_a_fachada() -> None:
+    razoes = _violacoes_da_aresta(
+        pathlib.PurePosixPath("adapters/out/staff/local_staff_read_adapter.py"),
+        {_MODULO_DA_FACHADA, "restaurant_hub.features.scheduling.application.ports.out"},
+    )
+
+    assert razoes == []

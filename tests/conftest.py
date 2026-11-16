@@ -70,6 +70,14 @@ TABELAS_EM_ORDEM_DE_LIMPEZA = (
     # Stage 3.11 — filha de `job_functions` (`CASCADE`), antes da mãe.
     "job_function_units",
     "job_functions",
+    # Stage 4.4 — BC scheduling: a trilha antes de `schedules`, que ela referencia com
+    # `RESTRICT`; as filhas do agregado, das netas para a raiz.
+    "schedule_changes",
+    "schedule_assignments",
+    "schedule_demands",
+    "schedule_bands",
+    "schedules",
+    "scheduling_settings",
 )
 
 

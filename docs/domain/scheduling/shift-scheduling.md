@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 4 (
 keywords: [domain, scheduling, shift-scheduling, escala, semana, dia-operacional, horario-de-corte, faixa, turno, intervalo, demanda, vaga, alocacao, excecao-de-funcao, sobre-cobertura, reconciliacao-na-leitura, desligamento, escala-vigente, publicacao, auditoria, versao, concorrencia, validacao, block, warn, aceite-consciente, sobreposicao, interjornada, teto-de-horas, carga-contratada, conta-para-a-carga, indisponibilidade, calendario, minha-escala, notificacao, imagem, fuso-horario, clt, lingua-ubiqua]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 bounded_context: scheduling
 subdomain: shift-scheduling
 references:
@@ -429,9 +429,12 @@ auto-fill publica direto, respeitando `block`, ou o Step 5 cria a sua noção de
 > aceite (política + sujeito + faixa?) — se o aceite sobrevive a uma mudança na alocação que a
 > originou.
 
-> **Lacuna para o concept da Stage 4.4:** granularidade da auditoria (por mutação; snapshot ×
-> diff), **retenção** (LGPD básica — `overview.md` §6 › "LGPD básica") e o que o funcionário vê quando uma
-> alocação dele muda.
+> **Lacuna fechada pela Stage 4.4 (ADR 4.4.0002; concept 4.4 §7 D-AUDIT, D-RET e D-EMP):**
+> granularidade da auditoria — uma linha de trilha por mudança gravada (`add` ou `save`), com as
+> operações efetivas e os aceites (diff, não snapshot); **retenção** (LGPD básica — `overview.md`
+> §6 › "LGPD básica") — a trilha vive enquanto a escala existir, sem expurgo na v1, e guarda só
+> identificadores opacos; e o que o funcionário vê quando uma alocação dele muda — só a escala
+> vigente (o aviso é o e-mail da 4.6).
 
 ### 3.6 Validações parametrizáveis
 
@@ -789,10 +792,13 @@ de auditoria são instantes absolutos (UTC).
 
 > **Lacuna de escopo do roadmap (registrada; a mestra anota no fechamento):** em que Stage entra
 > a coluna `Unit.timezone` — **4.4** (primeira migration do Step 4) ou **issue avulsa de
-> identity** antes da 4.3 (que precisa do port).
+> identity** antes da 4.3 (que precisa do port). *Nota 2026-11-16: a 4.4 não a trouxe (concept 4.4
+> §7 D-TZ); é a issue #198, de identity.*
 
-> **Lacuna para o concept da Stage 4.4/4.5:** representação persistida dos dois regimes e a forma
-> na borda HTTP (precedente ADR 3.6.0003 §Decision: wall-clock sem offset; valor com offset
+> **Lacuna fechada pela Stage 4.4 (ADR 4.4.0001; concept 4.4 §7 D-TIME):** representação
+> persistida dos dois regimes — faixas em `TIMESTAMP` sem fuso (wall-clock da unidade), carimbo
+> da trilha em `TIMESTAMP WITH TIME ZONE`. A forma na borda HTTP continua lacuna para o concept
+> da Stage 4.5 (precedente ADR 3.6.0003 §Decision: wall-clock sem offset; valor com offset
 > recusado, não convertido).
 
 ### 3.10 Fronteiras
@@ -1104,19 +1110,19 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 | **4.3** | calendário sobre recortes com várias escalas; resolução ator → `employee_id` (§3.7) — *fechada pela Stage 4.3 (concept 4.3 §7 D-CAL e D-OWN); a 4.5 compõe as unidades do ator (divergência 10 do concept 4.3)* |
 | **4.3** | DTO próprio do `StaffReadPort` (§3.10.1) — *fechada pela Stage 4.3: `StaffMember` (ADR 4.3.0003; concept 4.3 §7 D-STAFFPORT)* |
 | **4.3** | limpar ou não as alocações futuras no desligamento — a recontratação as reexibe (limite (4) de F7, §3.4) — *fechada pela Stage 4.3: não limpar (concept 4.3 §7 D-TERM; ADR 4.1.0006)* |
-| **4.3 / 4.4** | consulta em lote ao `StaffReadPort` para a reconciliação na leitura (custo por leitura — limite (5) de F7, §3.4) — *fechada pela Stage 4.3: o port só tem leituras em lote (ADR 4.3.0003; concept 4.3 §7 D-STAFFPORT); a 4.4 as serve no adapter* |
-| **4.3 / 4.4** | Stage em que staff passa a consultar o port de consulta reverso — funcionário e função demandada (§3.3, §3.4) — *fechada pela Stage 4.3: é a 4.4, dona da consulta e do wiring (concept 4.3 §7 D-REVERSE); até lá registro removido é "ausente", fail-closed* |
-| **4.4** | granularidade e retenção da auditoria; o que o funcionário vê quando muda (§3.5) |
-| **4.4 / 4.5** | versão da escala + checagem otimista (4.4); status/corpo da recusa (4.5) (§3.5) |
-| **4.4 / 4.5** | representação persistida dos dois regimes de tempo; forma na borda HTTP (§3.9) |
-| **4.4 (technical)** | localização do adapter cross-BC (§3.10.1) |
+| **4.3 / 4.4** | consulta em lote ao `StaffReadPort` para a reconciliação na leitura (custo por leitura — limite (5) de F7, §3.4) — *fechada pela Stage 4.3: o port só tem leituras em lote (ADR 4.3.0003; concept 4.3 §7 D-STAFFPORT); fechada pela Stage 4.4: o `LocalStaffReadAdapter` as serve sobre a `StaffReadFacade` (ADR 4.4.0004)* |
+| **4.3 / 4.4** | Stage em que staff passa a consultar o port de consulta reverso — funcionário e função demandada (§3.3, §3.4) — *fechada pela Stage 4.3: era a 4.4, dona da consulta e do wiring (concept 4.3 §7 D-REVERSE); fechada pela Stage 4.4: a ligação saiu dela e foi reendereçada à issue #194, com o reparo do registro ausente (ADR 4.4.0004; concept 4.4 §7 D-REVERSE); até lá registro removido é "ausente", fail-closed* |
+| **4.4** | granularidade e retenção da auditoria; o que o funcionário vê quando muda (§3.5) — *fechada pela Stage 4.4: uma linha por mudança, sem expurgo na v1, o funcionário vê a escala vigente (ADR 4.4.0002)* |
+| **4.4 / 4.5** | versão da escala + checagem otimista (4.4); status/corpo da recusa (4.5) (§3.5) — *fechada pela Stage 4.4: a versão é comparada dentro do lock transacional da unidade (ADR 4.4.0003); o status e o corpo da recusa ficam com a 4.5* |
+| **4.4 / 4.5** | representação persistida dos dois regimes de tempo; forma na borda HTTP (§3.9) — *fechada pela Stage 4.4: `TIMESTAMP` sem fuso nas faixas, `TIMESTAMP WITH TIME ZONE` na trilha (ADR 4.4.0001); a forma na borda fica com a 4.5* |
+| **4.4 (technical)** | localização do adapter cross-BC (§3.10.1) — *fechada pela Stage 4.4: `scheduling/adapters/out/staff/` sobre a fachada de staff, segundo par do `bc-independence` (ADR 4.4.0004)* |
 | **4.5** | nomes das permissões; salvar × editar; config tenant-wide; promoção do `AccessGuard` (§4); atualizar o comentário de `role.py` › `_ROLE_PERMISSIONS` ("nenhuma permissão sobre a escala", superado pela errata do ADR 3.4.0006) junto com o mapa de papéis — *nota 2026-11-09: o comentário foi atualizado na issue #127; a 4.5 só o confere ao estender o mapa* |
 | **4.6** | agrupamento/debounce; "afetados"; falha de envio; conteúdo; onde a flag persiste (§3.8) |
 | **4.7** | formato e biblioteca da imagem — delegado pelo roadmap §"Lacunas conhecidas" › "Formato da imagem da escala" (§3.8) |
 | **7.2 / 8.1** | contratos de leitura; "o que valia naquele dia" via auditoria (§3.10.3); grandezas "não conta" e "exceção de função" (§3.10.4) |
 | **sem Stage (roadmap)** | gates dos Steps 7/8: registros inativos invisíveis até a página de histórico de funcionários (limite (2) de F7, §3.4) |
 | **sem Stage (roadmap)** | mapa período nomeado → faixas (proposta: 5.1) (§3.2) |
-| **sem Stage (roadmap)** | em que Stage entra `Unit.timezone` (4.4 × issue de identity) (§3.9) |
+| **sem Stage (roadmap)** | em que Stage entra `Unit.timezone` (4.4 × issue de identity) (§3.9) — *a 4.4 não a trouxe: issue #198, de identity* |
 | **sem Stage (roadmap)** | roadmap 5.2 "rascunho de edição" / non-goal "aplicar+publicar" × F1 — gate do Step 5 (§3.5) |
 | **sem Stage (roadmap)** | feriados por unidade (§5) |
 
