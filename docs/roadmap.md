@@ -127,7 +127,7 @@ graph LR
 | `2.4-identity-http` | API de tenancy, usuários e auth | adapters/inbound/http | done | `2.3-identity-persistence` |
 | `2.5-email-invite` | Convite por e-mail | vertical (identity) | done | `2.4-identity-http` |
 | `2.6-identity-unit-of-work` | Fronteira transacional nos use cases de identity que escrevem mais de uma vez | application + adapters/out/postgres + tooling | done | `3.5-employee-login-link` |
-| `2.7-identity-application-authorization` | Autorização na camada application de identity | application | draft | `3.7-application-authorization`, #170 |
+| `2.7-identity-application-authorization` | Autorização na camada application de identity | application | done | `3.7-application-authorization`, #170 |
 | `3.1-staff-domain` | Domínio de equipe | domain | done | `2.5-email-invite` |
 | `3.2-staff-application` | Use cases de equipe | application | done | `3.1-staff-domain` |
 | `3.3-staff-persistence` | Persistência de staff | adapters/out/postgres | done | `3.2-staff-application` |
@@ -743,6 +743,20 @@ complexidade_estimada: M
 gate_mode: strict
 skills_hint: [hex-arch-python, composition-root, pytest-with-fakes, fastapi-thin-adapter, task-ordering-hex]
 ```
+
+> **Nota (2026-11-16): fechamento da Stage 2.7** (issue #184; concept e technical em
+> `docs/stages/2.7-identity-application-authorization/`; ADR 2.7.0001). O que a execução fixou:
+>
+> - **Cinco use cases, não quatro:** o convite de dono pela plataforma ganhou `InviteOwnerUseCase`
+>   (a rota `/restaurants/{id}/owners` deixa o `InviteUserUseCase`). Os cinco abrem `execute` com
+>   `authorize_requirement` sobre o port `ActionAuthorizer`, que o `AuthorizeActionUseCase` cumpre.
+> - **`required_permissions_for_role` desceu para o módulo do port** (uma definição só em `src/`);
+>   a borda continua autorizando, e um teste prova que ela nega sozinha (R7).
+> - **A fachada só provisiona `employee`** (`RoleNotProvisionableError`, 422); o resíduo de
+>   `ProvisionAccountUseCase` fica guardado pelo alcance (CA14), registrado como finding.
+> - **10 Tasks + 3 commits de correção** (Checkpoints C) **+ 1 extra** (auditoria de testes, 2 rodadas,
+>   33 mutações reais na segunda, todas mortas). `tests/e2e/` intocado. Findings na §7 do technical;
+>   a issue #205 leva as cinco cópias da emissão do token de convite.
 
 ### Step 3 — Equipe da unidade (BC `staff`)
 
@@ -2329,6 +2343,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-11-09 | Issue **#106** promovida a **Stage `4.8-scheduling-settings`** (Step 4, BC scheduling; `depends_on: 4.5-scheduling-http`): linha na Tabela de Stages, nó e aresta no grafo, bloco próprio com os requisitos do concept 4.3 §13; Step 4 passa a 4.1 → 4.8. A linha da #106 fica na Tabela de Issues como `done`, apontando a Stage | O corpo pedia um concept (regra nova de transição do calendário e método de escrita no port, PIPELINE §4.5); alargar a 4.5 misturaria camada-alvo e fatia vertical (PIPELINE §4.2 #1) — issue #106 |
 | 2026-11-09 | Issue **#41** promovida a **Stage `3.11-job-function-unit-enablement`** (Step 3, BC staff; `depends_on: 3.7-application-authorization, 3.9-error-hierarchy`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. O corpo pede concept (invariante do conjunto de unidades, leis do port revisadas, regra da cópia entre unidades com ADR, unicidade do nome) e toca modelo de dados com migration — o litmus de PIPELINE §4.5. Número conferido livre em develop, nas branches remotas e nas worktrees abertas (a #106 cria a 4.8). Step 3 passa a `3.1 → 3.11` | Promoção da issue #41 |
 | 2026-11-16 | Stage `3.11-job-function-unit-enablement` concluída (`done`): função de trabalho com habilitação por unidade (todas ou conjunto), listagem por unidade, alteração das unidades com guarda do estreitamento e a invariante funcionário × unidade em criar, atribuir e copiar (ADRs 3.11.0001 e 3.11.0002, migration `0005`); bloco acrescido de nota datada de fechamento. Auditoria do PR #188: findings sem pouso viraram as issues #206–#210 | Fechamento da Stage 3.11 (issue #41, PR #188) |
+| 2026-11-16 | Stage 2.7-identity-application-authorization concluída (`done`); bloco acrescido de nota datada de fechamento. Os cinco use cases de identity que agem por um ator (`ProvisionRestaurant`, `CreateUnit`, `CreateUser`, `InviteUser` e o novo `InviteOwner`) autorizam o alvo do próprio command antes de qualquer outra instrução, pelo port `ActionAuthorizer`; a borda HTTP segue autorizando e nenhuma faixa muda (`tests/e2e/` intocado); a fachada só provisiona `employee`. ADR 2.7.0001, notas datadas em 2.4.0003, 0.0.0014, 0.0.0018, 3.5.0001 e 0.0.0020. Issue #205 aberta para as cinco cópias da emissão do token. **O Step 2 permanece `in_progress`** (frontend) | Execução da Stage 2.7 — issue #184 |
 
 ## Próxima revisão de roadmap
 
