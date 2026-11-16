@@ -152,8 +152,8 @@ def test_nomes_de_constraint_de_cada_tabela() -> None:
     }
 
 
-def test_os_indices_sao_os_dois_do_acesso_medido() -> None:
-    """O de `schedules` serve as três leituras; o das alocações, o `CASCADE` da reescrita."""
+def test_o_unico_indice_alem_das_chaves_e_o_das_leituras() -> None:
+    """ADR 4.4.0001: o de `schedules` serve as três leituras; nada além do medido."""
     indices = {
         index.name: [column.name for column in index.columns]
         for table in scheduling_metadata.tables.values()
@@ -161,7 +161,6 @@ def test_os_indices_sao_os_dois_do_acesso_medido() -> None:
     }
     assert indices == {
         "ix_schedules_tenant_unit_first_day": ["tenant_id", "unit_id", "first_day"],
-        "ix_schedule_assignments_demand": ["tenant_id", "unit_id", "schedule_id", "demand_id"],
     }
 
 

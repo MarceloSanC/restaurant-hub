@@ -235,16 +235,9 @@ schedule_assignments = Table(
         "break_minutes IS NULL OR break_minutes >= 0",
         name="ck_schedule_assignments_break_non_negative",
     ),
-    # Não é otimização: é o índice das colunas da FK. Sem ele, o `CASCADE` de cada
-    # demanda apagada — toda reescrita de filhas no `save` — varre a tabela inteira; é
-    # também o acesso da leitura das alocações de uma escala.
-    Index(
-        "ix_schedule_assignments_demand",
-        "tenant_id",
-        "unit_id",
-        "schedule_id",
-        "demand_id",
-    ),
+    # Sem índice além das chaves (ADR 4.4.0001): o `CASCADE` da reescrita no `save` e a
+    # leitura das alocações de uma escala usam o prefixo `(tenant_id, unit_id)` da PK, o
+    # que basta ao volume do piloto; índice acompanha acesso medido (ADR 3.3.0005).
 )
 
 

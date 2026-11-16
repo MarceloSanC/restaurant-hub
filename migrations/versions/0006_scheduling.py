@@ -191,13 +191,6 @@ def upgrade() -> None:
             name="ck_schedule_assignments_break_non_negative",
         ),
     )
-    # O índice das colunas da FK: sem ele o `CASCADE` de cada demanda apagada varre a
-    # tabela inteira — e toda reescrita de filhas no `save` apaga demandas.
-    op.create_index(
-        "ix_schedule_assignments_demand",
-        "schedule_assignments",
-        ["tenant_id", "unit_id", "schedule_id", "demand_id"],
-    )
 
     op.create_table(
         "schedule_changes",
@@ -270,7 +263,6 @@ def downgrade() -> None:
     """Remove as seis tabelas, filhas antes das mães; a extensão fica (ver o docstring)."""
     op.drop_table("scheduling_settings")
     op.drop_table("schedule_changes")
-    op.drop_index("ix_schedule_assignments_demand", table_name="schedule_assignments")
     op.drop_table("schedule_assignments")
     op.drop_table("schedule_demands")
     op.drop_table("schedule_bands")
