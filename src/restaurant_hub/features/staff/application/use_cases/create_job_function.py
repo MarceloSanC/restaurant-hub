@@ -38,10 +38,10 @@ from restaurant_hub.features.staff.application.ports.out.job_function_repository
 )
 from restaurant_hub.features.staff.application.use_cases._unit_enablement import (
     authorize_enablement,
+    to_unit_enablement,
 )
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import JobFunctionId
-from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
 
 
@@ -83,11 +83,7 @@ class CreateJobFunctionUseCase:
             id=JobFunctionId(str(self._id_generator.next_id())),
             tenant_id=command.tenant_id,
             name=command.name,
-            unit_enablement=(
-                UnitEnablement.everywhere()
-                if command.unit_ids is None
-                else UnitEnablement.only(command.unit_ids)
-            ),
+            unit_enablement=to_unit_enablement(command.unit_ids),
         )
         # (2) Unicidade de nome no tenant.
         if self._job_functions.find_by_name(command.tenant_id, command.name) is not None:

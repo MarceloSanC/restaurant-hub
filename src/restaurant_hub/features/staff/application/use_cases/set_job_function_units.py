@@ -46,8 +46,9 @@ from restaurant_hub.features.staff.application.ports.out.job_function_repository
 )
 from restaurant_hub.features.staff.application.use_cases._unit_enablement import (
     authorize_enablement_change,
+    named_units,
+    to_unit_enablement,
 )
-from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 
 
 class SetJobFunctionUnitsUseCase:
@@ -89,23 +90,25 @@ class SetJobFunctionUnitsUseCase:
             self._guard,
             command.actor,
             command.tenant_id,
-            old=None if current.all_units else current.unit_ids,
+            old=named_units(current),
             new=command.unit_ids,
         )
         # (3) Transição: o domínio recusa a habilitação vazia aqui, antes do port.
-        enablement = (
-            UnitEnablement.everywhere()
-            if command.unit_ids is None
-            else UnitEnablement.only(command.unit_ids)
-        )
+        enablement = to_unit_enablement(command.unit_ids)
         changed = job_function.with_enablement(enablement)
-        # (4) Guarda: nenhuma unidade que deixa de ser coberta pode ter registro
-        # detendo a função. "Todas" cobre tudo — não há o que consultar.
+        # (4) Guarda: nenhuma unidade que **deixa de ser coberta** pode ter registro
+        # detendo a função. "Todas" cobre tudo — não há o que consultar. A pergunta
+        # é sobre o que esta mudança tira (coberta antes, não depois), e não sobre
+        # toda unidade fora da habilitação nova: um registro que a corrida declarada
+        # no ADR 3.11.0002 deixou fora de qualquer habilitação não pode travar um
+        # alargamento que nem toca a unidade dele.
         if not enablement.all_units:
             holding = self._employees.list_units_referencing_job_function(
                 command.tenant_id, command.job_function_id
             )
-            if any(not enablement.covers(unit_id) for unit_id in holding):
+            if any(
+                current.covers(unit_id) and not enablement.covers(unit_id) for unit_id in holding
+            ):
                 raise JobFunctionInUseError(command.job_function_id)
         # (5) Escrita — só a habilitação (L-JF7); o nome não é regravado.
         self._job_functions.update_enablement(changed)

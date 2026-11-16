@@ -36,6 +36,22 @@ from restaurant_hub.features.staff.application.ports.out.access_guard import (
 )
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import TenantId, UnitId
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
+
+
+def to_unit_enablement(unit_ids: frozenset[UnitId] | None) -> UnitEnablement:
+    """A habilitação que um command pede: `None` = todas as unidades.
+
+    Um sítio só para a convenção dos commands — `None` significa "todas", e um
+    conjunto, mesmo vazio, é um conjunto: o vazio chega ao domínio e é recusado lá
+    (`InvalidUnitEnablementError`), nunca vira "todas" por truthiness.
+    """
+    return UnitEnablement.everywhere() if unit_ids is None else UnitEnablement.only(unit_ids)
+
+
+def named_units(unit_enablement: UnitEnablement) -> frozenset[UnitId] | None:
+    """O inverso: as unidades nomeadas de uma habilitação, ou `None` para "todas"."""
+    return None if unit_enablement.all_units else unit_enablement.unit_ids
 
 
 def authorize_enablement(

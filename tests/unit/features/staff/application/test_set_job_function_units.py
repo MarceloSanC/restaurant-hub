@@ -309,3 +309,38 @@ def test_a_escrita_e_so_da_habilitacao_e_o_nome_fica() -> None:
     funcao = fakes.job_functions.find_by_id(_T, _F)
     assert funcao is not None
     assert funcao.name == "Cozinheiro"
+
+
+def test_alcance_vem_antes_da_validacao_local_conjunto_vazio_sem_alcance_e_negado() -> None:
+    """R8 — quem não alcança o que mudaria não aprende nem a forma do pedido.
+
+    A função vale em todas as unidades e o ator não detém `manage_tenant`: o
+    conjunto vazio, que o domínio recusaria, é **negado pelo guard antes** — com a
+    ordem trocada, a resposta seria `InvalidUnitEnablementError` (Checkpoint C).
+    """
+    fakes = _mundo(_TODAS)
+    guard = _guard(_A)
+
+    with pytest.raises(type(guard.authorization_error)) as excinfo:
+        _executar(fakes, guard, frozenset())
+
+    assert excinfo.value is guard.authorization_error
+    assert guard.calls[-1] == f"authorize({_MT},{_T},None)"
+
+
+@pytest.mark.parametrize("pedido", [frozenset({_A}), frozenset({_A, _B})], ids=["igual", "alarga"])
+def test_registro_ja_fora_da_habilitacao_nao_trava_mudanca_que_nao_tira_a_unidade_dele(
+    pedido: frozenset[UnitId],
+) -> None:
+    """A guarda pergunta pelo que a mudança **tira**, não por toda unidade descoberta.
+
+    O registro em C detém a função habilitada só em A — o estado que a corrida
+    declarada no ADR 3.11.0002 pode deixar. Repetir a habilitação ou alargá-la para
+    B não remove C (C já não era coberta), então nenhum dos dois é recusado.
+    """
+    fakes = _mundo(_so(_A))
+    _com_registro(fakes, _C, id_="e-c")
+
+    _executar(fakes, _guard(_A, _B), pedido)
+
+    assert _gravada(fakes) == UnitEnablement.only(pedido)
