@@ -55,7 +55,6 @@ AGENT_FIELDS = {
 }  # fmt: skip
 # Débito de estrutura anterior à regra (#65): chave do achado → (motivo, issue).
 KNOWN_DEBT: dict[str, tuple[str, int]] = {
-    ".claude/skills/stage-audit::body": ("SKILL.md anterior ao teto de 500 linhas", 162),
     ".claude/skills/issue-audit::body": ("SKILL.md anterior ao teto de 500 linhas", 162),
 }
 
