@@ -83,15 +83,18 @@ Three constraints shaped the rules:
 valendo.** Decisão do sponsor (Marcelo) em 2026-11-16, registrada na issue #190: a orquestração
 autônoma passa a ter no máximo **seis** worktrees de implementação ao mesmo tempo. Onde este
 ADR dá *three* como o teto, leia-se seis: o título, o campo `decision` do frontmatter,
-§Decision 2 (*"Cap: three worktrees"*), o motivo da rejeição da Alternativa C (*"the sponsor
-fixed three worktrees as the cost ceiling"*) e a consequência positiva *"three items at a
-time"*.
+§Decision 2 (*"Cap: three worktrees"*), o contra da Alternativa B (*"with three worktrees"*),
+o motivo da rejeição da Alternativa C (*"the sponsor fixed three worktrees as the cost
+ceiling"*) e a consequência positiva *"three items at a time"*.
 
-**Por quê.** O três era um teto de custo. A issue #190 registra o motivo: ele foi fixado quando
-o CI consumia a cota do GitHub Actions (§Decision 3 manda o `make check` completo para o
-Actions a cada push de cada PR, e o repositório era privado); o repositório passou a público
-em 2026-11-02 e o Actions deixou de ser o limite de custo. Com isso o sponsor subiu o teto
-para seis.
+**Por quê.** O três era um teto de custo. O corpo deste ADR registra como custo a sessão viva
+de cada worktree (§Context, *Cost*) e não fala da cota do GitHub Actions; esse segundo motivo
+vem da issue #190. Ela diz que o teto foi fixado quando o CI consumia a cota do Actions
+(§Decision 3 manda o `make check` completo para o Actions a cada push de cada PR, e o
+repositório era privado, como registra o ADR 1.1.0002), que o repositório passou a público em
+2026-11-02 e que, com isso, o Actions deixou de ser o limite de custo. Conferido em 2026-11-16:
+`gh repo view --json visibility` devolve `PUBLIC`. A data da virada é a que a issue informa;
+não foi medida aqui. Nesse contexto o sponsor subiu o teto para seis.
 
 **O que não muda.** Continua havendo teto, porque cada worktree em voo ainda segura uma sessão
 viva (§Context, *Cost*) e a máquina local continua rodando só checks focados (§Context, *Local
