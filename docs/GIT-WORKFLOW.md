@@ -425,7 +425,7 @@ as condições de entrada estão em §"Fechamento autônomo pela auditoria".
 
 ### Etapa 7: Cleanup
 
-§"Merge e limpeza da worktree", passos 4–7: `git pull` no principal,
+§"Merge e limpeza da worktree", passos 4–7: `git pull --ff-only` no principal,
 o banco da worktree, `worktree-rm.py <branch> --delete-remote` (que
 derruba esse banco) e a verificação (remota, local, worktree, containers
 e hooks).
