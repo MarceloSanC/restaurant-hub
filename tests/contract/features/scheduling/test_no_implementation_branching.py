@@ -22,11 +22,20 @@ import pytest
 from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_config_repository import (
     PostgresScheduleConfigRepository,
 )
+from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository import (
+    PostgresScheduleRepository,
+)
 from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
     ScheduleConfigRepository,
     SchedulingSettings,
 )
-from tests.contract.features.scheduling.conftest import CONFIG_IMPLEMENTATIONS
+from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ScheduleRepository,
+)
+from tests.contract.features.scheduling.conftest import (
+    CONFIG_IMPLEMENTATIONS,
+    SCHEDULE_IMPLEMENTATIONS,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -143,3 +152,14 @@ def test_o_ramo_postgres_de_config_world_e_o_adapter_real(
 ) -> None:
     repo, _ = config_world
     assert isinstance(repo, PostgresScheduleConfigRepository)
+
+
+def test_schedule_repo_roda_sobre_o_fake_e_o_postgres() -> None:
+    assert set(SCHEDULE_IMPLEMENTATIONS) == {"fake", "postgres"}
+
+
+@pytest.mark.parametrize("schedule_repo", ["postgres"], indirect=True)
+def test_o_ramo_postgres_de_schedule_repo_e_o_adapter_real(
+    schedule_repo: ScheduleRepository,
+) -> None:
+    assert isinstance(schedule_repo, PostgresScheduleRepository)

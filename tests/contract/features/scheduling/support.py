@@ -15,11 +15,18 @@ inverso do mapper que ela mesma testa provaria só que o mapper concorda consigo
 
 from typing import Any
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 
-from restaurant_hub.features.scheduling.adapters.out.postgres.tables import scheduling_settings
+from restaurant_hub.features.scheduling.adapters.out.postgres.mappers import row_to_change
+from restaurant_hub.features.scheduling.adapters.out.postgres.tables import (
+    schedule_changes,
+    scheduling_settings,
+)
 from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
     SchedulingSettings,
+)
+from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ScheduleChange,
 )
 from restaurant_hub.features.scheduling.domain.entities.schedule import Schedule
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import PolicyRule
@@ -87,3 +94,14 @@ def seed_settings(engine: Engine, tenant_id: str, settings: SchedulingSettings) 
             row[f"{name}_mode"] = value.mode.value
     with engine.begin() as connection:
         connection.execute(scheduling_settings.insert().values(row))
+
+
+def read_trail(engine: Engine, schedule_id: str) -> tuple[ScheduleChange, ...]:
+    """A trilha gravada da escala, em ordem de `seq`, lida pelo codec do adapter."""
+    with engine.connect() as connection:
+        rows = connection.execute(
+            select(schedule_changes)
+            .where(schedule_changes.c.schedule_id == schedule_id)
+            .order_by(schedule_changes.c.seq)
+        ).all()
+    return tuple(row_to_change(row) for row in rows)

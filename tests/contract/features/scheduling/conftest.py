@@ -23,6 +23,9 @@ from sqlalchemy import Engine
 from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_config_repository import (
     PostgresScheduleConfigRepository,
 )
+from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository import (
+    PostgresScheduleRepository,
+)
 from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
     ScheduleConfigRepository,
     SchedulingSettings,
@@ -51,7 +54,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
     ValidationConfig,
 )
 from tests.conftest import truncar_tudo
-from tests.contract.features.scheduling.support import seed_settings
+from tests.contract.features.scheduling.support import read_trail, seed_settings
 from tests.fakes.features.scheduling.in_memory_schedule_config_repository import (
     InMemoryScheduleConfigRepository,
 )
@@ -63,7 +66,7 @@ from tests.fakes.features.scheduling.in_memory_staff_read import InMemoryStaffRe
 T1, T2 = TenantId("t1"), TenantId("t2")
 
 CONFIG_IMPLEMENTATIONS = ("fake", "postgres")
-SCHEDULE_IMPLEMENTATIONS = ("fake",)
+SCHEDULE_IMPLEMENTATIONS = ("fake", "postgres")
 STAFF_READ_IMPLEMENTATIONS = ("fake",)
 U1, U2 = UnitId("u1"), UnitId("u2")
 
@@ -106,17 +109,32 @@ def mundo(request: pytest.FixtureRequest) -> Iterator[StaffReadPort]:
 
 @pytest.fixture(params=SCHEDULE_IMPLEMENTATIONS)
 def schedule_repo(request: pytest.FixtureRequest) -> Iterator[ScheduleRepository]:
-    assert request.param == "fake"
-    yield InMemoryScheduleRepository()
+    if request.param == "fake":
+        yield InMemoryScheduleRepository()
+        return
+    if request.param == "postgres":
+        engine: Engine = request.getfixturevalue("engine")
+        truncar_tudo(engine)
+        yield PostgresScheduleRepository(engine)
+        return
+    raise AssertionError(f"implementação desconhecida: {request.param!r}")
 
 
 @pytest.fixture
 def trail_of(
-    schedule_repo: ScheduleRepository,
+    request: pytest.FixtureRequest, schedule_repo: ScheduleRepository
 ) -> Callable[[str], tuple[ScheduleChange, ...]]:
-    """Leitor da trilha gravada (L-SC3), por implementação — a 4.4 lê a sua tabela."""
-    assert isinstance(schedule_repo, InMemoryScheduleRepository)
-    return schedule_repo.changes_of
+    """Leitor da trilha gravada (L-SC3), por implementação.
+
+    O do real lê `schedule_changes` pelo codec do adapter (`support.read_trail`): o port
+    não tem leitura da trilha (concept 4.4 §7 D-TRAILREAD).
+    """
+    if isinstance(schedule_repo, InMemoryScheduleRepository):
+        return schedule_repo.changes_of
+    if isinstance(schedule_repo, PostgresScheduleRepository):
+        engine: Engine = request.getfixturevalue("engine")
+        return lambda schedule_id: read_trail(engine, schedule_id)
+    raise AssertionError(f"implementação sem leitor de trilha: {type(schedule_repo)!r}")
 
 
 @pytest.fixture(params=CONFIG_IMPLEMENTATIONS)
