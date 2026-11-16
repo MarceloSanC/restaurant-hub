@@ -58,6 +58,10 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 )
 from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
+from tests.fakes.features.identity.stub_action_authorizers import (
+    TEST_ACTOR_ID,
+    RecordingActionAuthorizer,
+)
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import (
@@ -183,11 +187,12 @@ class Cenario:
             invitation_ttl=_TTL,
             base_url=_BASE_URL,
             unit_of_work=self.unidade,
+            authorizer=RecordingActionAuthorizer(),
         )
 
 
 def _comando(name: str = "Cantina do Zé") -> ProvisionRestaurantCommand:
-    return ProvisionRestaurantCommand(name=name, owner_email=_EMAIL)
+    return ProvisionRestaurantCommand(actor_id=TEST_ACTOR_ID, name=name, owner_email=_EMAIL)
 
 
 def _valor_do_link(corpo: str) -> str:
@@ -242,7 +247,7 @@ class TestCaminhoFeliz:
         command que o adapter monta não tem onde carregá-la (ADR 0.0.0018)."""
         nomes = {campo.name for campo in fields(ProvisionRestaurantCommand)}
 
-        assert nomes == {"name", "owner_email"}
+        assert nomes == {"actor_id", "name", "owner_email"}
 
     def test_emite_um_token_de_convite_para_o_dono(self) -> None:
         cenario = Cenario()

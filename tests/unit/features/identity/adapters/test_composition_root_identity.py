@@ -12,6 +12,7 @@ o caminho indireto; este teste fecha essa lacuna pelo lado do consumidor.
 """
 
 import ast
+import dataclasses
 import io
 import pathlib
 from collections.abc import Callable
@@ -19,7 +20,12 @@ from datetime import timedelta
 
 import pytest
 
-from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
+from restaurant_hub.composition_root import (
+    ApplicationDependencies,
+    build_http_wiring,
+    wire_dependencies,
+)
+from restaurant_hub.features.identity.adapters.inbound.http import router as identity_router
 from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
     PostgresPasswordSetupTokenRepository,
 )
@@ -46,6 +52,9 @@ from restaurant_hub.features.identity.application.use_cases.authenticate_user im
 )
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.invite_owner import (
+    InviteOwnerUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
@@ -99,6 +108,7 @@ def test_wire_dependencies_monta_os_use_cases() -> None:
     assert isinstance(deps.identity_refresh_session, RefreshSessionUseCase)
     assert isinstance(deps.identity_create_user, CreateUserUseCase)
     assert isinstance(deps.identity_invite_user, InviteUserUseCase)
+    assert isinstance(deps.identity_invite_owner, InviteOwnerUseCase)
     assert isinstance(deps.identity_request_password_reset, RequestPasswordResetUseCase)
     assert isinstance(deps.identity_set_password_with_token, SetPasswordWithTokenUseCase)
     assert deps.identity_guard is not None
@@ -163,6 +173,11 @@ _COM_UNIDADE: dict[str, tuple[Callable[[ApplicationDependencies], object], set[s
     "invite_user": (
         lambda d: d.identity_invite_user,
         {"_users", "_restaurants", "_units", "_tokens"},
+    ),
+    # Stage 2.7 — o convite de dono pela plataforma ganhou use case próprio.
+    "invite_owner": (
+        lambda d: d.identity_invite_owner,
+        {"_users", "_restaurants", "_tokens"},
     ),
     # O da fachada, dentro do gateway de staff — o caminho da travessia entre BCs.
     "provision_account": (
@@ -278,6 +293,7 @@ def test_ttls_do_token_de_setup_vem_da_configuracao() -> None:
     deps = wire_dependencies(cfg)
 
     assert deps.identity_invite_user._invitation_ttl == timedelta(hours=5)
+    assert deps.identity_invite_owner._invitation_ttl == timedelta(hours=5)
     assert deps.identity_provision_restaurant._invitation_ttl == timedelta(hours=5)
     assert deps.identity_request_password_reset._reset_ttl == timedelta(minutes=11)
 
@@ -312,6 +328,7 @@ def test_base_url_do_link_vem_da_configuracao() -> None:
     deps = wire_dependencies(cfg)
 
     assert deps.identity_invite_user._base_url == "https://app.exemplo.com"
+    assert deps.identity_invite_owner._base_url == "https://app.exemplo.com"
     assert deps.identity_request_password_reset._base_url == "https://app.exemplo.com"
     assert (
         deps.staff_identity_gateway._facade._provision_account._base_url
@@ -418,3 +435,63 @@ def test_um_import_proibido_plantado_reprova() -> None:
     alvos = [no.module for no in ast.walk(arvore) if isinstance(no, ast.ImportFrom) and no.module]
 
     assert any(_MODULO_DE_ADAPTERS in alvo for alvo in alvos)
+
+
+# Stage 2.7 (concept CA07) — os use cases que agem por um ator, pelo campo do contêiner.
+_QUE_AUTORIZAM = (
+    "identity_provision_restaurant",
+    "identity_create_unit",
+    "identity_create_user",
+    "identity_invite_user",
+    "identity_invite_owner",
+)
+
+
+@pytest.mark.parametrize("campo", _QUE_AUTORIZAM)
+def test_o_autorizador_dos_use_cases_e_o_mesmo_do_guard(campo: str) -> None:
+    """CA07 — uma decisão, não duas: o use case e a borda autorizam sobre o mesmo
+    `AuthorizeActionUseCase`. Um segundo autorizador passaria em qualquer teste de
+    tipo e faria a borda e a application decidirem sobre estados diferentes."""
+    deps = wire_dependencies(Settings(_env_file=None))
+
+    assert getattr(deps, campo)._authorizer is deps.identity_authorize_action
+    assert deps.identity_guard._authorize_action is deps.identity_authorize_action
+
+
+def test_a_lista_dos_que_autorizam_cobre_todo_use_case_com_autorizador() -> None:
+    """A totalidade de `_QUE_AUTORIZAM`: todo use case do contêiner que tem
+    `_authorizer` está na conferência acima."""
+    deps = wire_dependencies(Settings(_env_file=None))
+    com_autorizador = {
+        campo.name
+        for campo in dataclasses.fields(deps)
+        if hasattr(getattr(deps, campo.name), "_authorizer")
+    }
+
+    assert com_autorizador == set(_QUE_AUTORIZAM)
+
+
+def _provedores_do_router() -> dict[str, object]:
+    """Os `_get_*` do router de identity — derivados do módulo, não listados."""
+    return {
+        nome: valor
+        for nome, valor in vars(identity_router).items()
+        if nome.startswith("_get_") and callable(valor)
+    }
+
+
+def test_cada_provedor_do_router_e_ligado_ao_campo_de_mesmo_nome() -> None:
+    """`build_http_wiring` liga `_get_<x>` a `deps.identity_<x>` — todos, pelo nome.
+
+    Fecha o que só o e2e pegava (auditoria de testes da 2.7): o override de
+    `_get_invite_owner` ausente, ou apontando para o use case do convite de tenant,
+    deixava a suíte unitária verde.
+    """
+    deps = wire_dependencies(Settings(_env_file=None))
+    overrides = build_http_wiring(deps).dependency_overrides
+    provedores = _provedores_do_router()
+
+    assert "_get_invite_owner" in provedores
+    for nome, provedor in provedores.items():
+        campo = "identity_" + nome.removeprefix("_get_")
+        assert overrides[provedor]() is getattr(deps, campo), nome  # type: ignore[index]

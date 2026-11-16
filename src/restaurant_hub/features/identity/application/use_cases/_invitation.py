@@ -18,11 +18,12 @@ estado. A **byte-identidade** com o formato anterior é asserida em
 **`deliver_invitation` é a exceção, e é a única casa da política de falha do envio
 do convite** (issue #170). Recebe o port e envia; se o envio falha, registra só o
 tipo da falha e o `user_id` — como `RequestPasswordResetUseCase` faz desde a issue
-#26 — e levanta `InvitationNotSentError`. Os dois use cases que convidam depois de
-comitar a conta (`InviteUserUseCase` e `ProvisionRestaurantUseCase`) passam por
-aqui, e por isso as três rotas de convite herdam a mesma garantia de uma vez.
-Desde a issue #175 o terceiro chamador é `SendInvitationUseCase`, a entrega pela
-fachada no canal `email` do login de funcionário (R17 de staff): a quarta rota.
+#26 — e levanta `InvitationNotSentError`. Os três use cases que convidam depois de
+comitar a conta (`InviteUserUseCase`, `ProvisionRestaurantUseCase` e, desde a
+Stage 2.7, `InviteOwnerUseCase`) passam por aqui, e por isso as três rotas de
+convite herdam a mesma garantia de uma vez. Desde a issue #175 há mais um chamador,
+`SendInvitationUseCase`, a entrega pela fachada no canal `email` do login de
+funcionário (R17 de staff): a quarta rota.
 """
 
 import logging

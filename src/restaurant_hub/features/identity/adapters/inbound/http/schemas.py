@@ -115,8 +115,8 @@ class InviteOwnerRequest(BaseModel):
     enviada por cliente antigo é ignorada, como todo campo extra (nota 3 do
     módulo).
 
-    Sem campo `role`: o papel é fixado em `Role.OWNER` no código (no router e no
-    use case de provisionamento). É o que garante que **nenhuma rota emite
+    Sem campo `role`: o papel é fixado em `Role.OWNER` no código (nos use cases
+    de convite de dono e de provisionamento). É o que garante que **nenhuma rota emite
     `platform_admin`** — se o papel viesse do request, estas seriam as rotas por
     onde ele entraria (ADR 2.4.0003 §2b).
     """

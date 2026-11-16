@@ -51,6 +51,10 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
+from tests.fakes.features.identity.stub_action_authorizers import (
+    TEST_ACTOR_ID,
+    RecordingActionAuthorizer,
+)
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import (
@@ -152,6 +156,7 @@ class Cenario:
             invitation_ttl=_TTL,
             base_url=_BASE_URL,
             unit_of_work=self.unidade,
+            authorizer=RecordingActionAuthorizer(),
         )
 
 
@@ -162,6 +167,7 @@ def _comando(
     unit_ids: tuple[str, ...] = (),
 ) -> InviteUserCommand:
     return InviteUserCommand(
+        actor_id=TEST_ACTOR_ID,
         email=Email(email),
         role=role,
         tenant_id=RestaurantId(tenant) if tenant is not None else None,

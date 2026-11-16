@@ -52,6 +52,8 @@ _DE_APLICACAO = frozenset(
         # Issue #170 — a entrega por um port de saída falhou depois do commit. Não
         # é regra de produto: é o caso de uso que não pôde ser concluído.
         "InvitationNotSentError",
+        # Stage 2.7 — papel válido no domínio que a entrada da fachada não aceita.
+        "RoleNotProvisionableError",
     }
 )
 
@@ -74,7 +76,7 @@ def _application_error_classes() -> list[type]:
     ]
 
 
-def test_modulo_declara_as_vinte_e_uma_excecoes_esperadas() -> None:
+def test_modulo_declara_as_vinte_e_duas_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
@@ -113,6 +115,8 @@ def test_modulo_declara_as_vinte_e_uma_excecoes_esperadas() -> None:
         # própria para que a falha do provedor seja SUBSTITUÍDA, e não embrulhada:
         # a mensagem dela pode ecoar o destinatário e o link.
         "InvitationNotSentError",
+        # Stage 2.7 — a fachada só provisiona `employee` (ADR 2.7.0001 §Decision 5).
+        "RoleNotProvisionableError",
     }
 
 
