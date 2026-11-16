@@ -906,11 +906,15 @@ e [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
    - **registra a auditoria no PR** — comentário com o veredito + o label
      de auditoria gravado como `complete` (procedimento completo na skill
      de auditoria);
-   - **o merge é do usuário** (salvo pedido explícito, corrida autônoma
-     autorizada — [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md)
-     — ou orquestração de Step —
-     [ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md); a regra
-     de aprovação vive em [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §Gates de PR).
+   - **com o escopo fechado, faz o merge e a limpeza ela mesma**, sem
+     esperar OK (Fase F da skill —
+     [ADR 0.0.0022](./adr/0_0_0022-audit-session-closes-the-pr-it-validated.md)).
+     Na corrida autônoma autorizada
+     ([ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md)) e na
+     orquestração de Step
+     ([ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md)) o
+     merge é de quem despachou a auditoria. A regra de aprovação vive em
+     [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §Gates de PR.
 
 **Orquestração autônoma** ([`PROMPT-orchestrator-autonomous.md`](./PROMPT-orchestrator-autonomous.md),
 [ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)):

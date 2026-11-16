@@ -336,10 +336,12 @@ verificação (remota, local, worktree, containers, hooks). O label `complete` d
 segue os passos 1–2 da mesma seção: gravado com a branch sem conflito, e conferido o run novo do
 `audit-gate`.
 
-> **Override consciente da skill.** A `stage-audit` diz "nunca faz merge — é do usuário, salvo
-> pedido explícito". Aqui o **pedido explícito é este prompt**, ratificado pelo humano no
-> [ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md): o auditor continua sem mão no
-> merge (só julga e grava o label); quem mergeia é a **mestra**, e só com as condições acima.
+> **Aqui a Fase F da skill é da mestra.** A `stage-audit` fecha o PR sozinha na Fase F
+> ([ADR 0.0.0022](./adr/0_0_0022-audit-session-closes-the-pr-it-validated.md);
+> [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Fechamento autônomo pela auditoria"). Sob este prompt
+> os subagentes de auditoria (§3.1–§3.3) **param antes da Fase F**: o re-auditor grava o label e
+> devolve o veredito. Quem mergeia é a **mestra**
+> ([ADR 0.0.0007](./adr/0_0_0007-step-orchestrator-self-merges.md)), e só com as condições acima.
 
 ### 3.5 Relatório ao humano (formato da stage-audit) — informativo, não bloqueia
 
@@ -361,6 +363,12 @@ Quando **todas** as Stages do Step estiverem mergeadas: atualizar o **status do 
 Steps do `docs/roadmap.md` (`in_progress` → `done`, `last_reviewed_at` hoje) e entregar o
 **relatório do Step** — o que entregou de negócio, as Stages/PRs, os ADRs (forks decididos), e o doc
 de domínio que passou a `accepted` (ou, no Step 1, a **dispensa do gate** com a razão).
+
+O relatório do Step é **informativo**, como o da Stage (§3.5): a fronteira do Step **não é gate**
+([ADR 0.0.0022](./adr/0_0_0022-audit-session-closes-the-pr-it-validated.md),
+§Decision 5). O merge da última Stage não esperou por ele, e nenhuma Stage do Step seguinte
+espera. A revisão humana do BC inteiro é assíncrona; defeito que ela apontar vira **revisão
+pós-Stage**. Pausa na fronteira só existe quando o sponsor a declara para aquela corrida.
 
 ---
 

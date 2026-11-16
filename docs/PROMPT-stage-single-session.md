@@ -547,8 +547,9 @@ validação de gap real.
 **Você ABRE o PR ao final** (`git push` + `gh pr create`) — a sessão que
 implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
 `git rebase origin/develop` (o `roadmap.md` é o conflito recorrente; ver
-GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, salvo
-pedido explícito. Não execute `gh pr merge`.
+GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é da sessão de
+auditoria, que roda em contexto limpo e fecha o PR na Fase F da `stage-audit`
+(GIT-WORKFLOW §"Fechamento autônomo pela auditoria"). Não execute `gh pr merge`.
 
 > **Exceção — corrida autônoma autorizada.** Numa corrida coberta pelo
 > [ADR 0.0.0004](./adr/0_0_0004-autonomous-overnight-mode.md) (`status:
@@ -670,7 +671,7 @@ gh pr create --base develop --title "feat(<escopo>): stage <N.M> — <title_huma
 ```
 
 Depois do PR aberto, a sessão de auditoria valida e completa o checklist; o
-CI roda e **o usuário faz o merge** (salvo pedido explícito).
+CI roda e **ela mesma faz o merge**, com o escopo fechado (Fase F da `stage-audit`).
 
 # CONTRADIÇÕES
 
@@ -711,7 +712,7 @@ fonte mais alta na hierarquia.**
 8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) +
    relatório final (com disposições dos checkpoints).
 
-**PARE no merge.** Você faz push e abre o PR; o **merge é do usuário** (salvo pedido explícito, ou corrida autônoma autorizada pelo ADR 0.0.0004 — ver §REGRA DE PR). Não execute `gh pr merge`.
+**PARE no merge.** Você faz push e abre o PR; o **merge é da sessão de auditoria** (ou seu, só em corrida autônoma autorizada pelo ADR 0.0.0004 — ver §REGRA DE PR). Não execute `gh pr merge`.
 ````
 
 ---

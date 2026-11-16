@@ -380,8 +380,9 @@ gh pr create --base develop --title "..." --body "..."
 ```
 ```
 
-O usuário fará o `git push`, abrirá o PR, vai esperar CI/aprovação e fará
-o merge. **Você não toca nessa parte.**
+O usuário fará o `git push` e abrirá o PR. A sessão de auditoria (`issue-audit`,
+contexto limpo) valida e, com o escopo fechado, faz o merge (Fase F da skill —
+GIT-WORKFLOW §"Fechamento autônomo pela auditoria"). **Você não toca nessa parte.**
 
 # CONTRADIÇÕES
 
