@@ -206,9 +206,7 @@ class PostgresScheduleRepository:
             )
             self._insert_children(connection, mappers.schedule_to_rows(schedule))
             seq = connection.execute(next_seq_statement(schedule.id)).scalar_one()
-            connection.execute(
-                schedule_changes.insert().values(mappers.change_to_row(schedule, change, seq))
-            )
+            _ = seq  # MUTANTE 1: a trilha do save nao e gravada
 
     # ---- leitura ----------------------------------------------------------
 
