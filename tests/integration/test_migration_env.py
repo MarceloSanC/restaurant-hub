@@ -240,7 +240,7 @@ def test_url_do_chamador_invalida_e_recusada(invalida: object, scratch_url: str)
 
 @pytest.mark.parametrize(
     ("url", "alvo", "tem_timestamptz"),
-    [("mysql+pymysql://u:p@h/db", "0004", False), ("postgresql+psycopg://u:p@h/db", "head", True)],
+    [("mysql+pymysql://u:p@h/db", "0005", False), ("postgresql+psycopg://u:p@h/db", "head", True)],
     ids=["mysql", "postgres"],
 )
 def test_offline_gera_o_sql_no_dialeto_da_url_do_chamador(
@@ -251,7 +251,7 @@ def test_offline_gera_o_sql_no_dialeto_da_url_do_chamador(
     Com uma URL MySQL no atributo, o `TIMESTAMP WITH TIME ZONE` do Postgres some
     — um `env.py` que usasse as Settings (Postgres) no offline o manteria.
 
-    O lado MySQL para na `0004` (Stage 4.4): a `0006_scheduling` usa construções só do
+    O lado MySQL para na `0005` (Stage 4.4): a `0006_scheduling` usa construções só do
     Postgres (exclusion constraint, `JSONB`, `CREATE EXTENSION`), que nenhum outro
     dialeto renderiza. O que o teste mede — o dialeto vem da URL do chamador — não
     depende de qual revisão é renderizada; o lado Postgres segue até `head`.

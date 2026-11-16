@@ -15,7 +15,8 @@ sobrevive ao `downgrade base`. O detalhe de constraint, índice e tipo daquele
 schema fica em `features/staff/adapters/out/postgres/test_schema.py`; aqui só a
 existência e a reversibilidade.
 
-A Stage 4.4 acrescentou a `0006_scheduling` (CA10): as seis tabelas de scheduling e a
+A Stage 4.4 acrescentou a `0006_scheduling`, sobre a `0005` (CA10): as seis tabelas de
+scheduling e a
 extensão `btree_gist` existem após o `upgrade`; o `downgrade` de **um passo** remove as
 seis, deixa as de staff e **deixa a extensão**, que pode ter existido antes. O detalhe
 fica em `features/scheduling/adapters/out/postgres/test_schema.py`.
@@ -339,8 +340,8 @@ def test_downgrade_da_0006_remove_as_seis_tabelas_e_deixa_a_extensao(
 ) -> None:
     """CA10, metade do `downgrade` — descer **um passo**, até a revisão anterior à `0006`.
 
-    O alvo é lido do `down_revision` da própria `0006`, não escrito à mão: a `0005` da
-    Stage 3.11 nasce em paralelo, e quem mergear por último reencadeia as duas. Descer
+    O alvo é lido do `down_revision` da própria `0006`, não escrito à mão: a cadeia já
+    foi reencadeada uma vez (a `0005` da Stage 3.11 correu em paralelo). Descer
     até `base` não mediria nada: a `0003.downgrade` derruba staff junto, e uma
     `0006.downgrade` vazia sobreviveria. A extensão fica — pode ter existido antes, e
     outro objeto pode depender dela.

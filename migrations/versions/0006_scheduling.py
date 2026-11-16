@@ -7,9 +7,9 @@ trilha de auditoria (`schedule_changes`) e a configuração do tenant
 (`scheduling_settings`).
 
 **Numeração:** `0006`, não `0003` como o bloco 4.4 do roadmap dizia. `0003` é de staff
-desde a Stage 3.3, e a `0005` é da Stage 3.11 (PR #188), em voo junto com esta. As duas
-nascem sobre a `0004`; quem mergear por último aponta o `down_revision` para a outra,
-para o Alembic ter um head só (concept 4.4 §7 D-MIG).
+desde a Stage 3.3, e a `0005` é da Stage 3.11 (PR #188), que correu em paralelo com esta.
+As duas nasceram sobre a `0004`; a 3.11 mergeou primeiro, e esta passou a apontar para a
+`0005`, para o Alembic ter um head só (concept 4.4 §7 D-MIG).
 
 **A extensão `btree_gist`** é criada aqui: a exclusion constraint de dias disjuntos
 (L-SC2, ADR 4.4.0001) compara `tenant_id` e `unit_id` com `=` dentro de um índice GiST,
@@ -24,7 +24,7 @@ que lesse o enum de hoje descreveria o schema de hoje, e não o do dia em que fo
 aplicada.
 
 Revision ID: 0006
-Revises: 0004
+Revises: 0005
 Create Date: 2026-11-16
 """
 
@@ -35,7 +35,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0006"
-down_revision: str | None = "0004"
+down_revision: str | None = "0005"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
