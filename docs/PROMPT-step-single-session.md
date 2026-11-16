@@ -5,7 +5,7 @@ when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) trav
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
 created_at: 2026-07-05
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 ---
 
 # Prompt — Orquestração de Step em Sessão Mestra
@@ -58,9 +58,9 @@ produziu a fase anterior. Para uma Stage, a sequência de subagentes é:
 |---|---|---|
 | **3A — Concept** | autor de concept | escreve `concept.md` (+ ADRs de fork, §2) |
 | **Checkpoint A** | 2 revisores (lentes distintas) | conformidade · domínio/testabilidade |
-| **3B — Technical** | autor de technical | escreve `technical.md` (Tasks + rastreabilidade) |
-| **Checkpoint B** | revisor | matriz de rastreabilidade (critério → Task) |
-| **4 — Execução** | executor | roda as Tasks em ordem (`make check` por commit) |
+| **3B — Technical** | autor de technical | escreve `technical.md` (Tasks + rastreabilidade + plano de gates) |
+| **Checkpoint B** | revisor | matriz de rastreabilidade (critério → Task) + plano de gates |
+| **4 — Execução** | executor | roda as Tasks em ordem (testes da Task antes do commit; `make check` completo só nos pontos do plano de gates — PIPELINE §9.6) |
 | **Checkpoint C** | revisor (por bloco de 2–3 Tasks) | diff × concept/technical/LAYOUT/skills |
 | **Auditoria de testes** | auditor de testes | loop até todos "sim" + mutação real |
 

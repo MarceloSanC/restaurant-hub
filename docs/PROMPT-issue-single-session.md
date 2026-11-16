@@ -5,7 +5,7 @@ when-use: Issue avulsa da tabela de issues do roadmap com escopo delimitado, sob
 keywords: [prompt, issue, single-session, execucao, lifecycle]
 status: draft
 created_at: 2026-06-10
-updated_at: 2026-11-01
+updated_at: 2026-11-16
 ---
 
 # Prompt — Execução de Issue Avulsa em Sessão Única
@@ -164,7 +164,10 @@ exatos a modificar. Sua responsabilidade é ler o código e identificar o que pr
    - Ordem respeita dependências.
 3. Listar as sub-tasks em texto antes de codar. Se > 8, declare issue grande demais e
    PARE — propor abertura de Stage.
-4. Identificar **bifurcações materiais**: decisões ausentes na issue, no roadmap e no
+4. **Plano de gates:** listar junto das sub-tasks depois de quais o `make check` completo
+   precisa estar verde e por quê. De 1 a 3 pontos por issue, o de saída incluído; o padrão
+   é só o de saída. Regra completa: PIPELINE §9.6.
+5. Identificar **bifurcações materiais**: decisões ausentes na issue, no roadmap e no
    código existente que afetam contrato, fronteira ou critério de aceite.
    - Se houver: usar `AskUserQuestion` antes de codar.
    - Se não houver: declare "Não identifiquei bifurcações materiais" e siga.
@@ -182,7 +185,10 @@ Para cada sub-task em ordem:
    - **Irreversível ou caro** (port shape, contrato externo, formato persistido) →
      PERGUNTA antes de codar.
 3. **Implementar** e dar resumo conciso do que foi feito antes de commitar.
-4. **Rodar checks da sub-task.** Se falhar:
+4. **Rodar os checks da sub-task: só os testes dela** (`pytest <arquivos> -q --no-cov`;
+   os que ela escreveu ou alterou, mais as varreduras de totalidade que os arquivos dela
+   alimentam). O `make check` completo roda só nos pontos do plano de gates; ponto extra
+   que aparecer na execução vai no corpo do PR como `[deviation]` (PIPELINE §9.6). Se falhar:
    - Ajuste menor (import faltando, type hint) → corrige.
    - Problema de design → PARA e reporta.
 5. **Registrar decisão/achado** se algo surgir na execução que não estava na issue:
