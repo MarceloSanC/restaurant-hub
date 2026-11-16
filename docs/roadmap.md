@@ -260,6 +260,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#208](https://github.com/MarceloSanC/restaurant-hub/issues/208) | Docstring de `permission.py` com `manage_job_functions` exercida em unidade nomeada | identity | docs (domain) | open | `3.11-job-function-unit-enablement` |
 | [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | open | `3.11-job-function-unit-enablement` |
 | [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | open | — |
+| [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | open | #184 |
+| [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
