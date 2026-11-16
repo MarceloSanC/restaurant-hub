@@ -24,7 +24,9 @@ tasks_count: 0
 > 2. Executar Tasks em ordem (§2). **1 Task = 1 commit.**
 > 3. Cada Task traz: arquivos a tocar, descrição, critério de aceite,
 >    comando de verificação.
-> 4. **Não avançar para próxima Task sem verificação verde.**
+> 4. **Não avançar para próxima Task sem verificação verde.** A
+>    verificação da Task roda só os testes dela; o `make check` completo
+>    roda só nos pontos do [plano de gates](#plano-de-gates).
 > 5. Mensagem de commit segue [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
 >    `<type>(<scope>): <description> [N.M/task-NN]`
 > 6. Ao encontrar algo não previsto em §1–§6 ou no `concept.md`:
@@ -57,6 +59,20 @@ dependências externas? Ordem das Tasks e razão.>
 - <ex.: Python 3.12+, pyproject já existe>
 - <ex.: redis local rodando em porta 6379>
 
+### Plano de gates
+
+> Depois de quais Tasks o `make check` completo precisa estar verde.
+> **Orçamento: 1 a 3 pontos por Stage, o de saída incluído.** Nas demais
+> Tasks o comando de verificação roda só os testes da Task. Ponto no
+> meio da Stage precisa de motivo concreto; do 4º ponto em diante, de
+> justificativa por ponto. Regra completa (onde pôr um ponto, varreduras
+> de totalidade, como o ponto é cumprido sob orquestração):
+> [`PIPELINE.md`](../../PIPELINE.md) §9.6.
+
+| # | Depois da Task | Motivo |
+|---|---|---|
+| 1 | <Task NN, ou "saída"> | <quebra que este ponto pega e por que esperar o próximo sairia caro; no de saída: "gate de saída (§3)"> |
+
 ### Estrutura de pastas afetada
 
 ```
@@ -87,11 +103,11 @@ tests/
   - <interface esperada, comportamento esperado, exceções>
 - **Critério de aceite:**
   - <ex.: testes em `tests/.../test_<arquivo>.py` cobrem happy path e erro>
-- **Comando de verificação:**
+- **Comando de verificação** (só os testes da Task: os que ela escreve
+  ou altera, mais as varreduras de totalidade que os arquivos dela
+  alimentam; `make check` apenas se a Task está no plano de gates):
   ```bash
-  pytest tests/<pasta>/test_<arquivo>.py -v
-  mypy --strict src/restaurant_hub/<camada>/<arquivo>.py
-  python scripts/check_layout.py
+  pytest tests/<pasta>/test_<arquivo>.py -q --no-cov
   ```
 - **Commit sugerido:** `feat(<scope>): <description> [N.M/task-01]`
 
@@ -121,8 +137,7 @@ tests/
 
 ### Verificações automatizadas
 ```bash
-make check                # lint + type + import-linter + check_layout + testes
-pytest tests/             # todos os testes
+make check                # gate completo: o último ponto do plano de gates
 <outros comandos específicos da Stage>
 ```
 
@@ -132,7 +147,7 @@ pytest tests/             # todos os testes
 
 ### Checklist de fechamento da Stage
 - [ ] Todas as Tasks commitadas, cada uma com seu check verde
-- [ ] `make check` verde no branch
+- [ ] `make check` verde no branch, em cada ponto do plano de gates
 - [ ] Commit final `stage N.M: complete` aplicado
 - [ ] Branch mergeado em `develop`
 - [ ] `roadmap.md` atualizado: Stage marcada `done`, `updated_at` e
