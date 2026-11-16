@@ -878,6 +878,7 @@ def test_regra10_o_classificador_bate_com_os_ports_reais() -> None:
         "PasswordSetupTokenRepository.purge_expired",
         "JobFunctionRepository.add",
         "JobFunctionRepository.update",
+        "JobFunctionRepository.update_enablement",
         "JobFunctionRepository.delete",
         "EmployeeRepository.add",
         "EmployeeRepository.update",
