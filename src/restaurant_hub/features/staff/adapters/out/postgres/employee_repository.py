@@ -333,7 +333,7 @@ class PostgresEmployeeRepository:
             ).scalar_one()
         return bool(found)
 
-    def units_referencing_job_function(
+    def list_units_referencing_job_function(
         self, tenant_id: TenantId, job_function_id: JobFunctionId
     ) -> frozenset[UnitId]:
         """L-E8 — unidades dos registros que detêm a função, **sem filtro de `active`**.

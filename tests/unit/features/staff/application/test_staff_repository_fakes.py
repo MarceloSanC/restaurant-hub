@@ -154,8 +154,10 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
             lambda: fakes.employees.exists_by_job_function(_TENANT, JobFunctionId("f1")),
         ),
         (
-            "employees.units_referencing_job_function",
-            lambda: fakes.employees.units_referencing_job_function(_TENANT, JobFunctionId("f1")),
+            "employees.list_units_referencing_job_function",
+            lambda: fakes.employees.list_units_referencing_job_function(
+                _TENANT, JobFunctionId("f1")
+            ),
         ),
         (
             "employees.delete",

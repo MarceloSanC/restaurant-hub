@@ -630,7 +630,7 @@ def test_l_e7_exists_by_job_function_e_false_para_referencia_de_outro_tenant(
 
 def test_l_e8_sem_referencia_devolve_conjunto_vazio(repos: RepositoriosDeStaff) -> None:
     _com_funcoes_gravadas(repos)
-    assert repos.employees.units_referencing_job_function(_A, _F1) == frozenset()
+    assert repos.employees.list_units_referencing_job_function(_A, _F1) == frozenset()
 
 
 def test_l_e8_devolve_cada_unidade_uma_vez_e_conta_desligado(repos: RepositoriosDeStaff) -> None:
@@ -648,8 +648,8 @@ def test_l_e8_devolve_cada_unidade_uma_vez_e_conta_desligado(repos: Repositorios
         _funcionario(id=EmployeeId("e4"), unit_id=UnitId("u3"), job_function_ids=frozenset({_F2}))
     )
 
-    assert repos.employees.units_referencing_job_function(_A, _F1) == frozenset({_U1, _U2})
-    assert repos.employees.units_referencing_job_function(_A, _F2) == frozenset({UnitId("u3")})
+    assert repos.employees.list_units_referencing_job_function(_A, _F1) == frozenset({_U1, _U2})
+    assert repos.employees.list_units_referencing_job_function(_A, _F2) == frozenset({UnitId("u3")})
 
 
 def test_l_e8_referencia_de_outro_tenant_nao_conta(repos: RepositoriosDeStaff) -> None:
@@ -657,10 +657,12 @@ def test_l_e8_referencia_de_outro_tenant_nao_conta(repos: RepositoriosDeStaff) -
     repos.employees.add(
         _funcionario(tenant_id=_B, job_function_ids=frozenset({JobFunctionId("f-b")}))
     )
-    assert repos.employees.units_referencing_job_function(_A, JobFunctionId("f-b")) == frozenset()
-    assert repos.employees.units_referencing_job_function(_B, JobFunctionId("f-b")) == frozenset(
-        {_U1}
+    assert (
+        repos.employees.list_units_referencing_job_function(_A, JobFunctionId("f-b")) == frozenset()
     )
+    assert repos.employees.list_units_referencing_job_function(
+        _B, JobFunctionId("f-b")
+    ) == frozenset({_U1})
 
 
 # --- L-ORD: ordem total da listagem e da reidratação (ADR 3.3.0003) ----------

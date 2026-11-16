@@ -62,7 +62,7 @@ in the use cases with the port queries that support it (ADR 3.2.0001), at four p
    `JobFunctionInUseError` (`409`), the same error the guarded delete uses for the same
    reason. Terminated records count: the record survives termination and still points
    at the function (ADR 3.2.0006). The supporting query is the new
-   `EmployeeRepository` law `L-E8` (`units_referencing_job_function`).
+   `EmployeeRepository` law `L-E8` (`list_units_referencing_job_function`).
 
 **Declared limit:** the four checks are check-then-act. Unlike the delete guard, no
 foreign key closes the race — the enablement is "a flag or a row", which a

@@ -260,7 +260,7 @@ class EmployeeRepository(Protocol):
         """
         ...
 
-    def units_referencing_job_function(
+    def list_units_referencing_job_function(
         self, tenant_id: TenantId, job_function_id: JobFunctionId
     ) -> frozenset[UnitId]:
         """Unidades do tenant em que **algum** registro detém a função (Stage 3.11).
