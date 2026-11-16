@@ -537,3 +537,19 @@ def test_os_facade_only_so_sao_importados_pela_fachada_e_pelo_composition_root()
                 importadores.add(arquivo)
 
     assert importadores == _IMPORTADORES_PERMITIDOS
+
+
+def test_a_regra_de_composicao_e_definida_num_so_modulo_de_src() -> None:
+    """CA09 — `required_permissions_for_role` tem **uma** definição em `src/`, no
+    módulo do port. Uma cópia local (na borda, num use case) passaria no teste que
+    só olha `dependencies.py`, e a borda e a application exigiriam coisas diferentes."""
+    definidores = {
+        arquivo
+        for arquivo in _SRC.rglob("*.py")
+        for no in ast.walk(ast.parse(arquivo.read_text("utf-8")))
+        if isinstance(no, ast.FunctionDef) and no.name == "required_permissions_for_role"
+    }
+
+    assert definidores == {
+        _SRC / "features" / "identity" / "application" / "ports" / "out" / "action_authorizer.py"
+    }

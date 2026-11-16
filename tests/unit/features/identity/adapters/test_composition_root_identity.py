@@ -20,7 +20,12 @@ from datetime import timedelta
 
 import pytest
 
-from restaurant_hub.composition_root import ApplicationDependencies, wire_dependencies
+from restaurant_hub.composition_root import (
+    ApplicationDependencies,
+    build_http_wiring,
+    wire_dependencies,
+)
+from restaurant_hub.features.identity.adapters.inbound.http import router as identity_router
 from restaurant_hub.features.identity.adapters.out.postgres.password_setup_token_repository import (
     PostgresPasswordSetupTokenRepository,
 )
@@ -288,6 +293,7 @@ def test_ttls_do_token_de_setup_vem_da_configuracao() -> None:
     deps = wire_dependencies(cfg)
 
     assert deps.identity_invite_user._invitation_ttl == timedelta(hours=5)
+    assert deps.identity_invite_owner._invitation_ttl == timedelta(hours=5)
     assert deps.identity_provision_restaurant._invitation_ttl == timedelta(hours=5)
     assert deps.identity_request_password_reset._reset_ttl == timedelta(minutes=11)
 
@@ -322,6 +328,7 @@ def test_base_url_do_link_vem_da_configuracao() -> None:
     deps = wire_dependencies(cfg)
 
     assert deps.identity_invite_user._base_url == "https://app.exemplo.com"
+    assert deps.identity_invite_owner._base_url == "https://app.exemplo.com"
     assert deps.identity_request_password_reset._base_url == "https://app.exemplo.com"
     assert (
         deps.staff_identity_gateway._facade._provision_account._base_url
@@ -462,3 +469,29 @@ def test_a_lista_dos_que_autorizam_cobre_todo_use_case_com_autorizador() -> None
     }
 
     assert com_autorizador == set(_QUE_AUTORIZAM)
+
+
+def _provedores_do_router() -> dict[str, object]:
+    """Os `_get_*` do router de identity — derivados do módulo, não listados."""
+    return {
+        nome: valor
+        for nome, valor in vars(identity_router).items()
+        if nome.startswith("_get_") and callable(valor)
+    }
+
+
+def test_cada_provedor_do_router_e_ligado_ao_campo_de_mesmo_nome() -> None:
+    """`build_http_wiring` liga `_get_<x>` a `deps.identity_<x>` — todos, pelo nome.
+
+    Fecha o que só o e2e pegava (auditoria de testes da 2.7): o override de
+    `_get_invite_owner` ausente, ou apontando para o use case do convite de tenant,
+    deixava a suíte unitária verde.
+    """
+    deps = wire_dependencies(Settings(_env_file=None))
+    overrides = build_http_wiring(deps).dependency_overrides
+    provedores = _provedores_do_router()
+
+    assert "_get_invite_owner" in provedores
+    for nome, provedor in provedores.items():
+        campo = "identity_" + nome.removeprefix("_get_")
+        assert overrides[provedor]() is getattr(deps, campo), nome  # type: ignore[index]

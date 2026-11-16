@@ -42,6 +42,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.user_repository impo
     PostgresUserRepository,
 )
 from restaurant_hub.features.identity.application.dtos.commands import (
+    InviteOwnerCommand,
     InviteUserCommand,
     ProvisionAccountCommand,
     ProvisionRestaurantCommand,
@@ -66,6 +67,9 @@ from restaurant_hub.features.identity.application.errors import (
     InvitationNotSentError,
     RefreshTokenReuseError,
     SessionFingerprintAlreadyExistsError,
+)
+from restaurant_hub.features.identity.application.use_cases.invite_owner import (
+    InviteOwnerUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.invite_user import (
     InviteUserUseCase,
@@ -543,6 +547,69 @@ class TestConviteAtomico:
         linhas = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)
         assert sum(1 for linha in linhas["users"] if linha[0] != "user-1") == 1  # a conta nova
         assert len(linhas["unit_memberships"]) == 1
+        assert len(linhas["password_setup_tokens"]) == 1
+        assert len(sender.sent) == 1
+
+
+# ---------------------------------------------------------------------------
+# invite_owner — o convite de dono pela plataforma (Stage 2.7, ADR 2.7.0001):
+# as mesmas duas escritas do convite, na mesma unidade
+# ---------------------------------------------------------------------------
+
+
+def _convidar_dono(
+    engine: Engine, registro: Registro
+) -> tuple[InviteOwnerUseCase, RecordingEmailSender]:
+    sender = RecordingEmailSender()
+    use_case = InviteOwnerUseCase(
+        users=_Usuarios(engine, registro),
+        restaurants=PostgresRestaurantRepository(engine),
+        hasher=FakePasswordHasher(),
+        tokens=_Tokens(engine, registro),
+        token_issuer=FakeSetupTokenIssuer(),
+        email_sender=sender,
+        id_generator=FakeIdGenerator(),
+        clock=FakeClock(_AGORA),
+        invitation_ttl=timedelta(hours=72),
+        base_url="https://app.exemplo.com",
+        unit_of_work=PostgresUnitOfWork(engine),
+        authorizer=RecordingActionAuthorizer(),
+    )
+    return use_case, sender
+
+
+def _convite_de_dono() -> InviteOwnerCommand:
+    return InviteOwnerCommand(
+        actor_id=TEST_ACTOR_ID, email=Email("dono-novo@x.com"), tenant_id=RestaurantId("rest-a")
+    )
+
+
+class TestConviteDeDonoAtomico:
+    @pytest.mark.parametrize("n", range(1, len(_ESCRITAS_DO_CONVITE) + 1))
+    def test_falha_na_escrita_n_deixa_as_tabelas_identicas(
+        self, banco_limpo: Engine, n: int
+    ) -> None:
+        _semear_tenant_e_usuario(banco_limpo)
+        antes = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)
+        registro = Registro(falhar_em=n)
+        use_case, sender = _convidar_dono(banco_limpo, registro)
+
+        with pytest.raises(_FalhaInjetada):
+            use_case.execute(_convite_de_dono())
+
+        assert tuple(registro.escritas) == _ESCRITAS_DO_CONVITE[:n]
+        assert _linhas(banco_limpo, *_TABELAS_DO_CONVITE) == antes
+        assert sender.sent == ()
+
+    def test_sem_falha_grava_conta_e_token_e_envia(self, banco_limpo: Engine) -> None:
+        _semear_tenant_e_usuario(banco_limpo)
+        use_case, sender = _convidar_dono(banco_limpo, Registro())
+
+        use_case.execute(_convite_de_dono())
+
+        linhas = _linhas(banco_limpo, *_TABELAS_DO_CONVITE)
+        assert sum(1 for linha in linhas["users"] if linha[0] != "user-1") == 1  # a conta nova
+        assert len(linhas["unit_memberships"]) == 0
         assert len(linhas["password_setup_tokens"]) == 1
         assert len(sender.sent) == 1
 

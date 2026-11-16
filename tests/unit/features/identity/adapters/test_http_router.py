@@ -9,7 +9,7 @@ Os repositórios são fakes; o que se testa aqui é **a rota**, não a persistê
 O caminho com Postgres real é a Task 12.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 
@@ -29,6 +29,9 @@ from restaurant_hub.features.identity.application.dtos.identifiers import (
     SessionId,
 )
 from restaurant_hub.features.identity.application.dtos.tokens import AccessTokenClaims
+from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
+    ActionAuthorizer,
+)
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
@@ -69,6 +72,7 @@ from tests.fakes.features.identity.in_memory_restaurant_repository import (
 from tests.fakes.features.identity.in_memory_unit_of_work import InMemoryUnitOfWork
 from tests.fakes.features.identity.in_memory_unit_repository import InMemoryUnitRepository
 from tests.fakes.features.identity.in_memory_user_repository import InMemoryUserRepository
+from tests.fakes.features.identity.stub_action_authorizers import RecordingActionAuthorizer
 from tests.fakes.shared.fake_clock import FakeClock
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 from tests.fakes.shared.recording_email_sender import (
@@ -99,7 +103,7 @@ class _SenderQuebravel(RecordingEmailSender):
 class _Ambiente:
     """App real montada com fakes — o mesmo caminho que o composition root monta."""
 
-    def __init__(self) -> None:
+    def __init__(self, autorizador_dos_use_cases: ActionAuthorizer | None = None) -> None:
         self.restaurants = InMemoryRestaurantRepository()
         self.units = InMemoryUnitRepository()
         self.users = InMemoryUserRepository()
@@ -110,6 +114,10 @@ class _Ambiente:
         self.sender = _SenderQuebravel()
 
         autorizar = AuthorizeActionUseCase(users=self.users, units=self.units)
+        # Por padrão, o **mesmo** autorizador na borda e nos use cases, como no
+        # composition root. Os testes de R7 (Stage 2.7) passam um dublê que concede
+        # tudo aos use cases — assim só a borda pode negar.
+        autorizador = autorizador_dos_use_cases or autorizar
         guard = dependencies_module.IdentityGuard(
             token_issuer=self.issuer, authorize_action=autorizar
         )
@@ -133,13 +141,13 @@ class _Ambiente:
                     unit_of_work=InMemoryUnitOfWork(
                         self.restaurants, self.users, self.setup_tokens
                     ),
-                    authorizer=autorizar,
+                    authorizer=autorizador,
                 ),
                 router_module._get_create_unit: lambda: CreateUnitUseCase(
                     units=self.units,
                     restaurants=self.restaurants,
                     id_generator=FakeIdGenerator(),
-                    authorizer=autorizar,
+                    authorizer=autorizador,
                 ),
                 router_module._get_create_user: lambda: CreateUserUseCase(
                     users=self.users,
@@ -147,7 +155,7 @@ class _Ambiente:
                     units=self.units,
                     hasher=self.hasher,
                     id_generator=FakeIdGenerator(),
-                    authorizer=autorizar,
+                    authorizer=autorizador,
                 ),
                 router_module._get_invite_user: lambda: InviteUserUseCase(
                     users=self.users,
@@ -162,7 +170,7 @@ class _Ambiente:
                     invitation_ttl=timedelta(hours=72),
                     base_url="https://app.exemplo.com",
                     unit_of_work=InMemoryUnitOfWork(self.users, self.setup_tokens),
-                    authorizer=autorizar,
+                    authorizer=autorizador,
                 ),
                 # O **mesmo** `AuthorizeActionUseCase` do guard (Stage 2.7): a rota e
                 # o use case decidem sobre o mesmo estado, como no composition root.
@@ -178,7 +186,7 @@ class _Ambiente:
                     invitation_ttl=timedelta(hours=72),
                     base_url="https://app.exemplo.com",
                     unit_of_work=InMemoryUnitOfWork(self.users, self.setup_tokens),
-                    authorizer=autorizar,
+                    authorizer=autorizador,
                 ),
             }
         )
@@ -953,3 +961,104 @@ async def test_falha_do_sender_no_convite_devolve_500(ambiente: _Ambiente) -> No
         )
 
     assert resposta.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+# ---------------------------------------------------------------------------
+# R7 da Stage 2.7 — a borda continua negando **sozinha** (defesa em profundidade)
+# ---------------------------------------------------------------------------
+#
+# Desde a 2.7 o use case autoriza o mesmo requisito, e com o mesmo autorizador nos
+# dois lugares todo 403 acima passaria com ou sem a chamada da borda (mutação real
+# da auditoria de testes: tirar `guard.authorize` de três rotas deixava a suíte
+# verde). Aqui os use cases recebem um dublê que concede tudo: se a resposta é 403
+# e o dublê não foi consultado, quem negou foi a borda.
+
+
+async def _post_so_com_a_borda(
+    preparar: Callable[[_Ambiente], tuple[User, str, dict[str, object]]],
+) -> tuple[int, RecordingActionAuthorizer]:
+    do_use_case = RecordingActionAuthorizer()
+    ambiente = _Ambiente(autorizador_dos_use_cases=do_use_case)
+    ator, caminho, corpo = preparar(ambiente)
+    async with AsyncClient(transport=ASGITransport(app=ambiente.app), base_url="http://t") as c:
+        resposta = await c.post(f"/api/v1{caminho}", json=corpo, headers=ambiente.auth(ator))
+    return resposta.status_code, do_use_case
+
+
+def _owner_provisiona(ambiente: _Ambiente) -> tuple[User, str, dict[str, object]]:
+    ambiente.com_restaurante()
+    owner = ambiente.com_usuario(user_id="owner-r7", role=Role.OWNER, tenant_id=_TENANT)
+    # E-mail malformado de propósito: sem a autorização da borda, a conversão do
+    # corpo responderia 422 antes de o use case negar — a precedência 403 > 422.
+    return owner, "/restaurants", {"name": "Nova", "owner": {"email": "sem-arroba"}}
+
+
+def _owner_convida_dono(ambiente: _Ambiente) -> tuple[User, str, dict[str, object]]:
+    ambiente.com_restaurante()
+    owner = ambiente.com_usuario(user_id="owner-r7", role=Role.OWNER, tenant_id=_TENANT)
+    return owner, f"/restaurants/{_TENANT}/owners", {"email": "sem-arroba"}
+
+
+def _manager_cria_unidade(ambiente: _Ambiente) -> tuple[User, str, dict[str, object]]:
+    ambiente.com_restaurante()
+    manager = ambiente.com_usuario(user_id="manager-r7", role=Role.MANAGER, tenant_id=_TENANT)
+    return manager, f"/restaurants/{_TENANT}/units", {"name": "Filial"}
+
+
+def _manager_com_unidade(ambiente: _Ambiente) -> tuple[User, UnitId]:
+    ambiente.com_restaurante()
+    unidade = ambiente.com_unidade("unit-r7")
+    manager = ambiente.com_usuario(
+        user_id="manager-r7", role=Role.MANAGER, tenant_id=_TENANT, unidades=(unidade,)
+    )
+    return manager, unidade
+
+
+def _manager_cria_owner(ambiente: _Ambiente) -> tuple[User, str, dict[str, object]]:
+    # Com unidade visível, para que a recusa seja a de `manage_tenant` (a regra "não
+    # se concede o que não se detém"), e não a exigência de nomear unidade.
+    manager, unidade = _manager_com_unidade(ambiente)
+    corpo = {"email": "dono@x.com", "password": _SENHA, "role": "owner", "unit_ids": [unidade]}
+    return manager, "/users", corpo
+
+
+def _manager_convida_owner(ambiente: _Ambiente) -> tuple[User, str, dict[str, object]]:
+    manager, unidade = _manager_com_unidade(ambiente)
+    corpo = {"email": "dono@x.com", "role": "owner", "unit_ids": [unidade]}
+    return manager, "/users/invitations", corpo
+
+
+@pytest.mark.parametrize(
+    "preparar",
+    [
+        _owner_provisiona,
+        _owner_convida_dono,
+        _manager_cria_unidade,
+        _manager_cria_owner,
+        _manager_convida_owner,
+    ],
+    ids=lambda f: f.__name__.lstrip("_"),
+)
+async def test_a_borda_nega_sem_depender_do_use_case(
+    preparar: Callable[[_Ambiente], tuple[User, str, dict[str, object]]],
+) -> None:
+    """Concept 2.7 R7 — as cinco rotas autenticadas continuam autorizando na borda."""
+    status_obtido, do_use_case = await _post_so_com_a_borda(preparar)
+
+    assert status_obtido == HTTPStatus.FORBIDDEN
+    assert do_use_case.calls == []
+
+
+async def test_o_duble_dos_use_cases_de_r7_deixa_passar_quem_a_borda_aceita() -> None:
+    """Controle do arranjo de R7: com ator que a borda aceita, o use case roda e
+    consulta o dublê — sem isto, um ambiente que negasse tudo passaria acima."""
+
+    def owner_cria_unidade(ambiente: _Ambiente) -> tuple[User, str, dict[str, object]]:
+        ambiente.com_restaurante()
+        owner = ambiente.com_usuario(user_id="owner-ok", role=Role.OWNER, tenant_id=_TENANT)
+        return owner, f"/restaurants/{_TENANT}/units", {"name": "Filial"}
+
+    status_obtido, do_use_case = await _post_so_com_a_borda(owner_cria_unidade)
+
+    assert status_obtido == HTTPStatus.CREATED
+    assert len(do_use_case.calls) == 1

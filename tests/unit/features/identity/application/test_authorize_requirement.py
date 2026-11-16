@@ -6,6 +6,8 @@ da expansão — ordem, ausência de deduplicação, pedido sem unidade, interru
 primeira recusa — e as duas traduções de vazamento, pelo autorizador real.
 """
 
+from collections.abc import Iterator
+
 import pytest
 
 from restaurant_hub.features.identity.application.dtos.commands import (
@@ -124,10 +126,33 @@ def test_devolve_o_resultado_do_primeiro_pedido() -> None:
     assert autorizado.user_id == INFIDEL_ACTOR
 
 
+class _EmOrdemInversa(frozenset[Permission]):
+    """Um conjunto que itera na ordem **inversa** da ordenada.
+
+    A ordem de iteração de um `frozenset` de `StrEnum` depende do hash de `str`,
+    aleatório por processo: sem este dublê, um `authorize_requirement` sem `sorted`
+    passava em cerca de 1% das execuções (medido na auditoria de testes da 2.7).
+    """
+
+    def __iter__(self) -> Iterator[Permission]:
+        return iter(sorted(super().__iter__(), reverse=True))
+
+
+def test_a_ordem_das_permissoes_nao_depende_da_iteracao_do_conjunto() -> None:
+    permissoes = _EmOrdemInversa(required_permissions_for_role(Role.OWNER))
+    assert list(permissoes) == sorted(permissoes, reverse=True)
+    autorizador = RecordingActionAuthorizer()
+
+    authorize_requirement(autorizador, _ATOR, permissoes, tenant_id=_TENANT)
+
+    assert [pedido.permission for pedido in autorizador.calls] == sorted(permissoes)
+
+
 def _autorizador_real() -> tuple[AuthorizeActionUseCase, InMemoryUserRepository]:
     users = InMemoryUserRepository()
     units = InMemoryUnitRepository()
     units.add(Unit(id=_U1, restaurant_id=_TENANT, name="Centro"))
+    units.add(Unit(id=_U2, restaurant_id=_TENANT, name="Praia"))
     return AuthorizeActionUseCase(users=users, units=units), users
 
 
@@ -170,3 +195,22 @@ def test_recusa_de_rbac_sobe_sem_traducao() -> None:
         authorize_requirement(
             autorizador, _ATOR, frozenset({Permission.MANAGE_USERS}), tenant_id=_TENANT
         )
+
+
+def test_devolve_o_escopo_do_primeiro_pedido_e_nao_do_ultimo() -> None:
+    """Com o autorizador real o escopo devolvido é o do pedido — o primeiro, não o
+    último: é dele que a borda lê o tenant do ator (`authorize_all`)."""
+    autorizador, users = _autorizador_real()
+    owner = User(id=_ATOR, email=Email("dono@x.com"), role=Role.OWNER, tenant_id=_TENANT)
+    users.add(owner, PasswordHash("hashed::x"), ())
+
+    autorizado = authorize_requirement(
+        autorizador,
+        _ATOR,
+        frozenset({Permission.MANAGE_USERS, Permission.MANAGE_STAFF}),
+        tenant_id=_TENANT,
+        unit_ids=(_U1, _U2),
+    )
+
+    assert autorizado.scope_unit_id == _U1
+    assert autorizado.actor_tenant_id == _TENANT
