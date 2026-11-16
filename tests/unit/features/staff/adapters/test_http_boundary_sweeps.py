@@ -1168,6 +1168,12 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
         assert exc is ambiente.guard.authorization_error, (
             f"{chave_da_rota[1]}: a recusa do guard foi traduzida em outra exceção (L-AG2)"
         )
+        # A recusa tem de ser **sobre o valor corrompido**: uma sentinela que
+        # escapasse de outro alvo (o tenant, `manage_tenant`) satisfaria o ramo sem
+        # que o identificador do corpo tivesse chegado ao guard (Stage 3.11).
+        assert ambiente.guard.calls[-1].endswith(f",{valor})"), (
+            f"{chave_da_rota[1]}: o guard negou {ambiente.guard.calls[-1]}, e não o alvo {valor!r}"
+        )
         return
 
     if deve_escapar:

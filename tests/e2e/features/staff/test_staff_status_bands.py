@@ -660,8 +660,9 @@ _TOTAL_DE_ENTRADAS_DO_MAPA: Final = 25
 # A contagem é transcrita, e não derivada: é ela que faz um encolhimento do
 # domínio reprovar em vez de reduzir em silêncio o número de casos rodados.
 # 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17; a Stage 3.11,
-# o elemento de `unit_ids` da criação de função.
-_TOTAL_DE_CAMPOS_ESCALARES: Final = 16
+# o elemento de `unit_ids` da criação de função e os dois da substituição de
+# unidades (o corpo da matriz nomeia a unidade do path e a de destino).
+_TOTAL_DE_CAMPOS_ESCALARES: Final = 18
 
 
 def test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e() -> None:

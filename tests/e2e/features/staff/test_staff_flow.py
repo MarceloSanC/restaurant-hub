@@ -402,9 +402,12 @@ async def test_ca7_o_gerente_habilita_na_sua_unidade_e_so_mexe_no_que_enxerga(
     assert do_dono.json()["all_units"] is True
     assert do_dono.json()["unit_ids"] == []
 
+    # Com a unidade B no corpo — que o gerente de A não enxerga —, para que o 404
+    # prove a ordem: a existência é respondida **antes** de qualquer autorização de
+    # unidade (R8). Com a ordem trocada, a resposta seria o 403 de B.
     inexistente = await client.put(
         f"{API}/job-functions/funcao-que-nunca-existiu/units",
-        json={"unit_ids": [cenario.unidade_a]},
+        json={"unit_ids": [cenario.unidade_b]},
         headers=auth(gerente_de_a),
     )
     assert inexistente.status_code == HTTPStatus.NOT_FOUND, inexistente.text

@@ -112,13 +112,17 @@ INVOCACOES: dict[tuple[str, str], dict[str, object]] = {
     # `semear`: o alcance sobre as unidades do corpo depende da habilitação
     # **gravada** (ADR 3.11.0001 §5), então a função tem de existir para que um
     # `unit_ids` não concedido chegue ao guard — sem ela a resposta é o 404 da
-    # existência, e a varredura de CA24 mediria a ausência do dado.
+    # existência, e a varredura de CA24 mediria a ausência do dado. Ela é semeada
+    # **restrita à unidade do ator**, e não em todas: com "todas" gravado, qualquer
+    # conjunto pedido cairia em `manage_tenant`, e a sentinela escaparia sem que
+    # nenhuma unidade do corpo tivesse sido alvo (Checkpoint C). Com a semeadura
+    # igual ao corpo declarado, o sucesso declarado (200) também é alcançável.
     ("PUT", "/job-functions/{job_function_id}/units"): {
         "path": {"job_function_id": "jf-1"},
         "query": {},
         "body": {"unit_ids": [_UNIDADE]},
         "sucesso": HTTPStatus.OK,
-        "semear": lambda ambiente: ambiente.com_funcao("jf-1"),
+        "semear": lambda ambiente: ambiente.com_funcao_em("jf-1", "Garçom", _UNIDADE),
     },
     ("GET", "/units/{unit_id}/job-functions"): {
         "path": {"unit_id": _UNIDADE},
