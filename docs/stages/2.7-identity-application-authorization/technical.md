@@ -468,7 +468,7 @@ Oito lacunas da rodada 1, fechadas no commit `[2.7/task-11-extra]`: (1) **R7** �
 ### 2026-11-16 — [finding] O resíduo de `ProvisionAccountUseCase` — Claude
 **Contexto:** chamado direto, o use case ainda cria `platform_admin` ou `owner` em qualquer tenant (concept §13; ADR 2.7.0001 §Consequences). O que o guarda é o alcance, não a regra: CA14 trava que os quatro use cases facade-only só são importados pela fachada e pelo `composition_root.py`.
 **Direção sugerida:** o primeiro importador novo reprova CA14 e reabre a decisão (ADR 0.0.0020 §Inventory); fechar então no use case ou com uma entrada própria.
-**Stage candidata:** a primeira que acrescentar consumidor de use case facade-only — hoje `3.10-login-link-management`, que já declara classificar a consulta nova da fachada contra o inventário.
+**Stage candidata:** a primeira que acrescentar consumidor de use case facade-only — hoje `3.10-login-link-management`, que já declara classificar a consulta nova da fachada contra o inventário. A auditoria da Stage deu dono próprio ao resíduo: issue [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) (a 3.10 acrescenta uma consulta e não precisa importar `provision_account`).
 
 ### 2026-11-16 — [finding] Cinco cópias da emissão do token de convite — Claude
 **Contexto:** `invite_user`, `invite_owner` (novo, D4), `provision_restaurant`, `provision_account` e `request_password_reset`. O ADR 0.0.0018 › "Negative" deixou a extração "to the change that makes the copies diverge or adds a fifth"; esta Stage acrescentou a quinta.

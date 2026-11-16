@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar a Fase 3B desta Stage; antes de acrescentar use c
 keywords: [concept, identity-application-authorization, identity, authorization, action-authorizer, fail-closed, defense-in-depth, invite-owner, platform-admin, facade]
 status: done
 created_at: 2026-11-09
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 stage_id: 2.7-identity-application-authorization
 stage_title: Autorização na camada application de identity
 step_id: 2
@@ -272,7 +272,7 @@ nenhuma faixa existente muda.
 [decision:C] 2.7-D1 — tipo do ator no command de identity
 Escolha: actor_id: UserId · Alternativas: Actor = object opaco (staff); AccessPrincipal da fachada (user_id + tenant_id); dataclass nova Actor · Degrau (C): 1
 Base: commands.py › AuthorizeActionCommand ("actor_id: UserId") — identity já nomeia o ator assim na própria application; ADR 0.0.0020 §Decision 2 (não o AuthenticatedActor do HTTP)
-Verificado: ver §7 do technical (evidence-verifier, Checkpoint A)
+Verificado: sustenta — evidence-verifier no fechamento (2026-11-16), não no Checkpoint A; ver §7 do technical
 Configuração candidata: nenhuma · Reversível: sim (DTO interno)
 ```
 Staff usa `object` porque não pode nomear tipo de identity; identity pode. `AccessPrincipal` traria
@@ -283,7 +283,7 @@ o tenant do ator, convite a derivar o tenant em vez de confirmá-lo (R3).
 [decision:C] 2.7-D2 — dependência dos use cases: port estreito × AuthorizeActionUseCase direto
 Escolha: Protocol ActionAuthorizer em application/ports/out/ · Alternativas: depender da classe AuthorizeActionUseCase · Degrau (C): 1
 Base: ADR 0.0.0020 §Decision 5 "LAYOUT §5 has the use case depend on an interface … A direct dependency has to justify the deviation"; LAYOUT §5 "O use case depende da interface, não da implementação concreta"
-Verificado: ver §7 do technical (evidence-verifier, Checkpoint A)
+Verificado: sustenta — evidence-verifier no fechamento (2026-11-16), não no Checkpoint A; ver §7 do technical
 Configuração candidata: nenhuma · Reversível: sim
 ```
 **Divergência declarada do LAYOUT §5:** o port é de saída e quem o cumpre não é um adapter, é um
@@ -296,7 +296,7 @@ um dublê.
 [decision:C] 2.7-D3 — authorize_at_boundary dentro do use case × execute cru
 Escolha: authorize_requirement, que passa cada pedido por authorize_at_boundary; IdentityGuard.authorize_all delega a ela · Alternativas: chamar execute cru (as recusas viram UserNotFoundError/UnitNotFoundError); traduzir só na borda · Degrau (C): 2
 Base: ADR 0.0.0016 §Decision 2 (uma cópia de cada regra de vazamento); ADR 2.4.0001 §5 (fechamento do oráculo de enumeração); ADR 2.2.0002 (fail-closed)
-Verificado: ver §7 do technical (evidence-verifier, Checkpoint A)
+Verificado: sustenta — evidence-verifier no fechamento (2026-11-16), não no Checkpoint A; ver §7 do technical
 Configuração candidata: nenhuma · Reversível: sim
 ```
 Com a tradução, o use case responde ao driver o mesmo que a borda responderia: se um dia a borda
@@ -311,7 +311,7 @@ chamador passa a ser quem age por um ator, de fora ou de dentro.
 [decision:C] 2.7-D4 — entrada do convite de dono pela plataforma
 Escolha: InviteOwnerUseCase + InviteOwnerCommand · Alternativas: InviteUserUseCase aceitando dois commands e escolhendo o requisito pelo tipo do command · Degrau (C): 1 e 5
 Base: LAYOUT §7 "Um use case por arquivo"; LAYOUT §5 / ADR 0.0.0006 (execute(<Command>)); ADR 0.0.0020 §Inventory "A separate use case and a separate command are both acceptable"
-Verificado: ver §7 do technical (evidence-verifier, Checkpoint A)
+Verificado: sustenta — evidence-verifier no fechamento (2026-11-16), não no Checkpoint A; ver §7 do technical
 Configuração candidata: nenhuma · Reversível: sim
 ```
 Com dois commands, `execute` teria um requisito por tipo, e a forma "primeira instrução = uma
@@ -384,41 +384,41 @@ declarada no docstring.
 
 ## 11. Critérios de aceitação
 
-- [ ] **CA01** — **Totalidade:** o conjunto de módulos de `use_cases/` (sem `_`-prefixados) é
+- [x] **CA01** — **Totalidade:** o conjunto de módulos de `use_cases/` (sem `_`-prefixados) é
       exatamente a união disjunta dos cinco afetados de R3 e das dez exclusões nomeadas de R1; cada
       exclusão tem motivo escrito na suíte. Todo afetado tem no construtor `authorizer` anotado
       `ActionAuthorizer`; nenhuma exclusão o tem.
-- [ ] **CA02** — Os cinco commands têm `actor_id` como **primeiro** campo, sem default; construir
+- [x] **CA02** — Os cinco commands têm `actor_id` como **primeiro** campo, sem default; construir
       sem ele dá `TypeError`.
-- [ ] **CA03** — Com o autorizador que nega, cada afetado, chamado com command válido sobre dados
+- [x] **CA03** — Com o autorizador que nega, cada afetado, chamado com command válido sobre dados
       semeados, levanta **a própria** sentinela (`is`) e não faz nenhuma chamada a nenhum outro port
       (repositórios, hasher, emissor de token, gerador de id, relógio, unidade de trabalho,
       `EmailSender`), medido por espião. O conjunto espionado é **igual** ao dos parâmetros do
       construtor menos `authorizer` e os escalares (`invitation_ttl`, `base_url`) — conferido por
       `inspect.signature`; a sentinela não é `UserNotFoundError`/`UnitNotFoundError`.
-- [ ] **CA04** — **Requisito exato:** num caminho feliz com o autorizador que registra, a sequência
+- [x] **CA04** — **Requisito exato:** num caminho feliz com o autorizador que registra, a sequência
       de `AuthorizeActionCommand` é exatamente a de R3 (permissões em `sorted`, × unidades na ordem
       do command), com `actor_id` do command — conferida contra uma transcrição literal de R3 na
       suíte, não contra a tabela de cenários. Inclui um cenário discriminante: `create_user` com
       `role=owner` e `unit_ids=(U2, U1, U2)` produz 12 pedidos nessa ordem, sem deduplicar.
-- [ ] **CA05** — **Forma:** por AST, em cada afetado, descontado o docstring, a primeira instrução de
+- [x] **CA05** — **Forma:** por AST, em cada afetado, descontado o docstring, a primeira instrução de
       `execute` é a chamada de R2 com os argumentos de R3, e não há outra chamada a
       `authorize_requirement` nem a `self._authorizer` no corpo.
-- [ ] **CA06** — **Cadeia real por papel** (`AuthorizeActionUseCase` sobre repositórios em memória,
+- [x] **CA06** — **Cadeia real por papel** (`AuthorizeActionUseCase` sobre repositórios em memória,
       tenants A e B): cada célula da **matriz da cadeia real** de §6 — afetado × papel do ator,
       com o papel alvo `owner` em tenant B e a chamada direta com `role=platform_admin` — dá o
       tipo exato da célula e nenhum efeito; os controles positivos de §6 passam.
-- [ ] **CA07** — No grafo de `wire_dependencies`, os cinco afetados têm `_authorizer is
+- [x] **CA07** — No grafo de `wire_dependencies`, os cinco afetados têm `_authorizer is
       deps.identity_authorize_action`, a mesma instância do guard.
-- [ ] **CA08** — Faixas HTTP inalteradas: `git diff origin/develop -- tests/e2e` vazio e a suíte e2e
+- [x] **CA08** — Faixas HTTP inalteradas: `git diff origin/develop -- tests/e2e` vazio e a suíte e2e
       verde no CI.
-- [ ] **CA09** — `required_permissions_for_role` é **definida** só em
+- [x] **CA09** — `required_permissions_for_role` é **definida** só em
       `application/ports/out/action_authorizer.py`; `dependencies.py` a importa de lá e
       `IdentityGuard.authorize_all` delega a `authorize_requirement` (sem laço próprio) — por AST.
-- [ ] **CA10** — `IdentityFacade.provision_account` com `owner`, `manager`, `hr` e
+- [x] **CA10** — `IdentityFacade.provision_account` com `owner`, `manager`, `hr` e
       `platform_admin` levanta `RoleNotProvisionableError` sem efeito, inclusive com e-mail
       inválido; papel desconhecido segue `InvalidRoleError`; com `employee`, segue igual.
-- [ ] **CA11** — As frases que esta Stage torna falsas deixam de existir (`git grep -F` vazio
+- [x] **CA11** — As frases que esta Stage torna falsas deixam de existir (`git grep -F` vazio
       para cada uma, no arquivo indicado):
       `facade.py` › "Se identity deve seguir staff é decisão aberta";
       `get_account_role.py` › "se isso muda é a issue #115";
@@ -431,13 +431,13 @@ declarada no docstring.
       `identity_gateway.py` e `local_identity_gateway.py` › "identity não autoriza na application";
       `tenancy-and-access.md` › "decisão aberta para o BC inteiro". Os ADRs 2.4.0003, 0.0.0014,
       0.0.0018, 3.5.0001 e 0.0.0020 ganham nota datada append-only.
-- [ ] **CA12** — Recusa traduzida (R5): pela cadeia real, `actor_id` inexistente →
+- [x] **CA12** — Recusa traduzida (R5): pela cadeia real, `actor_id` inexistente →
       `InvalidAccessTokenError` e unidade inexistente → `UnitNotVisibleError`, sem efeito.
-- [ ] **CA13** — `make check` verde no CI do PR; cobertura ≥ 90% por arquivo de `src/` tocado.
-- [ ] **CA14** — Os módulos facade-only (`provision_account`, `send_invitation`,
+- [x] **CA13** — `make check` verde no CI do PR; cobertura ≥ 90% por arquivo de `src/` tocado.
+- [x] **CA14** — Os módulos facade-only (`provision_account`, `send_invitation`,
       `revoke_all_sessions`, `get_account_role`) só são importados, em `src/`, por
       `features/identity/application/facade.py` e `composition_root.py` (varredura AST).
-- [ ] **CA15** — Paridade do convite de dono: `InviteOwnerUseCase` produz o mesmo efeito, o mesmo
+- [x] **CA15** — Paridade do convite de dono: `InviteOwnerUseCase` produz o mesmo efeito, o mesmo
       result e as mesmas exceções que `InviteUserUseCase` com `role=OWNER` e sem unidades, inclusive
       na combinação e-mail repetido + restaurante inexistente (`EmailAlreadyRegisteredError`) e na
       falha de envio (`InvitationNotSentError`, conta e token comitados).
