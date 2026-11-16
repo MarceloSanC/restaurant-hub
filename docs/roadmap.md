@@ -142,7 +142,7 @@ graph LR
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
 | `4.3-scheduling-application` | Use cases da escala | application | done | `4.2-validation-policies` |
-| `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | draft | `4.3-scheduling-application` |
+| `4.4-scheduling-persistence` | Persistência da escala + auditoria | adapters/out/postgres | done | `4.3-scheduling-application` |
 | `4.5-scheduling-http` | API do editor e consulta de escala | adapters/inbound/http | draft | `4.4-scheduling-persistence`, `3.10-login-link-management` |
 | `4.6-schedule-notifications` | Notificação de publicação por e-mail | vertical (scheduling) | draft | `4.5-scheduling-http` |
 | `4.7-schedule-image` | Imagem/tabela da escala sob demanda | vertical (scheduling) | draft | `4.5-scheduling-http` |
