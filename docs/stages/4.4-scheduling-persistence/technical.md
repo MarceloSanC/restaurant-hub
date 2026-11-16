@@ -491,15 +491,40 @@ a 06 e a 09 editam o mesmo conftest e a mesma guarda, nessa ordem.
 **Razão:** reversível e sem efeito no schema.
 
 ### 2026-11-16 — [deviation] Checkpoint C (bloco 1, Tasks 02–04) — três achados corrigidos — Claude
-**Contexto:** revisor independente sobre `4f11144..6da24fe`.
-**Disposições:** (1) blocker — o caso "envolve" de dias disjuntos não cruzava a escala semeada: corrigido em `6c75896`; (2) major — `ix_schedule_assignments_demand` contradizia o ADR 4.4.0001 ("only one non-key index"): índice removido de `tables.py` e da `0006` em `37d13be`; (3) minor — o teste de "sem default de servidor" mandava `NULL` explícito: passou a omitir a coluna e a conferir `column_default` no catálogo, em `6c75896`.
+**Contexto:** revisor independente sobre `3aa69e4..f682ca2`.
+**Disposições:** (1) blocker — o caso "envolve" de dias disjuntos não cruzava a escala semeada: corrigido em `a733ac5`; (2) major — `ix_schedule_assignments_demand` contradizia o ADR 4.4.0001 ("only one non-key index"): índice removido de `tables.py` e da `0006` em `f9c8eac`; (3) minor — o teste de "sem default de servidor" mandava `NULL` explícito: passou a omitir a coluna e a conferir `column_default` no catálogo, em `a733ac5`.
 
 ### 2026-11-16 — [deviation] Task 03-fix — `tests/integration/test_migration_env.py` — Claude
 **Contexto:** o caso MySQL do teste de dialeto offline rodava `upgrade head --sql`, e a `0006` usa construções só do Postgres (exclusion constraint, `JSONB`, extensão), que o compilador MySQL não renderiza (run 43951779882).
-**Razão:** o lado MySQL para na `0004`; o lado Postgres segue até `head`. Arquivo fora da lista da Task 03, mesma mudança (`0308a96`).
+**Razão:** o lado MySQL para na `0004`; o lado Postgres segue até `head`. Arquivo fora da lista da Task 03, mesma mudança (`2d5c701`).
 
 ### 2026-11-16 — [deviation] Checkpoint C (bloco 2, Tasks 05–07) — dois blockers corrigidos — Claude
-**Contexto:** revisor independente sobre `0308a96..234e4a9`.
-**Disposições:** os dois blockers tinham a mesma causa — o `save` de `test_falha_no_insert_da_trilha_desfaz_o_save` e o disparado por `test_save_concorrente_entre_raiz_e_filhas_nao_rasga_o_agregado` usavam `expected_version` 1 sobre escala gravada na versão 2, e caíam no conflito de versão antes do ponto medido. Corrigidos em `aa2f256`. Nenhum achado no adapter de produção.
+**Contexto:** revisor independente sobre `2d5c701..a1a3d19`.
+**Disposições:** os dois blockers tinham a mesma causa — o `save` de `test_falha_no_insert_da_trilha_desfaz_o_save` e o disparado por `test_save_concorrente_entre_raiz_e_filhas_nao_rasga_o_agregado` usavam `expected_version` 1 sobre escala gravada na versão 2, e caíam no conflito de versão antes do ponto medido. Corrigidos em `bfc35b4`. Nenhum achado no adapter de produção.
+
+### 2026-11-16 — [decision] Fase 4 — fachada de staff dentro do escopo, sem tocar arquivo existente — Claude (orquestração autônoma)
+**Contexto:** o briefing da sessão retomada dizia "não edite `features/staff/**`", e a primeira tentativa de criar `features/staff/application/facade.py` (Task 08) foi recusada pelo classificador de permissões. O orquestrador corrigiu o briefing: a restrição era dele, mais larga do que devia; o arquivo **novo** está no escopo (concept, divergências 3 e 8), e nenhum arquivo existente de staff ou identity muda.
+**Decisão:** criar só o arquivo novo; nenhuma linha de staff ou identity existente foi alterada (`git diff --name-status origin/develop -- src/restaurant_hub/features/staff src/restaurant_hub/features/identity` mostra só `A …/staff/application/facade.py`).
+
+### 2026-11-16 — [deviation] Rebase sobre a 3.11 e a 2.7 — `0006` reencadeada sobre a `0005` — Claude
+**Contexto:** a Stage 3.11 (PR #188, `0005_job_function_units`) e a 2.7 (PR #187) mergearam em `develop` durante a execução. Dois rebases sem conflito.
+**Decisão:** `down_revision` da `0006` passou a `"0005"` (um head só, `1f89322`), conforme D-MIG; o caso MySQL do teste de dialeto offline sobe até a `0005`, que é portável. A fachada usa só `list_by_unit` e `list_by_tenant`, que a 3.11 não mudou; `JobFunction` ganhou `unit_enablement` com default "todas as unidades", e a semeadura do contrato e do fluxo passa por ele sem mudança. Os hashes citados acima são os de depois do rebase.
+
+### 2026-11-16 — [decision] Checkpoint C (bloco 3, Tasks 08–10) — nenhum achado material — Claude
+**Contexto:** revisor independente sobre as Tasks 08–10. Verificou a semeadura do ramo `postgres` de `mundo` contra as leis de staff, a aresta (dois pares exatos), o composition root (mesmo `Engine`, mesmas instâncias) e rodou o fluxo de CA17 com os repositórios de scheduling trocados por fakes.
+**Observação fora do filtro:** erros de `mypy` em arquivos de teste que o gate não tipa (`make typecheck` cobre `src/`, `tests/fakes/`, `scripts/`, `.claude/hooks/`).
+
+### 2026-11-16 — [deviation] Auditoria de testes — três lacunas, Task 12-extra — Claude
+**Contexto:** subagente independente; 27 mutações reais em mappers, tradutor, fachada e adapter de staff (25 derrubadas, 2 equivalentes) e mutação mental do repositório Postgres. Achou: (G1) nenhuma leitura ou `save` com **duas** escalas com filhas na unidade — `DELETE` das faixas sem `schedule_id`, ou filhas misturadas no `_build`, sobreviviam; (G2) a tradução da exclusion constraint dentro do `add` não tinha teste ponta a ponta; (G3) o fake não era cobrado por "id de escala em outro tenant" nem por `save` no endereço de outro tenant.
+**Disposição:** corrigidas em `7c351c2` (`[4.4/task-12-extra]`). Rodada 2: todos os itens satisfeitos, com seis mutações reais no fake derrubadas pelos testes novos.
+**Limite declarado:** sem Postgres local, as mutações do repositório real foram mentais, cada uma apontando o teste de contrato `[postgres]` ou de integração que a derruba.
+
+### 2026-11-16 — [finding] Testes fora do `mypy` do gate — candidata: issue avulsa de tooling
+**Contexto:** `make typecheck` não tipa `tests/` fora de `tests/fakes/`; os testes novos desta Stage (e `tests/conftest.py`, antes dela) têm erros que só o `mypy` manual mostra.
+**Candidata:** issue avulsa de tooling que estenda o `typecheck` aos testes ou declare a exclusão.
+
+### 2026-11-16 — [finding] Mutação real do repositório Postgres sem infraestrutura local — candidata: issue #168 ou avulsa
+**Contexto:** a auditoria de testes não pôde mutar o adapter real (Docker parado; o `mutmut` exige container Linux). A cobertura do adapter ficou comprovada por mutação mental com o teste derrubador nomeado.
+**Candidata:** um job de mutação no CI para os adapters Postgres, junto da #168 (banco isolado por worker), ou issue própria.
 
 <!-- END: post-execution -->
