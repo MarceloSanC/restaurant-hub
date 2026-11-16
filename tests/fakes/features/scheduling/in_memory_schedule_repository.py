@@ -1,5 +1,8 @@
 """Fake in-memory do `ScheduleRepository` — obedece L-SC1…L-SC8.
 
+No `save` troca o objeto inteiro: período e calendário são da criação e uma escala que os
+traga diferentes está fora do contrato do port (Stage 4.4), então o fake não os confere.
+
 Grava o estado e a `ScheduleChange` juntos (L-SC3) e os expõe (`changes_of`) para os
 testes da trilha. `calls` registra cada método chamado, para os testes de "nada
 gravado" e "nenhum port tocado antes da autorização".
@@ -51,14 +54,18 @@ class InMemoryScheduleRepository:
         return [e for (t, u, _), e in self._schedules.items() if (t, u) == (tenant_id, unit_id)]
 
     def _check_ids_against_others(self, schedule: Schedule) -> None:
+        # L-SC4: primeiro tipo em conflito (faixa → demanda → alocação) e, dele, o menor id
+        # por codepoint entre TODAS as outras escalas da unidade — nunca a ordem de gravação.
         novos = _internal_ids(schedule)
-        for outra in self._da_unidade(schedule.tenant_id, schedule.unit_id):
-            if outra.id == schedule.id:
-                continue
-            for tipo, ids in _internal_ids(outra).items():
-                comuns = sorted(novos[tipo] & ids)
-                if comuns:
-                    raise IdentifierInUseError(tipo, comuns[0])
+        outras = [
+            _internal_ids(outra)
+            for outra in self._da_unidade(schedule.tenant_id, schedule.unit_id)
+            if outra.id != schedule.id
+        ]
+        for tipo, ids in novos.items():
+            comuns = {usado for outra in outras for usado in outra[tipo]} & ids
+            if comuns:
+                raise IdentifierInUseError(tipo, min(comuns))
 
     def add(self, schedule: Schedule, change: ScheduleChange) -> None:
         self.calls.append("add")

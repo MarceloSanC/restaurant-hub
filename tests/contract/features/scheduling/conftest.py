@@ -50,13 +50,15 @@ T1, T2 = TenantId("t1"), TenantId("t2")
 U1, U2 = UnitId("u1"), UnitId("u2")
 
 
-def staff_member(eid: str, unidade: UnitId, *, ativo: bool = True) -> StaffMember:
+def staff_member(
+    eid: str, unidade: UnitId, *, ativo: bool = True, funcao: str = "cozinheiro"
+) -> StaffMember:
     return StaffMember(
         employee_id=EmployeeId(eid),
         unit_id=unidade,
         display_name=f"Nome {eid}",
         active=ativo,
-        job_function_ids=frozenset({JobFunctionId("cozinheiro")}),
+        job_function_ids=frozenset({JobFunctionId(funcao)}),
         contracted_weekly_hours=Decimal("40"),
         unavailabilities=(),
     )
@@ -67,7 +69,10 @@ def _semear(fake: InMemoryStaffRead) -> None:
     fake.add_member(T1, staff_member("bia", U1))
     fake.add_member(T1, staff_member("caio", U1, ativo=False), user_id="user-ana")
     fake.add_member(T1, staff_member("ana-u2", U2), user_id="user-ana")
-    fake.add_member(T2, staff_member("dani", U1), user_id="user-ana")
+    # `dani` detém uma função do catálogo do PRÓPRIO tenant: registro de `t2` com função de
+    # `t1` é estado que staff não representa (lei L-E4 de staff; id de função global), e o
+    # mundo tem de ser semeável nas duas implementações (Stage 4.4).
+    fake.add_member(T2, staff_member("dani", U1, funcao="garcom"), user_id="user-ana")
     fake.add_job_function(T1, JobFunctionEntry(JobFunctionId("cozinheiro"), "Cozinheiro"))
     fake.add_job_function(T1, JobFunctionEntry(JobFunctionId("atendente"), "Atendente"))
     fake.add_job_function(T2, JobFunctionEntry(JobFunctionId("garcom"), "Garçom"))

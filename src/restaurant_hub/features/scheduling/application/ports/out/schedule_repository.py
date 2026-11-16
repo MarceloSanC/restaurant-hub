@@ -1,31 +1,43 @@
 """Port de saída: persistência da escala e da trilha de mudanças (ADR 4.3.0004).
 
 **Uma escrita carrega a mudança.** `add` e `save` recebem a `ScheduleChange` — quem,
-quando, versão anterior, operações efetivas e violações aceitas — e o adapter (Stage 4.4)
-grava estado e trilha **na mesma transação**. Cada use case escreve uma vez, então a
-regra 10 do `check_layout` (ADR 2.6.0002 §5) não exige unidade de trabalho.
+quando, versão anterior, operações efetivas e violações aceitas — e o adapter (Stage 4.4,
+ADRs 4.4.0002 e 4.4.0003) grava estado e trilha **na mesma transação**. Cada use case
+escreve uma vez, então a regra 10 do `check_layout` (ADR 2.6.0002 §5) não exige unidade de
+trabalho.
 
 `ScheduleChange` **não define método algum**: a regra 10 classifica como escrita todo
 método não-leitura de classe declarada em `*_repository.py`.
 
 **Leis** (suíte `tests/contract/features/scheduling/test_schedule_repository_laws.py`):
 
-- **L-SC1 — `add` é inserção.** Id de escala já gravado ⇒ `IdentifierInUseError`.
+- **L-SC1 — `add` é inserção.** Id de escala já gravado, em qualquer tenant ⇒
+  `IdentifierInUseError`. Ordem do `add`: id da escala → período (L-SC2) → ids internos
+  (L-SC4).
 - **L-SC2 — dias disjuntos.** `add` cujo período cruza dia de outra escala do mesmo
   (tenant, unidade) ⇒ `SchedulePeriodTakenError` (invariante 4 da 4.1). Atômica no
   adapter; limite de concorrência declarado (ADR 3.2.0001).
 - **L-SC3 — estado e trilha juntos.** A mudança é gravada com o estado, ou nenhum dos dois.
-- **L-SC4 — `save` otimista.** Inexistente no endereço ⇒ `ScheduleNotFoundError`; versão
-  gravada ≠ `expected_version` ⇒ `ScheduleVersionConflictError` (com a atual); id interno
-  já usado por **outra** escala do mesmo (tenant, unidade) ⇒ `IdentifierInUseError`.
-  Ordem: endereço → versão → ids.
+- **L-SC4 — `save` otimista; ids internos únicos na unidade.** Inexistente no endereço ⇒
+  `ScheduleNotFoundError`; versão gravada ≠ `expected_version` ⇒
+  `ScheduleVersionConflictError` (com a atual); id interno já usado por **outra** escala do
+  mesmo (tenant, unidade) ⇒ `IdentifierInUseError`, **no `save` e no `add`**. Ordem do
+  `save`: endereço → versão → ids. O erro relata o primeiro tipo em conflito na ordem faixa →
+  demanda → alocação e, dele, o **menor id por codepoint** entre todas as outras escalas da
+  unidade — forma que não depende de ordem de gravação, que um banco não tem.
 - **L-SC5 — endereço de três partes.** Outro tenant ou unidade ⇒ `None`, e nunca aparece
   em listagem.
 - **L-SC6 — recorte.** `list_in_range` = as escalas que cruzam [first_day, last_day],
   ordenadas por first_day.
 - **L-SC7 — anteriores.** `list_ending_before` = last_day < before, da mais recente, no
   máximo `limit`.
-- **L-SC8 — fidelidade.** O lido é o gravado, campo a campo, inclusive a versão.
+- **L-SC8 — fidelidade.** O lido é o gravado, campo a campo, inclusive a versão e a ordem
+  das tuplas de faixas, demandas e alocações — depois de `add` e depois de `save`.
+
+**Período e calendário são da criação** (Stage 4.4). Nenhuma mutação do domínio os muda — o
+calendário é fotografado (ADR 4.1.0009). `save` grava as faixas e a versão; uma escala que
+chegue a ele com período ou calendário diferentes dos gravados está **fora do contrato**, e
+por isso `save` não tem como violar L-SC2.
 """
 
 from dataclasses import dataclass
@@ -48,7 +60,8 @@ class ScheduleChange:
 
     Attributes:
         author_user_id: quem — o `user_id` do escopo autorizado.
-        occurred_at: quando — `Clock.now()`.
+        occurred_at: quando — `Clock.now()`: instante absoluto, **aware**. Valor ingênuo
+            está fora do contrato (Stage 4.4).
         previous_version: a versão sobre a qual a mudança foi feita; `None` na criação.
         operations: o quê — as operações **efetivas**, em ordem (no-ops fora).
         acknowledged: as violações `warn` introduzidas e aceitas conscientemente.
