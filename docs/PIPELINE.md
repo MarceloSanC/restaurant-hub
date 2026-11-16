@@ -772,8 +772,9 @@ junto das sub-tasks. O padrão é um ponto, o de saída. Ponto extra que
 aparecer na execução vai no corpo do PR como `[deviation]`.
 
 **Transição.** Vale para Stage e issue cuja branch nasce depois do merge
-do ADR 0.0.0021. Stage que já estava em execução termina pelo prompt com
-que começou.
+do ADR 0.0.0021. Stage ou issue que já estava em execução termina pelo
+prompt com que começou: não tem plano de gates e nenhum é exigido dela,
+nem no gate de saída nem na auditoria.
 
 ---
 
