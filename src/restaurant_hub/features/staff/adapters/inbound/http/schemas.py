@@ -172,7 +172,14 @@ class CreateJobFunctionRequest(BaseModel):
     `unit_ids` ausente ou `null` = **todas** as unidades, que exige alcance sobre o
     restaurante (`manage_tenant`); uma lista nomeia as unidades (Stage 3.11, ADR
     3.11.0001). Cada id é validado na borda antes de alcançar o guard.
+
+    `extra="forbid"` porque aqui a **ausência** de `unit_ids` é o pedido mais largo:
+    um `unit_id` digitado no singular seria ignorado em silêncio e o dono criaria,
+    sem saber, uma função válida em todas as unidades (Checkpoint C). Campo
+    desconhecido é 422 do framework.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     unit_ids: list[str] | None = None

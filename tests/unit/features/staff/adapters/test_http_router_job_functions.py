@@ -509,6 +509,21 @@ async def test_id_de_unidade_invalido_no_corpo_e_422_antes_de_alcancar_o_guard(
     assert ambiente.guard.calls == ["authenticate"]
 
 
+async def test_campo_desconhecido_no_corpo_da_criacao_e_422_e_nada_e_criado(
+    client: AsyncClient, ambiente: Ambiente
+) -> None:
+    """Mesmo quem alcança o restaurante: `unit_id` (singular) não cria "em todas"."""
+    ambiente.guard.grant("manage_tenant", tenant_id=_TENANT)
+
+    resposta = await client.post(
+        "/api/v1/job-functions", json={"name": "Garçom", "unit_id": [_UNIDADE]}
+    )
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["type"] != "staff_error"
+    assert ambiente.fakes.job_functions.list_by_tenant(TenantId(_TENANT)) == ()
+
+
 async def test_unidades_repetidas_no_corpo_colapsam_no_conjunto(
     client: AsyncClient, ambiente: Ambiente
 ) -> None:

@@ -561,3 +561,14 @@ def test_employee_login_response_declara_o_setup_link_como_credencial() -> None:
     assert declares_credential(schemas.JobFunctionResponse) is False
 
     assert schemas.EmployeeLoginResponse.model_fields["setup_link"].annotation == (str | None)
+
+
+def test_campo_desconhecido_na_criacao_de_funcao_e_recusado_e_nao_ignorado() -> None:
+    """`unit_id` no singular não pode virar "todas as unidades" em silêncio.
+
+    Na criação, omitir `unit_ids` é o pedido mais largo; um campo desconhecido
+    ignorado faria o erro de digitação do dono habilitar a função no restaurante
+    inteiro (Checkpoint C da Stage 3.11).
+    """
+    with pytest.raises(ValidationError):
+        schemas.CreateJobFunctionRequest.model_validate({"name": "Sushiman", "unit_id": ["u1"]})
