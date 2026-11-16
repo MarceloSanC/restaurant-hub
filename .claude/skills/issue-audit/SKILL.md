@@ -154,13 +154,13 @@ uv run pytest <testes da issue> \
 **Antes de declarar `make check` verde, ler o target no `Makefile`** —
 confirmar que cada gate declarado em config (`fail_under`, `import-linter`,
 `mypy --strict`, `bandit`) é mesmo invocado. Config que nenhum comando
-dispara é decoração (conceito "Gate inerte ou míope"). E **quando um gate
+dispara é decoração (conceito ["Gate inerte ou míope"](reference/falso-verde.md#gate-inerte-ou-míope)). E **quando um gate
 falha, achar o gate que falhou primeiro** na cadeia: o de baixo pode nunca
 ter rodado (variante *míope*).
 
 **Toda saída que o autor colou como estado do "antes" tem de ser
-reproduzida a partir da base** — não da working tree (conceito "Evidência
-de árvore suja"):
+reproduzida a partir da base** — não da working tree (conceito ["Evidência
+de árvore suja"](reference/falso-verde.md#evidência-de-árvore-suja)):
 
 ```bash
 # arquivo alegado como pré-existente e quebrado é adição pura desta branch?
@@ -181,7 +181,7 @@ git archive origin/<base> | tar -x -C <tmp> && cd <tmp> && <comando do gate>
    `- [ ]`/`- [x]`:
    - **Marcado `[x]`** precisa de comando/arquivo:linha/teste que
      prova. ✅ sem evidência citada = finding (conceito
-     "Verificação assimétrica").
+     ["Verificação assimétrica"](reference/falso-verde.md#verificação-assimétrica)).
    - **Não marcado `[ ]`** mas o escopo foi entregue = atualizar a
      issue (observação, não blocker).
 4. **Literalidade do quantificador do critério (aprendizado-chave).**
@@ -275,7 +275,7 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
      card especulativo. *Discriminador vs. ISSUE SEPARADA especulativa:* a
      melhoria **se auto-anuncia sem custo** (NÃO-ISSUE) ou é **incerta mas
      silenciosa / com risco de esquecer** (vira issue especulativa)?
-   > Conceito de falso verde associado: **"Escopo empurrado pra frente"**
+   > Conceito de falso verde associado: **["Escopo empurrado pra frente"](reference/falso-verde.md#escopo-empurrado-pra-frente)**
    > — adiar um refino que é da própria issue como se fosse futuro.
 2. **Pergunta meta:** "Se eu soubesse que quem fechou esta issue tem
    histórico de mergear com bug, o que eu olharia?" — liste 2-3 itens
@@ -287,7 +287,7 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
 4. **Caça ao silencioso:** no diff novo, procure `# TODO`/`FIXME`/`XXX`,
    `pytest.skip`/`xfail`, `# type: ignore`/`cast(`/`: Any` em boundary,
    `# noqa`. Cada um pede 1 linha de justificativa (commit/comentário).
-   Sem justificativa = finding (conceito "Rastro perdido").
+   Sem justificativa = finding (conceito ["Rastro perdido"](reference/falso-verde.md#rastro-perdido)).
 5. **Caça ao teste preguiçoso:** abra 2-3 testes do diff e leia os
    asserts. Sinais (cada um = finding): `assert x is not None` sem o
    valor concreto; `isinstance` como prova de comportamento;
@@ -311,7 +311,7 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
 9. **Se delegou a sub-agente:** exija no relatório **2-3 trechos
    verbatim** das partes críticas (assinaturas, boundary, registro no
    boot). Leia à mão. Sem verbatim, "rodei rápido" só foi terceirizado
-   (conceito "Delegação cega").
+   (conceito ["Delegação cega"](reference/falso-verde.md#delegação-cega)).
 
 ### Fase E — Relatório (explicação do valor entregue + gate)
 
@@ -339,67 +339,9 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
   `arquivo:linha`, comando+resultado numérico, ou teste. Use links
   markdown clicáveis nos arquivos (seção 2).
 
-```markdown
-## Auditoria — Issue #<num> (<título curto>)   [ou: Issues #<a>, #<b>, ...]
-
-### Status global: ✅ APROVADA SEM BLOQUEANTES | ⚠️ APROVADA COM FINDINGS | ❌ BLOQUEADA
-Estado: GitHub <OPEN/CLOSED> · roadmap <open/done> · branch <mergeada?/em PR #N>
-
-### 1. Conceitos principais
-<breve descrição dos conceitos que a issue define/usa (do `## Escopo` e
-`## Problema`). O que cada conceito existe para resolver. Jargão glosado
-entre (). 2-5 bullets.>
-
-### 2. Tasks → arquivos → o que entrega (lista, não tabela)
-- **task-NN — <nome>**: mexeu em [arquivo](caminho), [arquivo](caminho)
-  — entrega de fato: <o que passou a existir/funcionar, em linguagem clara>.
-- ...
-
-### 3. Gates de saída — o que a issue garante 100% que existe e funciona
-Gate: <comando> → <resultado numérico>   (ex.: `make check` → 1779 passed, 98% cov)
-
-| Critério de aceitação (corpo da issue) | Status | Evidência (arquivo:linha / comando→resultado / teste) |
-|---|---|---|
-| <texto do checkbox> | ✅/⚠️/❌ | <prova concreta> |
-
-### 4. Decisões que impactam arquitetura / conceito / projeto
-- <decisão> — impacto: <…>; valor de design vs dívida: <…>.
-
-### 5. Findings / melhorias (classificados POR ESCOPO)
-**F<N> — <título>** (blocker | non-blocker | observação)
-- Contexto: <fato> · Onde: <arquivo:linha> · Por que importa: <consequência>
-- Escopo: **dentro da #<num>** | **issue separada** | **não-issue**
-- Recomendação: <proposta — não execute, proponha>
-
-### 6. Aprendizados → skills
-<algum padrão novo (falso verde, decisão recorrente, jargão mal
-explicado) que vale virar/atualizar conceito numa skill? Qual skill e
-qual conceito. Se nada novo: dizer "nada novo" explicitamente.
-
-Antes de propor a atualização, responda os 4 filtros — proposta que
-reprova em qualquer um NÃO entra:
-1. **Classe ou caso?** O aprendizado descreve uma CLASSE que recorre
-   (conceito) ou só este episódio (história)? História não entra —
-   skill fica afiada, não longa.
-2. **Canal de consumo real:** quem vai LER isto e quando? Regra
-   acionável de skill em `skills_hint` vira pergunta adversarial
-   obrigatória no Checkpoint C (consumo mecânico); texto que só o
-   autor leria é advisory — se o único canal é advisory, avalie se o
-   ganho justifica.
-3. **O viés generaliza?** Toda regra enviesa a atenção do revisor —
-   esse é o propósito. Formulada como conceito, o viés cobre a classe;
-   formulada como caso, faz o revisor caçar UM bug específico e cega
-   para o resto.
-4. **Já mora em outro mecanismo?** Se o conceito já vive no
-   questionário de auditoria, num script de gate ou noutra skill,
-   duplicar alonga sem afiar — aponte o mecanismo existente em vez de
-   copiar.>
-
-### Conclusão
-<2-4 linhas: que valor a issue entregou, quão bem modularizada
-(escalável/responsabilidade), pronta pra PR/merge? o que falta? o que é
-da issue vs futuro?>
-```
+**Template do relatório:** copiar o esqueleto de
+[reference/relatorio-fase-e.md](reference/relatorio-fase-e.md) (status global, as seis
+seções — com os 4 filtros da seção 6 — e a conclusão) e preencher.
 
 **Classificação:**
 - **blocker** — não atende um `## Critério de aceitação`, contradiz o
@@ -413,148 +355,23 @@ da issue vs futuro?>
 
 ## Conceitos de falso verde (anti-checklist)
 
-> Conceitos, não exemplos numerados: exemplo vira pattern-match (agente
-> acha "limpo" porque nenhum caso bate exato). Quando aparecer falso
-> verde novo, primeiro perguntar **qual conceito existente cobre**; só
-> criar conceito novo se for padrão genuinamente novo.
+O catálogo mora em [reference/falso-verde.md](reference/falso-verde.md): cada conceito
+com sintoma, **Pergunta** e **Tratamento**, a tabela de casos históricos e a regra de
+como o catálogo cresce. As fases acima citam o conceito pelo nome no ponto de uso; os
+que nenhuma fase cita só valem para quem leu o arquivo — **ler o catálogo inteiro antes
+de fechar a Fase D-bis**.
 
-### Escopo empurrado pra frente
-Um refino que é **da própria issue** é parqueado como "melhoria futura"
-porque a issue parece fechada (`done` no roadmap, muitos commits, etc.).
-O status vira desculpa para não terminar o escopo.
-- Sintoma: "isso fica pra um follow-up" sobre algo que mexeria nas
-  **mesmas linhas** que a issue criou, ou que um critério literal exige.
-- **Pergunta:** "este achado toca o mesmo entregável desta issue, ou é
-  capacidade/módulo/dependência nova?" Mesmo entregável → é desta issue.
-- **Tratamento:** classificar por escopo (Fase D-bis #1), não por
-  status. Dentro → propor implementar na branch da issue. Separada →
-  buscar backlog antes de abrir card (evita fragmentação). Não-issue →
-  só observação.
-
-### Verificação assimétrica
-Confundir presença com ausência, ou execução com asserção; ou cobrir
-*a peça* e assumir *a fiação*.
-- ✅ marcado sem evidência citada; teste-sonda da função de registro
-  tomado como prova do "handler **global**" (a fiação no boot fica sem
-  teste); `assert <campo seguro> in dto` "provando" ausência do dado
-  bruto.
-- **Pergunta:** "este check prova o critério, ou só a contrapositiva /
-  só a peça isolada?"
-- **Tratamento:** para "global/qualquer/todos", exigir teste pela app
-  real (`create_app()`/boot). Para invariante negativa, `Grep` ativo
-  com **0 matches**. Para coverage alto, ler 2-3 asserts (D-bis #5).
-- **Sub-caso — válvula sem contagem:** um detector cobra cada entrada de
-  uma allowlist/anotação/exclusão **nos dois sentidos** (presente/ausente,
-  viva/morta) e ainda assim pode ser silenciado pelo **crescimento do
-  conjunto** — anotar dez caminhos como `[planejado]`, acrescentar um
-  segundo `--ignore`. Pergunta: "qual asserção fixa o **conjunto**, não só
-  cada entrada?" Sem ela, a válvula é allowlist sem não-crescimento.
-
-### Evidência de árvore suja
-Saída colada como prova do estado de **outra** árvore (a base, o "antes"),
-mas produzida na working tree local — que tem arquivos *untracked* e o fix
-já aplicado. Diferente de "Rastro perdido": aqui **há** registro, plausível
-e específico — e **falso**, verificável em um comando.
-- Ex.: "rodei o gate em `develop`, 3 arquivos falham" — mas um dos 3 é
-  **adição pura desta branch** e nunca existiu na base; a falha real da base
-  era outra, a montante.
-- **Pergunta:** "esta saída foi reproduzida **a partir da base**, ou de uma
-  árvore que já contém o trabalho?"
-- **Tratamento:** para todo arquivo alegado como *pré-existente e quebrado*,
-  `git log --diff-filter=A -- <path>` (ou `git cat-file -e <base>:<path>`) —
-  se é adição pura, a evidência é falsa. Reproduzir a partir da base de
-  verdade: `git archive <base> | tar -x -C <tmp>`.
-
-### Definido mas não plugado (dead-config)
-Módulo/handler/validator existe, tem coverage, mas **nenhum call-site
-real** fora do teste — nunca entra no pipeline.
-- Ex.: um helper criado mas nunca chamado no boot; validator com teste
-  unitário verde mas nunca registrado no router.
-- **Pergunta:** "qual linha de produção **chama** isto?"
-- **Tratamento:** `Grep "<nome>"` no projeto excluindo o teste; exigir
-  ≥ 1 call-site real. Zero = finding.
-
-### Gate inerte ou míope
-Config declara o gate mas nada invoca (**inerte**); ou invoca global e
-mascara o granular (**míope**: média ≥ 90% com arquivo da issue em 70%).
-- **Pergunta:** "qual comando real exercita este gate, e em que
-  granularidade?"
-- **Tratamento:** ler o target do Makefile/CI; rodar coverage focada
-  nos arquivos da issue. Gate inerte = blocker (config que ninguém roda
-  é decoração).
-
-### Sintoma ≠ causa
-O `## Escopo` entregue cobre um caso particular do `## Problema`, não a
-causa. O critério passa para o exemplo testado, mas o problema real
-reaparece por outra porta.
-- **Pergunta:** "se eu trocar o input do exemplo por um vizinho, o
-  problema volta?"
-- **Tratamento:** reler `## Problema`, conferir que a solução é geral
-  (ex.: catch-all para **qualquer** Exception, não só a do bug que
-  originou a issue).
-
-### Solução complexa onde cabia a simples (concern capturado)
-O `## Escopo` cria caso especial/tipo/regra nova para tratar **local** um
-sintoma cujo tratamento direto seria **geral ou a montante** — um concern
-**compartilhado** (isolamento por tenant, fuso/corte do dia operacional,
-calendário, identidade) resolvido dentro de um consumidor só. Na issue
-avulsa isso escapa mais fácil que na Stage: não há `concept.md` — a
-especificação inteira é o corpo da issue, e o card pequeno e coeso
-*parece* bem escopado justamente por ser pequeno.
-- Sintoma: **tipo/regra/nuance nova** + o **mesmo problema recorre** em
-  outros consumidores do mesmo dado.
-- **Pergunta:** "há solução mais direta/geral, ou esta issue está remendando
-  local um concern compartilhado?"
-- **Tratamento:** a geral é o conserto; a local vira **piso declarado +
-  issue transversal** (buscar backlog antes de abrir), nunca solução
-  silenciosa. Blocker se a captura corrompe a semântica para outros
-  consumidores; senão non-blocker. Distinto de "Sintoma ≠ causa": lá a
-  solução é estreita demais **para o próprio problema da issue**; aqui ela
-  resolve o problema da issue e **erra a camada**.
-
-### Rastro perdido
-Decisão (off-task, silenciador, refactor, doc parcial) sem registro
-onde o reviewer procuraria.
-- `[#<num>/--]` sem justificativa no body; `# type: ignore`/`# noqa`
-  em boundary sem 1 linha de motivo; roadmap table atualizado mas
-  frontmatter esquecido (ou inverso); commit de outro escopo de carona
-  na branch da issue.
-- **Tratamento:** non-blocker em geral (corrigir antes do PR); blocker
-  se carona de escopo (pedir rebase — GIT-WORKFLOW §Etapa 4) ou padrão
-  repetido em ≥ 3 lugares.
-
-### Delegação cega
-Sub-agente devolve OK em batch e o auditor lê só o resumo.
-- **Pergunta:** "o resumo cita 2-3 trechos verbatim, ou só veredito?"
-- **Tratamento:** exigir verbatim das partes críticas; ler à mão;
-  re-prompt se não pediu. (D-bis #9)
-
-### Falso vermelho ambiental
-O **espelho** dos falsos verdes: gate vermelho local atribuído à branch
-quando a causa é o ambiente (típico: `.venv` de worktree dessincronizado
-— mypy/lint-imports falham em arquivo **intocado**). Custo invertido:
-finding falso + investigação na branch errada.
-- **Pergunta:** "o arquivo do erro mudou nesta branch, e o CI da base está
-  verde?" (`git diff origin/<base> -- <arquivo>` vazio + CI verde ⇒
-  ambiente, não branch.)
-- **Tratamento:** `uv sync --extra dev` e re-rodar o gate; só então julgar.
-  Registrar como **observação**, nunca como finding da branch.
-
----
-
-### Casos históricos (rastreabilidade do loop recursivo)
-
-| Caso | Conceito | Onde aconteceu |
-|---|---|---|
-| `[planejado]` do LAYOUT §2 e `--ignore` do mutmut cobrados por entrada, nunca pelo conjunto | Verificação assimétrica (válvula sem contagem) | #45, PR #50 — F1/F2 |
-| Rename `adapters/in → inbound` + import hygiene entregues fora do `## O quê` | Caça ao não-previsto → escopo ampliado na execução | #45, PR #50 — F6 |
-| 629 `ERROR` em integration/e2e: container Postgres da worktree morreu **durante** o `test-gate` (`Exited (255)`) | Falso vermelho ambiental | #45, PR #50 — F11 |
-| `only_mutate` com caminho morto após rename: mutmut filtra por `fnmatch` e **exclui o módulo em silêncio**, reportando "N/N" sobre 3 de 4 arquivos | Gate inerte ou míope | #45, PR #50 — `02ac4e5` |
-
-Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
-pegou algo): **primeiro perguntar qual conceito existente cobre**.
-Adicionar caso novo na tabela. Só criar conceito novo se for padrão
-genuinamente novo.
+- [Escopo empurrado pra frente](reference/falso-verde.md#escopo-empurrado-pra-frente)
+- [Verificação assimétrica](reference/falso-verde.md#verificação-assimétrica)
+- [Evidência de árvore suja](reference/falso-verde.md#evidência-de-árvore-suja)
+- [Definido mas não plugado (dead-config)](reference/falso-verde.md#definido-mas-não-plugado-dead-config)
+- [Gate inerte ou míope](reference/falso-verde.md#gate-inerte-ou-míope)
+- [Sintoma ≠ causa](reference/falso-verde.md#sintoma--causa)
+- [Solução complexa onde cabia a simples (concern capturado)](reference/falso-verde.md#solução-complexa-onde-cabia-a-simples-concern-capturado)
+- [Rastro perdido](reference/falso-verde.md#rastro-perdido)
+- [Delegação cega](reference/falso-verde.md#delegação-cega)
+- [Falso vermelho ambiental](reference/falso-verde.md#falso-vermelho-ambiental)
+- [Casos históricos (rastreabilidade do loop recursivo)](reference/falso-verde.md#casos-históricos-rastreabilidade-do-loop-recursivo)
 
 ---
 

@@ -54,9 +54,8 @@ AGENT_FIELDS = {
     "isolation", "color", "initialPrompt", "experimental",
 }  # fmt: skip
 # Débito de estrutura anterior à regra (#65): chave do achado → (motivo, issue).
-KNOWN_DEBT: dict[str, tuple[str, int]] = {
-    ".claude/skills/issue-audit::body": ("SKILL.md anterior ao teto de 500 linhas", 162),
-}
+# Vazio desde a #162, que trouxe `stage-audit` e `issue-audit` para o teto de 500 linhas.
+KNOWN_DEBT: dict[str, tuple[str, int]] = {}
 
 _TOC_HEADING = re.compile(r"#{1,6}\s+(sumário|índice|conteúdo|contents|table of contents)\b", re.I)
 _ANCHOR_LINK = re.compile(r"\]\(#[^)\s]+\)")
