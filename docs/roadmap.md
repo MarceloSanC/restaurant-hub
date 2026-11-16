@@ -265,6 +265,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | open | — |
 | [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | open | #184 |
 | [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
+| [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
+| [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
@@ -2062,6 +2064,13 @@ skills_hint: [task-ordering-hex, fastapi-thin-adapter]
 #### Stage 6.1 — `6.1-hosting-study`
 
 **Descrição humana:** estudo de custo/viabilidade nuvem (PaaS/VPS) × executável local na máquina do restaurante, considerando a tensão com o SaaS central futuro (Step 13), backup, atualização remota e Control iD; decisão registrada em ADR.
+
+> **Herdado da Stage 4.4 (2026-11-16, auditoria do PR #202):** a migration `0006_scheduling`
+> roda `CREATE EXTENSION IF NOT EXISTS btree_gist` (exclusion constraint de dias disjuntos, ADR
+> 4.4.0001). A extensão é *trusted* no PostgreSQL 16 (basta `CREATE` no banco), mas o
+> hospedeiro escolhido tem de permiti-la — Postgres gerenciado pode exigir lista de extensões
+> liberadas. O ADR desta Stage confere isso; se o hospedeiro recusar, o fallback é a tabela de
+> dias (ADR 4.4.0001, Alternative B).
 
 ```yaml
 stage_id: 6.1-hosting-study
