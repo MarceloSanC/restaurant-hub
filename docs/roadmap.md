@@ -248,6 +248,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#185](https://github.com/MarceloSanC/restaurant-hub/issues/185) | Dois `stage 3.7: complete` no histórico: o `check_stage_deps` não distingue qual Stage o commit reservado fechou | shared | tooling | open | — |
 | [#190](https://github.com/MarceloSanC/restaurant-hub/issues/190) | Subir o teto da orquestração autônoma de 3 para 6 worktrees | shared | docs + .claude | done | — |
 | [#195](https://github.com/MarceloSanC/restaurant-hub/issues/195) | Atualizar os textos de "repo privado" e decidir os Required Status Checks agora que o repo é público | shared | docs + .claude + .github | open | — |
+| [#196](https://github.com/MarceloSanC/restaurant-hub/issues/196) | `check_harness` não lê o conteúdo de `reference/` nem resolve âncora de link de skill | shared | tooling | open | #162 |
+| [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
