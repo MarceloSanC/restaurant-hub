@@ -38,9 +38,27 @@ aposenta a regra precisa poder citá-la.
 parágrafo com as quebras de linha, o recuo e o `>` de citação trocados por um
 espaço. Linha em branco separa parágrafos e a frase não a atravessa.
 
+**A marcação do markdown não esconde a frase.** Negrito, itálico e crase em
+qualquer palavra dela ("antes de **todo** commit") contam como espaço. Entre o
+comando e a amarração cabem só as palavras que qualificam o gate ("completo",
+"precisa estar verde", "deve passar", "roda"), vírgula, travessão e um
+parêntese curto.
+
 **Negação também reprova.** "Não rode o `make check` antes de todo commit" traz
 a frase e é reprovada. O doc normativo diz a regra nova e aponta o ADR; a regra
 antiga fica descrita no ADR.
+
+**O que o guard não pega.** Ele acha a frase, não a intenção. Escapam, e
+continuam dependendo de revisão:
+
+- bloco de comandos que roda `make check` e depois `git commit` (o RUNBOOK
+  Passo 9 tinha um);
+- paráfrase sem a amarração escrita: "todo commit passa pelo `make check`",
+  "cada Task termina com o `make check` verde";
+- lista de passos por Task com o comando no meio ("para cada Task: implementar
+  → checks + `make check` → commit", como estava no sumário do PROMPT-stage);
+- "`make check` antes do commit", sem "todo" nem "cada": a mesma forma serve ao
+  gate de saída ("antes do commit final"), que é legítimo.
 
 **Manutenção.**
 
@@ -92,22 +110,63 @@ class RequiredHeading:
     reason: str
 
 
-# `make check`, com a crase e o negrito que os docs põem em volta, e os adjetivos
-# que já apareceram entre o comando e a amarração.
-_GATE = r"make\s+check`?[\s*]*(?:(?:completo|verde|green)[\s*]*)*"
+# Entre duas palavras da frase cabe espaço e a marcação do markdown (negrito,
+# itálico, crase): "antes de **todo** commit" é a mesma frase.
+_SEP = r"[\s*_`]+"
+# Começo e fim de palavra que aceitam a marcação colada ("**por", "commit_").
+_START = r"(?<![A-Za-zÀ-ÿ0-9])"
+_END = r"(?![A-Za-zÀ-ÿ0-9])"
+
+
+def _words(pattern: str) -> str:
+    """O padrão com cada espaço trocado pelo separador que tolera a marcação."""
+    return pattern.replace(" ", _SEP)
+
+
+# O que pode ficar entre o comando e a amarração sem mudar a regra: a marcação,
+# vírgula, dois-pontos e travessão, um parêntese curto e as palavras que só
+# qualificam o gate ("completo", "verde", "precisa estar verde", "deve passar",
+# "roda", "must pass"). A lista é fechada de propósito. Um intervalo livre de N
+# palavras pegaria "`make check` por Stage no lugar do gate por Task", que é a
+# regra nova.
+_QUALIFIER = (
+    r"(?:completo|inteiro|verde|local|localmente|sempre|obrigat[oó]rio"
+    r"|precisam?|devem?|tem|t[eê]m|de|que|estar|est[aá]|ficar?"
+    r"|rodar?|rodam|rodando|rodado|passar?|passam|passando"
+    r"|green|full|always|locally|must|should|has|have|needs?|to|be|is|stays?"
+    r"|runs?|running|pass|passes|passing)"
+)
+_BETWEEN = rf"(?:[\s*_`,:–—]|\([^)\x00]{{0,80}}\)|{_QUALIFIER}{_END})*"
+# `make check`. Na ordem direta o hífen não está entre o que pode vir depois,
+# então `make check-task por commit` não casa; `make docs-check` não traz o
+# comando.
+_COMMAND = _START + r"make\s+check"
+_GATE = _COMMAND + _BETWEEN
 # A amarração a todo commit ou a toda Task, em português e em inglês (as skills
 # são escritas em inglês).
+_UNIT = r"(?:commits?|tasks?)"
 _EVERY_COMMIT = (
-    r"(?:antes\s+de\s+(?:todo|cada|qualquer)\s+(?:commit|task)"
-    r"|(?:por|a\s+cada|em\s+(?:todo|cada))\s+(?:commit|task)"
-    r"|(?:before|on|after)\s+(?:every|each)\s+(?:commit|task)"
-    r"|per\s+(?:commit|task))\b"
+    _START
+    + _words(
+        r"(?:"
+        rf"(?:antes|depois) de (?:todo|toda|cada|qualquer) {_UNIT}"
+        rf"|ap[oó]s (?:todo|toda|cada|qualquer) {_UNIT}"
+        rf"|ao (?:fim|final) de (?:todo|toda|cada) {_UNIT}"
+        rf"|(?:por|a cada|para cada|em (?:todo|toda|cada)) {_UNIT}"
+        rf"|(?:em|antes de|depois de|ap[oó]s) tod[oa]s (?:os|as) {_UNIT}"
+        rf"|(?:before|on|after|at|for) (?:every|each) {_UNIT}"
+        rf"|per {_UNIT}"
+        r")"
+    )
+    + _END
 )
 # A ordem invertida só com o verbo de mando colado: "a cada Task, porque o
 # `make check` roda no Actions" é prosa legítima do PROMPT-stage.
 _EVERY_COMMIT_FIRST = (
-    r"antes\s+de\s+(?:todo|cada|qualquer)\s+commit,?\s+"
-    r"(?:rodar?|rode|executar?|execute)\s+(?:o\s+)?\**`?make\s+check"
+    _EVERY_COMMIT
+    + r"[\s*_`,:]+(?:rodar?|rode|rodem|executar?|execute|executem|run)"
+    + _words(r" (?:(?:o|the) )?")
+    + _COMMAND
 )
 
 RETIRED_RULES: tuple[RetiredRule, ...] = (

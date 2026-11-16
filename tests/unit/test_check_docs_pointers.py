@@ -89,6 +89,36 @@ def _repo(tmp_path: pathlib.Path, files: dict[str, str]) -> pathlib.Path:
         "`make check` per commit is the baseline.",
         "> o `make check` verde\n> antes de todo commit continua valendo.",
         "Não rode o `make check` antes de todo commit.",
+        # A marcação do markdown no meio da frase não a esconde.
+        "`make check` verde antes de **todo** commit.",
+        "`make check` verde antes de todo **commit**.",
+        "`make check` verde antes de *todo* commit.",
+        "`make check` verde antes de todo `commit`.",
+        "_`make check` verde antes de todo commit_",
+        "**make check** verde antes de todo commit.",
+        "> > `make check` verde\n> > antes de **todo**\n> > commit.",
+        # Pontuação e as palavras que só qualificam o gate, entre o comando e a amarração.
+        "`make check` verde, antes de todo commit.",
+        "`make check` verde — antes de todo commit.",
+        "`make check` (lint + testes) antes de cada commit.",
+        "O `make check` completo precisa estar verde antes de todo commit.",
+        "O `make check` deve passar antes de cada commit.",
+        "O `make check` roda a cada Task.",
+        "`make check` must pass before each commit.",
+        "`make check` is green at every commit.",
+        # A amarração depois do commit ou da Task, e no plural.
+        "`make check` após cada Task.",
+        "`make check` depois de cada Task.",
+        "`make check` ao fim de cada Task.",
+        "`make check` em todos os commits.",
+        "`make check` em todas as Tasks.",
+        "`make check` antes de todos os commits.",
+        # A ordem invertida, com qualquer amarração e o verbo de mando colado.
+        "A cada Task, rode `make check`.",
+        "Depois de cada Task, rodar o **`make check`** completo.",
+        "After each Task, run `make check`.",
+        "Para cada Task: rode `make check` antes do commit.",
+        "Run `make check` for each Task.",
     ],
 )
 def test_the_retired_rule_is_rejected(text: str) -> None:
@@ -119,6 +149,23 @@ def test_the_retired_rule_is_rejected(text: str) -> None:
         "Depois rode o `make check`\n\nantes de todo commit, revise o diff.",
         # Outra célula da tabela não completa a frase.
         "| `make check` | por commit |",
+        # As palavras que qualificam o gate, sem a amarração: a regra nova as usa.
+        "o `make check` completo precisa estar verde, de 1 a 3 pontos por Stage",
+        "O `make check` completo roda **só** se a Task é um ponto do plano de gates.",
+        "`make check` verde no branch, em cada ponto do plano de gates",
+        "The full `make check` runs only at the 1–3 points of the Stage's gate plan.",
+        "1 a 3 `make check` por Stage, não por Task.",
+        # O ponto final separa as frases.
+        "sem `make check` local. O push continua a cada Task e o Actions roda em todos.",
+        # O gate de saída: antes do commit final, não de todo commit.
+        "`make check` verde antes do commit final `stage N.M: complete`.",
+        # A ordem invertida sem verbo de mando, e com o verbo sobre outra coisa.
+        "Antes do commit de cada Task rodam só os testes dela.",
+        "A cada Task, rode os testes dela; o `make check` fica para os pontos do plano.",
+        # A amarração começa em palavra inteira: "para cada" não é "a cada" no meio
+        # de outra palavra, e "paper commit" não é "per commit".
+        "`make check` no paper commit.",
+        "Na mesma cada Task rode `make check`.",
     ],
 )
 def test_legitimate_text_is_not_rejected(text: str) -> None:
