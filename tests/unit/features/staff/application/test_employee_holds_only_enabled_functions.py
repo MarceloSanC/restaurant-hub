@@ -311,3 +311,13 @@ def test_ca5_funcao_apagada_entre_a_atribuicao_e_a_copia_e_not_found() -> None:
         _copiar(fakes, FakeIdGenerator(), _U2)
 
     assert "employees.add" not in fakes.store.calls[antes:]
+
+
+def test_ca5_varias_funcoes_apagadas_a_copia_nomeia_a_menor_id() -> None:
+    """R8/R10 — como em atribuir, o 404 nomeia a menor id ausente, não uma qualquer."""
+    fakes = _mundo(funcoes_do_registro=frozenset({_F_AMBAS, _F_TODAS}))
+    del fakes.store.job_functions[_F_AMBAS]
+    del fakes.store.job_functions[_F_TODAS]
+
+    with pytest.raises(JobFunctionNotFoundError, match=f"'{_F_TODAS}'"):
+        _copiar(fakes, FakeIdGenerator(), _U2)

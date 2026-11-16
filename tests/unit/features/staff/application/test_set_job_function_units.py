@@ -167,6 +167,17 @@ def test_habilitacao_igual_a_gravada_nao_pede_alcance_alem_do_tenant() -> None:
     assert _gravada(fakes) == _so(_B)
 
 
+def test_todas_para_todas_nao_pede_manage_tenant() -> None:
+    """R5 — reenviar "todas" para quem já vale em todas não muda nada: só o tenant."""
+    fakes = _mundo(_TODAS)
+    guard = _guard()
+
+    _executar(fakes, guard, None)
+
+    assert guard.calls == [f"authorize({_JF},{_T},None)"]
+    assert _gravada(fakes) == _TODAS
+
+
 @pytest.mark.parametrize(
     ("antes", "pedido"),
     [(_TODAS, frozenset({_A})), (_so(_A), None)],
@@ -283,6 +294,27 @@ def test_estreitar_quando_os_registros_estao_so_nas_unidades_que_ficam_e_aceito(
     _executar(fakes, _guard(_A, _B), frozenset({_A}))
 
     assert _gravada(fakes) == _so(_A)
+
+
+@pytest.mark.parametrize("saindo", [_A, _C], ids=["sai-a-menor", "sai-a-maior"])
+def test_estreitar_com_registros_numa_unidade_que_fica_e_noutra_que_sai_e_recusado(
+    saindo: UnitId,
+) -> None:
+    """Basta **uma** unidade removida com registro: a que fica não absolve a que sai.
+
+    Com registros em B (fica) e na que sai, a guarda que olhasse só uma unidade, ou
+    que recusasse só quando todas as unidades com registro saíssem, aceitaria.
+    """
+    fakes = _mundo(_so(_A, _B, _C))
+    _com_registro(fakes, _B, id_="e-b")
+    _com_registro(fakes, saindo, id_="e-x")
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(JobFunctionInUseError):
+        _executar(fakes, _guard(_A, _B, _C), frozenset({_A, _B, _C} - {saindo}))
+
+    assert _gravada(fakes) == _so(_A, _B, _C)
+    assert _escritas(fakes, antes) == []
 
 
 def test_alargar_para_todas_nao_consulta_referencias() -> None:

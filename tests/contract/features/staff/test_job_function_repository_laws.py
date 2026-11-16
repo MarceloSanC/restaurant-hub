@@ -634,6 +634,30 @@ def test_l_jf6_list_by_unit_devolve_so_as_habilitadas_na_unidade(
     assert {f.id: f.unit_enablement for f in em_u1}[_F4] == _restrita(_U1, _U2)
 
 
+def test_leituras_de_varias_linhas_reidratam_a_habilitacao_de_cada_funcao(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """L-JF4, L-JF5 e L-JF6 — cada função volta com os **seus** vínculos, não os da vizinha.
+
+    Numa leitura de várias funções, o adapter agrupa as linhas de vínculo por id; um
+    agrupamento trocado passaria por um teste que confere só uma das funções.
+    """
+    _com_funcoes_em_unidades(repos)
+    esperado = {_F1: _TODAS, _F2: _restrita(_U1), _F3: _restrita(_U2), _F4: _restrita(_U1, _U2)}
+
+    def _por_id(funcoes: tuple[JobFunction, ...]) -> dict[JobFunctionId, UnitEnablement]:
+        return {f.id: f.unit_enablement for f in funcoes}
+
+    assert _por_id(repos.job_functions.list_by_tenant(_A)) == esperado
+    assert _por_id(repos.job_functions.find_all_by_ids(_A, frozenset(esperado))) == esperado
+    assert _por_id(repos.job_functions.list_by_unit(_A, _U1)) == {
+        k: esperado[k] for k in (_F1, _F2, _F4)
+    }
+    assert _por_id(repos.job_functions.list_by_unit(_A, _U2)) == {
+        k: esperado[k] for k in (_F1, _F3, _F4)
+    }
+
+
 def test_l_jf6_list_by_unit_nao_atravessa_tenant(repos: RepositoriosDeStaff) -> None:
     """A unidade `u1` do tenant B tem o mesmo id; nem por isso vaza para A, nem A para B."""
     _com_funcoes_em_unidades(repos)
