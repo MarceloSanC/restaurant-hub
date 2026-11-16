@@ -135,8 +135,7 @@ def internal_ids_in_use_statements(schedule: Schedule) -> tuple[tuple[str, Execu
 def stored_version_statement(schedule: Schedule) -> Executable:
     """A versão gravada no endereço de três partes (L-SC4, L-SC5)."""
     return select(schedules.c.version).where(
-        schedules.c.id == schedule.id,
-        schedules.c.tenant_id == schedule.tenant_id,
+        schedules.c.id == schedule.id,  # MUTANTE 2: sem filtro de tenant
         schedules.c.unit_id == schedule.unit_id,
     )
 
