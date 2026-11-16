@@ -89,13 +89,19 @@ async def client_500(app_e2e: object) -> AsyncIterator[AsyncClient]:
 
 
 async def _criar_funcionario(
-    client: AsyncClient, cabecalho: dict[str, str], unidade: str, nome: str
+    client: AsyncClient,
+    cabecalho: dict[str, str],
+    unidade: str,
+    nome: str,
+    *,
+    funcao_tambem_em: tuple[str, ...] = (),
 ) -> str:
     funcao = await client.post(
         f"{API}/job-functions",
         # Stage 3.11 — habilitada na unidade do registro: o gerente não cria para
-        # "todas as unidades" (ADR 3.11.0001 §4).
-        json={"name": f"Função de {nome}", "unit_ids": [unidade]},
+        # "todas as unidades" (ADR 3.11.0001 §4). `funcao_tambem_em` a habilita em
+        # mais unidades, para o cenário que copia o registro (ADR 3.11.0002).
+        json={"name": f"Função de {nome}", "unit_ids": [unidade, *funcao_tambem_em]},
         headers=cabecalho,
     )
     assert funcao.status_code == HTTPStatus.CREATED, funcao.text
@@ -520,7 +526,9 @@ async def test_ca26_a_copia_de_um_vinculado_nasce_sem_login(
     client: AsyncClient, cenario: Cenario, caixa_de_entrada: RecordingEmailSender
 ) -> None:
     cabecalho = auth(cenario.manager)
-    employee_id = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Hugo")
+    employee_id = await _criar_funcionario(
+        client, cabecalho, cenario.unidade_a, "Hugo", funcao_tambem_em=(cenario.unidade_b,)
+    )
     corpo = await _criar_login(
         client, cabecalho, cenario.unidade_a, employee_id, email="hugo@cantina.com", delivery="link"
     )
