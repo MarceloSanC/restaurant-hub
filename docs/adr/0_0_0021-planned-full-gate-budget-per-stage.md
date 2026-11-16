@@ -94,7 +94,7 @@ The operational rules have a single source, `docs/PIPELINE.md` §9.6. `docs/CONV
 
 ### Alternative F — Under the orchestrator, push only at the gate points
 - **Pros:** the number of Actions runs equals the number of points.
-- **Cons:** changes ADR 0.0.0008 item 3 (draft at the first push, a push per Task) and throws away verdicts that cost nothing locally.
+- **Cons:** changes how ADR 0.0.0008 item 3 is applied (a draft PR at the first push "so every push runs the full `make check` on Actions"; `docs/PROMPT-orchestrator-autonomous.md` §1 item 3 has the implementer push after every Task) and throws away verdicts that cost nothing locally.
 - **Why rejected:** the scarce resource is the local machine and the time spent waiting, not Actions runs. The budget counts waits.
 
 ## Decision records
