@@ -27,6 +27,8 @@ but does not prescribe which layer to start from.
 ## DO
 
 - Every Task leaves the build green — lower layer + tests exist before upper layer that depends on it.
+  "Green" per commit means the Task's own tests (the test files it wrote or changed, plus the totality sweeps its files feed) and the pre-commit hooks. The full `make check` runs only at the 1–3 points of the Stage's gate plan, the exit included. The rules live in `docs/PIPELINE.md` §9.6 — don't restate them here. The `check:` lines below are each Task's own tests.
+- Order Tasks so that the risky ones (a port or contract read by another bounded context, `shared/`, the composition root, deps/tool config/gate scripts/migrations) **cluster**: one gate-plan point right after the cluster covers all of them.
 - Fakes before real adapters: use case is testable without external infra in CI.
 - When the default does not apply, **declare the chosen order in the preamble of `technical.md`** with a short reason.
 
@@ -78,8 +80,10 @@ task-04  feat(orders/adapters/inbound): POST /orders + integration test      [2.
 
 task-05  feat(orders/bootstrap): wire CreateOrder in composition root   [2.1/task-05]
          files:  src/bootstrap/composition.py
-         check:  make check
+         check:  pytest tests/integration/orders/ && make check   # gate-plan point 1 of 1 = exit
 ```
+
+Gate plan for this Stage: a single `make check`, after task-05 (the exit). task-01..04 stay inside one bounded context and are covered by their own tests; task-05 wires the composition root and is the last Task anyway.
 
 After task-02 the Stage already has a verified use case even without Postgres running; reverting task-04 does not break the domain.
 

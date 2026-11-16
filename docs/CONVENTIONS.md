@@ -26,8 +26,10 @@ O dono vence; corrija o eco.
 **Regra do eco:** citar uma regra fora do doc dono é permitido como
 **1 frase + ponteiro** (a regra acionável fica no ponto de uso); o texto
 normativo completo vive só na casa dona. A conformidade é garantida em
-review; um guard mecânico opcional (`scripts/check_docs_pointers.py`, a
-criar) pode complementá-la.
+review. O guard mecânico `scripts/check_docs_pointers.py`, no
+`make docs-check`, cobre os desvios que já aconteceram: reprova a frase
+de uma regra aposentada por ADR que volte a um doc normativo, e o sumiço
+de uma seção para a qual os outros docs apontam.
 
 ---
 

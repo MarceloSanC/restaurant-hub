@@ -5,7 +5,7 @@ when-use: Fluxo padrão de execução de Stage (PIPELINE §11.1, implementa → 
 keywords: [prompt, stage, single-session, concept, technical, execucao, lifecycle, review, subagents, gates]
 status: done
 created_at: 2026-05-21
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 ---
 
 # Prompt — Execução de Stage em Sessão Única
@@ -188,11 +188,19 @@ do fluxo. Trate como gate objetivo.
    - Não mistura criação de port com criação de adapter desse port.
    - Ordem respeita dependências.
 3. Para Stages targeting domain/application/adapters, aplicar skill
-   `task-ordering-hex` (TDD inside-out, cada commit deixa o build verde).
+   `task-ordering-hex` (TDD inside-out; cada commit fica verde nos testes
+   da Task).
 4. Número saudável: **3–12 Tasks**; **≥ 14** = Stage grande demais — declare e PARE (alarme do CONVENTIONS §6).
-5. Incluir §7 "Execução" com marcadores
+5. Escrever o **plano de gates** na §1: depois de quais Tasks o
+   `make check` completo precisa estar verde. **De 1 a 3 pontos por
+   Stage, o de saída incluído**, cada um com o motivo; do 4º em diante,
+   justificativa por ponto. Antes de cortar as Tasks, mapear as
+   varreduras de totalidade que cada arquivo novo dispara: a Task leva a
+   entrada dela e o arquivo de teste da varredura entra no comando de
+   verificação da Task. Regra completa: PIPELINE §9.6.
+6. Incluir §7 "Execução" com marcadores
    `<!-- BEGIN: post-execution -->` / `<!-- END: post-execution -->` (vazios).
-6. Marcar `status: done` no frontmatter do technical.
+7. Marcar `status: done` no frontmatter do technical.
 
 ### Verificação de gap no Concept (UMA PASSADA — sem loop)
 
@@ -238,6 +246,11 @@ Independentes) valida mecanicamente:
   mapeia em ≥ 1 Task com check objetivo. Critério órfão = achado.
 - Caminhos de arquivo conformes a `LAYOUT.md`.
 - Cada Task contra os 5 critérios de Task Atômica (PIPELINE §4.3).
+- **Plano de gates** (§1 do technical) contra o PIPELINE §9.6: 1 a 3
+  pontos, o de saída incluído. É achado: ponto no meio sem motivo
+  concreto, ponto além do 3º sem justificativa, e Task que alimenta uma
+  varredura de totalidade sem levar a entrada ou sem o teste da
+  varredura no comando de verificação.
 
 Registrar a disposição de cada achado antes de commitar.
 
@@ -289,11 +302,17 @@ Para cada Task em ordem:
      PERGUNTA antes de codar.
 4. **Implementar** (apresentar diff ao humano antes do commit — não comitar
    por iniciativa própria).
-5. **Rodar checks da Task.** Baseline inegociável: **`make check` verde
-   antes de todo commit**, além dos checks específicos da Task (sob
-   orquestração autônoma, os passos 4–5 seguem a exceção de §REGRA DE PR:
-   sem humano para ver o diff, checks focados locais e `make check` no
-   GitHub Actions). Se falhar:
+5. **Rodar os checks da Task: só os testes dela.** São os arquivos de
+   teste que a Task escreveu ou alterou, mais as varreduras de totalidade
+   que os arquivos dela alimentam (`pytest <arquivos> -q --no-cov`). O
+   pre-commit cobre ruff, mypy e import-linter no commit. O `make check`
+   completo roda **só** se a Task é um ponto do plano de gates do
+   technical (1 a 3 por Stage, o de saída incluído). Ponto fora do plano
+   exige justificativa registrada como `[deviation]` em §7. Regra
+   completa: PIPELINE §9.6. Sob orquestração autônoma, os passos 4–5
+   seguem a exceção de §REGRA DE PR: sem humano para ver o diff, e o
+   ponto do plano é cumprido pelo run do GitHub Actions do commit, sem
+   `make check` local. Se falhar:
    - Ajuste menor (import faltando, type hint) → corrige.
    - Problema de design → PARA e reporta.
 6. **Registrar em §7 do technical** qualquer entrada surgida na execução,
@@ -550,7 +569,10 @@ pedido explícito. Não execute `gh pr merge`.
 > roda no GitHub Actions do PR — localmente, só checks focados (ruff/mypy
 > nos arquivos tocados, testes afetados contra o Postgres da worktree). A
 > evidência de `make check`/coverage nos gates é o run do Actions
-> (`gh pr checks`, `gh run view --log`). Fork que pediria `AskUserQuestion`
+> (`gh pr checks`, `gh run view --log`). Você **espera o run verde só nos
+> pontos do plano de gates** (PIPELINE §9.6); entre pontos segue para a
+> Task seguinte, e run vermelho que aparecer é corrigido antes da próxima
+> Task. Fork que pediria `AskUserQuestion`
 > volta ao orquestrador no relatório (você não tem canal com o humano).
 > Fecha com `gh pr ready`; **quem mergeia é o auditor** despachado depois.
 
@@ -607,7 +629,8 @@ ou e2e contra Postgres real; teste unitário com fake não é validação.
 6. Erros do adapter mapeiam corretamente? <...>
 
 ### 5. Gates que VOCÊ validou (com evidência colada — sem evidência, gate não conta)
-- [ ] `make check` verde — <últimas linhas da saída + exit code>
+- [ ] `make check` verde em cada ponto do plano de gates — <por ponto:
+      Task, últimas linhas da saída + exit code, ou o link do run do Actions>
 - [ ] Coverage ≥ 90% por arquivo tocado — <linhas relevantes do term-missing>
 - [ ] `check_technical_postexec.py` verde — <saída>
 - [ ] Checkpoints A/B/C com achados dispostos
@@ -670,12 +693,14 @@ fonte mais alta na hierarquia.**
 3. **Fase 3A**: gerar concept (perguntas se houver bifurcação material) →
    ADRs se aplicável → **Checkpoint A** (2 subagentes, lentes distintas) →
    commit `stage <N.M>: conceptual approved`.
-4. **Fase 3B**: gerar technical → verificação de gap (uma passada) →
-   ajustar concept SE gap material → **Checkpoint B** (matriz de
-   rastreabilidade) → commit `stage <N.M>: technical approved`
+4. **Fase 3B**: gerar technical (com o plano de gates) → verificação de
+   gap (uma passada) → ajustar concept SE gap material → **Checkpoint B**
+   (matriz de rastreabilidade + plano de gates) → commit
+   `stage <N.M>: technical approved`
    → **pausa opcional de gate humano** (se houve decisão de peso).
 5. **Fase 4**: criar arquivo de estado; para cada Task: re-hidratar →
-   implementar → checks + `make check` → registrar §7 se necessário →
+   implementar → testes da Task (`make check` completo só nos pontos do
+   plano de gates) → registrar §7 se necessário →
    commit `<type>(<scope>): <desc> [<N.M>/task-NN]` → atualizar estado.
    **Checkpoint C** a cada 2–3 Tasks.
 6. **Auditoria de testes** (subagente independente + mutação real):

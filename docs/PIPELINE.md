@@ -542,6 +542,10 @@ A IA traduz o Concept aprovado em sequência ordenada de Tasks
 anteriores relevantes carregados; concepts anteriores caso a caso.
 Lacuna no Concept → para e sinaliza loop reverso para 3A.
 
+O `technical.md` traz na §1 o **plano de gates**: depois de quais Tasks
+o `make check` completo precisa estar verde, de 1 a 3 pontos por Stage
+(regra em [§9.6](#96-plano-de-gates)).
+
 **Prompt completo para copy-paste:** [`RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md)
 §Passo 6.
 
@@ -552,6 +556,9 @@ Checklist:
 - [ ] Cada Task cumpre os 5 critérios de Task Atômica (§4.3).
 - [ ] Caminhos batem com `LAYOUT.md`.
 - [ ] Checks objetivos cobrem cada Task.
+- [ ] Plano de gates na §1: 1 a 3 pontos de `make check` completo, o de
+      saída incluído, cada um com o motivo; ponto além do 3º com
+      justificativa ([§9.6](#96-plano-de-gates)).
 - [ ] Ordem respeita dependências.
 - [ ] Riscos identificados são razoáveis.
 - [ ] Gate de saída da Stage definido (testes + critério funcional).
@@ -644,7 +651,8 @@ amend após gate.
 Após a última Task, executar o checklist de fechamento do
 `technical.md` §3:
 
-- [ ] `make check` verde localmente.
+- [ ] `make check` verde localmente — o último ponto do plano de gates
+      ([§9.6](#96-plano-de-gates)).
 - [ ] Verificações funcionais do `technical.md` §3 cumpridas.
 - [ ] `python scripts/check_technical_postexec.py` verde — confirma que,
       desde o commit `stage N.M: technical approved`, o diff do
@@ -667,6 +675,106 @@ Após a última Task, executar o checklist de fechamento do
       abrir TODO ou nova Stage de correção).
 
 → Próxima Stage.
+
+### 9.6 Plano de gates
+
+Onde o `make check` completo roda dentro de uma Stage. Esta seção é a
+fonte única da regra
+([ADR 0.0.0021](./adr/0_0_0021-planned-full-gate-budget-per-stage.md));
+RUNBOOK, PROMPTs e template apontam para cá.
+
+**Por Task.** Antes do commit de cada Task rodam só os testes dela:
+
+- os arquivos de teste que a Task escreveu ou alterou;
+- os testes de totalidade que os arquivos dela alimentam (abaixo).
+
+```bash
+pytest <arquivos> -q --no-cov
+```
+
+O pre-commit roda no commit, como antes (ruff-format, ruff, mypy,
+import-linter). Teste vermelho bloqueia o commit. Outro check focado
+(ex.: `python scripts/check_layout.py` depois de criar arquivo numa
+pasta nova) entra quando a Task tem motivo concreto para ele, não como
+rotina.
+
+**Por Stage.** O `make check` completo precisa estar verde só nos
+pontos do **plano de gates**, a tabela que o autor escreve na §1 do
+`technical.md` (Fase 3B):
+
+- **Orçamento: 1 a 3 pontos por Stage, o de saída incluído.** O gate de
+  saída (§9.5) é sempre um deles.
+- **Do 4º ponto em diante**, o plano traz a justificativa: qual quebra
+  concreta o ponto pega e por que o ponto seguinte pegaria tarde. "Por
+  segurança" não justifica. Se a necessidade aparece durante a execução,
+  o ponto extra entra como `[deviation]` na §7 do technical, com a mesma
+  justificativa.
+- O gate do technical (§8.4) revisa o plano.
+
+**Onde pôr um ponto no meio da Stage.** Logo depois da última Task de um
+grupo cuja quebra invalidaria as Tasks seguintes:
+
+- mudança em port ou contrato lido por outro bounded context ou por
+  outra camada;
+- mudança em `shared/` ou no composition root;
+- mudança em dependências, configuração de ferramenta, scripts de gate,
+  `conftest.py` compartilhado ou migration.
+
+O autor ordena as Tasks para que essas mudanças fiquem juntas e um ponto
+cubra todas. As varreduras de totalidade dão mais um candidato a ponto:
+depois da **primeira** Task que alimenta uma totalidade que outras Tasks
+também alimentam (regra 3 abaixo). Stage sem nenhum desses casos tem só
+o ponto de saída.
+
+**Varreduras de totalidade.** São os testes que derivam um conjunto do
+código e o comparam com uma lista transcrita: subclasses da raiz de erro
+× mapa de status HTTP, módulos de `use_cases/` × contêiner do
+composition root, `router.routes` × overrides de autorização e tabelas
+de rota, DTOs declarados × lista e contagem. Eles reprovam mudança
+incremental (um erro, use case, rota ou DTO novo sem a sua entrada), e
+reprovam num arquivo de teste que a Task não escreveu. Três regras:
+
+1. **A Task leva a sua entrada.** O erro novo vai com a linha no mapa, o
+   use case com o contêiner, a rota com o override e as linhas das
+   tabelas, no mesmo commit (§4.3, critério 1). Vermelho planejado
+   continua proibido.
+2. **A varredura entra nos testes da Task.** Na Fase 3B, antes de cortar
+   as Tasks, o autor lista quais varreduras cada arquivo novo ou
+   renomeado dispara e põe os arquivos de teste delas no comando de
+   verificação da Task. As candidatas saem de
+   `grep -rlE "__subclasses__|router\.routes|glob\(|getmembers|vars\(" tests/`.
+3. **A totalidade é motivo de ponto.** Varredura que o plano não mapeou
+   fica vermelha fora dos testes da Task, e cada Task seguinte do mesmo
+   tipo repete a falha. Quando duas ou mais Tasks alimentam a mesma
+   totalidade, a primeira delas é candidata a ponto no meio: o
+   `make check` ali confirma o mapa antes de o padrão ser replicado. O
+   plano gasta o orçamento na totalidade cuja falha custaria mais Tasks
+   refeitas.
+
+**Como um ponto é cumprido.** `make check` com exit 0 sobre o commit da
+Task do ponto:
+
+- **Modo manual:** rodado localmente.
+- **Orquestração autônoma**
+  ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)):
+  o job `lint-and-test` verde no run do Actions cujo head é esse commit,
+  sem `make check` local. O push continua a cada Task e o Actions roda
+  em todos. O orçamento conta os pontos em que o executor **espera o
+  veredito** antes de começar a Task seguinte. Entre pontos ele não
+  espera; run vermelho que aparecer entre pontos é corrigido antes da
+  próxima Task.
+
+**Ponto vermelho.** Commit `fix(<scope>): <desc> [N.M/task-NN-fix]`
+antes da próxima Task.
+
+**Issue avulsa.** Mesma regra, sem `technical.md`: o plano é listado
+junto das sub-tasks. O padrão é um ponto, o de saída. Ponto extra que
+aparecer na execução vai no corpo do PR como `[deviation]`.
+
+**Transição.** Vale para Stage e issue cuja branch nasce depois do merge
+do ADR 0.0.0021. Stage ou issue que já estava em execução termina pelo
+prompt com que começou: não tem plano de gates e nenhum é exigido dela,
+nem no gate de saída nem na auditoria.
 
 ---
 

@@ -5,7 +5,7 @@ when-use: Toda vez que iniciar uma nova Stage no projeto destino
 keywords: [runbook, stage, concept, technical, execucao, lifecycle]
 status: draft
 created_at: 2026-05-14
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 runbook_id: stage-lifecycle
 triggers:
   - Stage anterior foi mergeada e a próxima está pronta para iniciar
@@ -311,7 +311,14 @@ Produzir lista ordenada de Tasks. Cada Task descreve:
 - Arquivos a criar/modificar (caminhos exatos, conformes a LAYOUT.md).
 - Conteúdo material da Task (o que será feito, sem código completo).
 - Critério de aceite objetivo.
-- Comando(s) de verificação.
+- Comando(s) de verificação: só os testes da Task (os que ela escreve ou
+  altera, mais as varreduras de totalidade que os arquivos dela
+  alimentam).
+
+Produzir também o **plano de gates** (§1 do template): depois de quais
+Tasks o `make check` completo precisa estar verde. De 1 a 3 pontos por
+Stage, o de saída incluído, cada um com o motivo. Regra completa:
+`docs/PIPELINE.md` §9.6.
 
 A ordem entre Tasks segue skills de ordenação aplicáveis (ex.:
 `task-ordering-hex` para Stage de fatia vertical). Quando o default
@@ -356,6 +363,8 @@ técnicos, critério de aceite, comando de verificação em bloco bash,
 mensagem de commit sugerida no formato:
 `<type>(<scope>): <desc> [N.M/task-NN]` com rodapé `Refs #<issue>`.
 
+Inclua em §1 o plano de gates (tabela ponto → Task → motivo).
+
 Inclua no fim:
 - Ordem de dependência entre Tasks (se não óbvia).
 - Riscos e fallbacks.
@@ -382,6 +391,9 @@ Checklist (PIPELINE §8.4):
 - [ ] Cada Task cumpre os 5 critérios de Task Atômica (§4.3).
 - [ ] Caminhos batem com `LAYOUT.md`.
 - [ ] Checks objetivos cobrem cada Task.
+- [ ] Plano de gates na §1: 1 a 3 pontos de `make check` completo, o de
+      saída incluído, cada um com o motivo; ponto além do 3º com
+      justificativa (PIPELINE §9.6).
 - [ ] Ordem respeita dependências.
 - [ ] Riscos identificados são razoáveis.
 - [ ] Gate de saída da Stage definido (testes + critério funcional).
@@ -519,7 +531,10 @@ basta o registro em §7. Se a lacuna é grande demais para resolver via
 2. Identifique decisões ausentes; pergunte se houver (regra de
    reversibilidade acima).
 3. Implemente.
-4. Rode cada check listado na Task. Se algum falhar:
+4. Rode cada check listado na Task: só os testes dela. O `make check`
+   completo roda apenas se a Task é um ponto do plano de gates do
+   `technical.md` (§1; regra em `docs/PIPELINE.md` §9.6). Se algum
+   falhar:
    - Corrija se for ajuste menor (import faltando, type hint).
    - Pare e reporte se for problema de design.
 5. Apresente o diff completo ao humano antes do commit.
@@ -549,7 +564,8 @@ Mensagem de commit conforme CONVENTIONS.md §4:
 Para cada Task implementada, revisar diff antes do commit (PIPELINE §9.4):
 
 - [ ] Apenas arquivos listados na Task foram tocados.
-- [ ] Checks listados na Task passam.
+- [ ] Checks listados na Task passam (os testes da Task; o `make check`
+      completo só nos pontos do plano de gates — PIPELINE §9.6).
 - [ ] Código respeita `LAYOUT.md` (camada certa, sem imports proibidos).
 - [ ] Decisões justificadas batem com Concept.
 - [ ] Mensagem de commit no formato correto.
@@ -566,7 +582,8 @@ Para cada Task implementada, revisar diff antes do commit (PIPELINE §9.4):
 
 ```powershell
 # IA escreve os arquivos
-make check          # rodar todos os checks
+pytest <arquivos-de-teste-da-task> -q --no-cov   # só os testes da Task
+# Task que é ponto do plano de gates (technical.md §1): rodar também `make check`
 git add <arquivos-da-task>
 git commit -m "<type>(<scope>): <desc> [$N.$M/task-NN]
 
@@ -578,7 +595,8 @@ Refs #$issue"
 Após a última Task, executar o checklist canônico de fechamento
 (PIPELINE §9.5 — replicado aqui na íntegra):
 
-- [ ] `make check` verde localmente.
+- [ ] `make check` verde localmente — o último ponto do plano de gates
+      (PIPELINE §9.6).
 - [ ] Verificações funcionais do `technical.md` §3 cumpridas.
 - [ ] **`python scripts/check_technical_postexec.py` verde** — confirma
       que, desde `stage $N.$M: technical approved`, o diff do

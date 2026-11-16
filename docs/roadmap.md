@@ -231,7 +231,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#155](https://github.com/MarceloSanC/restaurant-hub/issues/155) | 14 mutantes sobreviventes no código de autorização (`authorize_action`, `dependencies`) | identity | tests | done | #132 |
 | [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | done | #117 |
 | [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | done | #65 |
-| [#163](https://github.com/MarceloSanC/restaurant-hub/issues/163) | Orçamento de 1 a 3 `make check` por Stage no lugar do gate por Task | shared | tooling + docs | open | #65 |
+| [#163](https://github.com/MarceloSanC/restaurant-hub/issues/163) | Orçamento de 1 a 3 `make check` por Stage no lugar do gate por Task | shared | tooling + docs | done | #65 |
 | [#164](https://github.com/MarceloSanC/restaurant-hub/issues/164) | Fechamento autônomo da auditoria e merge de Step sem OK humano | shared | docs + .claude | open | #65 |
 | [#165](https://github.com/MarceloSanC/restaurant-hub/issues/165) | Hook `publish_guard` trava push e merge fora dos gates | shared | tooling (.claude/hooks) | open | #65, #164 |
 | [#166](https://github.com/MarceloSanC/restaurant-hub/issues/166) | Issue Forms, hook `issue_guard` e roadmap sem Tabela de Issues | shared | tooling + docs + .github | open | #65 |
@@ -250,6 +250,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#195](https://github.com/MarceloSanC/restaurant-hub/issues/195) | Atualizar os textos de "repo privado" e decidir os Required Status Checks agora que o repo é público | shared | docs + .claude + .github | open | — |
 | [#196](https://github.com/MarceloSanC/restaurant-hub/issues/196) | `check_harness` não lê o conteúdo de `reference/` nem resolve âncora de link de skill | shared | tooling | open | #162 |
 | [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
+| [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | open | #163, #162 |
+| [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | open | #163 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
