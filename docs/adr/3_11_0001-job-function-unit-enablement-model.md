@@ -5,7 +5,7 @@ when-use: Reference before changing how a job function is scoped to units, befor
 keywords: [adr, job-function, unit, enablement, catalogue, manage-tenant, migration, staff, uniqueness]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 adr_id: 3.11.0001
 decision: JobFunction stays tenant-owned and gains a UnitEnablement value object that is either every unit of the restaurant, present and future, or a non-empty explicit set of units; the name stays unique in the restaurant; enabling in every unit requires manage_tenant on top of manage_job_functions, enabling in named units requires manage_job_functions on each unit; changing the enablement replaces it whole and needs reach over the units added and removed (manage_tenant when every unit is on either side); existing functions migrate to every unit
 context_stage: 3.11-job-function-unit-enablement
@@ -85,7 +85,9 @@ em voo nos arquivos de identity), e é fail-closed: um papel futuro com alcance
 multi-unidade e sem manage_tenant é negado, não promovido.`
 
 **5. Changing the enablement replaces it whole** — one operation, `PUT
-/job-functions/{id}/units`, with the same body shape as creation. The actor needs reach
+/job-functions/{id}/units`, with the same `unit_ids` field as creation, except that
+here it is **required** (`null` means every unit; an absent field is rejected, because
+a default would silently widen a restricted function). The actor needs reach
 over **what changes**, not over the whole old or new enablement: `manage_job_functions`
 on each unit **added** and on each unit **removed**, in a stable order; `manage_tenant`
 when either side is *every unit* and the two differ. So a manager enables in his own
