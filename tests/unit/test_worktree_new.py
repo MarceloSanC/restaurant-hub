@@ -450,7 +450,7 @@ def test_main_creates_worktree_whose_url_follows_its_port(
     assert "docker compose up -d --wait postgres" in out
     assert "derruba também o Postgres desta worktree" in out
     assert "python scripts/worktree-rm.py chore/58-db-url --delete-remote" in out
-    assert "git pull origin develop" in out
+    assert "git pull --ff-only origin develop" in out
 
 
 def test_main_without_port_assignment_keeps_the_copied_url(

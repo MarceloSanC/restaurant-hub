@@ -104,7 +104,16 @@ referenciam esta seção em vez de duplicar a lista:
   quando valem as condições de merge da §3 daquele prompt (label
   `complete`, sem blocker, Actions verde no head inclusive `audit-gate`,
   branch rebaseada sem carona, nenhum fork P pendente).
-  Fora dessas três exceções, a aprovação continua obrigatória. Elas são
+  **Exceção — PR auditado, em qualquer fluxo:** fora dos três fluxos
+  acima, o PR **contra `develop`** de Stage ou de issue avulsa também tem
+  a aprovação humana substituída pela auditoria de contexto limpo
+  ([ADR 0.0.0022](./adr/0_0_0022-audit-session-closes-the-pr-it-validated.md)):
+  a sessão que rodou `stage-audit`/`issue-audit` **sem ter implementado o
+  PR** mergeia sozinha, na Fase F da skill, quando valem as condições de
+  §"Fechamento autônomo pela auditoria".
+  Fora dessas quatro exceções, a aprovação continua obrigatória: PR
+  contra `main` (release, hotfix), PR sem auditoria, e PR "auditado" pela
+  mesma sessão que o implementou. Elas são
   **registradas no dono**, como manda CONVENTIONS §0 — sem isso os ADRs
   seriam letra morta.
 - **Branch atualizada:** PR precisa estar à frente da base (`Require
@@ -392,13 +401,14 @@ gh pr view        # comentários e aprovações
 
 **Se CI falhou:** voltar para Etapa 3, corrigir e fazer novo commit.
 
-**Se faltam aprovações:** aguardar review de outro dev. Não mergear sem aprovação.
+**Se faltam aprovações:** aguardar review de outro dev. Não mergear sem aprovação
+(exceção: a auditoria de contexto limpo que a substitui — §Gates de PR).
 
 **Se há comentários:** responder e fazer commits adicionais se necessário.
 
 **Gates:**
 - [ ] CI verde (todos os checks passando)
-- [ ] ≥ 1 aprovação de outro dev
+- [ ] ≥ 1 aprovação de outro dev, ou a auditoria de contexto limpo que a substitui (§Gates de PR)
 - [ ] Sem comentários não-resolvidos
 
 ### Etapa 6: Merge
@@ -408,13 +418,14 @@ segue §"Merge e limpeza da worktree", passos 1–4: rebase e CI verde,
 base reconferida **depois** do CI (`develop` anda durante a espera) e
 `gh pr merge <num> --merge` do checkout principal — merge commit, NUNCA
 squash/rebase, e **sem** `--delete-branch`, que não apaga a remota com a
-branch presa a uma worktree.
+branch presa a uma worktree. Quando quem mergeia é a sessão de auditoria,
+as condições de entrada estão em §"Fechamento autônomo pela auditoria".
 
 **Gate:** PR mergeado em develop.
 
 ### Etapa 7: Cleanup
 
-§"Merge e limpeza da worktree", passos 4–7: `git pull` no principal,
+§"Merge e limpeza da worktree", passos 4–7: `git pull --ff-only` no principal,
 o banco da worktree, `worktree-rm.py <branch> --delete-remote` (que
 derruba esse banco) e a verificação (remota, local, worktree, containers
 e hooks).
@@ -670,9 +681,11 @@ Detalhes e todas as flags: `python scripts/worktree-new.py --help` e
 ### Merge e limpeza da worktree
 
 Sequência canônica para mergear um PR cuja branch vive numa worktree —
-humano, mestra de Step ou auditor da orquestração autônoma. Os prompts
-apontam para cá; não copiam os passos. Cada passo existe por uma falha
-medida (issue #81):
+humano, mestra de Step ou sessão de auditoria (a da orquestração autônoma
+e a da Fase F das skills). Os prompts e as skills apontam para cá; não
+copiam os passos. Quem pode executá-la sem aprovação humana, e com quais
+condições, está em §"Fechamento autônomo pela auditoria", logo depois
+desta seção. Cada passo existe por uma falha medida (issue #81):
 
 - `gh pr merge --delete-branch` mergeia, mas **não apaga a branch
   remota** quando a branch local está presa a uma worktree — rodado de
@@ -729,8 +742,15 @@ git rev-list --count HEAD..origin/develop   # tem de ser 0; senão volte ao pass
 
 ```bash
 gh pr merge <num> --merge                   # nunca --squash/--rebase
-git pull origin develop                     # no principal: traz o merge, para o branch -d do passo 6
+git pull --ff-only origin develop           # no principal: traz o merge, para o branch -d do passo 6
 ```
+
+O `--ff-only` faz o pull falhar se o `develop` local tiver commit que o
+remoto não tem, em vez de criar um merge commit local (com
+`pull.rebase=false`, o `git pull` sem a flag cria). Falhou: não insistir
+com outro pull; o checkout principal não recebe commit
+(§"Branches em execução"), então há um commit fora do lugar a tirar dali
+antes de seguir.
 
 **5. O banco da worktree** (§"Banco e containers da worktree") sai no
 passo 6: o `worktree-rm.py` derruba o projeto compose dela (containers,
@@ -769,6 +789,87 @@ O `worktree-rm.py` já religa o hook que apontava para a worktree
 removida (§"Hooks do git"). Se o `grep` ainda mostrar outro venv, ou o
 script sair com 2, religar no principal com
 `uv run python scripts/install_hooks.py`.
+
+### Fechamento autônomo pela auditoria
+
+A sessão de auditoria que validou um PR fecha esse PR sozinha, sem pedir
+OK: é a **Fase F** da `stage-audit`/`issue-audit`
+([ADR 0.0.0022](./adr/0_0_0022-audit-session-closes-the-pr-it-validated.md)).
+Esta seção é a fonte única de **quem** fecha e **com quais condições**. A
+ordem dos comandos é a de §"Merge e limpeza da worktree", acima, e não se
+repete aqui.
+
+**Quem fecha.** A sessão (ou o subagente) que rodou a auditoria **sem ter
+implementado o PR**. Na orquestração autônoma (ADR 0.0.0008) é o auditor
+despachado. Dois fluxos têm outro dono do merge, e neles a auditoria
+termina no label `complete`:
+
+- sessão mestra de Step
+  ([`PROMPT-step-single-session.md`](./PROMPT-step-single-session.md) §3.4,
+  ADR 0.0.0007): quem mergeia é a mestra;
+- corrida overnight autorizada
+  ([`PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
+  §3, ADR 0.0.0004): quem mergeia é a sessão implementadora.
+
+Se quem pediu a auditoria disse para não mergear, ela não mergeia.
+
+**Condições de entrada** — todas, cada uma com a saída do comando, nunca
+de memória:
+
+1. **Escopo fechado.** Veredito sem blocker e sem finding de dentro da
+   Stage/issue em aberto; todo critério de aceite com evidência; finding
+   de outro escopo já virou issue, com link no comentário do veredito.
+2. **Worktree limpa e enviada.** `git status --porcelain` e
+   `git log --oneline origin/<branch>..HEAD` vazios.
+3. **Sem carona.** `git log --oneline origin/develop..HEAD` só traz
+   commits do escopo (§Etapa 4).
+4. **Nada pendente no PR.** Base `develop`; não é draft; checklist do
+   corpo todo marcado, ou com `n/a` justificado; nenhuma conversa de
+   review sem resolver (consulta abaixo).
+5. **Dependências mergeadas em `develop`.** O "Depende de" da issue; para
+   Stage, `python scripts/check_stage_deps.py <stage_id> --ref origin/develop`.
+6. **Nenhum fork P sem resposta** e nenhum HALT aberto.
+
+```bash
+gh pr view <num> --json baseRefName,isDraft,mergeable
+# conversas de review sem resolver: tem de imprimir 0
+gh api graphql -F o='{owner}' -F r='{repo}' -F n=<num> \
+  -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}' \
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved|not)]|length'
+```
+
+**Sequência.** §"Merge e limpeza da worktree", passos 1–7, na ordem. Três
+pontos dela pesam mais no fechamento pela auditoria:
+
+- O label `complete` e o comentário do veredito são gravados no passo 2,
+  **depois** do run do último push e com o PR sem conflito, não antes do
+  push. O veredito cita então os hashes que o rebase deixou. Se o passo 3
+  devolver ao passo 1 com o veredito já gravado, comentar no PR o
+  mapeamento dos hashes citados (antigo → novo).
+- Conflito no rebase que não seja o de linha das tabelas do
+  `docs/roadmap.md` (§"Branches em execução"): `git rebase --abort`, parar
+  e reportar. Conflito de conteúdo não se resolve às cegas no fechamento.
+- Os containers da worktree saem no passo 6: o `worktree-rm.py` derruba o
+  projeto compose dela (containers, volumes e redes). Rodar **sem**
+  `--no-docker`, que pula essa limpeza. Com o Docker parado o script só
+  avisa, e o Postgres órfão continua segurando a `POSTGRES_PORT`; o
+  passo 5 diz o que rodar quando o Docker voltar.
+
+**Paradas.** A sessão não mergeia e reporta o que falta quando:
+
+- uma condição de entrada é falsa;
+- um check fica vermelho e a fase de aplicação da auditoria não resolve;
+- a edição do passo 2 não gera run novo do `audit-gate`;
+- o `gh pr merge` é negado pela permissão da sessão ou por branch
+  protection. Nesse caso pedir ao humano; nunca editar a configuração de
+  permissões nem contornar a recusa.
+
+Parar não é falha. Mergear com pendência é.
+
+**Saída.** Uma linha de status: PR mergeado (hash do merge commit), issue
+`CLOSED` (`gh issue view <num> --json state`), worktree, branches local e
+remota e containers removidos (a verificação do passo 7), `develop` local
+atualizado.
 
 ### Quando precisar trocar de escopo no meio (com PR parcial)
 
@@ -909,8 +1010,9 @@ Exemplo de feedback construtivo:
 - Tentativa de push direto em `main` ou `develop`
 - Tentativa de merge **sem** CI verde
 - Tentativa de merge **sem** ≥ 1 aprovação — **exceto** em corrida autônoma
-  autorizada pelo ADR 0.0.0004, na orquestração de Step (ADR 0.0.0007) ou
-  na orquestração autônoma (ADR 0.0.0008),
+  autorizada pelo ADR 0.0.0004, na orquestração de Step (ADR 0.0.0007),
+  na orquestração autônoma (ADR 0.0.0008) ou em PR contra `develop`
+  auditado por sessão de contexto limpo (ADR 0.0.0022),
   onde a aprovação é substituída por auditoria de contexto limpo (ver
   §Gates de PR, o ponto único)
 - Coverage < 90% em código novo
@@ -965,7 +1067,7 @@ git sync                                 # atualiza main local
 gh pr create --base main --head develop  # criar release PR
 
 # Cleanup (após o merge — sequência completa em §Merge e limpeza da worktree)
-git pull origin develop                                  # no principal, ANTES do worktree-rm
+git pull --ff-only origin develop                        # no principal, ANTES do worktree-rm
 python scripts/worktree-rm.py <branch> --delete-remote   # compose + worktree + branches + prune
 make worktree-orphans                                    # compose de worktree que já saiu
 ```

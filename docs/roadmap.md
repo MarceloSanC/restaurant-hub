@@ -232,7 +232,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#158](https://github.com/MarceloSanC/restaurant-hub/issues/158) | Marca de lacuna em prosa livre escapa da regra 8 do `check_doc_frontmatter` | shared | tooling | done | #117 |
 | [#162](https://github.com/MarceloSanC/restaurant-hub/issues/162) | Trazer `stage-audit` e `issue-audit` para até 500 linhas (`KNOWN_DEBT` do `check_harness`) | shared | tooling + .claude | done | #65 |
 | [#163](https://github.com/MarceloSanC/restaurant-hub/issues/163) | Orçamento de 1 a 3 `make check` por Stage no lugar do gate por Task | shared | tooling + docs | done | #65 |
-| [#164](https://github.com/MarceloSanC/restaurant-hub/issues/164) | Fechamento autônomo da auditoria e merge de Step sem OK humano | shared | docs + .claude | open | #65 |
+| [#164](https://github.com/MarceloSanC/restaurant-hub/issues/164) | Fechamento autônomo da auditoria e merge de Step sem OK humano | shared | docs + .claude | done | #65 |
 | [#165](https://github.com/MarceloSanC/restaurant-hub/issues/165) | Hook `publish_guard` trava push e merge fora dos gates | shared | tooling (.claude/hooks) | open | #65, #164 |
 | [#166](https://github.com/MarceloSanC/restaurant-hub/issues/166) | Issue Forms, hook `issue_guard` e roadmap sem Tabela de Issues | shared | tooling + docs + .github | open | #65 |
 | [#167](https://github.com/MarceloSanC/restaurant-hub/issues/167) | Harness de arquitetura com gates AST, skill e revisor | shared | tooling + .claude | open | #65 |

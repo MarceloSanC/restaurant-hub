@@ -18,6 +18,7 @@ a auditoria cruza.
 | Regras de import / layers | `docs/LAYOUT.md` §3 + `hex-arch-python` skill |
 | Atomicidade da Stage | `docs/PIPELINE.md` §4.2 / §4.3 |
 | Gates de PR (CI verde, ≥90%, aprovação) | `docs/GIT-WORKFLOW.md` §Gates de PR |
+| Fechamento do PR pela auditoria (Fase F) | `docs/GIT-WORKFLOW.md` §"Fechamento autônomo pela auditoria" + §"Merge e limpeza da worktree" |
 | Convenção de commit/branch/PR | `docs/CONVENTIONS.md` §4 + `git-versioning-pointer` skill |
 | §7 post-exec — formato e regra | `docs/CONVENTIONS.md` §3.4 |
 | Status de Stage (`draft`/`approved`/`done`) | `docs/CONVENTIONS.md` §3 |

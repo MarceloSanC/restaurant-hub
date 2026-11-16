@@ -786,7 +786,7 @@ def _print_summary(*, branch: str, path: Path, issue: int, base: str) -> None:
     print(f"  # depois: git push -u origin {branch} && gh pr create --base {base}")
     print()
     print("Quando terminar a worktree (após PR mergeado — GIT-WORKFLOW §Merge e limpeza):")
-    print("  git pull origin develop   # no checkout principal (em develop), antes do worktree-rm")
+    print("  git pull --ff-only origin develop   # no checkout principal, antes do worktree-rm")
     print(f"  python scripts/worktree-rm.py {branch} --delete-remote   # do checkout principal")
     print("  # o worktree-rm derruba também o Postgres desta worktree (containers e volumes)")
 

@@ -5,7 +5,7 @@ when-use: Apenas em corrida autônoma overnight autorizada pelo ADR 0.0.0004 (st
 keywords: [prompt, stage, autonomous, overnight, auto-merge, adr-0004, audit-gate]
 status: done
 created_at: 2026-07-12
-updated_at: 2026-11-09
+updated_at: 2026-11-16
 ---
 
 # Prompt — Execução de Stage em Sessão Única (variante AUTÔNOMA)
@@ -90,8 +90,11 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
    que recebe só os caminhos dos artefatos, nunca o seu histórico nem o seu raciocínio.
    Se a auditoria apontar **blocker**, corrija e re-audite; só prossiga com auditoria sem
    blocker. É a **sessão de auditoria** (não você) quem completa o checklist do PR e grava
-   o label `> **Auditoria:** complete` + comentário de veredito (CONVENTIONS §3.6). **Nunca**
-   grave `complete` você mesmo.
+   o label `> **Auditoria:** complete` + comentário de veredito (CONVENTIONS §3.6), com a
+   branch já rebaseada e **depois** do run do último push (GIT-WORKFLOW §"Merge e limpeza da
+   worktree", passos 1–2). **Nunca** grave `complete` você mesmo. Nesta variante o auditor
+   **para antes da Fase F** da skill: o merge é seu (passo 3; GIT-WORKFLOW §"Fechamento
+   autônomo pela auditoria").
 
    **Cap de 2 re-auditorias.** Blocker que sobrevive à **3ª** rodada → **HALT**, não 4ª
    tentativa. Sem cap, esta é a única etapa do fluxo com re-rolagem infinita — e é justamente
@@ -112,7 +115,7 @@ e do **PR aberto** com o label de auditoria em `review` preservado:
    **sem** `--delete-branch` (com a branch presa à worktree ele não apaga a remota).
    Se o merge for recusado por branch protection (aprovação obrigatória), **HALT** — não
    burlar nem se auto-aprovar.
-4. Cleanup e sync para a próxima Stage: passos 4–7 da mesma seção — `git pull origin develop`
+4. Cleanup e sync para a próxima Stage: passos 4–7 da mesma seção — `git pull --ff-only origin develop`
    no principal **antes** do `worktree-rm`, `docker compose down -v` dentro da worktree,
    `python scripts/worktree-rm.py <branch> --delete-remote` e a verificação.
 5. **Nunca** force-push em `develop`/`main`; **nunca** reescrever história já mergeada.

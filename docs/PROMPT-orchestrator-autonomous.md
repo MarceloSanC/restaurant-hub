@@ -57,7 +57,7 @@ subagentes de contexto zerado e responde aos forks deles.
    instrução de **devolver o fork ao orquestrador** em vez de `AskUserQuestion` (o subagente não
    tem canal com o humano). O implementador termina com o PR pronto (`gh pr ready`) e o relatório.
 4. **Despachar o auditor** (§3) assim que o implementador reportar.
-5. Ao fim de cada merge: `git pull origin develop` no checkout principal, voltar ao passo 1.
+5. Ao fim de cada merge: `git pull --ff-only origin develop` no checkout principal, voltar ao passo 1.
 
 ## 3. Auditor (contexto limpo, com permissão de merge)
 
@@ -79,15 +79,17 @@ nunca o relatório nem o raciocínio do implementador. Roda a skill `stage-audit
      `develop` anda durante a espera); atrás → rebase, push e esperar o Actions de novo;
    - nenhum fork P pendente.
 4. Tudo valendo → executa os passos 4–7 da mesma seção, **do checkout principal**: merge commit sem
-   `--delete-branch`, `git pull`, `docker compose down -v` na worktree,
+   `--delete-branch`, `git pull --ff-only`, `docker compose down -v` na worktree,
    `worktree-rm.py <branch> --delete-remote`, e cola a saída da verificação (remota, local,
    worktree, containers, hooks). Alguma condição falhando → **não mergeia**; reporta o que travou.
 5. Devolve ao orquestrador: veredito, hash do merge (ou o bloqueio), issues abertas, aprendizados.
 
-> **Override consciente da skill.** `stage-audit`/`issue-audit` dizem "nunca faz merge — é do
-> usuário, salvo pedido explícito". Aqui o **pedido explícito é esta seção**, ratificada no
-> [ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md): o auditor
-> despachado por este prompt mergeia, e só com as condições do passo 3.
+> **É a Fase F da skill.** O fechamento dos passos 2–4 é a Fase F da `stage-audit`/`issue-audit`
+> ([ADR 0.0.0022](./adr/0_0_0022-audit-session-closes-the-pr-it-validated.md)).
+> O auditor despachado por este prompt é a sessão de auditoria: mergeia sem pedir OK
+> ([ADR 0.0.0008](./adr/0_0_0008-autonomous-orchestrator-parallel-worktrees.md)) e só com as
+> condições do passo 3, que são as de [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Fechamento
+> autônomo pela auditoria" (o dono; em divergência, vale lá).
 
 ## 4. Relatório ao humano
 

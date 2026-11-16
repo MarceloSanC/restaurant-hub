@@ -28,7 +28,7 @@ não pelo nome da pasta: pasta criada com slug diferente do da branch não exige
 `--path` (issue #81). Sem worktree com a branch, cai no caminho-padrão
 `../<repo>-worktrees/<slug>`; `--path` continua forçando o caminho.
 
-Rode do checkout principal, depois do `git pull origin develop`: o `git branch -d`
+Rode do checkout principal, depois do `git pull --ff-only origin develop`: o `git branch -d`
 só apaga a branch que já está mergeada no `develop` local (ou no upstream dela).
 Sequência completa de merge e limpeza: docs/GIT-WORKFLOW.md §"Merge e limpeza
 da worktree".

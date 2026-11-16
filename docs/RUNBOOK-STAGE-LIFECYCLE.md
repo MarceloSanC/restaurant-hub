@@ -657,14 +657,16 @@ Ver \`docs/stages/$N.$M-$slug/concept.md\` e \`technical.md\`.
 "@
 ```
 
-Aguardar gates do GIT-WORKFLOW (CI verde, +1 aprovação). Após aprovação, mergear pela
+Aguardar gates do GIT-WORKFLOW: CI verde e +1 aprovação, ou a auditoria de contexto limpo
+que a substitui (§Gates de PR) — nesse caso quem mergeia é a sessão de auditoria, na Fase F
+da skill. Mergear pela
 sequência de `docs/GIT-WORKFLOW.md` §"Merge e limpeza da worktree", passos 3–4: base
 reconferida depois do CI e `gh pr merge <num-pr> --merge` do checkout principal, **sem**
 `--delete-branch` (com a branch presa à worktree ele não apaga a remota).
 
 ### Passo 12 — Cleanup
 
-Passos 4–7 da mesma seção, do checkout principal: `git pull origin develop` **antes** do
+Passos 4–7 da mesma seção, do checkout principal: `git pull --ff-only origin develop` **antes** do
 `worktree-rm` (o `git branch -d` dele precisa do merge no `develop` local),
 `docker compose down -v` dentro da worktree, `python scripts/worktree-rm.py <branch>
 --delete-remote` e a verificação (remota, local, worktree, containers, hooks).
