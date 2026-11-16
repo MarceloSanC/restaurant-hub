@@ -5,7 +5,7 @@ when-use: Reference before authorizing an autonomous overnight run, when auditin
 keywords: [adr, process, autonomous, overnight, git, auto-merge, stage-audit, audit-gate]
 status: accepted
 created_at: 2026-07-12
-updated_at: 2026-07-16
+updated_at: 2026-11-16
 adr_id: "0.0.0004"
 decision: Define an autonomous overnight stage-execution mode where the agent self-merges stage PRs, with a clean-context audit (stage-audit + audit-gate label) substituting the human approval gate; each run must be explicitly authorized by flipping this ADR to accepted with the stage range recorded.
 context_stage: 0.0-global
@@ -139,3 +139,23 @@ For explicitly authorized overnight runs only:
 
 - Related: `docs/PROMPT-stage-single-session.md`, `docs/GIT-WORKFLOW.md` §Gates / §Comportamento bloqueante, `docs/CONVENTIONS.md` §3.6, `.github/workflows/audit-gate.yml`, `.claude/skills/stage-audit/SKILL.md`.
 - Origin: adapted from the `financial-forecasting` repo's ADR 0.0.0050 (autonomous overnight mode), adjusted to this repo's audit-gate label flow and stack.
+
+## Supersessão parcial
+
+**2026-11-16 — a frase de §Context *"Outside an authorized run, all three read literally and the
+merge stays the user's"* foi superada pelo
+[ADR 0.0.0022](./0_0_0022-audit-session-closes-the-pr-it-validated.md) (issue #164).** Fora de uma
+corrida autorizada, o PR contra `develop` que uma auditoria de contexto limpo validou é mergeado
+pela própria sessão de auditoria, na Fase F da `stage-audit`/`issue-audit`, sem aprovação humana.
+A exceção está registrada no dono, `GIT-WORKFLOW.md` §Gates de PR.
+
+O que este ADR decide continua valendo para a corrida overnight: ela precisa de autorização por
+recorte de Stages, quem mergeia nela é a sessão implementadora depois da auditoria, e as decisões
+seguem a política de §Decision 4.
+
+**A pausa na fronteira de cada Step** registrada em "Authorized runs" era condição da corrida
+`1.2` → `3.5`, que terminou (as Stages `2.5` e `3.5` estão mergeadas). Ela não é regra permanente:
+o ADR 0.0.0022 §Decision 5 registra que a fronteira de Step não é gate e que a pausa só existe
+quando o sponsor a declara para uma corrida, como esta autorização fez.
+
+Nota *append-only*; o corpo acima não foi editado.
