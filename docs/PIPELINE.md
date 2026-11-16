@@ -718,20 +718,21 @@ grupo cuja quebra invalidaria as Tasks seguintes:
   outra camada;
 - mudança em `shared/` ou no composition root;
 - mudança em dependências, configuração de ferramenta, scripts de gate,
-  `conftest.py` compartilhado ou migration;
-- a primeira Task que alimenta uma totalidade que outras Tasks também
-  alimentam (abaixo).
+  `conftest.py` compartilhado ou migration.
 
 O autor ordena as Tasks para que essas mudanças fiquem juntas e um ponto
-cubra todas. Stage sem nenhuma delas tem só o ponto de saída.
+cubra todas. As varreduras de totalidade dão mais um candidato a ponto:
+depois da **primeira** Task que alimenta uma totalidade que outras Tasks
+também alimentam (regra 3 abaixo). Stage sem nenhum desses casos tem só
+o ponto de saída.
 
 **Varreduras de totalidade.** São os testes que derivam um conjunto do
 código e o comparam com uma lista transcrita: subclasses da raiz de erro
 × mapa de status HTTP, módulos de `use_cases/` × contêiner do
 composition root, `router.routes` × overrides de autorização e tabelas
-de rota, DTOs × tabelas de campos. Eles reprovam mudança incremental (um
-erro, use case, rota ou DTO novo sem a sua entrada), e reprovam num
-arquivo de teste que a Task não escreveu. Três regras:
+de rota, DTOs declarados × lista e contagem. Eles reprovam mudança
+incremental (um erro, use case, rota ou DTO novo sem a sua entrada), e
+reprovam num arquivo de teste que a Task não escreveu. Três regras:
 
 1. **A Task leva a sua entrada.** O erro novo vai com a linha no mapa, o
    use case com o contêiner, a rota com o override e as linhas das
@@ -739,9 +740,9 @@ arquivo de teste que a Task não escreveu. Três regras:
    continua proibido.
 2. **A varredura entra nos testes da Task.** Na Fase 3B, antes de cortar
    as Tasks, o autor lista quais varreduras cada arquivo novo ou
-   renomeado dispara
-   (`grep -rlE "__subclasses__|router\.routes|glob\(" tests/`) e põe os
-   arquivos de teste delas no comando de verificação da Task.
+   renomeado dispara e põe os arquivos de teste delas no comando de
+   verificação da Task. As candidatas saem de
+   `grep -rlE "__subclasses__|router\.routes|glob\(|getmembers|vars\(" tests/`.
 3. **A totalidade é motivo de ponto.** Varredura que o plano não mapeou
    fica vermelha fora dos testes da Task, e cada Task seguinte do mesmo
    tipo repete a falha. Quando duas ou mais Tasks alimentam a mesma
