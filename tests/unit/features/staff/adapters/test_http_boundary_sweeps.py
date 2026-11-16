@@ -31,7 +31,7 @@ import importlib
 import pathlib
 import pkgutil
 import urllib.parse
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, get_args, get_origin
@@ -65,8 +65,9 @@ Caminho = tuple[str | int, ...]
 # `job_function_ids` em cada uma das duas rotas que o aceitam e o período de
 # `shift_preference`. A contagem é transcrita, e não derivada: é ela que faz um
 # encolhimento do domínio reprovar em vez de reduzir em silêncio os casos rodados.
-# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17.
-_TOTAL_DE_CAMPOS_ESCALARES = 15
+# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17; a Stage 3.11,
+# o elemento de `unit_ids` da criação de função e o da substituição de unidades.
+_TOTAL_DE_CAMPOS_ESCALARES = 17
 
 # Alias local do tipo devolvido por `identifier_fields`: o módulo entra como
 # objeto (`dependencies_module`), então o nome não está no espaço de nomes
@@ -139,6 +140,11 @@ class Invocacao:
     query: dict[str, str]
     body: dict[str, Any] | None
     sucesso: int
+    # Stage 3.11 — estado que a rota precisa encontrar para que um **alvo de
+    # autorização do corpo** chegue ao guard. Opcional e declarado pela Task da
+    # rota: só `PUT .../units` o usa, porque lá o alcance sobre as unidades é
+    # decidido contra a habilitação gravada, depois da existência.
+    semear: Callable[[Ambiente], None] | None = None
 
 
 def _rotas() -> list[APIRoute]:
@@ -181,6 +187,7 @@ def _invocacoes_declaradas() -> dict[ChaveDeRota, Invocacao]:
                 query=dict(bruta["query"]),
                 body=bruta["body"],
                 sucesso=int(bruta["sucesso"]),
+                semear=bruta.get("semear"),
             )
     return reunidas
 
@@ -469,8 +476,9 @@ def test_ca14_nenhum_handler_le_o_unit_id_do_escopo_autorizado() -> None:
 #
 # 17 até a 3.6 (16 rotas + a segunda autorização de R16); a Stage 3.5 acrescenta
 # R17, que autoriza **duas** vezes sobre o mesmo alvo (`manage_staff` e
-# `manage_users`, concept 3.5 §5.3) — 19.
-_TOTAL_DE_AUTORIZACOES = 19
+# `manage_users`, concept 3.5 §5.3) — 19. A Stage 3.11 acrescenta duas rotas, uma
+# autorização cada (o catálogo no tenant; a listagem na unidade do path) — 21.
+_TOTAL_DE_AUTORIZACOES = 21
 
 
 def _requisitos_declarados() -> dict[str, object]:
@@ -850,7 +858,7 @@ def test_o_eixo_de_corpo_de_ca20_nao_esta_vazio() -> None:
         for campo in dependencies_module.identifier_fields(modelo)
     }
 
-    assert campos_existentes == {"target_unit_id", "job_function_ids"}
+    assert campos_existentes == {"target_unit_id", "job_function_ids", "unit_ids"}
     assert _CASOS_DE_CORPO, "o eixo de corpo de CA20 ficou vazio — a varredura não mede nada"
 
 
@@ -1054,7 +1062,7 @@ def _e_alvo_de_autorizacao(nome: str) -> bool:
     um identificador de unidade novo, com outro nome, fica vermelho lá em vez de
     entrar mudo na espécie errada.
     """
-    return nome.endswith("unit_id")
+    return nome.endswith(("unit_id", "unit_ids"))
 
 
 def _quem_parseia(chave_da_rota: ChaveDeRota, caminho: Caminho) -> str:
@@ -1133,6 +1141,8 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
     invocacao = _INVOCACOES[chave_da_rota]
     assert invocacao.body is not None
     corpo = _com_valor_em(dict(invocacao.body), caminho, valor)
+    if invocacao.semear is not None:
+        invocacao.semear(ambiente)
 
     # Mesma espécie do eixo de path: um identificador de **unidade** que chega
     # pelo corpo (o `target_unit_id` de R16) é o segundo alvo de autorização, e
@@ -1157,6 +1167,12 @@ async def test_ca24_nenhum_campo_escalar_devolve_500(
         )
         assert exc is ambiente.guard.authorization_error, (
             f"{chave_da_rota[1]}: a recusa do guard foi traduzida em outra exceção (L-AG2)"
+        )
+        # A recusa tem de ser **sobre o valor corrompido**: uma sentinela que
+        # escapasse de outro alvo (o tenant, `manage_tenant`) satisfaria o ramo sem
+        # que o identificador do corpo tivesse chegado ao guard (Stage 3.11).
+        assert ambiente.guard.calls[-1].endswith(f",{valor})"), (
+            f"{chave_da_rota[1]}: o guard negou {ambiente.guard.calls[-1]}, e não o alvo {valor!r}"
         )
         return
 
@@ -1189,7 +1205,8 @@ def test_os_alvos_de_autorizacao_sao_exatamente_os_de_hoje() -> None:
     }
     alvos = {nome for nome in de_path | de_corpo if _e_alvo_de_autorizacao(nome)}
 
-    assert alvos == {"unit_id", "target_unit_id"}
+    # Stage 3.11 — `unit_ids`: as unidades em que uma função nasce habilitada.
+    assert alvos == {"unit_id", "target_unit_id", "unit_ids"}
 
 
 def test_a_varredura_de_ca24_alcanca_os_dois_campos_que_o_criterio_nomeia() -> None:
@@ -1228,11 +1245,13 @@ def test_os_elementos_de_lista_sao_do_lado_de_staff_no_dominio_de_ca24() -> None
     staff — a defesa contra o 422 que não é desta borda — ficaria desligada
     justamente nos caminhos recém-abertos.
 
-    A segunda asserção fecha o outro lado: nenhum elemento de lista é **alvo de
-    autorização**, então nenhum deles pode cair no ramo da sentinela do guard.
-    Hoje isso é verdade porque o único identificador de unidade que chega pelo
-    corpo é escalar (`target_unit_id`); no dia em que uma lista de unidades
-    existir, este teste é quem obriga a revisitar a espécie.
+    A segunda asserção fecha o outro lado, e foi **revisitada na Stage 3.11**,
+    como a redação anterior mandava ("no dia em que uma lista de unidades
+    existir"): os elementos de lista que são **alvo de autorização** são
+    exatamente os de `unit_ids`, e a lista é transcrita. Para eles CA24 aplica o
+    ramo da sentinela do guard — a espécie é decidida pelo **nome** do campo
+    (`_nome_do_campo`), que para `unit_ids.0` é `unit_ids` —; qualquer outro
+    elemento de lista que virasse alvo reprovaria aqui em vez de entrar mudo.
     """
     novos = [
         (chave_da_rota, caminho)
@@ -1243,7 +1262,15 @@ def test_os_elementos_de_lista_sao_do_lado_de_staff_no_dominio_de_ca24() -> None
 
     assert novos, "nenhum elemento de lista no domínio — a descida por lista sumiu"
     assert {_quem_parseia(chave_da_rota, caminho) for chave_da_rota, caminho in novos} == {"staff"}
-    assert not any(_e_alvo_de_autorizacao(_nome_do_campo(caminho)) for _, caminho in novos)
+    alvos_em_lista = {
+        (chave_da_rota, caminho)
+        for chave_da_rota, caminho in novos
+        if _e_alvo_de_autorizacao(_nome_do_campo(caminho))
+    }
+    assert alvos_em_lista == {
+        (("POST", "/job-functions"), ("unit_ids", 0)),
+        (("PUT", "/job-functions/{job_function_id}/units"), ("unit_ids", 0)),
+    }
 
 
 def test_a_classificacao_de_quem_parseia_nao_colapsou_para_um_lado_so() -> None:

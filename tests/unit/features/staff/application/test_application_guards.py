@@ -33,7 +33,8 @@ from restaurant_hub.features.staff.domain.entities.job_function import JobFuncti
 pytestmark = pytest.mark.unit
 
 # 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17).
-_USE_CASES_ESPERADOS = 17
+# 17 até a 3.10; a Stage 3.11 acrescenta `set_job_function_units`.
+_USE_CASES_ESPERADOS = 18
 
 
 def _modulos_de_use_case() -> list[str]:
@@ -81,6 +82,7 @@ def test_o_pacote_tem_exatamente_os_use_cases_declarados() -> None:
         "remove_unavailability",
         "rename_employee",
         "rename_job_function",
+        "set_job_function_units",
     ]
     assert len(_classes_de_use_case()) == _USE_CASES_ESPERADOS
 

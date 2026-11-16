@@ -164,7 +164,9 @@ def test_fluxo_completo_de_equipe_cruzando_duas_unidades() -> None:
     assert com_periodo.unavailabilities == (_PERIODO,)
 
     # 5. Cópia para a unidade B — leva o cadastro inteiro, já editado.
-    copia = CopyEmployeeToUnitUseCase(fakes.employees, ids, guard=PermissiveAccessGuard()).execute(
+    copia = CopyEmployeeToUnitUseCase(
+        fakes.employees, fakes.job_functions, ids, guard=PermissiveAccessGuard()
+    ).execute(
         CopyEmployeeToUnitCommand(
             actor=TEST_ACTOR,
             tenant_id=_TENANT,

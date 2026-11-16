@@ -41,6 +41,8 @@ _TABELAS_DE_STAFF = {
     "employee_job_functions",
     "employee_unavailabilities",
     "employee_shift_preferences",
+    # Stage 3.11 — criada pela `0005_job_function_units`.
+    "job_function_units",
 }
 
 
@@ -173,6 +175,72 @@ def _colunas_de_employees(engine: Engine) -> set[str]:
             )
         )
         return {linha[0] for linha in linhas}
+
+
+def _colunas_de(engine: Engine, tabela: str) -> set[str]:
+    with engine.connect() as conexao:
+        linhas = conexao.execute(
+            text("SELECT column_name FROM information_schema.columns WHERE table_name = :t"),
+            {"t": tabela},
+        )
+        return {linha[0] for linha in linhas}
+
+
+@pytest.mark.slow
+def test_ca4_funcao_anterior_a_0005_nasce_em_todas_as_unidades(
+    engine: Engine, database_url: str
+) -> None:
+    """CA4 da Stage 3.11 — o dado que já existe migra para "todas as unidades".
+
+    A função é gravada **no schema da 0004** (sem a coluna nova) e o `upgrade`
+    roda por cima dela: o `DEFAULT true` da coluna é o que a mantém visível em toda
+    unidade, e nenhuma linha de vínculo é escrita (a migration não lê `units`).
+    """
+    config = alembic_config(database_url)
+    try:
+        command.downgrade(config, "0004")
+        assert "enabled_in_all_units" not in _colunas_de(engine, "job_functions")
+        with engine.begin() as conexao:
+            conexao.execute(
+                text(
+                    "INSERT INTO job_functions (id, tenant_id, name) "
+                    "VALUES ('f-antiga', 't-mig', 'Cozinheiro')"
+                )
+            )
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            flag = conexao.execute(
+                text("SELECT enabled_in_all_units FROM job_functions WHERE id = 'f-antiga'")
+            ).scalar_one()
+            vinculos = conexao.execute(
+                text("SELECT count(*) FROM job_function_units WHERE job_function_id = 'f-antiga'")
+            ).scalar_one()
+        assert flag is True
+        assert vinculos == 0
+    finally:
+        command.upgrade(config, "head")
+        with engine.begin() as conexao:
+            conexao.execute(text("DELETE FROM job_functions WHERE id = 'f-antiga'"))
+
+
+@pytest.mark.slow
+def test_downgrade_da_0005_remove_so_o_que_ela_criou(engine: Engine, database_url: str) -> None:
+    """Descer até a 0004: a tabela de vínculo e a flag somem; `job_functions` fica."""
+    config = alembic_config(database_url)
+    try:
+        command.downgrade(config, "0004")
+        assert "job_function_units" not in _tabelas(engine)
+        colunas = _colunas_de(engine, "job_functions")
+        assert "enabled_in_all_units" not in colunas
+        assert colunas >= {"id", "tenant_id", "name"}
+        with engine.connect() as conexao:
+            indices = {
+                linha[0] for linha in conexao.execute(text("SELECT indexname FROM pg_indexes"))
+            }
+        assert "ix_job_function_units_tenant_unit" not in indices
+    finally:
+        command.upgrade(config, "head")
+    assert "job_function_units" in _tabelas(engine)
 
 
 @pytest.mark.slow

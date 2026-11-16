@@ -70,6 +70,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
+    SetJobFunctionUnitsCommand,
 )
 from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
@@ -129,6 +130,9 @@ from restaurant_hub.features.staff.application.use_cases.rename_employee import 
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
+    SetJobFunctionUnitsUseCase,
+)
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -183,6 +187,7 @@ _PERIODO_NOVO: Final = UnavailabilityPeriod(
 _MANAGE_STAFF: Final = "manage_staff"
 _MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
 _MANAGE_USERS: Final = "manage_users"
+_MANAGE_TENANT: Final = "manage_tenant"
 
 
 @dataclass
@@ -297,7 +302,10 @@ class Cenario:
 
 def _funcao_criada_no_tenant(montagem: Montagem, resultado: object) -> None:
     assert resultado.tenant_id == _A
-    assert montagem.fakes.job_functions.find_by_id(_A, JobFunctionId(resultado.id)) is not None
+    gravada = montagem.fakes.job_functions.find_by_id(_A, JobFunctionId(resultado.id))
+    assert gravada is not None
+    # A habilitação é a do **command** (u1), não a unidade inventada do escopo.
+    assert gravada.unit_enablement.unit_ids == frozenset({_U1})
 
 
 def _catalogo_do_tenant(montagem: Montagem, resultado: object) -> None:
@@ -315,6 +323,14 @@ def _funcao_renomeada_no_tenant(montagem: Montagem, resultado: object) -> None:
 def _funcao_apagada_no_tenant(montagem: Montagem, resultado: object) -> None:
     assert resultado is None
     assert montagem.fakes.job_functions.find_by_id(_A, _F_LIVRE) is None
+
+
+def _unidades_trocadas_no_tenant(montagem: Montagem, resultado: object) -> None:
+    assert resultado.tenant_id == _A
+    relida = montagem.fakes.job_functions.find_by_id(_A, _F_LIVRE)
+    assert relida is not None
+    assert relida.unit_enablement.unit_ids == frozenset({_U1})
+    assert relida.name == "Garçom"
 
 
 def _registro_no_endereco(montagem: Montagem, employee_id: EmployeeId) -> Employee | None:
@@ -420,8 +436,12 @@ def _login_vinculado_no_endereco(montagem: Montagem, resultado: object) -> None:
 CENARIOS: Final[dict[str, Cenario]] = {
     "create_job_function": Cenario(
         classe=CreateJobFunctionUseCase,
-        command=CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name="Caixa"),
-        alvos=((_MANAGE_JOB_FUNCTIONS, _A, None),),
+        # Stage 3.11 — criada **para a unidade u1**: o alvo derivado da habilitação
+        # (a unidade nomeada) vem depois do alvo de abertura (o tenant).
+        command=CreateJobFunctionCommand(
+            actor=TEST_ACTOR, tenant_id=_A, name="Caixa", unit_ids=frozenset({_U1})
+        ),
+        alvos=((_MANAGE_JOB_FUNCTIONS, _A, None), (_MANAGE_JOB_FUNCTIONS, _A, _U1)),
         no_endereco_do_command=_funcao_criada_no_tenant,
     ),
     "list_job_functions": Cenario(
@@ -443,6 +463,17 @@ CENARIOS: Final[dict[str, Cenario]] = {
         command=DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F_LIVRE),
         alvos=((_MANAGE_JOB_FUNCTIONS, _A, None),),
         no_endereco_do_command=_funcao_apagada_no_tenant,
+    ),
+    # Stage 3.11 — `f-livre` nasce em todas as unidades (default da semeadura):
+    # restringi-la a u1 muda o alcance do restaurante inteiro, e o alvo derivado é
+    # `manage_tenant` — lido da habilitação **gravada**, depois da existência.
+    "set_job_function_units": Cenario(
+        classe=SetJobFunctionUnitsUseCase,
+        command=SetJobFunctionUnitsCommand(
+            actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F_LIVRE, unit_ids=frozenset({_U1})
+        ),
+        alvos=((_MANAGE_JOB_FUNCTIONS, _A, None), (_MANAGE_TENANT, _A, None)),
+        no_endereco_do_command=_unidades_trocadas_no_tenant,
     ),
     "create_employee": Cenario(
         classe=CreateEmployeeUseCase,
@@ -636,7 +667,7 @@ def test_os_alvos_da_tabela_nomeiam_sempre_o_tenant() -> None:
 def test_toda_permissao_da_tabela_e_do_vocabulario_de_staff() -> None:
     """Uma permissão digitada errado na tabela faria CA05 travar o erro, não o acerto."""
     usadas = {alvo[0] for c in CENARIOS.values() for alvo in c.alvos}
-    assert usadas <= {_MANAGE_STAFF, _MANAGE_JOB_FUNCTIONS, _MANAGE_USERS}
+    assert usadas <= {_MANAGE_STAFF, _MANAGE_JOB_FUNCTIONS, _MANAGE_USERS, _MANAGE_TENANT}
 
 
 _DE_DOIS_ALVOS: Final = sorted(nome for nome, c in CENARIOS.items() if len(c.alvos) > 1)
@@ -644,10 +675,24 @@ _DE_DOIS_ALVOS: Final = sorted(nome for nome, c in CENARIOS.items() if len(c.alv
 
 def test_os_use_cases_de_dois_alvos_sao_os_do_concept() -> None:
     """Sem a contagem, CA06 passaria vácuo se a tabela perdesse um segundo alvo."""
-    assert _DE_DOIS_ALVOS == ["copy_employee_to_unit", "create_login_for_employee"]
+    assert _DE_DOIS_ALVOS == [
+        "copy_employee_to_unit",
+        "create_job_function",
+        "create_login_for_employee",
+        "set_job_function_units",
+    ]
 
 
-@pytest.mark.parametrize("nome", _DE_DOIS_ALVOS)
+# A exceção declarada ao ADR 3.7.0001 §4 (ADR 3.11.0001 §5): o alvo derivado de
+# `set_job_function_units` é a **diferença** contra a habilitação gravada, então a
+# função é lida entre as duas autorizações. A lista é transcrita — um segundo use
+# case que lesse antes de autorizar tudo não entra aqui de carona.
+_LEEM_ANTES_DO_ALVO_DERIVADO: Final = ("set_job_function_units",)
+
+
+@pytest.mark.parametrize(
+    "nome", [nome for nome in _DE_DOIS_ALVOS if nome not in _LEEM_ANTES_DO_ALVO_DERIVADO]
+)
 def test_ca06_negar_so_o_segundo_alvo_nao_deixa_efeito(nome: str) -> None:
     """Os dois alvos são autorizados antes da primeira porta (R2).
 
@@ -671,6 +716,31 @@ def test_ca06_negar_so_o_segundo_alvo_nao_deixa_efeito(nome: str) -> None:
     assert guard.calls[-1] == f"authorize({segundo[0]},{segundo[1]},{segundo[2]})"
     assert montagem.fakes.store.calls[chamadas_ao_store:] == []
     assert montagem.gateway.calls == []
+    assert montagem.ids.generated == []
+
+
+@pytest.mark.parametrize("nome", _LEEM_ANTES_DO_ALVO_DERIVADO)
+def test_negar_o_alvo_derivado_deixa_so_a_leitura_da_existencia(nome: str) -> None:
+    """O que a exceção declarada permite, e **só** isso: uma leitura, nenhuma escrita.
+
+    Concedido o tenant e negado o alvo derivado, o registro do store mostra
+    exatamente a leitura da função — a que o catálogo já entrega a quem passou no
+    tenant — e nada depois dela: nem a consulta de referências, nem a escrita.
+    """
+    cenario = CENARIOS[nome]
+    guard = InMemoryAccessGuard(credential=TEST_ACTOR)
+    permissao, tenant, unidade = cenario.alvos[0]
+    guard.grant(permissao, tenant_id=tenant, unit_id=unidade)
+    montagem = _montar(cenario.classe, guard)
+    chamadas_ao_store = len(montagem.fakes.store.calls)
+
+    with pytest.raises(type(guard.authorization_error)) as excinfo:
+        montagem.use_case.execute(cenario.command)
+
+    assert excinfo.value is guard.authorization_error
+    segundo = cenario.alvos[1]
+    assert guard.calls[-1] == f"authorize({segundo[0]},{segundo[1]},{segundo[2]})"
+    assert montagem.fakes.store.calls[chamadas_ao_store:] == ["job_functions.find_by_id"]
     assert montagem.ids.generated == []
 
 
@@ -777,11 +847,34 @@ def test_ca15_o_execute_abre_com_exatamente_as_autorizacoes_da_matriz(nome: str)
         and no.func.attr == "authorize"
     ]
     assert len(autorizacoes) == len(esperadas), f"{nome}: authorize fora da abertura"
+    # Stage 3.11 — o alvo derivado da habilitação é autorizado pelo helper
+    # compartilhado, e a chamada dele é a instrução **seguinte** à abertura: antes
+    # do gerador de id, da validação local e de qualquer porta.
+    helper = _HELPER_DE_HABILITACAO.get(nome)
+    if helper is not None:
+        seguinte = corpo[len(esperadas)]
+        assert isinstance(seguinte, ast.Expr)
+        assert ast.dump(seguinte.value) == ast.dump(
+            ast.parse(helper.format(param=param), mode="eval").body
+        )
+    chamadas_ao_helper = [
+        no
+        for no in ast.walk(execute)
+        if isinstance(no, ast.Call)
+        and isinstance(no.func, ast.Name)
+        and no.func.id.startswith("authorize_enablement")
+    ]
+    assert len(chamadas_ao_helper) == (1 if nome in _COM_ALVO_DERIVADO else 0), nome
 
 
-def test_a_varredura_de_forma_conhece_as_tres_permissoes_do_port() -> None:
+def test_a_varredura_de_forma_conhece_as_permissoes_do_port() -> None:
     """Se o mapa valor→nome perdesse uma, CA15 levantaria KeyError e não diria o porquê."""
-    assert set(_PERMISSAO_POR_VALOR) == {"manage_staff", "manage_job_functions", "manage_users"}
+    assert set(_PERMISSAO_POR_VALOR) == {
+        "manage_staff",
+        "manage_job_functions",
+        "manage_users",
+        "manage_tenant",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -797,9 +890,11 @@ def test_a_varredura_de_forma_conhece_as_tres_permissoes_do_port() -> None:
 # concept.
 _MATRIZ_R3: Final[dict[str, tuple[tuple[str, str | None], ...]]] = {
     "create_job_function": ((_MANAGE_JOB_FUNCTIONS, None),),
-    "list_job_functions": ((_MANAGE_JOB_FUNCTIONS, None),),
+    # Stage 3.11 — a listagem nomeia a unidade quando a query a traz (L-JF6).
+    "list_job_functions": ((_MANAGE_JOB_FUNCTIONS, "unit_id"),),
     "rename_job_function": ((_MANAGE_JOB_FUNCTIONS, None),),
     "delete_job_function": ((_MANAGE_JOB_FUNCTIONS, None),),
+    "set_job_function_units": ((_MANAGE_JOB_FUNCTIONS, None),),
     "create_employee": ((_MANAGE_STAFF, "unit_id"),),
     "list_employees": ((_MANAGE_STAFF, "unit_id"),),
     "rename_employee": ((_MANAGE_STAFF, "unit_id"),),
@@ -814,6 +909,41 @@ _MATRIZ_R3: Final[dict[str, tuple[tuple[str, str | None], ...]]] = {
     "copy_employee_to_unit": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_STAFF, "target_unit_id")),
     "create_login_for_employee": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_USERS, "unit_id")),
 }
+
+
+# Stage 3.11 (ADR 3.11.0001 §4 e §5) — alvos **derivados da habilitação**. A matriz
+# acima fixa a abertura de `execute`, que é estática; a habilitação pedida é dado
+# do command (um conjunto de unidades, ou "todas"), e o alcance sobre ela é
+# autorizado pelo helper `_unit_enablement`, logo depois da abertura. Aqui fica, por
+# use case, **o campo** do command de onde os alvos derivados saem e a chamada
+# canônica ao helper — a tabela de cenários é cobrada contra os dois.
+_COM_ALVO_DERIVADO: Final[dict[str, str]] = {
+    "create_job_function": "unit_ids",
+    "set_job_function_units": "unit_ids",
+}
+_HELPER_DE_HABILITACAO: Final[dict[str, str]] = {
+    "create_job_function": (
+        "authorize_enablement(self._guard, {param}.actor, {param}.tenant_id, {param}.unit_ids)"
+    ),
+}
+
+
+def _alvos_derivados(nome: str, command: object) -> tuple[AuthorizeCall, ...]:
+    """Os alvos que a habilitação do command exige: cada unidade, ou `manage_tenant`.
+
+    Na **criação** não há habilitação anterior, e os alvos saem só do command. Na
+    **substituição** o alvo é a diferença contra a habilitação gravada: a função do
+    cenário (`f-livre`) vale em todas as unidades, então qualquer conjunto pedido
+    muda o alcance do restaurante inteiro — `manage_tenant`.
+    """
+    campo = _COM_ALVO_DERIVADO.get(nome)
+    if campo is None:
+        return ()
+    unidades = getattr(command, campo)
+    tenant = command.tenant_id  # type: ignore[attr-defined]
+    if unidades is None or nome in _LEEM_ANTES_DO_ALVO_DERIVADO:
+        return ((_MANAGE_TENANT, tenant, None),)
+    return tuple((_MANAGE_JOB_FUNCTIONS, tenant, unidade) for unidade in sorted(unidades))
 
 
 def test_a_matriz_transcrita_cobre_a_pasta() -> None:
@@ -835,7 +965,7 @@ def test_os_alvos_da_tabela_sao_os_da_matriz_lida_do_command(nome: str) -> None:
         for permissao, campo in _MATRIZ_R3[nome]
     )
 
-    assert cenario.alvos == esperados
+    assert cenario.alvos == esperados + _alvos_derivados(nome, command)
 
 
 def test_na_copia_origem_e_destino_sao_unidades_diferentes_no_cenario() -> None:

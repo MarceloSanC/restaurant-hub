@@ -22,10 +22,15 @@ class ListJobFunctionsQuery:
 
     Não tem flag de estado porque **não há estado** a filtrar: a função não tem
     ciclo de vida (ADR 3.2.0005, L-JF5).
+
+    Attributes:
+        unit_id: a unidade cuja listagem se pede (Stage 3.11, L-JF6) — só as
+            funções habilitadas nela. `None` = o catálogo inteiro do restaurante.
     """
 
     actor: Actor = field(repr=False)
     tenant_id: TenantId
+    unit_id: UnitId | None = None
 
 
 @dataclass(frozen=True)

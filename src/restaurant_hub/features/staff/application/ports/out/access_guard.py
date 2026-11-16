@@ -16,10 +16,11 @@ staff: o que entra veio de fora e não é nosso; o que sai é endereço deste BC
 os use cases o consomem tipado.
 
 **O nome da permissão é `str`** porque o vocabulário fechado mora do outro lado
-da fronteira. Os três valores que staff usa — `"manage_staff"`, `"manage_job_functions"` e,
-desde a Stage 3.5, `"manage_users"` — são citados como **valores**, jamais importados como
-enum, e declarados só neste módulo. O preço está no ADR 3.4.0001: um erro de digitação não é
-pego pelo type-checker; é pego pelos testes por papel e por rota e pelos alvos dos use cases.
+da fronteira. Os valores que staff usa — `"manage_staff"`, `"manage_job_functions"`,
+desde a Stage 3.5 `"manage_users"` e desde a 3.11 `"manage_tenant"` — são citados
+como **valores**, jamais importados como enum, e declarados só neste módulo. O preço
+está no ADR 3.4.0001: um erro de digitação não é pego pelo type-checker; é pego pelos
+testes por papel e por rota e pelos alvos dos use cases.
 
 **As quatro leis** (ADR 3.4.0001 §2, concept §4). Um `Protocol` sozinho não
 carrega as propriedades de segurança de que este desenho depende: uma segunda
@@ -90,6 +91,11 @@ PERMISSION_MANAGE_JOB_FUNCTIONS: Final = "manage_job_functions"
 # permissão que governa contas é `manage_users` (concept 3.5 §5.3). R17 a exige
 # **junto** com `manage_staff`, as duas sobre a unidade do alvo.
 PERMISSION_MANAGE_USERS: Final = "manage_users"
+# Stage 3.11 — a quarta, e a segunda que não é de staff: habilitar uma função em
+# **todas** as unidades é decidir o catálogo do restaurante inteiro, e o alcance
+# sobre o restaurante que o guard expõe sem que staff leia papel é
+# `manage_tenant` (ADR 3.11.0001 §4). Exigida **junto** com `manage_job_functions`.
+PERMISSION_MANAGE_TENANT: Final = "manage_tenant"
 
 
 @dataclass(frozen=True)

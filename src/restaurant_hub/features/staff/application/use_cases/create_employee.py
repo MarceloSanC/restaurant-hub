@@ -33,6 +33,9 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._unit_enablement import (
+    require_enabled_in_unit,
+)
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.value_objects.identifiers import EmployeeId
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
@@ -60,6 +63,8 @@ class CreateEmployeeUseCase:
             JobFunctionNotFoundError: alguma id do conjunto não existe **no
                 tenant** — id de outro restaurante cai aqui, porque a resolução
                 é escopada (§5.4).
+            JobFunctionNotEnabledInUnitError: alguma função do conjunto não está
+                habilitada na unidade do registro (Stage 3.11).
             EmptyJobFunctionsError: conjunto vazio (domínio, 3.1).
             InvalidNameError: nome vazio (domínio, 3.1).
             InvalidIdentifierError: tenant ou unidade vazios (domínio, 3.1).
@@ -79,6 +84,9 @@ class CreateEmployeeUseCase:
             # `sorted` para a id reportada ser determinística quando falta
             # mais de uma: mensagem de erro instável é ruído em log e em teste.
             raise JobFunctionNotFoundError(sorted(missing)[0])
+        # (1b) Habilitação na unidade do registro (Stage 3.11, ADR 3.11.0002) —
+        # depois da referencial: função inexistente vence função fora da unidade.
+        require_enabled_in_unit(found, command.unit_id)
 
         # (2) Construção — o registro nasce ativo (ADR 3.2.0006).
         employee = Employee(

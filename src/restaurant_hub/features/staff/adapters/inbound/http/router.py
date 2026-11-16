@@ -69,6 +69,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
+    SetJobFunctionUnitsCommand,
 )
 from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
@@ -126,6 +127,9 @@ from restaurant_hub.features.staff.application.use_cases.rename_employee import 
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
+    SetJobFunctionUnitsUseCase,
+)
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -141,6 +145,7 @@ from restaurant_hub.features.staff.domain.value_objects.unavailability_period im
 
 from .dependencies import (
     MANAGE_JOB_FUNCTIONS_ACCESS,
+    MANAGE_JOB_FUNCTIONS_IN_UNIT_ACCESS,
     MANAGE_STAFF_IN_UNIT_ACCESS,
     MANAGE_USERS_IN_UNIT_ACCESS,
     CurrentActor,
@@ -161,6 +166,7 @@ from .schemas import (
     RegisterUnavailabilityRequest,
     RenameEmployeeRequest,
     RenameJobFunctionRequest,
+    SetJobFunctionUnitsRequest,
     to_workload_profile,
 )
 
@@ -192,6 +198,10 @@ def _get_rename_job_function() -> RenameJobFunctionUseCase:
 
 def _get_delete_job_function() -> DeleteJobFunctionUseCase:
     _not_wired("staff_delete_job_function")
+
+
+def _get_set_job_function_units() -> SetJobFunctionUnitsUseCase:
+    _not_wired("staff_set_job_function_units")
 
 
 def _get_create_employee() -> CreateEmployeeUseCase:
@@ -272,14 +282,28 @@ def _job_function_ids(raw_ids: list[str]) -> frozenset[JobFunctionId]:
     )
 
 
+def _unit_ids(raw_ids: list[str] | None) -> frozenset[UnitId] | None:
+    """Valida cada id de unidade do corpo antes de ele alcançar o guard (ADR 3.6.0002).
+
+    `None` passa como `None` — é "todas as unidades", e não "nenhuma". Um id em
+    branco ou malformado vira 422 aqui, e não a negação do guard que um `""`
+    produziria do lado de identity.
+    """
+    if raw_ids is None:
+        return None
+    return frozenset(UnitId(validate_identifier(raw_id, entity=_UNIT)) for raw_id in raw_ids)
+
+
 # ---------------------------------------------------------------------------
 # Catálogo de funções de trabalho — recurso **tenant-scoped**
 #
-# O alvo destas quatro rotas é o restaurante inteiro, **sem unidade**, e a
-# ausência é por desenho: `manage_job_functions` está em
+# O alvo que a **borda** autoriza nestas cinco rotas é o restaurante inteiro, sem
+# unidade no endereço, e a ausência é por desenho: `manage_job_functions` está em
 # `TENANT_WIDE_PERMISSIONS` (ADR 3.4.0008), e o passo 4 de
-# `AuthorizeActionUseCase` dispensa a unidade **por permissão**. Nomear uma
-# unidade aqui pediria escopo sobre um recurso que não é da unidade.
+# `AuthorizeActionUseCase` dispensa a unidade **por permissão**. Desde a Stage
+# 3.11 duas delas carregam unidades **no corpo** (onde a função vale): o alcance
+# sobre essas unidades é autorizado pelo use case (ADR 3.11.0001 §4 e §5), e a
+# borda só valida os ids.
 # ---------------------------------------------------------------------------
 
 
@@ -294,10 +318,17 @@ def create_job_function(
     guard: StaffAccessGuard,
     use_case: Annotated[CreateJobFunctionUseCase, Depends(_get_create_job_function)],
 ) -> JobFunctionResponse:
-    """Cria uma função no catálogo do restaurante do ator."""
+    """Cria uma função no catálogo do restaurante do ator, habilitada onde o corpo diz.
+
+    A borda autoriza o catálogo (o tenant); o alcance sobre as unidades pedidas — ou
+    `manage_tenant` para todas — é do use case (ADR 3.11.0001 §4).
+    """
+    unit_ids = _unit_ids(payload.unit_ids)
     scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission)
     result = use_case.execute(
-        CreateJobFunctionCommand(actor=actor, tenant_id=scope.tenant_id, name=payload.name)
+        CreateJobFunctionCommand(
+            actor=actor, tenant_id=scope.tenant_id, name=payload.name, unit_ids=unit_ids
+        )
     )
     return JobFunctionResponse.from_result(result)
 
@@ -354,6 +385,60 @@ def delete_job_function(
         )
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/job-functions/{job_function_id}/units", response_model=JobFunctionResponse)
+def set_job_function_units(
+    job_function_id: str,
+    payload: SetJobFunctionUnitsRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[SetJobFunctionUnitsUseCase, Depends(_get_set_job_function_units)],
+) -> JobFunctionResponse:
+    """Substitui as unidades em que a função vale; `null` = todas (Stage 3.11).
+
+    A borda autoriza o catálogo (o tenant). O alcance sobre as unidades que
+    **mudam** depende da habilitação gravada e é do use case (ADR 3.11.0001 §5);
+    aqui os ids pedidos são só validados, antes de qualquer guard.
+    """
+    identifier = validate_identifier(job_function_id, entity=_JOB_FUNCTION)
+    unit_ids = _unit_ids(payload.unit_ids)
+    scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_ACCESS.permission)
+    result = use_case.execute(
+        SetJobFunctionUnitsCommand(
+            actor=actor,
+            tenant_id=scope.tenant_id,
+            job_function_id=JobFunctionId(identifier),
+            unit_ids=unit_ids,
+        )
+    )
+    return JobFunctionResponse.from_result(result)
+
+
+# ---------------------------------------------------------------------------
+# Funções habilitadas numa unidade (Stage 3.11) — o catálogo visto **da unidade**
+#
+# A função continua do restaurante; esta rota responde "quais valem aqui". A
+# unidade vem do path e é alvo de autorização, como nas rotas de funcionário
+# (ADR 3.4.0007): é ela que faz a listagem de uma unidade não mostrar função que
+# não está habilitada nela, e que recusa a unidade que o ator não enxerga.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/units/{unit_id}/job-functions", response_model=list[JobFunctionResponse])
+def list_unit_job_functions(
+    unit_id: str,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[ListJobFunctionsUseCase, Depends(_get_list_job_functions)],
+) -> list[JobFunctionResponse]:
+    """Lista as funções habilitadas na unidade do endereço, na ordem de `L-ORD`."""
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    scope = guard.authorize(actor, MANAGE_JOB_FUNCTIONS_IN_UNIT_ACCESS.permission, unit_id=unit)
+    results = use_case.execute(
+        ListJobFunctionsQuery(actor=actor, tenant_id=scope.tenant_id, unit_id=UnitId(unit))
+    )
+    return [JobFunctionResponse.from_result(result) for result in results]
 
 
 # ---------------------------------------------------------------------------

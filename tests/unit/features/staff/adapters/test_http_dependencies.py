@@ -150,7 +150,9 @@ def test_o_helper_encontra_exatamente_os_identificadores_de_corpo_de_hoje() -> N
         for campo in dependencies.identifier_fields(modelo)
     }
 
-    assert encontrados == {"target_unit_id", "job_function_ids"}
+    # Stage 3.11 — `unit_ids` (criação de função): cada elemento é alvo de
+    # autorização e vai a `units.find_by_id` dentro de identity, como `target_unit_id`.
+    assert encontrados == {"target_unit_id", "job_function_ids", "unit_ids"}
 
 
 def test_o_helper_distingue_o_campo_escalar_da_colecao() -> None:
@@ -278,6 +280,18 @@ def test_o_catalogo_de_funcoes_declara_alvo_sem_unidade() -> None:
     """
     assert dependencies.MANAGE_JOB_FUNCTIONS_ACCESS.permission == "manage_job_functions"
     assert dependencies.MANAGE_JOB_FUNCTIONS_ACCESS.names_unit is False
+
+
+def test_as_funcoes_da_unidade_declaram_o_catalogo_com_unidade() -> None:
+    """Stage 3.11 — a mesma permissão do catálogo, com a unidade do path nomeada.
+
+    A permissão segue tenant-wide em identity (nenhuma unidade é exigida); o que
+    muda é que **esta rota** a nomeia, e é o passo de visibilidade que recusa a
+    unidade que o ator não enxerga (ADR 3.11.0001 §6).
+    """
+    requisito = dependencies.MANAGE_JOB_FUNCTIONS_IN_UNIT_ACCESS
+    assert requisito.permission == "manage_job_functions"
+    assert requisito.names_unit is True
 
 
 def test_a_equipe_declara_alvo_com_unidade() -> None:

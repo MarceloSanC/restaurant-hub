@@ -56,6 +56,7 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionAlreadyExistsError,
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
+    JobFunctionNotEnabledInUnitError,
     JobFunctionNotFoundError,
     LoginEmailAlreadyInUseError,
     SameUnitCopyError,
@@ -69,6 +70,7 @@ from restaurant_hub.features.staff.domain.exceptions.errors import (
     InvalidIdentifierError,
     InvalidNameError,
     InvalidUnavailabilityPeriodError,
+    InvalidUnitEnablementError,
     InvalidWeeklyHoursError,
     OverlappingUnavailabilityError,
     StaffError,
@@ -112,6 +114,7 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     JobFunctionAlreadyExistsError: HTTP_CONFLICT,
     EmployeeAlreadyExistsError: HTTP_CONFLICT,
     JobFunctionInUseError: HTTP_CONFLICT,
+    JobFunctionNotEnabledInUnitError: HTTP_CONFLICT,
     # `EmployeeInUseError` continua **sem produtor em v1** (nasce com o Step 4) e
     # mesmo assim tem entrada própria: totalidade é sobre a hierarquia, não sobre
     # o que é alcançável hoje. Não escrever e2e esperando produzi-la.
@@ -155,6 +158,7 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     # `InvalidEmailError` de identity pelo gateway, L-IG2; inclui o byte NUL,
     # que o VO `Email` passa a recusar na Stage 3.5, D8).
     InvalidLoginEmailError: HTTP_UNPROCESSABLE,
+    InvalidUnitEnablementError: HTTP_UNPROCESSABLE,
 }
 
 

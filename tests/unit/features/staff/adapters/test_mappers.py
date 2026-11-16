@@ -35,6 +35,7 @@ from restaurant_hub.features.staff.domain.exceptions.errors import (
     InvalidIdentifierError,
     InvalidNameError,
     InvalidUnavailabilityPeriodError,
+    InvalidUnitEnablementError,
     OverlappingUnavailabilityError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -51,6 +52,7 @@ from restaurant_hub.features.staff.domain.value_objects.shift_preference import 
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
     UnavailabilityPeriod,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
     FixedSchedule,
     OnDemand,
@@ -112,9 +114,14 @@ def test_round_trip_de_funcao_preserva_o_nome_verbatim() -> None:
     funcao = JobFunction(id=JobFunctionId("f1"), tenant_id=TenantId("t1"), name="cozinheiro ")
 
     linha = mappers.job_function_to_row(funcao)
-    assert linha == {"id": "f1", "tenant_id": "t1", "name": "cozinheiro "}
+    assert linha == {
+        "id": "f1",
+        "tenant_id": "t1",
+        "name": "cozinheiro ",
+        "enabled_in_all_units": True,
+    }
 
-    de_volta = mappers.row_to_job_function(_linha(**linha))
+    de_volta = mappers.row_to_job_function(_linha(**linha), unit_ids=())
     assert de_volta.id == "f1"
     assert de_volta.tenant_id == "t1"
     assert de_volta.name == "cozinheiro "
@@ -123,7 +130,9 @@ def test_round_trip_de_funcao_preserva_o_nome_verbatim() -> None:
 def test_funcao_com_nome_vazio_na_linha_levanta_ao_ser_lida() -> None:
     """Reidratação pelo construtor: linha corrompida não vira entidade inválida."""
     with pytest.raises(InvalidNameError):
-        mappers.row_to_job_function(_linha(id="f1", tenant_id="t1", name="   "))
+        mappers.row_to_job_function(
+            _linha(id="f1", tenant_id="t1", name="   ", enabled_in_all_units=True), unit_ids=()
+        )
 
 
 def test_ca16_byte_nul_na_linha_levanta_ao_ser_lido_nas_duas_entidades() -> None:
@@ -135,7 +144,10 @@ def test_ca16_byte_nul_na_linha_levanta_ao_ser_lido_nas_duas_entidades() -> None
     lugar do construtor apagaria a garantia sem quebrar mais nada.
     """
     with pytest.raises(InvalidNameError):
-        mappers.row_to_job_function(_linha(id="f1", tenant_id="t1", name="Cozi\x00nheiro"))
+        mappers.row_to_job_function(
+            _linha(id="f1", tenant_id="t1", name="Cozi\x00nheiro", enabled_in_all_units=True),
+            unit_ids=(),
+        )
 
     with pytest.raises(InvalidNameError):
         mappers.row_to_employee(
@@ -533,4 +545,48 @@ def test_user_id_vazio_gravado_por_fora_cai_na_validacao_da_entidade() -> None:
             job_function_ids=["f1"],
             unavailabilities=[],
             shift_periods=[],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.11 — habilitação por unidade (ADR 3.11.0001)
+# ---------------------------------------------------------------------------
+
+
+def test_round_trip_de_funcao_restrita_leva_os_vinculos_em_ordem_deterministica() -> None:
+    funcao = JobFunction(
+        id=JobFunctionId("f1"),
+        tenant_id=TenantId("t1"),
+        name="Garçom",
+        unit_enablement=UnitEnablement.only(frozenset({UnitId("u2"), UnitId("u1")})),
+    )
+    linha = mappers.job_function_to_row(funcao)
+    assert linha["enabled_in_all_units"] is False
+    vinculos = mappers.job_function_unit_rows(funcao)
+    assert vinculos == [
+        {"job_function_id": "f1", "tenant_id": "t1", "unit_id": "u1"},
+        {"job_function_id": "f1", "tenant_id": "t1", "unit_id": "u2"},
+    ]
+    de_volta = mappers.row_to_job_function(
+        _linha(**linha), unit_ids=[v["unit_id"] for v in vinculos]
+    )
+    assert de_volta.unit_enablement == funcao.unit_enablement
+
+
+def test_funcao_em_todas_as_unidades_nao_gera_vinculo() -> None:
+    funcao = JobFunction(id=JobFunctionId("f1"), tenant_id=TenantId("t1"), name="Garçom")
+    assert mappers.job_function_unit_rows(funcao) == []
+
+
+@pytest.mark.parametrize(
+    ("flag", "unidades"),
+    [(True, ("u1",)), (False, ())],
+    ids=["todas-com-vinculo", "restrita-sem-vinculo"],
+)
+def test_ca9b_linha_incoerente_levanta_ao_ser_lida(flag: bool, unidades: tuple[str, ...]) -> None:
+    """CA9b — a reidratação recusa flag e vínculos que não batem."""
+    with pytest.raises(InvalidUnitEnablementError):
+        mappers.row_to_job_function(
+            _linha(id="f1", tenant_id="t1", name="Garçom", enabled_in_all_units=flag),
+            unit_ids=unidades,
         )

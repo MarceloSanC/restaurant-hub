@@ -36,6 +36,10 @@ from restaurant_hub.features.staff.application.ports.out.access_guard import (
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._unit_enablement import (
+    authorize_enablement,
+    to_unit_enablement,
+)
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import JobFunctionId
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
@@ -58,6 +62,8 @@ class CreateJobFunctionUseCase:
             InvalidNameError: nome vazio ou só-whitespace (domínio, 3.1) —
                 levantado **sem tocar o repositório**.
             InvalidIdentifierError: tenant vazio (domínio, 3.1).
+            InvalidUnitEnablementError: `unit_ids` vazio ou com id em branco
+                (domínio, 3.11) — levantado **sem tocar o repositório**.
             JobFunctionNameAlreadyExistsError: nome já usado no tenant,
                 comparado **verbatim** (sem trim, sem case-folding).
         """
@@ -66,11 +72,18 @@ class CreateJobFunctionUseCase:
         self._guard.authorize(
             command.actor, PERMISSION_MANAGE_JOB_FUNCTIONS, tenant_id=command.tenant_id
         )
-        # (1) Construção: o domínio rejeita o nome vazio aqui, antes do port.
+        # (0b) Alcance da habilitação pedida (Stage 3.11, ADR 3.11.0001 §4): cada
+        # unidade nomeada, ou `manage_tenant` para todas. Ainda é autorização — vem
+        # antes do gerador de id e da validação local.
+        authorize_enablement(self._guard, command.actor, command.tenant_id, command.unit_ids)
+        # (1) Construção: o domínio rejeita o nome vazio e o conjunto de unidades
+        # vazio aqui, antes do port. A habilitação é passada **sempre** explícita —
+        # o default da entidade é o da migration, não uma escolha deste use case.
         job_function = JobFunction(
             id=JobFunctionId(str(self._id_generator.next_id())),
             tenant_id=command.tenant_id,
             name=command.name,
+            unit_enablement=to_unit_enablement(command.unit_ids),
         )
         # (2) Unicidade de nome no tenant.
         if self._job_functions.find_by_name(command.tenant_id, command.name) is not None:

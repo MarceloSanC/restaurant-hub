@@ -8,9 +8,9 @@ assuntos quebrou.
 
 ## O domínio é derivado do router, e a cardinalidade é asserida junto
 
-Toda lei aqui é universal sobre as 17 rotas (16 da 3.6 + R17 da 3.5), e o produto
-cartesiano é **explícito** — `{employee, platform_admin} x R01…R17` são 34 casos,
-não dois. As chaves saem de
+Toda lei aqui é universal sobre as 19 rotas (16 da 3.6, R17 da 3.5 e duas da 3.11),
+e o produto cartesiano é **explícito** — `{employee, platform_admin}` vezes as 19
+rotas são 38 casos, não dois. As chaves saem de
 `router.routes`; a declaração `ROTAS` diz como invocar cada uma contra recursos
 **vivos**, e `test_a_declaracao_de_rotas_e_total_sobre_o_router` reprova a rota que
 entrar sem declaração — a mesma disciplina do `_INVOCACOES` das varreduras
@@ -32,7 +32,7 @@ declarou desde a Task 05.
 
 O ADR 3.4.0006 §1 decidiu que `hr` e `manager` detêm as mesmas duas permissões de
 staff, com o mesmo alcance. CA12 trava a decisão como propriedade: os dois papéis
-respondem o **mesmo status** nas 17 rotas, sobre estados isomorfos. Um mapa de
+respondem o **mesmo status** nas 19 rotas, sobre estados isomorfos. Um mapa de
 papéis editado para dar a `hr` alcance diferente reprova aqui.
 """
 
@@ -63,18 +63,21 @@ pytestmark = pytest.mark.e2e
 # transforma "toda rota satisfaz P" numa afirmação com conteúdo: sem ela, um
 # `_rotas()` que devolvesse a lista vazia deixaria todo `parametrize` deste
 # módulo sem um único caso, e a suíte ficaria verde por não medir nada.
-# 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`).
-_TOTAL_DE_ROTAS: Final = 17
+# 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`); a Stage 3.11, a
+# substituição das unidades de uma função e a listagem de funções da unidade.
+_TOTAL_DE_ROTAS: Final = 19
 
 # As três partições do inventário e os dois produtos que os critérios nomeiam.
 # São **números transcritos do concept**, não derivados do código: derivá-los faria
 # a expectativa acompanhar qualquer encolhimento do domínio, que é precisamente o
 # modo de falha que estas contagens existem para pegar.
-_TOTAL_DE_RJF: Final = 4
-_TOTAL_DE_REMP: Final = 13
+# Stage 3.11: +1 no catálogo (`PUT .../units`) e +1 nas rotas com unidade no path
+# (`GET /units/{unit_id}/job-functions`); os produtos são 2 x 19 e 3 x 19.
+_TOTAL_DE_RJF: Final = 5
+_TOTAL_DE_REMP: Final = 14
 _TOTAL_COM_EMPLOYEE_ID: Final = 11
-_CASOS_DE_CA09: Final = 34
-_CASOS_DE_CA36: Final = 51
+_CASOS_DE_CA09: Final = 38
+_CASOS_DE_CA36: Final = 57
 
 # Os corpos constantes de identity (`identity/adapters/inbound/http/error_handlers.py`).
 # **Transcritos, e não importados**: o critério é sobre o contrato que o cliente
@@ -128,7 +131,9 @@ class Recursos:
         job_function_id: a função atribuída a esse funcionário.
         job_function_livre: uma segunda função, **sem** nenhum funcionário — R04
             a remove, e removê-la é 204; remover a primeira seria 409
-            (`JobFunctionInUseError`), que mediria outra coisa.
+            (`JobFunctionInUseError`), que mediria outra coisa. Desde a Stage 3.11
+            é habilitada **só em `unidade`**: é o que dá à listagem de funções da
+            unidade um efeito que discrimina uma unidade da outra (CA11).
         sufixo: discrimina os nomes quando dois conjuntos isomorfos coexistem
             (CA12) ou quando duas unidades são semeadas lado a lado (CA11).
     """
@@ -158,6 +163,20 @@ async def _efeito_listagem_so_da_unidade_do_path(
     itens = resposta.json()
     assert itens, "a listagem da unidade do path veio vazia — não há efeito a observar"
     assert {item["unit_id"] for item in itens} == {recursos.unidade}
+
+
+async def _efeito_funcoes_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """Stage 3.11 — a listagem de funções de uma unidade só traz o que vale nela.
+
+    `job_function_livre` é semeada **só** na unidade do cenário: tem de estar na
+    listagem dela, e a de qualquer outra semeadura (habilitada só na outra unidade)
+    não pode. Cada item ou vale em todas as unidades, ou nomeia a do path.
+    """
+    itens = resposta.json()
+    assert recursos.job_function_livre in {item["id"] for item in itens}
+    assert all(item["all_units"] or recursos.unidade in item["unit_ids"] for item in itens), itens
 
 
 async def _efeito_removido_da_unidade_do_path(
@@ -245,7 +264,10 @@ ROTAS: dict[ChaveDeRota, Rota] = {
     ("POST", "/job-functions"): Rota(
         path=_sem_path,
         query=_sem_query,
-        body=lambda r: {"name": f"Garçom {r.sufixo}"},
+        # Stage 3.11 — criada **para a unidade do cenário**: é o pedido que os três
+        # papéis com permissão alcançam (o `owner` por bypass, `manager`/`hr` por
+        # membership). Sem `unit_ids` seria "todas as unidades", só do `owner`.
+        body=lambda r: {"name": f"Garçom {r.sufixo}", "unit_ids": [r.unidade]},
         sucesso=HTTPStatus.CREATED,
     ),
     ("GET", "/job-functions"): Rota(
@@ -262,6 +284,19 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         query=_sem_query,
         body=_sem_corpo,
         sucesso=HTTPStatus.NO_CONTENT,
+    ),
+    # Stage 3.11 — substituir as unidades de uma função. A função livre do cenário
+    # vale só na unidade do path, e o corpo a **alarga** para a outra unidade: é uma
+    # mudança de verdade (a unidade acrescentada é alvo de autorização), que os três
+    # papéis com permissão alcançam — `owner` por bypass, `manager`/`hr` por serem
+    # membros das duas. Um corpo que repetisse a habilitação gravada seria sucesso
+    # sem nenhuma autorização de unidade (Checkpoint C). O que cada papel **não**
+    # pode mudar é do e2e de fluxo.
+    ("PUT", "/job-functions/{job_function_id}/units"): Rota(
+        path=lambda r: {"job_function_id": r.job_function_livre},
+        query=_sem_query,
+        body=lambda r: {"unit_ids": [r.unidade, r.unidade_destino]},
+        sucesso=HTTPStatus.OK,
     ),
     # --- REMP: funcionário, unit-scoped, unidade no path --------------------
     ("POST", _EMPLOYEES): Rota(
@@ -281,6 +316,14 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         body=_sem_corpo,
         sucesso=HTTPStatus.OK,
         efeito=_efeito_listagem_so_da_unidade_do_path,
+    ),
+    # Stage 3.11 — as funções habilitadas na unidade do path.
+    ("GET", "/units/{unit_id}/job-functions"): Rota(
+        path=lambda r: {"unit_id": r.unidade},
+        query=_sem_query,
+        body=_sem_corpo,
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_funcoes_da_unidade_do_path,
     ),
     ("PATCH", f"{_EMPLOYEES}/{{employee_id}}"): Rota(
         path=_do_funcionario,
@@ -501,8 +544,18 @@ async def platform_admin(client: AsyncClient, cenario: Cenario) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def _criar_funcao(client: AsyncClient, cabecalho: dict[str, str], nome: str) -> str:
-    resposta = await client.post(f"{API}/job-functions", json={"name": nome}, headers=cabecalho)
+async def _criar_funcao(
+    client: AsyncClient,
+    cabecalho: dict[str, str],
+    nome: str,
+    *,
+    unidades: list[str] | None = None,
+) -> str:
+    """Cria a função em todas as unidades (default) ou só nas `unidades` dadas."""
+    corpo: dict[str, Any] = {"name": nome}
+    if unidades is not None:
+        corpo["unit_ids"] = unidades
+    resposta = await client.post(f"{API}/job-functions", json=corpo, headers=cabecalho)
     assert resposta.status_code == HTTPStatus.CREATED, resposta.text
     return str(resposta.json()["id"])
 
@@ -518,7 +571,9 @@ async def _semear(
     """
     cabecalho = auth(cenario.owner)
     job_function_id = await _criar_funcao(client, cabecalho, f"Função {sufixo}")
-    job_function_livre = await _criar_funcao(client, cabecalho, f"Função livre {sufixo}")
+    job_function_livre = await _criar_funcao(
+        client, cabecalho, f"Função livre {sufixo}", unidades=[unidade]
+    )
 
     criado = await client.post(
         f"{API}/units/{unidade}/employees",
@@ -616,7 +671,7 @@ _RECURSOS_FICTICIOS: Final = Recursos(
 async def test_ca08_toda_rota_sem_bearer_recebe_401(
     client: AsyncClient, chave_da_rota: ChaveDeRota
 ) -> None:
-    """CA08 — 401 com corpo constante e `WWW-Authenticate: Bearer`, nas **17**.
+    """CA08 — 401 com corpo constante e `WWW-Authenticate: Bearer`, em **todas** (19).
 
     O domínio é `router.routes`, não uma amostra: "nenhuma rota de staff é
     pública" (§5.1) é uma lei universal, e uma lei universal travada em duas rotas
@@ -656,8 +711,8 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # sozinha. `include_inactive` fica de fora porque tem default — omiti-lo não
 # produz 422, e um caso que não degrada não mede a corrida.
 
-# Dez até a 3.6; R17 (3.5) tem corpo — onze.
-_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 11
+# Dez até a 3.6; R17 (3.5) tem corpo — onze; `PUT .../units` (3.11) — doze.
+_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 12
 
 # O corpo que nenhum `*Request` aceita. Não é um campo com valor errado: é a
 # **ausência** dos campos obrigatórios, que é o 422 mais barato de produzir e o
@@ -797,7 +852,7 @@ async def test_ca09_papel_sem_permissao_recebe_403_na_rota(  # noqa: PLR0913
     papel: str,
     chave_da_rota: ChaveDeRota,
 ) -> None:
-    """CA09 — produto `{employee, platform_admin} x R01…R17`: **34 casos**.
+    """CA09 — produto `{employee, platform_admin}` x as 19 rotas: **38 casos**.
 
     **Os recursos existem**, e é isso que separa 403 de 404: se o funcionário e a
     função não estivessem semeados, metade destas rotas poderia responder 404 por
@@ -856,7 +911,7 @@ async def test_ca10_ca11_ca36_papel_com_permissao_alcanca_a_rota(  # noqa: PLR09
     papel: str,
     chave_da_rota: ChaveDeRota,
 ) -> None:
-    """Produto `{owner, manager, hr} x R01…R17` — **51 casos**, e três critérios.
+    """Produto `{owner, manager, hr}` x as 19 rotas — **57 casos**, e três critérios.
 
     - **CA10** é a linha do `manager`: nenhuma das 16 responde 401 ou 403. Era o
       critério que a fork F1 reprovava; desde o ADR 0.0.0005 é o teste de

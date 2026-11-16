@@ -34,15 +34,20 @@ from restaurant_hub.features.staff.application.use_cases.list_job_functions impo
 from restaurant_hub.features.staff.application.use_cases.rename_job_function import (
     RenameJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     InvalidIdentifierError,
     InvalidNameError,
+    InvalidUnitEnablementError,
     StaffError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
+    UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
+from tests.fakes.features.staff.in_memory_access_guard import InMemoryAccessGuard
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 from tests.fakes.shared.fake_id_generator import FakeIdGenerator
@@ -333,3 +338,208 @@ def test_listar_devolve_todas_do_tenant_e_nenhuma_de_outro() -> None:
 def test_listar_tenant_sem_funcoes_devolve_vazio() -> None:
     fakes = staff_repositories()
     assert _listar(fakes).execute(ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_A)) == ()
+
+
+# --- Stage 3.11 — habilitação por unidade (ADR 3.11.0001) --------------------
+#
+# O guard aqui é o `InMemoryAccessGuard` — a segunda implementação das leis —,
+# porque o que se mede é **quem alcança o quê**: ele concede a tripla exata do
+# alvo, então "gerente de u1" é um conjunto de concessões, não um papel.
+
+_U1 = UnitId("u1")
+_U2 = UnitId("u2")
+_U3 = UnitId("u3")
+_JF = "manage_job_functions"
+_MT = "manage_tenant"
+
+
+def _gerente_de(*unidades: UnitId) -> InMemoryAccessGuard:
+    """Detém o catálogo no tenant e nas unidades dadas; **não** detém `manage_tenant`."""
+    guard = InMemoryAccessGuard(credential=TEST_ACTOR)
+    guard.grant(_JF, tenant_id=_A)
+    for unidade in unidades:
+        guard.grant(_JF, tenant_id=_A, unit_id=unidade)
+    return guard
+
+
+def _dono() -> InMemoryAccessGuard:
+    """Alcança o restaurante inteiro: catálogo no tenant e `manage_tenant`."""
+    guard = InMemoryAccessGuard(credential=TEST_ACTOR)
+    guard.grant(_JF, tenant_id=_A)
+    guard.grant(_MT, tenant_id=_A)
+    return guard
+
+
+def _criar_como(
+    fakes: StaffFakes, guard: InMemoryAccessGuard, gerador: FakeIdGenerator | None = None
+) -> CreateJobFunctionUseCase:
+    return CreateJobFunctionUseCase(fakes.job_functions, gerador or FakeIdGenerator(), guard=guard)
+
+
+def _command(unit_ids: frozenset[UnitId] | None, name: str = "Caixa") -> CreateJobFunctionCommand:
+    return CreateJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, name=name, unit_ids=unit_ids)
+
+
+def test_ca1_gerente_cria_funcao_so_para_a_sua_unidade() -> None:
+    """A função nasce habilitada em u1 e em mais nenhuma — relida pelo port."""
+    fakes = staff_repositories()
+
+    resultado = _criar_como(fakes, _gerente_de(_U1)).execute(_command(frozenset({_U1})))
+
+    assert resultado.all_units is False
+    assert resultado.unit_ids == (_U1,)
+    gravada = fakes.job_functions.find_by_id(_A, JobFunctionId(resultado.id))
+    assert gravada is not None
+    assert gravada.unit_enablement == UnitEnablement.only(frozenset({_U1}))
+    assert [f.id for f in fakes.job_functions.list_by_unit(_A, _U1)] == [resultado.id]
+    assert fakes.job_functions.list_by_unit(_A, _U2) == ()
+
+
+def test_ca2_as_unidades_sao_autorizadas_uma_a_uma_em_ordem_estavel() -> None:
+    """L-AG4 — um alvo por unidade, depois do tenant, em ordem `sorted`."""
+    fakes = staff_repositories()
+    guard = _gerente_de(_U1, _U2, _U3)
+
+    _criar_como(fakes, guard).execute(_command(frozenset({_U3, _U1, _U2})))
+
+    assert guard.calls == [
+        f"authorize({_JF},{_A},None)",
+        f"authorize({_JF},{_A},{_U1})",
+        f"authorize({_JF},{_A},{_U2})",
+        f"authorize({_JF},{_A},{_U3})",
+    ]
+
+
+def test_ca2_gerente_que_pede_unidade_que_nao_enxerga_e_negado_sem_efeito() -> None:
+    """Uma unidade alheia no conjunto nega o pedido inteiro, antes de id e de porta."""
+    fakes = staff_repositories()
+    guard = _gerente_de(_U1)
+    gerador = FakeIdGenerator()
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(type(guard.authorization_error)) as excinfo:
+        _criar_como(fakes, guard, gerador).execute(_command(frozenset({_U1, _U2})))
+
+    assert excinfo.value is guard.authorization_error  # crua (L-AG2)
+    assert guard.calls[-1] == f"authorize({_JF},{_A},{_U2})"
+    assert fakes.store.calls[antes:] == []
+    assert gerador.generated == []
+
+
+def test_ca2_gerente_que_pede_todas_as_unidades_e_negado_sem_efeito() -> None:
+    """ "Todas" exige `manage_tenant`; deter o catálogo em todas as unidades não basta."""
+    fakes = staff_repositories()
+    guard = _gerente_de(_U1, _U2, _U3)
+    gerador = FakeIdGenerator()
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(type(guard.authorization_error)) as excinfo:
+        _criar_como(fakes, guard, gerador).execute(_command(None))
+
+    assert excinfo.value is guard.authorization_error
+    assert guard.calls == [f"authorize({_JF},{_A},None)", f"authorize({_MT},{_A},None)"]
+    assert fakes.store.calls[antes:] == []
+    assert gerador.generated == []
+
+
+def test_ca2_dono_cria_para_todas_e_a_funcao_vale_em_toda_unidade() -> None:
+    fakes = staff_repositories()
+    guard = _dono()
+
+    resultado = _criar_como(fakes, guard).execute(_command(None))
+
+    assert resultado.all_units is True
+    assert resultado.unit_ids == ()
+    assert guard.calls == [f"authorize({_JF},{_A},None)", f"authorize({_MT},{_A},None)"]
+    for unidade in (_U1, _U2, UnitId("unidade-criada-amanha")):
+        assert [f.id for f in fakes.job_functions.list_by_unit(_A, unidade)] == [resultado.id]
+
+
+def test_manage_tenant_sozinho_nao_cria_sem_o_catalogo() -> None:
+    """As duas permissões são exigidas **juntas** — a do catálogo vem primeiro."""
+    fakes = staff_repositories()
+    guard = InMemoryAccessGuard(credential=TEST_ACTOR)
+    guard.grant(_MT, tenant_id=_A)
+
+    with pytest.raises(type(guard.authorization_error)):
+        _criar_como(fakes, guard).execute(_command(None))
+
+    assert guard.calls == [f"authorize({_JF},{_A},None)"]
+
+
+def test_ca9a_conjunto_de_unidades_vazio_e_recusado_sem_tocar_o_port() -> None:
+    """Vazio não é "todas": é a habilitação que o domínio recusa (ADR 3.11.0001 §2)."""
+    fakes = staff_repositories()
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(InvalidUnitEnablementError):
+        _criar_como(fakes, _gerente_de(_U1)).execute(_command(frozenset()))
+
+    assert fakes.store.calls[antes:] == []
+
+
+def test_o_resultado_ordena_as_unidades() -> None:
+    fakes = staff_repositories()
+
+    resultado = _criar_como(fakes, _gerente_de(_U1, _U2)).execute(_command(frozenset({_U2, _U1})))
+
+    assert resultado.unit_ids == (_U1, _U2)
+
+
+def _com_funcoes_em_unidades(fakes: StaffFakes) -> None:
+    for id_, nome, habilitacao in (
+        ("f-todas", "Cozinheiro", UnitEnablement.everywhere()),
+        ("f-u1", "Atendente", UnitEnablement.only(frozenset({_U1}))),
+        ("f-u2", "Barman", UnitEnablement.only(frozenset({_U2}))),
+    ):
+        fakes.job_functions.add(
+            JobFunction(id=JobFunctionId(id_), tenant_id=_A, name=nome, unit_enablement=habilitacao)
+        )
+
+
+def test_ca3_listar_uma_unidade_nao_mostra_funcao_nao_habilitada_nela() -> None:
+    fakes = staff_repositories()
+    _com_funcoes_em_unidades(fakes)
+    guard = _gerente_de(_U1)
+
+    resultado = ListJobFunctionsUseCase(fakes.job_functions, guard=guard).execute(
+        ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1)
+    )
+
+    assert [r.id for r in resultado] == ["f-u1", "f-todas"]  # L-ORD: Atendente, Cozinheiro
+    assert guard.calls == [f"authorize({_JF},{_A},{_U1})"]
+    assert "job_functions.list_by_tenant" not in fakes.store.calls
+
+
+def test_ca3_listar_unidade_que_o_ator_nao_enxerga_e_negado_sem_ler() -> None:
+    fakes = staff_repositories()
+    _com_funcoes_em_unidades(fakes)
+    guard = _gerente_de(_U1)
+    antes = len(fakes.store.calls)
+
+    with pytest.raises(type(guard.authorization_error)) as excinfo:
+        ListJobFunctionsUseCase(fakes.job_functions, guard=guard).execute(
+            ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U2)
+        )
+
+    assert excinfo.value is guard.authorization_error
+    assert fakes.store.calls[antes:] == []
+
+
+def test_ca11_o_catalogo_traz_a_habilitacao_de_cada_funcao() -> None:
+    """Sem unidade, a listagem é o catálogo inteiro — e cada item diz onde vale."""
+    fakes = staff_repositories()
+    _com_funcoes_em_unidades(fakes)
+    guard = _gerente_de(_U1)
+
+    resultado = ListJobFunctionsUseCase(fakes.job_functions, guard=guard).execute(
+        ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_A)
+    )
+
+    assert {r.id: (r.all_units, r.unit_ids) for r in resultado} == {
+        "f-todas": (True, ()),
+        "f-u1": (False, (_U1,)),
+        "f-u2": (False, (_U2,)),
+    }
+    assert guard.calls == [f"authorize({_JF},{_A},None)"]
+    assert "job_functions.list_by_unit" not in fakes.store.calls

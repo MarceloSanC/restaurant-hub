@@ -12,13 +12,19 @@ nenhum estado inalcançável — registro inativo na unidade destino já é
 alcançável por criar + desligar —, enquanto recusar a cópia de um desligado
 abriria um quarto item numa lista que o ADR fechou.
 
-**Por que não consome `JobFunctionRepository`.** A única razão para consultá-lo
-seria checar o **estado** das funções copiadas, que deixou de existir
-(ADR 3.2.0005). O conjunto de ids da origem já é referencialmente válido — foi
-validado quando foi atribuído — e as funções são **tenant-scoped**, logo
-continuam válidas na unidade destino. A corrida "função apagada entre a leitura
-da origem e a gravação da cópia" é fechada pela lei **L-E4** do
-`EmployeeRepository.add`, não por uma consulta extra aqui.
+**Consome `JobFunctionRepository` desde a Stage 3.11** (ADR 3.11.0002, que supera
+nesse ponto o ADR 3.2.0003). Antes a cópia não o consultava: as funções valiam no
+restaurante inteiro, logo continuavam válidas na unidade destino. Com a
+habilitação por unidade isso deixou de ser verdade, e a regra "um registro só
+detém função habilitada na sua unidade" vale para a cópia como vale para criar e
+atribuir: se alguma função da origem não vale no destino, a cópia é **recusada** —
+não habilita a função junto (quem copia tem `manage_staff`, não o catálogo) e não
+deixa a função para trás (a lista de exclusões do ADR 3.2.0003 é fechada). O
+gerente habilita a função no destino e repete a cópia.
+
+A corrida "função apagada entre a leitura da origem e a gravação da cópia"
+continua fechada pela lei **L-E4** do `EmployeeRepository.add`; a resolução daqui
+só antecipa o mesmo `JobFunctionNotFoundError`.
 
 **Os dois registros são independentes por construção**, não por cuidado: as
 entidades e VOs da 3.1 são `frozen`, então não há objeto mutável a compartilhar.
@@ -31,6 +37,7 @@ from restaurant_hub.features.staff.application.dtos.results import (
 )
 from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
+    JobFunctionNotFoundError,
     SameUnitCopyError,
 )
 from restaurant_hub.features.staff.application.ports.out.access_guard import (
@@ -39,6 +46,12 @@ from restaurant_hub.features.staff.application.ports.out.access_guard import (
 )
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
+)
+from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
+    JobFunctionRepository,
+)
+from restaurant_hub.features.staff.application.use_cases._unit_enablement import (
+    require_enabled_in_unit,
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.value_objects.identifiers import EmployeeId
@@ -49,9 +62,14 @@ class CopyEmployeeToUnitUseCase:
     """Duplica o cadastro de um funcionário em outra unidade do mesmo tenant."""
 
     def __init__(
-        self, employees: EmployeeRepository, id_generator: IdGenerator, guard: AccessGuard
+        self,
+        employees: EmployeeRepository,
+        job_functions: JobFunctionRepository,
+        id_generator: IdGenerator,
+        guard: AccessGuard,
     ) -> None:
         self._employees = employees
+        self._job_functions = job_functions
         self._id_generator = id_generator
         self._guard = guard
 
@@ -64,6 +82,12 @@ class CopyEmployeeToUnitUseCase:
                 resposta não pode revelar que o registro existe em outro tenant
                 nem em que unidade ele está (§5.4).
             SameUnitCopyError: destino igual à unidade de origem.
+            JobFunctionNotFoundError: função da origem apagada entre a atribuição
+                e a cópia.
+            JobFunctionNotEnabledInUnitError: alguma função da origem não está
+                habilitada na unidade destino (Stage 3.11). Perde para os dois
+                primeiros: a resposta a um registro alheio ou a um destino igual
+                à origem não diz nada sobre o catálogo.
 
         **`command.unit_id` é a ORIGEM; `command.target_unit_id` é o destino.**
         É o único ponto do BC onde as duas unidades convivem, e trocá-las
@@ -96,6 +120,13 @@ class CopyEmployeeToUnitUseCase:
         # (2) Destino diferente da origem.
         if command.target_unit_id == origin.unit_id:
             raise SameUnitCopyError(command.target_unit_id)
+        # (2b) As funções da origem valem no destino? (ADR 3.11.0002). Resolvidas
+        # antes da construção e do gerador de id: cópia recusada não consome id.
+        found = self._job_functions.find_all_by_ids(command.tenant_id, origin.job_function_ids)
+        missing = origin.job_function_ids - {job_function.id for job_function in found}
+        if missing:
+            raise JobFunctionNotFoundError(sorted(missing)[0])
+        require_enabled_in_unit(found, command.target_unit_id)
         # (3) A cópia: id novo, unidade destino, mesmo tenant, resto duplicado.
         copy = Employee(
             id=EmployeeId(str(self._id_generator.next_id())),

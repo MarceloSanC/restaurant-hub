@@ -327,7 +327,45 @@ async def _nome_de_funcao_repetido(
     """
     return await client.post(
         f"{API}/job-functions",
-        json={"name": f"Função {recursos.sufixo}"},
+        json={"name": f"Função {recursos.sufixo}", "unit_ids": [recursos.unidade]},
+        headers=cabecalho,
+    )
+
+
+async def _habilitacao_sem_unidade(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`InvalidUnitEnablementError` — `unit_ids: []` (Stage 3.11, ADR 3.11.0001 §2).
+
+    `[]` não é "todas as unidades" (isso é `null` ou a ausência do campo): é a
+    habilitação vazia, que o domínio recusa. O conversor do router distingue os dois
+    pela **ausência** (`is None`), como o de `shift_preference`.
+    """
+    return await client.post(
+        f"{API}/job-functions",
+        json={"name": f"Sem unidade {recursos.sufixo}", "unit_ids": []},
+        headers=cabecalho,
+    )
+
+
+async def _funcao_de_outra_unidade(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`JobFunctionNotEnabledInUnitError` — a função vale só na **outra** unidade.
+
+    O gerente cria uma função habilitada só na unidade de destino do cenário e a
+    atribui ao registro da unidade de origem: o pedido é bem-formado e a função
+    existe no restaurante, mas não vale na unidade do registro (ADR 3.11.0002).
+    """
+    criada = await client.post(
+        f"{API}/job-functions",
+        json={"name": f"Só no destino {recursos.sufixo}", "unit_ids": [recursos.unidade_destino]},
+        headers=cabecalho,
+    )
+    assert criada.status_code == HTTPStatus.CREATED, criada.text
+    return await client.put(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/job-functions",
+        json={"job_function_ids": [criada.json()["id"]]},
         headers=cabecalho,
     )
 
@@ -603,17 +641,28 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
         _remocao_de_vinculado,
         "funcionário com login não pode ser removido; desligue-o",
     ),
+    # Stage 3.11 — habilitação por unidade.
+    "InvalidUnitEnablementError": (
+        _habilitacao_sem_unidade,
+        "habilitação por unidade inválida: exige ao menos uma unidade",
+    ),
+    "JobFunctionNotEnabledInUnitError": (
+        _funcao_de_outra_unidade,
+        "não está habilitada na unidade",
+    ),
 }
 
-_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 23
+_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 25
 
 # O tamanho do domínio de corpo de CA24 **depois** de a varredura descer por
 # lista. Eram dez caminhos; os três novos são um elemento de `job_function_ids`
 # em cada uma das duas rotas que o aceitam e o período de `shift_preference`.
 # A contagem é transcrita, e não derivada: é ela que faz um encolhimento do
 # domínio reprovar em vez de reduzir em silêncio o número de casos rodados.
-# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17.
-_TOTAL_DE_CAMPOS_ESCALARES: Final = 15
+# 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17; a Stage 3.11,
+# o elemento de `unit_ids` da criação de função e os dois da substituição de
+# unidades (o corpo da matriz nomeia a unidade do path e a de destino).
+_TOTAL_DE_CAMPOS_ESCALARES: Final = 18
 
 
 def test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e() -> None:

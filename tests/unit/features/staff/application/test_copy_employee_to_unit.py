@@ -121,7 +121,10 @@ def _result(fakes: StaffFakes, unidade: UnitId, employee_id: EmployeeId) -> Empl
 
 def _copiar(fakes: StaffFakes, gerador: FakeIdGenerator | None = None) -> CopyEmployeeToUnitUseCase:
     return CopyEmployeeToUnitUseCase(
-        fakes.employees, gerador or FakeIdGenerator(), guard=PermissiveAccessGuard()
+        fakes.employees,
+        fakes.job_functions,
+        gerador or FakeIdGenerator(),
+        guard=PermissiveAccessGuard(),
     )
 
 

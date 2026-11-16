@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (
 keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao, cadastro-minimo, homonimos, wall-clock, fuso-da-unidade, rbac]
 status: accepted
 created_at: 2026-07-23
-updated_at: 2026-11-01
+updated_at: 2026-11-16
 bounded_context: staff
 subdomain: workforce
 references:
@@ -34,6 +34,8 @@ references:
   - ../../adr/3_5_0004-user-id-as-nullable-opaque-column.md
   - ../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md
   - ../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md
+  - ../../adr/3_11_0001-job-function-unit-enablement-model.md
+  - ../../adr/3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md
   - ../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md
   - ../../adr/4_1_0004-hr-reads-schedules-in-member-units.md
   - ../../adr/4_1_0005-unit-timezone-owned-by-identity.md
@@ -247,6 +249,33 @@ desligado** (§3.1), porque o registro dele sobrevive ao desligamento.
 > (`status: superseded`). A **remoção guardada** é a única parte do 3.1.0003 que sobreviveu, com
 > racional próprio restated no 3.2.0005.
 
+> **Nota (2026-11-16) — habilitação por unidade (Stage 3.11, issue #41;
+> [ADR 3.11.0001](../../adr/3_11_0001-job-function-unit-enablement-model.md)):** a regra
+> "Escopo: o restaurante (tenant), não a unidade" **continua valendo para o dono** — a função
+> pertence ao restaurante — e ganhou um refinamento: a função diz **em quais unidades vale**. Não é
+> reversão (mudar o dono para a unidade foi a leitura rejeitada pelo sponsor na issue #41). O que
+> passa a ser regra canônica:
+> - **Habilitação:** a função vale em **todas as unidades** do restaurante (inclusive as que forem
+>   criadas depois) **ou** num **conjunto não-vazio** de unidades. Função habilitada em nenhuma
+>   unidade não existe: quem não a quer mais a remove (ciclo de vida, acima). As funções anteriores
+>   à Stage 3.11 valem em todas as unidades.
+> - **Listagem:** o catálogo do restaurante mostra todas as funções e onde cada uma vale; a
+>   listagem de **uma unidade** mostra só as habilitadas nela.
+> - **Nome:** segue único **no restaurante** (invariante acima, inalterada). Uma função que já
+>   existe em outra unidade é **habilitada** na unidade que precisa dela, não recriada com o mesmo
+>   nome.
+> - **Quem pode:** criar ou habilitar numa unidade exige gerir o catálogo **naquela unidade** (o
+>   gerente alcança as unidades de que é membro); tirar a função de uma unidade exige o mesmo sobre
+>   ela; criar para, ou mudar de/para, **todas as unidades** exige alcance sobre o restaurante
+>   inteiro (`manage_tenant`, hoje do dono). Renomear e remover seguem com o alcance do catálogo do
+>   restaurante.
+> - **Funcionário × unidade:** um registro só detém funções habilitadas **na sua unidade**
+>   ([ADR 3.11.0002](../../adr/3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md)).
+>   Criar o registro ou atribuir funções com uma função que não vale na unidade é recusado; tirar a
+>   função de uma unidade em que algum registro — ativo ou desligado — a detém também.
+>
+> A consequência sobre a cópia entre unidades está na nota de §3.7.
+
 ### 3.3 Perfil de jornada: fixa × sob demanda
 
 **Regra canônica:** todo funcionário tem exatamente **um perfil de jornada**, de dois tipos
@@ -459,6 +488,16 @@ entre unidades").
 > origem e o que acontece com a cópia repetida. Os três bullets acima registram o que o ADR
 > decidiu; a borda HTTP manteve o limite declarado, sem guarda de duplicidade (ADR 3.4.0005), e a
 > unidade destino passou a ser autorizada tal como a de origem (bullet do mesmo tenant, acima).
+
+> **Nota (2026-11-16) — cópia e habilitação por unidade (Stage 3.11;
+> [ADR 3.11.0002](../../adr/3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md)):** o
+> bullet "As funções tenant-scoped tornam a cópia coerente" valia porque toda função valia em toda
+> unidade. Com a habilitação por unidade (nota de §3.2), a cópia é coerente **quando todas as
+> funções do registro valem na unidade destino**. Se alguma não vale, a cópia é **recusada** e nada
+> é gravado: ela não habilita a função no destino (quem copia gere a equipe, não o catálogo), não
+> copia sem a função (a lista de exclusão do ADR 3.2.0003 continua fechada) e não cria o registro
+> assim mesmo. O caminho é habilitar a função na unidade destino e repetir a cópia. O resto desta
+> seção — o que viaja, as três exclusões, a autorização das duas unidades — não muda.
 
 ### 3.8 Fronteira com identity — login opcional do funcionário
 

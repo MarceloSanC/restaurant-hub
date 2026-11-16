@@ -100,10 +100,36 @@ class JobFunctionInUseError(StaffError):
     **independentemente do estado** do funcionário: registro desligado ainda
     aponta para a função, e apagá-la deixaria o cadastro apontando para função
     inexistente, furando a invariante "ao menos uma função" da 3.1.
+
+    **Também o estreitamento da habilitação** (Stage 3.11, ADR 3.11.0002): tirar a
+    função de uma unidade em que algum registro — ativo ou desligado — a detém é
+    recusado pela mesma razão e com o mesmo erro. Nos dois casos o pedido está
+    correto e é **outro registro** que impede.
     """
 
     def __init__(self, job_function_id: str) -> None:
         super().__init__(f"função de trabalho em uso por algum funcionário: {job_function_id!r}")
+
+
+class JobFunctionNotEnabledInUnitError(StaffError):
+    """Função atribuída a um registro de unidade em que ela não vale (Stage 3.11).
+
+    Um registro de funcionário só detém funções **habilitadas na sua unidade**
+    (ADR 3.11.0002). A regra é uma só e tem três produtores: criar o registro,
+    substituir o conjunto de funções dele, e copiá-lo para uma unidade em que
+    alguma das funções não está habilitada — a cópia é **recusada**, sem habilitar
+    a função junto nem deixar a função para trás.
+
+    O pedido está bem-formado e a função existe; é o **estado do catálogo** que
+    impede — daí a mesma faixa de `JobFunctionInUseError`. A mensagem nomeia a
+    função e a unidade para que quem recebe saiba o que habilitar; as duas vêm do
+    próprio pedido, já autorizado.
+    """
+
+    def __init__(self, job_function_id: str, unit_id: str) -> None:
+        super().__init__(
+            f"função de trabalho {job_function_id!r} não está habilitada na unidade {unit_id!r}"
+        )
 
 
 class EmployeeInUseError(StaffError):
