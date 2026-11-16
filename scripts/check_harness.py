@@ -16,8 +16,13 @@ Estrutura (issue #65, port da FF#161) — o que a doc oficial só recomenda
   sem subpasta, e todo arquivo dali citado pelo `SKILL.md`;
 - arquivo de referência > 100 linhas com sumário no topo ("For reference files longer than
   100 lines, include a table of contents at the top");
-- link relativo e `scripts/<x>.py` citados no `SKILL.md` existem (relativos à skill ou à
-  raiz do repo);
+- link relativo e `scripts/<x>.py` citados no `SKILL.md` e nos arquivos de `reference/`
+  existem (o link, relativo ao arquivo que o traz ou à raiz do repo; o script, à skill ou à
+  raiz);
+- âncora (`#...`) de link para Markdown casa com um título do arquivo-alvo (issue #196): do
+  `SKILL.md` para `reference/`, de volta (`../SKILL.md#...`) e dentro do próprio arquivo, que
+  é o caso do sumário. A regra de slug é a do GitHub, descrita em `_slug`. Link dentro de
+  bloco de código cercado é exemplo e não conta; script citado ali conta;
 - `skills:` de subagente aponta skill existente; script de hook em `.claude/settings.json`
   (`${CLAUDE_PROJECT_DIR}/...`) existe.
 
@@ -30,8 +35,10 @@ from __future__ import annotations
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import yaml
 
@@ -59,8 +66,12 @@ KNOWN_DEBT: dict[str, tuple[str, int]] = {}
 
 _TOC_HEADING = re.compile(r"#{1,6}\s+(sumário|índice|conteúdo|contents|table of contents)\b", re.I)
 _ANCHOR_LINK = re.compile(r"\]\(#[^)\s]+\)")
-_MD_LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)\s]*)?\)")
+_MD_LINK = re.compile(r"\]\(([^)#\s]*)(?:#([^)\s]*))?\)")  # (alvo, âncora)
 _SCRIPT_REF = re.compile(r"(?<![\w/.-])((?:\.claude/skills/[\w-]+/)?scripts/[\w./-]+\.py)\b")
+_FENCE = re.compile(r"[ \t]*(`{3,}|~{3,})(.*)")
+_HEADING = re.compile(r" {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
+_INLINE_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_WORD_CATEGORIES = ("L", "M", "Nd", "Pc")  # letra, marca (o U+FE0F do emoji), dígito e `_`
 
 
 def _frontmatter(text: str) -> tuple[str, dict[str, Any]] | str:
@@ -131,6 +142,98 @@ def has_toc(text: str) -> bool:
     return any(_TOC_HEADING.match(line.strip()) for line in top) or anchors >= 2  # noqa: PLR2004
 
 
+def _prose(text: str) -> str:
+    """O texto sem os blocos de código cercados (``` ou ~~~), que não rendem link nem título."""
+    kept: list[str] = []
+    fence = ""
+    for line in text.splitlines():
+        match = _FENCE.match(line)
+        if fence:
+            # fecha com a mesma marca, de tamanho igual ou maior, e mais nada na linha
+            if match and match[1].startswith(fence) and not match[2].strip():
+                fence = ""
+        elif match and not (match[1][0] == "`" and "`" in match[2]):  # ```a``` é código em linha
+            fence = match[1]
+        else:
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def _slug(title: str) -> str:
+    """Âncora que o GitHub gera para um título, sem o sufixo de título repetido.
+
+    Minúsculas (Unicode: `NÃO` vira `não`); sai tudo que não é letra, marca combinante,
+    dígito, `_`, hífen ou espaço; cada espaço vira um hífen. Por isso `Literal ≠ espírito`
+    dá `literal--espírito`, com dois hífens: o `≠` some e os dois espaços ficam. De um link
+    no título sobra só o texto. Fonte: docs.github.com, "Basic writing and formatting
+    syntax" § "Section links". Conferida em 2026-11-16 contra os ids que o GitHub gerou
+    (`gh api .../contents/<arquivo> -H "Accept: application/vnd.github.html+json"`) para
+    todos os `.md` de `.claude/skills/` e de `docs/` (32 arquivos, 458 títulos, nenhum
+    divergente de `heading_anchors`).
+
+    Limite conhecido: a ênfase com sublinhado (`_assim_`), que o GitHub desfaz, aqui mantém
+    os `_`. Nenhum título de skill usa; se usar, o link certo reprova (vermelho, não calado).
+    """
+    text = _INLINE_LINK.sub(r"\1", title).lower()
+    kept = (
+        char
+        for char in text
+        if char in "- " or unicodedata.category(char).startswith(_WORD_CATEGORIES)
+    )
+    return "".join(kept).replace(" ", "-")
+
+
+def heading_anchors(text: str) -> set[str]:
+    """Âncoras dos títulos ATX (`# ...`) do texto; o título repetido ganha `-1`, `-2`...
+
+    O frontmatter sai antes (o `# ...` ali é comentário YAML, não título).
+    """
+    anchors: set[str] = set()
+    seen: dict[str, int] = {}
+    for line in _prose(_body(text)).splitlines():
+        match = _HEADING.match(line)
+        if not match:
+            continue
+        slug = _slug(match[1])
+        anchors.add(f"{slug}-{seen[slug]}" if slug in seen else slug)
+        seen[slug] = seen.get(slug, 0) + 1
+    return anchors
+
+
+def _existing(target: str, bases: tuple[Path, ...]) -> Path | None:
+    return next((base / target for base in bases if (base / target).exists()), None)
+
+
+def _has_anchor(dest: Path, anchor: str) -> bool:
+    """Só Markdown tem título a conferir: âncora em outro tipo de alvo (`x.py#L10`) passa."""
+    return dest.suffix != ".md" or anchor in heading_anchors(dest.read_text(encoding="utf-8"))
+
+
+def check_citations(path: Path, key: str, skill_dir: Path, root: Path) -> dict[str, str]:
+    """Arquivo, script e âncora citados em `path` (o `SKILL.md` ou um `reference/*.md`).
+
+    `key` prefixa a chave do achado. O script citado vale em qualquer ponto do texto, bloco
+    de código incluso (é onde o comando aparece); o link só vale fora dele.
+    """
+    text = _body(path.read_text(encoding="utf-8"))
+    found: dict[str, str] = {}
+    for script in sorted(set(_SCRIPT_REF.findall(text))):
+        if _existing(script, (skill_dir, root)) is None:
+            found[f"{key}::missing:{script}"] = f"cita `{script}`, que não existe"
+    for target, anchor in sorted(set(_MD_LINK.findall(_prose(text)))):
+        # com `:` é URL; sem `/` nem `.` é placeholder de exemplo (`[texto](caminho)`)
+        if ":" in target or (target and "/" not in target and "." not in target):
+            continue
+        dest = _existing(target, (path.parent, root)) if target else path
+        if dest is None:
+            found[f"{key}::missing:{target}"] = f"cita `{target}`, que não existe"
+        elif anchor and not _has_anchor(dest, unquote(anchor)):
+            found[f"{key}::anchor:{target}#{anchor}"] = (
+                f"âncora `{target}#{anchor}` não casa com título de `{dest.name}`"
+            )
+    return found
+
+
 def check_skill_layout(skill_md: Path, root: Path) -> dict[str, str]:
     """`{chave: achado}` de estrutura de uma skill; a chave é estável (para `KNOWN_DEBT`)."""
     skill_dir = skill_md.parent
@@ -160,12 +263,8 @@ def check_skill_layout(skill_md: Path, root: Path) -> dict[str, str]:
                 found[f"{rel}/{ref_rel}::toc"] = (
                     f"`{ref_rel}` tem > {TOC_THRESHOLD} linhas e não abre com sumário"
                 )
-    # alvo sem `/` nem `.` é placeholder de exemplo (`[texto](caminho)`), não arquivo
-    targets = {m for m in _MD_LINK.findall(body) if ("/" in m or "." in m) and ":" not in m}
-    targets |= set(_SCRIPT_REF.findall(body))
-    for target in sorted(targets):
-        if not ((skill_dir / target).exists() or (root / target).exists()):
-            found[f"{rel}::missing:{target}"] = f"cita `{target}`, que não existe"
+            found |= check_citations(ref, f"{rel}/{ref_rel}", skill_dir, root)
+    found |= check_citations(skill_md, rel, skill_dir, root)
     return found
 
 
