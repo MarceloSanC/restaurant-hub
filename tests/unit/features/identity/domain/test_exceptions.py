@@ -10,6 +10,7 @@ from restaurant_hub.features.identity.domain.exceptions.errors import (
     InvalidIdentifierError,
     InvalidNameError,
     InvalidRoleError,
+    InvalidTimezoneError,
     MissingTenantError,
     PlatformAdminMembershipError,
     PlatformAdminTenantError,
@@ -32,6 +33,7 @@ def test_identity_error_e_um_domain_error() -> None:
         InvalidIdentifierError,
         InvalidNameError,
         InvalidRoleError,
+        InvalidTimezoneError,
         MissingTenantError,
         PlatformAdminTenantError,
         PlatformAdminMembershipError,
@@ -91,3 +93,8 @@ def test_cross_tenant_error_cita_os_dois_tenants() -> None:
     assert "isolamento de tenant" in mensagem
     assert "'r1'" in mensagem
     assert "'r2'" in mensagem
+
+
+def test_fuso_invalido_preserva_a_chave_na_mensagem() -> None:
+    with pytest.raises(InvalidTimezoneError, match="'Lua/Base'"):
+        raise InvalidTimezoneError("Lua/Base")

@@ -44,6 +44,17 @@ class InvalidNameError(IdentityError):
         super().__init__(f"nome de {entity} não pode ser vazio")
 
 
+class InvalidTimezoneError(IdentityError):
+    """Fuso da unidade que não é chave IANA conhecida (ver `Unit`, ADR 4.1.0005).
+
+    A chave recusada vai na mensagem, como em `InvalidEmailError`: é o conteúdo
+    que quem chamou enviou, não dado de outro tenant.
+    """
+
+    def __init__(self, value: str) -> None:
+        super().__init__(f"fuso horário inválido: {value!r} não é chave IANA conhecida")
+
+
 class InvalidRoleError(IdentityError):
     """Papel desconhecido — fora do conjunto fechado de `Role`."""
 
