@@ -240,3 +240,29 @@ O degrau 1 decide porque a casa da constante já foi ratificada na #211, e a fac
 `identity-facade-only-reach` e o CA14 permitem a ela; nenhum import novo entre módulos nasce. Movê-la
 para o domínio daria ao `Role` um conhecimento que não é dele: o papel é válido no domínio, é a
 entrada que não o aceita (concept 2.7 D5). Nota *append-only*; o corpo acima não foi editado.
+
+**Auditoria do PR #255 — o teste do dublê não via uma cópia com o mesmo nome.**
+`test_a_fachada_segue_o_conjunto_do_use_case_e_nao_um_literal` troca o nome nos dois módulos; uma
+constante homônima declarada na própria fachada (`PROVISIONABLE_ROLES = frozenset({Role.EMPLOYEE})`
+em `facade.py`) também era trocada, e a fachada "seguia" o dublê. Por mutação local, essa segunda
+cópia passou as unit de identity e de staff. O terceiro teste,
+`test_o_nome_que_a_fachada_le_e_o_objeto_do_use_case`, exige que o nome no namespace de `facade.py`
+seja o **mesmo objeto** (`is`) que `provision_account.PROVISIONABLE_ROLES`, e mata essa mutação.
+`facade.py` está fora do `only_mutate`; a mutação acima foi feita à mão e não roda de novo quando a
+fachada muda. Pôr a fachada no escopo é a issue
+[#262](https://github.com/MarceloSanC/restaurant-hub/issues/262).
+
+```
+[decision:C] #234-2 — como a fachada lê PROVISIONABLE_ROLES e como o teste trava a cópia única
+Escolha: manter `from ...provision_account import PROVISIONABLE_ROLES` na fachada e travar no teste a identidade (`is`) entre o nome no namespace de facade.py e a constante do use case · Alternativas: a fachada ler o atributo do módulo (`provision_account.PROVISIONABLE_ROLES`) e o teste trocar a constante só no módulo de origem · Degrau (C): 5
+Base: Python Language Reference 3.12, §7.11 The import statement (forma `from`) "a reference to that value is stored in the local namespace"; mutação local da auditoria do PR #255: a constante homônima em facade.py passou as unit de identity e de staff sem o teste de identidade e reprova com ele
+Verificado: sustenta — evidence-verifier (2026-11-23, 4/4 itens: o trecho da referência do Python, o import e a ordem das checagens em facade.py, o dublê nos dois módulos e a asserção de identidade); completude por decision-reviewer (2026-11-23)
+Configuração candidata: nenhuma · Reversível: sim
+```
+
+As duas formas dão uma fonte só em produção: o `from ... import` guarda uma referência ao objeto
+do use case, e o módulo de origem termina de executar antes da fachada ligar o nome, então uma
+reatribuição no próprio `provision_account.py` também chega a ela. Elas diferem só no que o teste
+consegue ver, e a identidade fecha esse buraco sem mudar `src/` nem a forma de import do resto da
+fachada. Degrau 5, a mais simples: os degraus 1 a 4 não discriminam (as duas são fail-closed e
+reversíveis).
