@@ -58,7 +58,15 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # M2 (issue #45) — teste de mutação nos módulos que decidem acesso (os quatro da
-  # issue #45 e os que entraram depois; lista em `tests/unit/test_mutation_scope.py`).
+  # issue #45 e os que entraram depois) e no adapter Postgres da escala (issue
+  # #217); lista exata, com a issue de cada entrada, em
+  # `tests/unit/test_mutation_scope.py`.
+  #
+  # **O nome do job é `mutation`, sem o escopo** (issue #217). Até a #217 era
+  # `mutation-access-modules`, e deixou de descrever o que muta quando o adapter
+  # de persistência entrou; o escopo mora no `pyproject.toml`, não no nome. Não é
+  # check exigido por branch protection (não há), e os testes que leem este job
+  # o acham por esse nome.
   #
   # **Job próprio, noturno, e OBSERVACIONAL na primeira semana.** As três coisas
   # são decisões, não acidentes:
@@ -87,7 +95,7 @@ jobs:
   # do baseline engole o código de saída. Quando o limiar for decidido, é esse
   # passo de comparação que passa a `exit 1`.
   # ---------------------------------------------------------------------------
-  mutation-access-modules:
+  mutation:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
@@ -135,15 +143,21 @@ jobs:
         run: uv run pytest tests/ -q
 
       # O escopo vem do `[tool.mutmut]` do pyproject (`only_mutate`): os módulos
-      # que decidem acesso, e nada mais. A lista explícita, com a issue de cada
-      # entrada, está em `tests/unit/test_mutation_scope.py`, que a cobra contra o
-      # pyproject nos dois sentidos.
+      # que decidem acesso e o adapter Postgres da escala (issue #217), e nada
+      # mais. A lista explícita, com a issue de cada entrada, está em
+      # `tests/unit/test_mutation_scope.py`, que a cobra contra o pyproject nos
+      # dois sentidos.
+      #
+      # Os mutantes do adapter só morrem nos testes que falam com o banco
+      # (contrato `[postgres]`, integração e conduta). A seleção do mutmut não os
+      # tira (guarda em `test_mutation_scope.py`), e cada worker roda as
+      # migrations inteiras — `btree_gist` incluída — no banco próprio.
       #
       # Os workers rodam em paralelo (um por CPU, o default do mutmut 3.7.0), e
       # cada um usa um banco próprio, `<banco>_mutmut_<pid>`, que a fixture
       # `database_url` de `tests/conftest.py` cria e dropa (issue #132). O
       # instante de início delimita o log do Postgres que o passo seguinte lê.
-      - name: Rodar mutmut nos módulos de acesso
+      - name: Rodar mutmut no escopo do pyproject
         run: |
           echo "MUTMUT_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           uv run mutmut run

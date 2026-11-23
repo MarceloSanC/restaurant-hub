@@ -160,7 +160,7 @@ _AUDIT_GATE = _REPO_ROOT / ".github" / "workflows" / "audit-gate.yml"
 @pytest.fixture(scope="module")
 def job_de_mutacao() -> dict[str, Any]:
     workflow: dict[str, Any] = yaml.safe_load(_AUDIT_GATE.read_text(encoding="utf-8"))
-    job: dict[str, Any] = workflow["jobs"]["mutation-access-modules"]
+    job: dict[str, Any] = workflow["jobs"]["mutation"]
     return job
 
 

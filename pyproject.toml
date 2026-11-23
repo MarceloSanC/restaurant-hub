@@ -156,10 +156,23 @@ skip_covered = false
 exclude_also = ['if __name__ == "__main__":']
 
 # ---------------------------------------------------------------------------
-# Mutmut — teste de mutação nos módulos que DECIDEM ACESSO (M2 da issue #45)
+# Mutmut — teste de mutação nos módulos que DECIDEM ACESSO (M2 da issue #45) e
+# no adapter Postgres da escala (issue #217)
 # ---------------------------------------------------------------------------
-# Escopado em quatro arquivos, e não no repositório. O critério de entrada é
-# único e estreito: **o módulo participa da decisão de quem pode o quê**.
+# Escopado numa lista de arquivos, e não no repositório (a lista exata, com a
+# issue de cada entrada, está em `tests/unit/test_mutation_scope.py`). São dois
+# critérios de entrada, ambos estreitos:
+#
+# 1. **o módulo participa da decisão de quem pode o quê** — os quatro abaixo, o
+#    port da Stage 2.7 e o provisionamento de conta (issue #211);
+# 2. **o módulo é o adapter Postgres da escala** — `schedule_repository.py` (as
+#    leis L-SC1 a L-SC9 e a trilha na mesma transação) e `mappers.py` (o codec da
+#    trilha é contrato de dados). Os mutantes deles só morrem nos testes que
+#    falam com o banco (contrato `[postgres]`, integração e conduta), e a corrida
+#    os roda: a seleção abaixo não tira `tests/integration/` nem
+#    `tests/contract/`, e cada worker migra um banco próprio (issue #132).
+#
+# Do primeiro critério:
 #
 #   - `authorize_action.py`  — os quatro passos do guard (ADR 2.2.0002)
 #   - `user.py`              — a visibilidade de unidade, o eixo B do acesso
@@ -203,6 +216,8 @@ only_mutate = [
     "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
     "src/restaurant_hub/features/identity/application/ports/out/action_authorizer.py",
     "src/restaurant_hub/features/identity/application/use_cases/provision_account.py",
+    "src/restaurant_hub/features/scheduling/adapters/out/postgres/schedule_repository.py",
+    "src/restaurant_hub/features/scheduling/adapters/out/postgres/mappers.py",
 ]
 also_copy = [
     "docs/",
