@@ -133,10 +133,13 @@ residual race. `downgrade` drops the index.
 - R13, R19 and R20 do one read fewer.
 
 ### Negative
-- Stage 3.8 arrangements of case (a) **inside a unit** (unit tests `test_ca06`/`test_ca07` of
-  `test_employee_lifecycle.py`, e2e `test_ca16`) describe a state that no longer exists; they are
-  rewritten to assert the refusal. Case (a) across units is unchanged (still revokes, ADR 3.8.0001
-  Q4).
+- Arrangements of case (a) **inside a unit** describe a state that no longer exists: Stage 3.8's
+  unit tests `test_ca06`/`test_ca07` of `test_employee_lifecycle.py` leave; its e2e `test_ca16`
+  now asserts the refusal; Stage 3.10's `test_ca4_*` of `test_login_link_single_point.py` writes
+  the state straight into the fake store and asserts that it no longer holds sessions; the
+  scheduling contract world (`tests/contract/features/scheduling/conftest.py`) gives the
+  terminated record its own login. Case (a) across units is unchanged (still revokes, ADR
+  3.8.0001 Q4).
 - A failed `0008` on a database with duplicates needs a manual fix before retrying.
 - `add` with a preset `user_id` is not a production path (R12 and R15 build records without a
   login) and is not translated: on Postgres the index refuses it raw. Only tests take that path.
