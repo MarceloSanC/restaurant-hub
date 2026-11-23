@@ -593,4 +593,16 @@ atômica, plano de gates contra o PIPELINE §9.6). Correções no commit `stage 
 - **C3** (minor) a suíte do fake não cobria o tenant `""` explícito com o alvo do ator concedido (só a unidade vazia) → corrigido (caso `("", u1)` na parametrização de alvo vazio)
 - Pergunta fixa ("regra que já existe em outro lugar / no dono errado?"): nenhum achado — a resolução do tenant omitido repete a de staff por decisão (ADR 4.5.0003 §Decision 2).
 
+### 2026-11-23 — [decision] Checkpoint C (bloco Tasks 04–06) — disposições — Claude (Opus 5.5)
+**Contexto:** rodada 1, um revisor de contexto zerado sobre `2ba7116e..5a332c32` (src e tests), com as skills `fastapi-thin-adapter`, `hex-arch-python`, `pytest-with-fakes` e `task-ordering-hex`; onze mutações aplicadas e revertidas (seis sobreviventes). Correções em `[4.5/task-05-fix]` (conversor) e `[4.5/task-06-fix]` (testes de rota, esta entrada).
+- **C4** (importante) medida gigante no aceite (`"1E+1000000"`) com a `key` casando passava pelo conversor e estourava `decimal.Overflow` na subtração de `_publish._covers` → 500 → corrigido (`to_decimal` recusa mais de 15 dígitos inteiros ou de 12 decimais com `InvalidScheduleRequestError`; teste de conversor e de rota)
+- **C5** (cobertura) apagar `check_acknowledgement_identifiers` da rota S4 ficava verde → corrigido (teste de rota: NUL na `key` do aceite ⇒ 422 `invalid_identifier` sem `authorize`)
+- **C6** (cobertura) o mapeamento campo a campo de `to_operation` não era travado (`counts_toward_workload`, `counts`, `break_minutes` fixos sobreviviam) → corrigido (comparação campo a campo por variante, valores não default e o intervalo nulo da alocação)
+- **C7** (cobertura) o recorte de S5 e o `limit` de S6 não eram travados → corrigido (recorte com `first_day < last_day`; `limit=1` sobre duas escalas e `limit=53` ⇒ 422)
+- **C8** (nit) `_not_wired` duplicado no pacote e `validate_identifier` copiado de staff → refutado — artefato: `grep -n "def _not_wired" src/restaurant_hub/features/staff/adapters/inbound/http/*.py` devolve `dependencies.py:180` e `router.py:193` — a forma é a do precedente de staff, e o validador de identificador é por BC (ADR 3.6.0002; nenhum módulo de scheduling importa staff). A outra metade do nit — o teto de anos protege aritmética de domínio e mora só na borda — vira o `[finding]` abaixo.
+
+### 2026-11-23 — [finding] Teto de anos de dia e instante só na borda HTTP — Claude (Opus 5.5)
+**Contexto:** `validate_day`/`validate_instant` (anos 2 a 9998) impedem o `OverflowError` das somas de `timedelta` do domínio (período, vizinhas, `operational_day_of`), mas só para quem chega pela borda HTTP (D-IDS/concept §6). Um driver que não seja HTTP — o job de notificação da 4.6, o auto-fill do Step 5 — chamaria os use cases sem o teto.
+**Direção sugerida:** levar o teto para `require_day` (`application/use_cases/_inputs.py`) e para o `TimeRange`/`SchedulePeriod`, com `InvalidScheduleRequestError`/`InvalidTimeRangeError`, quando nascer o primeiro driver fora do HTTP. **Stage candidata:** `4.6-schedule-notifications` (primeiro driver não HTTP do BC).
+
 <!-- END: post-execution -->

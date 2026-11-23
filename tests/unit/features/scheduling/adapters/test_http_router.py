@@ -411,6 +411,63 @@ async def test_ca7_limite_de_faixa_extremo_e_422(client: AsyncClient) -> None:
     assert resposta.json()["code"] == "invalid_schedule_request"
 
 
+async def test_ca7_id_da_key_do_aceite_invalido_e_422_sem_autorizar(
+    ambiente: Ambiente, client: AsyncClient
+) -> None:
+    ambiente.world.guard.calls.clear()
+    aceite = {
+        "key": {
+            "policy": "over_coverage",
+            "employee_id": "\x00",
+            "demand_id": None,
+            "operational_days": ["2026-11-02"],
+            "assignment_ids": [],
+        },
+        "observed": "2",
+        "limit": "1",
+    }
+    resposta = await client.post(
+        f"{API}/units/{_U}/schedules/s1/publications",
+        json={"expected_version": 1, "operations": [], "acknowledgements": [aceite]},
+        headers=_GERENTE,
+    )
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["code"] == "invalid_identifier"
+    assert not [c for c in ambiente.world.guard.calls if c.startswith("authorize")]
+
+
+async def test_ca7_medida_gigante_no_aceite_que_casa_a_key_e_422_e_nunca_500(
+    client: AsyncClient,
+) -> None:
+    """A subtração do aceite estouraria o contexto decimal (`decimal.Overflow`) — 500."""
+    sid = await _criar(client)
+    excedente = [
+        *_LOTE_DA_ANA,
+        {
+            "op": "assign_employee",
+            "assignment_id": _ALOCACAO_2,
+            "demand_id": _DEMANDA,
+            "employee_id": "bia",
+        },
+    ]
+    recusa = await client.post(
+        f"{API}/units/{_U}/schedules/{sid}/publications",
+        json={"expected_version": 1, "operations": excedente},
+        headers=_GERENTE,
+    )
+    aceites = [
+        {"key": v["key"], "observed": "1E+1000000", "limit": v["limit"]}
+        for v in recusa.json()["violations"]
+    ]
+    resposta = await client.post(
+        f"{API}/units/{_U}/schedules/{sid}/publications",
+        json={"expected_version": 1, "operations": excedente, "acknowledgements": aceites},
+        headers=_GERENTE,
+    )
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json()["code"] == "invalid_schedule_request"
+
+
 async def test_ca7_decimal_malformado_no_aceite_e_422_de_scheduling(client: AsyncClient) -> None:
     sid = await _criar(client)
     aceite = {
@@ -431,6 +488,45 @@ async def test_ca7_decimal_malformado_no_aceite_e_422_de_scheduling(client: Asyn
     )
     assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert resposta.json()["code"] == "invalid_schedule_request"
+
+
+async def test_s5_o_recorte_chega_ao_use_case_na_ordem(client: AsyncClient) -> None:
+    sid = await _criar(client)
+    await client.post(
+        f"{API}/units/{_U}/schedules/{sid}/publications",
+        json={"expected_version": 1, "operations": _LOTE_DA_ANA},
+        headers=_GERENTE,
+    )
+    cal = await client.get(
+        f"{API}/units/{_U}/calendar",
+        params={"first_day": "2026-11-01", "last_day": "2026-11-03"},
+        headers=_GERENTE,
+    )
+    assert cal.status_code == HTTPStatus.OK, cal.text
+    assert (cal.json()["first_day"], cal.json()["last_day"]) == ("2026-11-01", "2026-11-03")
+    assert len(cal.json()["bands"]) == 1
+
+
+async def test_s6_o_limite_chega_ao_use_case(client: AsyncClient) -> None:
+    primeira = await _criar(client, "2026-11-02")
+    segunda = await _criar(client, "2026-11-09")
+    um = await client.get(
+        f"{API}/units/{_U}/schedules",
+        params={"before": "2026-11-30", "limit": 1},
+        headers=_GERENTE,
+    )
+    assert [s["schedule_id"] for s in um.json()] == [segunda]
+    dois = await client.get(
+        f"{API}/units/{_U}/schedules", params={"before": "2026-11-30"}, headers=_GERENTE
+    )
+    assert [s["schedule_id"] for s in dois.json()] == [segunda, primeira]
+    fora = await client.get(
+        f"{API}/units/{_U}/schedules",
+        params={"before": "2026-11-30", "limit": 53},
+        headers=_GERENTE,
+    )
+    assert fora.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert fora.json()["code"] == "invalid_schedule_request"
 
 
 # --- CA8: offset recusado -----------------------------------------------------------------
