@@ -505,6 +505,21 @@ class TestTransparenciaAExcecoes:
 
         assert [command.role for command in espiao.commands] == [Role.MANAGER]
 
+    def test_o_nome_que_a_fachada_le_e_o_objeto_do_use_case(self) -> None:
+        """Issue #234 — o teste acima troca o nome **nos dois módulos**, então não vê
+        uma cópia com o mesmo nome declarada na própria fachada
+        (`PROVISIONABLE_ROLES = frozenset({Role.EMPLOYEE})` em `facade.py`): o dublê
+        substitui a cópia e a fachada "segue" o conjunto trocado. A auditoria do PR
+        #255 provou por mutação local que essa cópia passa as unit de identity e de
+        staff.
+        `from ... import PROVISIONABLE_ROLES` liga o nome ao mesmo objeto do use
+        case; a identidade trava que é esse o objeto que a fachada lê, e não um igual
+        a ele. Lido pelo namespace do módulo (`vars`), que é onde a checagem de
+        `provision_account` procura o nome global."""
+        lido_pela_fachada = vars(modulo_facade)["PROVISIONABLE_ROLES"]
+
+        assert lido_pela_fachada is modulo_provision_account.PROVISIONABLE_ROLES
+
 
 class TestReexportacao:
     def test_reexporta_as_mesmas_classes_de_excecao(self) -> None:
