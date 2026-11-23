@@ -5,7 +5,7 @@ when-use: Reference before extending the identity role map for scheduling, befor
 keywords: [adr, rbac, permission, role, hr, manager, owner, employee, scheduling, read, manage, own, unit-scoped, supersedes-in-part, identity]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-13
+updated_at: 2026-11-23
 adr_id: 4.1.0004
 decision: Scheduling capabilities come in three unit-scoped families — read (live schedule + calendar of a unit), manage (edit demand and allocations, acknowledge warnings, save) and own ("my schedule") — and hr receives the read family for the units it is a member of, while manage stays with manager and owner and own goes to employee; this supersedes in part ADR 3.4.0006 §3, whose "any permission over the schedule" now reads as "any write permission".
 context_stage: 4.1-scheduling-domain
@@ -158,3 +158,12 @@ would have made the read grant a violation without this record.
   `gate-decisions.md`).
 - Process: [`CONVENTIONS.md`](../CONVENTIONS.md) §5 (errata banner, append-only, no body edit).
 - External: none — an access-control product decision.
+
+## Nota — nomes, mapa e a família "própria" para todos os papéis
+
+**2026-11-23 — Stage 4.5 ([ADR 4.5.0001](./4_5_0001-scheduling-permissions-in-the-identity-role-map.md)).**
+As lacunas do fim da §Decision fecharam: `view_schedule` (ler), `manage_schedule` (gerenciar, e
+salvar = editar) e `view_own_schedule` (própria); a configuração tenant-wide ganhou
+`manage_schedule_settings`, só do `owner`. A §Decision 4 dá a família "própria" ao `employee`; a 4.5
+a estende a `owner`, `manager` e `hr` (o gerente que trabalha na escala tem vínculo de login desde a
+Stage 3.10, e quem cria `employee` precisa deter a permissão dele).

@@ -5,7 +5,7 @@ when-use: Reference before adding a scheduling use case, changing the scheduling
 keywords: [adr, scheduling, authorization, access-guard, fail-closed, permission, subject, user-id, my-schedule]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-01
+updated_at: 2026-11-23
 adr_id: 4.3.0002
 decision: scheduling reapplies ADR 3.7.0001 with a port of its own — every use case receives an AccessGuard by constructor and, as the first statement of execute, authorizes one of three unit-scoped permissions (view_schedule, manage_schedule, view_own_schedule) on the command's tenant and unit; the returned scope is never an address, but carries the authenticated subject's user_id, which is read for the trail author and for "my schedule"; the rule is not promoted to a transversal ADR until a third bounded context repeats it.
 context_stage: 4.3-scheduling-application
@@ -83,3 +83,13 @@ Rejected: the subject would come from the request (ADR 0.0.0005 clause 1).
 
 - ADR 3.7.0001, ADR 3.4.0001, ADR 0.0.0005, ADR 4.1.0004
 - Issue #72 comments (findings of the 3.7 auditor)
+
+## Nota — o port ganha `authenticate` e o tenant opcional
+
+**2026-11-23 — Stage 4.5 ([ADR 4.5.0003](./4_5_0003-scheduling-http-edge-shape.md)).** A §Decision 1
+("only `authorize` … both targets are required") muda em dois pontos, para a borda HTTP depender do
+port como a de staff (ADR 3.7.0001): o port ganha `authenticate(request)`, e o `tenant_id` de
+`authorize` passa a opcional — omitido, é o tenant do ator (ADR 0.0.0005, cláusula 3). A unidade
+continua obrigatória. L-SG2 continua valendo para o tenant **pedido**; a lei nova L-SG5 cobre o
+omitido (o escopo traz o tenant do ator; ator sem tenant é negado, nunca coagido para `""`). Os use
+cases não mudam: todos continuam nomeando o tenant do command.

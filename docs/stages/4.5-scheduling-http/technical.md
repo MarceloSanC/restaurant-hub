@@ -1,19 +1,19 @@
 ---
-title: Technical — <Título da Stage>
+title: Technical — API do editor e consulta de escala
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), pronto para ser consumido por code assistant
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
-keywords: [technical, plano de execução, <slug>]
+keywords: [technical, plano de execução, scheduling-http]
 status: draft
-created_at: YYYY-MM-DD
-updated_at: YYYY-MM-DD
-stage_id: N.M-<slug>
-stage_title: <Título humano da Stage>
-step_id: N                       # sequencial, sem zero-padding (1, 2, 15…)
-step_title: <Título humano do Step>
-depends_on: []
+created_at: 2026-11-23
+updated_at: 2026-11-23
+stage_id: 4.5-scheduling-http
+stage_title: API do editor e consulta de escala
+step_id: 4
+step_title: Escala manual publicável
+depends_on: [4.4-scheduling-persistence, 3.10-login-link-management]
 concept_ref: ./concept.md
-issue_id: 0
-branch: feat/<num-issue>-<N-M>-<slug>
+issue_id: 254
+branch: feat/254-4-5-scheduling-http
 tasks_count: 0
 ---
 
@@ -252,7 +252,38 @@ C → o `-fix` do bloco ou o commit seguinte). Sem as do A e do B, technical
 Checkpoint sem achado grava a entrada mesmo assim ("nenhum achado material").
 O cabeçalho do C é `Checkpoint C (bloco Tasks NN–MM)`.
 
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+### 2026-11-23 — [decision] Checkpoint A — disposições — Claude (Opus 5.5)
+**Contexto:** rodada 1 com dois revisores de contexto zerado (conformidade; domínio/testabilidade) e
+o `decision-reviewer` da `evidence-resolution` §4.3; rodada 2 de re-verificação das correções (um
+revisor). Antes deles, dois `evidence-verifier` conferiram as citações dos sete registros
+`[decision:E|C]` (D-ERR-409 e D-IDS voltaram `parcial` e foram corrigidos; os demais, `sustenta`).
+Todas as correções entram no commit `stage 4.5: conceptual approved`.
+- **A1** (major, ambos) CA1 exigia "versão 2"; a versão soma 1 por operação efetiva → corrigido (CA1: 1 + operações efetivas)
+- **A2** (major, domínio) a matriz e2e não prova a autorização da rota (o use case nega igual) → corrigido (§5 inv. 4; CA14, teste de borda com espião)
+- **A3** (major, ambos + decision-reviewer) quatro `Duplicate*` em 409 contra o ADR 3.4.0002 §4 → corrigido (422; faixas reescritas na §6, D-ERR-BANDS e ADR 4.5.0002)
+- **A4** (major, domínio) o pino de R17 e a docstring da fachada quebram sem critério → corrigido (CA15, propriedade; divergência 1; nota no ADR 2.7.0001)
+- **A5** (major, domínio) CA6 passava sem a mudança do calendário → corrigido (CA6 exige `true` e `false` em S2 e S5)
+- **A6** (major, domínio + decision-reviewer) `MissingStaffRecordsError` sem saída para o cliente e vindo também das leituras → corrigido (§6, risco na §10, consequência no ADR 4.5.0002; #194 pré-requisito de produção)
+- **A7** (major, domínio) CA2 sem `platform_admin` → corrigido
+- **A8** (major, domínio) CA3 vácuo → corrigido (alocado no recorte, desligado, novo login)
+- **A9** (major, conformidade) D-DEACT sem errata do ADR 3.5.0003 §5 → corrigido (nota datada no ADR; issue #259)
+- **A10** (major, conformidade + decision-reviewer) protocolo da borda declarado no adapter de entrada, contra LAYOUT §5 e o precedente de staff → corrigido (o port de scheduling ganha `authenticate` e tenant opcional, lei L-SG5; D-GUARD, ADR 4.5.0003; divergência 2)
+- **A11** (major, decision-reviewer) D-CREATE quebra o princípio da matriz congelada e o comentário de `role.py` → corrigido (consequência declarada em D-CREATE e no ADR 4.5.0001; comentário de `role.py` reescrito na Task de identity; destaque no PR)
+- **A12** (major, decision-reviewer) D-CONFIG: tenant-wide é inócuo só para o dono, alargar não é aditivo, a 4.8 muda o port → corrigido (D-CONFIG e ADR 4.5.0001 reescritos; consequência para a 4.8 declarada)
+- **A13** (major, decision-reviewer) D-OWN: o funcionário não descobre a própria unidade → corrigido (limite declarado; #258 pré-requisito do piloto com funcionários; risco na §10)
+- **A14** (minor, domínio) CA5 "o lote reenviado passa" não é propriedade → corrigido (§6 e CA5: reenvio pode voltar 422; asserção sobre o corpo do 409)
+- **A15** (minor, domínio) tipo do decimal do aceite ambíguo → corrigido (`str` + conversor da borda)
+- **A16** (minor, domínio) partes do CA7 intestáveis → corrigido (path só-espaço/NUL; corpo; as duas operações de quantidade)
+- **A17** (minor, domínio) forma da `key` do aceite subespecificada → corrigido (eco exato, campos anuláveis)
+- **A18** (minor, domínio) regra de faixas incoerente (404 × 422 para referência no corpo) → corrigido (outro agregado = 404; valor interno = 422)
+- **A19** (minor, ambos) CA13 não objetivo e marca do §4 ("e-mail como efeito") sem destino → corrigido (CA13 lista linhas e marcas; D-EMAIL)
+- **A20** (minor, conformidade) `view_own_schedule` para `hr`/`manager`/`owner` sem nota nos ADRs 3.4.0006 e 4.1.0004 → corrigido (notas datadas)
+- **A21** (minor, conformidade) premissa (b) de D-OWNALL parcialmente falsa → corrigido (reescrita: rotas de identity × R17 pela fachada)
+- **A22** (minor, conformidade) regra de corpo "nenhum registro que o pedido não nomeou" larga demais → corrigido ("nenhum registro invisível")
+- **A23** (minor, conformidade) dia extremo produz 500 → corrigido (§6 e CA7; na rodada 2, estendido aos limites de faixa, que estouram em `operational_day_of`)
+- **A24** (minor, conformidade) corpo de S1 não especificado → corrigido (§4.2)
+- **A25** (minor, decision-reviewer) teto de 500 do lote sem medição → corrigido (declarado como premissa não medida em D-BATCH; reversível)
+- **A26** (contrato, rodada 2) a extensão do port contradiz o ADR 4.3.0002 §Decision 1 sem nota → corrigido (nota datada no ADR 4.3.0002; docstring do port reescrita na Task que o estende)
+- **A27** (minor, rodada 2) marcas do corpo do doc de domínio que citam a 4.5 faltavam no CA13 (§3.5, §3.9, §3.10.2, nota de §6) → corrigido
 
 <!-- END: post-execution -->
