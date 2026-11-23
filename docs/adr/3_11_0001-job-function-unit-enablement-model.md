@@ -5,7 +5,7 @@ when-use: Reference before changing how a job function is scoped to units, befor
 keywords: [adr, job-function, unit, enablement, catalogue, manage-tenant, migration, staff, uniqueness]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 adr_id: 3.11.0001
 decision: JobFunction stays tenant-owned and gains a UnitEnablement value object that is either every unit of the restaurant, present and future, or a non-empty explicit set of units; the name stays unique in the restaurant; enabling in every unit requires manage_tenant on top of manage_job_functions, enabling in named units requires manage_job_functions on each unit; changing the enablement replaces it whole and needs reach over the units added and removed (manage_tenant when every unit is on either side); existing functions migrate to every unit
 context_stage: 3.11-job-function-unit-enablement
@@ -229,3 +229,15 @@ Postgres com um corpo só) e os testes de conduta `test_issue_206_*` de
 entre estreitar a habilitação e atribuir a função a um registro, declarada no
 [ADR 3.11.0002](./3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md), não é
 esta e segue aberta. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-23 — a remontagem das duas metades numa leitura vê um instante só (issue #225).**
+As §Implementation notes dizem que a reidratação de linha incoerente "fails loudly"; até a
+#225 ela também falhava por **corrida**: as leituras remontavam flag e vínculos em dois
+statements sob `READ COMMITTED`, e uma alteração de "conjunto" para "todas" comitando entre
+eles produzia a combinação que `UnitEnablement` recusa, respondida como 422 numa leitura. As
+leituras de função rodam agora sob `REPEATABLE READ`
+([ADR 3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md) §Decision
+(c), que recebeu nota datada), e o lookup de `delete` deixou de remontar a habilitação. A falha
+ruidosa continua valendo para incoerência de fato gravada (CA9b). A remontagem sob lock de
+`update_enablement`, descrita na nota de 2026-11-22, não mudou: segue em `READ COMMITTED`.
+Nota *append-only*; o corpo acima não foi editado.

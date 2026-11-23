@@ -5,7 +5,7 @@ when-use: Reference before adding a version column or an If-Match/ETag flow to s
 keywords: [adr, concurrency, lost-update, optimistic-locking, version, select-for-update, transaction, atomicity, read-modify-write, staff, etag]
 status: accepted
 created_at: 2026-08-10
-updated_at: 2026-08-10
+updated_at: 2026-11-23
 adr_id: 3.3.0006
 decision: every staff repository method runs its guards and its write inside one transaction and the employee update takes a row lock on the lookup, which closes partial-aggregate states and guard interleaving; optimistic concurrency control is not introduced because it would require a version token to cross the port signature published by Stage 3.2, and is escalated to Stage 3.4
 context_stage: 3.3-staff-persistence
@@ -192,3 +192,22 @@ migration alongside the `ETag`/`If-Match` surface.
   [3.3.0004](./3_3_0004-per-operation-integrity-error-translation.md)
 - Finding: `docs/stages/3.2-staff-application/concept.md` §5 rule 17 and §10
 - Transactional precedent: `docs/stages/2.3-identity-persistence/concept.md` §7 Decision 6
+
+## Notas datadas
+
+**2026-11-23 — a §Decision (c) passou a valer também para as leituras de função (issue #225).**
+Desde a Stage 3.11 a `JobFunction` é remontada de duas tabelas — a flag
+`enabled_in_all_units` em `job_functions` e os vínculos de `job_function_units` —, mas as
+leituras de `PostgresJobFunctionRepository` seguiam em `READ COMMITTED`: uma alteração de
+"conjunto" para "todas" comitando entre os dois statements fazia a leitura levantar
+`InvalidUnitEnablementError` (422). As cinco leituras (`find_by_id`, `find_by_name`,
+`find_all_by_ids`, `list_by_tenant`, `list_by_unit`) rodam agora sob `REPEATABLE READ`, com o
+mesmo `_in_single_snapshot` do repositório de funcionário, e numa listagem todas as funções
+vêm do mesmo instante (lei "Leitura coerente" no port). Ficam em `READ COMMITTED`, de
+propósito, a remontagem de `update_enablement` — sob o lock da linha, que precisa reler o que
+a alteração anterior comitou (ADR 0.0.0010) — e o lookup de `delete`, que deixou de remontar a
+habilitação e só confere a existência. Uma correção ao texto de §Consequences → Negative: o
+erro de serialização ali previsto "in principle" para as leituras não ocorre em leitura pura —
+"read-only transactions will never have serialization conflicts" (PostgreSQL 16, §13.2.2);
+só a transação que escreve ou trava linha o sofre. Provas: os testes `test_issue_225_*` de
+`test_staff_conduct.py`, com duas conexões. Nota *append-only*; o corpo acima não foi editado.
