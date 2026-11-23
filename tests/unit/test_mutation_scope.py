@@ -128,20 +128,31 @@ def test_o_gate_estrutural_do_check_layout_fica_fora_da_corrida() -> None:
     mutado.)
     Se alguém tirar o `--ignore` por achar que é sobra, a corrida volta a morrer
     na coleta de estatísticas — e este teste diz o porquê antes disso.
+
+    Desde a issue #205 há um segundo, pelo mesmo motivo estrutural:
+    `test_setup_token_issuance_rule10.py` roda a regra 10 sobre o `src/` real e
+    conta os blocos de unidade de `provision_account.py`, que dentro de `mutants/`
+    tem uma cópia de `execute` por mutante — a varredura reprova (medido: o run
+    45113622689 morreu em `failed to collect stats`). É gate sobre o texto do
+    fonte; não mataria mutante nenhum.
     """
     selecao = _config_do_mutmut()["pytest_add_cli_args_test_selection"]
     assert isinstance(selecao, list)
 
-    # Conjunto exato, não pertinência: um segundo `--ignore` entraria calado e a
+    # Conjunto exato, não pertinência: um terceiro `--ignore` entraria calado e a
     # corrida mediria menos suíte com o mesmo "N/N" — a mesma classe do caminho
     # morto em `only_mutate` que este arquivo existe para tornar barulhento.
-    assert selecao == ["--ignore=tests/unit/test_check_layout.py"]
+    assert selecao == [
+        "--ignore=tests/unit/test_check_layout.py",
+        "--ignore=tests/unit/features/identity/application/test_setup_token_issuance_rule10.py",
+    ]
 
-    ignorado = selecao[0].removeprefix("--ignore=")
-    assert (_REPO_ROOT / ignorado).is_file(), (
-        f"o --ignore aponta para {ignorado}, que não existe: a exclusão está morta "
-        f"e a corrida voltaria a morrer na coleta de estatísticas"
-    )
+    for opcao in selecao:
+        ignorado = opcao.removeprefix("--ignore=")
+        assert (_REPO_ROOT / ignorado).is_file(), (
+            f"o --ignore aponta para {ignorado}, que não existe: a exclusão está morta "
+            f"e a corrida voltaria a morrer na coleta de estatísticas"
+        )
 
 
 # ---------------------------------------------------------------------------

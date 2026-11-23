@@ -44,11 +44,7 @@ from datetime import timedelta
 from restaurant_hub.features.identity.application.dtos.commands import (
     RequestPasswordResetCommand,
 )
-from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
-from restaurant_hub.features.identity.application.dtos.setup_tokens import (
-    PasswordSetupToken,
-    SetupTokenPurpose,
-)
+from restaurant_hub.features.identity.application.dtos.setup_tokens import SetupTokenPurpose
 from restaurant_hub.features.identity.application.ports.out.password_setup_token_repository import (
     PasswordSetupTokenRepository,
 )
@@ -59,7 +55,9 @@ from restaurant_hub.features.identity.application.ports.out.unit_of_work import 
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
-from restaurant_hub.features.identity.application.use_cases._invitation import setup_link
+from restaurant_hub.features.identity.application.use_cases._invitation import (
+    issue_setup_token,
+)
 from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
 from restaurant_hub.shared.application.ports.out.clock import Clock
 from restaurant_hub.shared.application.ports.out.email_sender import (
@@ -122,8 +120,8 @@ class RequestPasswordResetUseCase:
         # tempo nenhum, exatamente o ataque que esta regra existe para fechar.
         try:
             with self._unit_of_work.transaction():
-                token_value = self._issue_token(credentials.user.id)
-            self._send(command.email.value, token_value)
+                link = self._issue_token(credentials.user.id)
+            self._send(command.email.value, link)
         except Exception as exc:
             # Sem `exc_info` e sem `str(exc)`, de propósito — ver o docstring do
             # módulo. O nome da classe separa "provedor fora" de "banco recusou
@@ -137,7 +135,13 @@ class RequestPasswordResetUseCase:
             return
 
     def _issue_token(self, user_id: UserId) -> str:
-        """Invalida as redefinições anteriores e emite uma nova."""
+        """Invalida as redefinições anteriores e emite uma nova, devolvendo o link.
+
+        O cálculo da emissão é o único de identity (`issue_setup_token`, issue
+        #205); as duas escritas ficam aqui, em método do use case, que a regra 10
+        do `check_layout` segue a partir de `execute` — e por isso enxerga ambas
+        dentro da unidade.
+        """
         now = self._clock.now()
 
         # Escopado por propósito: um convite pendente do mesmo usuário sobrevive.
@@ -145,20 +149,21 @@ class RequestPasswordResetUseCase:
         # qualquer pessoa", acionável em laço por quem soubesse o e-mail dela.
         self._tokens.invalidate_all_for_user(user_id, now, purpose=SetupTokenPurpose.PASSWORD_RESET)
 
-        issued = self._token_issuer.issue()
-        self._tokens.add(
-            PasswordSetupToken(
-                id=SetupTokenId(str(self._id_generator.next_id())),
-                user_id=user_id,
-                purpose=SetupTokenPurpose.PASSWORD_RESET,
-                token_fingerprint=issued.fingerprint,
-                issued_at=now,
-                expires_at=now + self._reset_ttl,
-            )
+        # O mesmo `now` da invalidação: a nova nasce no instante em que as
+        # anteriores morreram.
+        reset = issue_setup_token(
+            self._token_issuer,
+            self._id_generator,
+            user_id=user_id,
+            purpose=SetupTokenPurpose.PASSWORD_RESET,
+            now=now,
+            ttl=self._reset_ttl,
+            base_url=self._base_url,
         )
-        return issued.value
+        self._tokens.add(reset.record)
+        return reset.link
 
-    def _send(self, recipient: str, token_value: str) -> None:
+    def _send(self, recipient: str, link: str) -> None:
         """Compõe e envia a mensagem.
 
         **A absorção da falha não acontece aqui**: ela envolve o caminho inteiro,
@@ -170,7 +175,6 @@ class RequestPasswordResetUseCase:
         no log do servidor (issue #26) — só o tipo, nunca a mensagem, porque a
         de um provedor de e-mail pode ecoar o destinatário ou o link.
         """
-        link = setup_link(self._base_url, token_value)
         self._email_sender.send(
             EmailMessage(
                 to=recipient,
