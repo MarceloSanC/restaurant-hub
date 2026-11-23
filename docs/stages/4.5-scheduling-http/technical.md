@@ -605,4 +605,9 @@ atômica, plano de gates contra o PIPELINE §9.6). Correções no commit `stage 
 **Contexto:** `validate_day`/`validate_instant` (anos 2 a 9998) impedem o `OverflowError` das somas de `timedelta` do domínio (período, vizinhas, `operational_day_of`), mas só para quem chega pela borda HTTP (D-IDS/concept §6). Um driver que não seja HTTP — o job de notificação da 4.6, o auto-fill do Step 5 — chamaria os use cases sem o teto.
 **Direção sugerida:** levar o teto para `require_day` (`application/use_cases/_inputs.py`) e para o `TimeRange`/`SchedulePeriod`, com `InvalidScheduleRequestError`/`InvalidTimeRangeError`, quando nascer o primeiro driver fora do HTTP. **Stage candidata:** `4.6-schedule-notifications` (primeiro driver não HTTP do BC).
 
+### 2026-11-23 — [measurement] Ponto 2 do plano de gates (Task 07) — Claude (Opus 5.5)
+**Contexto:** plano de gates da §1, ponto 2, depois do wiring (Task 07). Antes do push, rebase simples sobre `origin/develop` (`88c3ff9d`: #217, #242, #243 mergeadas), sem conflito; `check_layout.py` (regra 10 derivada, #243) e `lint-imports` (12 contratos) verdes localmente. Hashes depois do rebase: Tasks 01–07 `8e9feb70`, `00262ea6`, `99eaaf6d`, `aee915fb`, `e81b176b`, `928ad174`, `f5a0157a`; fixes `72f34ea2`, `61a65f98`, `9ad8bd23`.
+**Medição:** run `ci` 45138602830, job `lint-and-test` **success** sobre `f5a0157a` — https://github.com/MarceloSanC/restaurant-hub/actions/runs/45138602830/job/137570771955 (inclui `test_deny_by_default.py` e `test_credential_responses_are_not_stored.py` vendo as sete rotas de scheduling, e a integração da 4.4 sem os campos provisórios).
+**Razão:** o ponto 2 confirma o composition root e as varreduras globais antes dos e2e das Tasks 08–10.
+
 <!-- END: post-execution -->
