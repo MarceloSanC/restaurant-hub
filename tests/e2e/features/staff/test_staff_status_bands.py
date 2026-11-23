@@ -591,6 +591,9 @@ INALCANCAVEIS_POR_HTTP: Final = frozenset(
         # (a escrita condicional confere o estado lido); a conduta com duas
         # conexões do repositório a cobre (ADR 3.10.0001 §2).
         "EmployeeLoginChangedError",
+        # Stage 3.10: as rotas de vincular e trocar nascem na Task 10.
+        "LoginAccountNotFoundError",
+        "LoginAlreadyLinkedInUnitError",
     }
 )
 
@@ -665,8 +668,9 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
 }
 
 # 28 desde a Stage 3.10, que acrescenta `EmployeeHasNoLoginError` e
-# `EmployeeLoginChangedError` às 26 de develop (inclui a da issue #206).
-_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 28
+# `EmployeeLoginChangedError` às 26 de develop (inclui a da issue #206), e
+# `LoginAccountNotFoundError` e `LoginAlreadyLinkedInUnitError` (30).
+_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 30
 
 # O tamanho do domínio de corpo de CA24 **depois** de a varredura descer por
 # lista. Eram dez caminhos; os três novos são um elemento de `job_function_ids`
