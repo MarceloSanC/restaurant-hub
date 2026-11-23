@@ -41,6 +41,7 @@ from restaurant_hub.features.scheduling.application.dtos.commands import (
     UnassignEmployee,
     WithdrawDemand,
 )
+from restaurant_hub.features.scheduling.application.dtos.results import DemandResult
 from restaurant_hub.features.scheduling.application.errors import InvalidScheduleRequestError
 from restaurant_hub.features.scheduling.domain.exceptions.errors import (
     InvalidDemandQuantityError,
@@ -372,7 +373,6 @@ def test_aceite_vira_o_dto_com_a_key_como_ecoada() -> None:
         ("observed", "1E+1000000", "observed"),
         ("limit", "-9E+999999", "limit"),
         ("observed", "1E+16", "observed"),
-        ("limit", "1E-13", "limit"),
     ],
 )
 def test_medida_malformada_e_422_de_scheduling(campo: str, valor: str, trecho: str) -> None:
@@ -456,3 +456,58 @@ def test_instante_da_resposta_sai_sem_offset() -> None:
     ).model_dump(mode="json")
     assert (resposta["start"], resposta["end"]) == ("2026-12-07T08:00:00", "2026-12-07T16:00:00")
     assert datetime.fromisoformat(resposta["start"]).tzinfo is None
+
+
+# --- auditoria de testes (Task 11 extra): as fronteiras do tamanho de uma medida ------------
+
+
+@pytest.mark.parametrize(
+    "valor",
+    [
+        "999999999999999",
+        "-999999999999999",
+        "0.0000000000006",
+        "1E-1000030",
+        "1.000000000000000",
+        "0E-20",
+        "0",
+    ],
+    ids=[
+        "15-digitos",
+        "15-digitos-negativo",
+        "13-casas-que-a-carga-emite",
+        "subnormal",
+        "zeros-a-direita",
+        "zero-com-expoente",
+        "zero",
+    ],
+)
+def test_to_decimal_aceita_ate_15_digitos_inteiros_e_qualquer_casa(valor: str) -> None:
+    """Casas decimais não têm teto: a medida emitida pelo servidor tem de poder voltar."""
+    assert schemas.to_decimal(valor, name="observed") == Decimal(valor)
+
+
+@pytest.mark.parametrize(
+    "valor",
+    ["1000000000000000", "1E+15", "-1E+15", "1E+1000000"],
+    ids=["16-digitos", "1e15", "1e15-negativo", "expoente-gigante"],
+)
+def test_to_decimal_recusa_mais_de_15_digitos_inteiros(valor: str) -> None:
+    with pytest.raises(InvalidScheduleRequestError, match="tamanho"):
+        schemas.to_decimal(valor, name="observed")
+
+
+def test_a_demanda_orfa_sai_false_na_resposta() -> None:
+    """`function_enabled_in_unit` atravessa o schema como veio (a órfã é `false`)."""
+    for valor in (True, False):
+        resposta = schemas.DemandResponse.from_result(
+            DemandResult(
+                demand_id=ShiftDemandId("d1"),
+                job_function_id="cook",  # type: ignore[arg-type]
+                job_function_name=None,
+                function_enabled_in_unit=valor,
+                quantity=1,
+                assignments=(),
+            )
+        )
+        assert resposta.function_enabled_in_unit is valor

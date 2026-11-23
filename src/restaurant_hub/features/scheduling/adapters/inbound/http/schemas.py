@@ -86,12 +86,12 @@ from restaurant_hub.features.scheduling.domain.value_objects.violation import (
 )
 
 MAX_BATCH: Final = 500
-# O tamanho de uma medida de violação aceita no aceite: minutos, horas e contagens cabem com
-# folga em 15 dígitos inteiros e 12 decimais. Acima disso, a subtração do aceite
-# (`_publish._covers`) estoura o contexto decimal padrão (`decimal.Overflow`) e responderia
-# 500 (Checkpoint C, bloco 04–06).
-MAX_DECIMAL_ADJUSTED: Final = 15
-MIN_DECIMAL_EXPONENT: Final = -12
+# O teto de uma medida de violação no aceite: 15 dígitos inteiros. Acima disso, a subtração do
+# aceite (`_publish._covers`) pode estourar o contexto decimal padrão (`decimal.Overflow`) e
+# responderia 500 (Checkpoint C, bloco 04–06). Casas decimais não têm teto: expoente negativo
+# grande não estoura (underflow não é armadilha no contexto padrão), e o servidor emite medidas
+# com tantas casas quanto a carga contratada em staff tiver — recusá-las travaria o aceite.
+MAX_INTEGER_DIGITS: Final = 15
 # O teto da coluna `quantity` (`INTEGER` do Postgres, -2147483648 a +2147483647 — D-QTY).
 MAX_QUANTITY: Final = 2_147_483_647
 
@@ -378,8 +378,8 @@ def to_decimal(raw: str, *, name: str) -> Decimal:
     """Texto decimal finito — a medida de uma violação (decisão 5 do módulo).
 
     Raises:
-        InvalidScheduleRequestError: não numérico, `NaN`/`Infinity`, ou fora do tamanho de uma
-            medida (mais de 15 dígitos inteiros ou de 12 decimais) — 422, nunca 500.
+        InvalidScheduleRequestError: não numérico, `NaN`/`Infinity`, ou mais de 15 dígitos
+            inteiros — 422, nunca 500.
     """
     try:
         value = Decimal(raw)
@@ -387,10 +387,8 @@ def to_decimal(raw: str, *, name: str) -> Decimal:
         raise InvalidScheduleRequestError(f"{name} não é número decimal") from exc
     if not value.is_finite():
         raise InvalidScheduleRequestError(f"{name} não é número finito")
-    exponent = value.as_tuple().exponent
-    if value.adjusted() > MAX_DECIMAL_ADJUSTED or (
-        isinstance(exponent, int) and exponent < MIN_DECIMAL_EXPONENT and value != 0
-    ):
+    # `adjusted()` não usa contexto decimal: não estoura nem com `1E+1000000`.
+    if value != 0 and value.adjusted() >= MAX_INTEGER_DIGITS:
         raise InvalidScheduleRequestError(f"{name} fora do tamanho de uma medida")
     return value
 
