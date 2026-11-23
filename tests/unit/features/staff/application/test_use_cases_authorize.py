@@ -65,6 +65,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
     DeleteJobFunctionCommand,
+    LinkExistingLoginCommand,
     ReactivateEmployeeCommand,
     RegisterUnavailabilityCommand,
     RemoveUnavailabilityCommand,
@@ -108,6 +109,9 @@ from restaurant_hub.features.staff.application.use_cases.delete_employee import 
 )
 from restaurant_hub.features.staff.application.use_cases.delete_job_function import (
     DeleteJobFunctionUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.link_existing_login import (
+    LinkExistingLoginUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.list_employees import (
     ListEmployeesUseCase,
@@ -177,6 +181,9 @@ _E_DESLIGADO: Final = EmployeeId("e-desligado")
 _E_COM_LOGIN: Final = EmployeeId("e-com-login")
 _LOGIN: Final = UserId("login-do-registro")
 _EMAIL: Final = "maria@cantina.com"
+# Stage 3.10 — a conta que já existe no restaurante, membro de u1 (um gerente).
+_CONTA_EXISTENTE: Final = UserId("conta-existente")
+_EMAIL_DA_CONTA: Final = "gerente@cantina.com"
 _PERIODO_GRAVADO: Final = UnavailabilityPeriod(
     start=datetime(2026, 11, 2, 8, 0), end=datetime(2026, 11, 2, 12, 0)
 )
@@ -260,6 +267,9 @@ def _montar(classe: type, guard: AccessGuard) -> Montagem:
     # O login do registro é de funcionário (L-IG5): sem isso, desligar não revogaria
     # e o efeito do outro lado da fronteira sumiria do caminho feliz.
     gateway.seed_employee_login(_LOGIN, tenant_id=_A, unit_id=_U1)
+    gateway.seed_account(
+        _CONTA_EXISTENTE, email=_EMAIL_DA_CONTA, tenant_id=_A, unit_ids=frozenset({_U1})
+    )
     ids = FakeIdGenerator()
     disponiveis: dict[str, object] = {
         "employees": fakes.employees,
@@ -433,6 +443,11 @@ def _login_vinculado_no_endereco(montagem: Montagem, resultado: object) -> None:
     assert (registro.tenant_id, registro.unit_id) == (_A, _U1)
 
 
+def _conta_existente_vinculada_no_endereco(montagem: Montagem, resultado: object) -> None:
+    _devolve_o_registro_do_endereco(resultado)
+    assert _relido(montagem).user_id == _CONTA_EXISTENTE
+
+
 CENARIOS: Final[dict[str, Cenario]] = {
     "create_job_function": Cenario(
         classe=CreateJobFunctionUseCase,
@@ -603,6 +618,19 @@ CENARIOS: Final[dict[str, Cenario]] = {
         alvos=((_MANAGE_STAFF, _A, _U1), (_MANAGE_USERS, _A, _U1)),
         no_endereco_do_command=_login_vinculado_no_endereco,
     ),
+    # Stage 3.10 — R18, o mesmo par de R17 (ADR 3.10.0002 §5).
+    "link_existing_login": Cenario(
+        classe=LinkExistingLoginUseCase,
+        command=LinkExistingLoginCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E_ATIVO,
+            email=_EMAIL_DA_CONTA,
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1), (_MANAGE_USERS, _A, _U1)),
+        no_endereco_do_command=_conta_existente_vinculada_no_endereco,
+    ),
 }
 
 _NOMES: Final = sorted(CENARIOS)
@@ -679,6 +707,7 @@ def test_os_use_cases_de_dois_alvos_sao_os_do_concept() -> None:
         "copy_employee_to_unit",
         "create_job_function",
         "create_login_for_employee",
+        "link_existing_login",
         "set_job_function_units",
     ]
 
@@ -908,6 +937,8 @@ _MATRIZ_R3: Final[dict[str, tuple[tuple[str, str | None], ...]]] = {
     "reactivate_employee": ((_MANAGE_STAFF, "unit_id"),),
     "copy_employee_to_unit": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_STAFF, "target_unit_id")),
     "create_login_for_employee": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_USERS, "unit_id")),
+    # Stage 3.10 — as transições do vínculo de login (ADR 3.10.0002 §5).
+    "link_existing_login": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_USERS, "unit_id")),
 }
 
 
