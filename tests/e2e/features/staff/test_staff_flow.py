@@ -504,3 +504,38 @@ async def test_issue_207_gerente_de_a_nao_renomeia_nem_apaga_funcao_so_de_b(
     ids_restantes = {f["id"] for f in restantes.json()}
     assert so_de_b in ids_restantes
     assert ids_restantes.isdisjoint({so_de_a, de_todas})
+
+
+async def test_issue_207_gerente_e_rh_de_todas_as_unidades_negados_em_funcao_de_todas(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """A consequência de produto do ADR 0.0.0023, pelo HTTP real: "todas" é do dono.
+
+    A matriz de autorização semeia a função nas duas unidades do cenário para que
+    `manager` e `hr` sigam alcançando o `PATCH`; este é o caso que ela deixou de
+    exercer. O `manager` do cenário e um `hr` são membros de **todas** as unidades
+    que existem hoje, e mesmo assim recebem 403 com o corpo constante ao renomear e
+    ao apagar uma função que vale em todas: "todas" inclui as unidades futuras e
+    exige `manage_tenant`. Nada muda, e os dois papéis respondem igual (CA12).
+    """
+    rh_das_duas = await _criar_ator(
+        client, cenario, "rh-das-duas@cantina.com", "hr", (cenario.unidade_a, cenario.unidade_b)
+    )
+    funcoes = f"{API}/job-functions"
+    criada = await client.post(funcoes, json={"name": "Garçom"}, headers=auth(cenario.owner))
+    assert criada.status_code == HTTPStatus.CREATED, criada.text
+    assert criada.json()["all_units"] is True
+    de_todas = str(criada.json()["id"])
+
+    for ator in (cenario.manager, rh_das_duas):
+        renomeada = await client.patch(
+            f"{funcoes}/{de_todas}", json={"name": "Tomado"}, headers=auth(ator)
+        )
+        apagada = await client.delete(f"{funcoes}/{de_todas}", headers=auth(ator))
+        for negada in (renomeada, apagada):
+            assert negada.status_code == HTTPStatus.FORBIDDEN, negada.text
+            assert negada.json() == _CORPO_403
+
+    catalogo = await client.get(funcoes, headers=auth(cenario.owner))
+    por_id = {f["id"]: (f["name"], f["all_units"]) for f in catalogo.json()}
+    assert por_id[de_todas] == ("Garçom", True)
