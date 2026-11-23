@@ -52,6 +52,7 @@ class UnitResult:
     id: UnitId
     restaurant_id: RestaurantId
     name: str
+    timezone: str
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,18 @@ class AccountRoleResult:
     """
 
     role: Role
+
+
+@dataclass(frozen=True)
+class UnitTimezoneResult:
+    """O fuso de uma unidade existente (issue #198, ADR 4.1.0005).
+
+    `timezone` é a chave IANA (`America/Sao_Paulo`), conferida contra a base na
+    criação (`Unit.create`). A leitura não a reconfere: a base do processo pode ter
+    mudado desde então, e quem converte trata a chave que não carregar.
+    """
+
+    timezone: str
 
 
 @dataclass(frozen=True)

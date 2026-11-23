@@ -125,6 +125,8 @@ def test_o_mapa_nao_tem_entrada_orfa() -> None:
         (domain_errors.PlatformAdminTenantError(), 422),
         (domain_errors.PlatformAdminMembershipError(), 422),
         (domain_errors.CrossTenantError("a", "b"), 422),
+        # Issue #198 — chave de fuso desconhecida (ADR 4.1.0005).
+        (domain_errors.InvalidTimezoneError("Lua/Base"), 422),
         # Stage 2.7 — papel válido que a fachada não provisiona (ADR 2.7.0001).
         (application_errors.RoleNotProvisionableError("owner"), 422),
         # Issue #170 — a conta foi gravada e o e-mail não saiu: culpa do servidor.

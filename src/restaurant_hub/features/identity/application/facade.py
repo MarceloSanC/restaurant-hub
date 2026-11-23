@@ -48,6 +48,17 @@ extrair o Bearer e anotar o ator para o log (#26) são do adapter HTTP de
 identity, que publica `AccessPrincipal` — o tipo daqui — por
 `IdentityGuard.authenticate_principal`.
 
+**A fachada da unidade (`IdentityUnitFacade`, issue #198, ADR 4.1.0005)** é a
+terceira classe deste módulo: a leitura do fuso da unidade, para o BC que converte
+horário de parede em instante (e-mail da 4.6, ponto do Step 7, hub). Classe
+própria, e não um método a mais em `IdentityFacade`, porque o consumidor é outro:
+o gateway de staff não precisa do fuso, e quem precisa do fuso não precisa de
+provisionar conta. Valem as três propriedades — primitivos, sem tradução, sem
+autorizar —, e o endereço é o par (tenant, unidade): unidade de outro tenant é
+`None`, como a inexistente. Ainda **não** é montada no `composition_root`: nenhum
+BC a consome, e o port de leitura do consumidor nasce com ele (o par nomeado no
+`.importlinter` também). A montagem entra no mesmo PR do primeiro consumidor.
+
 A fachada é montada **uma vez**, no `composition_root`, sobre os **mesmos
 repositórios, `EmailSender` e `Clock`** que servem as rotas de identity — um
 grafo, não dois. Os três primeiros use cases por baixo dela nasceram na Stage
@@ -61,6 +72,7 @@ from dataclasses import dataclass, field
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthorizeActionCommand,
     GetAccountRoleCommand,
+    GetUnitTimezoneCommand,
     ProvisionAccountCommand,
     RevokeAllSessionsCommand,
     SendInvitationCommand,
@@ -76,6 +88,9 @@ from restaurant_hub.features.identity.application.use_cases.authorize_action imp
 )
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.get_unit_timezone import (
+    GetUnitTimezoneUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     ProvisionAccountUseCase,
@@ -102,6 +117,7 @@ __all__ = [
     "EmailAlreadyRegisteredError",
     "IdentityAccessFacade",
     "IdentityFacade",
+    "IdentityUnitFacade",
     "InvalidEmailError",
     "PermissionDeniedError",
     "ProvisionedAccount",
@@ -289,3 +305,25 @@ class IdentityAccessFacade:
             actor_tenant_id=authorized.actor_tenant_id,
             scope_unit_id=authorized.scope_unit_id,
         )
+
+
+class IdentityUnitFacade:
+    """O que outro BC pode ler de uma unidade, em primitivos (issue #198)."""
+
+    def __init__(self, get_unit_timezone: GetUnitTimezoneUseCase) -> None:
+        self._get_unit_timezone = get_unit_timezone
+
+    def timezone(self, *, tenant_id: str, unit_id: str) -> str | None:
+        """A chave IANA do fuso da unidade, ou `None` se ela não existe no tenant.
+
+        Só leitura (ADR 4.1.0005). Unidade de outro tenant é `None`, como a
+        inexistente: a fachada não autoriza, mas a leitura não atravessa tenants.
+        Devolve a chave, não um `ZoneInfo`: a conversão de horário de parede em
+        instante é do consumidor (ADR 4.1.0005 §Decision 3), e é ele quem trata
+        a chave que a base dele não carregar: a chave foi conferida na criação da
+        unidade, não nesta leitura. A falha do repositório sobe como é.
+        """
+        result = self._get_unit_timezone.execute(
+            GetUnitTimezoneCommand(tenant_id=RestaurantId(tenant_id), unit_id=UnitId(unit_id))
+        )
+        return None if result is None else result.timezone

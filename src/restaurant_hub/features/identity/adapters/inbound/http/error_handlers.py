@@ -67,6 +67,7 @@ from restaurant_hub.features.identity.domain.exceptions.errors import (
     InvalidIdentifierError,
     InvalidNameError,
     InvalidRoleError,
+    InvalidTimezoneError,
     MissingTenantError,
     PlatformAdminMembershipError,
     PlatformAdminTenantError,
@@ -162,6 +163,8 @@ IDENTITY_ERROR_STATUS: Final[dict[type[IdentityFailure], int]] = {
     PlatformAdminTenantError: HTTP_UNPROCESSABLE,
     PlatformAdminMembershipError: HTTP_UNPROCESSABLE,
     CrossTenantError: HTTP_UNPROCESSABLE,
+    # Issue #198 — fuso da unidade fora das chaves IANA (ADR 4.1.0005).
+    InvalidTimezoneError: HTTP_UNPROCESSABLE,
     # Stage 2.7 — papel válido que a fachada não provisiona. Nenhuma rota o alcança;
     # 422 pela mesma razão de `InvalidRoleError`: o conteúdo pedido é recusado.
     RoleNotProvisionableError: HTTP_UNPROCESSABLE,

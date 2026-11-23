@@ -23,6 +23,7 @@ from restaurant_hub.features.identity.application import errors as erros_de_appl
 from restaurant_hub.features.identity.application import facade as modulo_facade
 from restaurant_hub.features.identity.application.dtos.commands import (
     GetAccountRoleCommand,
+    GetUnitTimezoneCommand,
     ProvisionAccountCommand,
     RevokeAllSessionsCommand,
     SendInvitationCommand,
@@ -31,6 +32,7 @@ from restaurant_hub.features.identity.application.dtos.identifiers import Passwo
 from restaurant_hub.features.identity.application.dtos.results import (
     AccountRoleResult,
     ProvisionedAccountResult,
+    UnitTimezoneResult,
     UserResult,
 )
 from restaurant_hub.features.identity.application.errors import RoleNotProvisionableError
@@ -39,6 +41,7 @@ from restaurant_hub.features.identity.application.facade import (
     AccessPrincipal,
     IdentityAccessFacade,
     IdentityFacade,
+    IdentityUnitFacade,
     ProvisionedAccount,
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
@@ -46,6 +49,9 @@ from restaurant_hub.features.identity.application.use_cases.authorize_action imp
 )
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.get_unit_timezone import (
+    GetUnitTimezoneUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
     PROVISIONABLE_ROLES,
@@ -417,6 +423,8 @@ class TestReexportacao:
             "EmailAlreadyRegisteredError",
             "IdentityAccessFacade",
             "IdentityFacade",
+            # Issue #198 — a leitura do fuso da unidade (ADR 4.1.0005).
+            "IdentityUnitFacade",
             "InvalidEmailError",
             "PermissionDeniedError",
             "ProvisionedAccount",
@@ -702,3 +710,66 @@ class TestFachadaDeAcesso:
         """Sobrevivia: tirar `frozen` — o ator que decide acesso não pode ter o tenant reescrito."""
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(valor, campo, "outro")
+
+
+# ---------------------------------------------------------------------------
+# Issue #198 — `IdentityUnitFacade`, a leitura do fuso da unidade (ADR 4.1.0005)
+# ---------------------------------------------------------------------------
+
+
+class _EspiaoDeFuso(GetUnitTimezoneUseCase):
+    def __init__(
+        self, *, devolve: UnitTimezoneResult | None = None, levanta: Exception | None = None
+    ) -> None:
+        self.commands: list[GetUnitTimezoneCommand] = []
+        self._devolve = devolve
+        self._levanta = levanta
+
+    def execute(self, command: GetUnitTimezoneCommand) -> UnitTimezoneResult | None:
+        self.commands.append(command)
+        if self._levanta is not None:
+            raise self._levanta
+        return self._devolve
+
+
+class TestFachadaDaUnidade:
+    def test_converte_o_endereco_e_devolve_a_chave_em_texto(self) -> None:
+        espiao = _EspiaoDeFuso(devolve=UnitTimezoneResult(timezone="America/Manaus"))
+
+        fuso = IdentityUnitFacade(espiao).timezone(tenant_id="rest-a", unit_id="unit-a1")
+
+        assert fuso == "America/Manaus"
+        assert type(fuso) is str
+        assert espiao.commands == [
+            GetUnitTimezoneCommand(tenant_id=RestaurantId("rest-a"), unit_id=UnitId("unit-a1"))
+        ]
+
+    def test_unidade_desconhecida_e_none(self) -> None:
+        fachada = IdentityUnitFacade(_EspiaoDeFuso(devolve=None))
+
+        assert fachada.timezone(tenant_id="rest-a", unit_id="fantasma") is None
+
+    def test_excecao_da_consulta_sobe_na_mesma_instancia(self) -> None:
+        falha = RuntimeError("banco fora")
+        fachada = IdentityUnitFacade(_EspiaoDeFuso(levanta=falha))
+
+        with pytest.raises(RuntimeError) as excinfo:
+            fachada.timezone(tenant_id="rest-a", unit_id="unit-a1")
+
+        assert excinfo.value is falha
+
+    def test_sobre_o_use_case_real_o_tenant_alheio_e_none(self) -> None:
+        """O grafo real de fakes: o fuso gravado volta; o par trocado de tenant, não."""
+        units = InMemoryUnitRepository()
+        units.add(
+            Unit(
+                id=UnitId("unit-a1"),
+                restaurant_id=RestaurantId("rest-a"),
+                name="Centro",
+                timezone="America/Manaus",
+            )
+        )
+        fachada = IdentityUnitFacade(GetUnitTimezoneUseCase(units))
+
+        assert fachada.timezone(tenant_id="rest-a", unit_id="unit-a1") == "America/Manaus"
+        assert fachada.timezone(tenant_id="rest-b", unit_id="unit-a1") is None
