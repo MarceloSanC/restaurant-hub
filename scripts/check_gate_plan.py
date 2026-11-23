@@ -79,7 +79,10 @@ TECHNICAL_GLOB = "docs/stages/*/technical.md"
 
 # As Stages aprovadas antes do merge do ADR 0.0.0021 (PR #192, 2026-11-16): as 20
 # que estavam em `docs/stages/` e as três em execução no merge (2.7, 3.11 e 4.4,
-# ADR 0.0.0021 Decisão 11). Lista fechada: não se adiciona Stage aqui.
+# ADR 0.0.0021 Decisão 11). Lista fechada: não se adiciona Stage aqui. Parecida, mas
+# de outra regra e outra data: `LEGACY_CHECKPOINT_STAGES` em
+# `scripts/check_technical_postexec.py` (disposições dos Checkpoints, issue #210,
+# com a 3.10) — as duas não se unificam.
 LEGACY_STAGES: frozenset[str] = frozenset(
     {
         "1.1-bootstrap",

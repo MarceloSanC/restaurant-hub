@@ -660,6 +660,10 @@ Após a última Task, executar o checklist de fechamento do
       `BEGIN/END: post-execution`).
 - [ ] §7 do `technical.md` reflete o que realmente aconteceu na execução
       (entradas `[decision]`/`[finding]`/`[deviation]`/`[measurement]` com header `data — [tag] escopo — autor`).
+- [ ] No fluxo de sessão única (§11.1), a §7 tem a entrada de disposição de
+      cada Checkpoint (A, B e cada bloco do C), gravada no commit que o
+      fechou (CONVENTIONS §3.4); no fluxo multi-sessão, as entradas do A e
+      do B registram os gates humanos dos Passos 5 e 7 do RUNBOOK.
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] Commit final `stage N.M: complete` no branch.
 - [ ] PR contra `develop` aberto e mergeado, seguindo os
@@ -900,6 +904,11 @@ e [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
    - produz `concept.md` + `technical.md`; **pausa opcional de gate
      humano** sobre os dois artefatos antes da Fase 4 — o fluxo ideal
      quando houve decisão de peso (o prompt oferece a pausa);
+   - passa o concept, o technical e cada bloco de Tasks pelos
+     Checkpoints A, B e C (revisores de contexto zerado) e grava a
+     disposição de cada achado na §7 do `technical.md`, no commit que
+     fecha o checkpoint — o relatório da sessão não sobrevive a uma
+     troca de sessão no meio da Stage (CONVENTIONS §3.4);
    - executa as Tasks (1 commit cada), roda a auditoria de testes e o
      gate de saída (RUNBOOK Passo 10);
    - **abre o PR em estado "falta revisar"**: marca no checklist só o

@@ -5,7 +5,7 @@ when-use: Toda vez que iniciar uma nova Stage no projeto destino
 keywords: [runbook, stage, concept, technical, execucao, lifecycle]
 status: draft
 created_at: 2026-05-14
-updated_at: 2026-11-16
+updated_at: 2026-11-23
 runbook_id: stage-lifecycle
 triggers:
   - Stage anterior foi mergeada e a próxima está pronta para iniciar
@@ -244,11 +244,15 @@ Checklist (PIPELINE §7.4):
 - [ ] ADRs identificados como necessários foram escritos (`accepted`).
 - [ ] Stage cabe em ~3–12 Tasks (`CONVENTIONS.md` §6); se cresceu além disso, dividir antes de seguir.
 - [ ] Frontmatter completo; `status: done`.
+- [ ] Entrada `[decision] Checkpoint A` na §7 do esqueleto do `technical.md`
+      (CONVENTIONS §3.4): neste fluxo, sem revisor de contexto zerado, o
+      gate humano faz as vezes do Checkpoint A, e a entrada registra o que
+      ele pediu e como ficou — ou que aprovou sem ajuste.
 
 **Aprovado:**
 
 ```powershell
-git add "docs/stages/$N.$M-$slug/concept.md" "docs/adr/$($N)_$($M)_*.md"
+git add "docs/stages/$N.$M-$slug/concept.md" "docs/stages/$N.$M-$slug/technical.md" "docs/adr/$($N)_$($M)_*.md"
 git commit -m "stage $N.$M: conceptual approved
 
 Refs #$issue"
@@ -400,7 +404,11 @@ Checklist (PIPELINE §8.4):
 - [ ] Número de Tasks saudável (3–12; ≥ 14 = Stage grande demais).
 - [ ] §7 "Execução" presente com marcadores
       `<!-- BEGIN: post-execution -->` / `<!-- END: post-execution -->`
-      (vazia ou contendo apenas placeholder).
+      com as entradas `[decision] Checkpoint A` (do Passo 5) e
+      `[decision] Checkpoint B` — esta registrando o que este gate pediu, ou
+      que aprovou sem ajuste (CONVENTIONS §3.4); fora elas, vazia ou só com
+      o placeholder. Sem as duas, `check_technical_postexec.py` recusa o
+      technical `done` (Stage aberta depois da issue #210).
 - [ ] `concept.status == done` neste momento.
 - [ ] Frontmatter completo (incluindo `issue_id` e `branch`); `status: done`.
 

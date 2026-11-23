@@ -5,7 +5,7 @@ when-use: Apenas em corrida autônoma overnight autorizada pelo ADR 0.0.0004 (st
 keywords: [prompt, stage, autonomous, overnight, auto-merge, adr-0004, audit-gate]
 status: done
 created_at: 2026-07-12
-updated_at: 2026-11-16
+updated_at: 2026-11-22
 ---
 
 # Prompt — Execução de Stage em Sessão Única (variante AUTÔNOMA)
@@ -64,7 +64,9 @@ Nunca use ADR para enterrar uma contradição que deveria parar a corrida.
 
 Os achados de Checkpoint que o canônico manda escalar via `AskUserQuestion` seguem o mesmo
 mapa: reversível/barato → decisão autônoma (com ADR se não-trivial); contradição ou
-irreversível ambíguo → HALT. A regra do artefato colado para `refutado` continua intacta.
+irreversível ambíguo → HALT. A regra do artefato colado para `refutado` continua intacta, e a
+disposição — inclusive a decisão autônoma ou o HALT que tomou o lugar do `escalado` — vai para a
+entrada do checkpoint na §7, como no canônico.
 
 ### 2. Serviços externos e efeitos colaterais
 
@@ -158,7 +160,8 @@ verdade).
 - Escopo estrito por Task (a resolução da violação muda — §1 — mas a detecção não);
   §7 post-execution (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`); arquivo de estado no scratchpad.
 - **Checkpoints A/B/C** (revisores independentes de contexto zerado, prompt adversarial,
-  cap de 3 rodadas, disposição explícita de todo achado) e **Auditoria de Testes por
+  cap de 3 rodadas, disposição explícita de todo achado, gravada na §7 do technical no commit
+  que fecha cada checkpoint — canônico §"Revisão por Agentes Independentes") e **Auditoria de Testes por
   subagente independente** (loop até todos "sim", com mutação real nas funções críticas) —
   gates explícitos, não pular.
 - **Gates de saída com regra de evidência**: saída literal colada ou o gate não conta —
