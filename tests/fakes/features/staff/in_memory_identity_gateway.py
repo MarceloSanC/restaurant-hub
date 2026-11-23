@@ -135,6 +135,9 @@ class InMemoryIdentityGateway:
             encontrados por e-mail: nasceram no tenant e na unidade do registro.
         fail_account_query_with: se definido, `find_login_by_email` levanta
             **esta instância** (L-IG6, metade da falha).
+        fail_revoke_with: se definido, `revoke_login_sessions` levanta **esta
+            instância** — a falha de infraestrutura que L-IG4 não promete evitar
+            (Stage 3.10, auditoria de testes: "falha na revogação, nada é gravado").
     """
 
     logins: dict[UserId, ProvisionedLoginRecord] = field(default_factory=dict)
@@ -150,6 +153,7 @@ class InMemoryIdentityGateway:
     fail_role_query_with: Exception | None = None
     accounts: dict[str, ExistingLogin] = field(default_factory=dict)
     fail_account_query_with: Exception | None = None
+    fail_revoke_with: Exception | None = None
     mirror: Callable[[str], None] | None = None
     _sequence: int = 0
 
@@ -209,6 +213,8 @@ class InMemoryIdentityGateway:
     def revoke_login_sessions(self, user_id: UserId) -> None:
         """L-IG4 — idempotente e total: registra, nunca levanta."""
         self.record(f"revoke_login_sessions({user_id!r})")
+        if self.fail_revoke_with is not None:
+            raise self.fail_revoke_with
         self.revoked.append(user_id)
 
     def is_employee_login(self, user_id: UserId) -> bool:

@@ -550,3 +550,18 @@ def test_ca4_trocar_aplica_a_regra_ao_login_antigo_e_nao_ao_novo() -> None:
 
     assert gateway.revoked == [login]
     assert f"is_employee_login({_NOVA!r})" not in gateway.calls
+
+
+def test_r13_falha_da_revogacao_sobe_crua_e_o_registro_fica_ativo() -> None:
+    fakes, gateway, login = _arranjo()
+    _gravar(fakes, _registro(user_id=login))
+    falha = RuntimeError("identity fora")
+    gateway.fail_revoke_with = falha
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _desligar(fakes.employees, gateway)
+
+    assert excinfo.value is falha
+    relido = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert relido.active is True
