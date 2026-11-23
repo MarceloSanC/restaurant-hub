@@ -1876,6 +1876,14 @@ skills_hint: [repository-pattern, composition-root]
 > demandada deixa a demanda sem nome. Fora da Stage, com dono: `Unit.timezone` (#198) e o write
 > skew de fronteira (#199).
 
+> Nota (2026-11-22): o write skew de fronteira (#199) fechou fora da Stage, como issue
+> ([ADR 4.4.0005](./adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md)):
+> `ScheduleRepository.save` passa a receber as vizinhas que a avaliação leu e recusa com
+> `ScheduleVersionConflictError` quando uma delas mudou (lei L-SC9). Da lista "Fora da Stage" da
+> nota anterior segue aberta só a #198. **A 4.5 herda também** o corpo HTTP dessa recusa: o erro
+> traz `changed_neighbour_id`, e a escala editada não mudou, então reenviar o mesmo lote é válido
+> (ADR 4.4.0005 §Decision 3).
+
 #### Stage 4.5 — `4.5-scheduling-http`
 
 **Descrição humana:** endpoints do editor (demanda, alocações, avaliação ao vivo, publicar), calendário dia/semana/mês, escalas anteriores e "minha escala" (RBAC: funcionário só vê a própria); e2e do fluxo completo.
