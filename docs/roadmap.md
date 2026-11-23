@@ -282,6 +282,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#248](https://github.com/MarceloSanC/restaurant-hub/issues/248) | Decidir se gerente de restaurante de uma unidade volta a renomear e apagar funções de todas as unidades | staff | application | open | #207 |
 | [#260](https://github.com/MarceloSanC/restaurant-hub/issues/260) | Classificar na regra 10 todo port de saída que não é repositório | shared | tooling | done | #243 |
 | [#262](https://github.com/MarceloSanC/restaurant-hub/issues/262) | Pôr a fachada de identity no escopo da mutação de acesso | identity | tooling + tests | open | #217 |
+| [#265](https://github.com/MarceloSanC/restaurant-hub/issues/265) | O `lock-check` do CI passa com o lock defasado porque o `uv sync` o reescreve antes | shared | .github + tests | open | #244 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
