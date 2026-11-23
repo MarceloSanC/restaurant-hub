@@ -585,6 +585,12 @@ INALCANCAVEIS_POR_HTTP: Final = frozenset(
         "JobFunctionAlreadyExistsError",
         "EmployeeAlreadyExistsError",
         "JobFunctionEnablementChangedError",
+        # Stage 3.10: as rotas de trocar e desvincular nascem na Task 10.
+        "EmployeeHasNoLoginError",
+        # Stage 3.10: só uma corrida entre duas requisições produz esta exceção
+        # (a escrita condicional confere o estado lido); a conduta com duas
+        # conexões do repositório a cobre (ADR 3.10.0001 §2).
+        "EmployeeLoginChangedError",
     }
 )
 
