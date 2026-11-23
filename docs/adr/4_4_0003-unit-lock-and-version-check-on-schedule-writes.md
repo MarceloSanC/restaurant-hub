@@ -108,7 +108,7 @@ level before the first statement of the transaction, as `PostgresEmployeeReposit
 - `docs/stages/4.4-scheduling-persistence/concept.md` §5, §6, §7 D-LOCK, D-SKEW
 - [ADR 4.4.0005](./4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md) (issue #199)
 
-## Nota — o `save` passa a conferir as vizinhas lidas (issue #199)
+## Supersessão parcial
 
 **2026-11-22 — o último item de §Consequences › "Neutral / trade-offs accepted" (*"The lock
 does not close the boundary write skew of concept 4.3 §3"*) foi superado pelo ADR 4.4.0005; a
