@@ -1554,7 +1554,7 @@ def test_l_react_gravado_ja_ativo_e_idempotente(repos: RepositoriosDeStaff) -> N
     )
 
 
-def test_a_lei_da_issue_242_esta_declarada_no_port() -> None:
+def test_a_lei_da_issue_242_esta_declarada_no_port(repos: RepositoriosDeStaff) -> None:
     documentacao = EmployeeRepository.reactivate.__doc__ or ""
     assert "L-REACT" in documentacao
     assert "#242" in documentacao
