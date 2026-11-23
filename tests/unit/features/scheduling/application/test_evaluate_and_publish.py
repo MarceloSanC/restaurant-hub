@@ -1,6 +1,6 @@
 """`evaluate_schedule` e `publish_schedule` (concept 4.3 §5.4 a §5.13).
 
-CA02, CA04, CA05, CA06, CA07, CA10, CA12, CA16, CA25, CA26.
+CA02, CA04, CA05, CA06, CA07, CA10, CA12, CA16, CA25, CA26; issue #209 (função habilitada).
 """
 
 import dataclasses
@@ -25,6 +25,7 @@ from restaurant_hub.features.scheduling.application.errors import (
     BlockingViolationsError,
     IdentifierInUseError,
     InactiveStaffMemberError,
+    JobFunctionNotEnabledInUnitError,
     MissingStaffRecordsError,
     ScheduleNotFoundError,
     ScheduleVersionConflictError,
@@ -54,6 +55,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.employee_facts impo
 from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
     AssignmentId,
     EmployeeId,
+    JobFunctionId,
     ScheduleId,
     ShiftBandId,
     ShiftDemandId,
@@ -600,3 +602,67 @@ def test_ca07_aceite_parcial_recusa_so_com_as_pendentes_sem_gravar(world: World)
         _publish(world).execute(_c(world, lote, so_uma))
     assert excinfo.value.violations == (segunda,)
     assert "save" not in world.schedules.calls
+
+
+# --- issue #209 — a demanda da unidade só aceita função habilitada nela ----------------------
+
+_CAIXA = JobFunctionId("caixa")
+_DEMANDA_CAIXA = (DeclareDemand(ShiftDemandId("d-caixa"), _F1, _CAIXA, DemandQuantity(1)),)
+
+
+def _caixa_so_em(world: World, unidade: UnitId) -> None:
+    """`caixa` existe no catálogo de t1, mas vale só em `unidade` (Stage 3.11)."""
+    world.staff.add_job_function(T1, JobFunctionEntry(_CAIXA, "Caixa"), units=frozenset({unidade}))
+
+
+@pytest.mark.parametrize("caso", ["avaliar", "publicar"])
+def test_issue_209_demanda_de_funcao_de_outra_unidade_recusa_sem_gravar(
+    world: World, caso: str
+) -> None:
+    _seed(world)
+    _caixa_so_em(world, U2)
+    with pytest.raises(JobFunctionNotEnabledInUnitError) as excinfo:
+        if caso == "avaliar":
+            _evaluate(world).execute(_q(world, _DEMANDA_CAIXA))
+        else:
+            _publish(world).execute(_c(world, _DEMANDA_CAIXA))
+    assert (excinfo.value.job_function_id, excinfo.value.unit_id) == (_CAIXA, U1)
+    assert "save" not in world.schedules.calls
+
+
+def test_issue_209_a_habilitacao_lida_e_a_da_unidade_da_escala(world: World) -> None:
+    """A mesma função, habilitada só na unidade da escala, passa: o endereço lido é o certo."""
+    _seed(world)
+    _caixa_so_em(world, U1)
+    resultado = _publish(world).execute(_c(world, _DEMANDA_CAIXA))
+    assert resultado.summary.version == 2  # noqa: PLR2004
+    gravada = world.schedules.find_by_id(T1, U1, _S1)
+    assert gravada is not None
+    assert _CAIXA in {d.job_function_id for f in gravada.bands for d in f.demands}
+
+
+def test_issue_209_demanda_gravada_antes_do_estreitamento_nao_trava_edicao_alheia(
+    world: World,
+) -> None:
+    """D1: a função deixou de valer na unidade depois; a demanda fica e o lote alheio passa."""
+    base = (
+        schedule("s1")
+        .enable_band(_F1, TimeRange(start=at(MONDAY, 10), end=at(MONDAY, 16)))
+        .declare_demand(_D1, _F1, COOK, DemandQuantity(1))
+        .declare_demand(ShiftDemandId("d-caixa"), _F1, _CAIXA, DemandQuantity(1))
+    )
+    _seed(world, base)
+    _caixa_so_em(world, U2)
+    _publish(world).execute(_c(world, (ChangeDemandQuantity(_D1, DemandQuantity(2)),)))
+    gravada = world.schedules.find_by_id(T1, U1, _S1)
+    assert gravada is not None
+    _, demanda = gravada.locate_demand(ShiftDemandId("d-caixa"))
+    assert demanda.quantity == DemandQuantity(1)
+    with pytest.raises(JobFunctionNotEnabledInUnitError):
+        _publish(world).execute(
+            _c(
+                world,
+                (ChangeDemandQuantity(ShiftDemandId("d-caixa"), DemandQuantity(2)),),
+                version=2,
+            )
+        )

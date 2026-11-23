@@ -5,7 +5,7 @@ when-use: Reference before letting scheduling read staff any other way, before a
 keywords: [adr, scheduling, staff, facade, gateway, bc-independence, import-linter, staff-read-port, user-id, reverse-guard, cross-bc]
 status: accepted
 created_at: 2026-11-16
-updated_at: 2026-11-16
+updated_at: 2026-11-23
 adr_id: 4.4.0004
 decision: 'features/staff/application/facade.py exposes StaffReadFacade, an in-process open host service with four read methods in primitive types built over EmployeeRepository and JobFunctionRepository, which does not authorize; scheduling implements StaffReadPort in features/scheduling/adapters/out/staff/local_staff_read_adapter.py importing only that facade, under a second named ignore_imports pair pinned by test; the records linked to a login are found by filtering the unit listing, with no new port method and no index; the reverse delete guard of ADR 4.1.0006 is a staff deliverable and is left to issue #194.'
 context_stage: 4.4-scheduling-persistence
@@ -106,3 +106,14 @@ routes. `tests/unit/features/staff/test_bc_independence.py` and
 - ADR 0.0.0016, ADR 3.3.0005, ADR 3.5.0001, ADR 3.5.0004, ADR 3.7.0001, ADR 4.1.0006, ADR 4.3.0003
 - `docs/LAYOUT.md` §3
 - `docs/stages/4.4-scheduling-persistence/concept.md` §4, §7 D-STAFF, D-USERID, D-REVERSE
+
+## Supersessão parcial
+
+**2026-11-23 — §Decision 1 › "using only `list_by_unit` and `list_by_tenant`" superada em
+parte pelo ADR 4.3.0005.** A `StaffReadFacade` ganhou um quinto método,
+`list_unit_functions(tenant_id, unit_id)`, sobre `JobFunctionRepository.list_by_unit` (L-JF6,
+criado pela Stage 3.11): onde a cláusula nomeia os dois métodos de repositório, leia-se
+`EmployeeRepository.list_by_unit`, `JobFunctionRepository.list_by_tenant` e
+`JobFunctionRepository.list_by_unit`. O método é aditivo, em primitivos e não autoriza; o
+adapter `LocalStaffReadAdapter` o traduz para a leitura L-ST6 do `StaffReadPort`. O par
+nomeado do `bc-independence`, a forma da aresta e o resto da decisão continuam valendo.

@@ -48,6 +48,7 @@ references:
   - ../../adr/4_1_0012-one-record-occupies-at-most-one-slot-per-band.md
   - ../../adr/4_2_0001-function-mismatch-follows-current-staff-record.md
   - ../../adr/4_2_0002-evaluator-input-and-violation-identity.md
+  - ../../adr/4_3_0005-demand-accepts-only-functions-enabled-in-the-unit.md
   - ../../adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md
 ---
 
@@ -258,6 +259,7 @@ da demanda** e pertence a scheduling (`workforce.md` §3.2).
   função pode ser demandada em qualquer unidade. Habilitação por unidade é a issue #41, não
   decidida (`roadmap.md` §Stage 3.4 › `non_goals`; ADR 3.4.0008 › "It is the foundation issue #41 will need").
   **Nota (2026-11-16):** a issue #41 foi decidida e entregue em staff pela Stage 3.11 (`workforce.md` §3.2 › "Nota (2026-11-16) — habilitação por unidade"): a função segue do tenant e passou a valer em todas as unidades ou num conjunto delas. Scheduling **ainda não consulta** a habilitação — a demanda continua aceitando qualquer função do tenant; decidir se a demanda de uma unidade se restringe às funções habilitadas nela fica para uma Stage do Step 4.
+  **Nota (2026-11-23, issue #209; [ADR 4.3.0005](../../adr/4_3_0005-demand-accepts-only-functions-enabled-in-the-unit.md)):** decidido sem esperar Stage — a demanda de uma unidade **só aceita função habilitada nela**. Declarar demanda de função que não vale na unidade, ou aumentar o `N` de uma já gravada, é recusado (`JobFunctionNotEnabledInUnitError`); scheduling lê a habilitação pelo `StaffReadPort` (lei L-ST6), sem FK entre BCs. A demanda gravada antes de staff estreitar a função **fica**: não é apagada, staff não recusa o estreitamento por causa dela e ela não bloqueia edição que não a introduz — reduzir, zerar, retirar e mover a faixa passam (D1, nota de 2026-11-01 em §6). Ela aparece como demanda descoberta e o auto-fill nunca a cobre. A alocação não muda: o registro da unidade só detém função habilitada nela (ADR 3.11.0002). Lacuna para o concept da Stage 4.5: status e corpo da recusa e como a borda sinaliza a demanda gravada antes do estreitamento.
 - **Cobertura** = `alocados ÷ N`. Cobertura **< 100% é estado legítimo** da escala vigente
   ("vagas não preenchíveis", "vagas descobertas" — `roadmap.md` §Stage 5.1 › "Descrição humana"; §Stage 5.2 › `definition_of_done`; `overview.md` §3 › "métricas de cobertura da demanda").
   **`N` é alvo, não teto:** cobertura **> 100%** também é legítima — a alocação excedente é
@@ -1130,6 +1132,7 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 | **4.4 / 4.5** | representação persistida dos dois regimes de tempo; forma na borda HTTP (§3.9) — *fechada pela Stage 4.4: `TIMESTAMP` sem fuso nas faixas, `TIMESTAMP WITH TIME ZONE` na trilha (ADR 4.4.0001); a forma na borda fica com a 4.5* |
 | **4.4 (technical)** | localização do adapter cross-BC (§3.10.1) — *fechada pela Stage 4.4: `scheduling/adapters/out/staff/` sobre a fachada de staff, segundo par do `bc-independence` (ADR 4.4.0004)* |
 | **4.5** | nomes das permissões; salvar × editar; config tenant-wide; promoção do `AccessGuard` (§4); atualizar o comentário de `role.py` › `_ROLE_PERMISSIONS` ("nenhuma permissão sobre a escala", superado pela errata do ADR 3.4.0006) junto com o mapa de papéis — *nota 2026-11-09: o comentário foi atualizado na issue #127; a 4.5 só o confere ao estender o mapa* |
+| **4.5** | status e corpo da recusa `JobFunctionNotEnabledInUnitError`; como a borda sinaliza a demanda gravada antes de a função deixar de valer na unidade (§3.3; ADR 4.3.0005) |
 | **4.6** | agrupamento/debounce; "afetados"; falha de envio; conteúdo; onde a flag persiste (§3.8) |
 | **4.7** | formato e biblioteca da imagem — delegado pelo roadmap §"Lacunas conhecidas" › "Formato da imagem da escala" (§3.8) |
 | **7.2 / 8.1** | contratos de leitura; "o que valia naquele dia" via auditoria (§3.10.3); grandezas "não conta" e "exceção de função" (§3.10.4) |

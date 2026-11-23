@@ -53,5 +53,12 @@ class GetCalendarUseCase:
         )
         first, last = require_range(query.first_day, query.last_day)
         found = self._schedules.list_in_range(query.tenant_id, query.unit_id, first, last)
-        view = load_staff(self._staff, query.tenant_id, query.unit_id, found, with_roster=False)
+        view = load_staff(
+            self._staff,
+            query.tenant_id,
+            query.unit_id,
+            found,
+            with_roster=False,
+            with_unit_functions=False,
+        )
         return to_calendar_result(first, last, found, view.members, view.function_names)

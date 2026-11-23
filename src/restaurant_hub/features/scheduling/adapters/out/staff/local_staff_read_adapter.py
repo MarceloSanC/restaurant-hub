@@ -73,3 +73,11 @@ class LocalStaffReadAdapter:
             JobFunctionEntry(job_function_id=JobFunctionId(f.job_function_id), name=f.name)
             for f in self._facade.list_functions(tenant_id)
         )
+
+    def list_unit_job_functions(
+        self, tenant_id: TenantId, unit_id: UnitId
+    ) -> tuple[JobFunctionEntry, ...]:
+        return tuple(
+            JobFunctionEntry(job_function_id=JobFunctionId(f.job_function_id), name=f.name)
+            for f in self._facade.list_unit_functions(tenant_id, unit_id)
+        )
