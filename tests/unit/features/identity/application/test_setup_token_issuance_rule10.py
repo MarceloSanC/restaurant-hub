@@ -27,6 +27,9 @@ import types
 
 import pytest
 
+# `_anotacao` da regra 10 lê só `Name`, `Attribute` e string; o detector deste
+# arquivo lê todos os nomes da anotação, então não depende dele.
+
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
@@ -50,18 +53,36 @@ def _carregar_check_layout() -> types.ModuleType:
 check_layout = _carregar_check_layout()
 
 
+def _nomes_na_anotacao(anotacao: ast.expr | None) -> set[str]:
+    """Todo nome que aparece na anotação — `X`, `mod.X`, `"X"`, `X | None`, `Optional[X]`."""
+    if anotacao is None:
+        return set()
+    nomes: set[str] = set()
+    for no in ast.walk(anotacao):
+        if isinstance(no, ast.Name):
+            nomes.add(no.id)
+        elif isinstance(no, ast.Attribute):
+            nomes.add(no.attr)
+        elif isinstance(no, ast.Constant) and isinstance(no.value, str):
+            nomes |= _nomes_na_anotacao(ast.parse(no.value, mode="eval").body)
+    return nomes
+
+
 def _recebem_repositorio(modulo: pathlib.Path, ports: set[str]) -> list[str]:
-    """`função(parâmetro: <Port>Repository)` em qualquer função ou método do módulo."""
+    """`função(parâmetro: ...<Port>Repository...)` em qualquer função ou método do módulo.
+
+    Lê **todo** parâmetro (`*args` e `**kwargs` inclusive) e todo nome dentro da
+    anotação, para que `X | None`, `Optional[X]` ou `"X"` não escapem.
+    """
     arvore = ast.parse(modulo.read_text(encoding="utf-8"))
     achados: list[str] = []
     for no in ast.walk(arvore):
         if not isinstance(no, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        argumentos = no.args
-        for arg in [*argumentos.posonlyargs, *argumentos.args, *argumentos.kwonlyargs]:
-            # O mesmo leitor de anotação que a regra 10 usa no construtor.
-            tipo = check_layout._anotacao(arg.annotation)
-            if tipo in ports:
+        a = no.args
+        parametros = [*a.posonlyargs, *a.args, *a.kwonlyargs, *filter(None, (a.vararg, a.kwarg))]
+        for arg in parametros:
+            for tipo in sorted(_nomes_na_anotacao(arg.annotation) & ports):
                 achados.append(f"{no.name}({arg.arg}: {tipo})")
     return achados
 
@@ -91,6 +112,28 @@ def test_o_detector_reprova_um_helper_que_recebe_o_repositorio(tmp_path: pathlib
     achados = _recebem_repositorio(plantado, {"PasswordSetupTokenRepository"})
 
     assert achados == ["issue_setup_token(tokens: PasswordSetupTokenRepository)"]
+
+
+@pytest.mark.parametrize(
+    "assinatura",
+    [
+        "tokens: PasswordSetupTokenRepository | None",
+        "tokens: Optional[PasswordSetupTokenRepository]",
+        "tokens: 'PasswordSetupTokenRepository'",
+        "tokens: ports.PasswordSetupTokenRepository",
+        "*tokens: PasswordSetupTokenRepository",
+        "**tokens: PasswordSetupTokenRepository",
+    ],
+)
+def test_o_detector_reprova_as_formas_disfarcadas_do_repositorio(
+    tmp_path: pathlib.Path, assinatura: str
+) -> None:
+    plantado = tmp_path / "_invitation.py"
+    plantado.write_text(f"def emitir({assinatura}) -> None:\n    pass\n", encoding="utf-8")
+
+    achados = _recebem_repositorio(plantado, {"PasswordSetupTokenRepository"})
+
+    assert achados == ["emitir(tokens: PasswordSetupTokenRepository)"]
 
 
 # --- 2. os cinco use cases reais continuam contados ----------------------------
