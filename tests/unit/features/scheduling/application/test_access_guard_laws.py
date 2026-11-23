@@ -94,8 +94,10 @@ def test_l_sg2_ator_de_outro_tenant_e_negado_mesmo_com_o_alvo_concedido() -> Non
     assert excinfo.value is guard.authorization_error
 
 
-@pytest.mark.parametrize(("tenant", "unidade"), [(_T, ""), (_T, "  ")])
+@pytest.mark.parametrize(("tenant", "unidade"), [(_T, ""), (_T, "  "), ("", _U)])
 def test_l_sg2_alvo_vazio_nunca_vira_escopo_mesmo_concedido(tenant: str, unidade: str) -> None:
+    """Inclui o tenant `""` **explícito** com o alvo do ator concedido: só a ausência (`None`)
+    é resolvida para o tenant do ator (L-SG5) — a mesma régua do adapter."""
     guard, ator = _guard()
     guard.grant(PERMISSION_MANAGE_SCHEDULE, tenant_id=tenant, unit_id=unidade)
     with pytest.raises(Exception) as excinfo:

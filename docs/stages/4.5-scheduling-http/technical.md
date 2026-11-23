@@ -581,4 +581,16 @@ atômica, plano de gates contra o PIPELINE §9.6). Correções no commit `stage 
 **Contexto:** `tests/unit/features/identity/application/test_authorize_requirement.py` (CA04 da 2.7) usava `required_permissions_for_role(Role.OWNER)` como insumo de um cenário sobre a **ordem** dos pedidos, e o conjunto do `owner` cresceu com as permissões de escala.
 **Razão:** o insumo virou o conjunto fixo das quatro permissões que o cenário sempre teve; a asserção (permissões por fora, unidades na ordem dada, sem deduplicar) não mudou. Ajuste mecânico abaixo do limiar de pergunta; o arquivo entrou no commit da Task 01.
 
+### 2026-11-23 — [measurement] Ponto 1 do plano de gates (Task 03) — Claude (Opus 5.5)
+**Contexto:** plano de gates da §1, ponto 1, depois da Task 03; orquestração autônoma — o ponto é o `lint-and-test` do Actions no commit da Task.
+**Medição:** o primeiro push das Tasks 01–03 não disparou o CI: o PR estava em conflito com `develop` (a #243 mergeou e mexeu na tabela de issues do roadmap). Rebase simples sobre `origin/develop` (`2bc397ad`), conflito do roadmap resolvido mantendo as três linhas (#258, #259, #260), `push --force-with-lease`. Hashes depois do rebase: Task 01 `7887bf79`, Task 02 `b7577217`, Task 03 `2ba7116e`. Run `ci` 45134080325, job `lint-and-test` **success** sobre `2ba7116e` — https://github.com/MarceloSanC/restaurant-hub/actions/runs/45134080325/job/137556047846
+**Razão:** o ponto 1 fecha o grupo que muda contrato lido por outro BC e por outra camada (enum e mapa de papéis, port do guard, `.importlinter`) antes de a borda ser escrita sobre ele.
+
+### 2026-11-23 — [decision] Checkpoint C (bloco Tasks 01–03) — disposições — Claude (Opus 5.5)
+**Contexto:** rodada 1, um revisor de contexto zerado sobre `744ddb69..2ba7116e`, com as skills `fastapi-thin-adapter`, `hex-arch-python`, `pytest-with-fakes` e `composition-root`; seis mutações aplicadas à mão no adapter (três mortas, três sobreviventes). Correções no commit `[4.5/task-03-fix]`.
+- **C1** (minor) a mensagem da `PermissionDeniedError` do ator sem tenant e a do `TypeError` de wiring sobreviviam à mutação → corrigido (asserção de papel e permissão na mensagem; `match="object"`, como em staff)
+- **C2** (minor) trocar `TenantId(target_tenant_id)` por `TenantId(actor_tenant_id)` sobrevivia (os dublês sempre igualavam os dois) → corrigido (caso com `grant.actor_tenant_id` diferente do tenant pedido; o escopo traz o pedido)
+- **C3** (minor) a suíte do fake não cobria o tenant `""` explícito com o alvo do ator concedido (só a unidade vazia) → corrigido (caso `("", u1)` na parametrização de alvo vazio)
+- Pergunta fixa ("regra que já existe em outro lugar / no dono errado?"): nenhum achado — a resolução do tenant omitido repete a de staff por decisão (ADR 4.5.0003 §Decision 2).
+
 <!-- END: post-execution -->

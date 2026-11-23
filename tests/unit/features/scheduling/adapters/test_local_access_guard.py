@@ -222,17 +222,33 @@ def test_l_sg2_l_sg5_ator_sem_tenant_e_negado_mesmo_concedido(
     tenant_do_ator: str | None, pedido: str | None
 ) -> None:
     facade = _SpyAccessFacade(_grant(actor_tenant_id=tenant_do_ator, role="platform_admin"))
-    with pytest.raises(PermissionDeniedError):
+    with pytest.raises(PermissionDeniedError) as excinfo:
         _guard(facade).authorize(
             _ator(tenant_id=tenant_do_ator),
             PERMISSION_MANAGE_SCHEDULE,
             tenant_id=pedido,
             unit_id="u1",
         )
+    # A mensagem vai para o log (o corpo 403 é constante): papel e permissão do grant.
+    assert "platform_admin" in str(excinfo.value)
+    assert PERMISSION_MANAGE_SCHEDULE in str(excinfo.value)
+
+
+def test_l_sg2_o_escopo_traz_o_tenant_pedido_e_nao_o_lido_do_banco() -> None:
+    """O escopo é o alvo pedido (ou resolvido) confirmado — não `grant.actor_tenant_id`.
+
+    Na cadeia real identity força os dois a serem iguais; o dublê os separa para que a troca
+    de um pelo outro no adapter não sobreviva (Checkpoint C, bloco 01–03).
+    """
+    facade = _SpyAccessFacade(_grant(actor_tenant_id="t-do-banco"))
+    escopo = _guard(facade).authorize(
+        _ator(), PERMISSION_VIEW_SCHEDULE, tenant_id="t1", unit_id="u1"
+    )
+    assert escopo.tenant_id == "t1"
 
 
 def test_ator_que_nao_veio_do_guard_e_defeito_de_wiring() -> None:
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="object"):
         _guard(_SpyAccessFacade(_grant())).authorize(
             object(), PERMISSION_MANAGE_SCHEDULE, unit_id="u1"
         )
