@@ -279,7 +279,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#243](https://github.com/MarceloSanC/restaurant-hub/issues/243) | Derivar a tabela de auxiliares que escrevem da regra 10 | shared | tooling | done | `3.10-login-link-management` |
 | [#246](https://github.com/MarceloSanC/restaurant-hub/issues/246) | Repetir no import-linter o alcance dos use cases facade-only de identity | identity | tooling | done | #233 |
 | [#248](https://github.com/MarceloSanC/restaurant-hub/issues/248) | Decidir se gerente de restaurante de uma unidade volta a renomear e apagar funções de todas as unidades | staff | application | open | #207 |
-| [#260](https://github.com/MarceloSanC/restaurant-hub/issues/260) | Classificar na regra 10 todo port de saída que não é repositório | shared | tooling | open | #243 |
+| [#260](https://github.com/MarceloSanC/restaurant-hub/issues/260) | Classificar na regra 10 todo port de saída que não é repositório | shared | tooling | done | #243 |
 | [#262](https://github.com/MarceloSanC/restaurant-hub/issues/262) | Pôr a fachada de identity no escopo da mutação de acesso | identity | tooling + tests | open | #217 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
