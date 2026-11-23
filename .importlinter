@@ -314,3 +314,32 @@ ignore_imports =
     restaurant_hub.features.staff.adapters.out.identity.* -> restaurant_hub.features.identity.application.facade
     restaurant_hub.features.scheduling.adapters.out.staff.* -> restaurant_hub.features.staff.application.facade
 unmatched_ignore_imports_alerting = error
+
+# Issue #246 — o ALCANCE dos use cases facade-only de identity. Eles não autorizam:
+# quem autoriza é o consumidor da fachada (ADR 3.5.0001 §Decision 1, ADR 0.0.0020
+# §Inventory), logo um terceiro importador reabriria a decisão. A guarda principal é
+# o teste CA14 (tests/unit/features/identity/application/test_use_cases_authorize.py),
+# que varre `src/` por AST e vê também o import por string e pelo pacote pai; este
+# contrato repete só a parte estática, no `lint-imports` (pre-commit e CI), com
+# mensagem de arquitetura antes da suíte. Não substitui o CA14: o grafo não vê import
+# por string nem símbolo reexportado pela fachada.
+#
+# `type = protected` (import-linter 2.13, docs/contract_types/protected.md): só
+# imports DIRETOS contam, logo a cadeia legítima staff -> fachada -> use case não
+# acusa — um `forbidden` acusaria, por checar imports indiretos por padrão.
+#
+# A lista de `protected_modules` é a mesma de `_FACADE_ONLY` do CA14;
+# `test_a_lista_do_contrato_facade_only_e_a_do_ca14` (mesmo arquivo do CA14) trava a
+# igualdade. Use case facade-only novo => entra nas duas no mesmo commit.
+[importlinter:contract:identity-facade-only-reach]
+name = use cases facade-only de identity so sao importados pela fachada e pelo composition_root (ADR 0.0.0020)
+type = protected
+protected_modules =
+    restaurant_hub.features.identity.application.use_cases.get_account_role
+    restaurant_hub.features.identity.application.use_cases.get_unit_timezone
+    restaurant_hub.features.identity.application.use_cases.provision_account
+    restaurant_hub.features.identity.application.use_cases.revoke_all_sessions
+    restaurant_hub.features.identity.application.use_cases.send_invitation
+allowed_importers =
+    restaurant_hub.features.identity.application.facade
+    restaurant_hub.composition_root
