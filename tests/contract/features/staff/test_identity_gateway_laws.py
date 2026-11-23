@@ -429,6 +429,16 @@ def test_l_ig6_email_com_espaco_e_maiusculas_encontra_a_conta(
     assert conta.user_id == user_id
 
 
+def test_l_ig6_o_email_de_conta_existente_esta_em_uso_para_provisionar(
+    gateway: GatewaySobContrato,
+) -> None:
+    """L-IG2 sobre uma conta que não nasceu por este port: o e-mail já é login de alguém."""
+    gateway.conta_existente("ana@contrato.exemplo", "manager", (gateway.unit_id,))
+
+    with pytest.raises(LoginEmailAlreadyInUseError):
+        _provisionar(gateway, email="ana@contrato.exemplo")
+
+
 def test_l_ig6_email_sem_conta_e_none(gateway: GatewaySobContrato) -> None:
     gateway.conta_existente("ana@contrato.exemplo", "manager", (gateway.unit_id,))
 
