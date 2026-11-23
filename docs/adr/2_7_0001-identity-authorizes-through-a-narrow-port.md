@@ -5,7 +5,7 @@ when-use: Reference before adding an identity use case that acts on behalf of an
 keywords: [adr, identity, authorization, action-authorizer, port, invite-owner, facade, platform-admin, fail-closed, defense-in-depth]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 adr_id: "2.7.0001"
 decision: 'The identity use cases that act for an actor carry actor_id: UserId first in their command, depend on a narrow ActionAuthorizer port that AuthorizeActionUseCase satisfies, and open execute with one authorize_requirement call that applies the boundary leak translations (the HTTP guard delegates to the same function); the platform owner invitation becomes InviteOwnerUseCase; IdentityFacade.provision_account refuses any role but employee.'
 context_stage: 2.7-identity-application-authorization
@@ -204,3 +204,65 @@ contrato de staff, integração). Alargar o conjunto continua sendo decisão de 
 unidades do use case fica, inalcançável enquanto o conjunto não incluir `platform_admin`, pela ordem
 verbatim de `InviteUserUseCase` e pela mesma razão do concept 2.7 D6. Nota *append-only*; o corpo
 acima não foi editado.
+
+## Nota — a fachada lê `PROVISIONABLE_ROLES`: a regra de papel tem uma cópia só
+
+**2026-11-23 — issue [#234](https://github.com/MarceloSanC/restaurant-hub/issues/234).** Na nota
+de 2026-11-22 acima, *"A fachada mantém a sua checagem"* continua valendo, mas a checagem deixou de
+ser uma segunda cópia da regra. `IdentityFacade.provision_account` confere
+`papel not in PROVISIONABLE_ROLES`, com a constante importada de `provision_account.py`, no lugar do
+literal `papel is not Role.EMPLOYEE`. A recusa continua sendo a primeira instrução depois da
+conversão do papel (`Role.from_string`), antes do e-mail e de qualquer porta, com a mesma
+`RoleNotProvisionableError`; papel desconhecido continua subindo `InvalidRoleError`.
+
+A frase *"Para as duas cópias da regra não divergirem, `test_facade.py` ›
+`test_a_fachada_aceita_exatamente_os_papeis_que_o_use_case_aceita` as compara papel a papel"* descreve
+um estado que já não existe. Comparar a fachada com a constante que ela lê seria tautológico:
+alargar o conjunto passaria verde. O teste virou
+`test_a_fachada_recusa_antes_do_use_case_todo_papel_fora_do_conjunto`, que percorre o enum inteiro,
+exige que o papel recusado não chegue ao use case e compara o conjunto aceito com `{employee}`
+transcrito no próprio teste. Um segundo teste,
+`test_a_fachada_segue_o_conjunto_do_use_case_e_nao_um_literal`, alarga a constante por dublê e trava
+que a fachada a segue. Alargar o conjunto agora é editar um lugar no código, e a edição solta
+continua reprovando nos dois testes que transcrevem `{employee}` (este e `test_provision_account.py`
+› `test_o_conjunto_aceito_e_exatamente_employee`) até que um ADR a decida.
+
+```
+[decision:C] #234-1 — onde mora PROVISIONABLE_ROLES quando a fachada também a lê
+Escolha: continua em use_cases/provision_account.py, importada pela fachada · Alternativas: mover para o domínio (value_objects/role.py); módulo de application próprio só para a constante · Degrau (C): 1
+Base: nota de 2026-11-22 deste ADR, [decision:C] #211-1 › "conjunto aceito declarado no use case (PROVISIONABLE_ROLES)"; .importlinter › identity-facade-only-reach › "allowed_importers = restaurant_hub.features.identity.application.facade"
+Verificado: sustenta — evidence-verifier (2026-11-23, 6/6 itens: as duas citações da Base, o import já existente na fachada, a checagem primeira em facade.py, o concept 2.7 D5 e os importadores permitidos do CA14); completude por decision-reviewer (2026-11-23)
+Configuração candidata: nenhuma · Reversível: sim
+```
+
+O degrau 1 decide porque a casa da constante já foi ratificada na #211, e a fachada já importa
+`provision_account.py` (para `ProvisionAccountUseCase`), pela aresta que o contrato
+`identity-facade-only-reach` e o CA14 permitem a ela; nenhum import novo entre módulos nasce. Movê-la
+para o domínio daria ao `Role` um conhecimento que não é dele: o papel é válido no domínio, é a
+entrada que não o aceita (concept 2.7 D5). Nota *append-only*; o corpo acima não foi editado.
+
+**Auditoria do PR #255 — o teste do dublê não via uma cópia com o mesmo nome.**
+`test_a_fachada_segue_o_conjunto_do_use_case_e_nao_um_literal` troca o nome nos dois módulos; uma
+constante homônima declarada na própria fachada (`PROVISIONABLE_ROLES = frozenset({Role.EMPLOYEE})`
+em `facade.py`) também era trocada, e a fachada "seguia" o dublê. Por mutação local, essa segunda
+cópia passou as unit de identity e de staff. O terceiro teste,
+`test_o_nome_que_a_fachada_le_e_o_objeto_do_use_case`, exige que o nome no namespace de `facade.py`
+seja o **mesmo objeto** (`is`) que `provision_account.PROVISIONABLE_ROLES`, e mata essa mutação.
+`facade.py` está fora do `only_mutate`; a mutação acima foi feita à mão e não roda de novo quando a
+fachada muda. Pôr a fachada no escopo é a issue
+[#262](https://github.com/MarceloSanC/restaurant-hub/issues/262).
+
+```
+[decision:C] #234-2 — como a fachada lê PROVISIONABLE_ROLES e como o teste trava a cópia única
+Escolha: manter `from ...provision_account import PROVISIONABLE_ROLES` na fachada e travar no teste a identidade (`is`) entre o nome no namespace de facade.py e a constante do use case · Alternativas: a fachada ler o atributo do módulo (`provision_account.PROVISIONABLE_ROLES`) e o teste trocar a constante só no módulo de origem · Degrau (C): 5
+Base: Python Language Reference 3.12, §7.11 The import statement (forma `from`) "a reference to that value is stored in the local namespace"; mutação local da auditoria do PR #255: a constante homônima em facade.py passou as unit de identity e de staff sem o teste de identidade e reprova com ele
+Verificado: sustenta — evidence-verifier (2026-11-23, 4/4 itens: o trecho da referência do Python, o import e a ordem das checagens em facade.py, o dublê nos dois módulos e a asserção de identidade); completude por decision-reviewer (2026-11-23)
+Configuração candidata: nenhuma · Reversível: sim
+```
+
+As duas formas dão uma fonte só em produção: o `from ... import` guarda uma referência ao objeto
+do use case, e o módulo de origem termina de executar antes da fachada ligar o nome, então uma
+reatribuição no próprio `provision_account.py` também chega a ela. Elas diferem só no que o teste
+consegue ver, e a identidade fecha esse buraco sem mudar `src/` nem a forma de import do resto da
+fachada. Degrau 5, a mais simples: os degraus 1 a 4 não discriminam (as duas são fail-closed e
+reversíveis).

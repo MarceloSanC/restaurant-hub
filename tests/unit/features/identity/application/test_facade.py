@@ -47,6 +47,9 @@ from restaurant_hub.features.identity.application.facade import (
     IdentityUnitFacade,
     ProvisionedAccount,
 )
+from restaurant_hub.features.identity.application.use_cases import (
+    provision_account as modulo_provision_account,
+)
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
 )
@@ -60,7 +63,6 @@ from restaurant_hub.features.identity.application.use_cases.get_unit_timezone im
     GetUnitTimezoneUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
-    PROVISIONABLE_ROLES,
     ProvisionAccountUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.revoke_all_sessions import (
@@ -109,6 +111,9 @@ pytestmark = pytest.mark.unit
 
 _AGORA = datetime(2026, 9, 14, 12, 0, tzinfo=UTC)
 _BASE_URL = "https://app.exemplo.com"
+# Transcrito, não derivado de `PROVISIONABLE_ROLES` (a fachada a lê desde a issue
+# #234): alargar o conjunto é decisão de ADR, e a edição solta reprova aqui também.
+_PAPEIS_QUE_A_FACHADA_ACEITA = frozenset({Role.EMPLOYEE})
 
 
 # ---------------------------------------------------------------------------
@@ -461,22 +466,59 @@ class TestTransparenciaAExcecoes:
 
         assert espiao.commands == []
 
-    def test_a_fachada_aceita_exatamente_os_papeis_que_o_use_case_aceita(self) -> None:
-        """Issue #211 — a regra existe em dois lugares (a entrada e o use case) e este
-        teste as mantém iguais, papel a papel, sobre o enum inteiro. Alargar um lado
-        só reprova aqui, em vez de virar uma recusa tardia ou uma regra morta."""
+    def test_a_fachada_recusa_antes_do_use_case_todo_papel_fora_do_conjunto(self) -> None:
+        """Issues #211 e #234 — sobre o enum inteiro, papel a papel: o recusado não
+        chega ao use case, o aceito chega com o papel convertido, e o conjunto aceito
+        é o **transcrito** em `_PAPEIS_QUE_A_FACHADA_ACEITA`. Desde a #234 a fachada
+        lê `PROVISIONABLE_ROLES`; comparar com a constante seria tautológico (alargá-la
+        passaria verde aqui), por isso a expectativa não é derivada dela."""
         aceitos_pela_fachada: set[Role] = set()
         for papel in Role:
             fachada, espiao, _, _ = _fachada_espia()
             try:
                 _provisionar(fachada, role=papel.value)
-            except RoleNotProvisionableError:
+            except RoleNotProvisionableError as erro:
+                assert erro.role == papel.value
                 assert espiao.commands == []
             else:
+                assert [command.role for command in espiao.commands] == [papel]
                 aceitos_pela_fachada.add(papel)
 
-        assert aceitos_pela_fachada
-        assert aceitos_pela_fachada == PROVISIONABLE_ROLES
+        assert aceitos_pela_fachada == _PAPEIS_QUE_A_FACHADA_ACEITA
+
+    def test_a_fachada_segue_o_conjunto_do_use_case_e_nao_um_literal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Issue #234 — a regra tem uma cópia só, a do use case. Com o conjunto
+        trocado por dublê para `{manager}`, a fachada aceita `manager` e recusa
+        `employee`: um literal reintroduzido na fachada (a segunda cópia), sozinho ou
+        somado à constante, erra um dos dois lados e reprova aqui. O dublê troca o
+        nome nos dois módulos, para não depender de como a fachada o importa."""
+        trocado = frozenset({Role.MANAGER})
+        monkeypatch.setattr(modulo_provision_account, "PROVISIONABLE_ROLES", trocado)
+        monkeypatch.setattr(modulo_facade, "PROVISIONABLE_ROLES", trocado)
+        fachada, espiao, _, _ = _fachada_espia()
+
+        _provisionar(fachada, role="manager")
+        with pytest.raises(RoleNotProvisionableError):
+            _provisionar(fachada, role="employee")
+
+        assert [command.role for command in espiao.commands] == [Role.MANAGER]
+
+    def test_o_nome_que_a_fachada_le_e_o_objeto_do_use_case(self) -> None:
+        """Issue #234 — o teste acima troca o nome **nos dois módulos**, então não vê
+        uma cópia com o mesmo nome declarada na própria fachada
+        (`PROVISIONABLE_ROLES = frozenset({Role.EMPLOYEE})` em `facade.py`): o dublê
+        substitui a cópia e a fachada "segue" o conjunto trocado. A auditoria do PR
+        #255 provou por mutação local que essa cópia passa as unit de identity e de
+        staff.
+        `from ... import PROVISIONABLE_ROLES` liga o nome ao mesmo objeto do use
+        case; a identidade trava que é esse o objeto que a fachada lê, e não um igual
+        a ele. Lido pelo namespace do módulo (`vars`), que é onde a checagem de
+        `provision_account` procura o nome global."""
+        lido_pela_fachada = vars(modulo_facade)["PROVISIONABLE_ROLES"]
+
+        assert lido_pela_fachada is modulo_provision_account.PROVISIONABLE_ROLES
 
 
 class TestReexportacao:

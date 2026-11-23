@@ -271,7 +271,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#225](https://github.com/MarceloSanC/restaurant-hub/issues/225) | Leitura de função responde 422 espúrio quando a habilitação muda no meio da remontagem | staff | adapters/out | done | #206 |
 | [#226](https://github.com/MarceloSanC/restaurant-hub/issues/226) | Decidir o controle otimista (`ETag`/`If-Match`) das edições de equipe (especulativa) | staff | application + adapters | open | — |
 | [#233](https://github.com/MarceloSanC/restaurant-hub/issues/233) | Fechar os pontos cegos da varredura de alcance dos use cases facade-only | identity | tests | done | #211 |
-| [#234](https://github.com/MarceloSanC/restaurant-hub/issues/234) | A fachada de provisionamento lê `PROVISIONABLE_ROLES` em vez do literal | identity | application | open | #211, `3.10-login-link-management` |
+| [#234](https://github.com/MarceloSanC/restaurant-hub/issues/234) | A fachada de provisionamento lê `PROVISIONABLE_ROLES` em vez do literal | identity | application | done | #211, `3.10-login-link-management` |
 | [#236](https://github.com/MarceloSanC/restaurant-hub/issues/236) | Alterar o fuso de uma unidade já criada | identity | domain + application + adapters | open | #198 |
 | [#237](https://github.com/MarceloSanC/restaurant-hub/issues/237) | Conferir o `Verificado:` das decisões gravadas fora da forma do §5 da `evidence-resolution` | shared | tooling | open | #212 |
 | [#241](https://github.com/MarceloSanC/restaurant-hub/issues/241) | Fechar com lock por `user_id` o resíduo da corrida de fim de vínculo na unidade | staff | application + adapters/out | open | `3.10-login-link-management` |
@@ -280,6 +280,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#246](https://github.com/MarceloSanC/restaurant-hub/issues/246) | Repetir no import-linter o alcance dos use cases facade-only de identity | identity | tooling | done | #233 |
 | [#248](https://github.com/MarceloSanC/restaurant-hub/issues/248) | Decidir se gerente de restaurante de uma unidade volta a renomear e apagar funções de todas as unidades | staff | application | open | #207 |
 | [#260](https://github.com/MarceloSanC/restaurant-hub/issues/260) | Classificar na regra 10 todo port de saída que não é repositório | shared | tooling | open | #243 |
+| [#262](https://github.com/MarceloSanC/restaurant-hub/issues/262) | Pôr a fachada de identity no escopo da mutação de acesso | identity | tooling + tests | open | #217 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
