@@ -59,6 +59,8 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotEnabledInUnitError,
     JobFunctionNotFoundError,
+    LoginAccountNotFoundError,
+    LoginAlreadyLinkedInUnitError,
     LoginEmailAlreadyInUseError,
     SameUnitCopyError,
     StaffApplicationError,
@@ -101,6 +103,9 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     # da hierarquia.
     JobFunctionNotFoundError: HTTP_NOT_FOUND,
     EmployeeNotFoundError: HTTP_NOT_FOUND,
+    # Stage 3.10 — conta existente inexistente ou fora do alcance do registro, com a
+    # mesma resposta para todos os casos (ADR 3.10.0002 §3).
+    LoginAccountNotFoundError: HTTP_NOT_FOUND,
     # 409 — conflito com estado **já gravado**: ou a chave existe, ou uma
     # referência existente impede a remoção. É a definição de faixa do
     # ADR 3.4.0002 §4, e é dela que sai o par `InUse`: o payload está correto,
@@ -145,6 +150,8 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     # e o estado do vínculo que mudou entre a leitura e a escrita condicional.
     EmployeeHasNoLoginError: HTTP_CONFLICT,
     EmployeeLoginChangedError: HTTP_CONFLICT,
+    # Stage 3.10 — um login por unidade (ADR 3.10.0001 §6).
+    LoginAlreadyLinkedInUnitError: HTTP_CONFLICT,
     # 422 — invariante violada **pelo conteúdo enviado**.
     InvalidNameError: HTTP_UNPROCESSABLE,
     InvalidIdentifierError: HTTP_UNPROCESSABLE,
