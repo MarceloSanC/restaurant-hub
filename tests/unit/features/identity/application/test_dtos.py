@@ -39,6 +39,7 @@ from restaurant_hub.features.identity.application.dtos.identifiers import (
 )
 from restaurant_hub.features.identity.application.dtos.results import (
     AccountRoleResult,
+    AccountSummaryResult,
     AuthenticationResult,
     AuthorizedActor,
     ProvisionedAccountResult,
@@ -66,6 +67,7 @@ _RESULT_CLASSES = (
     AuthorizedActor,
     ProvisionedAccountResult,
     AccountRoleResult,
+    AccountSummaryResult,
     ProvisionedRestaurantResult,
     UnitTimezoneResult,
 )
@@ -94,7 +96,9 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # por `ProvisionRestaurantCommand` e `ProvisionedRestaurantResult`.
 # 28 desde a Stage 2.7, que acrescenta `InviteOwnerCommand`.
 # 30 desde a issue #198, que acrescenta `GetUnitTimezoneCommand` e `UnitTimezoneResult`.
-_TOTAL_DE_DTOS = 30
+# 32 desde a Stage 3.10, que acrescenta `FindAccountByEmailCommand` e
+# `AccountSummaryResult`.
+_TOTAL_DE_DTOS = 32
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:

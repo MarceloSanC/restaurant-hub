@@ -93,6 +93,9 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.find_account_by_email import (
+    FindAccountByEmailUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
 )
@@ -478,6 +481,7 @@ def wire_dependencies(
         send_invitation=SendInvitationUseCase(email_sender=sender),
         revoke_all_sessions=RevokeAllSessionsUseCase(sessions=sessions, clock=clock),
         get_account_role=GetAccountRoleUseCase(users=users),
+        find_account_by_email=FindAccountByEmailUseCase(users=users),
     )
     staff_identity_gateway = LocalIdentityGateway(identity_facade)
 
