@@ -256,6 +256,13 @@ also_copy = [
 #
 # Os demais gates da #45 continuam na corrida: `check_dead_shared` e
 # `test_status_map` leem arquivos que o mutmut não toca.
+#
+# `test_setup_token_issuance_rule10.py` (issue #205) sai pelo mesmo motivo: roda a
+# regra 10 sobre o `src/` e conta os blocos de unidade de `provision_account.py`,
+# que em `mutants/` tem uma cópia de `execute` por mutante (medido: a corrida
+# morreu em `failed to collect stats`). O efeito do passo de emissão continua
+# na corrida, por `test_setup_token_issuance.py`.
 pytest_add_cli_args_test_selection = [
     "--ignore=tests/unit/test_check_layout.py",
+    "--ignore=tests/unit/features/identity/application/test_setup_token_issuance_rule10.py",
 ]
