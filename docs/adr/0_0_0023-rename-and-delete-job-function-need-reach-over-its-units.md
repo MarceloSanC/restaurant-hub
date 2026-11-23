@@ -196,6 +196,15 @@ Configuração candidata: nenhuma · Reversível: sim (port signature, no migrat
   every function migrated from before Stage 3.11; the owner does it. This is the same limit ADR
   3.11.0001 §Consequences (Negative) already records for narrowing or widening such a function. A
   manager who needs it can ask the owner to restrict the function to named units first.
+- **In a restaurant with a single unit — the most common pilot case — the manager and the hr lose
+  rename and delete over every function that already exists**, because every function migrated
+  from before Stage 3.11 is enabled in every unit, and they cannot narrow it to their unit to get it
+  back (narrowing is the owner's too). What stays with them: the functions they create naming their
+  unit, and assigning functions to records. The same holds for a manager who is a member of every
+  unit of a multi-unit restaurant: "every unit" covers future units. This consequence was not read
+  by the sponsor before the delegated choice; the question — keep, add a single-unit shortcut,
+  migrate the old functions to named units, or revert — is issue #248 (raised by the audit of
+  PR #239).
 - Two port signatures changed (`update`, `delete` gain `expected`); every caller passes what it read.
 
 ### Neutral / trade-offs accepted
