@@ -5,7 +5,7 @@ when-use: Reference before adding a second write to any use case, before making 
 keywords: [adr, unit-of-work, scope, bounded-context, cross-bc, side-effect, email, outbox, gate, check-layout, allowlist, staff, identity]
 status: accepted
 created_at: 2026-10-19
-updated_at: 2026-10-19
+updated_at: 2026-11-23
 adr_id: 2.6.0002
 decision: the five identity use cases that write more than once (set_password_with_token, invite_user, provision_account, request_password_reset, refresh_session's rotation) run their writes inside the identity unit; staff gets no unit because none of its use cases writes twice inside staff, and its two cross-BC crossings (create_login_for_employee, deactivate_employee) keep their ordered, declared windows because a transaction across bounded contexts is rejected by ADR 4.1.0006; e-mail is sent after commit; SessionRepository.revoke reports whether it revoked so that a concurrent rotation loser is treated as reuse; check_layout rule 10 requires every use case with two or more writes to keep all of them inside exactly one unit (only write-and-refuse tolerated outside) unless it is in a counted allowlist citing this ADR
 context_stage: 2.6-identity-unit-of-work
@@ -189,3 +189,16 @@ which the rule does see; the staff gateway is an adapter). None exists today.
   [3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md)
 - Concept 3.5 §6.4 and §10; concept 2.5 §5 rule 13
 - Issue: #46; issue #45 (gates)
+
+## Nota — "None exists today", lido ao pé da letra (issue #205, 2026-11-23)
+
+A frase que fecha os pontos cegos declarados (*"None exists today"*) já não vale na letra para o
+segundo deles, *"a repository handed to a module-level function"*: helpers de módulo de
+scheduling recebem repositório — `_inputs.settings_of(config, ...)`,
+`_inputs.neighbours_of(schedules, ...)`, `_publish.load_for_edit(schedules, ...)` e
+`_publish.run_batch(schedules, config, ...)`. Todos só leem (`find_settings`, `list_in_range`,
+`find_by_id`), então nenhuma escrita escapa da regra 10 e a garantia continua de pé; o que ficou
+defasado é a afirmação. Desde a issue #205 há também `_invitation.issue_setup_token`, que de
+propósito não recebe repositório ([ADR 0.0.0024](./0_0_0024-setup-token-issuance-is-one-write-free-helper.md),
+com teste que reprova se passar a receber). Seguir, de forma geral, repositório ou gateway entregue
+a helper de módulo é o escopo da issue #243. Nota *append-only*; o corpo acima não foi editado.
