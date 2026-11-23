@@ -91,7 +91,7 @@ class RelinkLoginUseCase:
         if user_id == current:
             return to_employee_result(employee)
         # Antes de gravar — ver o docstring do módulo.
-        end_active_link(self._employees, self._gateway, employee)
+        end_active_link(self._gateway, employee)
         self._employees.relink_login(
             command.tenant_id,
             command.unit_id,

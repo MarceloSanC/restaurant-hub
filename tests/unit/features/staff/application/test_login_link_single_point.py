@@ -176,7 +176,7 @@ def test_no_modulo_do_ponto_unico_so_end_active_link_revoga() -> None:
 
 def test_controle_outra_funcao_do_modulo_que_revoga_reprova() -> None:
     fonte = (
-        "def end_active_link(employees, gateway, employee):\n"
+        "def end_active_link(gateway, employee):\n"
         "    gateway.revoke_login_sessions(employee.user_id)\n"
         "def cut(gateway, user_id):\n"
         "    gateway.revoke_login_sessions(user_id)\n"
@@ -223,7 +223,7 @@ def test_os_use_cases_que_encerram_vinculo_sao_os_transcritos() -> None:
             "def execute(self, c):\n"
             "    repo = self._employees\n"
             "    repo.deactivate(t, u, e, expected_user_id=x, expected_active=a)\n"
-            "    end_active_link(self._employees, self._gateway, e)\n",
+            "    end_active_link(self._gateway, e)\n",
             id="apelido-e-ponto-unico-depois",
         ),
     ],
@@ -241,7 +241,7 @@ def test_controle_a_transicao_da_entidade_sem_ponto_unico_reprova() -> None:
 def test_controle_a_transicao_depois_do_ponto_unico_passa() -> None:
     fonte = (
         "def execute(self, c):\n"
-        "    end_active_link(self._employees, self._gateway, employee)\n"
+        "    end_active_link(self._gateway, employee)\n"
         "    return to_result(employee.deactivate())\n"
     )
     assert _violacoes_de_ordem(fonte) == []
@@ -290,35 +290,24 @@ def test_revoga_quando_o_registro_ativo_e_a_unica_fonte_do_login_de_funcionario(
     registro = _registro(user_id=login)
     _gravar(fakes, registro)
 
-    end_active_link(fakes.employees, gateway, registro)
+    end_active_link(gateway, registro)
 
     assert gateway.revoked == [login]
 
 
 def test_registro_desligado_nao_toca_identity() -> None:
-    fakes, gateway, login = _arranjo()
+    _, gateway, login = _arranjo()
     registro = _registro(user_id=login, active=False)
 
-    end_active_link(fakes.employees, gateway, registro)
+    end_active_link(gateway, registro)
 
     assert gateway.calls == []
 
 
 def test_registro_sem_login_nao_toca_identity() -> None:
-    fakes, gateway, _ = _arranjo()
+    _, gateway, _ = _arranjo()
 
-    end_active_link(fakes.employees, gateway, _registro())
-
-    assert gateway.calls == []
-
-
-def test_outro_registro_ativo_da_unidade_com_o_login_decide_sem_cruzar_a_fronteira() -> None:
-    fakes, gateway, login = _arranjo()
-    registro = _registro(user_id=login)
-    _gravar(fakes, registro)
-    _gravar(fakes, _registro("e2", user_id=login))
-
-    end_active_link(fakes.employees, gateway, registro)
+    end_active_link(gateway, _registro())
 
     assert gateway.calls == []
 
@@ -326,22 +315,30 @@ def test_outro_registro_ativo_da_unidade_com_o_login_decide_sem_cruzar_a_frontei
 @pytest.mark.parametrize(
     "outro",
     [
+        pytest.param({}, id="ativo-da-unidade-com-o-login"),
         pytest.param({"unit_id": _U2}, id="outra-unidade"),
         pytest.param({"active": False}, id="desligado"),
         pytest.param({"user_id": UserId("outro-login")}, id="outro-login"),
     ],
 )
-def test_outro_registro_que_nao_concede_o_login_na_unidade_nao_impede(
-    outro: dict[str, object],
-) -> None:
+def test_outro_registro_nao_e_lido_e_o_vinculo_ativo_revoga(outro: dict[str, object]) -> None:
+    """A regra não lê a unidade (issue #241, ADR 0.0.0025 §4): fail-closed.
+
+    O primeiro caso — outro registro **ativo da mesma unidade** com o mesmo login —
+    é o estado que o índice `uq_employees_tenant_unit_user` recusa; aqui ele é gravado
+    direto no store só para travar que, se existisse, a regra revogaria em vez de
+    deixar as sessões vivas. Os outros três nunca impediram a revogação.
+    """
     fakes, gateway, login = _arranjo()
     registro = _registro(user_id=login)
     _gravar(fakes, registro)
     _gravar(fakes, _registro("e2", **{"user_id": login, **outro}))  # type: ignore[arg-type]
+    antes = len(fakes.store.calls)
 
-    end_active_link(fakes.employees, gateway, registro)
+    end_active_link(gateway, registro)
 
     assert gateway.revoked == [login]
+    assert fakes.store.calls[antes:] == [], "a regra leu o repositório"
 
 
 def test_login_de_outro_papel_nao_e_revogado() -> None:
@@ -351,7 +348,7 @@ def test_login_de_outro_papel_nao_e_revogado() -> None:
     registro = _registro(user_id=gerente)
     _gravar(fakes, registro)
 
-    end_active_link(fakes.employees, gateway, registro)
+    end_active_link(gateway, registro)
 
     assert gateway.revoked == []
     assert gateway.calls == [f"is_employee_login({gerente!r})"]
@@ -362,7 +359,7 @@ def test_login_desconhecido_nao_e_revogado() -> None:
     registro = _registro(user_id=UserId("login-que-identity-nao-conhece"))
     _gravar(fakes, registro)
 
-    end_active_link(fakes.employees, gateway, registro)
+    end_active_link(gateway, registro)
 
     assert gateway.revoked == []
 
@@ -375,7 +372,7 @@ def test_falha_da_consulta_de_papel_sobe_crua_sem_revogar() -> None:
     gateway.fail_role_query_with = falha
 
     with pytest.raises(RuntimeError) as excinfo:
-        end_active_link(fakes.employees, gateway, registro)
+        end_active_link(gateway, registro)
 
     assert excinfo.value is falha
     assert gateway.revoked == []
@@ -551,15 +548,18 @@ def test_ca4_revoga_o_login_de_funcionario_unico_da_unidade(chamador: str) -> No
 
 
 @pytest.mark.parametrize("chamador", _CHAMADORES)
-def test_ca4_outro_registro_ativo_da_unidade_com_o_login_nao_revoga(chamador: str) -> None:
+def test_ca4_outro_registro_ativo_da_unidade_com_o_login_nao_impede_a_revogacao(
+    chamador: str,
+) -> None:
+    """Issue #241: o estado é recusado pelo índice da unidade (ADR 0.0.0025); gravado
+    direto no store, ele não segura as sessões vivas em nenhum dos três chamadores."""
     fakes, gateway, login = _arranjo_ca4()
     _gravar(fakes, _registro(user_id=login))
     _gravar(fakes, _registro("e2", user_id=login))
 
     _executar(chamador, fakes.employees, gateway)
 
-    assert gateway.revoked == []
-    assert not any(c.startswith("is_employee_login") for c in gateway.calls)
+    assert gateway.revoked == [login]
 
 
 @pytest.mark.parametrize("chamador", _CHAMADORES)

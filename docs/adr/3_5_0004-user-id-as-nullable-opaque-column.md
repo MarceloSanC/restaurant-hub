@@ -212,3 +212,13 @@ e `unlink_login` (desvínculo, conferindo o login e o estado lidos). Continua se
 genérica: `update` segue ignorando o `user_id`, e nenhuma troca acontece sem a guarda do
 domínio sobre o gravado. Tudo o mais deste ADR continua valendo. Nota *append-only*; o
 corpo acima não foi editado.
+
+**2026-11-23 — §3 ("no UNIQUE", "no index") superado em parte pelo [ADR 0.0.0025](./0_0_0025-one-login-per-unit-is-a-partial-unique-index.md) (issue
+#241).** `employees.user_id` ganhou o índice único **parcial** `uq_employees_tenant_unit_user`
+sobre `(tenant_id, unit_id, user_id) WHERE user_id IS NOT NULL` (migration `0008`): o mesmo
+login não fica em dois registros da **mesma unidade**, ativos ou desligados — a regra "um
+login por unidade" do ADR 3.10.0001 §6, agora imposta pelo banco. Entre unidades nada muda:
+o `UNIQUE (user_id)` da Alternativa B continua rejeitado pelo motivo de lá (workforce §3.7).
+O índice é de regra, não de acesso; o de acesso (`find_by_user_id`, Alternativa C) segue
+para quando houver a consulta. Coluna anulável, opaca, sem FK e nunca copiada continuam
+valendo. Nota *append-only*; o corpo acima não foi editado.

@@ -20,6 +20,7 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | snapshot único nas leituras de função (#225) | nada, sem alteração concorrente | #225, aqui |
 | condição sob lock em `update` e `delete` de função (#207) | nada, sem corrida | #207, aqui |
 | `active` fora do `SET` do `update` (#242) | nada, sem transição concorrente | #242, aqui |
+| índice de um login por unidade (#241) | nada, sem vínculo concorrente | #241, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -40,6 +41,7 @@ dois **vazariam** — pelo pool — para todo teste seguinte da suíte, e o sint
 seria falha em outro arquivo.
 """
 
+import dataclasses
 import re
 import threading
 from collections.abc import Callable, Iterator
@@ -65,7 +67,9 @@ from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository
 from restaurant_hub.features.staff.application.dtos.commands import (
     ChangeWorkloadProfileCommand,
     DeleteEmployeeCommand,
+    LinkExistingLoginCommand,
     ReactivateEmployeeCommand,
+    RelinkLoginCommand,
     RenameEmployeeCommand,
     SetJobFunctionUnitsCommand,
 )
@@ -75,6 +79,7 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionEnablementChangedError,
     JobFunctionInUseError,
     JobFunctionNotFoundError,
+    LoginAlreadyLinkedInUnitError,
 )
 from restaurant_hub.features.staff.application.ports.out.access_guard import (
     PERMISSION_MANAGE_JOB_FUNCTIONS,
@@ -85,8 +90,14 @@ from restaurant_hub.features.staff.application.use_cases.change_workload_profile
 from restaurant_hub.features.staff.application.use_cases.delete_employee import (
     DeleteEmployeeUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.link_existing_login import (
+    LinkExistingLoginUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.reactivate_employee import (
     ReactivateEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.relink_login import (
+    RelinkLoginUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.rename_employee import (
     RenameEmployeeUseCase,
@@ -114,6 +125,7 @@ from restaurant_hub.features.staff.domain.value_objects.workload_profile import 
     OnDemand,
 )
 from tests.fakes.features.staff.in_memory_access_guard import InMemoryAccessGuard
+from tests.fakes.features.staff.in_memory_identity_gateway import InMemoryIdentityGateway
 from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = [pytest.mark.integration]
@@ -1963,3 +1975,154 @@ def test_issue_242_edicao_lida_antes_do_desligamento_nao_reativa(
     assert (relido.active, relido.user_id) == (False, _LOGIN_R18), (
         "a edição lida antes do desligamento reativou o registro"
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #241 — um login por unidade sob concorrência (ADR 0.0.0025)
+# ---------------------------------------------------------------------------
+#
+# O resíduo do ADR 3.10.0001 §6: R18 (ou R19) lê a unidade, não acha a conta em
+# outro registro, e grava. Dois deles ao mesmo tempo, para a **mesma** conta em
+# **dois** registros da unidade, liam os dois "livre" e gravavam os dois — e só
+# sobre esse estado voltava a corrida de dois fins de vínculo do ADR 3.8.0001.
+#
+# O entrelace, com os use cases de verdade sobre o adapter Postgres: o primeiro
+# grava o vínculo e, **antes de comitar** (no `after_cursor_execute` do `UPDATE`
+# dele), o segundo roda inteiro numa thread — a leitura da unidade dele não vê o
+# vínculo não comitado e passa — até ficar parado no índice. Só então o primeiro
+# comita, e o segundo é recusado com o 409 da regra. Sincronia por condição
+# (`_esperar_backend_bloqueado`), não por relógio. Sem o índice o segundo nunca
+# espera — gravaria em outra linha — e o teste reprova nessa espera.
+
+_EMAIL_DA_CONTA = "conta@cantina.com"
+_CONTA = UserId("conta-disputada")
+_E2 = EmployeeId("e2")
+
+
+def _dois_registros_da_unidade(
+    motor: Engine, *, vinculos: tuple[UserId | None, UserId | None]
+) -> None:
+    """`e1` e `e2` na unidade `u1`, com os vínculos pedidos (pelo port)."""
+    _semear(motor)
+    repositorio = PostgresEmployeeRepository(motor)
+    repositorio.add(dataclasses.replace(_funcionario(), id=_E2, name="Bruno"))
+    for funcionario, vinculo in zip((_E1, _E2), vinculos, strict=True):
+        if vinculo is not None:
+            repositorio.link_login(_A, _U1, funcionario, vinculo)
+
+
+def _gateway_com_a_conta() -> InMemoryIdentityGateway:
+    gateway = InMemoryIdentityGateway()
+    gateway.seed_account(_CONTA, email=_EMAIL_DA_CONTA, tenant_id=_A, unit_ids=frozenset({_U1}))
+    return gateway
+
+
+def _r18(motor: Engine, funcionario: EmployeeId) -> None:
+    LinkExistingLoginUseCase(
+        PostgresEmployeeRepository(motor), _gateway_com_a_conta(), guard=PermissiveAccessGuard()
+    ).execute(
+        LinkExistingLoginCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=funcionario,
+            email=_EMAIL_DA_CONTA,
+        )
+    )
+
+
+def _r19(motor: Engine, funcionario: EmployeeId) -> None:
+    RelinkLoginUseCase(
+        PostgresEmployeeRepository(motor), _gateway_com_a_conta(), guard=PermissiveAccessGuard()
+    ).execute(
+        RelinkLoginCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=funcionario,
+            email=_EMAIL_DA_CONTA,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("operacao", "vinculos"),
+    [
+        (_r18, (None, None)),
+        (_r19, (UserId("login-de-e1"), UserId("login-de-e2"))),
+    ],
+    ids=["r18_vincular", "r19_trocar"],
+)
+def test_issue_241_dois_vinculos_concorrentes_da_conta_na_unidade_o_segundo_e_recusado(
+    motores: Callable[[], Engine],
+    operacao: Callable[[Engine, EmployeeId], None],
+    vinculos: tuple[UserId | None, UserId | None],
+) -> None:
+    """O critério da issue: de dois vínculos concorrentes, um é recusado — com o 409 da regra."""
+    motor_primeiro = motores()
+    motor_segundo = motores()
+    motor_observador = motores()
+    _dois_registros_da_unidade(motor_primeiro, vinculos=vinculos)
+    erros: list[BaseException] = []
+
+    def _segundo() -> None:
+        try:
+            operacao(motor_segundo, _E2)
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    segundo = threading.Thread(target=_segundo)
+
+    def _segundo_ate_parar_no_indice() -> None:
+        segundo.start()
+        _esperar_backend_bloqueado(motor_observador)
+
+    with _entrelacar(motor_primeiro, "UPDATE employees", _segundo_ate_parar_no_indice) as disparou:
+        operacao(motor_primeiro, _E1)
+    segundo.join(_TIMEOUT_SINCRONIA)
+
+    assert disparou[0], "o entrelace não disparou — a corrida não foi exercitada"
+    assert not segundo.is_alive(), "o segundo vínculo não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], LoginAlreadyLinkedInUnitError), erros
+    assert "'e2'" in str(erros[0])
+    repositorio = PostgresEmployeeRepository(motor_observador)
+    primeiro_relido = repositorio.find_by_id(_A, _U1, _E1)
+    segundo_relido = repositorio.find_by_id(_A, _U1, _E2)
+    assert primeiro_relido is not None
+    assert segundo_relido is not None
+    assert (primeiro_relido.user_id, segundo_relido.user_id) == (_CONTA, vinculos[1]), (
+        "a conta ficou em dois registros da unidade, ou o segundo perdeu o vínculo que tinha"
+    )
+
+
+def test_issue_241_o_segundo_espera_no_indice_e_nao_no_lock_da_linha(
+    motores: Callable[[], Engine],
+) -> None:
+    """Sem lock novo: com a linha de `e2` livre, `link_login` de `e2` só para no índice.
+
+    A transação aberta grava a conta em `e1` e não comita. `link_login(e2)` trava a
+    linha **dele** (livre), roda as guardas e para no `UPDATE` — o statement que viola
+    o índice —, não no `SELECT … FOR UPDATE`. Com `lock_timeout`, a espera vira
+    `55P03` no `UPDATE`: a ordem de locks é a de antes (linha do endereço, depois a
+    entrada do índice), sem lock por `user_id` que pudesse inverter ordem e deadlockar.
+    """
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _dois_registros_da_unidade(motor_adapter, vinculos=(None, None))
+    repositorio = PostgresEmployeeRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("UPDATE employees SET user_id = :u WHERE id = :e AND tenant_id = :t"),
+            {"u": _CONTA, "e": _E1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            repositorio.link_login(_A, _U1, _E2, _CONTA)
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados[-1].lstrip().startswith("UPDATE employees"), tentados[-1]
+    assert any("FOR UPDATE" in statement for statement in concluidos), concluidos

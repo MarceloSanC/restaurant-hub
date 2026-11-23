@@ -21,6 +21,7 @@ import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.identity.adapters.out.security.argon2_hasher import (
     _DUMMY_SENTINEL,
@@ -678,6 +679,8 @@ async def test_ca31_email_com_byte_nul_e_422_de_staff(
 # Os casos (a) e (b) da issue #60 não são produzíveis pela API ainda: a cópia não
 # carrega o `user_id` e "vincular login existente" não existe. O arranjo é um
 # `UPDATE employees SET user_id` direto — a única forma até lá, declarada no ADR.
+# Desde a issue #241 o caso (a) só existe **entre** unidades: dentro da unidade o
+# banco recusa o segundo registro do login (ADR 0.0.0025), e CA16 trava a recusa.
 #
 # **Sempre o refresh rotacionado.** Um refresh com 200 rotaciona o token; reapresentar
 # o **original** depois dispara a detecção de reuso e responde 401 mesmo que o
@@ -722,22 +725,30 @@ async def _funcionario_logado_com_dois_registros(
     return registro_a, registro_b, await _login(client, "cris@cantina.com")
 
 
-async def test_ca16_dois_registros_do_login_na_unidade_so_o_ultimo_corta(
+async def test_ca16_segundo_registro_do_login_na_unidade_e_recusado_e_desligar_corta(
     client: AsyncClient, engine: Engine, cenario: Cenario
 ) -> None:
-    """Caso (a) da issue #60: enquanto o outro registro da unidade está ativo, ele concede."""
+    """Caso (a) da issue #60 **dentro da unidade** deixou de existir (issue #241).
+
+    O índice `uq_employees_tenant_unit_user` (ADR 0.0.0025) recusa o segundo registro
+    da unidade com o mesmo login até por `UPDATE` direto — o arranjo que esta CA usava.
+    Sem outro registro que conceda o acesso, desligar o único corta a sessão.
+    """
     cabecalho = auth(cenario.manager)
-    registro_a, registro_b, tokens = await _funcionario_logado_com_dois_registros(
-        client, engine, cenario, unidade_do_segundo=cenario.unidade_a
+    registro_a = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Cris")
+    registro_b = await _criar_funcionario(client, cabecalho, cenario.unidade_a, "Cris (2)")
+    corpo = await _criar_login(
+        client, cabecalho, cenario.unidade_a, registro_a, email="cris@cantina.com", delivery="link"
     )
+    with pytest.raises(IntegrityError) as recusa:
+        _vincular_direto(engine, registro_b, corpo["employee"]["user_id"])
+    assert "uq_employees_tenant_unit_user" in str(recusa.value)
+    await _definir_senha(client, _token_de(corpo["setup_link"]))
+    tokens = await _login(client, "cris@cantina.com")
 
     await _desligar(client, cabecalho, cenario.unidade_a, registro_a)
-    vivo = await _refresh(client, tokens["refresh_token"])
-    assert vivo.status_code == HTTPStatus.OK, vivo.text
 
-    await _desligar(client, cabecalho, cenario.unidade_a, registro_b)
-    # O rotacionado da resposta anterior — ver o comentário da seção.
-    cortado = await _refresh(client, vivo.json()["refresh_token"])
+    cortado = await _refresh(client, tokens["refresh_token"])
     assert cortado.status_code == HTTPStatus.UNAUTHORIZED, cortado.text
 
 

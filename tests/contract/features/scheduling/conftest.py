@@ -117,13 +117,16 @@ def staff_member(
 # O mundo semeado, como dados: o MESMO para as duas implementações. Registro com login
 # vinculado leva o `user_id`.
 #
+# Um login por unidade (issue #241, ADR 0.0.0025): o desligado `caio` tem login próprio —
+# o mesmo de `ana` na unidade dela é estado que staff recusa (índice da unidade).
+#
 # `dani` detém uma função do catálogo do PRÓPRIO tenant: registro de `t2` com função de `t1`
 # é estado que staff não representa (lei L-E4 de staff; id de função global), e o mundo tem
 # de ser semeável nas duas implementações (Stage 4.4).
 _REGISTROS: tuple[tuple[TenantId, StaffMember, str | None], ...] = (
     (T1, staff_member("ana", U1), "user-ana"),
     (T1, staff_member("bia", U1), None),
-    (T1, staff_member("caio", U1, ativo=False), "user-ana"),
+    (T1, staff_member("caio", U1, ativo=False), "user-caio"),
     (T1, staff_member("ana-u2", U2), "user-ana"),
     (T2, staff_member("dani", U1, funcao="garcom"), "user-ana"),
 )

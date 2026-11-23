@@ -24,6 +24,7 @@ from restaurant_hub.features.staff.adapters.out.postgres.integrity_errors import
     ON_INSERT_JOB_FUNCTION,
     ON_UPDATE_JOB_FUNCTION,
     ON_WRITE_EMPLOYEE,
+    ON_WRITE_LOGIN_LINK,
     ConstraintMap,
 )
 from restaurant_hub.features.staff.application.errors import (
@@ -32,6 +33,7 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
+    LoginAlreadyLinkedInUnitError,
     StaffApplicationError,
 )
 from restaurant_hub.features.staff.domain.exceptions.errors import StaffError
@@ -43,6 +45,7 @@ _TODOS_OS_MAPAS: tuple[ConstraintMap, ...] = (
     ON_UPDATE_JOB_FUNCTION,
     ON_DELETE_JOB_FUNCTION,
     ON_WRITE_EMPLOYEE,
+    ON_WRITE_LOGIN_LINK,
 )
 
 # Lista completa do concept §6 "O que NÃO é traduzido, deliberadamente" —
@@ -150,6 +153,29 @@ def test_os_quatro_mapas_estao_completos_e_sao_exatamente_estes() -> None:
         "uq_employees_id_tenant": EmployeeAlreadyExistsError,
         "fk_employee_job_functions_job_function": JobFunctionNotFoundError,
     }
+    assert dict(ON_WRITE_LOGIN_LINK) == {
+        "uq_employees_tenant_unit_user": LoginAlreadyLinkedInUnitError,
+    }
+
+
+def test_mapa_da_escrita_do_vinculo_e_um_login_por_unidade() -> None:
+    """Issue #241 (ADR 0.0.0025): o índice da unidade vira o 409 que a regra já usa.
+
+    O detalhe é o registro que se tentou vincular — a mensagem não nomeia o outro.
+    """
+    traduzido = integrity_errors.translate(
+        _erro("uq_employees_tenant_unit_user"), ON_WRITE_LOGIN_LINK, "e1"
+    )
+    assert isinstance(traduzido, LoginAlreadyLinkedInUnitError)
+    assert "'e1'" in str(traduzido)
+    assert isinstance(traduzido, StaffError | StaffApplicationError)
+
+
+def test_o_indice_da_unidade_nao_e_traduzido_nas_escritas_que_nao_gravam_o_vinculo() -> None:
+    """`add`/`update` não o alcançam em produção (R12 e R15 nascem sem login, e
+    `update` não grava `user_id`): fora da escrita do vínculo ele sobe cru."""
+    erro = _erro("uq_employees_tenant_unit_user")
+    assert integrity_errors.translate(erro, ON_WRITE_EMPLOYEE, "e1") is erro
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +212,13 @@ def test_a_mesma_constraint_tem_dois_significados_conforme_a_operacao() -> None:
 @pytest.mark.parametrize(
     "mapa",
     _TODOS_OS_MAPAS,
-    ids=["insert_funcao", "update_funcao", "delete_funcao", "escrita_funcionario"],
+    ids=[
+        "insert_funcao",
+        "update_funcao",
+        "delete_funcao",
+        "escrita_funcionario",
+        "escrita_do_vinculo",
+    ],
 )
 def test_constraint_sem_significado_de_negocio_sobe_intacta(
     mapa: ConstraintMap, constraint: str
@@ -204,7 +236,13 @@ def test_constraint_sem_significado_de_negocio_sobe_intacta(
 @pytest.mark.parametrize(
     "mapa",
     _TODOS_OS_MAPAS,
-    ids=["insert_funcao", "update_funcao", "delete_funcao", "escrita_funcionario"],
+    ids=[
+        "insert_funcao",
+        "update_funcao",
+        "delete_funcao",
+        "escrita_funcionario",
+        "escrita_do_vinculo",
+    ],
 )
 def test_constraint_desconhecida_sobe_intacta(mapa: ConstraintMap) -> None:
     """Inventar erro de negócio para o que não se entende perde o bug de vista."""

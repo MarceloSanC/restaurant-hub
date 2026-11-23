@@ -95,7 +95,6 @@ def test_ca5_desvincula_registro_ativo_revogando_antes_de_gravar() -> None:
 
     assert chamadas == [
         "employees.find_by_id",
-        "employees.list_by_unit",
         f"gateway.is_employee_login({login!r})",
         f"gateway.revoke_login_sessions({login!r})",
         "employees.unlink_login",

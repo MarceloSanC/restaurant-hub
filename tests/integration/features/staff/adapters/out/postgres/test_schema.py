@@ -27,7 +27,7 @@ sobrevive a um bug de código.
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import Engine, text
+from sqlalchemy import Connection, Engine, text
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.staff.adapters.out.postgres.tables import (
@@ -148,6 +148,7 @@ def test_os_dois_indices_nao_unicos_existem(engine: Engine) -> None:
         "ix_employees_tenant_unit",
         "ix_employee_job_functions_function",
         "ix_job_function_units_tenant_unit",
+        "uq_employees_tenant_unit_user",
     } <= indices
 
 
@@ -237,14 +238,16 @@ def test_tipos_de_coluna_de_employees(engine: Engine) -> None:
     assert len(colunas) == _COLUNAS_DE_EMPLOYEES
 
 
-def test_user_id_nao_tem_fk_unique_nem_indice_no_banco(engine: Engine) -> None:
-    """As três ausências do ADR 3.5.0004 §3, medidas no catálogo do Postgres.
+def test_user_id_nao_tem_fk_nem_constraint_e_so_o_indice_de_um_por_unidade(
+    engine: Engine,
+) -> None:
+    """As ausências que ficam do ADR 3.5.0004 §3, e o índice da issue #241, no catálogo.
 
     Este teste olha só o estado `head`. O `downgrade` da `0004` **não** é
     provado pelo `downgrade base` da fixture (a `0003` derruba `employees`
     inteira, o que mascararia uma `0004.downgrade` vazia); quem o prova é
     `tests/integration/test_migration.py::test_downgrade_da_0004_remove_so_a_coluna_user_id`,
-    descendo até `0003` e olhando o catálogo.
+    descendo até `0003` e olhando o catálogo. O da `0008` é provado lá também.
     """
     with engine.connect() as conexao:
         constraints_sobre_user_id = conexao.execute(
@@ -256,7 +259,7 @@ def test_user_id_nao_tem_fk_unique_nem_indice_no_banco(engine: Engine) -> None:
         ).all()
         indices_sobre_user_id = conexao.execute(
             text(
-                "SELECT i.relname FROM pg_index x "
+                "SELECT i.relname, x.indisunique, pg_get_indexdef(x.indexrelid) FROM pg_index x "
                 "JOIN pg_class i ON i.oid = x.indexrelid "
                 "JOIN pg_attribute a ON a.attrelid = x.indrelid AND a.attnum = ANY(x.indkey) "
                 "WHERE x.indrelid = 'employees'::regclass AND a.attname = 'user_id'"
@@ -264,7 +267,78 @@ def test_user_id_nao_tem_fk_unique_nem_indice_no_banco(engine: Engine) -> None:
         ).all()
 
     assert constraints_sobre_user_id == []
-    assert indices_sobre_user_id == []
+    assert len(indices_sobre_user_id) == 1, indices_sobre_user_id
+    nome, unico, definicao = indices_sobre_user_id[0]
+    assert (nome, unico) == ("uq_employees_tenant_unit_user", True)
+    assert "(tenant_id, unit_id, user_id)" in definicao, definicao
+    assert definicao.endswith("WHERE (user_id IS NOT NULL)"), definicao
+
+
+# ---------------------------------------------------------------------------
+# Issue #241 — um login por unidade, recusado pelo banco (ADR 0.0.0025)
+# ---------------------------------------------------------------------------
+
+
+def _registro(
+    conexao: Connection, id_: str, *, tenant: str = "t1", unidade: str = "u1", ativo: bool = True
+) -> None:
+    conexao.execute(
+        text(
+            "INSERT INTO employees "
+            "(id, tenant_id, unit_id, name, workload_kind, weekly_hours, active) "
+            "VALUES (:id, :t, :u, 'Ana', 'on_demand', NULL, :a)"
+        ),
+        {"id": id_, "t": tenant, "u": unidade, "a": ativo},
+    )
+
+
+def _vincular(conexao: Connection, id_: str, login: str) -> None:
+    conexao.execute(
+        text("UPDATE employees SET user_id = :login WHERE id = :id"), {"login": login, "id": id_}
+    )
+
+
+@pytest.mark.parametrize("segundo_ativo", [True, False], ids=["ativo", "desligado"])
+def test_segundo_registro_da_unidade_com_o_mesmo_login_e_recusado(
+    banco_limpo: Engine, segundo_ativo: bool
+) -> None:
+    """Por `UPDATE` direto, sem mapper nem port: a guarda existe onde sobrevive a um bug.
+
+    O desligado conta, como na regra (ADR 3.10.0001 §6). O nome da violação é o do
+    índice — é por ele que o tradutor de `link_login`/`relink_login` a reconhece.
+    """
+    with banco_limpo.begin() as conexao:
+        _registro(conexao, "e1")
+        _registro(conexao, "e2", ativo=segundo_ativo)
+        _vincular(conexao, "e1", "login-1")
+
+    with pytest.raises(IntegrityError) as excecao, banco_limpo.begin() as conexao:
+        _vincular(conexao, "e2", "login-1")
+
+    assert _nome_da_constraint(excecao.value) == "uq_employees_tenant_unit_user"
+
+
+def test_o_mesmo_login_em_outra_unidade_ou_outro_tenant_e_varios_sem_login_sao_aceitos(
+    banco_limpo: Engine,
+) -> None:
+    """O índice é por unidade (workforce §3.7) e parcial: `NULL` não limita ninguém."""
+    with banco_limpo.begin() as conexao:
+        _registro(conexao, "e1")
+        _registro(conexao, "e-u2", unidade="u2")
+        _registro(conexao, "e-t2", tenant="t2")
+        _registro(conexao, "e-sem-1")
+        _registro(conexao, "e-sem-2")
+        for id_ in ("e1", "e-u2", "e-t2"):
+            _vincular(conexao, id_, "login-1")
+
+    with banco_limpo.connect() as conexao:
+        vinculados = conexao.execute(
+            text("SELECT count(*) FROM employees WHERE user_id = 'login-1'")
+        ).scalar_one()
+        sem_login = conexao.execute(
+            text("SELECT count(*) FROM employees WHERE user_id IS NULL")
+        ).scalar_one()
+    assert (vinculados, sem_login) == (3, 2)
 
 
 def test_instantes_sao_timestamp_sem_fuso_no_banco(engine: Engine) -> None:

@@ -280,3 +280,33 @@ e declarou o resíduo (dois vínculos concorrentes da mesma conta na unidade). O
 `user_id` segue como o fechamento completo, e depende de uma transação de staff que segure
 a leitura da unidade e a escrita; vai para issue própria (ADR 3.10.0001 §6). Nota
 *append-only*; o corpo acima não foi editado.
+
+## Nota — a corrida de dois desligamentos na unidade fechada pelo banco (issue #241, 2026-11-23)
+
+**`### Negative`, a corrida de dois desligamentos concorrentes de dois registros da mesma
+unidade com o mesmo login — fechada.** O resíduo que a nota anterior entregou a issue própria
+(dois vínculos concorrentes da mesma conta na unidade) foi fechado pelo [ADR 0.0.0025](./0_0_0025-one-login-per-unit-is-a-partial-unique-index.md): o índice único
+parcial `uq_employees_tenant_unit_user` sobre `(tenant_id, unit_id, user_id)` (migration `0008`)
+recusa o segundo registro da unidade com o login, a todo escritor de `user_id`, e `link_login`/
+`relink_login` traduzem a recusa no 409 da regra. Provas: `test_issue_241_*` de
+`test_staff_conduct.py` (R18 e R19 concorrentes, duas conexões, o segundo recusado), os testes
+do catálogo e da recusa por `UPDATE` direto em `test_schema.py`, e a CA16 da 3.8 em
+`test_employee_login_flow.py`, que agora trava a recusa do arranjo que ela usava.
+
+O que isso prova, e só isso: num banco na revisão `0008`, dois registros da mesma unidade não
+carregam o mesmo login, então a corrida — que precisa deles — não é produzível por caminho
+nenhum, API ou SQL direto. O que **sobra**, declarado:
+
+- um banco com duplicatas **anteriores** ao índice não chega à `0008`: a migration falha e não
+  aplica nada (ADR 0.0.0025 §5; premissa registrada: sem dados de produção);
+- o "lock por `user_id`" desta seção **não** foi implementado: o índice o substitui (ADR
+  0.0.0025, Alternativa A);
+- entre unidades nada mudou: o caso (a) entre unidades continua revogando (`### Negative`,
+  primeiro item; concept §13 Q4).
+
+**Decisão 1, condição 1.** "Nenhum outro registro **ativo** da mesma unidade aponta para o
+login" vale agora por construção para todo registro vinculado, e a regra deixou de lê-la:
+`end_active_link` não lista mais a unidade (ADR 0.0.0025 §4). Com isso cai também o item de
+`### Negative` *"R13 now reads the whole unit listing before terminating a linked record"*. Os
+arranjos do caso (a) **dentro** da unidade (CA06/CA07 de `test_employee_lifecycle.py`, CA16 do
+e2e) saíram ou passaram a travar a recusa. Nota *append-only*; o corpo acima não foi editado.
