@@ -565,10 +565,11 @@ async def _remocao_de_vinculado(
 # - `EmployeeRelocationError` — nenhuma rota permite enviar `unit_id` num update;
 # - as duas colisões de **id** — o id é UUID gerado dentro do use case, nunca
 #   enviado pelo cliente, e produzi-las exigiria dois UUID4 iguais;
-# - `JobFunctionEnablementChangedError` (issue #206) — nenhuma requisição
+# - `JobFunctionEnablementChangedError` (issues #206 e #207) — nenhuma requisição
 #   **isolada** a produz: exige outra alteração de unidades comitada entre a
-#   leitura e a escrita da mesma função. A prova pelo banco real é o teste de
-#   conduta de duas conexões em `test_staff_conduct.py`.
+#   leitura e a escrita (alterar unidades, renomear ou apagar) da mesma função.
+#   A prova pelo banco real é o teste de conduta de duas conexões em
+#   `test_staff_conduct.py`.
 #
 # As cinco recusas de login da Stage 3.5 estiveram aqui entre a Task 01 (entrada
 # no mapa, sem produtor) e a Task 11 (R17 e a guarda de R15), que as moveu para

@@ -33,6 +33,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     UnitId,
     UserId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import (
     InMemoryStaffStore,
@@ -113,7 +114,10 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
     nova = _funcao(id_="f-nova", name="Nova")
     return [
         ("job_functions.add", lambda: fakes.job_functions.add(nova)),
-        ("job_functions.update", lambda: fakes.job_functions.update(nova)),
+        (
+            "job_functions.update",
+            lambda: fakes.job_functions.update(nova, expected=nova.unit_enablement),
+        ),
         (
             "job_functions.find_by_id",
             lambda: fakes.job_functions.find_by_id(_TENANT, JobFunctionId("f-nova")),
@@ -137,7 +141,9 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
         ),
         (
             "job_functions.delete",
-            lambda: fakes.job_functions.delete(_TENANT, JobFunctionId("f-nova")),
+            lambda: fakes.job_functions.delete(
+                _TENANT, JobFunctionId("f-nova"), expected=nova.unit_enablement
+            ),
         ),
         ("employees.add", lambda: fakes.employees.add(_funcionario(id_="e-novo"))),
         ("employees.update", lambda: fakes.employees.update(_funcionario(id_="e-novo"))),
@@ -298,7 +304,9 @@ def test_funcionario_gravado_por_uma_visao_e_visto_pela_guarda_da_outra() -> Non
     fakes.job_functions.add(_funcao())
     fakes.employees.add(_funcionario())
     with pytest.raises(JobFunctionInUseError):
-        fakes.job_functions.delete(_TENANT, JobFunctionId("f1"))
+        fakes.job_functions.delete(
+            _TENANT, JobFunctionId("f1"), expected=UnitEnablement.everywhere()
+        )
 
 
 def test_as_duas_visoes_escrevem_no_mesmo_store() -> None:

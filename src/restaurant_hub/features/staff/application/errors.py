@@ -68,6 +68,8 @@ class JobFunctionEnablementChangedError(StaffApplicationError):
     conjunto novo por cima seria autorizar contra um estado que não é mais o
     gravado: com a função em `{A}`, o dono alarga para `{A, B}` e um gerente de A
     reenvia `{A}` — B sairia por um ator sem alcance sobre B (ADR 3.11.0001 §5).
+    Desde a issue #207 renomear (`update`, L-JF2) e apagar (`delete`, L-JF3) também
+    são autorizados contra a habilitação lida e recusam pela mesma condição.
 
     Fica sob a raiz de **aplicação** (ADR 3.9.0001 §3): não há regra de produto de
     concorrência em staff, como a F8 é para a escala; a condição nasce da forma

@@ -18,7 +18,7 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | `tenant_id` no `WHERE` do `DELETE` (#108) | nada, o lookup sob lock já o conferiu | #108, aqui |
 | condição sob `FOR NO KEY UPDATE` em `update_enablement` (#206) | nada, sem corrida | #206, aqui |
 | snapshot único nas leituras de função (#225) | nada, sem alteração concorrente | #225, aqui |
-| lookup de `delete` sem remontar a habilitação (#225) | nada, sem corrida | #225, aqui |
+| condição sob lock em `update` e `delete` de função (#207) | nada, sem corrida | #207, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -612,7 +612,9 @@ def test_regressao_5_20_update_que_nao_mexe_no_conjunto_nao_deadlocka_com_delete
 
     def _lado_b() -> None:
         try:
-            PostgresJobFunctionRepository(motor_b).delete(_A, _F2)
+            PostgresJobFunctionRepository(motor_b).delete(
+                _A, _F2, expected=UnitEnablement.everywhere()
+            )
         except BaseException as erro:
             resultados["b"] = erro
 
@@ -712,7 +714,9 @@ def test_regressao_5_20_update_sem_mudanca_no_conjunto_nao_segura_lock_em_job_fu
     def _tentar_remover_f2() -> None:
         """Roda com a transação do `update` de A ainda aberta."""
         try:
-            PostgresJobFunctionRepository(motor_b).delete(_A, _F2)
+            PostgresJobFunctionRepository(motor_b).delete(
+                _A, _F2, expected=UnitEnablement.everywhere()
+            )
         except BaseException as erro:
             observado["erro"] = erro
 
@@ -1514,33 +1518,6 @@ def test_issue_225_listagem_nao_mistura_funcoes_de_instantes_diferentes(
     assert lido in (antes, depois), f"listagem com funções de instantes diferentes: {lido!r}"
 
 
-def test_issue_225_delete_com_conjunto_para_todas_no_meio_do_lookup_remove(
-    motores: Callable[[], Engine],
-) -> None:
-    """O lookup de `delete` não levanta por corrida (lei do port, L-JF3).
-
-    O lookup vem antes do `DELETE`, sem lock, sob `READ COMMITTED` — `delete`
-    escreve, e não roda sob o snapshot único das leituras. Se ele remontasse a
-    habilitação, a mesma alteração `{A}` → todas comitando entre a linha e os
-    vínculos faria a remoção responder `InvalidUnitEnablementError`, um 422 num
-    pedido válido. Ele só precisa saber se a função existe.
-    """
-    motor_adapter = motores()
-    motor_escritor = motores()
-    _semear_funcao_em_a(motor_adapter)
-    repositorio = PostgresJobFunctionRepository(motor_adapter)
-
-    with _entrelacar(
-        motor_adapter,
-        _GATILHO_LINHA_DA_FUNCAO,
-        lambda: _alterar(motor_escritor, _F1, _F1_NOME, _SO_A, _TODAS),
-    ) as disparou:
-        repositorio.delete(_A, _F1)
-
-    assert disparou[0], "o entrelace não disparou — o lookup não foi exercitado no meio"
-    assert PostgresJobFunctionRepository(motor_escritor).find_by_id(_A, _F1) is None
-
-
 # `list_by_unit` fica de fora por definição, não por esquecimento: a única
 # incoerência que a remontagem enxerga (flag `false`, zero vínculos) não nomeia
 # unidade nenhuma, então o filtro de L-JF6 não a lista — devolve vazio, e não há
@@ -1570,3 +1547,131 @@ def test_issue_225_dado_incoerente_gravado_continua_levantando(
 
     with pytest.raises(InvalidUnitEnablementError):
         _ler_funcao(PostgresJobFunctionRepository(motor), metodo)
+
+
+# ---------------------------------------------------------------------------
+# Issue #207 — renomear e apagar condicionais à habilitação lida
+# ---------------------------------------------------------------------------
+#
+# Renomear e apagar passam a exigir alcance sobre as unidades em que a função vale,
+# autorizado contra a habilitação **lida**; `update` (L-JF2) e `delete` (L-JF3)
+# recebem essa leitura e decidem sob o lock da linha, na forma de `update_enablement`.
+# O lookup de `delete` agora remonta a habilitação — sob `FOR UPDATE`, onde as duas
+# metades não podem vir de instantes diferentes (o que a #225 temia sem lock).
+
+_ESCRITAS_CONDICIONAIS = ("update", "delete")
+_LOCK_DO_LOOKUP = {"update": "FOR NO KEY UPDATE", "delete": "FOR UPDATE"}
+
+
+def _escrever(
+    repositorio: PostgresJobFunctionRepository, metodo: str, lida: UnitEnablement
+) -> None:
+    """Renomeia ou apaga `f1` com a habilitação `lida` como condição."""
+    if metodo == "update":
+        repositorio.update(
+            JobFunction(id=_F1, tenant_id=_A, name="Chef", unit_enablement=lida), expected=lida
+        )
+    else:
+        repositorio.delete(_A, _F1, expected=lida)
+
+
+@pytest.mark.parametrize("metodo", _ESCRITAS_CONDICIONAIS)
+def test_issue_207_escrita_bloqueia_no_lookup_e_nao_depois(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """A comparação decide sob o lock — a mesma prova da #206 para `update_enablement`."""
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _semear_funcao_em_a(motor_adapter)
+    repositorio = PostgresJobFunctionRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            _escrever(repositorio, metodo, _SO_A)
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados, "o adapter nem chegou a emitir statement"
+    assert _LOCK_DO_LOOKUP[metodo] in tentados[-1], "o adapter bloqueou em outro statement"
+    assert concluidos == [], "algum statement completou antes do lock"
+
+
+@pytest.mark.parametrize("metodo", _ESCRITAS_CONDICIONAIS)
+def test_issue_207_escrita_que_espera_uma_alteracao_de_unidades_a_rele_e_e_recusada(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """O cenário da issue no banco: o gerente de A leu `{A}`; o dono alarga para `{A, B}`.
+
+    A primeira conexão prende a linha e acrescenta B **sem comitar**; a escrita do
+    gerente, numa thread, fica parada no lock com a leitura antiga. Só então a
+    primeira comita. Com a comparação sob o lock, a escrita relê `{A, B}` e recusa —
+    a função não é renomeada nem apagada em B, que o gerente não alcança. Para o
+    `delete` é também a prova de que a remontagem sob lock não rasga: a alteração
+    comita durante a espera e a leitura vê flag e vínculos do mesmo instante.
+    """
+    motor_primeira = motores()
+    motor_segunda = motores()
+    motor_observador = motores()
+    _semear_funcao_em_a(motor_primeira)
+    erros: list[BaseException] = []
+
+    def _escrita_do_gerente() -> None:
+        try:
+            _escrever(PostgresJobFunctionRepository(motor_segunda), metodo, _SO_A)
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_primeira.begin() as primeira:
+        primeira.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        primeira.execute(
+            text(
+                "INSERT INTO job_function_units (job_function_id, tenant_id, unit_id) "
+                "VALUES (:f, :t, :u)"
+            ),
+            {"f": _F1, "t": _A, "u": _UB},
+        )
+        segunda = threading.Thread(target=_escrita_do_gerente)
+        segunda.start()
+        _esperar_backend_bloqueado(motor_observador)
+    segunda.join(_TIMEOUT_SINCRONIA)
+
+    assert not segunda.is_alive(), "a escrita do gerente não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], JobFunctionEnablementChangedError), erros
+    gravada = PostgresJobFunctionRepository(motor_observador).find_by_id(_A, _F1)
+    assert gravada is not None, "a função foi apagada com a leitura antiga"
+    assert (gravada.name, gravada.unit_enablement) == ("Cozinheiro", _A_E_B)
+
+
+def test_issue_207_atribuicao_em_curso_da_funcao_nao_bloqueia_renomear(
+    motores: Callable[[], Engine],
+) -> None:
+    """O lookup de `update` é `FOR NO KEY UPDATE`: não conflita com o `KEY SHARE` da FK.
+
+    Atribuir a função a um registro prende a linha em `KEY SHARE`; renomear (um
+    `UPDATE` de coluna não-chave) nunca esperou por isso, e o lookup novo não pode
+    passar a esperar.
+    """
+    motor_adapter = motores()
+    motor_atribuicao = motores()
+    _semear_funcao_em_a(motor_adapter)
+
+    with motor_atribuicao.begin() as atribuicao:
+        atribuicao.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR KEY SHARE"),
+            {"f": _F1, "t": _A},
+        )
+        _escrever(PostgresJobFunctionRepository(motor_adapter), "update", _SO_A)
+
+    gravada = PostgresJobFunctionRepository(motor_adapter).find_by_id(_A, _F1)
+    assert gravada is not None
+    assert gravada.name == "Chef"

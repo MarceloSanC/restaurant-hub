@@ -67,10 +67,13 @@ class DeleteJobFunctionUseCase:
             command.actor, PERMISSION_MANAGE_JOB_FUNCTIONS, tenant_id=command.tenant_id
         )
         # (1) Existência no tenant.
-        if self._job_functions.find_by_id(command.tenant_id, command.job_function_id) is None:
+        job_function = self._job_functions.find_by_id(command.tenant_id, command.job_function_id)
+        if job_function is None:
             raise JobFunctionNotFoundError(command.job_function_id)
         # (2) Guarda de referências.
         if self._employees.exists_by_job_function(command.tenant_id, command.job_function_id):
             raise JobFunctionInUseError(command.job_function_id)
         # (3) Remoção.
-        self._job_functions.delete(command.tenant_id, command.job_function_id)
+        self._job_functions.delete(
+            command.tenant_id, command.job_function_id, expected=job_function.unit_enablement
+        )

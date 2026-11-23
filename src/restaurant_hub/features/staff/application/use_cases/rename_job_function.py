@@ -75,5 +75,5 @@ class RenameJobFunctionUseCase:
         if namesake is not None and namesake.id != job_function.id:
             raise JobFunctionNameAlreadyExistsError(command.name)
         # (4) Escrita.
-        self._job_functions.update(renamed)
+        self._job_functions.update(renamed, expected=job_function.unit_enablement)
         return to_job_function_result(renamed)

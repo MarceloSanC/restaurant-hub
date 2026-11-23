@@ -51,11 +51,12 @@ método público, não pelo núcleo sobre `Connection` — uma unidade de trabal
 aberta no nível default perderia o snapshot único destas leituras, o mesmo aviso
 do `employee_repository`.
 
-Duas exceções deliberadas ficam em `READ COMMITTED`: a remontagem de
-`update_enablement`, que roda sob o lock da linha e precisa reler o que a
-alteração anterior comitou (ver o método), e o lookup de `delete`, que não
-remonta a habilitação — só pergunta se a função existe, então não tem duas
-metades para ver de instantes diferentes.
+A exceção deliberada fica em `READ COMMITTED`: a remontagem das três escritas
+sobre função existente (`update_enablement`, `update` e `delete`, condicionais à
+habilitação lida desde as issues #206 e #207), que roda sob o lock da linha e
+precisa reler o que a alteração anterior comitou (ver `update_enablement`). Até a
+#207 o lookup de `delete` não remontava a habilitação (issue #225); agora remonta,
+sob o lock, onde as duas metades não podem vir de instantes diferentes.
 
 E a ordem, que é lei do port desde a Stage 3.3 (`L-ORD`, ADR 3.3.0003):
 `ORDER BY name COLLATE "C", id COLLATE "C"` nas duas listagens, com a colação
@@ -153,25 +154,7 @@ class PostgresJobFunctionRepository:
         sob lock, como as escritas do registro de funcionário.
         """
         with self._engine.begin() as connection:
-            row = connection.execute(
-                select(job_functions)
-                .where(
-                    job_functions.c.id == job_function.id,
-                    job_functions.c.tenant_id == job_function.tenant_id,
-                )
-                # `FOR NO KEY UPDATE`, e não `FOR UPDATE`: é o lock que o `UPDATE`
-                # de coluna não-chave desta escrita já tomava. Serializa as
-                # alterações de unidades entre si, com a renomeação e com o
-                # `DELETE`, sem passar a conflitar com o `KEY SHARE` que a FK de
-                # `employee_job_functions` toma ao atribuir a função a um registro
-                # (ADR 3.3.0006 (b)) — atribuir não muda a habilitação.
-                .with_for_update(key_share=True)
-            ).one_or_none()
-            if row is None:
-                raise JobFunctionNotFoundError(job_function.id)
-            stored = self._hydrate(connection, [row])[0].unit_enablement
-            if stored != expected:
-                raise JobFunctionEnablementChangedError(job_function.id)
+            self._lock_unchanged(connection, job_function.tenant_id, job_function.id, expected)
             connection.execute(
                 job_functions.update()
                 .where(
@@ -188,8 +171,13 @@ class PostgresJobFunctionRepository:
             )
             self._insert_units(connection, job_function)
 
-    def update(self, job_function: JobFunction) -> None:
-        """L-JF2 — `UPDATE` com `rowcount == 0` ⇒ `JobFunctionNotFoundError`.
+    def update(self, job_function: JobFunction, expected: UnitEnablement) -> None:
+        """L-JF2 — `UPDATE` do nome, condicional à habilitação lida (issue #207).
+
+        O lookup sob `FOR NO KEY UPDATE` (o lock que o `UPDATE` de coluna
+        não-chave já tomava) responde `JobFunctionNotFoundError` e compara a
+        habilitação gravada com `expected` — `JobFunctionEnablementChangedError`
+        se mudou —, como em `update_enablement`.
 
         A guarda de nome de L-JF1 vale aqui **ignorando a própria função**, e o
         índice único resolve isso sozinho: renomear para o nome que a função já
@@ -199,11 +187,14 @@ class PostgresJobFunctionRepository:
         """
         try:
             with self._engine.begin() as connection:
+                self._lock_unchanged(connection, job_function.tenant_id, job_function.id, expected)
                 self._update(connection, job_function)
         except IntegrityError as error:
             raise translate(error, ON_UPDATE_JOB_FUNCTION, job_function.name) from error
 
-    def delete(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> None:
+    def delete(
+        self, tenant_id: TenantId, job_function_id: JobFunctionId, expected: UnitEnablement
+    ) -> None:
         """L-JF3 — remoção guardada pelo `RESTRICT`, com o lookup **antes**.
 
         A ordem é normativa (§5.4): função ausente **no tenant** responde
@@ -214,9 +205,20 @@ class PostgresJobFunctionRepository:
         Guarda e escrita rodam na **mesma** transação. Fora dela a ordem seria
         decorativa: entre o `SELECT` e o `DELETE`, um `INSERT` de vínculo
         concorrente mudaria a resposta.
+
+        **Condicional à habilitação lida (issue #207).** O lookup é
+        `SELECT … FOR UPDATE` — o lock que o `DELETE` tomaria de qualquer forma,
+        tomado antes para que a comparação decida sobre a linha que vai sair — e
+        remonta a habilitação para compará-la com `expected`. Sob o lock a
+        remontagem é coerente pelo argumento de `update_enablement` (todo escritor
+        dos vínculos toma a linha-pai antes), o que substitui o lookup sem
+        remontagem que a issue #225 tinha posto aqui.
         """
         try:
             with self._engine.begin() as connection:
+                self._lock_unchanged(
+                    connection, tenant_id, job_function_id, expected, for_delete=True
+                )
                 self._delete(connection, tenant_id, job_function_id)
         except IntegrityError as error:
             raise translate(error, ON_DELETE_JOB_FUNCTION, job_function_id) from error
@@ -366,6 +368,41 @@ class PostgresJobFunctionRepository:
             for row in rows
         )
 
+    def _lock_unchanged(
+        self,
+        connection: Connection,
+        tenant_id: TenantId,
+        job_function_id: JobFunctionId,
+        expected: UnitEnablement,
+        *,
+        for_delete: bool = False,
+    ) -> None:
+        """Trava a linha, e recusa se ausente ou se a habilitação gravada não é `expected`.
+
+        A condição das três escritas sobre função existente (issues #206 e #207),
+        numa cópia só. Ausente no tenant ⇒ `JobFunctionNotFoundError` **antes** da
+        comparação; diferente ⇒ `JobFunctionEnablementChangedError`.
+
+        O lock é `FOR NO KEY UPDATE` para as duas escritas de coluna não-chave
+        (renomear, mudar unidades): serializa-as entre si e com o `DELETE` sem
+        conflitar com o `KEY SHARE` que a FK de `employee_job_functions` toma ao
+        atribuir a função a um registro (ADR 3.3.0006 (b)) — atribuir não muda a
+        habilitação. Para a remoção é `FOR UPDATE`, o lock que o `DELETE` já
+        tomaria (e que já esperava atribuição em curso).
+        """
+        row = connection.execute(
+            select(job_functions)
+            .where(
+                job_functions.c.id == job_function_id,
+                job_functions.c.tenant_id == tenant_id,
+            )
+            .with_for_update(key_share=not for_delete)
+        ).one_or_none()
+        if row is None:
+            raise JobFunctionNotFoundError(job_function_id)
+        if self._hydrate(connection, [row])[0].unit_enablement != expected:
+            raise JobFunctionEnablementChangedError(job_function_id)
+
     def _update(self, connection: Connection, job_function: JobFunction) -> None:
         result = connection.execute(
             job_functions.update()
@@ -384,18 +421,8 @@ class PostgresJobFunctionRepository:
     def _delete(
         self, connection: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
     ) -> None:
-        # Só a existência, sem remontar a habilitação (issue #225): a remontagem
-        # são dois statements em `READ COMMITTED`, e uma alteração de unidades
-        # comitando entre eles faria a remoção responder um erro de dado
-        # incoerente que nunca esteve gravado.
-        found = connection.execute(
-            select(job_functions.c.id).where(
-                job_functions.c.id == job_function_id,
-                job_functions.c.tenant_id == tenant_id,
-            )
-        ).one_or_none()
-        if found is None:
-            raise JobFunctionNotFoundError(job_function_id)
+        # O lookup (existência e habilitação, sob `FOR UPDATE`) já rodou em
+        # `_lock_unchanged`, na mesma transação.
         connection.execute(
             job_functions.delete().where(
                 job_functions.c.id == job_function_id,

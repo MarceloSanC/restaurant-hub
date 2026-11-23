@@ -116,9 +116,10 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     EmployeeAlreadyExistsError: HTTP_CONFLICT,
     JobFunctionInUseError: HTTP_CONFLICT,
     JobFunctionNotEnabledInUnitError: HTTP_CONFLICT,
-    # 409 — a escrita condicional de L-JF7 (issue #206): a habilitação gravada não
-    # é mais a que o pedido leu. O payload está correto; o que impede é o estado
-    # gravado por **outra** alteração, comitada entre a leitura e a escrita.
+    # 409 — as escritas condicionais de L-JF7 (issue #206) e de L-JF2/L-JF3 (renomear
+    # e apagar, issue #207): a habilitação gravada não é mais a que o pedido leu. O
+    # payload está correto; o que impede é o estado gravado por **outra** alteração,
+    # comitada entre a leitura e a escrita.
     # Inalcançável por requisição **isolada** — só um entrelace de duas a produz;
     # quem a prova pelo banco real é o teste de conduta de duas conexões.
     JobFunctionEnablementChangedError: HTTP_CONFLICT,
