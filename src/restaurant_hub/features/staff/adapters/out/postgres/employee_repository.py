@@ -279,13 +279,11 @@ class PostgresEmployeeRepository:
         """
         with self._engine.begin() as connection:
             row = connection.execute(
-                select(employees)
-                .where(
+                select(employees).where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
                     employees.c.unit_id == unit_id,
                 )
-                .with_for_update()
             ).one_or_none()
             if row is None:
                 raise EmployeeNotFoundError(employee_id)
