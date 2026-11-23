@@ -5,7 +5,7 @@ when-use: Reference before adding a second write to any use case, before making 
 keywords: [adr, unit-of-work, scope, bounded-context, cross-bc, side-effect, email, outbox, gate, check-layout, allowlist, staff, identity]
 status: accepted
 created_at: 2026-10-19
-updated_at: 2026-10-19
+updated_at: 2026-11-23
 adr_id: 2.6.0002
 decision: the five identity use cases that write more than once (set_password_with_token, invite_user, provision_account, request_password_reset, refresh_session's rotation) run their writes inside the identity unit; staff gets no unit because none of its use cases writes twice inside staff, and its two cross-BC crossings (create_login_for_employee, deactivate_employee) keep their ordered, declared windows because a transaction across bounded contexts is rejected by ADR 4.1.0006; e-mail is sent after commit; SessionRepository.revoke reports whether it revoked so that a concurrent rotation loser is treated as reuse; check_layout rule 10 requires every use case with two or more writes to keep all of them inside exactly one unit (only write-and-refuse tolerated outside) unless it is in a counted allowlist citing this ADR
 context_stage: 2.6-identity-unit-of-work
@@ -189,3 +189,15 @@ which the rule does see; the staff gateway is an adapter). None exists today.
   [3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md)
 - Concept 3.5 §6.4 and §10; concept 2.5 §5 rule 13
 - Issue: #46; issue #45 (gates)
+
+## Nota — duas travessias novas na allowlist da regra 10 (Stage 3.10, 2026-11-23)
+
+O campo `decision` enumera duas travessias de staff para identity
+(`create_login_for_employee`, `deactivate_employee`). Desde a Stage 3.10 são quatro:
+`RelinkLoginUseCase` e `UnlinkLoginUseCase` revogam as sessões do login em identity, pelo
+ponto único `end_active_link`, antes de gravar o vínculo em staff — a mesma ordem de R13
+(ADR 3.5.0003 §2) e o mesmo motivo de ficarem fora de uma unidade de trabalho (§2: não
+há transação entre BCs). A regra 10 passou a contar a chamada a um auxiliar declarado em
+`HELPER_WRITES` como escrita do use case que o chama; sem isso a entrada de
+`DeactivateEmployeeUseCase` ficaria morta ([ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md)
+§5). Nota *append-only*; o corpo acima não foi editado.

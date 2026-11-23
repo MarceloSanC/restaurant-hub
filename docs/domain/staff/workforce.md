@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (
 keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao, cadastro-minimo, homonimos, wall-clock, fuso-da-unidade, rbac]
 status: accepted
 created_at: 2026-07-23
-updated_at: 2026-11-16
+updated_at: 2026-11-23
 bounded_context: staff
 subdomain: workforce
 references:
@@ -34,6 +34,8 @@ references:
   - ../../adr/3_5_0004-user-id-as-nullable-opaque-column.md
   - ../../adr/3_7_0001-every-staff-use-case-authorizes-its-own-target.md
   - ../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md
+  - ../../adr/3_10_0001-login-link-transitions-by-conditional-write.md
+  - ../../adr/3_10_0002-existing-account-eligibility-by-email.md
   - ../../adr/3_11_0001-job-function-unit-enablement-model.md
   - ../../adr/3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md
   - ../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md
@@ -572,6 +574,31 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
 > encerre o vínculo (desvincular, revincular a outro login) aplica o mesmo corte
 > ([ADR 3.8.0001](../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md),
 > decisão 5).
+
+> **Nota (2026-11-23): gestão do vínculo de login (Stage 3.10).** O bullet "O vínculo é
+> definido uma única vez e só num registro ativo" e a frase "Não há 'desvincular' nem
+> 'vincular login existente' na v1" valiam até a Stage 3.10. Desde ela:
+>
+> - **Vincular uma conta que já existe** (R18) liga ao registro sem login a conta do
+>   restaurante nomeada pelo e-mail — o gerente ou dono que também trabalha na escala. A
+>   conta precisa ser do restaurante do registro e alcançar a unidade dele (membro dela,
+>   ou o dono, que enxerga todas); conta de outro restaurante, de administrador da
+>   plataforma ou sem alcance recebe a mesma recusa de uma conta inexistente. O vínculo
+>   não cria membership nem muda o papel da conta.
+> - **Trocar o login** (R19) põe outra conta existente no lugar, numa operação só;
+>   **desvincular** (R20) tira o login — também de um registro desligado, o caminho para
+>   remover um registro que recebeu login por engano.
+> - **Um login por unidade:** vincular e trocar recusam a conta que já está em outro
+>   registro da mesma unidade (ativo ou desligado).
+> - **Registro desligado continua sem receber login**, nem conta existente; e o
+>   desligamento passou a conferir o vínculo que leu — um vínculo criado no meio faz o
+>   desligamento ser recusado, em vez de deixar o registro desligado e vinculado.
+> - **Toda transição que encerra um vínculo ativo** (desligar, trocar, desvincular) corta
+>   o acesso pela mesma regra do desligamento, num ponto único.
+>
+> Vincular, trocar e desvincular exigem as mesmas duas permissões de criar login
+> ([ADR 3.10.0001](../../adr/3_10_0001-login-link-transitions-by-conditional-write.md);
+> [ADR 3.10.0002](../../adr/3_10_0002-existing-account-eligibility-by-email.md)).
 
 ---
 

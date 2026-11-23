@@ -5,7 +5,7 @@ when-use: Reference before writing `employees.user_id`, before changing `Employe
 keywords: [adr, user_id, employee, login-link, lost-update, conditional-write, for-update, staff, port, issue-68]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-03
+updated_at: 2026-11-23
 adr_id: "0.0.0010"
 decision: '`EmployeeRepository` gains `link_login(tenant_id, unit_id, employee_id, user_id)` — the only writer of `employees.user_id` after the record exists — which locks the row, re-runs the domain guards of `Employee.link_login` on the stored record and writes only `user_id`; `update` ignores the entity''s `user_id` and keeps the stored one; `CreateLoginForEmployeeUseCase` links through `link_login`'
 context_stage: 0.0-global
@@ -181,3 +181,15 @@ escalated as a finding on issue #68"*) foi superado por
 recusado com `EmployeeHasLoginError`, e o adapter Postgres prende a linha com `SELECT … FOR UPDATE`
 antes da guarda e do `DELETE`. Um R17 que vincula entre a leitura do R15 e a remoção não deixa mais
 conta órfã. O resto deste ADR continua valendo. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-23 — dois pontos superados em parte pelo
+[ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md) (Stage
+3.10).** (1) A decisão 3 e o campo `decision` (`link_login` como *"the only writer of
+`employees.user_id` after the record exists"*): `relink_login` e `unlink_login` são
+escritores novos, na mesma forma — trava a linha, reaplica a guarda do domínio sobre o
+gravado, grava uma coluna. (2) O item de `### Negative` *"The reverse order of the
+termination race is not closed"*: fechado. O desligamento grava pelo `deactivate`
+condicional (L-DEACT) com o login e o estado que leu; um vínculo concorrente gravado
+entre a leitura e a escrita faz R13 responder 409 sem gravar, e o registro fica ativo e
+vinculado (conduta com duas conexões em `test_staff_conduct.py`). O resto deste ADR
+continua valendo. Nota *append-only*; o corpo acima não foi editado.
