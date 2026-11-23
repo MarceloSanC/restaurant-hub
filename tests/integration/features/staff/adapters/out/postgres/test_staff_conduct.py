@@ -90,6 +90,7 @@ from restaurant_hub.features.staff.domain.entities.job_function import JobFuncti
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
     InvalidUnitEnablementError,
+    EmployeeLoginChangedError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
@@ -1709,3 +1710,89 @@ def test_issue_207_escrita_que_espera_conjunto_para_todas_nao_responde_422_por_c
     gravada = PostgresJobFunctionRepository(motor_observador).find_by_id(_A, _F1)
     assert gravada is not None, "a função foi apagada com a leitura antiga"
     assert (gravada.name, gravada.unit_enablement) == ("Cozinheiro", _TODAS)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.10 — as escritas condicionais ao lido decidem sob o lock (CA10)
+# ---------------------------------------------------------------------------
+#
+# A forma da corrida de dois R17 acima, para as três leis novas (ADR 3.10.0001
+# §2): outra transação muda o vínculo e **não comita**; a escrita da Stage roda
+# numa thread e fica parada no lock; só então a outra comita. Com a guarda sob o
+# lock, a escrita rele o gravado e recusa com `EmployeeLoginChangedError`. Sem o
+# `FOR UPDATE`, ela leria o estado velho, esperaria só no `UPDATE` e gravaria por
+# cima — o contrato sequencial não enxerga essa diferença.
+
+_LOGIN_LIDO = UserId("login-lido")
+_LOGIN_CONCORRENTE = UserId("login-concorrente")
+
+
+def _desligar_conforme_lido(repositorio: PostgresEmployeeRepository) -> None:
+    """L-DEACT: o R13 leu o registro **sem** vínculo (a ordem inversa do ADR 0.0.0010)."""
+    repositorio.deactivate(_A, _U1, _E1, expected_user_id=None, expected_active=True)
+
+
+def _trocar_conforme_lido(repositorio: PostgresEmployeeRepository) -> None:
+    """L-RELINK: um segundo R19 que leu o login antigo."""
+    repositorio.relink_login(
+        _A, _U1, _E1, expected_user_id=_LOGIN_LIDO, user_id=UserId("login-do-segundo")
+    )
+
+
+def _desvincular_conforme_lido(repositorio: PostgresEmployeeRepository) -> None:
+    """L-UNLINK: um R20 que leu o login antigo, concorrente a uma troca."""
+    repositorio.unlink_login(_A, _U1, _E1, expected_user_id=_LOGIN_LIDO, expected_active=True)
+
+
+@pytest.mark.parametrize(
+    ("vinculo_inicial", "escrita"),
+    [
+        (None, _desligar_conforme_lido),
+        (_LOGIN_LIDO, _trocar_conforme_lido),
+        (_LOGIN_LIDO, _desvincular_conforme_lido),
+    ],
+    ids=["l_deact_vinculo_concorrente", "l_relink_troca_concorrente", "l_unlink_troca_concorrente"],
+)
+def test_stage_3_10_escrita_condicional_rele_o_vinculo_sob_o_lock(
+    motores: Callable[[], Engine],
+    vinculo_inicial: UserId | None,
+    escrita: Callable[[PostgresEmployeeRepository], None],
+) -> None:
+    """Uma escrita concorrente comita enquanto a da Stage espera o lock: a da Stage recusa.
+
+    O registro termina **ativo** e com o vínculo da escrita concorrente — no caso
+    de L-DEACT, ativo **e** vinculado, em vez de desligado e vinculado a um login
+    que nenhuma revogação considerou.
+    """
+    motor_concorrente = motores()
+    motor_stage = motores()
+    motor_observador = motores()
+    _semear(motor_concorrente)
+    if vinculo_inicial is not None:
+        PostgresEmployeeRepository(motor_concorrente).link_login(_A, _U1, _E1, vinculo_inicial)
+    erros: list[BaseException] = []
+
+    def _escrita_da_stage() -> None:
+        try:
+            escrita(PostgresEmployeeRepository(motor_stage))
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_concorrente.begin() as concorrente:
+        concorrente.execute(
+            text("UPDATE employees SET user_id = :u WHERE id = :e AND tenant_id = :t"),
+            {"u": _LOGIN_CONCORRENTE, "e": _E1, "t": _A},
+        )
+        thread = threading.Thread(target=_escrita_da_stage)
+        thread.start()
+        _esperar_backend_bloqueado(motor_observador)
+    thread.join(_TIMEOUT_SINCRONIA)
+
+    assert not thread.is_alive(), "a escrita da Stage não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], EmployeeLoginChangedError), erros
+    relido = PostgresEmployeeRepository(motor_observador).find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.user_id, relido.active) == (_LOGIN_CONCORRENTE, True), (
+        "a escrita da Stage gravou sobre o vínculo concorrente"
+    )
