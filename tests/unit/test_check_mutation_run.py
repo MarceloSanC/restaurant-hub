@@ -3,8 +3,11 @@
 A corrida noturna morreu na coleta durante dias sem alarme: o job era
 `continue-on-error`, e o `mutmut run` que sai com 0 sem ter testado mutante
 nenhum (zero mutantes, ou corrida interrompida) passaria até sem ele. O script
-lê o resumo do `mutmut export-cicd-stats` e falha nesses casos — e só neles:
-sobrevivente continua observacional (limiar da issue #45).
+lê o resumo do `mutmut export-cicd-stats` e falha nesses casos.
+
+Desde a issue #217, com `--sobreviventes`/`--equivalentes`, também falha com
+mutante vivo fora da lista de equivalentes conhecidos e com item da lista que
+não sobreviveu (lista desatualizada).
 """
 
 import importlib.util
@@ -12,6 +15,7 @@ import json
 import pathlib
 import subprocess
 import sys
+import tomllib
 import types
 from typing import Any
 
@@ -62,7 +66,8 @@ def _gravar(tmp_path: pathlib.Path, resumo: dict[str, int]) -> str:
     "resumo",
     [
         _resumo(total=10, killed=7, survived=3),
-        # Sobrevivente não reprova: o limiar é a issue #45, não esta.
+        # Sem a lista, o resumo sozinho não reprova sobrevivente (issue #217:
+        # o limiar mora em `--equivalentes`).
         _resumo(total=4, survived=4),
         # Cada desfecho de mutante testado conta para fechar o total.
         _resumo(
@@ -197,3 +202,127 @@ def test_a_conferencia_le_o_resumo_da_corrida(job_de_mutacao: dict[str, Any]) ->
 
     assert conferencia > corrida
     assert run.index("mutmut export-cicd-stats") < run.index("scripts/check_mutation_run.py")
+
+
+# ---------------------------------------------------------------------------
+# Limiar de sobreviventes (issue #217): só os equivalentes conhecidos vivem.
+# ---------------------------------------------------------------------------
+
+_A = "restaurant_hub.m.xǁCǁsave__mutmut_34"
+_B = "restaurant_hub.m.x_f__mutmut_15"
+_C = "restaurant_hub.features.identity.application.use_cases.authorize_action.x_f__mutmut_3"
+
+
+def _results(**estados: str) -> str:
+    """A saída do `mutmut results` do mutmut 3.7.0: `    <nome>: <estado>` por linha."""
+    return "".join(f"    {nome}: {estado}\n" for nome, estado in estados.items())
+
+
+def _linhas(*nomes: str) -> str:
+    return "".join(f"{nome}\n" for nome in nomes)
+
+
+def _rodar_com_lista(
+    tmp_path: pathlib.Path, resultados: str, lista: str, resumo: dict[str, int] | None = None
+) -> int:
+    saida = tmp_path / "mutmut-results.txt"
+    saida.write_text(resultados, encoding="utf-8")
+    conhecidos = tmp_path / "equivalentes.txt"
+    conhecidos.write_text(lista, encoding="utf-8")
+    stats = _gravar(tmp_path, resumo or _resumo(total=10, killed=8, survived=2))
+    argumentos = [stats, "--sobreviventes", str(saida), "--equivalentes", str(conhecidos)]
+    return int(_script.main(argumentos))
+
+
+def test_so_os_equivalentes_conhecidos_vivos_passa(tmp_path: pathlib.Path) -> None:
+    lista = "# comentário\n\n" + f"{_A}  # premissa\n" + _linhas(_B)
+    resultados = _results(**{_A: "survived", _B: "survived", _C: "killed"})
+
+    assert _rodar_com_lista(tmp_path, resultados, lista) == 0
+
+
+@pytest.mark.parametrize("estado", ["survived", "no tests", "suspicious", "skipped"])
+def test_mutante_vivo_fora_da_lista_reprova(
+    tmp_path: pathlib.Path, estado: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """O defeito que a #217 fecha: um sobrevivente novo no código de acesso passava calado."""
+    resultados = _results(**{_A: "survived", _B: "survived", _C: estado})
+
+    assert _rodar_com_lista(tmp_path, resultados, _linhas(_A, _B)) == 1
+    assert f"fora da lista de equivalentes: {_C} ({estado})" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("estado", ["killed", "timeout", "segfault", "caught by type check"])
+def test_estado_de_mutante_morto_nao_conta_como_vivo(tmp_path: pathlib.Path, estado: str) -> None:
+    resultados = _results(**{_A: "survived", _B: "survived", _C: estado})
+
+    assert _rodar_com_lista(tmp_path, resultados, _linhas(_A, _B)) == 0
+
+
+def test_equivalente_que_nao_sobreviveu_reprova_como_lista_desatualizada(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Editar a função renumera os mutantes; teste novo pode matar um deles."""
+    resultados = _results(**{_A: "survived", _B: "killed"})
+
+    assert _rodar_com_lista(tmp_path, resultados, _linhas(_A, _B)) == 1
+    assert f"lista desatualizada): {_B}" in capsys.readouterr().err
+
+
+def test_linha_que_nao_e_mutante_nao_conta(tmp_path: pathlib.Path) -> None:
+    resultados = "WARNING: algo do uv\n" + _results(**{_A: "survived"})
+
+    assert _rodar_com_lista(tmp_path, resultados, _linhas(_A)) == 0
+
+
+def test_a_lista_nao_dispensa_a_corrida_que_nao_mediu(tmp_path: pathlib.Path) -> None:
+    assert _rodar_com_lista(tmp_path, "", "", _resumo(total=12, killed=11)) == 1
+
+
+@pytest.mark.parametrize(
+    "argumentos",
+    [
+        ["--sobreviventes", "x.txt"],
+        ["--equivalentes", "x.txt"],
+        ["--sobreviventes"],
+        ["a.json", "b.json"],
+    ],
+)
+def test_metade_da_lista_e_uso_errado(argumentos: list[str]) -> None:
+    assert _script.main(argumentos) == 2  # noqa: PLR2004
+
+
+def test_arquivo_da_lista_ausente_reprova(tmp_path: pathlib.Path) -> None:
+    stats = _gravar(tmp_path, _resumo(total=1, killed=1))
+    ausente = str(tmp_path / "ausente.txt")
+
+    assert _script.main([stats, "--sobreviventes", ausente, "--equivalentes", ausente]) == 1
+
+
+def test_o_job_confere_os_sobreviventes_contra_a_lista_do_repo(
+    job_de_mutacao: dict[str, Any],
+) -> None:
+    """Tirar os argumentos devolve o job ao "qualquer número de sobreviventes passa"."""
+    passo = _indice_do_passo(job_de_mutacao, "scripts/check_mutation_run.py")
+    run = job_de_mutacao["steps"][passo]["run"]
+
+    assert run.index("mutmut results > mutmut-results.txt") < run.index("check_mutation_run.py")
+    assert "--sobreviventes mutmut-results.txt" in run
+    assert "--equivalentes scripts/mutation_equivalents.txt" in run
+    assert (_REPO_ROOT / "scripts" / "mutation_equivalents.txt").is_file()
+
+
+def test_todo_equivalente_da_lista_e_de_um_modulo_do_escopo() -> None:
+    """Item de módulo fora do `only_mutate` nunca sobreviveria: entrada morta na lista."""
+    lista = (_REPO_ROOT / "scripts" / "mutation_equivalents.txt").read_text(encoding="utf-8")
+    with (_REPO_ROOT / "pyproject.toml").open("rb") as arquivo:
+        escopo = tomllib.load(arquivo)["tool"]["mutmut"]["only_mutate"]
+    modulos = {
+        caminho.removeprefix("src/").removesuffix(".py").replace("/", ".") for caminho in escopo
+    }
+
+    nomes = _script.equivalentes(lista)
+    assert nomes
+    for nome in nomes:
+        assert "__mutmut_" in nome
+        assert any(nome.startswith(f"{modulo}.") for modulo in modulos), nome

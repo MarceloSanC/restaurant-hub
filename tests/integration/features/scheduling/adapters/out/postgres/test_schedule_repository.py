@@ -367,6 +367,8 @@ def test_save_nao_regrava_periodo_nem_calendario(
 # adapter. Os sobreviventes abaixo não têm teste porque nenhum estado que o schema admite
 # os distingue do original; cada um nomeia a premissa e o teste que a trava. Se a premissa
 # cair (o teste dela mudar), o mutante deixa de ser equivalente e precisa de teste.
+# Os nomes estão em `scripts/mutation_equivalents.txt`, que o job confere contra a
+# corrida: sobrevivente fora da lista reprova, e item da lista que morreu também.
 #
 # - `save`, filtros `tenant_id`/`unit_id` do `UPDATE schedules` (mutmut 34 e 35): o
 #   `UPDATE` casa por `schedules.id`, que é a PK sozinha (`pk_schedules`, um id em

@@ -68,7 +68,7 @@ jobs:
   # check exigido por branch protection (não há), e os testes que leem este job
   # o acham por esse nome.
   #
-  # **Job próprio, noturno, e OBSERVACIONAL na primeira semana.** As três coisas
+  # **Job próprio, noturno, e com limiar de sobreviventes.** As três coisas
   # são decisões, não acidentes:
   #
   # 1. **Fora do `make check` e do pre-commit.** Uma corrida de mutação gera um
@@ -78,22 +78,23 @@ jobs:
   # 2. **Noturno, não por PR.** A corrida leva minutos por mutante sobrevivente,
   #    e o sinal que ela dá — "esta suíte não notaria esta mudança" — é sobre a
   #    suíte, não sobre o diff. Não há o que bloquear num PR específico.
-  # 3. **Sobrevivente observacional enquanto o limiar não está decidido.** A
-  #    issue #45 registra a incerteza: falhar a qualquer sobrevivente
-  #    provavelmente é ruído no primeiro dia. A primeira semana mede o baseline;
-  #    só então se escolhe entre "zero sobreviventes" e "não pior que o
-  #    baseline". Um gate que nasce vermelho não é gate — é um alarme que se
-  #    aprende a ignorar.
+  # 3. **Sobrevivente: zero fora dos equivalentes conhecidos** (issue #217). A
+  #    issue #45 nasceu observacional — falhar a qualquer sobrevivente
+  #    provavelmente seria ruído no primeiro dia, e a primeira semana mediria o
+  #    baseline. O baseline dos módulos de acesso chegou a zero (#155); com o
+  #    adapter da escala vieram dez equivalentes que aparecem em toda corrida, e
+  #    um sobrevivente novo e real passaria calado entre eles. A #217 fechou o
+  #    limiar: a lista `scripts/mutation_equivalents.txt`, conferida pelo
+  #    `check_mutation_run.py` nos dois sentidos.
   #
   # **Corrida que não mede reprova (issue #87).** Até a #87 o job inteiro era
   # `continue-on-error`, e isso escondia o outro modo de falha: a corrida que
   # morre na coleta (`failed to collect stats`) e sai sem testar um mutante. Foi
   # o que aconteceu por dias, com o workflow verde. Agora o job reprova quando
   # o código original não passa, quando o `mutmut run` sai com erro, e quando
-  # sobra mutante sem desfecho (`scripts/check_mutation_run.py`). Sobrevivente
-  # continua sem reprovar: o `mutmut run` sai com 0 com sobreviventes, e o passo
-  # do baseline engole o código de saída. Quando o limiar for decidido, é esse
-  # passo de comparação que passa a `exit 1`.
+  # sobra mutante sem desfecho (`scripts/check_mutation_run.py`), e, desde a
+  # #217, quando sobra mutante vivo fora da lista de equivalentes (item 3). O
+  # passo do baseline continua só publicando o `mutmut results` no resumo.
   # ---------------------------------------------------------------------------
   mutation:
     if: github.event_name != 'pull_request'
@@ -174,10 +175,13 @@ jobs:
 
       # `mutmut run` com saída 0 não garante que mediu: zero mutantes gerados ou
       # mutante sem desfecho também saem verdes. O resumo do mutmut cobra os dois.
+      # E o `mutmut results` contra `scripts/mutation_equivalents.txt` (issue
+      # #217): mutante vivo fora da lista reprova, item da lista que morreu também.
       - name: A corrida testou todos os mutantes
         run: |
           uv run mutmut export-cicd-stats
-          uv run python scripts/check_mutation_run.py mutants/mutmut-cicd-stats.json
+          uv run mutmut results > mutmut-results.txt
+          uv run python scripts/check_mutation_run.py mutants/mutmut-cicd-stats.json --sobreviventes mutmut-results.txt --equivalentes scripts/mutation_equivalents.txt
 
       - name: Baseline de sobreviventes
         if: always()
