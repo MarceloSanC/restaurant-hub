@@ -27,12 +27,26 @@ que o concept 3.5 §6.4 declarou — conta pendente sem token e, no fluxo de sta
 sem vínculo. A unidade é **de identity**: não envolve o `employees.update` que o
 gateway de staff faz depois (ADR 2.6.0002 §2), e essa janela segue declarada.
 
-**A ordem das checagens é a de `InviteUserUseCase`, verbatim**, e pelas mesmas
-razões (unicidade global primeiro; rejeição de `platform_admin` com unidades
-antes de tocar no `UnitRepository`, senão a diferença entre `UnitNotFoundError`
-e `PlatformAdminMembershipError` revelaria quais unidades existem). `_link_units`
-é a terceira cópia da mesma mecânica — declarada no concept 3.5 §10; extrair
-agora acoplaria três fluxos que ainda podem divergir.
+**O papel é recusado antes de tudo** (issue #211). Este use case cria conta
+**sem autorizar** — quem autoriza é o consumidor da fachada (ADR 3.5.0001
+§Decision 1) — e por isso só aceita os papéis de `PROVISIONABLE_ROLES`, hoje só
+`employee`, o login de funcionário de staff. É a mesma regra que
+`IdentityFacade.provision_account` aplica na entrada (ADR 2.7.0001 §Decision 5),
+agora também aqui: um chamador direto, sem a fachada, não cria `platform_admin`,
+`owner`, `manager` nem `hr`. A recusa é a primeira instrução de `execute`,
+antes de qualquer porta, então não grava nada e não revela nada (nem se o
+e-mail está ocupado). Alargar o conjunto é decisão de ADR, não edição local: cada
+papel a mais é conta privilegiada criada sem "não se concede o que não se detém".
+
+**Depois do papel, a ordem é a de `InviteUserUseCase`, verbatim**, e pelas
+mesmas razões (unicidade global primeiro; rejeição de `platform_admin` com
+unidades antes de tocar no `UnitRepository`, senão a diferença entre
+`UnitNotFoundError` e `PlatformAdminMembershipError` revelaria quais unidades
+existem). Com o conjunto aceito de hoje o ramo de `platform_admin` é
+inalcançável; ele fica, como os ramos iguais de `create_user`/`invite_user`
+ficaram na Stage 2.7 (concept 2.7 D6), para que alargar o conjunto não desfaça a
+ordem. `_link_units` é a terceira cópia da mesma mecânica — declarada no concept
+3.5 §10; extrair agora acoplaria três fluxos que ainda podem divergir.
 """
 
 from collections.abc import Sequence
@@ -53,6 +67,7 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     RestaurantNotFoundError,
+    RoleNotProvisionableError,
     UnitNotFoundError,
 )
 from restaurant_hub.features.identity.application.ports.out.password_hasher import (
@@ -90,6 +105,10 @@ from restaurant_hub.features.identity.domain.value_objects.unit_membership impor
 from restaurant_hub.shared.application.ports.out.clock import Clock
 from restaurant_hub.shared.application.ports.out.id_generator import IdGenerator
 
+# Os papéis que esta entrada sem autorização cria. Fora daqui, `execute` recusa
+# antes de qualquer porta (issue #211). Alargar exige ADR.
+PROVISIONABLE_ROLES: frozenset[Role] = frozenset({Role.EMPLOYEE})
+
 
 class ProvisionAccountUseCase:
     """Cria a conta sem senha utilizável, emite o token e devolve o link."""
@@ -126,12 +145,18 @@ class ProvisionAccountUseCase:
         """Provisiona a conta pendente.
 
         Raises:
+            RoleNotProvisionableError: papel fora de `PROVISIONABLE_ROLES` —
+                checado primeiro, antes de qualquer porta.
             EmailAlreadyRegisteredError: e-mail já usado em qualquer tenant.
-            PlatformAdminMembershipError: `platform_admin` com `unit_ids`.
+            PlatformAdminMembershipError: `platform_admin` com `unit_ids` — só
+                alcançável se o conjunto aceito vier a incluir `platform_admin`.
             RestaurantNotFoundError: tenant informado não existe.
             UnitNotFoundError: alguma unidade informada não existe.
             CrossTenantError: unidade pertence a outro tenant.
         """
+        if command.role not in PROVISIONABLE_ROLES:
+            raise RoleNotProvisionableError(command.role.value)
+
         if self._users.exists_by_email(command.email):
             raise EmailAlreadyRegisteredError(command.email.value)
 

@@ -5,6 +5,10 @@ ganha o **prazo do canal**, nenhum e-mail sai daqui, e o link devolvido é o
 **único** lugar onde o valor do token aparece — com a forma exata que o front-end
 consome. A ordem das checagens é a de `InviteUserUseCase`, e o teste de
 precedência da 2.5 está replicado porque a ordem é contrato, não detalhe.
+
+Desde a issue #211, antes de tudo isso vem o **papel**: chamado direto, sem a
+fachada, o use case recusa todo papel fora do conjunto aceito, sem efeito e sem
+tocar porta nenhuma (`TestPapelProvisionavel`).
 """
 
 from collections.abc import Sequence
@@ -23,9 +27,14 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     RestaurantNotFoundError,
+    RoleNotProvisionableError,
     UnitNotFoundError,
 )
+from restaurant_hub.features.identity.application.use_cases import (
+    provision_account as modulo_provision_account,
+)
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
+    PROVISIONABLE_ROLES,
     ProvisionAccountUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
@@ -33,6 +42,7 @@ from restaurant_hub.features.identity.domain.entities.unit import Unit
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions.errors import (
     CrossTenantError,
+    MissingTenantError,
     PlatformAdminMembershipError,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
@@ -283,7 +293,7 @@ class TestCaminhoFeliz:
     def test_sem_unidades_tambem_provisiona(self) -> None:
         cenario = Cenario()
 
-        resultado = cenario.use_case.execute(_comando(role=Role.MANAGER, unit_ids=()))
+        resultado = cenario.use_case.execute(_comando(unit_ids=()))
 
         assert resultado.user.unit_ids == ()
 
@@ -321,14 +331,31 @@ class TestCasosDeErro:
         with pytest.raises(EmailAlreadyRegisteredError):
             cenario.use_case.execute(_comando("ocupado@x.com", tenant="rest-fantasma"))
 
-    def test_platform_admin_com_unidade_levanta_antes_de_consultar_unidades(self) -> None:
-        """A ordem é contrato (2.5, replicado): `UnitNotFoundError` aqui revelaria quais existem."""
+    def test_platform_admin_com_unidade_levanta_antes_de_consultar_unidades(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A ordem é contrato (2.5, replicado): `UnitNotFoundError` aqui revelaria quais
+        existem. Desde a issue #211 o ramo só é alcançável com `platform_admin` no
+        conjunto aceito — o dublê alarga o conjunto para exercitar a ordem que um
+        alargamento futuro herdaria."""
+        monkeypatch.setattr(modulo_provision_account, "PROVISIONABLE_ROLES", frozenset(Role))
         cenario = Cenario()
 
         with pytest.raises(PlatformAdminMembershipError):
             cenario.use_case.execute(
                 _comando(role=Role.PLATFORM_ADMIN, tenant=None, unit_ids=("nao-existe",))
             )
+
+    def test_sem_tenant_levanta_o_erro_de_dominio_e_nao_grava(self) -> None:
+        """Sem tenant não há restaurante a consultar: quem recusa é o `User`
+        (`MissingTenantError`), não um `RestaurantNotFoundError` de tenant `None`."""
+        cenario = Cenario()
+
+        with pytest.raises(MissingTenantError):
+            cenario.use_case.execute(_comando(tenant=None, unit_ids=()))
+
+        assert cenario.users.exists_by_email(Email("funcionario@x.com")) is False
+        assert cenario.tokens.tokens == {}
 
     def test_tenant_inexistente_levanta(self) -> None:
         cenario = Cenario()
@@ -356,6 +383,114 @@ class TestCasosDeErro:
 
         assert cenario.users.exists_by_email(Email("nao@x.com")) is False
         assert cenario.tokens.tokens == {}
+
+
+# Transcritos, não derivados de `PROVISIONABLE_ROLES`: derivar a expectativa da
+# constante tornaria o teste tautológico — alargar o conjunto passaria verde.
+_PAPEIS_ACEITOS = frozenset({Role.EMPLOYEE})
+# Derivados do enum: um papel novo em `Role` cai aqui sem edição e é recusado.
+_PAPEIS_RECUSADOS = tuple(papel for papel in Role if papel not in _PAPEIS_ACEITOS)
+
+
+class _PortaProibida:
+    """Dublê de **toda** porta do construtor: qualquer acesso reprova o teste."""
+
+    def __init__(self, nome: str) -> None:
+        self._nome = nome
+
+    def __getattr__(self, atributo: str) -> object:
+        raise AssertionError(f"a recusa do papel tocou {self._nome}.{atributo}")
+
+
+def _use_case_sem_portas() -> ProvisionAccountUseCase:
+    proibida = _PortaProibida
+    return ProvisionAccountUseCase(
+        users=proibida("users"),  # type: ignore[arg-type]
+        restaurants=proibida("restaurants"),  # type: ignore[arg-type]
+        units=proibida("units"),  # type: ignore[arg-type]
+        hasher=proibida("hasher"),  # type: ignore[arg-type]
+        tokens=proibida("tokens"),  # type: ignore[arg-type]
+        token_issuer=proibida("token_issuer"),  # type: ignore[arg-type]
+        id_generator=proibida("id_generator"),  # type: ignore[arg-type]
+        clock=proibida("clock"),  # type: ignore[arg-type]
+        invitation_ttl=_TTL_CONVITE,
+        handover_ttl=_TTL_EM_MAOS,
+        base_url=_BASE_URL,
+        unit_of_work=proibida("unit_of_work"),  # type: ignore[arg-type]
+    )
+
+
+def _comando_valido_para(papel: Role) -> ProvisionAccountCommand:
+    """O command que, sem a recusa do papel, criaria a conta: `platform_admin` sem
+    tenant nem unidade (o `User` exige), os demais no tenant e na unidade do cenário."""
+    if papel is Role.PLATFORM_ADMIN:
+        return _comando("alvo@x.com", role=papel, tenant=None, unit_ids=())
+    return _comando("alvo@x.com", role=papel)
+
+
+class TestPapelProvisionavel:
+    """Issue #211 — a propriedade, não um caso: chamada direta ao use case (sem
+    fachada, sem HTTP) com **qualquer** papel fora do conjunto aceito é recusada
+    sem efeito. A fachada aplica a mesma regra na entrada (ADR 2.7.0001
+    §Decision 5); aqui ela deixa de depender de quem alcança o use case."""
+
+    def test_as_listas_particionam_o_enum_e_a_dos_recusados_nao_e_vazia(self) -> None:
+        """Guarda contra o parametrize vácuo: sem papel recusado, os testes abaixo
+        não rodariam caso nenhum e passariam verdes."""
+        assert _PAPEIS_RECUSADOS
+        assert _PAPEIS_ACEITOS
+        assert set(_PAPEIS_RECUSADOS) | _PAPEIS_ACEITOS == set(Role)
+
+    def test_o_conjunto_aceito_e_exatamente_employee(self) -> None:
+        """Alargar `PROVISIONABLE_ROLES` é decisão de ADR; a edição solta reprova aqui."""
+        assert PROVISIONABLE_ROLES == _PAPEIS_ACEITOS
+
+    @pytest.mark.parametrize("papel", _PAPEIS_RECUSADOS, ids=str)
+    def test_papel_recusado_nao_grava_conta_nem_token(self, papel: Role) -> None:
+        """Com um command que, sem a recusa, daria certo, a recusa é tudo o que acontece."""
+        cenario = Cenario()
+
+        with pytest.raises(RoleNotProvisionableError) as erro:
+            cenario.use_case.execute(_comando_valido_para(papel))
+
+        assert erro.value.role == papel.value
+        assert cenario.users.exists_by_email(Email("alvo@x.com")) is False
+        assert cenario.users.memberships == []
+        assert cenario.tokens.tokens == {}
+        assert cenario.unidade.aberturas == 0
+
+    @pytest.mark.parametrize("papel", _PAPEIS_RECUSADOS, ids=str)
+    def test_papel_recusado_nao_toca_porta_nenhuma(self, papel: Role) -> None:
+        """A recusa é a primeira instrução: nem a unicidade do e-mail é consultada,
+        então sondar com papel recusado não ensina se o e-mail existe."""
+        with pytest.raises(RoleNotProvisionableError):
+            _use_case_sem_portas().execute(_comando_valido_para(papel))
+
+    @pytest.mark.parametrize("papel", _PAPEIS_RECUSADOS, ids=str)
+    def test_o_papel_vem_antes_do_email_do_tenant_e_das_unidades(self, papel: Role) -> None:
+        """Com e-mail ocupado, tenant e unidade fantasmas, o que sobe é a recusa."""
+        cenario = Cenario()
+        cenario.use_case.execute(_comando("ocupado@x.com"))
+
+        with pytest.raises(RoleNotProvisionableError):
+            cenario.use_case.execute(
+                _comando(
+                    "ocupado@x.com",
+                    role=papel,
+                    tenant="rest-fantasma",
+                    unit_ids=("unit-fantasma",),
+                )
+            )
+
+    @pytest.mark.parametrize("papel", sorted(_PAPEIS_ACEITOS), ids=str)
+    def test_papel_aceito_provisiona(self, papel: Role) -> None:
+        """Controle positivo: a recusa não é um `raise` incondicional."""
+        cenario = Cenario()
+
+        resultado = cenario.use_case.execute(_comando_valido_para(papel))
+
+        assert resultado.user.role is papel
+        assert cenario.users.exists_by_email(Email("alvo@x.com")) is True
 
 
 _ESCRITAS = ("users.add", "tokens.add")

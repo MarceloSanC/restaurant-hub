@@ -302,13 +302,15 @@ class InvitationNotSentError(IdentityApplicationError):
 
 
 class RoleNotProvisionableError(IdentityApplicationError):
-    """Papel válido que a fachada não provisiona (Stage 2.7, ADR 2.7.0001 §Decision 5).
+    """Papel válido que o provisionamento não cria (Stage 2.7, ADR 2.7.0001 §Decision 5).
 
-    `IdentityFacade.provision_account` cria contas **sem autorizar** — quem autoriza é
-    o consumidor (ADR 3.5.0001 §Decision 1) — e por isso só aceita o papel que serve:
-    `employee`, o login de funcionário de staff. Um `owner`, `manager`, `hr` ou
-    `platform_admin` por esse caminho seria conta privilegiada criada sem a regra
-    "não se concede o que não se detém".
+    `IdentityFacade.provision_account` e o `ProvisionAccountUseCase` por baixo dela
+    criam contas **sem autorizar** — quem autoriza é o consumidor (ADR 3.5.0001
+    §Decision 1) — e por isso só aceitam o papel que servem: `employee`, o login de
+    funcionário de staff. Um `owner`, `manager`, `hr` ou `platform_admin` por esse
+    caminho seria conta privilegiada criada sem a regra "não se concede o que não se
+    detém". Os dois levantam esta classe, cada um como primeira instrução: a fachada
+    na entrada (Stage 2.7) e o use case para quem o chama direto (issue #211).
 
     É de aplicação, e não de domínio (ADR 3.9.0001): o papel existe e é válido no
     domínio; é esta entrada que não o aceita. Papel **desconhecido** continua sendo
