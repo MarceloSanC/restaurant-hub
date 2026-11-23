@@ -404,13 +404,16 @@ def test_main_exits_2_when_nothing_is_found(
 # Contra os docs reais
 # ---------------------------------------------------------------------------
 
-# O corte, transcrito: os 20 registros que reprovavam no merge da issue #212 (19 sem o
-# campo, 1 fora do vocabulário). Este conjunto não cresce; registro novo traz o campo.
-_LEGACY_COUNT = 20
+# O corte, transcrito: os 23 registros que reprovavam no merge da issue #212 (21 sem o
+# campo, 2 fora do vocabulário; 3 deles do ADR 4.4.0005, mergeado antes da regra).
+# Este conjunto não cresce; registro novo traz o campo.
+_LEGACY_COUNT = 23
 _ADR = "docs/adr/"
+_A445 = _ADR + "4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md"
 _C37 = "docs/stages/3.7-application-authorization/concept.md"
 _C42 = "docs/stages/4.2-validation-policies/concept.md"
 _LEGACY = {
+    *((_A445, f"D199-{number}") for number in range(1, 4)),
     (_ADR + "0_0_0012-cite-the-roadmap-by-stable-anchor.md", "0.0.0012"),
     (_ADR + "0_0_0017-cite-domain-docs-by-stable-anchor.md", "0.0.0017"),
     (_ADR + "0_0_0019-cite-overview-adrs-and-code-by-stable-anchor.md", "0.0.0019"),
@@ -420,9 +423,9 @@ _LEGACY = {
     *((_C37, f"D{number}") for number in range(1, 4)),
     *((_C42, f"D{number}") for number in range(1, 12)),
 }
-# Piso da varredura real (medição de 2026-11-23): 30 registros em 3 concepts e 9 ADRs
-# fora do corte e dentro dele. Só cresce.
-_REAL_RECORDS_FLOOR = 30
+# Piso da varredura real (medição de 2026-11-23, com o ADR 4.4.0005): 33 registros em
+# 4 concepts e 8 ADRs, fora do corte e dentro dele. Só cresce.
+_REAL_RECORDS_FLOOR = 33
 _REAL_PASSING_FLOOR = 10
 
 

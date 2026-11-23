@@ -83,7 +83,11 @@ VOCABULARY: tuple[str, ...] = ("sustenta", "parcial→corrigido", "não verifica
 
 # Os registros anteriores à issue #212 que reprovariam (medição de 2026-11-23 em
 # `develop` 1d95ab8): 19 sem o campo e 1 fora do vocabulário (ADR 0.0.0022 D1,
-# "não se aplica o §4.2"). Todos em concept de Stage `done` ou em ADR `accepted`.
+# "não se aplica o §4.2"). Mais os 3 do ADR 4.4.0005 (issue #199), mergeado em
+# `develop` (06d527c) antes desta regra, achados no rebase da auditoria: D199-1 com
+# "teste de contrato ..." (fora do vocabulário) e D199-2/D199-3 sem o campo; nenhum
+# passou pelo `evidence-verifier`, então não há termo que se possa gravar sem afirmar
+# o que não houve. Todos em concept de Stage `done` ou em ADR `accepted`.
 # Lista fechada: não se acrescenta registro aqui. Parecidas, mas de outras regras e
 # outras datas: `LEGACY_STAGES` em `scripts/check_gate_plan.py` (plano de gates,
 # ADR 0.0.0021) e `LEGACY_CHECKPOINT_STAGES` em `scripts/check_technical_postexec.py`
@@ -95,6 +99,9 @@ LEGACY_RECORDS: frozenset[tuple[str, str]] = frozenset(
         ("docs/adr/0_0_0019-cite-overview-adrs-and-code-by-stable-anchor.md", "0.0.0019"),
         ("docs/adr/0_0_0022-audit-session-closes-the-pr-it-validated.md", "D1"),
         ("docs/adr/2_7_0001-identity-authorizes-through-a-narrow-port.md", "2.7.0001-2"),
+        ("docs/adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md", "D199-1"),
+        ("docs/adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md", "D199-2"),
+        ("docs/adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md", "D199-3"),
         ("docs/stages/3.11-job-function-unit-enablement/concept.md", "D8"),
         ("docs/stages/3.7-application-authorization/concept.md", "D1"),
         ("docs/stages/3.7-application-authorization/concept.md", "D2"),
