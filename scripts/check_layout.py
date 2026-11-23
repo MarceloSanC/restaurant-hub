@@ -628,6 +628,34 @@ GATEWAY_WRITE_METHODS: dict[str, frozenset[str]] = {
     "IdentityGateway": frozenset({"provision_employee_login", "revoke_login_sessions"}),
 }
 
+# Ports de saída que não são repositório e **não gravam**, cada um com o motivo
+# (issue #260). Com `GATEWAY_WRITE_METHODS`, é a classificação **total** desses ports:
+# todo port (`_e_port`) de `ports/out/` fora de `*_repository.py`, de qualquer BC ou de
+# `shared/`, está num dos dois, ou `check_out_port_classification` reprova. Sem isso,
+# um gateway novo que gravasse em outro BC seria lido como leitura em silêncio. A chave
+# é o nome da classe, como em `is_write`: dois ports homônimos (os dois `AccessGuard`)
+# partilham a classificação — fail-closed, porque o pino de métodos do teste é por
+# (arquivo, classe) e o método que grava conta pelo nome nos dois.
+NON_WRITING_PORTS: dict[str, str] = {
+    "ActionAuthorizer": "decide o acesso (AuthorizeActionUseCase); não grava",
+    "PasswordHasher": "calcula e confere hash em memória; não grava",
+    "SetupTokenIssuer": (
+        "gera o valor do token e a impressão digital; quem grava é o PasswordSetupTokenRepository"
+    ),
+    "TokenIssuer": (
+        "assina, decodifica e gera tokens em memória; quem grava a sessão é o SessionRepository"
+    ),
+    "UnitOfWork": "é a própria unidade de trabalho da regra 10 (UNIT_OF_WORK_PORT)",
+    "AccessGuard": "autentica e autoriza (scheduling e staff, homônimos); só lê",
+    "StaffReadPort": "scheduling lê staff pela fachada de leitura (list_*); não grava",
+    "Clock": "lê a hora; não grava",
+    "IdGenerator": "gera o identificador em memória; não grava",
+    "EmailSender": (
+        "efeito externo fora de propósito: o e-mail sai depois do commit e não conta "
+        "como escrita da unidade (ADR 2.6.0002 §3)"
+    ),
+}
+
 # Os auxiliares que escrevem — funções de módulo de `use_cases/` que recebem um
 # repositório ou gateway e gravam por ele — **não** são uma tabela: saem de
 # `helper_writes`, derivados do código (issue #243). Até a issue #243 eram uma tabela
@@ -707,6 +735,90 @@ def port_methods(src_root: Path) -> dict[str, set[str]]:
         for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
             metodos[classe.name] = {m.name for m in classe.body if isinstance(m, _FUNCOES)}
     return metodos
+
+
+_BASES_DE_PORT = frozenset({"Protocol", "ABC"})
+_METACLASSES_DE_PORT = frozenset({"ABCMeta"})
+
+
+def _apelidos(tree: ast.Module) -> dict[str, str]:
+    """`from typing import Protocol as P` → `{"P": "Protocol"}` (e o mesmo para `ABC`/`ABCMeta`)."""
+    return {
+        nome.asname: nome.name
+        for no in ast.walk(tree)
+        if isinstance(no, ast.ImportFrom)
+        for nome in no.names
+        if nome.asname is not None and nome.name in _BASES_DE_PORT | _METACLASSES_DE_PORT
+    }
+
+
+def _e_port(
+    classe: ast.ClassDef,
+    apelidos: dict[str, str] | None = None,
+    ports_conhecidos: frozenset[str] = frozenset(),
+) -> bool:
+    """`class X(Protocol)`, `X(typing.Protocol)`, `X(Protocol[T])`, `X(ABC)`,
+    `X(metaclass=ABCMeta)` — com o nome importado sob apelido ou não — ou uma
+    classe que herda de outro port (`ports_conhecidos`).
+
+    As outras classes de `ports/out/` (dataclasses de retorno, enums) não são port.
+    """
+    apelidos = apelidos or {}
+
+    def nome_real(no: ast.expr) -> str | None:
+        nome = _anotacao(no)
+        return apelidos.get(nome, nome) if nome is not None else None
+
+    for base in classe.bases:
+        nome = nome_real(base.value if isinstance(base, ast.Subscript) else base)
+        if nome in _BASES_DE_PORT or nome in ports_conhecidos:
+            return True
+    return any(
+        k.arg == "metaclass" and nome_real(k.value) in _METACLASSES_DE_PORT for k in classe.keywords
+    )
+
+
+def non_repository_ports(src_root: Path) -> dict[tuple[str, str], frozenset[str]]:
+    """(arquivo relativo, port) → métodos, para todo port de saída que não é repositório.
+
+    Derivado da árvore: `ports/out/` de cada feature e de `shared/` (subpastas e
+    `__init__.py` inclusive), fora de `*_repository.py` (issue #260). Port é a classe
+    de `_e_port`; a herança de outro port (de repositório ou não) se resolve até o
+    ponto fixo, pelo nome.
+
+    **Limites declarados** (auditoria do PR #263): só a classe no nível do módulo — a
+    definida dentro de `if`/`try`/função não é vista; classe sem base nenhuma usada
+    como interface não é port para a regra (o port do projeto é `Protocol`, LAYOUT
+    §5); e a classe de um arquivo `*_repository.py` é sempre repositório,
+    classificada pelo prefixo do método (o que não começa com `find_`/`exists_`/`list_`
+    grava — o erro desse lado é contar escrita a mais, salvo o método com prefixo de
+    leitura que grava, risco que já era o da convenção de nome dos repositórios).
+    """
+    classes: dict[tuple[str, str], tuple[ast.ClassDef, dict[str, str]]] = {}
+    for arquivo in sorted(src_root.rglob("*.py")):
+        caminho = posix(arquivo)
+        if PORTS_OUT_ANCHOR not in caminho or caminho.endswith(REPOSITORY_PORT_SUFFIX):
+            continue
+        tree = parse(arquivo)
+        if tree is None:
+            continue
+        relativo = arquivo.relative_to(src_root).as_posix()
+        apelidos = _apelidos(tree)
+        for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
+            classes[(relativo, classe.name)] = (classe, apelidos)
+
+    conhecidos = frozenset(repository_port_names(src_root))
+    portas: dict[tuple[str, str], frozenset[str]] = {}
+    while True:
+        novas = {
+            chave: frozenset(m.name for m in classe.body if isinstance(m, _FUNCOES))
+            for chave, (classe, apelidos) in classes.items()
+            if chave not in portas
+            and _e_port(classe, apelidos, conhecidos | {nome for _, nome in portas})
+        }
+        if not novas:
+            return portas
+        portas.update(novas)
 
 
 def is_write(port: str, method: str, repository_ports: set[str]) -> bool:
@@ -1306,6 +1418,43 @@ def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
     return violacoes
 
 
+def check_out_port_classification(src_root: Path) -> list[str]:
+    """Regra 10 — todo port de saída que não é repositório está classificado (issue #260).
+
+    O repositório se classifica pelo nome do método; o resto, só pelo que o script
+    declara. Port novo fora de `GATEWAY_WRITE_METHODS` e de `NON_WRITING_PORTS`
+    reprova até alguém dizer se ele grava — o padrão contrário, ler como leitura,
+    deixaria passar verde um use case que gravasse por ele e pelo repositório fora
+    de unidade. Entrada que não corresponde a port real reprova também, e o mesmo
+    nome nos dois lados é contradição.
+    """
+    portas = non_repository_ports(src_root)
+    nomes = {nome for _, nome in portas}
+    violacoes: list[str] = []
+    for arquivo, nome in sorted(portas):
+        if nome not in GATEWAY_WRITE_METHODS and nome not in NON_WRITING_PORTS:
+            violacoes.append(
+                f"ESCRITA MÚLTIPLA: {arquivo} — o port de saída '{nome}' não está "
+                f"classificado. Ponha os métodos que gravam em GATEWAY_WRITE_METHODS, ou "
+                f"declare-o em NON_WRITING_PORTS com o motivo (issue #260)."
+            )
+    for tabela, declarados in (
+        ("GATEWAY_WRITE_METHODS", set(GATEWAY_WRITE_METHODS)),
+        ("NON_WRITING_PORTS", set(NON_WRITING_PORTS)),
+    ):
+        for nome in sorted(declarados - nomes):
+            violacoes.append(
+                f"ESCRITA MÚLTIPLA: {tabela} declara '{nome}', que não é port de saída "
+                f"fora de repositório — tire a entrada (classificação morta)."
+            )
+    for nome in sorted(set(GATEWAY_WRITE_METHODS) & set(NON_WRITING_PORTS)):
+        violacoes.append(
+            f"ESCRITA MÚLTIPLA: '{nome}' está em GATEWAY_WRITE_METHODS e em "
+            f"NON_WRITING_PORTS — um port grava ou não grava."
+        )
+    return violacoes
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1340,6 +1489,7 @@ def main() -> int:
         *check_result_construction_sites(src_root),
         *check_package_markers(src_root),
         *check_multi_write_unit_of_work(src_root),
+        *check_out_port_classification(src_root),
         *check_error_hierarchy_protocol(src_root),
     ]
 

@@ -246,3 +246,48 @@ ou método de instância dele), num alias local, ou entregue como método ligado
 que a auditoria da #205 declarou no guarda dela); `getattr` dinâmico; função fora de `use_cases/`
 ou fora do nível do módulo. A allowlist do §5 não mudou. Nota *append-only*; o corpo acima não foi
 editado.
+
+## Nota — todo port de saída fora de repositório passa a ser classificado (issue #260, 2026-11-23)
+
+O §5 diz que é escrita *"a call to a gateway method the script declares as a write"*; o que ele não
+fixava era o **conjunto** dos gateways. Até a issue #260 só `IdentityGateway` era declarado
+(`GATEWAY_WRITE_METHODS`), e um port de saída novo que gravasse em outro BC seria lido como leitura
+em silêncio. Agora `scripts/check_layout.py` deriva da árvore todo port de saída que não é
+repositório (`non_repository_ports`: as classes `Protocol` ou `ABC` de `ports/out/` das features e
+de `shared/`, fora de `*_repository.py`), e `check_out_port_classification`, ligada ao `main`, exige
+que cada um esteja em `GATEWAY_WRITE_METHODS` (com os métodos que gravam) ou em `NON_WRITING_PORTS`
+(com o motivo de não gravar). Port novo sem classificação reprova; entrada que já não corresponde a
+port real, ou o mesmo port nas duas tabelas, também. O pino de `tests/unit/test_check_layout.py`
+(`test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado`) classifica todo **método** de
+cada um desses ports, de modo que um método novo — inclusive num port que hoje não grava — reprova
+até ser classificado.
+
+Medido em `develop` (`0b57697`): doze ports. Só `IdentityGateway` grava
+(`provision_employee_login`, `revoke_login_sessions`); `ActionAuthorizer`, `PasswordHasher`,
+`SetupTokenIssuer`, `TokenIssuer`, `UnitOfWork`, os dois `AccessGuard` (scheduling e staff),
+`StaffReadPort`, `Clock` e `IdGenerator` não gravam; o `EmailSender` fica fora **de propósito**
+(§3: o e-mail sai depois do commit), e a declaração dele diz isso. A chave das tabelas é o nome da
+classe, como em `is_write`: ports homônimos de BCs diferentes partilham a classificação.
+O limite é *fail-closed*: o pino de métodos é por (arquivo, classe), então um método novo num
+dos dois `AccessGuard` reprova o teste mesmo com o nome já classificado no script; e, se um
+deles passasse a gravar, mover `AccessGuard` para `GATEWAY_WRITE_METHODS` conta o método pelo
+nome nos dois — escrita a mais, nunca a menos.
+
+A auditoria do PR #263 plantou formas de port que a primeira versão da descoberta não via e as
+passou a ver, com teste: `Protocol`/`ABC` importados com apelido (`from typing import Protocol as
+P`), `metaclass=ABCMeta` e a classe que herda de outro port (de repositório ou não) sem repetir
+`Protocol`. Subpasta de `ports/out/`, `__init__.py`, `typing_extensions.Protocol` e duas classes
+no mesmo arquivo já eram vistos. Ficam **fora**, declarados no docstring de
+`non_repository_ports`: a classe que não está no nível do módulo (dentro de `if`, `try` ou
+função); a classe sem base nenhuma usada como interface (o port do projeto é `Protocol`,
+LAYOUT §5); e a classe de um arquivo `*_repository.py`, que é sempre repositório e se classifica
+pelo prefixo do método — o erro desse lado é contar escrita a mais, salvo o método com prefixo
+de leitura que grava, risco que já era o da convenção de nome dos repositórios.
+
+[decision:C] 260-1 — onde mora a declaração dos ports que não gravam
+Escolha: no script, ao lado de `GATEWAY_WRITE_METHODS`, com checagem própria no `main` · Alternativas: só no teste · Degrau (C): 1
+Base: §5 deste ADR e `scripts/check_layout.py` › `MULTI_WRITE_ALLOWLIST`, `GATEWAY_WRITE_METHODS` "A allowlist é contável como a do charter (regra 6)" — as tabelas da regra 10 moram no script e a entrada morta reprova no `make check`
+Verificado: não verificado (§4.2) — decisão de tooling, fora das quatro classes
+Configuração candidata: nenhuma · Reversível: sim (mover a tabela para o teste é local)
+
+Nota *append-only*; o corpo acima não foi editado.

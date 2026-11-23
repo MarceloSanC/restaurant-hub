@@ -270,7 +270,12 @@ composition root ([ADR 2.6.0001](./adr/2_6_0001-identity-unit-of-work-port-and-a
   para identity (ADR 2.6.0002, nota da Stage 3.10). A chamada a uma função de
   módulo de `use_cases/` que grava por um parâmetro anotado com o port (ou chama
   outra que grava) conta como escrita do use case: a lista desses auxiliares é
-  **derivada** do código (`helper_writes`, issue #243), não escrita à mão.
+  **derivada** do código (`helper_writes`, issue #243), não escrita à mão. O
+  método de repositório se classifica pelo nome; todo **outro** port de saída
+  (de feature ou de `shared/`) precisa estar classificado no script — em
+  `GATEWAY_WRITE_METHODS`, com os métodos que gravam, ou em `NON_WRITING_PORTS`,
+  com o motivo de não gravar — ou a regra reprova (issue #260, nota do
+  ADR 2.6.0002).
 
 ## 6. Composition Root
 
