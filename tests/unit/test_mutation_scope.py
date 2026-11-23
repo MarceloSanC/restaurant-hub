@@ -15,10 +15,11 @@ existe para tornar barulhento.
 
 **Lista explícita + asserção de que ela cobre a configuração**, o par de sempre.
 A lista aqui tem dois critérios de entrada: os módulos que decidem acesso (os
-quatro da issue, o port da Stage 2.7 e o provisionamento de conta da issue #211)
-e o adapter Postgres da escala (issue #217); a asserção seguinte cobra o
-`pyproject.toml` contra ela nos dois sentidos, para que nem um módulo saia do
-escopo por edição distraída, nem outro entre sem que a issue que o justifica
+quatro da issue, o port da Stage 2.7, o provisionamento de conta da issue #211 e
+as regras do vínculo de login da Stage 3.10) e o adapter Postgres da escala
+(issue #217); a asserção seguinte cobra o `pyproject.toml` contra ela nos dois
+sentidos, para que nem um módulo saia do escopo por edição distraída, nem outro
+entre sem que a issue que o justifica
 seja escrita neste arquivo.
 """
 
@@ -41,7 +42,8 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
 # Os módulos que decidem acesso: os quatro que a issue #45 nomeia, o port da
-# Stage 2.7 e o provisionamento de conta (issue #211). Um novo entra aqui com a
+# Stage 2.7, o provisionamento de conta (issue #211) e as regras do vínculo de login
+# (Stage 3.10). Um novo entra aqui com a
 # justificativa ao lado — e só então no `pyproject.toml`.
 _MODULOS_DE_ACESSO = frozenset(
     {
@@ -65,6 +67,12 @@ _MODULOS_DE_ACESSO = frozenset(
         # (issue #211): o conjunto decide qual conta privilegiada pode nascer por
         # uma entrada que não autoriza — o mesmo critério de entrada dos demais.
         "src/restaurant_hub/features/identity/application/use_cases/provision_account.py",
+        # Quem recebe login sobre qual registro (Stage 3.10, ADR 3.10.0002 §3): a
+        # elegibilidade da conta existente — tenant do registro, alcance da unidade, a
+        # mesma recusa para conta alheia e `platform_admin` — e o ponto único da regra
+        # de fim de vínculo, que decide de quem as sessões caem (ADR 3.10.0001 §5).
+        # Entrou pela auditoria do PR #230.
+        "src/restaurant_hub/features/staff/application/use_cases/_login_link.py",
     }
 )
 
@@ -224,20 +232,31 @@ def test_o_gate_estrutural_do_check_layout_fica_fora_da_corrida() -> None:
     mutado.)
     Se alguém tirar o `--ignore` por achar que é sobra, a corrida volta a morrer
     na coleta de estatísticas — e este teste diz o porquê antes disso.
+
+    Desde a issue #205 há um segundo, pelo mesmo motivo estrutural:
+    `test_setup_token_issuance_rule10.py` roda a regra 10 sobre o `src/` real e
+    conta os blocos de unidade de `provision_account.py`, que dentro de `mutants/`
+    tem uma cópia de `execute` por mutante — a varredura reprova (medido: o run
+    45113622689 morreu em `failed to collect stats`). É gate sobre o texto do
+    fonte; não mataria mutante nenhum.
     """
     selecao = _config_do_mutmut()["pytest_add_cli_args_test_selection"]
     assert isinstance(selecao, list)
 
-    # Conjunto exato, não pertinência: um segundo `--ignore` entraria calado e a
+    # Conjunto exato, não pertinência: um terceiro `--ignore` entraria calado e a
     # corrida mediria menos suíte com o mesmo "N/N" — a mesma classe do caminho
     # morto em `only_mutate` que este arquivo existe para tornar barulhento.
-    assert selecao == ["--ignore=tests/unit/test_check_layout.py"]
+    assert selecao == [
+        "--ignore=tests/unit/test_check_layout.py",
+        "--ignore=tests/unit/features/identity/application/test_setup_token_issuance_rule10.py",
+    ]
 
-    ignorado = selecao[0].removeprefix("--ignore=")
-    assert (_REPO_ROOT / ignorado).is_file(), (
-        f"o --ignore aponta para {ignorado}, que não existe: a exclusão está morta "
-        f"e a corrida voltaria a morrer na coleta de estatísticas"
-    )
+    for opcao in selecao:
+        ignorado = opcao.removeprefix("--ignore=")
+        assert (_REPO_ROOT / ignorado).is_file(), (
+            f"o --ignore aponta para {ignorado}, que não existe: a exclusão está morta "
+            f"e a corrida voltaria a morrer na coleta de estatísticas"
+        )
 
 
 # ---------------------------------------------------------------------------

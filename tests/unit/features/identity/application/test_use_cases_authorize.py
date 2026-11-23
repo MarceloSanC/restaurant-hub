@@ -17,6 +17,7 @@ válido. Três propriedades, parametrizadas pela tabela:
 """
 
 import ast
+import configparser
 import functools
 import importlib
 import importlib.util
@@ -364,6 +365,7 @@ _EXCLUSOES: dict[str, str] = {
     "revoke_all_sessions": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
     "get_account_role": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
     "get_unit_timezone": "só a fachada o chama; o consumidor autoriza (issue #198, ADR 4.1.0005)",
+    "find_account_by_email": "só a fachada o chama; o consumidor autoriza (ADR 3.10.0002 §2)",
 }
 
 # Os módulos facade-only (CA14): o resíduo de `provision_account` (concept 2.7 §13)
@@ -375,6 +377,7 @@ _FACADE_ONLY = frozenset(
         "revoke_all_sessions",
         "get_account_role",
         "get_unit_timezone",
+        "find_account_by_email",
     }
 )
 _IMPORTADORES_PERMITIDOS = frozenset(
@@ -1010,6 +1013,39 @@ def test_os_facade_only_so_sao_importados_pela_fachada_e_pelo_composition_root()
 
     assert varridos >= _PISO_DE_ARQUIVOS_VARRIDOS
     assert importadores == _IMPORTADORES_PERMITIDOS
+
+
+_IMPORTLINTER = _SRC.parents[1] / ".importlinter"
+_SECAO_FACADE_ONLY = "importlinter:contract:identity-facade-only-reach"
+
+
+def _lista_do_contrato(contrato: configparser.SectionProxy, opcao: str) -> set[str]:
+    """Uma opção multilinha do `.importlinter`, como conjunto de nomes de módulo."""
+    return {linha.strip() for linha in contrato.get(opcao, "").splitlines() if linha.strip()}
+
+
+def test_a_lista_do_contrato_facade_only_e_a_do_ca14() -> None:
+    """Issue #246 — o contrato `identity-facade-only-reach` do `.importlinter` repete o
+    CA14 no `lint-imports`. As duas listas (módulos protegidos e importadores
+    permitidos) têm de ser as deste arquivo: um use case facade-only novo que entrasse
+    só em `_FACADE_ONLY` deixaria o contrato protegendo menos do que o CA14, sem
+    ninguém notar. A seção é lida como configuração, não como texto."""
+    parser = configparser.ConfigParser()
+    parser.read(_IMPORTLINTER, encoding="utf-8")
+    assert parser.has_section(_SECAO_FACADE_ONLY), (
+        f"o contrato {_SECAO_FACADE_ONLY!r} sumiu do .importlinter"
+    )
+    contrato = parser[_SECAO_FACADE_ONLY]
+    importadores = {
+        ".".join(caminho.relative_to(_SRC.parent).with_suffix("").parts)
+        for caminho in _IMPORTADORES_PERMITIDOS
+    }
+
+    assert contrato["type"] == "protected"
+    assert _lista_do_contrato(contrato, "protected_modules") == {
+        f"{_PACOTE_USE_CASES}.{nome}" for nome in _FACADE_ONLY
+    }
+    assert _lista_do_contrato(contrato, "allowed_importers") == importadores
 
 
 def test_a_regra_de_composicao_e_definida_num_so_modulo_de_src() -> None:

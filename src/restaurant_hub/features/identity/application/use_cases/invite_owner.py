@@ -28,12 +28,8 @@ falha trocada por `InvitationNotSentError` em `_invitation.deliver_invitation` (
 from datetime import timedelta
 
 from restaurant_hub.features.identity.application.dtos.commands import InviteOwnerCommand
-from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
 from restaurant_hub.features.identity.application.dtos.results import UserResult, to_user_result
-from restaurant_hub.features.identity.application.dtos.setup_tokens import (
-    PasswordSetupToken,
-    SetupTokenPurpose,
-)
+from restaurant_hub.features.identity.application.dtos.setup_tokens import SetupTokenPurpose
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     RestaurantNotFoundError,
@@ -60,7 +56,7 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
 from restaurant_hub.features.identity.application.use_cases._invitation import (
     deliver_invitation,
     invitation_message,
-    setup_link,
+    issue_setup_token,
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     authorize_requirement,
@@ -136,38 +132,27 @@ class InviteOwnerUseCase:
             tenant_id=command.tenant_id,
         )
 
-        # O hash inutilizável, e não `dummy_hash()` — ADR 2.5.0004.
+        # O hash inutilizável, e não `dummy_hash()` — ADR 2.5.0004. O token é
+        # calculado pela emissão única de identity e gravado aqui, à vista da regra
+        # 10 (issue #205, ADR 0.0.0024).
         with self._unit_of_work.transaction():
             self._users.add(owner, self._hasher.unusable_hash(), ())
-            token_value = self._issue_token(owner.id)
+            invitation = issue_setup_token(
+                self._token_issuer,
+                self._id_generator,
+                user_id=owner.id,
+                purpose=SetupTokenPurpose.INVITATION,
+                now=self._clock.now(),
+                ttl=self._invitation_ttl,
+                base_url=self._base_url,
+            )
+            self._tokens.add(invitation.record)
 
         # Depois do commit (ADR 2.6.0002 §3).
         deliver_invitation(
             self._email_sender,
-            invitation_message(command.email.value, setup_link(self._base_url, token_value)),
+            invitation_message(command.email.value, invitation.link),
             owner.id,
         )
 
         return to_user_result(owner, ())
-
-    def _issue_token(self, user_id: UserId) -> str:
-        """Emite e persiste o token de convite, devolvendo **só** o valor a enviar.
-
-        Quinta cópia do passo (com `InviteUserUseCase`, `ProvisionRestaurantUseCase`,
-        `ProvisionAccountUseCase` e `RequestPasswordResetUseCase`), declarada no ADR
-        2.7.0001 §Consequences — extraí-la sem esconder a escrita da regra 10 é
-        `[finding]` da Stage 2.7.
-        """
-        now = self._clock.now()
-        issued = self._token_issuer.issue()
-        self._tokens.add(
-            PasswordSetupToken(
-                id=SetupTokenId(str(self._id_generator.next_id())),
-                user_id=user_id,
-                purpose=SetupTokenPurpose.INVITATION,
-                token_fingerprint=issued.fingerprint,
-                issued_at=now,
-                expires_at=now + self._invitation_ttl,
-            )
-        )
-        return issued.value

@@ -67,7 +67,8 @@ Caminho = tuple[str | int, ...]
 # encolhimento do domínio reprovar em vez de reduzir em silêncio os casos rodados.
 # 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17; a Stage 3.11,
 # o elemento de `unit_ids` da criação de função e o da substituição de unidades.
-_TOTAL_DE_CAMPOS_ESCALARES = 17
+# 19 desde a Stage 3.10: o `email` de R18 e o de R19.
+_TOTAL_DE_CAMPOS_ESCALARES = 19
 
 # Alias local do tipo devolvido por `identifier_fields`: o módulo entra como
 # objeto (`dependencies_module`), então o nome não está no espaço de nomes
@@ -478,7 +479,8 @@ def test_ca14_nenhum_handler_le_o_unit_id_do_escopo_autorizado() -> None:
 # R17, que autoriza **duas** vezes sobre o mesmo alvo (`manage_staff` e
 # `manage_users`, concept 3.5 §5.3) — 19. A Stage 3.11 acrescenta duas rotas, uma
 # autorização cada (o catálogo no tenant; a listagem na unidade do path) — 21.
-_TOTAL_DE_AUTORIZACOES = 21
+# 27 desde a Stage 3.10: R18, R19 e R20 autorizam duas vezes cada, como R17.
+_TOTAL_DE_AUTORIZACOES = 27
 
 
 def _requisitos_declarados() -> dict[str, object]:
@@ -1468,7 +1470,8 @@ def test_o_dominio_adversarial_de_ca24_nao_esta_vazio() -> None:
 # `EmployeeLoginResponse` embrulha o registro. Transcrita, como as outras
 # contagens: uma rota nova de funcionário que respondesse com outro schema
 # reprovaria aqui até que alguém decidisse que ela não devolve o registro.
-_TOTAL_DE_ROTAS_QUE_DEVOLVEM_FUNCIONARIO = 12
+# 15 desde a Stage 3.10: R18, R19 e R20 devolvem o registro.
+_TOTAL_DE_ROTAS_QUE_DEVOLVEM_FUNCIONARIO = 15
 
 
 def _devolve_funcionario(modelo: object) -> bool:

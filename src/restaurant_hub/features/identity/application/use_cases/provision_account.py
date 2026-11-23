@@ -55,15 +55,11 @@ from datetime import timedelta
 from restaurant_hub.features.identity.application.dtos.commands import (
     ProvisionAccountCommand,
 )
-from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
 from restaurant_hub.features.identity.application.dtos.results import (
     ProvisionedAccountResult,
     to_user_result,
 )
-from restaurant_hub.features.identity.application.dtos.setup_tokens import (
-    PasswordSetupToken,
-    SetupTokenPurpose,
-)
+from restaurant_hub.features.identity.application.dtos.setup_tokens import SetupTokenPurpose
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     RestaurantNotFoundError,
@@ -89,7 +85,9 @@ from restaurant_hub.features.identity.application.ports.out.unit_repository impo
 from restaurant_hub.features.identity.application.ports.out.user_repository import (
     UserRepository,
 )
-from restaurant_hub.features.identity.application.use_cases._invitation import setup_link
+from restaurant_hub.features.identity.application.use_cases._invitation import (
+    issue_setup_token,
+)
 from restaurant_hub.features.identity.domain.entities.user import User
 from restaurant_hub.features.identity.domain.exceptions.errors import (
     PlatformAdminMembershipError,
@@ -184,16 +182,32 @@ class ProvisionAccountUseCase:
         # O hash inutilizável, e não `dummy_hash()` — ADR 2.5.0004. O dummy é
         # derivado de um literal deste repositório; gravá-lo aqui faria a senha
         # dessa string abrir a conta da pessoa.
+        #
+        # O prazo é a única coisa que o canal muda: um link em mãos vive
+        # `handover_ttl`; um que vai por e-mail, `invitation_ttl`. O propósito é o
+        # mesmo `INVITATION` — quem redime não distingue o canal, nem precisa. O
+        # token é calculado pela emissão única de identity e gravado aqui, à vista
+        # da regra 10 (issue #205, ADR 0.0.0024).
+        ttl = self._handover_ttl if command.handed_over else self._invitation_ttl
         with self._unit_of_work.transaction():
             self._users.add(user, self._hasher.unusable_hash(), memberships)
-            token_value = self._issue_token(user.id, handed_over=command.handed_over)
+            invitation = issue_setup_token(
+                self._token_issuer,
+                self._id_generator,
+                user_id=user.id,
+                purpose=SetupTokenPurpose.INVITATION,
+                now=self._clock.now(),
+                ttl=ttl,
+                base_url=self._base_url,
+            )
+            self._tokens.add(invitation.record)
 
         return ProvisionedAccountResult(
             # Pelo mapper único de `UserResult` (regra 8 do `check_layout`, issue
             # #45): o result da conta provisionada é o **mesmo** que o convite
             # devolve, e um campo novo em `UserResult` aparece aqui sem edição.
             user=to_user_result(user, memberships),
-            setup_link=setup_link(self._base_url, token_value),
+            setup_link=invitation.link,
         )
 
     def _link_units(
@@ -214,25 +228,3 @@ class ProvisionAccountUseCase:
                 raise UnitNotFoundError(unit_id)
             memberships.append(user.link_to_unit(unit))
         return tuple(memberships)
-
-    def _issue_token(self, user_id: UserId, *, handed_over: bool) -> str:
-        """Emite e persiste o token, devolvendo **só** o valor a colocar no link.
-
-        O prazo é a única coisa que o canal muda: um link em mãos vive
-        `handover_ttl`; um que vai por e-mail, `invitation_ttl`. O propósito é o
-        mesmo `INVITATION` — quem redime não distingue o canal, nem precisa.
-        """
-        now = self._clock.now()
-        ttl = self._handover_ttl if handed_over else self._invitation_ttl
-        issued = self._token_issuer.issue()
-        self._tokens.add(
-            PasswordSetupToken(
-                id=SetupTokenId(str(self._id_generator.next_id())),
-                user_id=user_id,
-                purpose=SetupTokenPurpose.INVITATION,
-                token_fingerprint=issued.fingerprint,
-                issued_at=now,
-                expires_at=now + ttl,
-            )
-        )
-        return issued.value

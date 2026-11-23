@@ -164,7 +164,8 @@ exclude_also = ['if __name__ == "__main__":']
 # critérios de entrada, ambos estreitos:
 #
 # 1. **o módulo participa da decisão de quem pode o quê** — os quatro abaixo, o
-#    port da Stage 2.7 e o provisionamento de conta (issue #211);
+#    port da Stage 2.7, o provisionamento de conta (issue #211) e as regras do
+#    vínculo de login (Stage 3.10);
 # 2. **o módulo é o adapter Postgres da escala** — `schedule_repository.py` (as
 #    leis L-SC1 a L-SC9 e a trilha na mesma transação) e `mappers.py` (o codec da
 #    trilha é contrato de dados). Os mutantes deles só morrem nos testes que
@@ -216,6 +217,7 @@ only_mutate = [
     "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
     "src/restaurant_hub/features/identity/application/ports/out/action_authorizer.py",
     "src/restaurant_hub/features/identity/application/use_cases/provision_account.py",
+    "src/restaurant_hub/features/staff/application/use_cases/_login_link.py",
     "src/restaurant_hub/features/scheduling/adapters/out/postgres/schedule_repository.py",
     "src/restaurant_hub/features/scheduling/adapters/out/postgres/mappers.py",
 ]
@@ -271,6 +273,13 @@ also_copy = [
 #
 # Os demais gates da #45 continuam na corrida: `check_dead_shared` e
 # `test_status_map` leem arquivos que o mutmut não toca.
+#
+# `test_setup_token_issuance_rule10.py` (issue #205) sai pelo mesmo motivo: roda a
+# regra 10 sobre o `src/` e conta os blocos de unidade de `provision_account.py`,
+# que em `mutants/` tem uma cópia de `execute` por mutante (medido: a corrida
+# morreu em `failed to collect stats`). O efeito do passo de emissão continua
+# na corrida, por `test_setup_token_issuance.py`.
 pytest_add_cli_args_test_selection = [
     "--ignore=tests/unit/test_check_layout.py",
+    "--ignore=tests/unit/features/identity/application/test_setup_token_issuance_rule10.py",
 ]

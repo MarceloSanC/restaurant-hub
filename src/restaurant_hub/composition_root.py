@@ -93,6 +93,9 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
 from restaurant_hub.features.identity.application.use_cases.create_user import (
     CreateUserUseCase,
 )
+from restaurant_hub.features.identity.application.use_cases.find_account_by_email import (
+    FindAccountByEmailUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
 )
@@ -202,6 +205,9 @@ from restaurant_hub.features.staff.application.use_cases.delete_employee import 
 from restaurant_hub.features.staff.application.use_cases.delete_job_function import (
     DeleteJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.link_existing_login import (
+    LinkExistingLoginUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.list_employees import (
     ListEmployeesUseCase,
 )
@@ -214,6 +220,9 @@ from restaurant_hub.features.staff.application.use_cases.reactivate_employee imp
 from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
     RegisterUnavailabilityUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.relink_login import (
+    RelinkLoginUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.remove_unavailability import (
     RemoveUnavailabilityUseCase,
 )
@@ -225,6 +234,9 @@ from restaurant_hub.features.staff.application.use_cases.rename_job_function imp
 )
 from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
     SetJobFunctionUnitsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.unlink_login import (
+    UnlinkLoginUseCase,
 )
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
@@ -294,6 +306,15 @@ class ApplicationDependencies:
     # Stage 3.5 — o 17º use case de staff (R17). Consome `staff_identity_gateway`,
     # como `staff_deactivate_employee` passou a consumir (R13).
     staff_create_login_for_employee: CreateLoginForEmployeeUseCase
+    # Stage 3.10 — transição do vínculo de login (ADR 3.10.0001). Consome
+    # `staff_identity_gateway`, como R13 e R17.
+    staff_relink_login: RelinkLoginUseCase
+    # Stage 3.10 — transição do vínculo de login (ADR 3.10.0001). Consome
+    # `staff_identity_gateway`, como R13 e R17.
+    staff_unlink_login: UnlinkLoginUseCase
+    # Stage 3.10 — transição do vínculo de login (ADR 3.10.0001). Consome
+    # `staff_identity_gateway`, como R13 e R17.
+    staff_link_existing_login: LinkExistingLoginUseCase
 
     # --- staff (Stage 3.4) ---------------------------------------------------
     #
@@ -478,6 +499,7 @@ def wire_dependencies(
         send_invitation=SendInvitationUseCase(email_sender=sender),
         revoke_all_sessions=RevokeAllSessionsUseCase(sessions=sessions, clock=clock),
         get_account_role=GetAccountRoleUseCase(users=users),
+        find_account_by_email=FindAccountByEmailUseCase(users=users),
     )
     staff_identity_gateway = LocalIdentityGateway(identity_facade)
 
@@ -656,6 +678,15 @@ def wire_dependencies(
         staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
             employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
         ),
+        staff_relink_login=RelinkLoginUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
+        ),
+        staff_unlink_login=UnlinkLoginUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
+        ),
+        staff_link_existing_login=LinkExistingLoginUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
+        ),
         staff_access_guard=staff_access_guard,
         staff_identity_gateway=staff_identity_gateway,
         scheduling_schedules=scheduling_schedules,
@@ -699,6 +730,9 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
         {
             staff_dependencies_module.get_access_guard: lambda: deps.staff_access_guard,
             staff_router_module._get_create_job_function: (lambda: deps.staff_create_job_function),
+            staff_router_module._get_link_existing_login: lambda: deps.staff_link_existing_login,
+            staff_router_module._get_relink_login: lambda: deps.staff_relink_login,
+            staff_router_module._get_unlink_login: lambda: deps.staff_unlink_login,
             staff_router_module._get_list_job_functions: lambda: deps.staff_list_job_functions,
             staff_router_module._get_set_job_function_units: (
                 lambda: deps.staff_set_job_function_units

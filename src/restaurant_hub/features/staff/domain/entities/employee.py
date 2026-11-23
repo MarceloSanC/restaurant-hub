@@ -22,6 +22,8 @@ from dataclasses import dataclass
 
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
+    EmployeeHasNoLoginError,
+    EmployeeLoginChangedError,
     EmptyJobFunctionsError,
     InvalidIdentifierError,
     InvalidNameError,
@@ -186,6 +188,95 @@ class Employee:
         """
         self.assert_can_link_login()
         return dataclasses.replace(self, user_id=user_id)
+
+    def assert_link_state(self, user_id: UserId | None, *, was_active: bool) -> None:
+        """Confere o estado gravado contra o lido (Stage 3.10, ADR 3.10.0001 §2).
+
+        As escritas do vínculo e o desligamento rodam esta guarda sobre o registro
+        **gravado**, com o que o use case leu. Duas divergências recusam: o login
+        mudou, ou o registro foi lido desligado e está ativo (recontratado no meio
+        — encerrar o vínculo agora encerraria um vínculo **ativo** sem a regra de
+        fim de vínculo, que só rodou sobre um desligado). Lido ativo e gravado
+        desligado **não** recusa: quem desligou no meio já passou pela regra.
+
+        Raises:
+            EmployeeLoginChangedError: uma das duas divergências.
+        """
+        if self.user_id != user_id or (self.active and not was_active):
+            raise EmployeeLoginChangedError(self.id)
+
+    def assert_can_unlink_login(self) -> UserId:
+        """A guarda de desvincular: o registro precisa ter login (Stage 3.10).
+
+        Método separado pela razão de `assert_can_link_login`: o use case pergunta
+        antes de cruzar a fronteira, e `unlink_login` chama esta guarda de novo, para
+        que a regra tenha **uma** casa.
+
+        Returns:
+            O login atual, já garantido presente.
+
+        Raises:
+            EmployeeHasNoLoginError: o registro não tem login.
+        """
+        if self.user_id is None:
+            raise EmployeeHasNoLoginError(self.id)
+        return self.user_id
+
+    def unlink_login(self, expected: UserId, *, was_active: bool) -> "Employee":
+        """Desvincula o login — vale também para registro desligado (Stage 3.10).
+
+        Raises:
+            EmployeeHasNoLoginError: o registro não tem login (precede a próxima).
+            EmployeeLoginChangedError: o estado gravado não é o lido.
+        """
+        self.assert_can_unlink_login()
+        self.assert_link_state(expected, was_active=was_active)
+        return dataclasses.replace(self, user_id=None)
+
+    def assert_can_relink_login(self) -> UserId:
+        """As guardas de trocar o login, **nesta ordem** (Stage 3.10, concept §4).
+
+        Uma casa só, chamada pelo use case antes de identity e por `relink_login`.
+
+        Returns:
+            O login atual, já garantido presente.
+
+        Raises:
+            EmployeeHasNoLoginError: o registro não tem login — precede a próxima.
+            TerminatedEmployeeLoginError: o registro está desligado.
+        """
+        if self.user_id is None:
+            raise EmployeeHasNoLoginError(self.id)
+        if not self.active:
+            raise TerminatedEmployeeLoginError(self.id)
+        return self.user_id
+
+    def relink_login(self, expected: UserId, user_id: UserId) -> "Employee":
+        """Troca o login vinculado por outro (Stage 3.10, R19).
+
+        O estado ativo lido é implícito: trocar exige registro ativo, como vincular.
+
+        Raises:
+            EmployeeHasNoLoginError: o registro não tem login — precede as demais.
+            TerminatedEmployeeLoginError: o registro está desligado — desligado não
+                recebe login (concept 3.5 §5.5).
+            EmployeeLoginChangedError: o login gravado não é o lido.
+        """
+        self.assert_can_relink_login()
+        self.assert_link_state(expected, was_active=True)
+        return dataclasses.replace(self, user_id=user_id)
+
+    def deactivate_as_read(self, expected: UserId | None, *, was_active: bool) -> "Employee":
+        """Desliga conferindo o estado lido (Stage 3.10, R13 por L-DEACT).
+
+        Idempotente no valor como `deactivate`: dois desligamentos concorrentes do
+        mesmo registro, com o mesmo login, passam os dois.
+
+        Raises:
+            EmployeeLoginChangedError: o estado gravado não é o lido.
+        """
+        self.assert_link_state(expected, was_active=was_active)
+        return self.deactivate()
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Employee):

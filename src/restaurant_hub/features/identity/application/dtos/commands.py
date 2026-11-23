@@ -181,6 +181,17 @@ class GetUnitTimezoneCommand:
 
 
 @dataclass(frozen=True)
+class FindAccountByEmailCommand:
+    """Consulta de uma conta pelo e-mail (Stage 3.10, ADR 3.10.0002 §2).
+
+    Quem pergunta é a fachada, a serviço de staff, que vincula a um registro de
+    funcionário uma conta que já existe — nomeada pelo e-mail, como em R17.
+    """
+
+    email: Email
+
+
+@dataclass(frozen=True)
 class InviteUserCommand:
     """Convite de uma pessoa que ainda não tem conta.
 

@@ -42,12 +42,8 @@ from collections.abc import Sequence
 from datetime import timedelta
 
 from restaurant_hub.features.identity.application.dtos.commands import InviteUserCommand
-from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
 from restaurant_hub.features.identity.application.dtos.results import UserResult, to_user_result
-from restaurant_hub.features.identity.application.dtos.setup_tokens import (
-    PasswordSetupToken,
-    SetupTokenPurpose,
-)
+from restaurant_hub.features.identity.application.dtos.setup_tokens import SetupTokenPurpose
 from restaurant_hub.features.identity.application.errors import (
     EmailAlreadyRegisteredError,
     RestaurantNotFoundError,
@@ -79,7 +75,7 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
 from restaurant_hub.features.identity.application.use_cases._invitation import (
     deliver_invitation,
     invitation_message,
-    setup_link,
+    issue_setup_token,
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     authorize_requirement,
@@ -184,12 +180,26 @@ class InviteUserUseCase:
         # O hash inutilizável, e não `dummy_hash()` — ADR 2.5.0004. O dummy é
         # derivado de um literal deste repositório; gravá-lo aqui faria a senha
         # dessa string abrir a conta da pessoa convidada.
+        #
+        # O token: o cálculo é o único de identity (`issue_setup_token`, issue #205);
+        # a gravação fica aqui, à vista da regra 10 do `check_layout`. O valor só
+        # existe dentro do link, entre esta linha e o corpo do e-mail — nenhum
+        # result, DTO persistido ou mensagem de erro o carrega (concept §5 regra 1).
         with self._unit_of_work.transaction():
             self._users.add(user, self._hasher.unusable_hash(), memberships)
-            token_value = self._issue_token(user.id)
+            invitation = issue_setup_token(
+                self._token_issuer,
+                self._id_generator,
+                user_id=user.id,
+                purpose=SetupTokenPurpose.INVITATION,
+                now=self._clock.now(),
+                ttl=self._invitation_ttl,
+                base_url=self._base_url,
+            )
+            self._tokens.add(invitation.record)
 
         # Depois do commit — ver o docstring do módulo (ADR 2.6.0002 §3).
-        self._send_invitation_email(user.id, command.email.value, token_value)
+        self._send_invitation_email(user.id, command.email.value, invitation.link)
 
         return to_user_result(user, memberships)
 
@@ -212,28 +222,7 @@ class InviteUserUseCase:
             memberships.append(user.link_to_unit(unit))
         return tuple(memberships)
 
-    def _issue_token(self, user_id: UserId) -> str:
-        """Emite e persiste o token, devolvendo **só** o valor a enviar.
-
-        O valor não entra em nenhum campo do result, de nenhum DTO persistido, de
-        nenhuma mensagem de erro: ele existe entre esta linha e o corpo do
-        e-mail, e em nenhum outro lugar (concept §5 regra 1).
-        """
-        now = self._clock.now()
-        issued = self._token_issuer.issue()
-        self._tokens.add(
-            PasswordSetupToken(
-                id=SetupTokenId(str(self._id_generator.next_id())),
-                user_id=user_id,
-                purpose=SetupTokenPurpose.INVITATION,
-                token_fingerprint=issued.fingerprint,
-                issued_at=now,
-                expires_at=now + self._invitation_ttl,
-            )
-        )
-        return issued.value
-
-    def _send_invitation_email(self, user_id: UserId, recipient: str, token_value: str) -> None:
+    def _send_invitation_email(self, user_id: UserId, recipient: str, link: str) -> None:
         """Compõe e envia a mensagem.
 
         Desde a Stage 3.5 a composição vive em `_invitation.py`, a única casa do
@@ -242,8 +231,4 @@ class InviteUserUseCase:
         Assunto, corpo e link são byte-idênticos aos da 2.5 (CA16 da 3.5). Desde a
         issue #170 o envio também passa por lá, em `deliver_invitation`.
         """
-        deliver_invitation(
-            self._email_sender,
-            invitation_message(recipient, setup_link(self._base_url, token_value)),
-            user_id,
-        )
+        deliver_invitation(self._email_sender, invitation_message(recipient, link), user_id)
