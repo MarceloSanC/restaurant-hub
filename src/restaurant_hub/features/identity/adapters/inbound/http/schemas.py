@@ -45,6 +45,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, SecretStr
 
+from restaurant_hub.features.identity.domain.entities.unit import DEFAULT_TIMEZONE
+
 # Campo de resposta que carrega credencial (nota 4 do módulo). A anotação do campo
 # continua `str` — a marca vai para o `FieldInfo` e para o JSON Schema, não para o
 # tipo.
@@ -91,9 +93,18 @@ class CreateUnitRequest(BaseModel):
     """Criação de unidade sob um restaurante.
 
     Sem `restaurant_id`: o restaurante é o recurso pai, e vem do path.
+
+    `timezone` é opcional (issue #198, ADR 4.1.0005): omitido, a unidade nasce
+    no fuso default. Chave fora da base IANA é recusada pelo domínio
+    (`InvalidTimezoneError`, 422), não aqui: uma regra, um lugar.
     """
 
     name: str
+    timezone: str = Field(
+        default=DEFAULT_TIMEZONE,
+        description="Chave IANA do fuso da unidade (ex.: America/Manaus).",
+        examples=["America/Sao_Paulo"],
+    )
 
 
 class UnitResponse(BaseModel):
@@ -102,6 +113,7 @@ class UnitResponse(BaseModel):
     id: str
     restaurant_id: str
     name: str
+    timezone: str
 
 
 class InviteOwnerRequest(BaseModel):

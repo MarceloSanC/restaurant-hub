@@ -19,6 +19,10 @@ A Stage 4.4 acrescentou a `0006_scheduling`, sobre a `0005` (CA10): as seis tabe
 scheduling e a extensão `btree_gist` existem após o `upgrade`; o `downgrade` de **um
 passo** remove as seis, deixa as de staff e **deixa a extensão**, que pode ter existido
 antes. O detalhe fica em `features/scheduling/adapters/out/postgres/test_schema.py`.
+
+A issue #198 acrescentou a `0007_units_timezone`, sobre a `0006`: a coluna `timezone` em
+`units`, e a unidade que já existia antes dela fica com o default `America/Sao_Paulo`
+(ADR 4.1.0005); o `downgrade` de um passo remove só a coluna.
 """
 
 import logging
@@ -359,3 +363,58 @@ def test_downgrade_da_0006_remove_as_seis_tabelas_e_deixa_a_extensao(
         command.upgrade(config, "head")
 
     assert _tabelas(engine) >= _TABELAS_DE_SCHEDULING
+
+
+@pytest.mark.slow
+def test_0007_unidade_anterior_fica_com_o_fuso_default(engine: Engine, database_url: str) -> None:
+    """Issue #198 — a unidade gravada **no schema anterior** ganha `America/Sao_Paulo`.
+
+    A unidade é inserida com o banco na revisão anterior à `0007` (sem a coluna), e o
+    `upgrade` roda por cima dela: é o `DEFAULT` do `ADD COLUMN` que a preenche. O alvo
+    é lido do `down_revision` da própria `0007`, para sobreviver a um reencadeamento.
+    """
+    config = alembic_config(database_url)
+    anterior = ScriptDirectory.from_config(config).get_revision("0007").down_revision
+    assert isinstance(anterior, str), anterior
+    try:
+        command.downgrade(config, anterior)
+        assert "timezone" not in _colunas_de(engine, "units")
+        with engine.begin() as conexao:
+            conexao.execute(
+                text("INSERT INTO restaurants (id, name) VALUES ('r-tz', 'Cantina do Fuso')")
+            )
+            conexao.execute(
+                text(
+                    "INSERT INTO units (id, restaurant_id, name) VALUES ('u-tz', 'r-tz', 'Centro')"
+                )
+            )
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            fuso = conexao.execute(
+                text("SELECT timezone FROM units WHERE id = 'u-tz'")
+            ).scalar_one()
+        assert fuso == "America/Sao_Paulo"
+    finally:
+        command.upgrade(config, "head")
+        with engine.begin() as conexao:
+            conexao.execute(text("DELETE FROM units WHERE id = 'u-tz'"))
+            conexao.execute(text("DELETE FROM restaurants WHERE id = 'r-tz'"))
+
+
+@pytest.mark.slow
+def test_downgrade_da_0007_remove_so_a_coluna_timezone(engine: Engine, database_url: str) -> None:
+    """Descer um passo: `units` fica, com as colunas anteriores, e `timezone` some."""
+    config = alembic_config(database_url)
+    anterior = ScriptDirectory.from_config(config).get_revision("0007").down_revision
+    assert isinstance(anterior, str), anterior
+
+    assert "timezone" in _colunas_de(engine, "units")
+    try:
+        command.downgrade(config, anterior)
+        colunas = _colunas_de(engine, "units")
+        assert "timezone" not in colunas
+        assert colunas >= {"id", "restaurant_id", "name"}, colunas
+    finally:
+        command.upgrade(config, "head")
+
+    assert "timezone" in _colunas_de(engine, "units")

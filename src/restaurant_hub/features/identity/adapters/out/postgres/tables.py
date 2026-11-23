@@ -42,6 +42,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 
@@ -88,6 +89,9 @@ units = Table(
     Column("id", Text, nullable=False),
     Column("restaurant_id", Text, nullable=False),
     Column("name", Text, nullable=False),
+    # Issue #198 (ADR 4.1.0005) — chave IANA do fuso da unidade, criada pela `0007`.
+    # O default do banco é o mesmo do domínio; sem `CHECK`: a entidade valida.
+    Column("timezone", Text, nullable=False, server_default=text("'America/Sao_Paulo'")),
     PrimaryKeyConstraint("id", name="pk_units"),
     ForeignKeyConstraint(["restaurant_id"], ["restaurants.id"], name="fk_units_restaurant"),
     # Âncora **obrigatória**, não redundância: o Postgres exige índice único

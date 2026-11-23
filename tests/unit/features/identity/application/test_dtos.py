@@ -44,6 +44,7 @@ from restaurant_hub.features.identity.application.dtos.results import (
     ProvisionedAccountResult,
     ProvisionedRestaurantResult,
     UnitResult,
+    UnitTimezoneResult,
     UserResult,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
@@ -66,6 +67,7 @@ _RESULT_CLASSES = (
     ProvisionedAccountResult,
     AccountRoleResult,
     ProvisionedRestaurantResult,
+    UnitTimezoneResult,
 )
 
 # Prefixo dos módulos de entidade — o que um result nunca pode carregar.
@@ -91,7 +93,8 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # 27 até a 3.8; a issue #67 troca `CreateRestaurantCommand` e `RestaurantResult`
 # por `ProvisionRestaurantCommand` e `ProvisionedRestaurantResult`.
 # 28 desde a Stage 2.7, que acrescenta `InviteOwnerCommand`.
-_TOTAL_DE_DTOS = 28
+# 30 desde a issue #198, que acrescenta `GetUnitTimezoneCommand` e `UnitTimezoneResult`.
+_TOTAL_DE_DTOS = 30
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
@@ -123,6 +126,8 @@ def test_commands_carregam_os_campos_declarados() -> None:
         actor_id=TEST_ACTOR_ID, restaurant_id=RestaurantId("rest-1"), name="Centro"
     )
     assert unit_command.restaurant_id == "rest-1"
+    # Issue #198 — sem fuso declarado, o command leva o default do domínio.
+    assert unit_command.timezone == "America/Sao_Paulo"
 
     auth_command = AuthenticateUserCommand(email=Email("dono@x.com"), plain_password="s3nha")
     assert auth_command.email.value == "dono@x.com"
@@ -179,7 +184,10 @@ def test_results_carregam_os_campos_declarados() -> None:
 
     assert (
         UnitResult(
-            id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro"
+            id=UnitId("unit-1"),
+            restaurant_id=RestaurantId("rest-1"),
+            name="Centro",
+            timezone="America/Sao_Paulo",
         ).restaurant_id
         == "rest-1"
     )
@@ -245,7 +253,12 @@ def test_dtos_sao_imutaveis() -> None:
     with pytest.raises(FrozenInstanceError):
         command.name = "Outra"  # type: ignore[misc]
 
-    result = UnitResult(id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro")
+    result = UnitResult(
+        id=UnitId("unit-1"),
+        restaurant_id=RestaurantId("rest-1"),
+        name="Centro",
+        timezone="America/Sao_Paulo",
+    )
     with pytest.raises(FrozenInstanceError):
         result.name = "Outra"  # type: ignore[misc]
 

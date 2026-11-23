@@ -5,7 +5,7 @@ when-use: Reference before adding or changing an identity use case that creates,
 keywords: [adr, identity, authorization, application, fail-closed, defense-in-depth, second-driver, platform-admin, escalation, transversal, issue-115]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 adr_id: "0.0.0020"
 decision: 'Identity adopts the ADR 3.7.0001 shape for the four use cases that act on behalf of an authenticated actor (ProvisionRestaurant, CreateUnit, CreateUser, InviteUser): the actor travels in the command, and the use case declares its own access requirement and runs it through AuthorizeActionUseCase before any other statement, while the HTTP boundary keeps authorizing as defense in depth. The ten other identity use cases are out by kind (credential-as-authority, the decision itself, facade-only) and the inventory says why. Implementation is Stage 2.7-identity-application-authorization. With a third bounded context following it, the rule "every use case that acts for an actor authorizes its own target" is transversal (ADR 4.3.0002 §5 trigger): each bounded context keeps its own port shape.'
 context_stage: 0.0-global
@@ -304,3 +304,15 @@ não existe. O resíduo fechou no use case, e já não depende de quem o alcanç
 (CA14) continua valendo para os quatro use cases facade-only, que não autorizam. Detalhes e decisão:
 a nota de 2026-11-22 do [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md).
 Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — `GetUnitTimezoneUseCase` entra no inventário como facade-only
+
+**2026-11-23 — issue #198 (ADR 4.1.0005).** Um use case novo de identity, classificado contra
+§Inventory como o parágrafo do resíduo pede: `GetUnitTimezoneUseCase`, a leitura do fuso da
+unidade, tem como único chamador a `IdentityUnitFacade` (terceira classe de
+`identity/application/facade.py`). Fica **fora**, facade-only, pela mesma razão das quatro
+anteriores: a fachada não autoriza, quem a chama responde pela autorização do seu lado
+(ADR 3.5.0001 §Decision 1). É só leitura e endereçado pelo par (tenant, unidade), então não
+cria conta nem atravessa tenants. O inventário passa a dezesseis use cases, cinco afetados e
+onze exclusões; a exclusão nomeada e o alcance (só a fachada e o composition root podem importá-lo)
+estão em `test_use_cases_authorize.py`. Nota *append-only*; o corpo acima não foi editado.
