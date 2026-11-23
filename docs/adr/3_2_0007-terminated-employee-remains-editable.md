@@ -5,7 +5,7 @@ when-use: Reference when implementing or changing any employee edit use case (St
 keywords: [adr, staff, employee, lifecycle, active, inactive, terminated, edit, reactivate, orthogonality, sponsor]
 status: accepted
 created_at: 2026-08-09
-updated_at: 2026-08-09
+updated_at: 2026-11-23
 adr_id: 3.2.0007
 decision: A terminated (inactive) employee record remains editable by every edit use case, and none of those operations changes `active` — reactivation is an explicit act, available only through reactivate_employee.
 context_stage: 3.2-staff-application
@@ -162,3 +162,17 @@ the first person who assumes the other reading.
   representative; this ADR is a direct instance.
 - Authorship: **human sponsor, 2026-08-09**, via the master session, after the independent test audit
   of Stage 3.2 returned the gap as finding F-01.
+
+## Notas datadas
+
+**2026-11-23 — "nenhuma edição altera `active`" passou a ser garantida pelo port (issue #242).**
+O segundo item de `### Negative` (*"The rule is enforced by tests, not by a type. A seventh edit
+use case could write `active`"*) está fechado: `EmployeeRepository.update` ignora o `active` da
+entidade e mantém o gravado, e só `deactivate` (L-DEACT) e `reactivate` (L-REACT) escrevem o
+estado. Uma edição nova não consegue mais gravá-lo, e a regra passou a valer também sob
+concorrência: uma edição lida antes de um desligamento e gravada depois não reativa o registro
+(antes, "last write wins" do ADR 3.3.0006 o reativava). Provas: `test_issue_242_*` em
+`test_employee_repository_laws.py` (fake ≡ Postgres) e em `test_staff_conduct.py` (duas
+conexões); detalhes na nota de 2026-11-23 do
+[ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md). Nota
+*append-only*; o corpo acima não foi editado.

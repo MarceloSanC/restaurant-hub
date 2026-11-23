@@ -154,6 +154,13 @@ válidas para **nome**, não para regra) e pelas decisões de kickoff:
   cadastro de quem saiu não é o mesmo ato que recontratá-lo, e o sistema não obriga um para
   conseguir o outro. A reativação é **explícita** e só acontece pela transição de recontratação.
 
+> **Nota (2026-11-23) — issue #242:** a regra vale também **sob concorrência**. O estado ativo tem
+> escrita própria no repositório: a edição de cadastro não o grava, e só o desligamento e a
+> recontratação o escrevem. Uma edição que leu o registro antes de uma recontratação (ou de um
+> desligamento) e grava depois não desfaz a transição — antes, a última escrita vencia também
+> sobre o estado ([ADR 3.10.0001](../../adr/3_10_0001-login-link-transitions-by-conditional-write.md),
+> nota de 2026-11-23).
+
 > **Nota (2026-09-14) — gate do Step 4:** o registro **desligado some de todas as telas de escala**
 > (escala vigente, calendário, "minha escala", escalas anteriores, imagem, e-mail) — inclusive as
 > suas alocações passadas. Nada é escrito em scheduling no desligamento: staff só marca o estado, e
