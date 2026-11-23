@@ -255,7 +255,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
 | [#198](https://github.com/MarceloSanC/restaurant-hub/issues/198) | Fuso por unidade em `Unit.timezone` (ADR 4.1.0005) | identity | domain + adapters/out | open | `4.4-scheduling-persistence` |
 | [#199](https://github.com/MarceloSanC/restaurant-hub/issues/199) | Write skew de fronteira entre publicações em semanas adjacentes | scheduling | application + adapters/out | open | `4.4-scheduling-persistence` |
-| [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | open | #163, #162 |
+| [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | done | #163, #162 |
 | [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | open | #163 |
 | [#205](https://github.com/MarceloSanC/restaurant-hub/issues/205) | Decidir a extração da emissão do token de convite, hoje em cinco use cases de identity | identity | application | open | #184 |
 | [#206](https://github.com/MarceloSanC/restaurant-hub/issues/206) | Alteração concorrente das unidades de uma função remove unidade sem alcance (escrita condicional em `update_enablement`) | staff | application + adapters/out | open | `3.11-job-function-unit-enablement` |
@@ -267,6 +267,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
 | [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
 | [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
+| [#224](https://github.com/MarceloSanC/restaurant-hub/issues/224) | Fixar o corpo do PR como lugar do plano de gates da issue avulsa | shared | docs + .claude | open | #200 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

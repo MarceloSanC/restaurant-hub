@@ -13,6 +13,7 @@ a auditoria cruza.
 | Decisões técnicas (D1..DN) | `concept.md` §7 |
 | Questões em aberto (Q1..QN) | `concept.md` §13 |
 | Gate de saída + mapping invariante↔teste | `technical.md` §3 |
+| Plano de gates (pontos de `make check` completo) | `technical.md` §1; regra em `docs/PIPELINE.md` §9.6; conferência em [plano-de-gates.md](plano-de-gates.md) |
 | Tasks executadas | `technical.md` §2 |
 | §7 post-execution (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`) | `technical.md` §7 |
 | Regras de import / layers | `docs/LAYOUT.md` §3 + `hex-arch-python` skill |

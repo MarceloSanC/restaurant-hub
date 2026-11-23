@@ -208,6 +208,12 @@ git archive origin/<base> | tar -x -C <tmp> && cd <tmp> && <comando do gate>
 6. **Docs derivados.** `docs/roadmap.md`: status da issue na tabela e
    frontmatter (`updated_at`/`last_reviewed_at`) coerentes? (Issue
    **não** tem `§7 post-execution` — isso é de Stage; não cobrar aqui.)
+7. **Plano de gates** (regra: PIPELINE §9.6, "Issue avulsa"). Listado
+   junto das sub-tasks, no corpo do PR ou no relatório; sem plano escrito
+   vale o padrão, um ponto, o de saída. Ponto além dele: `[deviation]` no
+   corpo do PR e run verde do `lint-and-test` no commit da sub-task do
+   ponto. Branch nascida antes do merge do ADR 0.0.0021 não deve plano.
+   Corte e comandos: [plano-de-gates.md](../stage-audit/reference/plano-de-gates.md#issue-avulsa).
 
 ### Fase D — Judgment por tipo de mudança (não se mecaniza)
 
@@ -421,6 +427,7 @@ verde — são regra de execução, já ancorada acima):
 | Fechamento do PR pela auditoria (Fase F) | `docs/GIT-WORKFLOW.md` §"Fechamento autônomo pela auditoria" + §"Merge e limpeza da worktree" |
 | Convenção de commit/branch/PR de issue avulsa | `docs/CONVENTIONS.md` §4 + `git-versioning-pointer` |
 | Buscar issue duplicada antes de criar follow-up | `git-versioning-pointer` §Criar issue + GIT-WORKFLOW §Etapa 1 |
+| Plano de gates e evidência por ponto | `docs/PIPELINE.md` §9.6 + Fase C, item 7 |
 | Validador estrutural | `scripts/check_layout.py` |
 
 ---
