@@ -5,7 +5,7 @@ when-use: Reference when writing the gate plan of a technical.md (Fase 3B), deci
 keywords: [adr, process, gates, make-check, gate-plan, budget, totality-sweep, github-actions, docs-check, issue-163]
 status: accepted
 created_at: 2026-11-16
-updated_at: 2026-11-16
+updated_at: 2026-11-22
 adr_id: "0.0.0021"
 decision: 'Each Task runs only its own tests (the test files it wrote or changed plus the totality sweeps its files feed) and the pre-commit hooks; the full `make check` must be green only at the 1 to 3 points per Stage that the gate plan in §1 of the technical.md names, the exit gate included, and a 4th point needs a written justification or becomes a `[deviation]`. A point is met by a local run or, under the orchestrator, by the Actions run of that commit. check_docs_pointers.py rejects the retired rule in the normative docs.'
 context_stage: 0.0-global
@@ -147,7 +147,7 @@ Configuração candidata: nenhuma · Reversível: sim
 - The quality of the plan depends on the author's judgement. The budget cap and the justification rule make a bad plan visible. They do not prevent one.
 
 ### Neutral / trade-offs accepted
-- No gate checks that a technical.md has a gate plan or that the plan has 1 to 3 points: the technical gate reviews it. A mechanical check would need a cut-off for the Stages approved before this ADR (issue #201, speculative).
+- The technical gate reviews the merit of the plan. Its form is checked mechanically since issue #201: `scripts/check_gate_plan.py`, wired in `make docs-check`, rejects a technical.md without the "Plano de gates" heading in §1 or with the table out of the template's form (numbered points, filled cells, an exit point, no "por segurança" from the 4th point on). The cut-off for the Stages approved before this ADR is a closed list of their folders, locked by a test. Since the same issue, `scripts/check_docs_pointers.py` also rejects a fenced command block that runs `make check` before a `git commit` carrying a Task mark.
 - The audit skills (`stage-audit`, `issue-audit`) do not yet read the gate plan. They are being reorganized by issue #162, so the change is left as a follow-up (issue #200, which also adds the pointer to the orchestrator prompt).
 
 ## References
@@ -159,3 +159,4 @@ Configuração candidata: nenhuma · Reversível: sim
 - `docs/PIPELINE.md` §9.6: the operational single source. §4.3: the atomic-Task criteria.
 - `docs/templates/stage-technical.md` §1 "Plano de gates".
 - `scripts/check_docs_pointers.py`, `tests/unit/test_check_docs_pointers.py`.
+- `scripts/check_gate_plan.py`, `tests/unit/test_check_gate_plan.py` (issue #201).
