@@ -5,7 +5,7 @@ when-use: Reference before adding or reading a timezone anywhere in the system, 
 keywords: [adr, scheduling, identity, unit, timezone, iana, zoneinfo, wall-clock, port, cross-bc, dst, configuration, domain-gate]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-09-26
+updated_at: 2026-11-23
 adr_id: 4.1.0005
 decision: The unit's timezone is owned by identity as Unit.timezone — an IANA time-zone key validated by the standard library, default America/Sao_Paulo — and scheduling (later timeclock and hub) reads it through a port; which Stage adds the column is a roadmap scope gap (candidates 4.4 or a standalone identity issue), recorded here and not decided.
 context_stage: 4.1-scheduling-domain
@@ -167,3 +167,30 @@ timezone from; every consumer would invent its own.
     verão no território nacional." Disponível em:
     https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2019/decreto/D9772.htm. Acesso em:
     13 set. 2026.
+
+## Nota — a coluna entrou pela issue #198
+
+**2026-11-23 — issue #198 (identity).** O ponto 4 da §Decision fica respondido: a coluna entrou
+por uma issue avulsa de identity, não pela 4.4 (concept 4.4 §7 D-TZ).
+
+- **Persistência.** Migration `0007_units_timezone`: `units.timezone TEXT NOT NULL DEFAULT
+  'America/Sao_Paulo'`; toda unidade anterior a ela fica com o default. Sem `CHECK` de chave: o
+  conjunto IANA muda a cada release do tzdata.
+- **Validação no domínio, não só na borda.** As §Consequences/Neutral chamam a validação da chave
+  de *"a boundary concern of the identity Stage that adds the column"*. A issue a pôs na entidade:
+  `Unit` recusa chave fora de `zoneinfo.available_timezones()` com `InvalidTimezoneError`
+  (domínio, ADR 3.9.0001 §Decision 3; 422 no mapa de identity). Pertencimento ao conjunto, e não
+  "o `ZoneInfo(key)` construiu?", porque construir depende do sistema de arquivos: no Windows o
+  espaço no fim da chave passa, e um diretório da base (`America`) levanta `OSError`. O pacote
+  `tzdata` virou dependência direta, para que o conjunto seja o mesmo em todo ambiente.
+- **Escrita.** `POST /restaurants/{id}/units` aceita `timezone` opcional, com o default
+  declarado no OpenAPI, e a resposta devolve o fuso (o "one field on the unit screen" das
+  §Consequences/Positive). Editar o fuso de uma unidade já criada não tem rota.
+- **Leitura.** `IdentityUnitFacade.timezone(tenant_id=, unit_id=)` em
+  `identity/application/facade.py`, em primitivos, sobre o use case facade-only
+  `GetUnitTimezoneUseCase`: unidade de outro tenant responde como inexistente (`None`). A forma
+  do port do consumidor (§Consequences/Neutral) segue aberta: o port, o adapter, o par nomeado
+  no `.importlinter` e a montagem da fachada no `composition_root` nascem com o primeiro
+  consumidor.
+
+Nota *append-only*; o corpo acima não foi editado.
