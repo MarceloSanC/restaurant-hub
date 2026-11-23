@@ -484,4 +484,8 @@ Oito lacunas da rodada 1, fechadas no commit `[2.7/task-11-extra]`: (1) **R7** �
 **Contexto:** o finding de 2026-11-16 acima, com dono na issue [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211).
 **Decisão:** o use case declara `PROVISIONABLE_ROLES` (hoje `{employee}`) e recusa todo papel fora dele como primeira instrução de `execute`, antes de qualquer porta, com a mesma `RoleNotProvisionableError` da fachada. A fachada e o command não mudam, e um teste compara as duas cópias da regra papel a papel. O registro da decisão está na nota de 2026-11-22 do ADR 2.7.0001, e as do ADR 0.0.0020 e do ADR 2.4.0003 apontam para ela. Entrada pós-merge (CONVENTIONS §3.4): o plano acima não muda.
 
+### 2026-11-23 — [decision] A fachada lê `PROVISIONABLE_ROLES`: a regra de papel tem uma cópia só (pós-merge) — Claude
+**Contexto:** a entrada de 2026-11-22 acima deixou duas cópias da regra (use case e fachada) e um teste que as comparava; a unificação ficou na issue [#234](https://github.com/MarceloSanC/restaurant-hub/issues/234), que esperava a Stage 3.10.
+**Decisão:** `IdentityFacade.provision_account` confere `papel not in PROVISIONABLE_ROLES` no lugar do literal, ainda como primeira checagem e antes do e-mail. Na entrada acima, *"A fachada e o command não mudam, e um teste compara as duas cópias da regra papel a papel"* deixou de valer: o teste de paridade compara o que a fachada aceita com `{employee}` transcrito no teste, e outro trava que a fachada segue a constante. O registro está na nota de 2026-11-23 do ADR 2.7.0001. Entrada pós-merge (CONVENTIONS §3.4): o plano acima não muda.
+
 <!-- END: post-execution -->
