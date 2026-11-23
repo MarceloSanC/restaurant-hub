@@ -52,6 +52,7 @@ class UnitResult:
     id: UnitId
     restaurant_id: RestaurantId
     name: str
+    timezone: str
 
 
 @dataclass(frozen=True)

@@ -563,6 +563,43 @@ async def test_owner_cria_unidade_no_proprio_tenant(
 
     assert resposta.status_code == HTTPStatus.CREATED
     assert resposta.json()["restaurant_id"] == _TENANT
+    # Issue #198 — sem `timezone` no corpo, a unidade nasce no fuso default.
+    assert resposta.json()["timezone"] == "America/Sao_Paulo"
+
+
+async def test_owner_cria_unidade_com_fuso_declarado(
+    ambiente: _Ambiente, client: AsyncClient
+) -> None:
+    """Issue #198 — o fuso do corpo é gravado e devolvido (ADR 4.1.0005)."""
+    ambiente.com_restaurante()
+    owner = ambiente.com_usuario(user_id="owner", role=Role.OWNER, tenant_id=_TENANT)
+
+    resposta = await client.post(
+        f"/api/v1/restaurants/{_TENANT}/units",
+        json={"name": "Filial Manaus", "timezone": "America/Manaus"},
+        headers=ambiente.auth(owner),
+    )
+
+    assert resposta.status_code == HTTPStatus.CREATED
+    corpo = resposta.json()
+    assert corpo["timezone"] == "America/Manaus"
+    assert ambiente.units.units[corpo["id"]].timezone == "America/Manaus"
+
+
+async def test_fuso_invalido_e_422_e_nao_grava(ambiente: _Ambiente, client: AsyncClient) -> None:
+    """Issue #198 — chave fora da base IANA é erro de domínio: 422, nada gravado."""
+    ambiente.com_restaurante()
+    owner = ambiente.com_usuario(user_id="owner", role=Role.OWNER, tenant_id=_TENANT)
+
+    resposta = await client.post(
+        f"/api/v1/restaurants/{_TENANT}/units",
+        json={"name": "Filial", "timezone": "Lua/Base"},
+        headers=ambiente.auth(owner),
+    )
+
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert "fuso horário inválido" in resposta.json()["detail"]
+    assert ambiente.units.units == {}
 
 
 async def test_owner_de_outro_tenant_nao_cria_unidade(

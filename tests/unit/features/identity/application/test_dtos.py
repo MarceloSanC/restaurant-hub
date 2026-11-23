@@ -123,6 +123,8 @@ def test_commands_carregam_os_campos_declarados() -> None:
         actor_id=TEST_ACTOR_ID, restaurant_id=RestaurantId("rest-1"), name="Centro"
     )
     assert unit_command.restaurant_id == "rest-1"
+    # Issue #198 — sem fuso declarado, o command leva o default do domínio.
+    assert unit_command.timezone == "America/Sao_Paulo"
 
     auth_command = AuthenticateUserCommand(email=Email("dono@x.com"), plain_password="s3nha")
     assert auth_command.email.value == "dono@x.com"
@@ -179,7 +181,10 @@ def test_results_carregam_os_campos_declarados() -> None:
 
     assert (
         UnitResult(
-            id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro"
+            id=UnitId("unit-1"),
+            restaurant_id=RestaurantId("rest-1"),
+            name="Centro",
+            timezone="America/Sao_Paulo",
         ).restaurant_id
         == "rest-1"
     )
@@ -245,7 +250,12 @@ def test_dtos_sao_imutaveis() -> None:
     with pytest.raises(FrozenInstanceError):
         command.name = "Outra"  # type: ignore[misc]
 
-    result = UnitResult(id=UnitId("unit-1"), restaurant_id=RestaurantId("rest-1"), name="Centro")
+    result = UnitResult(
+        id=UnitId("unit-1"),
+        restaurant_id=RestaurantId("rest-1"),
+        name="Centro",
+        timezone="America/Sao_Paulo",
+    )
     with pytest.raises(FrozenInstanceError):
         result.name = "Outra"  # type: ignore[misc]
 

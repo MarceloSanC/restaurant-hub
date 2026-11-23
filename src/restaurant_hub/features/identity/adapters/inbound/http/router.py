@@ -174,7 +174,12 @@ def _authenticated_actor(
 
 
 def _unit_response(result: UnitResult) -> UnitResponse:
-    return UnitResponse(id=result.id, restaurant_id=result.restaurant_id, name=result.name)
+    return UnitResponse(
+        id=result.id,
+        restaurant_id=result.restaurant_id,
+        name=result.name,
+        timezone=result.timezone,
+    )
 
 
 def _user_response(result: UserResult) -> UserResponse:
@@ -393,7 +398,12 @@ def create_unit(
     guard.authorize(actor, Permission.MANAGE_TENANT, tenant_id=tenant_id)
 
     result = use_case.execute(
-        CreateUnitCommand(actor_id=actor.claims.subject, restaurant_id=tenant_id, name=payload.name)
+        CreateUnitCommand(
+            actor_id=actor.claims.subject,
+            restaurant_id=tenant_id,
+            name=payload.name,
+            timezone=payload.timezone,
+        )
     )
     return _unit_response(result)
 

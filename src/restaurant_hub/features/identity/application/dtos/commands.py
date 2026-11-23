@@ -18,6 +18,7 @@ vira 4xx, em vez de estourar dentro do use case.
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from restaurant_hub.features.identity.domain.entities.unit import DEFAULT_TIMEZONE
 from restaurant_hub.features.identity.domain.value_objects.email import Email
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
@@ -59,11 +60,14 @@ class CreateUnitCommand:
     """Criação de uma unidade sob um restaurante existente.
 
     `actor_id` é quem cria — o ator que o use case autoriza (Stage 2.7).
+    `timezone` é a chave IANA do fuso da unidade (issue #198, ADR 4.1.0005); quem
+    não a informa fica com o default do domínio. A validação é da entidade.
     """
 
     actor_id: UserId
     restaurant_id: RestaurantId
     name: str
+    timezone: str = DEFAULT_TIMEZONE
 
 
 @dataclass(frozen=True)

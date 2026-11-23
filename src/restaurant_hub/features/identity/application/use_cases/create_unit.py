@@ -56,6 +56,8 @@ class CreateUnitUseCase:
                 restaurante do command (ADR 2.7.0001 §Decision 3).
             RestaurantNotFoundError: o restaurante informado não existe.
             InvalidNameError: nome vazio (invariante do domínio).
+            InvalidTimezoneError: fuso fora das chaves IANA (invariante do
+                domínio, issue #198) — levantado antes de qualquer escrita.
         """
         authorize_requirement(
             self._authorizer,
@@ -71,10 +73,12 @@ class CreateUnitUseCase:
             id=UnitId(str(self._id_generator.next_id())),
             restaurant_id=command.restaurant_id,
             name=command.name,
+            timezone=command.timezone,
         )
         self._units.add(unit)
         return UnitResult(
             id=unit.id,
             restaurant_id=unit.restaurant_id,
             name=unit.name,
+            timezone=unit.timezone,
         )
