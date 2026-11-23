@@ -188,7 +188,9 @@ Task 01 ─► Task 02 ─► Task 04
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
-> Preenchida durante/após a **Fase 4**. **Apenas esta seção é editável
+> Preenchida durante/após a **Fase 4** — exceto as disposições dos
+> Checkpoints A (gravada na Fase 3A, com este arquivo ainda esqueleto) e
+> B (na Fase 3B), formato abaixo. **Apenas esta seção é editável
 > após `status: done`** — alterações fora dos marcadores
 > `BEGIN/END: post-execution` são rejeitadas no Passo 10 do
 > [`RUNBOOK-STAGE-LIFECYCLE.md`](../../RUNBOOK-STAGE-LIFECYCLE.md) via
@@ -232,6 +234,23 @@ Vocabulário fechado (CONVENTIONS §3.4): `decision` (ou `decision:E` /
 `decision:C`, skill `evidence-resolution` §5), `finding`, `deviation`,
 `measurement`. Outra tag no cabeçalho de entrada é recusada por
 `scripts/check_technical_postexec.py`.
+
+**Disposições dos Checkpoints** (CONVENTIONS §3.4): uma entrada
+`[decision]` por checkpoint — e por bloco no C —, gravada no commit que
+fecha o checkpoint (A → `conceptual approved`; B → `technical approved`;
+C → o `-fix` do bloco ou o commit seguinte). Sem as do A e do B, technical
+`done` é recusado pelo script.
+
+```markdown
+### YYYY-MM-DD — [decision] Checkpoint A — disposições — <Autor>
+**Contexto:** rodada <n> de 3; revisores: <lentes>.
+- **A1** (<severidade>, <lente>) <achado em 1 linha> → corrigido (<hash ou marca do commit>)
+- **A2** (…) … → refutado — artefato: <trecho de teste, código ou saída, colado>
+- **A3** (…) … → escalado (<pergunta P, HALT ou issue>)
+```
+
+Checkpoint sem achado grava a entrada mesmo assim ("nenhum achado material").
+O cabeçalho do C é `Checkpoint C (bloco Tasks NN–MM)`.
 
 ### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
 <!-- preencher quando aplicável; remover este placeholder se vazio -->

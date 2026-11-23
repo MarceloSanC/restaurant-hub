@@ -343,6 +343,20 @@ original aprovado permanece no git. Regras durante a janela de execução:
   `#### [tag] …`) é recusada por `scripts/check_technical_postexec.py`,
   em qualquer Stage, mergeada ou não. Formato detalhado no template
   `stage-technical.md` §7.
+- **Disposições dos Checkpoints A, B e C** (revisões por agentes
+  independentes do `PROMPT-stage-single-session.md`): cada checkpoint
+  grava a sua entrada `[decision]`, com `Checkpoint A`, `Checkpoint B` ou
+  `Checkpoint C (bloco …)` no cabeçalho, **no momento do checkpoint e no
+  commit que o fecha** — não no fechamento da Stage. A do A vai para a §7
+  do esqueleto do technical (que existe desde o `conceptual draft`, ainda
+  em `draft`) e entra no commit `stage N.M: conceptual approved`; a do B,
+  no `stage N.M: technical approved`; a de cada bloco do C, no `-fix` do
+  bloco ou, sem correção, no commit seguinte. Uma linha por achado, com a
+  disposição; checkpoint sem achado também grava a entrada, dizendo isso.
+  Technical `done` sem as entradas do A e do B é recusado por
+  `scripts/check_technical_postexec.py` (checagem 3), salvo as Stages do
+  corte `LEGACY_CHECKPOINT_STAGES` — as anteriores à regra (issue #210),
+  a 3.10 inclusa. Formato no template `stage-technical.md` §7.
 - **Durante a execução** (Stage não mergeada), mudar algo em §1–§6 do
   `technical.md` após `done` exige regressão para `draft` (§3.2). Nunca
   editar §1–§6 silenciosamente nessa janela. Pós-merge a restrição não
