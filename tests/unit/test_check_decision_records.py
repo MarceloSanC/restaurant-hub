@@ -331,6 +331,19 @@ def test_draft_counts_only_in_the_frontmatter(tmp_path: pathlib.Path) -> None:
     assert gate.problems(_repo(tmp_path, {_NEW_STAGE: text}))
 
 
+@pytest.mark.parametrize(
+    "head",
+    ["# Concept sem frontmatter\n", "---\nstatus: draft\n\n# frontmatter sem fechar\n"],
+    ids=["no-frontmatter", "unclosed-frontmatter"],
+)
+def test_a_concept_without_a_closed_frontmatter_is_checked(
+    tmp_path: pathlib.Path, head: str
+) -> None:
+    """Sem frontmatter fechado não há `draft` a isentar: fail-closed."""
+    text = head + "\n" + _record(None)
+    assert gate.problems(_repo(tmp_path, {_NEW_STAGE: text}))
+
+
 def test_an_adr_is_always_checked(tmp_path: pathlib.Path) -> None:
     """O ADR nasce `accepted` (PROMPT-stage, Fase 3A passo 6): não há rascunho a isentar."""
     adr = _concept(_record(None), status="draft")
