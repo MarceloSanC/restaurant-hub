@@ -37,6 +37,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 
 pytestmark = [pytest.mark.integration]
 
@@ -44,6 +45,9 @@ _A = TenantId("tenant-a")
 _B = TenantId("tenant-b")
 _F1 = JobFunctionId("f1")
 _F2 = JobFunctionId("f2")
+# A habilitação de `_funcao()` (default da entidade): a que as escritas condicionais
+# de L-JF2/L-JF3 (issue #207) esperam.
+_EM_TODAS = UnitEnablement.everywhere()
 
 
 @pytest.fixture
@@ -191,7 +195,7 @@ def test_find_by_name_e_verbatim_no_banco(repositorio: PostgresJobFunctionReposi
 
 def test_l_jf2_update_grava_o_novo_nome(repositorio: PostgresJobFunctionRepository) -> None:
     repositorio.add(_funcao())
-    repositorio.update(_funcao(name="Chapeiro"))
+    repositorio.update(_funcao(name="Chapeiro"), expected=_EM_TODAS)
     gravada = repositorio.find_by_id(_A, _F1)
     assert gravada is not None
     assert gravada.name == "Chapeiro"
@@ -202,7 +206,7 @@ def test_l_jf2_update_de_funcao_inexistente_nao_grava_nada(
 ) -> None:
     """`rowcount == 0` ⇒ `NotFound`, e **nada** é inserido — não é upsert."""
     with pytest.raises(JobFunctionNotFoundError):
-        repositorio.update(_funcao())
+        repositorio.update(_funcao(), expected=_EM_TODAS)
     assert repositorio.find_by_id(_A, _F1) is None
     assert repositorio.list_by_tenant(_A) == ()
 
@@ -217,7 +221,7 @@ def test_l_jf2_update_com_tenant_alheio_nao_grava_nada(
     """
     repositorio.add(_funcao())
     with pytest.raises(JobFunctionNotFoundError):
-        repositorio.update(_funcao(tenant=_B, name="Chapeiro"))
+        repositorio.update(_funcao(tenant=_B, name="Chapeiro"), expected=_EM_TODAS)
     gravada = repositorio.find_by_id(_A, _F1)
     assert gravada is not None
     assert gravada.name == "Cozinheiro"
@@ -232,7 +236,7 @@ def test_l_jf2_renomear_para_o_proprio_nome_nao_e_conflito(
     mesma — e ainda seria check-then-act sob concorrência.
     """
     repositorio.add(_funcao())
-    repositorio.update(_funcao(name="Cozinheiro"))
+    repositorio.update(_funcao(name="Cozinheiro"), expected=_EM_TODAS)
     gravada = repositorio.find_by_id(_A, _F1)
     assert gravada is not None
     assert gravada.name == "Cozinheiro"
@@ -244,7 +248,7 @@ def test_l_jf2_update_para_nome_de_outra_funcao_do_tenant_e_erro(
     repositorio.add(_funcao())
     repositorio.add(_funcao(id_=_F2, name="Chapeiro"))
     with pytest.raises(JobFunctionNameAlreadyExistsError) as excecao:
-        repositorio.update(_funcao(id_=_F2, name="Cozinheiro"))
+        repositorio.update(_funcao(id_=_F2, name="Cozinheiro"), expected=_EM_TODAS)
     assert "Cozinheiro" in str(excecao.value)
 
     gravada = repositorio.find_by_id(_A, _F2)
@@ -261,7 +265,7 @@ def test_update_nao_move_a_funcao_de_tenant(repositorio: PostgresJobFunctionRepo
     testes deste arquivo.
     """
     repositorio.add(_funcao())
-    repositorio.update(_funcao(name="Chapeiro"))
+    repositorio.update(_funcao(name="Chapeiro"), expected=_EM_TODAS)
     gravada = repositorio.find_by_id(_A, _F1)
     assert gravada is not None
     assert gravada.tenant_id == _A
@@ -277,7 +281,7 @@ def test_l_jf3_delete_remove_a_funcao_sem_referencias(
     repositorio: PostgresJobFunctionRepository,
 ) -> None:
     repositorio.add(_funcao())
-    repositorio.delete(_A, _F1)
+    repositorio.delete(_A, _F1, expected=_EM_TODAS)
     assert repositorio.find_by_id(_A, _F1) is None
 
 
@@ -285,7 +289,7 @@ def test_l_jf3_delete_de_funcao_inexistente_no_tenant_e_not_found(
     repositorio: PostgresJobFunctionRepository,
 ) -> None:
     with pytest.raises(JobFunctionNotFoundError):
-        repositorio.delete(_A, _F1)
+        repositorio.delete(_A, _F1, expected=_EM_TODAS)
 
 
 def test_ca7_delete_de_funcao_referenciada_por_desligado_e_in_use(
@@ -304,7 +308,7 @@ def test_ca7_delete_de_funcao_referenciada_por_desligado_e_in_use(
     _semear_funcionario_referenciando(banco_limpo, _F1, active=False)
 
     with pytest.raises(JobFunctionInUseError) as excecao:
-        repositorio.delete(_A, _F1)
+        repositorio.delete(_A, _F1, expected=_EM_TODAS)
     assert "f1" in str(excecao.value)
 
     ainda_la = repositorio.find_by_id(_A, _F1)
@@ -318,7 +322,7 @@ def test_l_jf3_delete_de_funcao_referenciada_por_ativo_tambem_e_in_use(
     repositorio.add(_funcao())
     _semear_funcionario_referenciando(banco_limpo, _F1, active=True)
     with pytest.raises(JobFunctionInUseError):
-        repositorio.delete(_A, _F1)
+        repositorio.delete(_A, _F1, expected=_EM_TODAS)
 
 
 def test_l_jf3_not_found_vence_in_use_com_tenant_alheio(
@@ -335,7 +339,7 @@ def test_l_jf3_not_found_vence_in_use_com_tenant_alheio(
     _semear_funcionario_referenciando(banco_limpo, _F1)
 
     with pytest.raises(JobFunctionNotFoundError):
-        repositorio.delete(_B, _F1)
+        repositorio.delete(_B, _F1, expected=_EM_TODAS)
     assert repositorio.find_by_id(_A, _F1) is not None
 
 

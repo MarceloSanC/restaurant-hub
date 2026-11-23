@@ -241,3 +241,21 @@ leituras de função rodam agora sob `REPEATABLE READ`
 ruidosa continua valendo para incoerência de fato gravada (CA9b). A remontagem sob lock de
 `update_enablement`, descrita na nota de 2026-11-22, não mudou: segue em `READ COMMITTED`.
 Nota *append-only*; o corpo acima não foi editado.
+
+## Supersessão parcial
+
+**2026-11-23 — o bullet de §Consequences → Neutral *"Renaming and deleting a function keep the
+tenant-wide authorization of ADR 3.4.0008"* foi superado pelo [ADR 0.0.0023](./0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md) (issue #207).** Renomear e
+apagar exigem agora alcance sobre a habilitação **gravada**, pela mesma regra da §Decision 4
+(`authorize_enablement` de `_unit_enablement.py`): `manage_job_functions` em cada unidade nomeada,
+`manage_tenant` quando a função vale em todas. O gerente de A não renomeia nem apaga função só de
+B, e a remoção seguida de recriação deixou de ser caminho para tirar a função de uma unidade que
+ele não vê. A leitura antes do alvo derivado é a mesma exceção declarada ao ADR 3.7.0001 §4 da
+§Decision 5, com a mesma justificativa (não é oráculo: o catálogo já mostra onde a função vale). As
+duas escritas passaram a ser condicionais à habilitação lida (L-JF2 e L-JF3 revisadas), na forma
+que a nota de 2026-11-22 descreve para `update_enablement`. Com isso o lookup de `delete` volta a
+remontar a habilitação — sob `FOR UPDATE`, onde as duas metades não podem vir de instantes
+diferentes —, o que substitui a frase da nota de 2026-11-23 sobre esse lookup. O resto da decisão
+continua valendo; a consequência negativa *"A manager cannot narrow or widen a function that is
+enabled in every unit"* passa a valer também para renomear e apagar. Nota *append-only*; o corpo
+acima não foi editado.

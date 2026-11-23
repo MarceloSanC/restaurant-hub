@@ -432,3 +432,110 @@ async def test_ca7_estreitar_com_funcionario_na_unidade_removida_e_409(
     assert "função de trabalho em uso por algum funcionário" in recusada.json()["detail"]
     _, em_b = await _funcoes_da_unidade(client, cenario.manager, cenario.unidade_b)
     assert em_b == [job_function_id]
+
+
+async def test_issue_207_gerente_de_a_nao_renomeia_nem_apaga_funcao_so_de_b(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """Issue #207 — renomear e apagar exigem alcance sobre onde a função vale, pelo HTTP real.
+
+    O dono cria uma função só em B e outra em todas as unidades. O gerente só de A
+    recebe 403 com o corpo constante de identity ao renomear e ao apagar as duas —
+    a de B ele não alcança, e "todas" exige `manage_tenant` —, e nada muda: o
+    catálogo segue com os nomes e as unidades de antes. O 404 de uma função
+    inexistente vem antes do alcance (a existência é respondida primeiro, como em
+    `PUT .../units`). Controle positivo: o mesmo gerente renomeia e apaga uma função
+    só de A, e o dono renomeia e apaga a de todas as unidades.
+    """
+    gerente_de_a = await _criar_ator(
+        client, cenario, "gerente-so-de-a@cantina.com", "manager", (cenario.unidade_a,)
+    )
+    funcoes = f"{API}/job-functions"
+
+    async def _criar(nome: str, unidades: list[str] | None, tokens: dict[str, Any]) -> str:
+        corpo: dict[str, Any] = {"name": nome}
+        if unidades is not None:
+            corpo["unit_ids"] = unidades
+        resposta = await client.post(funcoes, json=corpo, headers=auth(tokens))
+        assert resposta.status_code == HTTPStatus.CREATED, resposta.text
+        return str(resposta.json()["id"])
+
+    so_de_b = await _criar("Sommelier", [cenario.unidade_b], cenario.owner)
+    de_todas = await _criar("Recepcionista", None, cenario.owner)
+    so_de_a = await _criar("Pizzaiolo", [cenario.unidade_a], gerente_de_a)
+
+    for funcao_id in (so_de_b, de_todas):
+        renomeada = await client.patch(
+            f"{funcoes}/{funcao_id}", json={"name": "Tomado"}, headers=auth(gerente_de_a)
+        )
+        apagada = await client.delete(f"{funcoes}/{funcao_id}", headers=auth(gerente_de_a))
+        for negada in (renomeada, apagada):
+            assert negada.status_code == HTTPStatus.FORBIDDEN, negada.text
+            assert negada.json() == _CORPO_403
+
+    catalogo = await client.get(funcoes, headers=auth(cenario.owner))
+    por_id = {f["id"]: (f["name"], f["all_units"], f["unit_ids"]) for f in catalogo.json()}
+    assert por_id[so_de_b] == ("Sommelier", False, [cenario.unidade_b])
+    assert por_id[de_todas] == ("Recepcionista", True, [])
+
+    inexistente = await client.patch(
+        f"{funcoes}/funcao-que-nunca-existiu", json={"name": "X"}, headers=auth(gerente_de_a)
+    )
+    assert inexistente.status_code == HTTPStatus.NOT_FOUND, inexistente.text
+    assert inexistente.json()["type"] == "staff_error"
+
+    # Controle positivo: o alcance existe, a regra não nega tudo.
+    renomeada_a = await client.patch(
+        f"{funcoes}/{so_de_a}", json={"name": "Pizzaiolo chefe"}, headers=auth(gerente_de_a)
+    )
+    assert renomeada_a.status_code == HTTPStatus.OK, renomeada_a.text
+    assert renomeada_a.json()["name"] == "Pizzaiolo chefe"
+    apagada_a = await client.delete(f"{funcoes}/{so_de_a}", headers=auth(gerente_de_a))
+    assert apagada_a.status_code == HTTPStatus.NO_CONTENT, apagada_a.text
+
+    do_dono = await client.patch(
+        f"{funcoes}/{de_todas}", json={"name": "Recepção"}, headers=auth(cenario.owner)
+    )
+    assert do_dono.status_code == HTTPStatus.OK, do_dono.text
+    apagada_pelo_dono = await client.delete(f"{funcoes}/{de_todas}", headers=auth(cenario.owner))
+    assert apagada_pelo_dono.status_code == HTTPStatus.NO_CONTENT, apagada_pelo_dono.text
+
+    restantes = await client.get(funcoes, headers=auth(cenario.owner))
+    ids_restantes = {f["id"] for f in restantes.json()}
+    assert so_de_b in ids_restantes
+    assert ids_restantes.isdisjoint({so_de_a, de_todas})
+
+
+async def test_issue_207_gerente_e_rh_de_todas_as_unidades_negados_em_funcao_de_todas(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """A consequência de produto do ADR 0.0.0023, pelo HTTP real: "todas" é do dono.
+
+    A matriz de autorização semeia a função nas duas unidades do cenário para que
+    `manager` e `hr` sigam alcançando o `PATCH`; este é o caso que ela deixou de
+    exercer. O `manager` do cenário e um `hr` são membros de **todas** as unidades
+    que existem hoje, e mesmo assim recebem 403 com o corpo constante ao renomear e
+    ao apagar uma função que vale em todas: "todas" inclui as unidades futuras e
+    exige `manage_tenant`. Nada muda, e os dois papéis respondem igual (CA12).
+    """
+    rh_das_duas = await _criar_ator(
+        client, cenario, "rh-das-duas@cantina.com", "hr", (cenario.unidade_a, cenario.unidade_b)
+    )
+    funcoes = f"{API}/job-functions"
+    criada = await client.post(funcoes, json={"name": "Garçom"}, headers=auth(cenario.owner))
+    assert criada.status_code == HTTPStatus.CREATED, criada.text
+    assert criada.json()["all_units"] is True
+    de_todas = str(criada.json()["id"])
+
+    for ator in (cenario.manager, rh_das_duas):
+        renomeada = await client.patch(
+            f"{funcoes}/{de_todas}", json={"name": "Tomado"}, headers=auth(ator)
+        )
+        apagada = await client.delete(f"{funcoes}/{de_todas}", headers=auth(ator))
+        for negada in (renomeada, apagada):
+            assert negada.status_code == HTTPStatus.FORBIDDEN, negada.text
+            assert negada.json() == _CORPO_403
+
+    catalogo = await client.get(funcoes, headers=auth(cenario.owner))
+    por_id = {f["id"]: (f["name"], f["all_units"]) for f in catalogo.json()}
+    assert por_id[de_todas] == ("Garçom", True)

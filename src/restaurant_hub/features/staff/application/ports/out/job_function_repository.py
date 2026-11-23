@@ -36,7 +36,10 @@ reidratada (L-JF4/L-JF5 e os dois `find_*`); `add` a grava junto com a linha
 (L-JF1), `delete` a leva junto (L-JF3), e só `update_enablement` (L-JF7) a muda —
 condicionada, desde a issue #206, à habilitação que o chamador leu.
 `update` (L-JF2) **não** a grava: renomear e mudar unidades são escritas
-distintas para que uma não regrave a outra sob concorrência.
+distintas para que uma não regrave a outra sob concorrência. Desde a issue #207
+as três escritas sobre uma função existente — `update`, `delete` e
+`update_enablement` — recebem a habilitação lida e recusam se a gravada mudou:
+as três são autorizadas contra ela.
 
 **Leitura coerente (issue #225).** Toda leitura deste port — os dois `find_*`,
 `find_all_by_ids`, `list_by_tenant` e `list_by_unit` — devolve cada função como
@@ -46,7 +49,8 @@ e nunca um erro causado pela corrida (a combinação incoerente que
 `UnitEnablement` recusa só aparece se estiver de fato gravada). Numa listagem o
 instante é **um só para todas as funções**: o resultado não junta uma função de
 antes de uma alteração com outra de depois dela. O lookup de `delete` (L-JF3)
-também não levanta por corrida. O fake cumpre a lei por construção (não há
+também não levanta por corrida (desde a issue #207 ele remonta a habilitação sob o
+lock da linha, como o de `update_enablement`). O fake cumpre a lei por construção (não há
 leitura concorrente em memória); o adapter Postgres, lendo sob snapshot único.
 
 **Escopo de tenant na assinatura** (ADR 3.2.0002): não existe operação sem
@@ -96,7 +100,7 @@ class JobFunctionRepository(Protocol):
         """
         ...
 
-    def update(self, job_function: JobFunction) -> None:
+    def update(self, job_function: JobFunction, expected: UnitEnablement) -> None:
         """Grava o estado de uma função existente.
 
         **L-JF2 — é `UPDATE`, não upsert.** Função inexistente **no tenant** ⇒
@@ -107,10 +111,20 @@ class JobFunctionRepository(Protocol):
         **Grava só o nome** — a habilitação por unidade fica como está gravada,
         qualquer que seja a da entidade recebida (Stage 3.11). Quem a muda é
         `update_enablement` (L-JF7).
+
+        **L-JF2 (revisada) (issue #207) — escrita condicional à habilitação lida.**
+        Renomear exige alcance sobre as unidades em que a função vale, e o use case
+        o autoriza contra a habilitação que **leu**. `expected` é essa habilitação:
+        se a **gravada** não for igual a ela ⇒ `JobFunctionEnablementChangedError`,
+        e **nada** é gravado — a mesma condição de L-JF7. Ordem: o lookup por
+        `(tenant_id, id)` vem antes da comparação, e a comparação antes da guarda
+        de nome; comparação e escrita são atômicas.
         """
         ...
 
-    def delete(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> None:
+    def delete(
+        self, tenant_id: TenantId, job_function_id: JobFunctionId, expected: UnitEnablement
+    ) -> None:
         """Remove a função **definitivamente**.
 
         **L-JF3 — remoção guardada.** Inexistente **no tenant** ⇒
@@ -129,6 +143,13 @@ class JobFunctionRepository(Protocol):
 
         **L-JF3 (revisada) (Stage 3.11)** — a habilitação por unidade sai junto com a
         função; recriar uma função com o mesmo id não herda unidades antigas.
+
+        **L-JF3 (revisada) (issue #207) — remoção condicional à habilitação lida.**
+        Como em L-JF2: `expected` é a habilitação sobre a qual o use case autorizou
+        a remoção; gravada diferente ⇒ `JobFunctionEnablementChangedError`, e a
+        função continua legível. Ordem: lookup ⇒ `JobFunctionNotFoundError`;
+        comparação ⇒ `JobFunctionEnablementChangedError`; referências ⇒
+        `JobFunctionInUseError`. Comparação e remoção são atômicas.
         """
         ...
 

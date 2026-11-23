@@ -259,7 +259,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | done | #163 |
 | [#205](https://github.com/MarceloSanC/restaurant-hub/issues/205) | Decidir a extração da emissão do token de convite, hoje em cinco use cases de identity | identity | application | open | #184 |
 | [#206](https://github.com/MarceloSanC/restaurant-hub/issues/206) | Alteração concorrente das unidades de uma função remove unidade sem alcance (escrita condicional em `update_enablement`) | staff | application + adapters/out | done | `3.11-job-function-unit-enablement` |
-| [#207](https://github.com/MarceloSanC/restaurant-hub/issues/207) | Decidir o alcance por unidade em renomear e apagar função restrita | staff | application + adapters/inbound/http | open | `3.11-job-function-unit-enablement` |
+| [#207](https://github.com/MarceloSanC/restaurant-hub/issues/207) | Decidir o alcance por unidade em renomear e apagar função restrita | staff | application + adapters/inbound/http | done | `3.11-job-function-unit-enablement` |
 | [#208](https://github.com/MarceloSanC/restaurant-hub/issues/208) | Docstring de `permission.py` com `manage_job_functions` exercida em unidade nomeada | identity | docs (domain) | open | `3.11-job-function-unit-enablement` |
 | [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | done | `3.11-job-function-unit-enablement` |
 | [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | done | — |
@@ -275,6 +275,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#236](https://github.com/MarceloSanC/restaurant-hub/issues/236) | Alterar o fuso de uma unidade já criada | identity | domain + application + adapters | open | #198 |
 | [#237](https://github.com/MarceloSanC/restaurant-hub/issues/237) | Conferir o `Verificado:` das decisões gravadas fora da forma do §5 da `evidence-resolution` | shared | tooling | open | #212 |
 | [#246](https://github.com/MarceloSanC/restaurant-hub/issues/246) | Repetir no import-linter o alcance dos use cases facade-only de identity | identity | tooling | open | #233 |
+| [#248](https://github.com/MarceloSanC/restaurant-hub/issues/248) | Decidir se gerente de restaurante de uma unidade volta a renomear e apagar funções de todas as unidades | staff | application | open | #207 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

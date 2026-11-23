@@ -128,7 +128,8 @@ class Recursos:
         unidade: a unidade do **path** — a que endereça o registro.
         unidade_destino: a outra unidade do mesmo restaurante, destino de R16.
         employee_id: o funcionário semeado em `unidade`.
-        job_function_id: a função atribuída a esse funcionário.
+        job_function_id: a função atribuída a esse funcionário — desde a issue #207
+            habilitada em `unidade` e `unidade_destino`, não em todas.
         job_function_livre: uma segunda função, **sem** nenhum funcionário — R04
             a remove, e removê-la é 204; remover a primeira seria 409
             (`JobFunctionInUseError`), que mediria outra coisa. Desde a Stage 3.11
@@ -570,7 +571,14 @@ async def _semear(
     ator de montar o próprio cenário.
     """
     cabecalho = auth(cenario.owner)
-    job_function_id = await _criar_funcao(client, cabecalho, f"Função {sufixo}")
+    # Issue #207 — habilitada nas **duas** unidades do cenário, e não em todas:
+    # renomear e apagar exigem alcance sobre onde a função vale, e "todas" seria
+    # só do `owner` (`manage_tenant`). Nas duas, `manager` e `hr` — membros das
+    # duas — alcançam `PATCH /job-functions/{id}` (CA10/CA12/CA36), e a cópia para
+    # o destino continua encontrando a função habilitada lá (ADR 3.11.0002).
+    job_function_id = await _criar_funcao(
+        client, cabecalho, f"Função {sufixo}", unidades=[unidade, destino]
+    )
     job_function_livre = await _criar_funcao(
         client, cabecalho, f"Função livre {sufixo}", unidades=[unidade]
     )

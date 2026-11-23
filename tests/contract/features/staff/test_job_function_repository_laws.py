@@ -54,6 +54,10 @@ _B = TenantId("tenant-b")
 _U1 = UnitId("u1")
 _F1 = JobFunctionId("f1")
 _F2 = JobFunctionId("f2")
+# A habilitação de `_funcao()` — o default da entidade — e, portanto, a que as
+# escritas condicionais (L-JF2/L-JF3 revisadas, issue #207) esperam nos testes
+# anteriores à Stage 3.11.
+_EM_TODAS = UnitEnablement.everywhere()
 
 
 def _funcao(
@@ -182,7 +186,7 @@ def test_l_jf2_update_de_funcao_inexistente_no_tenant_nao_grava_nada(
     repos: RepositoriosDeStaff,
 ) -> None:
     with pytest.raises(JobFunctionNotFoundError):
-        repos.job_functions.update(_funcao())
+        repos.job_functions.update(_funcao(), expected=_EM_TODAS)
     assert repos.job_functions.find_by_id(_A, _F1) is None
     assert repos.job_functions.list_by_tenant(_A) == ()
 
@@ -191,7 +195,7 @@ def test_l_jf2_update_de_funcao_de_outro_tenant_nao_grava_nada(repos: Repositori
     """ "Inexistente no tenant" inclui "existe, mas é de outro restaurante"."""
     _com_funcao_gravada(repos)
     with pytest.raises(JobFunctionNotFoundError):
-        repos.job_functions.update(_funcao(tenant=_B, name="Chapeiro"))
+        repos.job_functions.update(_funcao(tenant=_B, name="Chapeiro"), expected=_EM_TODAS)
     gravada = repos.job_functions.find_by_id(_A, _F1)
     assert gravada is not None
     assert gravada.name == "Cozinheiro"
@@ -201,7 +205,7 @@ def test_l_jf2_update_de_funcao_de_outro_tenant_nao_grava_nada(repos: Repositori
 def test_l_jf2_renomear_para_o_proprio_nome_e_aceito(repos: RepositoriosDeStaff) -> None:
     """O caso que um `exists_by_name` booleano quebraria (concept §7)."""
     _com_funcao_gravada(repos)
-    repos.job_functions.update(_funcao(name="Cozinheiro"))
+    repos.job_functions.update(_funcao(name="Cozinheiro"), expected=_EM_TODAS)
     gravada = repos.job_functions.find_by_id(_A, _F1)
     assert gravada is not None
     assert gravada.name == "Cozinheiro"
@@ -211,7 +215,7 @@ def test_l_jf2_renomear_para_o_nome_de_outra_funcao_e_erro(repos: RepositoriosDe
     _com_funcao_gravada(repos)
     repos.job_functions.add(_funcao(id_=_F2, name="Chapeiro"))
     with pytest.raises(JobFunctionNameAlreadyExistsError):
-        repos.job_functions.update(_funcao(id_=_F2, name="Cozinheiro"))
+        repos.job_functions.update(_funcao(id_=_F2, name="Cozinheiro"), expected=_EM_TODAS)
     gravada = repos.job_functions.find_by_id(_A, _F2)
     assert gravada is not None
     assert gravada.name == "Chapeiro"  # nome antigo
@@ -219,7 +223,7 @@ def test_l_jf2_renomear_para_o_nome_de_outra_funcao_e_erro(repos: RepositoriosDe
 
 def test_l_jf2_update_grava_o_nome_novo_no_caminho_feliz(repos: RepositoriosDeStaff) -> None:
     _com_funcao_gravada(repos)
-    repos.job_functions.update(_funcao(name="Chapeiro"))
+    repos.job_functions.update(_funcao(name="Chapeiro"), expected=_EM_TODAS)
     gravada = repos.job_functions.find_by_id(_A, _F1)
     assert gravada is not None
     assert gravada.name == "Chapeiro"
@@ -230,7 +234,7 @@ def test_l_jf2_update_grava_o_nome_novo_no_caminho_feliz(repos: RepositoriosDeSt
 
 def test_l_jf3_delete_sem_referencias_remove(repos: RepositoriosDeStaff) -> None:
     _com_funcao_gravada(repos)
-    repos.job_functions.delete(_A, _F1)
+    repos.job_functions.delete(_A, _F1, expected=_EM_TODAS)
     assert repos.job_functions.find_by_id(_A, _F1) is None
 
 
@@ -240,7 +244,7 @@ def test_l_jf3_delete_de_funcao_referenciada_e_erro_e_a_funcao_continua_legivel(
     _com_funcao_gravada(repos)
     repos.employees.add(_funcionario())
     with pytest.raises(JobFunctionInUseError):
-        repos.job_functions.delete(_A, _F1)
+        repos.job_functions.delete(_A, _F1, expected=_EM_TODAS)
     assert repos.job_functions.find_by_id(_A, _F1) is not None
 
 
@@ -254,7 +258,7 @@ def test_l_jf3_referenciador_inativo_tambem_bloqueia(repos: RepositoriosDeStaff)
     _com_funcao_gravada(repos)
     repos.employees.add(_funcionario(active=False))
     with pytest.raises(JobFunctionInUseError):
-        repos.job_functions.delete(_A, _F1)
+        repos.job_functions.delete(_A, _F1, expected=_EM_TODAS)
     assert repos.job_functions.find_by_id(_A, _F1) is not None
 
 
@@ -265,14 +269,14 @@ def test_l_jf3_referenciador_em_outra_unidade_do_tenant_tambem_bloqueia(
     _com_funcao_gravada(repos)
     repos.employees.add(_funcionario(unit=UnitId("u2")))
     with pytest.raises(JobFunctionInUseError):
-        repos.job_functions.delete(_A, _F1)
+        repos.job_functions.delete(_A, _F1, expected=_EM_TODAS)
 
 
 def test_l_jf3_delete_de_funcao_inexistente_no_tenant_e_not_found(
     repos: RepositoriosDeStaff,
 ) -> None:
     with pytest.raises(JobFunctionNotFoundError):
-        repos.job_functions.delete(_A, _F1)
+        repos.job_functions.delete(_A, _F1, expected=_EM_TODAS)
 
 
 # --- L-JF4 / L-JF5: leitura em lote e listagem -------------------------------
@@ -458,13 +462,13 @@ def test_escopo_de_tenant_funcao_do_a_e_invisivel_e_intocavel_com_tenant_b(
 
     # Escrita: NotFound, e nunca NameAlreadyExists (que confirmaria o nome).
     with pytest.raises(JobFunctionNotFoundError):
-        repos.job_functions.update(_funcao(tenant=_B))
+        repos.job_functions.update(_funcao(tenant=_B), expected=_EM_TODAS)
 
     # Remoção: NotFound VENCE InUse. Este é o ponto: a função está de fato
     # referenciada, e responder `JobFunctionInUseError` confirmaria ao tenant B
     # que ela existe **e** que está em uso no restaurante alheio (§5.4).
     with pytest.raises(JobFunctionNotFoundError):
-        repos.job_functions.delete(_B, _F1)
+        repos.job_functions.delete(_B, _F1, expected=_EM_TODAS)
     assert repos.job_functions.find_by_id(_A, _F1) is not None
 
 
@@ -583,7 +587,7 @@ def test_l_jf2_update_grava_so_o_nome_e_preserva_a_habilitacao_gravada(
     """L-JF2 — renomear não regrava onde a função vale (Checkpoint A da 3.11)."""
     repos.job_functions.add(_funcao_em(_restrita(_U1)))
 
-    repos.job_functions.update(_funcao_em(_TODAS, name="Chef"))
+    repos.job_functions.update(_funcao_em(_TODAS, name="Chef"), expected=_restrita(_U1))
 
     gravada = repos.job_functions.find_by_id(_A, _F1)
     assert gravada is not None
@@ -594,7 +598,7 @@ def test_l_jf2_update_grava_so_o_nome_e_preserva_a_habilitacao_gravada(
 def test_l_jf3_delete_leva_a_habilitacao_junto(repos: RepositoriosDeStaff) -> None:
     """L-JF3 (revisada) — recriar com o mesmo id não herda unidades da função apagada."""
     repos.job_functions.add(_funcao_em(_restrita(_U1, _U2)))
-    repos.job_functions.delete(_A, _F1)
+    repos.job_functions.delete(_A, _F1, expected=_restrita(_U1, _U2))
 
     repos.job_functions.add(_funcao_em(_TODAS))
     assert _habilitacao(repos, _F1) == _TODAS
@@ -827,7 +831,7 @@ def test_l_jf7_renomeacao_intercalada_nao_recusa_a_alteracao_de_unidades(
     """
     repos.job_functions.add(_funcao_em(_restrita(_U1)))
     lida = _restrita(_U1)
-    repos.job_functions.update(_funcao_em(lida, name="Chef"))
+    repos.job_functions.update(_funcao_em(lida, name="Chef"), expected=lida)
 
     repos.job_functions.update_enablement(
         _funcao_em(_restrita(_U1, _U2), name="Cozinheiro"), expected=lida
@@ -836,3 +840,98 @@ def test_l_jf7_renomeacao_intercalada_nao_recusa_a_alteracao_de_unidades(
     gravada = repos.job_functions.find_by_id(_A, _F1)
     assert gravada is not None
     assert (gravada.name, gravada.unit_enablement) == ("Chef", _restrita(_U1, _U2))
+
+
+# --- L-JF2 / L-JF3 (revisadas), issue #207: renomear e apagar condicionais ------
+#
+# Renomear e apagar passam a exigir alcance sobre as unidades em que a função vale,
+# autorizado contra a habilitação **lida**; as duas escritas recebem essa leitura e
+# recusam se a gravada mudou — a mesma propriedade de L-JF7, sobre o mesmo domínio
+# de pares (`_PARES_DIFERENTES`).
+
+
+@pytest.mark.parametrize(("gravada", "esperada"), _PARES_DIFERENTES)
+def test_l_jf2_renomear_com_habilitacao_esperada_diferente_e_recusado_sem_gravar_nada(
+    gravada: UnitEnablement, esperada: UnitEnablement, repos: RepositoriosDeStaff
+) -> None:
+    repos.job_functions.add(_funcao_em(gravada))
+
+    with pytest.raises(JobFunctionEnablementChangedError):
+        repos.job_functions.update(_funcao_em(gravada, name="Chef"), expected=esperada)
+
+    relida = repos.job_functions.find_by_id(_A, _F1)
+    assert relida is not None
+    assert (relida.name, relida.unit_enablement) == ("Cozinheiro", gravada)
+
+
+@pytest.mark.parametrize(("gravada", "esperada"), _PARES_DIFERENTES)
+def test_l_jf3_apagar_com_habilitacao_esperada_diferente_e_recusado_e_a_funcao_fica(
+    gravada: UnitEnablement, esperada: UnitEnablement, repos: RepositoriosDeStaff
+) -> None:
+    repos.job_functions.add(_funcao_em(gravada))
+
+    with pytest.raises(JobFunctionEnablementChangedError):
+        repos.job_functions.delete(_A, _F1, expected=esperada)
+
+    assert _habilitacao(repos, _F1) == gravada
+
+
+@pytest.mark.parametrize(
+    ("rotulo", "habilitacao"), _HABILITACOES, ids=[r for r, _ in _HABILITACOES]
+)
+def test_l_jf2_l_jf3_habilitacao_esperada_igual_a_gravada_renomeia_e_apaga(
+    rotulo: str, habilitacao: UnitEnablement, repos: RepositoriosDeStaff
+) -> None:
+    """A outra metade: a condição satisfeita não recusa, em nenhuma forma."""
+    repos.job_functions.add(_funcao_em(habilitacao))
+
+    repos.job_functions.update(_funcao_em(habilitacao, name="Chef"), expected=habilitacao)
+    relida = repos.job_functions.find_by_id(_A, _F1)
+    assert relida is not None
+    assert (relida.name, relida.unit_enablement) == ("Chef", habilitacao), rotulo
+
+    repos.job_functions.delete(_A, _F1, expected=habilitacao)
+    assert repos.job_functions.find_by_id(_A, _F1) is None, rotulo
+
+
+def test_l_jf2_l_jf3_not_found_vence_a_recusa_por_mudanca(repos: RepositoriosDeStaff) -> None:
+    """O lookup no tenant vem antes da comparação, nas duas escritas."""
+    repos.job_functions.add(_funcao_em(_restrita(_U1)))
+
+    with pytest.raises(JobFunctionNotFoundError):
+        repos.job_functions.update(_funcao_em(_restrita(_U1), tenant=_B), expected=_restrita(_U2))
+    with pytest.raises(JobFunctionNotFoundError):
+        repos.job_functions.delete(_B, _F1, expected=_restrita(_U2))
+
+    assert _habilitacao(repos, _F1) == _restrita(_U1)
+
+
+def test_l_jf3_a_recusa_por_mudanca_vence_a_referencia(repos: RepositoriosDeStaff) -> None:
+    """Ordem: a comparação vem antes da guarda de referências.
+
+    A função mudou desde a leitura **e** está em uso: a resposta é a mudança. O
+    ator foi autorizado contra uma habilitação que não é mais a gravada, e nada do
+    que vem depois — nem a resposta da guarda — deve ser decidido sobre ela.
+    """
+    repos.job_functions.add(_funcao_em(_restrita(_U1, _U2)))
+    repos.employees.add(_funcionario())
+
+    with pytest.raises(JobFunctionEnablementChangedError):
+        repos.job_functions.delete(_A, _F1, expected=_restrita(_U1))
+
+    assert _habilitacao(repos, _F1) == _restrita(_U1, _U2)
+
+
+def test_l_jf2_a_recusa_por_mudanca_vence_o_conflito_de_nome(repos: RepositoriosDeStaff) -> None:
+    """Ordem: a comparação vem antes da guarda de nome."""
+    repos.job_functions.add(_funcao_em(_restrita(_U1, _U2)))
+    repos.job_functions.add(_funcao_em(_restrita(_U1), id_=_F2, name="Chapeiro"))
+
+    with pytest.raises(JobFunctionEnablementChangedError):
+        repos.job_functions.update(
+            _funcao_em(_restrita(_U1), name="Chapeiro"), expected=_restrita(_U1)
+        )
+
+    relida = repos.job_functions.find_by_id(_A, _F1)
+    assert relida is not None
+    assert relida.name == "Cozinheiro"
