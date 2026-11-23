@@ -1650,3 +1650,62 @@ def test_issue_207_escrita_que_espera_uma_alteracao_de_unidades_a_rele_e_e_recus
     gravada = PostgresJobFunctionRepository(motor_observador).find_by_id(_A, _F1)
     assert gravada is not None, "a função foi apagada com a leitura antiga"
     assert (gravada.name, gravada.unit_enablement) == ("Cozinheiro", _A_E_B)
+
+
+@pytest.mark.parametrize("metodo", _ESCRITAS_CONDICIONAIS)
+def test_issue_207_escrita_que_espera_conjunto_para_todas_nao_responde_422_por_corrida(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """A propriedade da #225 na forma nova: a corrida nunca vira 422 espúrio.
+
+    O teste da #225 que este PR trocou provava que o lookup de `delete`, sem lock,
+    não levantava `InvalidUnitEnablementError` quando `{A}` → todas comitava entre a
+    linha e os vínculos. Com a remontagem de volta, sob o lock, é a transição que
+    **muda a flag** que pode rasgar: flag antiga (`false`) com os vínculos novos
+    (nenhum). A primeira conexão prende a linha, liga a flag e apaga os vínculos
+    **sem comitar**; a escrita, numa thread, para no lock com a leitura `{A}`. Depois
+    do commit, o `SELECT … FOR UPDATE` devolve a versão nova da linha (PostgreSQL 16
+    §13.3.2: "will then lock and return the updated row"), e a consulta dos vínculos
+    abre snapshot novo: a escrita vê todas, coerente, e recusa por mudança — nem
+    422, nem renomeação ou remoção sobre a leitura antiga.
+    """
+    motor_primeira = motores()
+    motor_segunda = motores()
+    motor_observador = motores()
+    _semear_funcao_em_a(motor_primeira)
+    erros: list[BaseException] = []
+
+    def _escrita_do_gerente() -> None:
+        try:
+            _escrever(PostgresJobFunctionRepository(motor_segunda), metodo, _SO_A)
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_primeira.begin() as primeira:
+        primeira.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        primeira.execute(
+            text(
+                "UPDATE job_functions SET enabled_in_all_units = true "
+                "WHERE id = :f AND tenant_id = :t"
+            ),
+            {"f": _F1, "t": _A},
+        )
+        primeira.execute(
+            text("DELETE FROM job_function_units WHERE job_function_id = :f AND tenant_id = :t"),
+            {"f": _F1, "t": _A},
+        )
+        segunda = threading.Thread(target=_escrita_do_gerente)
+        segunda.start()
+        _esperar_backend_bloqueado(motor_observador)
+    segunda.join(_TIMEOUT_SINCRONIA)
+
+    assert not segunda.is_alive(), "a escrita do gerente não terminou"
+    assert len(erros) == 1, erros
+    assert not isinstance(erros[0], InvalidUnitEnablementError), "422 espúrio por corrida"
+    assert isinstance(erros[0], JobFunctionEnablementChangedError), erros
+    gravada = PostgresJobFunctionRepository(motor_observador).find_by_id(_A, _F1)
+    assert gravada is not None, "a função foi apagada com a leitura antiga"
+    assert (gravada.name, gravada.unit_enablement) == ("Cozinheiro", _TODAS)
