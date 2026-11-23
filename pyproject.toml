@@ -214,6 +214,7 @@ only_mutate = [
     "src/restaurant_hub/features/identity/application/use_cases/authorize_action.py",
     "src/restaurant_hub/features/identity/domain/entities/user.py",
     "src/restaurant_hub/features/staff/adapters/out/identity/local_access_guard.py",
+    "src/restaurant_hub/features/scheduling/adapters/out/identity/local_access_guard.py",
     "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
     "src/restaurant_hub/features/identity/application/ports/out/action_authorizer.py",
     "src/restaurant_hub/features/identity/application/use_cases/provision_account.py",

@@ -313,6 +313,7 @@ modules =
 ignore_imports =
     restaurant_hub.features.staff.adapters.out.identity.* -> restaurant_hub.features.identity.application.facade
     restaurant_hub.features.scheduling.adapters.out.staff.* -> restaurant_hub.features.staff.application.facade
+    restaurant_hub.features.scheduling.adapters.out.identity.* -> restaurant_hub.features.identity.application.facade
 unmatched_ignore_imports_alerting = error
 
 # Issue #246 — o ALCANCE dos use cases facade-only de identity. Eles não autorizam:
