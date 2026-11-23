@@ -5,7 +5,7 @@ when-use: Reference before changing `POST /restaurants`, `POST /restaurants/{id}
 keywords: [adr, provisioning, restaurant, owner, invitation, pending-account, setup-token, unusable-hash, platform-admin, credential, identity, issue-114]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-09
+updated_at: 2026-11-23
 adr_id: "0.0.0018"
 decision: "The owner emitted by `POST /restaurants` and by `POST /restaurants/{id}/owners` is born as a pending account (unusable hash + single-use INVITATION setup token) and receives the setup link by e-mail sent after the identity unit commits; neither request body has a password field any more. `ProvisionRestaurantUseCase` writes `restaurants.add` + `users.add` + `tokens.add` in one unit and sends with the existing invitation message; the owner route reuses `InviteUserUseCase` with the literal `Role.OWNER` and the tenant from the path. A failed send propagates (5xx) with restaurant, owner and token committed; the recovery is the public password-reset request."
 context_stage: 0.0-global
@@ -201,3 +201,10 @@ mantém `Role.OWNER` como literal no código. Depois da autorização a sequênc
 (unicidade do e-mail, restaurante existente, conta e token numa unidade, e-mail depois do commit),
 travada por um teste de paridade com o caminho anterior. Nota *append-only*; o corpo acima não
 foi editado.
+
+**2026-11-23 — o adiamento de Consequences › Negative (*"extracting it is left to the change that
+makes the copies diverge or adds a fifth"*) foi fechado por [ADR 0.0.0024](./0_0_0024-setup-token-issuance-is-one-write-free-helper.md)
+(issue #205).** A quinta cópia chegou com `InviteOwnerUseCase` (Stage 2.7). O cálculo da emissão
+(emitir, montar o registro e o link) tem agora uma definição só, `_invitation.issue_setup_token`,
+que não grava; cada um dos cinco use cases mantém o seu `self._tokens.add(...)` dentro da unidade,
+à vista da regra 10 do `check_layout`. Nota *append-only*; o corpo acima não foi editado.
