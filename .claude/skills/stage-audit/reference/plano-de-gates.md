@@ -119,8 +119,19 @@ O §9.6, "Issue avulsa", vale com quatro trocas:
   **non-blocker, dentro da própria issue**, como o plano ausente da Stage (seção 4): o gate
   de saída verde cobre o código, falta o rastro. O conserto é editar o corpo do PR com as
   sub-tasks e os pontos em que o executor de fato esperou, com os runs (um só, o de saída, se
-  não esperou em outro). Como todo finding dentro da própria issue, trava a Fase F até o corpo
-  ser editado.
+  não esperou em outro). Quem edita é a fase de aplicação da auditoria. Como todo finding
+  dentro da própria issue, trava a Fase F até o corpo ser editado.
 - **Ponto extra:** um ponto além do de saída precisa do `[deviation]` no corpo do PR, não na §7
   (issue não tem `technical.md`).
 - **Commit do ponto:** a marca é `[#<num>/task-NN`; a evidência segue a seção 3.
+
+**PR aberto antes do lugar fixo (issue #224).** Até o merge do PR #249, o texto dizia "sem lugar
+fixo" e tratava a ausência como o padrão. O PR de issue avulsa com branch posterior ao corte,
+aberto antes desse merge (`gh pr view <num> --json createdAt` contra
+`gh pr view 249 --json mergedAt`) e auditado depois, cai no finding acima, sem isenção: o conserto
+é barato e o rastro vale igual. O executor seguiu a regra do seu tempo, então o auditor não o
+devolve: na fase de aplicação, reconstrói o plano a partir do próprio PR (sub-tasks pelas marcas
+`[#<num>/task-NN` dos commits; pontos: o de saída, com o run do head, mais os que um
+`[deviation]` do corpo ou o relatório do executor nomeiam, cada um com o run da seção 3), grava a
+seção "Plano de gates" no corpo e diz no comentário do veredito que o plano foi reconstruído
+pela auditoria.
