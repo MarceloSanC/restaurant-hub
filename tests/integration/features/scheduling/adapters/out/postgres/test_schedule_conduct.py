@@ -48,7 +48,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.schedule_period imp
     SchedulePeriod,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
-from tests.contract.features.scheduling.support import project, read_trail
+from tests.contract.features.scheduling.support import NO_NEIGHBOURS, project, read_trail
 
 pytestmark = [pytest.mark.integration]
 
@@ -189,8 +189,12 @@ def test_dois_saves_sobre_a_mesma_versao_b_recebe_conflito(
     a, b = _intercalar(
         banco_limpo,
         "UPDATE schedules",
-        lambda: repo.save(v1.enable_band(ShiftBandId("fa"), _faixa(_SEG, 10)), 1, _mudanca(1)),
-        lambda: repo.save(v1.enable_band(ShiftBandId("fb"), _faixa(_SEG, 15)), 1, _mudanca(1)),
+        lambda: repo.save(
+            v1.enable_band(ShiftBandId("fa"), _faixa(_SEG, 10)), 1, NO_NEIGHBOURS, _mudanca(1)
+        ),
+        lambda: repo.save(
+            v1.enable_band(ShiftBandId("fb"), _faixa(_SEG, 15)), 1, NO_NEIGHBOURS, _mudanca(1)
+        ),
         "advisory",
     )
     assert a.erro is None
@@ -220,15 +224,21 @@ def test_dois_adds_de_periodos_que_se_cruzam_b_recebe_periodo_tomado(
 def test_dois_saves_com_o_mesmo_id_interno_novo_b_recebe_id_em_uso(
     repo: PostgresScheduleRepository, banco_limpo: Engine
 ) -> None:
-    s1, s2 = _escala("s1"), _escala("s2", _SEG + timedelta(days=7))
+    # Duas semanas de distância: não são vizinhas, e a recusa é a do id, não a de L-SC9.
+    s1, s2 = _escala("s1"), _escala("s2", _SEG + timedelta(days=14))
     repo.add(s1, _mudanca(None))
     repo.add(s2, _mudanca(None))
     a, b = _intercalar(
         banco_limpo,
         "UPDATE schedules",
-        lambda: repo.save(s1.enable_band(ShiftBandId("fx"), _faixa(_SEG, 10)), 1, _mudanca(1)),
         lambda: repo.save(
-            s2.enable_band(ShiftBandId("fx"), _faixa(s2.period.first_day, 10)), 1, _mudanca(1)
+            s1.enable_band(ShiftBandId("fx"), _faixa(_SEG, 10)), 1, NO_NEIGHBOURS, _mudanca(1)
+        ),
+        lambda: repo.save(
+            s2.enable_band(ShiftBandId("fx"), _faixa(s2.period.first_day, 10)),
+            1,
+            NO_NEIGHBOURS,
+            _mudanca(1),
         ),
         "advisory",
     )
@@ -309,7 +319,7 @@ def test_save_concorrente_entre_raiz_e_filhas_nao_rasga_o_agregado(
     ler = _LEITURAS[leitura]
 
     with _save_entre_raiz_e_filhas(
-        banco_limpo, lambda: repo.save(v2, v1.version, _mudanca(v1.version))
+        banco_limpo, lambda: repo.save(v2, v1.version, NO_NEIGHBOURS, _mudanca(v1.version))
     ) as vistos:
         durante = ler(repo)
 

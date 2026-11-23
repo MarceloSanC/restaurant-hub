@@ -71,6 +71,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
     ValidationConfig,
     WorkloadDirection,
 )
+from tests.contract.features.scheduling.support import save_as_read
 from tests.fakes.features.scheduling.in_memory_staff_read import InMemoryStaffRead
 from tests.unit.features.scheduling.application.conftest import (
     COOK,
@@ -450,7 +451,7 @@ def test_ca02_versao_anterior_a_gravada_recusa(world: World, caso: str) -> None:
     _seed(world)
     gravada = world.schedules.find_by_id(T1, U1, _S1)
     assert gravada is not None
-    world.schedules.save(dataclasses.replace(gravada, version=2), 1, blank_change(1))
+    save_as_read(world.schedules, dataclasses.replace(gravada, version=2), 1, blank_change(1))
     world.schedules.calls.clear()
     with pytest.raises(ScheduleVersionConflictError) as excinfo:
         if caso == "avaliar":
