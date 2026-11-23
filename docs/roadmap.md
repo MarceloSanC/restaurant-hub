@@ -262,7 +262,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#207](https://github.com/MarceloSanC/restaurant-hub/issues/207) | Decidir o alcance por unidade em renomear e apagar função restrita | staff | application + adapters/inbound/http | open | `3.11-job-function-unit-enablement` |
 | [#208](https://github.com/MarceloSanC/restaurant-hub/issues/208) | Docstring de `permission.py` com `manage_job_functions` exercida em unidade nomeada | identity | docs (domain) | open | `3.11-job-function-unit-enablement` |
 | [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | open | `3.11-job-function-unit-enablement` |
-| [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | open | — |
+| [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | done | — |
 | [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | open | #184 |
 | [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
 | [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |

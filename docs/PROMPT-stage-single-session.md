@@ -5,7 +5,7 @@ when-use: Fluxo padrão de execução de Stage (PIPELINE §11.1, implementa → 
 keywords: [prompt, stage, single-session, concept, technical, execucao, lifecycle, review, subagents, gates]
 status: done
 created_at: 2026-05-21
-updated_at: 2026-11-16
+updated_at: 2026-11-22
 ---
 
 # Prompt — Execução de Stage em Sessão Única
@@ -165,15 +165,18 @@ do fluxo. Trate como gate objetivo.
    - **Domínio/testabilidade:** os conceitos de negócio estão corretos?
      Os critérios de aceite são objetivamente testáveis ou são desejos
      vagos?
-   Só seguir depois de registrar a disposição de cada achado.
+   Só seguir depois de **gravar** a disposição de cada achado na §7 do
+   esqueleto do `technical.md` (entrada `[decision] Checkpoint A`; regra
+   em §Revisão por Agentes Independentes).
 9. Marcar `status: done` no frontmatter do concept.
 10. **Commit** (único — não passar por draft intermediário nesta variante):
    ```bash
-   git add docs/stages/<N.M>-<slug>/concept.md docs/adr/<N>_<M>_*.md
+   git add docs/stages/<N.M>-<slug>/concept.md docs/stages/<N.M>-<slug>/technical.md docs/adr/<N>_<M>_*.md
    git commit -m "stage <N.M>: conceptual approved
 
    Refs #<issue>"
    ```
+   O `technical.md` entra só com a entrada do Checkpoint A na §7.
 
 ## Fase 3B — Technical
 
@@ -198,8 +201,10 @@ do fluxo. Trate como gate objetivo.
    varreduras de totalidade que cada arquivo novo dispara: a Task leva a
    entrada dela e o arquivo de teste da varredura entra no comando de
    verificação da Task. Regra completa: PIPELINE §9.6.
-6. Incluir §7 "Execução" com marcadores
-   `<!-- BEGIN: post-execution -->` / `<!-- END: post-execution -->` (vazios).
+6. Manter a §7 "Execução" entre os marcadores
+   `<!-- BEGIN: post-execution -->` / `<!-- END: post-execution -->`,
+   com a entrada do Checkpoint A que a Fase 3A gravou ali — reescrever o
+   esqueleto não a apaga.
 7. Marcar `status: done` no frontmatter do technical.
 
 ### Verificação de gap no Concept (UMA PASSADA — sem loop)
@@ -252,7 +257,10 @@ Independentes) valida mecanicamente:
   varredura de totalidade sem levar a entrada ou sem o teste da
   varredura no comando de verificação.
 
-Registrar a disposição de cada achado antes de commitar.
+Gravar a disposição de cada achado na §7 (entrada `[decision] Checkpoint
+B`) antes de commitar: ela entra no commit abaixo, e o
+`check_technical_postexec.py` recusa o technical `done` sem as entradas
+do A e do B.
 
 **Commit do technical aprovado:**
 
@@ -338,7 +346,9 @@ subagente revisa o diff acumulado do bloco
 technical + LAYOUT **+ as skills do `skills_hint` da Stage + a regra de
 idioma de código** (ver §Revisão → "Lente do Checkpoint C"; protocolo
 geral na mesma seção). Correções viram commit
-`fix(<scope>): <desc> [<N.M>/task-NN-fix]`.
+`fix(<scope>): <desc> [<N.M>/task-NN-fix]`. A disposição do bloco vai
+para a §7 (entrada `[decision] Checkpoint C (bloco Tasks NN–MM)`) no
+`-fix` do bloco ou, sem correção, no commit seguinte.
 
 **Regressão mid-stage:** se uma Task revelar que Task anterior foi
 implementada errada:
@@ -366,8 +376,22 @@ não é "runbook colapsado" — é "runbook sem revisão". Regras:
   comportamento ou cobertura. Estilo/cosmético não é achado.
 - **Disposição explícita para todo achado:** `corrigido` (com commit),
   `refutado` ou `escalado` (vira `AskUserQuestion`). **Proibido descartar
-  achado em silêncio.** As disposições entram no relatório final. A
-  refutação também é auto-avaliada — sem trava, o autor mata achado válido
+  achado em silêncio.**
+- **Onde e quando a disposição é gravada:** na §7 do `technical.md`, uma
+  entrada `[decision]` por checkpoint (e por bloco no C), **no commit que
+  fecha o checkpoint** — formato e regra em CONVENTIONS §3.4 e no template
+  `stage-technical.md` §7:
+  - **A:** na §7 do esqueleto do technical (existe desde o `conceptual
+    draft`), no commit `stage <N.M>: conceptual approved`;
+  - **B:** no commit `stage <N.M>: technical approved`;
+  - **C:** no `-fix` do bloco ou, sem correção, no commit seguinte.
+  O relatório final aponta essas entradas; não é o lugar da disposição.
+  Quando a sessão cai e outra conclui (aconteceu nas Stages 3.11 e 4.4),
+  o relatório da sessão perdida leva junto a disposição, e a auditoria
+  não confere uma refutação que não está no repo (issue #210). Vale para
+  Stage aberta depois do merge da #210; as anteriores, a 3.10 inclusa,
+  estão no corte do `check_technical_postexec.py`.
+- **A refutação também é auto-avaliada** — sem trava, o autor mata achado válido
   com citação plausível-porém-errada. Duas camadas sobre `refutado`:
   - **Sempre:** `refutado` exige **artefato colado** — trecho de teste,
     código ou saída de comando que refuta, **não prosa**. Refutação que só
@@ -482,7 +506,8 @@ Todos OBRIGATÓRIOS antes do commit final `stage <N.M>: complete`:
 - [ ] `python scripts/check_technical_postexec.py docs/stages/<N.M>-<slug>/technical.md` verde.
 - [ ] Auditoria de Testes (acima) com todos os itens "sim".
 - [ ] Checkpoints A, B e C executados, com **todos os achados
-      dispostos** (`corrigido`/`refutado`/`escalado`).
+      dispostos** (`corrigido`/`refutado`/`escalado`) nas entradas
+      `Checkpoint A`/`B`/`C` da §7.
 - [ ] **Verificação end-to-end:** fluxo da Stage exercitado pelo
       entrypoint real (API/CLI/job) quando houver superfície de
       runtime — testes passando não substituem executar o fluxo. Entrega:
@@ -615,11 +640,12 @@ ou e2e contra Postgres real; teste unitário com fake não é validação.
 - Findings escalados (com Stage candidata).
 
 ### 3. Revisões por agentes independentes
-- Checkpoint A (concept): <achados + disposição de cada um>
-- Checkpoint B (technical): <achados + disposição de cada um>
-- Checkpoint C (blocos de Tasks): <achados + disposição de cada um>
-(disposições: `corrigido` com hash / `refutado` com **artefato colado**
-(2º revisor se era blocker) / `escalado`)
+- Checkpoint A (concept): <nº de achados por disposição> — entrada da §7: <cabeçalho>
+- Checkpoint B (technical): <idem>
+- Checkpoint C (por bloco de Tasks): <idem>
+(a disposição item a item — `corrigido` com hash / `refutado` com **artefato
+colado** (2º revisor se era blocker) / `escalado` — está na §7, gravada no
+commit de cada checkpoint)
 
 ### 4. Auditoria de testes (executada por subagente independente)
 1. Caminho feliz coberto? <sim/não + evidência>
@@ -634,7 +660,7 @@ ou e2e contra Postgres real; teste unitário com fake não é validação.
       Task, últimas linhas da saída + exit code, ou o link do run do Actions>
 - [ ] Coverage ≥ 90% por arquivo tocado — <linhas relevantes do term-missing>
 - [ ] `check_technical_postexec.py` verde — <saída>
-- [ ] Checkpoints A/B/C com achados dispostos
+- [ ] Checkpoints A/B/C com achados dispostos nas entradas da §7
 - [ ] Verificação end-to-end — entregue no §0 (passos + saída obtida)
 - [ ] §7 reflete execução real
 - [ ] Findings com Stage candidata
@@ -692,25 +718,26 @@ fonte mais alta na hierarquia.**
 1. Verificar pré-condições.
 2. Carregar contexto (ler docs listados).
 3. **Fase 3A**: gerar concept (perguntas se houver bifurcação material) →
-   ADRs se aplicável → **Checkpoint A** (2 subagentes, lentes distintas) →
+   ADRs se aplicável → **Checkpoint A** (2 subagentes, lentes distintas;
+   disposições na §7 do esqueleto do technical) →
    commit `stage <N.M>: conceptual approved`.
 4. **Fase 3B**: gerar technical (com o plano de gates) → verificação de
    gap (uma passada) → ajustar concept SE gap material → **Checkpoint B**
-   (matriz de rastreabilidade + plano de gates) → commit
+   (matriz de rastreabilidade + plano de gates; disposições na §7) → commit
    `stage <N.M>: technical approved`
    → **pausa opcional de gate humano** (se houve decisão de peso).
 5. **Fase 4**: criar arquivo de estado; para cada Task: re-hidratar →
    implementar → testes da Task (`make check` completo só nos pontos do
    plano de gates) → registrar §7 se necessário →
    commit `<type>(<scope>): <desc> [<N.M>/task-NN]` → atualizar estado.
-   **Checkpoint C** a cada 2–3 Tasks.
+   **Checkpoint C** a cada 2–3 Tasks (disposições na §7 do bloco).
 6. **Auditoria de testes** (subagente independente + mutação real):
    loop até todos os itens "sim". Testes faltantes viram Tasks extras
    com commit dedicado.
 7. **Gate de saída**: todos os gates verdes **com evidência colada** →
    commit `stage <N.M>: complete`.
 8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) +
-   relatório final (com disposições dos checkpoints).
+   relatório final (apontando as entradas dos checkpoints na §7).
 
 **PARE no merge.** Você faz push e abre o PR; o **merge é da sessão de auditoria** (ou seu, só em corrida autônoma autorizada pelo ADR 0.0.0004 — ver §REGRA DE PR). Não execute `gh pr merge`.
 ````

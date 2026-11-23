@@ -16,6 +16,7 @@ a auditoria cruza.
 | Plano de gates (pontos de `make check` completo) | `technical.md` §1; regra em `docs/PIPELINE.md` §9.6; conferência em [plano-de-gates.md](plano-de-gates.md) |
 | Tasks executadas | `technical.md` §2 |
 | §7 post-execution (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`) | `technical.md` §7 |
+| Disposições dos Checkpoints A/B/C | `technical.md` §7, uma entrada `[decision] Checkpoint X` por checkpoint; regra em `docs/CONVENTIONS.md` §3.4; conferência em [disposicoes-checkpoints.md](disposicoes-checkpoints.md) |
 | Regras de import / layers | `docs/LAYOUT.md` §3 + `hex-arch-python` skill |
 | Atomicidade da Stage | `docs/PIPELINE.md` §4.2 / §4.3 |
 | Gates de PR (CI verde, ≥90%, aprovação) | `docs/GIT-WORKFLOW.md` §Gates de PR |
