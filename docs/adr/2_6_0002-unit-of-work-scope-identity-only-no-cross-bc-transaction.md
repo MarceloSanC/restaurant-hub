@@ -268,6 +268,21 @@ Medido em `develop` (`0b57697`): doze ports. Só `IdentityGateway` grava
 `StaffReadPort`, `Clock` e `IdGenerator` não gravam; o `EmailSender` fica fora **de propósito**
 (§3: o e-mail sai depois do commit), e a declaração dele diz isso. A chave das tabelas é o nome da
 classe, como em `is_write`: ports homônimos de BCs diferentes partilham a classificação.
+O limite é *fail-closed*: o pino de métodos é por (arquivo, classe), então um método novo num
+dos dois `AccessGuard` reprova o teste mesmo com o nome já classificado no script; e, se um
+deles passasse a gravar, mover `AccessGuard` para `GATEWAY_WRITE_METHODS` conta o método pelo
+nome nos dois — escrita a mais, nunca a menos.
+
+A auditoria do PR #263 plantou formas de port que a primeira versão da descoberta não via e as
+passou a ver, com teste: `Protocol`/`ABC` importados com apelido (`from typing import Protocol as
+P`), `metaclass=ABCMeta` e a classe que herda de outro port (de repositório ou não) sem repetir
+`Protocol`. Subpasta de `ports/out/`, `__init__.py`, `typing_extensions.Protocol` e duas classes
+no mesmo arquivo já eram vistos. Ficam **fora**, declarados no docstring de
+`non_repository_ports`: a classe que não está no nível do módulo (dentro de `if`, `try` ou
+função); a classe sem base nenhuma usada como interface (o port do projeto é `Protocol`,
+LAYOUT §5); e a classe de um arquivo `*_repository.py`, que é sempre repositório e se classifica
+pelo prefixo do método — o erro desse lado é contar escrita a mais, salvo o método com prefixo
+de leitura que grava, risco que já era o da convenção de nome dos repositórios.
 
 [decision:C] 260-1 — onde mora a declaração dos ports que não gravam
 Escolha: no script, ao lado de `GATEWAY_WRITE_METHODS`, com checagem própria no `main` · Alternativas: só no teste · Degrau (C): 1
