@@ -14,11 +14,14 @@ Sumário: [1. Corte](#1-a-stage-precisa-de-plano-corte) ·
 ## 1. A Stage precisa de plano? (corte)
 
 A transição do §9.6 fala da branch que **nasce** depois do merge do ADR 0.0.0021. O nascimento é
-a data de autor do primeiro commit da branch, que o rebase preserva:
+a menor data de autor entre os commits da branch, que o rebase preserva. A comparação é em
+segundos desde a época (`%at`/`%ct`), não em texto ISO: commit feito com outro fuso (devcontainer
+em UTC) inverte a comparação de strings.
 
 ```bash
-git log --reverse --format=%aI origin/develop..HEAD | head -1   # nascimento da branch
-git log -1 --format=%cI 13ad533   # merge do PR #192 (ADR 0.0.0021): 2026-11-16T17:23:40-03:00
+nasc=$(git log --format=%at origin/develop..HEAD | sort -n | head -1)   # nascimento da branch
+corte=$(git log -1 --format=%ct 13ad533)   # merge do PR #192 (ADR 0.0.0021): 2026-11-16T17:23:40-03:00
+[ "$nasc" -gt "$corte" ] && echo "plano exigido" || echo "transição"
 ```
 
 - **Nascimento anterior ao merge** → Stage da transição: sem plano, e nenhum é exigido (nem no
@@ -31,6 +34,13 @@ git log -1 --format=%cI 13ad533   # merge do PR #192 (ADR 0.0.0021): 2026-11-16T
   que foi escrito foi prometido.
 - Auditoria depois do merge (`origin/develop..HEAD` vazio): trocar o intervalo por
   `<merge>^1..<merge>^2`.
+
+**Limites do corte.** A data de autor muda com `git commit --amend --reset-author`,
+`git rebase --ignore-date` (ou `--reset-author-date`) e com um squash que reescreve todos os
+commits; e a branch criada antes do merge mas com o primeiro commit depois tem a data posterior,
+embora a worktree dela tenha nascido sem o §9.6. Nos quatro casos o erro vai para o lado de
+**cobrar** o plano, nunca para o de dispensá-lo. Se o relatório, a §7 ou o reflog mostram que a
+execução começou antes do merge, vale a transição, registrada como observação com a evidência.
 
 Não servem de corte a ancestralidade (`git merge-base --is-ancestor 13ad533 <commit>`) nem a
 presença da seção: depois de um rebase em `develop` toda branch antiga descende do merge (o
@@ -58,7 +68,7 @@ O §9.6 ("Como um ponto é cumprido") diz o que vale como evidência. Para cada 
    ```
 2. **A evidência sob orquestração:** o job `lint-and-test` verde no run cujo head é esse commit.
    ```bash
-   gh run list --commit <sha> --workflow ci.yml --json databaseId,conclusion,event
+   gh run list --commit <sha> --workflow ci.yml --limit 200 --json databaseId,conclusion,event
    gh run view <id> --json jobs --jq '.jobs[] | select(.name=="lint-and-test") | .conclusion'
    ```
 3. **A evidência no modo manual:** o relatório do executor (PROMPT-stage, §5 do relatório:
@@ -66,13 +76,16 @@ O §9.6 ("Como um ponto é cumprido") diz o que vale como evidência. Para cada 
    Ponto sem nenhum dos dois não tem evidência.
 4. **O ponto de saída** é o run do head do PR, já conferido na Fase B.
 5. **Rebase depois do ponto:** o hash do ponto sumiu da branch, mas o run continua. Listar os
-   runs da branch e achar o da Task pela mensagem do commit:
+   runs da branch (o `--limit` importa: o padrão do `gh` é 20) e achar o da Task pela mensagem
+   do commit, que a API ainda serve para o hash reescrito:
    ```bash
-   gh run list --branch <branch> --workflow ci.yml --json headSha,conclusion
+   gh run list --branch <branch> --workflow ci.yml --limit 200 --json headSha,conclusion
    gh api repos/{owner}/{repo}/commits/<headSha> --jq .commit.message
    ```
 6. **Ponto vermelho:** o commit seguinte ao do ponto é o `[N.M/task-NN-fix]` da mesma Task,
-   antes do primeiro commit da Task seguinte (§9.6, "Ponto vermelho").
+   antes do primeiro commit da Task seguinte (§9.6, "Ponto vermelho"). Sob orquestração, run
+   vermelho **entre** pontos segue a mesma regra (§9.6, "Como um ponto é cumprido"): a lista do
+   item 5 mostra os `failure`, e cada um precisa do conserto antes da Task seguinte.
 7. **Espera fora do plano:** ponto que o relatório ou a §7 citam e a tabela não tem precisa do
    `[deviation]` com a justificativa.
 
@@ -81,7 +94,11 @@ O §9.6 ("Como um ponto é cumprido") diz o que vale como evidência. Para cada 
 - **non-blocker, dentro da Stage:** plano ausente numa Stage posterior ao corte; ponto além do
   3º sem justificativa; ponto sem evidência; ponto vermelho sem o `fix` antes da Task seguinte.
   O gate de saída verde ainda cobre o código; o que falta é o rastro. A fase de aplicação o
-  repõe: `[deviation]` na §7 com o run achado, ou com o motivo de não haver.
+  repõe: `[deviation]` na §7 com o run achado, ou com o motivo de não haver; no plano ausente,
+  o `[deviation]` lista os pontos em que o executor de fato esperou, com os runs. Como todo
+  finding dentro da Stage, trava a Fase F até ser reposto ([fase-f.md](fase-f.md), "Escopo
+  fechado"). Plano ausente ou estourado é também o gatilho de reavaliação da issue #201: citá-la
+  no veredito se ainda estiver aberta.
 - **blocker:** o ponto de saída vermelho (regra da Fase B).
 
 ## Issue avulsa
@@ -89,8 +106,10 @@ O §9.6 ("Como um ponto é cumprido") diz o que vale como evidência. Para cada 
 O §9.6, "Issue avulsa", vale com quatro trocas:
 
 - **Corte:** o mesmo comando do item 1, na branch da issue.
-- **Onde está o plano:** listado junto das sub-tasks, no corpo do PR ou no relatório do
-  executor. Sem plano escrito vale o padrão do §9.6 (um ponto, o de saída): não é finding.
+- **Onde está o plano:** listado junto das sub-tasks, que o PROMPT-issue manda escrever em
+  texto, sem lugar fixo (issue #224). O auditor lê o corpo do PR (onde já vai o `[deviation]` do ponto extra)
+  e, se tiver acesso, o relatório do executor. Sem plano escrito vale o padrão do §9.6 (um
+  ponto, o de saída): não é finding.
 - **Ponto extra:** um ponto além do de saída precisa do `[deviation]` no corpo do PR, não na §7
   (issue não tem `technical.md`).
 - **Commit do ponto:** a marca é `[#<num>/task-NN`; a evidência segue a seção 3.
