@@ -888,6 +888,8 @@ def test_regra10_a_allowlist_nao_cresceu() -> None:
     assert set(check_layout.MULTI_WRITE_ALLOWLIST) == {
         "CreateLoginForEmployeeUseCase",
         "DeactivateEmployeeUseCase",
+        # Stage 3.10 — revogam pelo ponto único antes de gravar o vínculo (ADR 3.10.0001 §5).
+        "UnlinkLoginUseCase",
     }
 
 

@@ -72,6 +72,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
     SetJobFunctionUnitsCommand,
+    UnlinkLoginCommand,
 )
 from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
@@ -136,6 +137,9 @@ from restaurant_hub.features.staff.application.use_cases.rename_job_function imp
 )
 from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
     SetJobFunctionUnitsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.unlink_login import (
+    UnlinkLoginUseCase,
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
@@ -448,6 +452,13 @@ def _conta_existente_vinculada_no_endereco(montagem: Montagem, resultado: object
     assert _relido(montagem).user_id == _CONTA_EXISTENTE
 
 
+def _login_desvinculado_no_endereco(montagem: Montagem, resultado: object) -> None:
+    assert (resultado.tenant_id, resultado.unit_id, resultado.id) == (_A, _U1, _E_COM_LOGIN)
+    relido = montagem.fakes.employees.find_by_id(_A, _U1, _E_COM_LOGIN)
+    assert relido is not None
+    assert relido.user_id is None
+
+
 CENARIOS: Final[dict[str, Cenario]] = {
     "create_job_function": Cenario(
         classe=CreateJobFunctionUseCase,
@@ -634,6 +645,17 @@ CENARIOS: Final[dict[str, Cenario]] = {
         alvos=((_MANAGE_STAFF, _A, _U1), (_MANAGE_USERS, _A, _U1)),
         no_endereco_do_command=_conta_existente_vinculada_no_endereco,
     ),
+    "unlink_login": Cenario(
+        classe=UnlinkLoginUseCase,
+        command=UnlinkLoginCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E_COM_LOGIN,
+        ),
+        alvos=((_MANAGE_STAFF, _A, _U1), (_MANAGE_USERS, _A, _U1)),
+        no_endereco_do_command=_login_desvinculado_no_endereco,
+    ),
 }
 
 _NOMES: Final = sorted(CENARIOS)
@@ -714,6 +736,7 @@ def test_os_use_cases_de_dois_alvos_sao_os_do_concept() -> None:
         "link_existing_login",
         "rename_job_function",
         "set_job_function_units",
+        "unlink_login",
     ]
 
 
@@ -968,6 +991,7 @@ _MATRIZ_R3: Final[dict[str, tuple[tuple[str, str | None], ...]]] = {
     "create_login_for_employee": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_USERS, "unit_id")),
     # Stage 3.10 — as transições do vínculo de login (ADR 3.10.0002 §5).
     "link_existing_login": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_USERS, "unit_id")),
+    "unlink_login": ((_MANAGE_STAFF, "unit_id"), (_MANAGE_USERS, "unit_id")),
 }
 
 

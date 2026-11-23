@@ -232,6 +232,9 @@ from restaurant_hub.features.staff.application.use_cases.rename_job_function imp
 from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
     SetJobFunctionUnitsUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.unlink_login import (
+    UnlinkLoginUseCase,
+)
 from restaurant_hub.shared.application.ports.out.email_sender import EmailSender
 from restaurant_hub.shared.infrastructure.clock.system_clock import SystemClock
 from restaurant_hub.shared.infrastructure.config.settings import Settings, get_settings
@@ -300,6 +303,9 @@ class ApplicationDependencies:
     # Stage 3.5 — o 17º use case de staff (R17). Consome `staff_identity_gateway`,
     # como `staff_deactivate_employee` passou a consumir (R13).
     staff_create_login_for_employee: CreateLoginForEmployeeUseCase
+    # Stage 3.10 — transição do vínculo de login (ADR 3.10.0001). Consome
+    # `staff_identity_gateway`, como R13 e R17.
+    staff_unlink_login: UnlinkLoginUseCase
     # Stage 3.10 — transição do vínculo de login (ADR 3.10.0001). Consome
     # `staff_identity_gateway`, como R13 e R17.
     staff_link_existing_login: LinkExistingLoginUseCase
@@ -664,6 +670,9 @@ def wire_dependencies(
             guard=staff_access_guard,
         ),
         staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
+        ),
+        staff_unlink_login=UnlinkLoginUseCase(
             employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
         ),
         staff_link_existing_login=LinkExistingLoginUseCase(
