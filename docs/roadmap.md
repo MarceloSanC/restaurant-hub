@@ -266,7 +266,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | done | #184 |
 | [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | done | — |
 | [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
-| [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
+| [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | done | `4.4-scheduling-persistence` |
 | [#224](https://github.com/MarceloSanC/restaurant-hub/issues/224) | Fixar o corpo do PR como lugar do plano de gates da issue avulsa | shared | docs + .claude | done | #200 |
 | [#225](https://github.com/MarceloSanC/restaurant-hub/issues/225) | Leitura de função responde 422 espúrio quando a habilitação muda no meio da remontagem | staff | adapters/out | done | #206 |
 | [#226](https://github.com/MarceloSanC/restaurant-hub/issues/226) | Decidir o controle otimista (`ETag`/`If-Match`) das edições de equipe (especulativa) | staff | application + adapters | open | — |

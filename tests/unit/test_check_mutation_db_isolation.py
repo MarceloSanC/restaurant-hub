@@ -99,7 +99,7 @@ _AUDIT_GATE = _REPO_ROOT / ".github" / "workflows" / "audit-gate.yml"
 @pytest.fixture(scope="module")
 def steps() -> list[dict[str, Any]]:
     workflow: dict[str, Any] = yaml.safe_load(_AUDIT_GATE.read_text(encoding="utf-8"))
-    found: list[dict[str, Any]] = workflow["jobs"]["mutation-access-modules"]["steps"]
+    found: list[dict[str, Any]] = workflow["jobs"]["mutation"]["steps"]
     return found
 
 
