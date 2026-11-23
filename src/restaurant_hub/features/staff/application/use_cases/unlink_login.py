@@ -40,7 +40,6 @@ from restaurant_hub.features.staff.application.ports.out.identity_gateway import
     IdentityGateway,
 )
 from restaurant_hub.features.staff.application.use_cases._login_link import end_active_link
-from restaurant_hub.features.staff.domain.exceptions.errors import EmployeeHasNoLoginError
 
 
 class UnlinkLoginUseCase:
@@ -83,17 +82,14 @@ class UnlinkLoginUseCase:
         )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
-        if employee.user_id is None:
-            raise EmployeeHasNoLoginError(employee.id)
+        current = employee.assert_can_unlink_login()
         # Antes de gravar — ver o docstring do módulo.
         end_active_link(self._employees, self._gateway, employee)
         self._employees.unlink_login(
             command.tenant_id,
             command.unit_id,
             command.employee_id,
-            expected_user_id=employee.user_id,
+            expected_user_id=current,
             expected_active=employee.active,
         )
-        return to_employee_result(
-            employee.unlink_login(employee.user_id, was_active=employee.active)
-        )
+        return to_employee_result(employee.unlink_login(current, was_active=employee.active))
