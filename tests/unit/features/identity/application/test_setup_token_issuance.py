@@ -357,6 +357,42 @@ def test_o_valor_gravado_e_o_fingerprint_do_token_do_link(nome: str) -> None:
     assert len(grafo.issuer.emissoes) == 1
 
 
+class _RelogioQueAnda(FakeClock):
+    """Cada leitura avança um segundo: duas leituras nunca dão o mesmo instante."""
+
+    def now(self) -> datetime:
+        instante = super().now()
+        self.advance(timedelta(seconds=1))
+        return instante
+
+
+def test_a_redefinicao_emite_no_mesmo_instante_em_que_invalida_as_anteriores() -> None:
+    """O `now` da emissão é o da invalidação (o docstring de `issue_setup_token`).
+
+    Com o relógio fixo dos outros casos, ler o relógio uma segunda vez para emitir
+    passaria calado; aqui cada leitura dá um instante novo.
+    """
+    grafo = _Grafo()
+    grafo.clock = _RelogioQueAnda(_AGORA)
+    anterior = PasswordSetupToken(
+        id=SetupTokenId("reset-anterior"),
+        user_id=_USUARIO_CADASTRADO,
+        purpose=SetupTokenPurpose.PASSWORD_RESET,
+        token_fingerprint="sfp::anterior",
+        issued_at=_AGORA - timedelta(minutes=5),
+        expires_at=_AGORA + timedelta(minutes=25),
+    )
+    grafo.tokens.add(anterior)
+
+    _pedir_redefinicao(grafo)
+
+    invalidado = grafo.tokens.tokens[anterior.id]
+    (nova,) = (t for t in grafo.tokens.tokens.values() if t.id != anterior.id)
+    assert invalidado.consumed_at is not None
+    assert nova.issued_at == invalidado.consumed_at
+    assert nova.expires_at == invalidado.consumed_at + _RESET_TTL
+
+
 # ---------------------------------------------------------------------------
 # A definição única do passo — `issue_setup_token` (issue #205)
 # ---------------------------------------------------------------------------
