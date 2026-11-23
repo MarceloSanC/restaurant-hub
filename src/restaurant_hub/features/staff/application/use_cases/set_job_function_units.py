@@ -23,6 +23,13 @@ na sua unidade. Estreitar a habilitação enquanto algum registro — ativo ou
 desligado — de uma unidade que sairia detém a função é recusado, com o mesmo erro
 da remoção guardada. É *check-then-act*: nenhuma constraint fecha a corrida com uma
 atribuição concorrente (limite declarado no ADR).
+
+**A escrita é condicional à habilitação lida** (issue #206). A diferença é
+autorizada contra o que foi lido; se outra alteração de unidades comitar entre a
+leitura e a escrita, o port recusa com `JobFunctionEnablementChangedError` em vez
+de gravar o conjunto deste pedido por cima — o que tiraria, por um ator sem
+alcance, uma unidade que só o outro escritor alcançava (ADR 3.11.0001 §5, nota de
+fechamento). Quem recebe a recusa relê e reenvia.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import SetJobFunctionUnitsCommand
