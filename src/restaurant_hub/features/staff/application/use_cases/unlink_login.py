@@ -60,8 +60,8 @@ class UnlinkLoginUseCase:
             EmployeeHasNoLoginError: o registro não tem login — também quando foi
                 desvinculado entre a leitura e a escrita.
             EmployeeLoginChangedError: o login ou o estado gravado não é o lido.
-            Exception: a falha da listagem, da consulta de papel ou da revogação sobe
-                crua — e nada é gravado.
+            Exception: a falha da consulta de papel ou da revogação sobe crua — e
+                nada é gravado.
         """
         # (0) Autorização do alvo do command, antes de qualquer outra instrução
         # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
@@ -84,7 +84,7 @@ class UnlinkLoginUseCase:
             raise EmployeeNotFoundError(command.employee_id)
         current = employee.assert_can_unlink_login()
         # Antes de gravar — ver o docstring do módulo.
-        end_active_link(self._employees, self._gateway, employee)
+        end_active_link(self._gateway, employee)
         self._employees.unlink_login(
             command.tenant_id,
             command.unit_id,

@@ -113,7 +113,6 @@ def test_troca_o_login_validando_a_conta_nova_antes_de_encerrar_o_antigo() -> No
         "employees.find_by_id",
         f"gateway.find_login_by_email({_EMAIL_NOVO!r})",
         "employees.list_by_unit",  # R10, ativos e desligados
-        "employees.list_by_unit",  # regra de fim de vínculo, só ativos
         f"gateway.is_employee_login({antigo!r})",
         f"gateway.revoke_login_sessions({antigo!r})",
         "employees.relink_login",

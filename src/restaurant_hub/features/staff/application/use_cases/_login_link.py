@@ -32,9 +32,7 @@ from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.value_objects.identifiers import UserId
 
 
-def end_active_link(
-    employees: EmployeeRepository, gateway: IdentityGateway, employee: Employee
-) -> None:
+def end_active_link(gateway: IdentityGateway, employee: Employee) -> None:
     """Revoga as sessões do login quando o registro é a fonte do acesso dele.
 
     A regra do ADR 3.8.0001 decisões 1 e 2, nesta ordem, cada passo só se o
@@ -43,28 +41,25 @@ def end_active_link(
     1. **o registro está ativo e tem login** — o vínculo de um desligado não é
        vínculo ativo; encerrá-lo (desligar de novo, desvincular um desligado) não
        toca identity;
-    2. **nenhum outro registro ativo da mesma unidade aponta para o login** — se
-       houver, é ele que ainda concede o acesso. `list_by_unit` devolve só ativos
-       (L-E6). Só a unidade: nenhuma operação de staff atravessa unidades
-       implicitamente (workforce §3.1);
-    3. **o login é de funcionário** (L-IG5) — gerente ou dono tira a autoridade do
+    2. **o login é de funcionário** (L-IG5) — gerente ou dono tira a autoridade do
        papel, não do registro, e revogar não protegeria nada.
+
+    A condição "nenhum outro registro ativo da mesma unidade aponta para o login"
+    (ADR 3.8.0001 decisão 1) vale **por construção** e não é lida: o índice
+    `uq_employees_tenant_unit_user` impede dois registros da unidade com o mesmo
+    login (issue #241, ADR 0.0.0025 §4). Lê-la só mudaria o desfecho num estado
+    que o banco recusa — e ali deixaria as sessões vivas. Outra unidade não conta
+    (workforce §3.1; concept 3.8 §13 Q4).
 
     A consulta local decide antes de cruzar a fronteira. Em R19, `employee` é o
     registro lido, ainda com o login **antigo**.
 
     Raises:
-        Exception: a falha da listagem, da consulta de papel (L-IG5) ou da
-            revogação (L-IG4) sobe crua — o chamador não grava.
+        Exception: a falha da consulta de papel (L-IG5) ou da revogação (L-IG4)
+            sobe crua — o chamador não grava.
     """
     user_id = employee.user_id
     if not employee.active or user_id is None:
-        return
-    shared = any(
-        other.user_id == user_id and other.id != employee.id
-        for other in employees.list_by_unit(employee.tenant_id, employee.unit_id)
-    )
-    if shared:
         return
     if gateway.is_employee_login(user_id):
         gateway.revoke_login_sessions(user_id)
@@ -87,8 +82,9 @@ def resolve_linkable_login(
        **mesmo** `LoginAccountNotFoundError`;
     4. **um login por unidade** (ADR 3.10.0001 §6): outro registro da unidade, ativo
        ou desligado, já vinculado à conta ⇒ `LoginAlreadyLinkedInUnitError`. A
-       checagem lê a unidade antes da escrita; dois vínculos concorrentes da mesma
-       conta na unidade ainda podem passar (resíduo declarado no concept §6.1).
+       checagem lê a unidade antes da escrita; o vínculo concorrente que passa por
+       ela é recusado pela escrita (`link_login`/`relink_login`, com o mesmo erro),
+       sob o índice único da unidade (issue #241, ADR 0.0.0025).
 
     Raises:
         LoginAccountNotFoundError: conta inexistente ou fora do alcance do registro.
