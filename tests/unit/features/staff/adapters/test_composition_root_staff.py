@@ -111,11 +111,14 @@ _USE_CASES_DE_STAFF = (
     "staff_create_login_for_employee",
     "staff_link_existing_login",
     "staff_unlink_login",
+    "staff_relink_login",
 )
 
 # 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17); a Stage
 # 3.11, `set_job_function_units`.
-_TOTAL_DE_USE_CASES = 20  # Stage 3.10: +unlink_login  # Stage 3.10: +link_existing_login
+_TOTAL_DE_USE_CASES = (
+    21  # Stage 3.10: +relink_login  # Stage 3.10: +unlink_login  # Stage 3.10: +link_existing_login
+)
 
 
 def _dependencias() -> ApplicationDependencies:
@@ -650,6 +653,7 @@ def test_ca07_deactivate_e_create_login_recebem_a_mesma_instancia_do_gateway() -
     ("campo", "recebe_gateway"),
     [
         pytest.param("staff_create_login_for_employee", True, id="create-login"),
+        pytest.param("staff_relink_login", True, id="relink_login"),
         pytest.param("staff_unlink_login", True, id="unlink_login"),
         pytest.param("staff_link_existing_login", True, id="link_existing_login"),
         pytest.param("staff_deactivate_employee", True, id="deactivate"),
