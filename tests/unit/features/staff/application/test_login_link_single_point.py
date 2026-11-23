@@ -162,11 +162,14 @@ def _chamadas_exclusivas_fora_de_end_active_link(fonte: str) -> set[tuple[str, i
 
 
 def test_no_modulo_do_ponto_unico_so_end_active_link_revoga() -> None:
-    """A regra 10 só conta `end_active_link` como escrita em identity (`HELPER_WRITES`).
+    """Dentro do módulo permitido, só `end_active_link` revoga: o ponto é único.
 
     Uma segunda função de `_login_link.py` que revogasse passaria pela varredura acima
-    (o módulo é o permitido) e ficaria invisível à regra 10 — o ponto cego que a
-    auditoria do PR #230 mediu; a derivação geral da tabela é a issue #243.
+    (o módulo é o permitido). Até a issue #243 ela ficaria também invisível à regra
+    10, que lia uma tabela de auxiliares escrita à mão — o ponto cego que a auditoria
+    do PR #230 mediu. Desde a #243 a regra deriva os auxiliares que escrevem e a
+    contaria; este teste continua cobrando o que é dele, o ponto único (ADR 3.8.0001
+    decisão 5).
     """
     assert _chamadas_exclusivas_fora_de_end_active_link(_modulos()[_MODULO_DO_PONTO_UNICO]) == set()
 
