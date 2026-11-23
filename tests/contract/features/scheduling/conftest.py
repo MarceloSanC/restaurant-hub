@@ -80,6 +80,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     UserId as StaffUserId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.conftest import truncar_tudo
 from tests.contract.features.scheduling.support import read_trail, seed_settings
@@ -126,18 +127,24 @@ _REGISTROS: tuple[tuple[TenantId, StaffMember, str | None], ...] = (
     (T1, staff_member("ana-u2", U2), "user-ana"),
     (T2, staff_member("dani", U1, funcao="garcom"), "user-ana"),
 )
-_CATALOGO: tuple[tuple[TenantId, JobFunctionEntry], ...] = (
-    (T1, JobFunctionEntry(JobFunctionId("cozinheiro"), "Cozinheiro")),
-    (T1, JobFunctionEntry(JobFunctionId("atendente"), "Atendente")),
-    (T2, JobFunctionEntry(JobFunctionId("garcom"), "Garçom")),
+# Habilitação por unidade (Stage 3.11; L-ST6, issue #209): `None` = todas as unidades.
+# `atendente` vale só em u2 — nenhum registro a detém, como staff exige (ADR 3.11.0002);
+# `barman`, de t2, nomeia o mesmo id `u2` e não pode vazar para t1.
+_CATALOGO: tuple[tuple[TenantId, JobFunctionEntry, frozenset[UnitId] | None], ...] = (
+    (T1, JobFunctionEntry(JobFunctionId("cozinheiro"), "Cozinheiro"), None),
+    (T1, JobFunctionEntry(JobFunctionId("atendente"), "Atendente"), frozenset({U2})),
+    (T2, JobFunctionEntry(JobFunctionId("garcom"), "Garçom"), None),
+    (T2, JobFunctionEntry(JobFunctionId("barman"), "Barman"), frozenset({U2})),
 )
 
 
 def _semear(fake: InMemoryStaffRead) -> None:
     for tenant, membro, user_id in _REGISTROS:
         fake.add_member(tenant, membro, user_id=user_id)
-    for tenant, entrada in _CATALOGO:
-        fake.add_job_function(tenant, entrada)
+    for tenant, entrada, unidades in _CATALOGO:
+        fake.add_job_function(
+            tenant, entrada, units=None if unidades is None else frozenset(unidades)
+        )
 
 
 def _semear_staff_real(engine: Engine) -> StaffReadFacade:
@@ -148,12 +155,17 @@ def _semear_staff_real(engine: Engine) -> StaffReadFacade:
     """
     funcoes = PostgresJobFunctionRepository(engine)
     registros = PostgresEmployeeRepository(engine)
-    for tenant, entrada in _CATALOGO:
+    for tenant, entrada, unidades in _CATALOGO:
         funcoes.add(
             JobFunction(
                 id=StaffJobFunctionId(entrada.job_function_id),
                 tenant_id=StaffTenantId(tenant),
                 name=entrada.name,
+                unit_enablement=(
+                    UnitEnablement.everywhere()
+                    if unidades is None
+                    else UnitEnablement.only(frozenset(StaffUnitId(u) for u in unidades))
+                ),
             )
         )
     for tenant, membro, user_id in _REGISTROS:

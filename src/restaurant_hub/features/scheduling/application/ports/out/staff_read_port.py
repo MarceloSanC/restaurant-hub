@@ -5,8 +5,9 @@ Scheduling não importa staff (contrato `bc-independence`): lê por este port, c
 que não autoriza** — o use case de scheduling já autorizou a leitura com permissão de
 scheduling (ADR 3.5.0001: o chamador autoriza; finding 1 da issue #72).
 
-Quatro leituras **em lote**, todas com a unidade no endereço exceto o catálogo, que é
-do tenant. Não há listagem tenant-wide de registro.
+Cinco leituras **em lote**, todas com a unidade no endereço exceto o catálogo, que é
+do tenant. Não há listagem tenant-wide de registro. A quinta — as funções habilitadas na
+unidade — é da issue #209 (ADR 4.3.0005), que estende as quatro do ADR 4.3.0003.
 
 **Leis** (suíte `tests/contract/features/scheduling/test_staff_read_port_laws.py`):
 
@@ -18,6 +19,9 @@ do tenant. Não há listagem tenant-wide de registro.
 - **L-ST4 — vínculo de login.** `list_members_of_user` = os registros da unidade
   vinculados ao `user_id`, ativos ou não, só eles.
 - **L-ST5 — catálogo.** `list_job_functions` = todas as funções do tenant, só elas.
+- **L-ST6 — funções da unidade.** `list_unit_job_functions` = as funções do tenant
+  habilitadas na unidade (as que valem em todas as unidades e as que a nomeiam), só elas;
+  função restrita a outras unidades não vem, nem a de outro tenant.
 
 Nenhuma ordem é garantida: o use case ordena.
 """
@@ -89,4 +93,10 @@ class StaffReadPort(Protocol):
 
     def list_job_functions(self, tenant_id: TenantId) -> tuple[JobFunctionEntry, ...]:
         """O catálogo de funções do tenant (L-ST5)."""
+        ...
+
+    def list_unit_job_functions(
+        self, tenant_id: TenantId, unit_id: UnitId
+    ) -> tuple[JobFunctionEntry, ...]:
+        """As funções do tenant habilitadas na unidade (L-ST6)."""
         ...

@@ -15,9 +15,11 @@ Três propriedades a definem:
    isso a fachada lê os **repositórios** de staff e não os use cases, que autorizam com
    ator e permissão de staff (ADR 3.7.0001). Não traduz exceção.
 3. **Nunca cruza unidade nem tenant.** Toda leitura de registro passa pela listagem da
-   unidade (`list_by_unit`), e o catálogo pela do tenant (`list_by_tenant`): os únicos
-   métodos usados, que a Stage 3.11 não muda de assinatura. O vínculo de login filtra a
-   unidade aqui (concept 4.4 §7 D-USERID) e o `user_id` não sai na resposta.
+   unidade (`EmployeeRepository.list_by_unit`), o catálogo pela do tenant
+   (`JobFunctionRepository.list_by_tenant`) e as funções habilitadas numa unidade pela
+   listagem da unidade (`JobFunctionRepository.list_by_unit`, L-JF6 — issue #209, ADR
+   4.3.0005): os únicos métodos usados. O vínculo de login filtra a unidade aqui (concept
+   4.4 §7 D-USERID) e o `user_id` não sai na resposta.
 
 Montada uma vez, no `composition_root`, sobre as **mesmas** instâncias de repositório que
 servem as rotas de staff.
@@ -63,7 +65,7 @@ class StaffRecord:
 
 @dataclass(frozen=True)
 class StaffFunction:
-    """Uma função do catálogo do tenant, em primitivos."""
+    """Uma função do catálogo do tenant (ou das habilitadas numa unidade), em primitivos."""
 
     job_function_id: str
     name: str
@@ -126,4 +128,11 @@ class StaffReadFacade:
         return tuple(
             StaffFunction(job_function_id=str(function.id), name=function.name)
             for function in self._job_functions.list_by_tenant(TenantId(tenant_id))
+        )
+
+    def list_unit_functions(self, tenant_id: str, unit_id: str) -> tuple[StaffFunction, ...]:
+        """As funções do tenant habilitadas na unidade (L-JF6; issue #209)."""
+        return tuple(
+            StaffFunction(job_function_id=str(function.id), name=function.name)
+            for function in self._job_functions.list_by_unit(TenantId(tenant_id), UnitId(unit_id))
         )

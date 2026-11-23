@@ -35,13 +35,14 @@ _DE_APLICACAO = {
     errors.MissingStaffRecordsError,
 }
 # Regras do produto: escalas não se sobrepõem, versão vigente (sponsor F8), violações,
-# registro desligado.
+# registro desligado, função que não vale na unidade (issue #209).
 _DE_DOMINIO = {
     errors.SchedulePeriodTakenError,
     errors.ScheduleVersionConflictError,
     errors.BlockingViolationsError,
     errors.UnacknowledgedViolationsError,
     errors.InactiveStaffMemberError,
+    errors.JobFunctionNotEnabledInUnitError,
     errors.InactiveAllocationsInUseError,
 }
 _NOMES = {
@@ -54,6 +55,7 @@ _NOMES = {
     "StaffMemberNotFoundError",
     "InactiveStaffMemberError",
     "JobFunctionNotFoundError",
+    "JobFunctionNotEnabledInUnitError",
     "InactiveAllocationsInUseError",
     "MissingStaffRecordsError",
     "InvalidScheduleRequestError",
@@ -70,7 +72,7 @@ def _classes() -> list[type]:
     ]
 
 
-def test_o_modulo_declara_os_doze_erros_do_concept() -> None:
+def test_o_modulo_declara_os_erros_do_concept_e_da_issue_209() -> None:
     assert {c.__name__ for c in _classes()} == _NOMES
 
 
@@ -144,3 +146,10 @@ def test_registro_ausente_carrega_os_ids_das_alocacoes() -> None:
 def test_id_em_uso_diz_o_tipo_e_o_valor() -> None:
     erro = errors.IdentifierInUseError("AssignmentId", "a1")
     assert (erro.id_type, erro.value) == ("AssignmentId", "a1")
+
+
+def test_funcao_nao_habilitada_carrega_a_funcao_e_a_unidade() -> None:
+    erro = errors.JobFunctionNotEnabledInUnitError("caixa", "u1")
+    assert (erro.job_function_id, erro.unit_id) == ("caixa", "u1")
+    assert "'caixa'" in str(erro)
+    assert "'u1'" in str(erro)

@@ -1,6 +1,6 @@
 """Fake in-memory do `StaffReadPort` — semeável e com registro de chamadas.
 
-Obedece L-ST1…L-ST5 (suíte de contrato). `calls` registra cada leitura, para os testes
+Obedece L-ST1…L-ST6 (suíte de contrato). `calls` registra cada leitura, para os testes
 de "nenhum port tocado antes da autorização".
 """
 
@@ -26,6 +26,8 @@ class InMemoryStaffRead:
     _members: dict[tuple[str, str, str], StaffMember] = field(default_factory=dict)
     _users: dict[tuple[str, str, str], str] = field(default_factory=dict)
     _catalog: dict[str, dict[str, JobFunctionEntry]] = field(default_factory=dict)
+    # Habilitação por função: ausente = todas as unidades (o default de staff, Stage 3.11).
+    _enabled_in: dict[tuple[str, str], frozenset[str]] = field(default_factory=dict)
 
     # --- semeadura (fora do port) ------------------------------------------------
 
@@ -41,9 +43,15 @@ class InMemoryStaffRead:
         self._members.pop((tenant_id, unit_id, employee_id), None)
         self._users.pop((tenant_id, unit_id, employee_id), None)
 
-    def add_job_function(self, tenant_id: str, entry: JobFunctionEntry) -> None:
-        """Acrescenta uma função ao catálogo do tenant."""
+    def add_job_function(
+        self, tenant_id: str, entry: JobFunctionEntry, *, units: frozenset[str] | None = None
+    ) -> None:
+        """Acrescenta uma função ao catálogo; `units` restringe onde vale (None = todas)."""
         self._catalog.setdefault(tenant_id, {})[entry.job_function_id] = entry
+        if units is None:
+            self._enabled_in.pop((tenant_id, entry.job_function_id), None)
+        else:
+            self._enabled_in[(tenant_id, entry.job_function_id)] = units
 
     # --- port ----------------------------------------------------------------------
 
@@ -77,6 +85,16 @@ class InMemoryStaffRead:
     def list_job_functions(self, tenant_id: TenantId) -> tuple[JobFunctionEntry, ...]:
         self.calls.append("list_job_functions")
         return tuple(self._catalog.get(tenant_id, {}).values())
+
+    def list_unit_job_functions(
+        self, tenant_id: TenantId, unit_id: UnitId
+    ) -> tuple[JobFunctionEntry, ...]:
+        self.calls.append("list_unit_job_functions")
+        return tuple(
+            entry
+            for fid, entry in self._catalog.get(tenant_id, {}).items()
+            if unit_id in self._enabled_in.get((tenant_id, fid), frozenset({unit_id}))
+        )
 
 
 _conforms: StaffReadPort = InMemoryStaffRead()

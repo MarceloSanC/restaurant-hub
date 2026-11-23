@@ -1,9 +1,9 @@
-"""Leis L-ST1…L-ST5 do `StaffReadPort` (concept 4.3 §4; CA21).
+"""Leis L-ST1…L-ST6 do `StaffReadPort` (concept 4.3 §4; CA21; L-ST6 da issue #209).
 
 Parametrizada por implementação: nesta Stage só o fake; a 4.4 acrescenta o adapter
 real ao `params` da fixture `mundo` (precedente 3.5). O mundo semeado é o mesmo para
 toda implementação: dois tenants, duas unidades, ativos, um desligado, vínculos de
-login e catálogo.
+login, catálogo e habilitação de função por unidade.
 """
 
 import pytest
@@ -12,7 +12,11 @@ from restaurant_hub.features.scheduling.application.ports.out.staff_read_port im
     StaffMember,
     StaffReadPort,
 )
-from restaurant_hub.features.scheduling.domain.value_objects.identifiers import EmployeeId
+from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
+    EmployeeId,
+    TenantId,
+    UnitId,
+)
 from tests.contract.features.scheduling.conftest import T1 as _T1
 from tests.contract.features.scheduling.conftest import T2 as _T2
 from tests.contract.features.scheduling.conftest import U1 as _U1
@@ -60,7 +64,19 @@ def test_l_st5_catalogo_e_o_do_tenant_e_so_ele(mundo: StaffReadPort) -> None:
         "cozinheiro": "Cozinheiro",
         "atendente": "Atendente",
     }
-    assert {f.job_function_id for f in mundo.list_job_functions(_T2)} == {"garcom"}
+    assert {f.job_function_id for f in mundo.list_job_functions(_T2)} == {"garcom", "barman"}
+
+
+def test_l_st6_funcoes_da_unidade_sao_as_habilitadas_nela_e_so_elas(mundo: StaffReadPort) -> None:
+    """Todas as unidades entra em toda unidade; o conjunto, só nas que nomeia; sem cruzar tenant."""
+
+    def _funcoes(tenant: TenantId, unidade: UnitId) -> dict[str, str]:
+        return {f.job_function_id: f.name for f in mundo.list_unit_job_functions(tenant, unidade)}
+
+    assert _funcoes(_T1, _U1) == {"cozinheiro": "Cozinheiro"}
+    assert _funcoes(_T1, _U2) == {"cozinheiro": "Cozinheiro", "atendente": "Atendente"}
+    assert _funcoes(_T2, _U1) == {"garcom": "Garçom"}
+    assert _funcoes(_T2, _U2) == {"garcom": "Garçom", "barman": "Barman"}
 
 
 def test_os_valores_do_registro_chegam_inteiros(mundo: StaffReadPort) -> None:

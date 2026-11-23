@@ -13,6 +13,8 @@ cada use case fica no próprio `execute` (regra 10 do `check_layout`).
 - `load_staff`: o quadro de staff — quadro ativo (opcional) + alocados + alvos, unidos
   por `employee_id` com o de `list_members` prevalecendo; alocado ausente ⇒
   `MissingStaffRecordsError` com os ids das alocações (fail-closed, ADR 4.3.0003 §3).
+  Na edição, também as funções habilitadas na unidade (L-ST6, ADR 4.3.0005); sem o
+  pedido, o conjunto fica vazio — nenhuma função vale, fail-closed.
 - `facts_of`: os `EmployeeFacts` do avaliador, a partir do quadro.
 """
 
@@ -127,10 +129,12 @@ class StaffView:
     Attributes:
         members: os registros por id (ativos e inativos que vieram).
         function_names: o catálogo do tenant, id → nome.
+        unit_function_ids: as funções habilitadas na unidade (só lidas na edição).
     """
 
     members: dict[EmployeeId, StaffMember]
     function_names: dict[JobFunctionId, str]
+    unit_function_ids: frozenset[JobFunctionId]
 
 
 def allocations_of(
@@ -146,7 +150,7 @@ def allocations_of(
     ]
 
 
-def load_staff(  # noqa: PLR0913 — endereço (3) + escalas + alvos + o quadro ativo
+def load_staff(  # noqa: PLR0913 — endereço (3) + escalas + alvos + quadro + funções
     staff: StaffReadPort,
     tenant_id: TenantId,
     unit_id: UnitId,
@@ -154,6 +158,7 @@ def load_staff(  # noqa: PLR0913 — endereço (3) + escalas + alvos + o quadro 
     *,
     targets: frozenset[EmployeeId] = frozenset(),
     with_roster: bool,
+    with_unit_functions: bool,
 ) -> StaffView:
     """O quadro: quadro ativo (se pedido) + alocados + alvos, fail-closed no ausente."""
     allocations = allocations_of(schedules)
@@ -171,7 +176,12 @@ def load_staff(  # noqa: PLR0913 — endereço (3) + escalas + alvos + o quadro 
     if missing:
         raise MissingStaffRecordsError(missing)
     names = {f.job_function_id: f.name for f in staff.list_job_functions(tenant_id)}
-    return StaffView(members=members, function_names=names)
+    enabled = (
+        frozenset(f.job_function_id for f in staff.list_unit_job_functions(tenant_id, unit_id))
+        if with_unit_functions
+        else frozenset()
+    )
+    return StaffView(members=members, function_names=names, unit_function_ids=enabled)
 
 
 def facts_of(view: StaffView) -> tuple[EmployeeFacts, ...]:

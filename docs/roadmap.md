@@ -261,7 +261,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#206](https://github.com/MarceloSanC/restaurant-hub/issues/206) | Alteração concorrente das unidades de uma função remove unidade sem alcance (escrita condicional em `update_enablement`) | staff | application + adapters/out | done | `3.11-job-function-unit-enablement` |
 | [#207](https://github.com/MarceloSanC/restaurant-hub/issues/207) | Decidir o alcance por unidade em renomear e apagar função restrita | staff | application + adapters/inbound/http | open | `3.11-job-function-unit-enablement` |
 | [#208](https://github.com/MarceloSanC/restaurant-hub/issues/208) | Docstring de `permission.py` com `manage_job_functions` exercida em unidade nomeada | identity | docs (domain) | open | `3.11-job-function-unit-enablement` |
-| [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | open | `3.11-job-function-unit-enablement` |
+| [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | done | `3.11-job-function-unit-enablement` |
 | [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | done | — |
 | [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | done | #184 |
 | [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | done | — |
@@ -1887,6 +1887,19 @@ skills_hint: [repository-pattern, composition-root]
 > nota anterior segue aberta só a #198. **A 4.5 herda também** o corpo HTTP dessa recusa: o erro
 > traz `changed_neighbour_id`, e a escala editada não mudou, então reenviar o mesmo lote é válido
 > (ADR 4.4.0005 §Decision 3).
+
+> Nota (2026-11-23): a issue #209 fechou fora de Stage
+> ([ADR 4.3.0005](./adr/4_3_0005-demand-accepts-only-functions-enabled-in-the-unit.md)): a demanda
+> de uma unidade só aceita função habilitada nela, e o lote que declara a demanda ou aumenta o `N`
+> de função que não vale na unidade recusa com `JobFunctionNotEnabledInUnitError` (raiz
+> `SchedulingError`). **A 4.5 herda:** o status e o corpo dessa recusa no mapa de erros de
+> scheduling (o nome repete o erro de staff, cada um no seu BC e no seu mapa); e como a borda
+> sinaliza a demanda gravada antes de staff estreitar a função, que fica, não bloqueia edição
+> alheia e aparece como demanda descoberta (D1). **O Step 5 herda:** o auto-fill nunca cobre essa
+> demanda, que pesa na cobertura e nas "vagas não preenchíveis" até a gerente reduzir ou retirar.
+> **Limite declarado:** a corrida entre BCs (scheduling lê a habilitação, staff estreita, o publish
+> grava) não é versionada pelo `save` e termina no estado tolerado pela D1 (ADR 4.3.0005
+> §Consequences).
 
 #### Stage 4.5 — `4.5-scheduling-http`
 

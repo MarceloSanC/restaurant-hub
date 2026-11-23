@@ -5,7 +5,7 @@ when-use: Reference before changing what scheduling reads from staff, how the st
 keywords: [adr, scheduling, staff, read-port, facade, fail-closed, roster, reconciliation, inactive, unavailability, staff-induced-violation]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-01
+updated_at: 2026-11-23
 adr_id: 4.3.0003
 decision: StaffReadPort has four batch reads — the active roster of a unit, given records of a unit (active or not), the unit's records linked to a login, and the tenant's job-function catalogue — returning a scheduling-owned StaffMember DTO; the 4.4 adapter serves it from a staff facade that does not authorize (the scheduling use case already did); the evaluator input is the whole active roster plus every allocated record, and an allocated record staff does not return is refused fail-closed, never turned into inactive; staff changes that make the live schedule violate are not guarded in staff but shown live for the manager to fix.
 context_stage: 4.3-scheduling-application
@@ -86,3 +86,13 @@ scope and index (ADR 3.5.0004 Alt C) — 4.4.
 
 - ADR 3.4.0006, ADR 3.5.0001, ADR 4.1.0006, ADR 4.2.0001, ADR 4.2.0002
 - `docs/domain/scheduling/shift-scheduling.md` §3.5, §3.6.6, §3.6.7, §3.6.8, §3.10.1, §6
+
+## Supersessão parcial
+
+**2026-11-23 — §Decision 1 › "Four reads, addressed by unit" superada em parte pelo ADR
+4.3.0005.** O port ganhou uma **quinta** leitura, também endereçada por unidade:
+`list_unit_job_functions(tenant_id, unit_id)`, as funções do tenant habilitadas na unidade
+(lei L-ST6), para que a demanda de uma unidade aceite só função que vale nela (issue #209). O
+resto da decisão — leituras em lote, DTOs próprios, fachada que não autoriza, insumo
+fail-closed e a D1 de §Decision 4 — continua valendo; a D1 é o que limita a nova regra: a
+demanda gravada antes de staff estreitar a função aparece e não bloqueia edição alheia.
