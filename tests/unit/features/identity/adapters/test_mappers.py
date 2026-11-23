@@ -73,6 +73,20 @@ def test_unidade_faz_round_trip() -> None:
         "rest-1",
         "Centro",
     )
+    assert de_volta.timezone == "America/Sao_Paulo"
+
+
+def test_unidade_leva_o_fuso_na_linha_e_o_traz_de_volta() -> None:
+    """Issue #198 — o fuso não default sobrevive à ida e à volta, sem cair no default."""
+    unidade = Unit(
+        id=UnitId("unit-1"),
+        restaurant_id=RestaurantId("rest-1"),
+        name="Centro",
+        timezone="America/Manaus",
+    )
+    linha = mappers.unit_to_row(unidade)
+    assert linha["timezone"] == "America/Manaus"
+    assert mappers.row_to_unit(_linha(**linha)).timezone == "America/Manaus"
 
 
 def test_usuario_faz_round_trip_e_o_hash_viaja_ao_lado() -> None:

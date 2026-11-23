@@ -88,7 +88,12 @@ def row_to_restaurant(row: Row) -> Restaurant:
 
 
 def unit_to_row(unit: Unit) -> dict[str, Any]:
-    return {"id": unit.id, "restaurant_id": unit.restaurant_id, "name": unit.name}
+    return {
+        "id": unit.id,
+        "restaurant_id": unit.restaurant_id,
+        "name": unit.name,
+        "timezone": unit.timezone,
+    }
 
 
 def row_to_unit(row: Row) -> Unit:
@@ -96,6 +101,7 @@ def row_to_unit(row: Row) -> Unit:
         id=UnitId(row.id),
         restaurant_id=RestaurantId(row.restaurant_id),
         name=row.name,
+        timezone=row.timezone,
     )
 
 
