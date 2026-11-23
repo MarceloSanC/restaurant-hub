@@ -956,6 +956,8 @@ _RECURSOS_DE_INTROSPECCAO: Final = Recursos(
     job_function_id="f",
     job_function_livre="g",
     sufixo="introspecção",
+    employee_com_login_id="e-com-login",
+    email_existente="existente@introspeccao.com",
 )
 
 # As rotas cujo `*Request` declara um campo `name` — o domínio de CA22, derivado.
