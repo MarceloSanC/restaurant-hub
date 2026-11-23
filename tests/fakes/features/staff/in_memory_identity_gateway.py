@@ -37,6 +37,7 @@ from restaurant_hub.features.staff.application.errors import (
     LoginEmailAlreadyInUseError,
 )
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    ExistingLogin,
     IdentityGateway,
     LoginDelivery,
     ProvisionedLogin,
@@ -129,6 +130,11 @@ class InMemoryIdentityGateway:
             por `seed_login_of_other_role`, que grava nos dois.
         fail_role_query_with: se definido, `is_employee_login` levanta **esta
             instância** (L-IG5, metade da falha).
+        accounts: contas que já existem, por e-mail normalizado (L-IG6, Stage
+            3.10) — semeadas por `seed_account`. Os logins do ledger também são
+            encontrados por e-mail: nasceram no tenant e na unidade do registro.
+        fail_account_query_with: se definido, `find_login_by_email` levanta
+            **esta instância** (L-IG6, metade da falha).
     """
 
     logins: dict[UserId, ProvisionedLoginRecord] = field(default_factory=dict)
@@ -142,6 +148,8 @@ class InMemoryIdentityGateway:
     fail_send_with: Exception | None = None
     other_role_logins: set[UserId] = field(default_factory=set)
     fail_role_query_with: Exception | None = None
+    accounts: dict[str, ExistingLogin] = field(default_factory=dict)
+    fail_account_query_with: Exception | None = None
     mirror: Callable[[str], None] | None = None
     _sequence: int = 0
 
@@ -210,6 +218,30 @@ class InMemoryIdentityGateway:
             raise self.fail_role_query_with
         return user_id in self.logins and user_id not in self.other_role_logins
 
+    def find_login_by_email(self, email: str) -> ExistingLogin | None:
+        """L-IG6 — a conta do e-mail normalizado, ou `None`; malformado é traduzido.
+
+        A normalização (`strip` + minúsculas) espelha o VO `Email` de identity, que
+        o lado real aplica na fachada.
+        """
+        self.record(f"find_login_by_email({email!r})")
+        if email in self.invalid_emails:
+            raise InvalidLoginEmailError(email) from FakeEmailInvalid(email)
+        if self.fail_account_query_with is not None:
+            raise self.fail_account_query_with
+        normalizado = email.strip().lower()
+        if normalizado in self.accounts:
+            return self.accounts[normalizado]
+        for user_id, registro in self.logins.items():
+            if registro.email.strip().lower() == normalizado:
+                return ExistingLogin(
+                    user_id=user_id,
+                    tenant_id=registro.tenant_id,
+                    unit_ids=frozenset({registro.unit_id}),
+                    every_unit=False,
+                )
+        return None
+
     # ---- ganchos de teste (não fazem parte do port) ----
 
     def seed_employee_login(self, user_id: UserId, *, tenant_id: TenantId, unit_id: UnitId) -> None:
@@ -246,6 +278,36 @@ class InMemoryIdentityGateway:
             setup_link="",
         )
         self.other_role_logins.add(user_id)
+
+    def seed_account(  # noqa: PLR0913 — os quatro fatos de L-IG6 mais o e-mail
+        self,
+        user_id: UserId,
+        *,
+        email: str,
+        tenant_id: TenantId | None,
+        unit_ids: frozenset[UnitId] = frozenset(),
+        every_unit: bool = False,
+        employee: bool = False,
+    ) -> None:
+        """Uma conta que já existe, encontrável por e-mail (L-IG6, Stage 3.10).
+
+        `employee` decide L-IG5 para ela: grava no ledger, e em `other_role_logins`
+        quando não é de funcionário — a conta existente de um gerente vinculada a
+        um registro responde `False`, como em identity. Não registra em `calls`.
+        """
+        self.accounts[email.strip().lower()] = ExistingLogin(
+            user_id=user_id, tenant_id=tenant_id, unit_ids=unit_ids, every_unit=every_unit
+        )
+        if tenant_id is not None:
+            self.logins[user_id] = ProvisionedLoginRecord(
+                email=email,
+                tenant_id=tenant_id,
+                unit_id=next(iter(sorted(unit_ids)), UnitId("sem-unidade")),
+                delivery=LoginDelivery.EMAIL,
+                setup_link="",
+            )
+        if not employee:
+            self.other_role_logins.add(user_id)
 
 
 _conforms: IdentityGateway = InMemoryIdentityGateway()

@@ -2,11 +2,12 @@
 
 É a segunda travessia entre os dois bounded contexts — a primeira é o
 `AccessGuard` (Stage 3.4) — e a primeira consumida por **use case**, que é o
-caso para o qual `ports/out/` foi antecipado (ADR 3.4.0001 §4). Quatro operações:
+caso para o qual `ports/out/` foi antecipado (ADR 3.4.0001 §4). Cinco operações:
 provisionar o login **pendente** de um funcionário, enviar o convite, revogar
-as sessões de um login e — desde a Stage 3.8 — perguntar se um login é de
-funcionário. Nada aqui nomeia `User`, `Role`, `Email` ou qualquer
-tipo de identity: identificadores atravessam a fronteira como strings opacas
+as sessões de um login, perguntar se um login é de funcionário (Stage 3.8) e —
+desde a Stage 3.10 — encontrar pelo e-mail uma conta que já existe. Nada aqui
+nomeia `User`, `Role`, `Email` ou qualquer tipo de identity: identificadores
+atravessam a fronteira como strings opacas
 (`identifiers.py`), o e-mail chega como `str` cru e é a implementação quem o
 valida do outro lado (concept 3.5 §5.7).
 
@@ -32,8 +33,8 @@ use cases que só ela chama são exclusões nomeadas do inventário de identity 
 provisionamento pela fachada só aceita o papel `"employee"` (ADR 2.7.0001), o
 mesmo literal que o gateway passa (L-IG1).
 
-**As cinco leis** (concept 3.5 §4; L-IG5 do concept 3.8 §4). Texto normativo
-deste módulo, pareado com a suíte de contrato
+**As seis leis** (concept 3.5 §4; L-IG5 do concept 3.8 §4; L-IG6 do concept
+3.10 §4). Texto normativo deste módulo, pareado com a suíte de contrato
 `tests/contract/features/staff/test_identity_gateway_laws.py`, que roda o
 **mesmo** corpo contra as duas implementações:
 
@@ -71,6 +72,18 @@ deste módulo, pareado com a suíte de contrato
   `False` numa falha seria *fail-open* — o desligamento gravaria e a sessão
   ficaria viva (ADR 3.8.0001 §3). O port responde booleano, nunca o papel: staff
   não nomeia o vocabulário de papéis de identity.
+- **L-IG6 — `find_login_by_email` devolve a conta do e-mail, em qualquer tenant;
+  e-mail malformado é traduzido; o resto sobe cru** (Stage 3.10, ADR 3.10.0002
+  §1). A conta cujo e-mail é `email` — na forma que identity normaliza —, com o
+  tenant dela (`None` para conta fora de restaurante, o `platform_admin`), as
+  unidades de que **ela** é membro e `every_unit`, se ela alcança todas as
+  unidades do tenant sem membership (sempre falso sem tenant). Nenhuma conta ⇒
+  `None`, não erro. E-mail malformado ⇒ `InvalidLoginEmailError`, a tradução de
+  L-IG2. Qualquer outra falha sobe **como a implementação a levantou** (mesma
+  instância). Não responde papel, pela razão de L-IG5. **A decisão de vincular não
+  é do port**: a recusa uniforme de conta alheia, de `platform_admin` e de conta
+  que não alcança a unidade é do use case (ADR 3.10.0002 §3), que autoriza
+  `manage_staff` e `manage_users` antes de perguntar.
 
 **Por que `delivery` é parâmetro de `provision_employee_login`, e não só do use
 case:** o canal decide o **prazo** do segredo (concept D9 — o link entregue em
@@ -106,6 +119,24 @@ class LoginDelivery(StrEnum):
 
 
 @dataclass(frozen=True)
+class ExistingLogin:
+    """Uma conta que já existe, no vocabulário de staff (L-IG6, Stage 3.10).
+
+    Attributes:
+        user_id: a conta.
+        tenant_id: o restaurante da conta; `None` para conta fora de restaurante.
+        unit_ids: as unidades de que **esta** conta é membro.
+        every_unit: a conta alcança todas as unidades do seu tenant sem
+            membership (o dono); sempre falso quando `tenant_id` é `None`.
+    """
+
+    user_id: UserId
+    tenant_id: TenantId | None
+    unit_ids: frozenset[UnitId]
+    every_unit: bool
+
+
+@dataclass(frozen=True)
 class ProvisionedLogin:
     """O que volta de `provision_employee_login`.
 
@@ -125,7 +156,8 @@ class ProvisionedLogin:
 class IdentityGateway(Protocol):
     """Provisiona logins pendentes, envia convites e revoga sessões — em identity.
 
-    E, desde a Stage 3.8, diz se um login é de funcionário (L-IG5).
+    E, desde a Stage 3.8, diz se um login é de funcionário (L-IG5); desde a 3.10,
+    encontra uma conta existente pelo e-mail (L-IG6).
     """
 
     def provision_employee_login(
@@ -198,5 +230,20 @@ class IdentityGateway(Protocol):
 
         Raises:
             Exception: qualquer falha de identity sobe **crua** — L-IG5.
+        """
+        ...
+
+    def find_login_by_email(self, email: str) -> ExistingLogin | None:
+        """A conta cujo e-mail é `email`, em qualquer tenant (L-IG6 — ADR 3.10.0002 §1).
+
+        Args:
+            email: o e-mail **cru** — a validação e a normalização são de identity.
+
+        Returns:
+            A conta, ou `None` se nenhuma tem esse e-mail.
+
+        Raises:
+            InvalidLoginEmailError: o e-mail não é um e-mail (L-IG6, como L-IG2).
+            Exception: qualquer outra falha sobe **crua** — L-IG6.
         """
         ...
