@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 4 (
 keywords: [domain, scheduling, shift-scheduling, escala, semana, dia-operacional, horario-de-corte, faixa, turno, intervalo, demanda, vaga, alocacao, excecao-de-funcao, sobre-cobertura, reconciliacao-na-leitura, desligamento, escala-vigente, publicacao, auditoria, versao, concorrencia, validacao, block, warn, aceite-consciente, sobreposicao, interjornada, teto-de-horas, carga-contratada, conta-para-a-carga, indisponibilidade, calendario, minha-escala, notificacao, imagem, fuso-horario, clt, lingua-ubiqua]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-11-16
+updated_at: 2026-11-22
 bounded_context: scheduling
 subdomain: shift-scheduling
 references:
@@ -48,6 +48,7 @@ references:
   - ../../adr/4_1_0012-one-record-occupies-at-most-one-slot-per-band.md
   - ../../adr/4_2_0001-function-mismatch-follows-current-staff-record.md
   - ../../adr/4_2_0002-evaluator-input-and-violation-identity.md
+  - ../../adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md
 ---
 
 # Domínio scheduling/shift-scheduling — escala manual publicável
@@ -407,6 +408,16 @@ foi atualizada, se foi, aparece mensagem se deseja atualizar e perder o trabalho
   aceite está na trilha.
 - Toda mutação gera entrada de auditoria com quem/quando e incrementa a versão da escala.
 - Nenhuma mutação é aplicada sobre uma versão que o editor não viu.
+
+> **Nota (2026-11-22, issue #199; [ADR 4.4.0005](../../adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md)):**
+> a versão conferida na gravação cobre também as **escalas adjacentes** que a avaliação leu
+> (a que termina no dia anterior ao período e a que começa no dia seguinte). Duas publicações
+> simultâneas em semanas vizinhas da mesma unidade não gravam as duas sobre avaliações velhas:
+> a segunda é recusada como conflito de versão, nomeando a vizinha, e a nova tentativa enxerga a
+> violação de fronteira (sobreposição ou descanso entre jornadas na virada). Assim o invariante
+> "a escala vigente nunca contém violação `block`" vale também através da fronteira da semana,
+> que antes era limite declarado (concept 4.3 §3). Os fatos de staff e a configuração de
+> validação lidos pela avaliação seguem sem essa conferência (ADR 4.4.0005 › Neutral).
 
 > **Lacuna fechada pela Stage 4.3 (ADR 4.3.0001; nota de §6) — unidade de salvamento:** uma **operação por
 > requisição** (alocar, desalocar, mudar demanda) ou um **lote de edições** salvo de uma vez? A
