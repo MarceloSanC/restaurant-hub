@@ -1,7 +1,7 @@
 """`LocalStaffReadAdapter` — a tradução de primitivos de staff para os tipos de scheduling (CA15).
 
 O adapter roda aqui sobre uma fachada **dublê** que devolve primitivos fixos: o que se mede é
-a tradução, e as leis L-ST1 a L-ST5 rodam na suíte de contrato contra o adapter sobre a
+a tradução, e as leis L-ST1 a L-ST6 rodam na suíte de contrato contra o adapter sobre a
 fachada real e os repositórios Postgres. A forma da aresta (só o gateway importa staff, e só
 a fachada) é cobrada em `tests/unit/features/scheduling/test_bc_independence.py`.
 """
@@ -79,6 +79,10 @@ class _FachadaDuble:
         self.chamadas.append(("catalogo", tenant_id))
         return (StaffFunction("cozinheiro", "Cozinheiro"),)
 
+    def list_unit_functions(self, tenant_id: str, unit_id: str) -> tuple[StaffFunction, ...]:
+        self.chamadas.append(("unidade", tenant_id, unit_id))
+        return (StaffFunction("caixa", "Caixa"),)
+
 
 def _adapter() -> tuple[StaffReadPort, _FachadaDuble]:
     fachada = _FachadaDuble()
@@ -123,3 +127,13 @@ def test_o_catalogo_vira_job_function_entry() -> None:
         JobFunctionEntry(JobFunctionId("cozinheiro"), "Cozinheiro"),
     )
     assert fachada.chamadas == [("catalogo", "t2")]
+
+
+def test_as_funcoes_da_unidade_viram_job_function_entry() -> None:
+    """Issue #209: a leitura das funções habilitadas repassa o endereço inteiro."""
+    fachada = _FachadaDuble()
+    adapter = LocalStaffReadAdapter(fachada)  # type: ignore[arg-type]
+    (caixa,) = adapter.list_unit_job_functions(TenantId("t1"), UnitId("u2"))
+    assert caixa == JobFunctionEntry(JobFunctionId("caixa"), "Caixa")
+    assert type(caixa.job_function_id) is str
+    assert fachada.chamadas == [("unidade", "t1", "u2")]
