@@ -4,7 +4,9 @@ Mesmo protocolo do evaluate; depois: `block` introduzida ⇒ `BlockingViolations
 senão `warn` introduzida sem aceite que a cubra ⇒ `UnacknowledgedViolationsError`;
 senão grava **uma** vez — a escala final e a `ScheduleChange` (autor = sujeito do
 escopo, instante do `Clock`, versão anterior, operações efetivas, aceites) — ou nada,
-se nenhuma operação mudou a escala (§5.10).
+se nenhuma operação mudou a escala (§5.10). A escrita é condicionada à versão da escala
+**e** à das vizinhas que a avaliação leu (L-SC9, issue #199): uma vizinha publicada no
+meio recusa com `ScheduleVersionConflictError`, e a nova avaliação a enxerga.
 """
 
 from restaurant_hub.features.scheduling.application.dtos.commands import PublishScheduleCommand
@@ -92,6 +94,8 @@ class PublishScheduleUseCase:
             self._schedules.save(
                 batch.after,
                 loaded.version,
+                # As vizinhas que a avaliação viu: mudou alguma ⇒ o save recusa (L-SC9).
+                batch.neighbours,
                 ScheduleChange(
                     author_user_id=scope.user_id,
                     occurred_at=self._clock.now(),

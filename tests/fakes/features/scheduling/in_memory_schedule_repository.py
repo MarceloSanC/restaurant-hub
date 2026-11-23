@@ -3,13 +3,17 @@
 No `save` troca o objeto inteiro: período e calendário são da criação e uma escala que os
 traga diferentes está fora do contrato do port (Stage 4.4), então o fake não os confere.
 
+L-SC9: as vagas vizinhas são achadas pela mesma regra do adapter — a escala da unidade
+que termina no dia anterior ao período e a que começa no dia seguinte — e comparadas,
+anterior antes da seguinte, com o `ExpectedNeighbours` recebido.
+
 Grava o estado e a `ScheduleChange` juntos (L-SC3) e os expõe (`changes_of`) para os
 testes da trilha. `calls` registra cada método chamado, para os testes de "nada
 gravado" e "nenhum port tocado antes da autorização".
 """
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from restaurant_hub.features.scheduling.application.errors import (
     IdentifierInUseError,
@@ -18,6 +22,8 @@ from restaurant_hub.features.scheduling.application.errors import (
     ScheduleVersionConflictError,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ExpectedNeighbours,
+    NeighbourVersion,
     ScheduleChange,
     ScheduleRepository,
 )
@@ -36,6 +42,21 @@ def _internal_ids(schedule: Schedule) -> dict[str, set[str]]:
         "ShiftDemandId": {d.id for d in demandas},
         "AssignmentId": {a.id for d in demandas for a in d.assignments},
     }
+
+
+def _changed_neighbour(
+    stored: NeighbourVersion | None, expected: NeighbourVersion | None
+) -> str | None:
+    """A escala a nomear se a vaga não está como lida: a que a ocupa, ou a lida se esvaziou."""
+    if stored is not None and stored != expected:
+        return stored.schedule_id
+    if stored is None and expected is not None:
+        return expected.schedule_id
+    return None
+
+
+def _version_of(schedule: Schedule | None) -> NeighbourVersion | None:
+    return None if schedule is None else NeighbourVersion(schedule.id, schedule.version)
 
 
 @dataclass
@@ -67,6 +88,31 @@ class InMemoryScheduleRepository:
             if comuns:
                 raise IdentifierInUseError(tipo, min(comuns))
 
+    def _vagas(self, schedule: Schedule) -> tuple[NeighbourVersion | None, NeighbourVersion | None]:
+        um_dia = timedelta(days=1)
+        anterior = schedule.period.first_day - um_dia
+        seguinte = schedule.period.last_day + um_dia
+        outras = [
+            e for e in self._da_unidade(schedule.tenant_id, schedule.unit_id) if e.id != schedule.id
+        ]
+        previous = next((e for e in outras if e.period.last_day == anterior), None)
+        following = next((e for e in outras if e.period.first_day == seguinte), None)
+        return _version_of(previous), _version_of(following)
+
+    def _check_neighbours(
+        self, schedule: Schedule, stored_version: int, expected: ExpectedNeighbours
+    ) -> None:
+        # L-SC9: qualquer diferença na vaga recusa — outra escala, outra versão, vaga que
+        # esvaziou ou que passou a ter escala. A anterior antes da seguinte.
+        for gravada, esperada in zip(
+            self._vagas(schedule), (expected.previous, expected.following), strict=True
+        ):
+            changed = _changed_neighbour(gravada, esperada)
+            if changed is not None:
+                raise ScheduleVersionConflictError(
+                    stored_version, stored_version, changed_neighbour_id=changed
+                )
+
     def add(self, schedule: Schedule, change: ScheduleChange) -> None:
         self.calls.append("add")
         if any(e.id == schedule.id for e in self._schedules.values()):
@@ -79,7 +125,13 @@ class InMemoryScheduleRepository:
         self._schedules[(schedule.tenant_id, schedule.unit_id, schedule.id)] = schedule
         self._changes[schedule.id] = [change]
 
-    def save(self, schedule: Schedule, expected_version: int, change: ScheduleChange) -> None:
+    def save(
+        self,
+        schedule: Schedule,
+        expected_version: int,
+        expected_neighbours: ExpectedNeighbours,
+        change: ScheduleChange,
+    ) -> None:
         self.calls.append("save")
         chave = (schedule.tenant_id, schedule.unit_id, schedule.id)
         gravada = self._schedules.get(chave)
@@ -87,6 +139,7 @@ class InMemoryScheduleRepository:
             raise ScheduleNotFoundError(schedule.id)
         if gravada.version != expected_version:
             raise ScheduleVersionConflictError(expected_version, gravada.version)
+        self._check_neighbours(schedule, gravada.version, expected_neighbours)
         self._check_ids_against_others(schedule)
         self._schedules[chave] = schedule
         self._changes[schedule.id].append(change)

@@ -18,6 +18,7 @@ from sqlalchemy.dialects import postgresql
 from restaurant_hub.features.scheduling.adapters.out.postgres import schedule_repository
 from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository import (
     internal_ids_in_use_statements,
+    neighbour_statements,
     next_seq_statement,
     period_taken_statement,
     schedule_id_taken_statement,
@@ -197,3 +198,14 @@ def test_o_proximo_seq_e_o_maior_da_escala_mais_um() -> None:
         "SELECT coalesce(max(schedule_changes.seq), 0) + 1 AS anon_1 FROM schedule_changes "
         "WHERE schedule_changes.schedule_id = 's1'"
     )
+
+
+def test_as_vagas_vizinhas_sao_a_que_termina_antes_e_a_que_comeca_depois_na_unidade() -> None:
+    """L-SC9: `first_day + days` = início do período; `first_day` = dia seguinte ao último."""
+    anterior, seguinte = neighbour_statements(_escala())
+    base = (
+        "SELECT schedules.id, schedules.version FROM schedules WHERE schedules.tenant_id = 't1' "
+        "AND schedules.unit_id = 'u1' AND schedules.id != 's1' AND "
+    )
+    assert _sql(anterior) == base + "schedules.first_day + schedules.days = '2026-11-02'"
+    assert _sql(seguinte) == base + "schedules.first_day = '2026-11-09'"
