@@ -216,7 +216,7 @@ before and after the migration is the same for every existing function.
 (lei `L-JF7`, revisada) recebe a habilitação que o use case leu e sobre a qual autorizou a
 diferença, e recusa com `JobFunctionEnablementChangedError` quando a gravada mudou — sem
 gravar nada; o mapa de staff a responde como `409`. O adapter Postgres decide sob
-`SELECT … FOR UPDATE` na linha da função, a forma que o
+`SELECT … FOR NO KEY UPDATE` na linha da função, a forma que o
 [ADR 0.0.0010](./0_0_0010-employee-login-link-has-its-own-conditional-write.md) deu a
 `link_login`; staff continua sem lock otimista
 ([ADR 3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md)) e não há
