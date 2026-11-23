@@ -70,7 +70,11 @@ class EvaluateScheduleUseCase:
         )
         batch = run_batch(self._schedules, self._config, self._staff, loaded, query.operations)
         sched = to_schedule_result(
-            batch.after, batch.view.members, batch.view.function_names, batch.after_violations
+            batch.after,
+            batch.view.members,
+            batch.view.function_names,
+            batch.after_violations,
+            enabled=batch.view.unit_function_ids,
         )
         return to_evaluation_result(
             sched,

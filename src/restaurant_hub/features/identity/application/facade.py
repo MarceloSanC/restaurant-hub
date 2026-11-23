@@ -33,9 +33,11 @@ Três propriedades definem a fachada:
    por `required_permissions_for_role`; por isso **`provision_account` só aceita
    o papel `employee`** (ADR 2.7.0001 §Decision 5) — outro papel válido sobe
    `RoleNotProvisionableError` antes de qualquer porta. O gateway de staff já
-   fixa o papel como valor (`"employee"`, L-IG1), e o pino em
-   `test_http_dependencies.py` trava que `employee` exige exatamente
-   `manage_users`.
+   fixa o papel como valor (`"employee"`, L-IG1). Desde a Stage 4.5 o `employee`
+   detém `view_own_schedule`, e criar um passou a exigir `manage_users` **e** ela; o
+   argumento continua valendo por uma propriedade que `test_http_dependencies.py`
+   trava: todo papel que detém o requisito de R17 (`manage_staff` e `manage_users`)
+   detém também o que o `employee` detém (ADR 4.5.0001; nota no ADR 2.7.0001).
 
 **A fachada de acesso (`IdentityAccessFacade`, issue #47, ADR 0.0.0016)** é a
 segunda classe deste módulo, e a propriedade 3 não a contradiz: ela não autoriza

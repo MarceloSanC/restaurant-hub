@@ -266,3 +266,13 @@ reatribuição no próprio `provision_account.py` também chega a ela. Elas dife
 consegue ver, e a identidade fecha esse buraco sem mudar `src/` nem a forma de import do resto da
 fachada. Degrau 5, a mais simples: os degraus 1 a 4 não discriminam (as duas são fail-closed e
 reversíveis).
+
+## Nota — criar `employee` deixa de exigir só `manage_users`
+
+**2026-11-23 — Stage 4.5 ([ADR 4.5.0001](./4_5_0001-scheduling-permissions-in-the-identity-role-map.md)).**
+Com `view_own_schedule` no `employee`, `required_permissions_for_role(EMPLOYEE)` passa a
+`{manage_users, view_own_schedule}`. O argumento da §Decision 5 (a fachada pode pular a regra porque
+`provision_account` só aceita `employee`, que exige só `manage_users`) continua valendo por uma
+propriedade, não pela igualdade: todo papel que detém `manage_staff` e `manage_users` — o requisito
+da rota R17 — detém também o que o `employee` detém. O pino de igualdade de
+`test_http_dependencies.py` virou teste dessa propriedade.

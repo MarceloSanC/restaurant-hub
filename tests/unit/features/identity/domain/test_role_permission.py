@@ -19,6 +19,16 @@ _RESTAURANT_ROLES = (Role.OWNER, Role.MANAGER, Role.HR, Role.EMPLOYEE)
 # As duas capacidades que o BC `staff` introduziu no vocabulário (ADR 3.4.0006 §4).
 _STAFF_PERMISSIONS = frozenset({Permission.MANAGE_STAFF, Permission.MANAGE_JOB_FUNCTIONS})
 
+# As quatro de escala (Stage 4.5, ADR 4.5.0001).
+_SCHEDULE_PERMISSIONS = frozenset(
+    {
+        Permission.VIEW_SCHEDULE,
+        Permission.MANAGE_SCHEDULE,
+        Permission.VIEW_OWN_SCHEDULE,
+        Permission.MANAGE_SCHEDULE_SETTINGS,
+    }
+)
+
 
 def test_role_e_conjunto_fechado_de_cinco_papeis() -> None:
     assert {r.value for r in Role} == {
@@ -40,6 +50,10 @@ def test_permission_e_conjunto_fechado() -> None:
         "manage_users",
         "manage_staff",
         "manage_job_functions",
+        "view_schedule",
+        "manage_schedule",
+        "view_own_schedule",
+        "manage_schedule_settings",
     }
 
 
@@ -86,6 +100,10 @@ def test_mapa_de_permissoes_e_total_sobre_todos_os_papeis() -> None:
                 Permission.MANAGE_USERS,
                 Permission.MANAGE_STAFF,
                 Permission.MANAGE_JOB_FUNCTIONS,
+                Permission.VIEW_SCHEDULE,
+                Permission.MANAGE_SCHEDULE,
+                Permission.VIEW_OWN_SCHEDULE,
+                Permission.MANAGE_SCHEDULE_SETTINGS,
             },
         ),
         (
@@ -94,6 +112,9 @@ def test_mapa_de_permissoes_e_total_sobre_todos_os_papeis() -> None:
                 Permission.MANAGE_USERS,
                 Permission.MANAGE_STAFF,
                 Permission.MANAGE_JOB_FUNCTIONS,
+                Permission.VIEW_SCHEDULE,
+                Permission.MANAGE_SCHEDULE,
+                Permission.VIEW_OWN_SCHEDULE,
             },
         ),
         (
@@ -102,9 +123,11 @@ def test_mapa_de_permissoes_e_total_sobre_todos_os_papeis() -> None:
                 Permission.MANAGE_USERS,
                 Permission.MANAGE_STAFF,
                 Permission.MANAGE_JOB_FUNCTIONS,
+                Permission.VIEW_SCHEDULE,
+                Permission.VIEW_OWN_SCHEDULE,
             },
         ),
-        (Role.EMPLOYEE, set()),
+        (Role.EMPLOYEE, {Permission.VIEW_OWN_SCHEDULE}),
     ],
 )
 def test_conteudo_exato_do_mapa_por_papel(role: Role, esperado: set[Permission]) -> None:
@@ -123,7 +146,43 @@ def test_nenhum_papel_de_restaurante_gerencia_a_plataforma(role: Role) -> None:
 
 
 def test_employee_nao_tem_capacidade_de_gestao() -> None:
-    assert Role.EMPLOYEE.permissions == frozenset()
+    """Desde a Stage 4.5 o `employee` vê a própria escala, e só isso (ADR 4.5.0001)."""
+    assert Role.EMPLOYEE.permissions == frozenset({Permission.VIEW_OWN_SCHEDULE})
+    assert not any(p.value.startswith("manage_") for p in Role.EMPLOYEE.permissions)
+
+
+# --------------------------------------------------------------------------
+# Stage 4.5 (CA11) — as quatro permissões de escala no mapa de papéis
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("role", "esperado"),
+    [
+        (Role.OWNER, set(_SCHEDULE_PERMISSIONS)),
+        (
+            Role.MANAGER,
+            {Permission.VIEW_SCHEDULE, Permission.MANAGE_SCHEDULE, Permission.VIEW_OWN_SCHEDULE},
+        ),
+        (Role.HR, {Permission.VIEW_SCHEDULE, Permission.VIEW_OWN_SCHEDULE}),
+        (Role.EMPLOYEE, {Permission.VIEW_OWN_SCHEDULE}),
+        (Role.PLATFORM_ADMIN, set()),
+    ],
+)
+def test_subconjunto_de_escala_por_papel(role: Role, esperado: set[Permission]) -> None:
+    """ADR 4.5.0001 §Decision 3 — o mapa de escala, papel a papel."""
+    assert role.permissions & _SCHEDULE_PERMISSIONS == frozenset(esperado)
+
+
+def test_hr_nao_mexe_na_escala() -> None:
+    """ADR 3.4.0006 §3 (mantido pelos ADRs 4.1.0004 e 4.5.0001): `hr` lê, não gerencia."""
+    assert Permission.MANAGE_SCHEDULE not in Role.HR.permissions
+    assert Permission.MANAGE_SCHEDULE_SETTINGS not in Role.HR.permissions
+
+
+def test_so_o_owner_detem_a_configuracao_de_escala() -> None:
+    """ADR 4.5.0001 §Decision 5 — tenant-wide, só do dono."""
+    assert [r for r in Role if Permission.MANAGE_SCHEDULE_SETTINGS in r.permissions] == [Role.OWNER]
 
 
 # --------------------------------------------------------------------------
@@ -166,7 +225,19 @@ def test_tenant_wide_permissions_e_a_lista_esperada_explicita() -> None:
     Asserção sobre o conjunto **exato**: acrescentar membro passa a ser ato
     deliberado e revisado, e não um diff de uma palavra que nada observa.
     """
-    assert set(TENANT_WIDE_PERMISSIONS) == {Permission.MANAGE_JOB_FUNCTIONS}
+    assert set(TENANT_WIDE_PERMISSIONS) == {
+        Permission.MANAGE_JOB_FUNCTIONS,
+        Permission.MANAGE_SCHEDULE_SETTINGS,
+    }
+
+
+@pytest.mark.parametrize(
+    "permissao",
+    [Permission.VIEW_SCHEDULE, Permission.MANAGE_SCHEDULE, Permission.VIEW_OWN_SCHEDULE],
+)
+def test_permissoes_de_escala_da_unidade_nao_sao_tenant_wide(permissao: Permission) -> None:
+    """A escala mora numa unidade (ADR 4.1.0004 §1): ler, gerenciar e a própria são unit-scoped."""
+    assert permissao not in TENANT_WIDE_PERMISSIONS
 
 
 def test_manage_staff_nao_e_tenant_wide() -> None:

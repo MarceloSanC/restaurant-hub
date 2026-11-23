@@ -66,4 +66,5 @@ class GetScheduleUseCase:
             current.view.members,
             current.view.function_names,
             current.after_violations,
+            enabled=current.view.unit_function_ids,
         )

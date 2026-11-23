@@ -14,6 +14,12 @@ a ação tem de nomeá-la), enquanto `MANAGE_JOB_FUNCTIONS` é **tenant-wide** (
 catálogo de funções pertence ao restaurante — `workforce.md` §3.2 — e não tem
 unidade a nomear). Uma permissão só não pode ser as duas coisas, e é por isso
 que são duas (ADR 3.4.0006 §4).
+
+**As de escala** (Stage 4.5, ADR 4.5.0001): `VIEW_SCHEDULE` (ler a escala e o calendário),
+`MANAGE_SCHEDULE` (editar, avaliar, aceitar aviso e publicar — salvar é editar) e
+`VIEW_OWN_SCHEDULE` ("minha escala") são **unit-scoped**: a escala é da unidade.
+`MANAGE_SCHEDULE_SETTINGS` (a configuração de escala do restaurante, que a Stage 4.8 consome) é
+**tenant-wide**, como `MANAGE_JOB_FUNCTIONS`.
 """
 
 from enum import StrEnum
@@ -27,6 +33,10 @@ class Permission(StrEnum):
     MANAGE_USERS = "manage_users"
     MANAGE_STAFF = "manage_staff"
     MANAGE_JOB_FUNCTIONS = "manage_job_functions"
+    VIEW_SCHEDULE = "view_schedule"
+    MANAGE_SCHEDULE = "manage_schedule"
+    VIEW_OWN_SCHEDULE = "view_own_schedule"
+    MANAGE_SCHEDULE_SETTINGS = "manage_schedule_settings"
 
 
 # Permissões cujo alvo é o **restaurante**, não a unidade — o critério de entrada
@@ -41,4 +51,10 @@ class Permission(StrEnum):
 # Acrescentar membro aqui é ato deliberado e revisado: há teste com lista
 # esperada explícita, então a entrada nova não passa como diff de uma palavra
 # (ADR 3.4.0008 §5).
-TENANT_WIDE_PERMISSIONS: frozenset[Permission] = frozenset({Permission.MANAGE_JOB_FUNCTIONS})
+#
+# `MANAGE_SCHEDULE_SETTINGS` entra pelo mesmo critério: o alvo é a configuração do
+# **restaurante** (ADR 4.5.0001 §Decision 1). As outras três de escala ficam fora — a escala
+# mora numa unidade.
+TENANT_WIDE_PERMISSIONS: frozenset[Permission] = frozenset(
+    {Permission.MANAGE_JOB_FUNCTIONS, Permission.MANAGE_SCHEDULE_SETTINGS}
+)

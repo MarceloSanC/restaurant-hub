@@ -5,7 +5,7 @@ when-use: Reference before granting hr any scheduling permission in Step 4, befo
 keywords: [adr, rbac, permission, role, hr, manager, staff, scheduling, forward-constraint, identity]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-09-13
+updated_at: 2026-11-23
 adr_id: 3.4.0006
 decision: Identity gains MANAGE_STAFF and MANAGE_JOB_FUNCTIONS, both granted to owner, manager and hr; within staff hr and manager are equivalent, because the sponsor placed the hr/manager divergence on the scheduling axis (Step 4) rather than on reach — hr edits employee records including workload, shift preference and unavailability, and only manager/owner touch the schedule itself
 context_stage: 3.4-staff-access-scope
@@ -173,3 +173,12 @@ mais features."* The roadmap block of Stage 3.4 gets the reconciliation note.
 - ADR 2.2.0002 (two fail-closed axes), ADR 2.4.0003 (composition at the boundary)
 - ADR 3.4.0008 (tenant-wide permissions)
 - Issue #41 — per-unit enablement of job functions
+
+## Nota — `hr` ganha também a própria escala
+
+**2026-11-23 — Stage 4.5 ([ADR 4.5.0001](./4_5_0001-scheduling-permissions-in-the-identity-role-map.md)).**
+A restrição do §3, já superada em parte pelo ADR 4.1.0004 (o `hr` **lê** a escala das unidades de
+que é membro), se estreita mais um passo: o `hr` detém também `view_own_schedule` ("minha escala",
+só as próprias alocações), como todo papel do restaurante. "Mexer" continua vedado: o `hr` não
+detém `manage_schedule`. Consequência no eixo de criação: o `hr` deixa de criar e convidar `manager`,
+porque o `manager` detém `manage_schedule` (regra "não se concede o que não se detém").

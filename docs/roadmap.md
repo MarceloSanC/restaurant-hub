@@ -279,6 +279,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#243](https://github.com/MarceloSanC/restaurant-hub/issues/243) | Derivar a tabela de auxiliares que escrevem da regra 10 | shared | tooling | done | `3.10-login-link-management` |
 | [#246](https://github.com/MarceloSanC/restaurant-hub/issues/246) | Repetir no import-linter o alcance dos use cases facade-only de identity | identity | tooling | done | #233 |
 | [#248](https://github.com/MarceloSanC/restaurant-hub/issues/248) | Decidir se gerente de restaurante de uma unidade volta a renomear e apagar funções de todas as unidades | staff | application | open | #207 |
+| [#258](https://github.com/MarceloSanC/restaurant-hub/issues/258) | "Minha escala" composta entre unidades e as unidades do próprio login | scheduling | adapters/inbound/http + identity ou staff | open | `4.5-scheduling-http` |
+| [#259](https://github.com/MarceloSanC/restaurant-hub/issues/259) | Decidir a desativação de conta no gatilho do ADR 3.5.0003 §5 | identity | domain + application + adapters | open | `4.5-scheduling-http` |
 | [#260](https://github.com/MarceloSanC/restaurant-hub/issues/260) | Classificar na regra 10 todo port de saída que não é repositório | shared | tooling | done | #243 |
 | [#262](https://github.com/MarceloSanC/restaurant-hub/issues/262) | Pôr a fachada de identity no escopo da mutação de acesso | identity | tooling + tests | open | #217 |
 

@@ -1502,6 +1502,7 @@ _PORTS_FORA_DE_REPOSITORIO: dict[tuple[str, str], dict[str, bool]] = {
         "transaction": _NAO_GRAVA,
     },
     ("features/scheduling/application/ports/out/access_guard.py", "AccessGuard"): {
+        "authenticate": _NAO_GRAVA,
         "authorize": _NAO_GRAVA,
     },
     ("features/scheduling/application/ports/out/staff_read_port.py", "StaffReadPort"): {

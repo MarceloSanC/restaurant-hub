@@ -5,7 +5,7 @@ when-use: Reference before changing what `deactivate_employee` or `delete_employ
 keywords: [adr, termination, deactivate, delete, revoke-sessions, is_active, employee-login, identity-gateway, staff, identity]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-10-19
+updated_at: 2026-11-23
 adr_id: 3.5.0003
 decision: '`DeactivateEmployeeUseCase` (R13) gains the `IdentityGateway` and, when the record carries a `user_id`, calls `revoke_login_sessions` **before** writing `active=False`; `DeleteEmployeeUseCase` (R15) refuses a linked record (`EmployeeHasLoginError`, 409 — terminate first) and does not touch identity; the account is not deactivated (`User.is_active` does not exist and is not added), so the person can authenticate again and reaches nothing; `reactivate_employee` does nothing with identity; `is_active` is deferred with the trigger "before the first self-service permission of `employee`"'
 context_stage: 3.5-employee-login-link
@@ -231,3 +231,14 @@ implementation agree, and makes a double termination harmless.
   Acrescentar a desativação de conta, com o gatilho daqui, continua valendo.
 
 O resto deste ADR (§1b, §2, §3, §4, §6) continua em vigor.
+
+## Nota — o gatilho do §5 disparou
+
+**2026-11-23 — Stage 4.5 (concept 4.5 §7 D-DEACT; [ADR 4.5.0001](./4_5_0001-scheduling-permissions-in-the-identity-role-map.md)).**
+O `employee` recebeu a primeira permissão de auto-serviço (`view_own_schedule`). A Stage 4.5 **não**
+entrega a desativação de conta: "minha escala" lê só registros **ativos** vinculados ao login, então
+o desligado autentica e recebe lista vazia — o corte estrutural do §3, travado por e2e. A decisão que
+o §5 pede (a capacidade de desativar conta existe? como ato separado, nunca consequência do
+desligamento — ADR 3.8.0001 §4) passa para a issue
+[#259](https://github.com/MarceloSanC/restaurant-hub/issues/259), por decisão P delegada pelo
+sponsor à sessão da 4.5.

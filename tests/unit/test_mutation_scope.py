@@ -55,6 +55,9 @@ _MODULOS_DE_ACESSO = frozenset(
         # `raise`. Substituiu o `composition_root.py` na issue #47, que moveu
         # para cá o `_IdentityAccessGuard` — o critério de entrada é o mesmo.
         "src/restaurant_hub/features/staff/adapters/out/identity/local_access_guard.py",
+        # O `AccessGuard` de scheduling (Stage 4.5, ADR 4.5.0003): resolve o tenant omitido
+        # (L-SG5) e nega o ator sem tenant num `raise` — o mesmo critério do de staff.
+        "src/restaurant_hub/features/scheduling/adapters/out/identity/local_access_guard.py",
         # A borda que extrai o Bearer e delega ao use case.
         "src/restaurant_hub/features/identity/adapters/inbound/http/dependencies.py",
         # "Não se concede o que não se detém" — `required_permissions_for_role`, que

@@ -130,7 +130,19 @@ from restaurant_hub.features.identity.application.use_cases.set_password_with_to
     SetPasswordWithTokenUseCase,
 )
 
-# --- scheduling (Stage 4.4) — adapters e ports de dados, num bloco próprio ---------------
+# --- scheduling (Stages 4.4 e 4.5) — adapters, o guard e os sete use cases, num bloco próprio
+from restaurant_hub.features.scheduling.adapters.inbound.http import (
+    dependencies as scheduling_dependencies_module,
+)
+from restaurant_hub.features.scheduling.adapters.inbound.http import (
+    error_handlers as scheduling_error_handlers_module,
+)
+from restaurant_hub.features.scheduling.adapters.inbound.http import (
+    router as scheduling_router_module,
+)
+from restaurant_hub.features.scheduling.adapters.out.identity.local_access_guard import (
+    LocalAccessGuard as SchedulingLocalAccessGuard,
+)
 from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_config_repository import (
     PostgresScheduleConfigRepository,
 )
@@ -140,14 +152,29 @@ from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repositor
 from restaurant_hub.features.scheduling.adapters.out.staff.local_staff_read_adapter import (
     LocalStaffReadAdapter,
 )
-from restaurant_hub.features.scheduling.application.ports.out.schedule_config_repository import (
-    ScheduleConfigRepository,
+from restaurant_hub.features.scheduling.application.ports.out.access_guard import (
+    AccessGuard as SchedulingAccessGuard,
 )
-from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
-    ScheduleRepository,
+from restaurant_hub.features.scheduling.application.use_cases.create_schedule import (
+    CreateScheduleUseCase,
 )
-from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
-    StaffReadPort,
+from restaurant_hub.features.scheduling.application.use_cases.evaluate_schedule import (
+    EvaluateScheduleUseCase,
+)
+from restaurant_hub.features.scheduling.application.use_cases.get_calendar import (
+    GetCalendarUseCase,
+)
+from restaurant_hub.features.scheduling.application.use_cases.get_my_schedule import (
+    GetMyScheduleUseCase,
+)
+from restaurant_hub.features.scheduling.application.use_cases.get_schedule import (
+    GetScheduleUseCase,
+)
+from restaurant_hub.features.scheduling.application.use_cases.list_past_schedules import (
+    ListPastSchedulesUseCase,
+)
+from restaurant_hub.features.scheduling.application.use_cases.publish_schedule import (
+    PublishScheduleUseCase,
 )
 from restaurant_hub.features.staff.adapters.inbound.http import (
     dependencies as staff_dependencies_module,
@@ -341,19 +368,21 @@ class ApplicationDependencies:
     # (R17) e `staff_deactivate_employee` (R13) — a **mesma** instância nos dois.
     staff_identity_gateway: IdentityGateway
 
-    # --- scheduling (Stage 4.4) — PROVISÓRIOS --------------------------------
+    # --- scheduling (Stage 4.5) ----------------------------------------------
     #
-    # Três **ports de dados**, contra a regra do docstring acima ("expõe use cases, não
-    # repositórios"), por decisão registrada (concept 4.4 §7 D-WIRING; nota datada no
-    # LAYOUT §6). Os sete use cases de scheduling exigem o `AccessGuard` de scheduling,
-    # cujas permissões ainda não existem em identity: a Stage 4.5 cria o guard, monta os
-    # use cases sobre estes três campos e **remove** os três. Até lá nenhum provedor de
-    # `build_http_wiring` os entrega a uma rota — um port de dados ligado direto a uma rota
-    # leria escala e staff sem passar pela autorização dos use cases (travado por
-    # `test_composition_root_scheduling.py`).
-    scheduling_schedules: ScheduleRepository
-    scheduling_settings: ScheduleConfigRepository
-    scheduling_staff_read: StaffReadPort
+    # Os sete use cases do BC, sobre os adapters Postgres e o `StaffReadPort` da 4.4 e o
+    # `AccessGuard` de scheduling. Até a 4.5 o contêiner expunha, provisoriamente, os três
+    # ports de dados (concept 4.4 §7 D-WIRING); eles saíram — o "expõe use cases, não
+    # repositórios" do docstring voltou a valer sem exceção.
+    scheduling_create_schedule: CreateScheduleUseCase
+    scheduling_get_schedule: GetScheduleUseCase
+    scheduling_evaluate_schedule: EvaluateScheduleUseCase
+    scheduling_publish_schedule: PublishScheduleUseCase
+    scheduling_get_calendar: GetCalendarUseCase
+    scheduling_list_past_schedules: ListPastSchedulesUseCase
+    scheduling_get_my_schedule: GetMyScheduleUseCase
+    # Anotado com o **port**, como `staff_access_guard`: é o consumido pela borda.
+    scheduling_access_guard: SchedulingAccessGuard
 
 
 @dataclass
@@ -510,6 +539,13 @@ def wire_dependencies(
     scheduling_settings = PostgresScheduleConfigRepository(engine)
     scheduling_staff_read = LocalStaffReadAdapter(
         StaffReadFacade(employees=staff_employees, job_functions=staff_job_functions)
+    )
+    # Stage 4.5 (ADR 4.5.0003): o `AccessGuard` de scheduling sobre a fachada de acesso
+    # montada sobre o **mesmo** `AuthorizeActionUseCase`, e autenticando pelo **mesmo**
+    # `IdentityGuard` das rotas de identity e de staff — uma decisão de acesso, não três.
+    scheduling_access_guard = SchedulingLocalAccessGuard(
+        access=IdentityAccessFacade(authorize_action=authorize_action),
+        authenticate_request=guard.authenticate_principal,
     )
 
     return ApplicationDependencies(
@@ -689,14 +725,51 @@ def wire_dependencies(
         ),
         staff_access_guard=staff_access_guard,
         staff_identity_gateway=staff_identity_gateway,
-        scheduling_schedules=scheduling_schedules,
-        scheduling_settings=scheduling_settings,
-        scheduling_staff_read=scheduling_staff_read,
+        scheduling_create_schedule=CreateScheduleUseCase(
+            schedules=scheduling_schedules,
+            config=scheduling_settings,
+            ids=id_generator,
+            clock=clock,
+            guard=scheduling_access_guard,
+        ),
+        scheduling_get_schedule=GetScheduleUseCase(
+            schedules=scheduling_schedules,
+            config=scheduling_settings,
+            staff=scheduling_staff_read,
+            guard=scheduling_access_guard,
+        ),
+        scheduling_evaluate_schedule=EvaluateScheduleUseCase(
+            schedules=scheduling_schedules,
+            config=scheduling_settings,
+            staff=scheduling_staff_read,
+            guard=scheduling_access_guard,
+        ),
+        scheduling_publish_schedule=PublishScheduleUseCase(
+            schedules=scheduling_schedules,
+            config=scheduling_settings,
+            staff=scheduling_staff_read,
+            clock=clock,
+            guard=scheduling_access_guard,
+        ),
+        scheduling_get_calendar=GetCalendarUseCase(
+            schedules=scheduling_schedules,
+            staff=scheduling_staff_read,
+            guard=scheduling_access_guard,
+        ),
+        scheduling_list_past_schedules=ListPastSchedulesUseCase(
+            schedules=scheduling_schedules, guard=scheduling_access_guard
+        ),
+        scheduling_get_my_schedule=GetMyScheduleUseCase(
+            schedules=scheduling_schedules,
+            staff=scheduling_staff_read,
+            guard=scheduling_access_guard,
+        ),
+        scheduling_access_guard=scheduling_access_guard,
     )
 
 
 def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
-    """Carrega os adapters HTTP dos dois BCs e monta o que `create_app()` registra.
+    """Carrega os adapters HTTP dos três BCs e monta o que `create_app()` registra.
 
     **É aqui que as 17 rotas de staff passam a existir na aplicação.** Até esta
     Stage o BC era surdo-mudo: os use cases e o `staff_access_guard` estavam
@@ -769,11 +842,38 @@ def build_http_wiring(deps: ApplicationDependencies) -> HttpWiring:
         }
     )
 
+    # As oito entradas de scheduling (Stage 4.5): o guard e os sete use cases, uma a uma.
+    overrides.update(
+        {
+            scheduling_dependencies_module.get_access_guard: (lambda: deps.scheduling_access_guard),
+            scheduling_router_module._get_create_schedule: (
+                lambda: deps.scheduling_create_schedule
+            ),
+            scheduling_router_module._get_get_schedule: lambda: deps.scheduling_get_schedule,
+            scheduling_router_module._get_evaluate_schedule: (
+                lambda: deps.scheduling_evaluate_schedule
+            ),
+            scheduling_router_module._get_publish_schedule: (
+                lambda: deps.scheduling_publish_schedule
+            ),
+            scheduling_router_module._get_calendar: lambda: deps.scheduling_get_calendar,
+            scheduling_router_module._get_list_past_schedules: (
+                lambda: deps.scheduling_list_past_schedules
+            ),
+            scheduling_router_module._get_my_schedule: lambda: deps.scheduling_get_my_schedule,
+        }
+    )
+
     return HttpWiring(
-        routers=(router_module.router, staff_router_module.router),
+        routers=(
+            router_module.router,
+            staff_router_module.router,
+            scheduling_router_module.router,
+        ),
         register_error_handlers=(
             error_handlers_module.register_identity_error_handlers,
             staff_error_handlers_module.register_staff_error_handlers,
+            scheduling_error_handlers_module.register_scheduling_error_handlers,
         ),
         dependency_overrides=overrides,
     )

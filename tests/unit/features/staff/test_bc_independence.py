@@ -72,6 +72,12 @@ _PAR_DE_SCHEDULING = (
     "restaurant_hub.features.scheduling.adapters.out.staff.* -> "
     "restaurant_hub.features.staff.application.facade"
 )
+# Stage 4.5 (ADR 4.5.0003): o terceiro par, o `AccessGuard` de scheduling sobre a fachada de
+# identity. A forma dele é cobrada no teste de scheduling, como a do segundo.
+_PAR_DE_SCHEDULING_IDENTITY = (
+    "restaurant_hub.features.scheduling.adapters.out.identity.* -> "
+    "restaurant_hub.features.identity.application.facade"
+)
 _GATEWAY = _STAFF / "adapters" / "out" / "identity" / "local_identity_gateway.py"
 # Issue #47 (ADR 0.0.0016): o segundo consumidor da mesma aresta — o `AccessGuard`
 # que até ali era `_IdentityAccessGuard`, no composition root.
@@ -218,9 +224,11 @@ def test_ca12_nenhum_modulo_de_staff_nomeia_role_nem_permission() -> None:
 def test_ca13_o_contrato_bc_independence_tem_exatamente_os_pares_das_fachadas() -> None:
     """CA13 — a lista de supressões é **exata**: os pares das duas fachadas, e só eles.
 
-    Desde a Stage 4.4 são **dois** pares, na mesma forma (ADR 4.4.0004): o de staff sobre a
-    fachada de identity e o de scheduling sobre a fachada de staff. Um terceiro continua
-    entrando só por decisão, editando as constantes e o `.importlinter` no mesmo commit.
+    Desde a Stage 4.4 eram **dois** pares, na mesma forma (ADR 4.4.0004): o de staff sobre a
+    fachada de identity e o de scheduling sobre a fachada de staff. A Stage 4.5 acrescentou o
+    terceiro, decidido (ADR 4.5.0003): o `AccessGuard` de scheduling sobre a fachada de
+    identity. Um quarto continua entrando só por decisão, editando as constantes e o
+    `.importlinter` no mesmo commit.
 
     Até a Stage 3.4 este teste asseria que a lista não existia ("zero" só é
     propriedade se algo o medir). A 3.5 abriu a fronteira por **uma** aresta,
@@ -234,11 +242,12 @@ def test_ca13_o_contrato_bc_independence_tem_exatamente_os_pares_das_fachadas() 
     contrato = _contrato_bc_independence()
 
     pares = [linha.strip() for linha in contrato["ignore_imports"].splitlines() if linha.strip()]
-    assert pares == [_PAR_UNICO, _PAR_DE_SCHEDULING], (
+    assert pares == [_PAR_UNICO, _PAR_DE_SCHEDULING, _PAR_DE_SCHEDULING_IDENTITY], (
         f"o contrato `bc-independence` tem outra lista de supressões: {pares}. "
         "As arestas entre os BCs são `staff.adapters.out.identity.* -> "
         "identity.application.facade` (ADR 3.5.0001 §3) e `scheduling.adapters.out."
-        "staff.* -> staff.application.facade` (ADR 4.4.0004); outra entra por "
+        "staff.* -> staff.application.facade` (ADR 4.4.0004) e `scheduling.adapters.out."
+        "identity.* -> identity.application.facade` (ADR 4.5.0003); outra entra por "
         "decisão, editando estas constantes e o `.importlinter` no mesmo commit."
     )
     assert contrato["unmatched_ignore_imports_alerting"] == "error"

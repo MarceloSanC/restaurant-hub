@@ -371,6 +371,8 @@ _TOTAL_DE_ROTAS_DE_STAFF = 22
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.inbound.http"
 _PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
+# Stage 4.5 — o terceiro router da app; a partição identity/staff subtrai também os pares dele.
+_PACOTE_HTTP_SCHEDULING = "restaurant_hub.features.scheduling.adapters.inbound.http"
 _PREFIXO_DA_API = "/api/v1"
 
 # O inventário de identity, **literal**, como o cliente o alcança. Transcrito e
@@ -526,12 +528,15 @@ def test_ca30_o_wiring_registra_os_dois_routers_e_os_dois_registradores() -> Non
     """
     wiring = build_http_wiring(_dependencias())
 
-    assert wiring.routers == (identity_router, staff_router)
+    # Stage 4.5: o terceiro BC com borda (scheduling) entra depois dos dois.
+    assert wiring.routers[:2] == (identity_router, staff_router)
+    assert len(wiring.routers) == 3  # noqa: PLR2004
 
-    assert wiring.register_error_handlers == (
+    assert wiring.register_error_handlers[:2] == (
         register_identity_error_handlers,
         register_staff_error_handlers,
     )
+    assert len(wiring.register_error_handlers) == 3  # noqa: PLR2004
 
 
 def test_ca30_o_mapa_de_overrides_cobre_todo_provedor_do_router_de_staff() -> None:
@@ -608,7 +613,7 @@ def test_ca30_todas_as_rotas_de_staff_ficam_montadas_sob_o_prefixo() -> None:
     de_staff = montadas & _pares_do_router(_PACOTE_HTTP_STAFF)
 
     assert len(de_staff) == _TOTAL_DE_ROTAS_DE_STAFF
-    assert montadas - de_staff == _ROTAS_DE_IDENTITY
+    assert montadas - de_staff - _pares_do_router(_PACOTE_HTTP_SCHEDULING) == _ROTAS_DE_IDENTITY
     assert all(path.startswith(_PREFIXO_DA_API) for _, path in montadas)
 
 
@@ -633,7 +638,11 @@ def test_ca30_o_inventario_de_identity_nao_regrediu() -> None:
     wiring = build_http_wiring(_dependencias())
 
     assert wiring.routers[0] is identity_router
-    de_identity = _pares_montados(_app_do_wiring()) - _pares_do_router(_PACOTE_HTTP_STAFF)
+    de_identity = (
+        _pares_montados(_app_do_wiring())
+        - _pares_do_router(_PACOTE_HTTP_STAFF)
+        - _pares_do_router(_PACOTE_HTTP_SCHEDULING)
+    )
 
     assert de_identity == _ROTAS_DE_IDENTITY
     assert len(de_identity) == _TOTAL_DE_ROTAS_DE_IDENTITY

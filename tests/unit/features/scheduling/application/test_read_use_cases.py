@@ -18,6 +18,9 @@ from restaurant_hub.features.scheduling.application.errors import (
     MissingStaffRecordsError,
     ScheduleNotFoundError,
 )
+from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
+    JobFunctionEntry,
+)
 from restaurant_hub.features.scheduling.application.use_cases.get_calendar import (
     GetCalendarUseCase,
 )
@@ -232,3 +235,19 @@ def test_ca16_ausente_que_nao_conta_carga_tambem_recusa(world: World) -> None:
     assert excinfo.value.assignment_ids == (AssignmentId("a-ze"),)
     with pytest.raises(MissingStaffRecordsError):
         _cal_uc(world).execute(_cal(world, MONDAY, MONDAY))
+
+
+# --- Stage 4.5: a demanda diz se a função vale na unidade (ADR 4.5.0003 §Decision 4) --------
+
+
+@pytest.mark.parametrize(("unidades", "esperado"), [(None, True), (frozenset({"u2"}), False)])
+def test_get_e_calendario_dizem_se_a_funcao_vale_na_unidade(
+    world: World, unidades: frozenset[str] | None, esperado: bool
+) -> None:
+    """Habilitada em toda unidade ⇒ `True`; estreitada para outra unidade ⇒ `False` (órfã)."""
+    world.staff.add_job_function(T1, JobFunctionEntry(COOK, "Cozinheiro"), units=unidades)
+    world.schedules.add(_semana("s1", MONDAY, "ana"), blank_change())
+    lida = _get_uc(world).execute(_get(world))
+    assert lida.bands[0].demands[0].function_enabled_in_unit is esperado
+    cal = _cal_uc(world).execute(_cal(world, MONDAY, MONDAY))
+    assert cal.bands[0].demands[0].function_enabled_in_unit is esperado

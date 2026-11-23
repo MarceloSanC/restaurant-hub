@@ -121,6 +121,8 @@ def _staff() -> dict[EmployeeId, StaffMember]:
 
 
 _NOMES = {COOK: "Cozinheiro", WAITER: "Atendente"}
+# Stage 4.5 — as funções habilitadas na unidade: o garçom não (demanda órfã, ADR 4.3.0005).
+_HABILITADAS = frozenset({COOK, JobFunctionId("sumida")})
 
 
 def _por_id(resultado: results.ScheduleResult, band_id: str) -> results.BandResult:
@@ -128,18 +130,18 @@ def _por_id(resultado: results.ScheduleResult, band_id: str) -> results.BandResu
 
 
 def test_ca13_a_escala_omite_a_alocacao_de_inativo() -> None:
-    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, ())
+    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, (), enabled=_HABILITADAS)
     garcom = next(d for d in _por_id(resultado, "f9").demands if d.demand_id == "d-z")
     assert garcom.assignments == ()
 
 
 def test_ca27_faixas_por_inicio_e_desempate_por_id() -> None:
-    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, ())
+    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, (), enabled=_HABILITADAS)
     assert [f.band_id for f in resultado.bands] == ["f5", "f9", "f1"]
 
 
 def test_ca27_demandas_por_funcao_independente_da_insercao() -> None:
-    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, ())
+    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, (), enabled=_HABILITADAS)
     assert [d.job_function_id for d in _por_id(resultado, "f9").demands] == [
         "atendente",
         "cozinheiro",
@@ -147,7 +149,7 @@ def test_ca27_demandas_por_funcao_independente_da_insercao() -> None:
 
 
 def test_ca27_alocacoes_por_nome_e_desempate_por_id() -> None:
-    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, ())
+    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, (), enabled=_HABILITADAS)
     cozinha = next(d for d in _por_id(resultado, "f9").demands if d.demand_id == "d-a")
     assert [(a.display_name, a.assignment_id) for a in cozinha.assignments] == [
         ("Ana", "a-m"),
@@ -159,9 +161,36 @@ def test_ca27_alocacoes_por_nome_e_desempate_por_id() -> None:
 
 
 def test_ca27_funcao_fora_do_catalogo_sai_com_nome_none() -> None:
-    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, ())
+    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, (), enabled=_HABILITADAS)
     assert _por_id(resultado, "f1").demands[0].job_function_name is None
     assert _por_id(resultado, "f9").operational_day == MONDAY
+
+
+def test_a_demanda_diz_se_a_funcao_vale_na_unidade() -> None:
+    """Stage 4.5 (ADR 4.5.0003 §Decision 4) — pertença ao conjunto, nos dois sentidos."""
+    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, (), enabled=_HABILITADAS)
+    por_demanda = {
+        d.demand_id: d.function_enabled_in_unit for f in resultado.bands for d in f.demands
+    }
+    assert por_demanda == {"d-a": True, "d-z": False, "d-x": True}
+
+
+def test_sem_funcao_habilitada_toda_demanda_sai_orfa() -> None:
+    resultado = results.to_schedule_result(_escala(), _staff(), _NOMES, (), enabled=frozenset())
+    assert {d.function_enabled_in_unit for f in resultado.bands for d in f.demands} == {False}
+
+
+def test_o_calendario_diz_se_a_funcao_vale_na_unidade() -> None:
+    cal = results.to_calendar_result(
+        MONDAY,
+        MONDAY + timedelta(days=7),
+        (_semana_seguinte(), _escala()),
+        _staff(),
+        _NOMES,
+        enabled=frozenset({WAITER}),
+    )
+    por_demanda = {d.demand_id: d.function_enabled_in_unit for f in cal.bands for d in f.demands}
+    assert por_demanda == {"d-a": False, "d-z": True, "d-x": False, "e-1": False}
 
 
 def test_o_resumo_traz_endereco_periodo_e_versao() -> None:
@@ -189,7 +218,12 @@ def _semana_seguinte() -> Schedule:
 
 def test_ca13_ca27_calendario_sobre_duas_escalas() -> None:
     cal = results.to_calendar_result(
-        _TUESDAY, MONDAY + timedelta(days=7), (_semana_seguinte(), _escala()), _staff(), _NOMES
+        _TUESDAY,
+        MONDAY + timedelta(days=7),
+        (_semana_seguinte(), _escala()),
+        _staff(),
+        _NOMES,
+        enabled=_HABILITADAS,
     )
     assert [s.schedule_id for s in cal.schedules] == ["s1", "s0"]  # por first_day
     assert [f.band_id for f in cal.bands] == ["f1", "g1"]  # segunda (f5/f9) fora do recorte

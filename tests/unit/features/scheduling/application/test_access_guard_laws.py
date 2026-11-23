@@ -94,8 +94,10 @@ def test_l_sg2_ator_de_outro_tenant_e_negado_mesmo_com_o_alvo_concedido() -> Non
     assert excinfo.value is guard.authorization_error
 
 
-@pytest.mark.parametrize(("tenant", "unidade"), [(_T, ""), (_T, "  ")])
+@pytest.mark.parametrize(("tenant", "unidade"), [(_T, ""), (_T, "  "), ("", _U)])
 def test_l_sg2_alvo_vazio_nunca_vira_escopo_mesmo_concedido(tenant: str, unidade: str) -> None:
+    """Inclui o tenant `""` **explícito** com o alvo do ator concedido: só a ausência (`None`)
+    é resolvida para o tenant do ator (L-SG5) — a mesma régua do adapter."""
     guard, ator = _guard()
     guard.grant(PERMISSION_MANAGE_SCHEDULE, tenant_id=tenant, unit_id=unidade)
     with pytest.raises(Exception) as excinfo:
@@ -112,3 +114,53 @@ def test_l_sg3_cada_alvo_e_uma_chamada_registrada() -> None:
         f"authorize({PERMISSION_MANAGE_SCHEDULE},{_T},{_U})",
         f"authorize({PERMISSION_MANAGE_SCHEDULE},{_T},{_U2})",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Stage 4.5 — L-SG5 (tenant omitido) e `authenticate` (ADR 4.5.0003)
+# ---------------------------------------------------------------------------
+
+
+def test_l_sg5_tenant_omitido_e_o_do_ator() -> None:
+    guard, ator = _guard()
+    escopo = guard.authorize(ator, PERMISSION_MANAGE_SCHEDULE, unit_id=_U)
+    assert (escopo.tenant_id, escopo.unit_id, escopo.user_id) == (_T, _U, "user-1")
+
+
+def test_l_sg5_tenant_omitido_registra_a_chamada_sem_tenant() -> None:
+    guard, ator = _guard()
+    guard.authorize(ator, PERMISSION_MANAGE_SCHEDULE, unit_id=_U)
+    assert guard.calls == [f"authorize({PERMISSION_MANAGE_SCHEDULE},None,{_U})"]
+
+
+def test_l_sg5_ator_sem_tenant_e_negado_com_o_tenant_omitido() -> None:
+    guard, _ = _guard()
+    administrador = guard.issue("admin-1", None)
+    guard.grant(PERMISSION_MANAGE_SCHEDULE, tenant_id="", unit_id=_U)
+    with pytest.raises(Exception) as excinfo:
+        guard.authorize(administrador, PERMISSION_MANAGE_SCHEDULE, unit_id=_U)
+    assert excinfo.value is guard.authorization_error
+
+
+def test_l_sg3_tenant_omitido_nao_alcanca_unidade_nao_concedida() -> None:
+    guard, ator = _guard()
+    with pytest.raises(Exception) as excinfo:
+        guard.authorize(ator, PERMISSION_MANAGE_SCHEDULE, unit_id=_U2)
+    assert excinfo.value is guard.authorization_error
+
+
+def test_authenticate_devolve_o_ator_emitido_pelo_sujeito_do_cabecalho() -> None:
+    guard, ator = _guard()
+    assert guard.authenticate({"authorization": "Bearer user-1"}) is ator
+
+
+@pytest.mark.parametrize(
+    "pedido",
+    [{}, {"authorization": "user-1"}, {"authorization": "Bearer desconhecido"}, None],
+    ids=["sem-cabecalho", "sem-bearer", "sujeito-nao-emitido", "pedido-nulo"],
+)
+def test_l_sg1_authenticate_sem_credencial_levanta_a_sentinela_crua(pedido: object) -> None:
+    guard, _ = _guard()
+    with pytest.raises(Exception) as excinfo:
+        guard.authenticate(pedido)
+    assert excinfo.value is guard.authentication_error
