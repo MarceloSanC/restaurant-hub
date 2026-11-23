@@ -176,3 +176,16 @@ def test_falha_da_consulta_sobe_crua() -> None:
         _resolver(fakes, gateway)
 
     assert excinfo.value is falha
+
+
+def test_o_proprio_registro_ja_gravado_com_a_conta_nao_conta_como_outro() -> None:
+    """Vínculo concorrente da mesma conta ao próprio registro: quem responde é L-LINK.
+
+    O registro foi lido sem login e está gravado com a conta. R10 olha só os
+    **outros** registros da unidade; se contasse o próprio, a resposta seria
+    "outro registro" em vez do `EmployeeAlreadyHasLoginError` da escrita.
+    """
+    fakes, gateway = _arranjo(tenant_id=_A, unit_ids=frozenset({_U1}))
+    fakes.store.employees[_REGISTRO.id] = dataclasses.replace(_REGISTRO, user_id=_CONTA)
+
+    assert _resolver(fakes, gateway, _REGISTRO) == _CONTA
