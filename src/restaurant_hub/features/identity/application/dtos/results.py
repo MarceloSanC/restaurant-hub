@@ -127,6 +127,25 @@ class UnitTimezoneResult:
 
 
 @dataclass(frozen=True)
+class AccountSummaryResult:
+    """Quem é uma conta, para quem vai vinculá-la (Stage 3.10, ADR 3.10.0002 §2).
+
+    Attributes:
+        user_id: a conta.
+        tenant_id: o restaurante da conta; `None` só para `platform_admin`.
+        unit_ids: as unidades de que **esta** conta é membro, em ordem estável.
+        sees_every_unit: a conta enxerga todas as unidades do seu tenant sem
+            membership (`User.bypasses_unit_scope`) — o dono. Falso para conta sem
+            tenant: não há tenant cujas unidades alcançar.
+    """
+
+    user_id: UserId
+    tenant_id: RestaurantId | None
+    unit_ids: tuple[UnitId, ...]
+    sees_every_unit: bool
+
+
+@dataclass(frozen=True)
 class AuthenticationResult:
     """Par de tokens emitido por um login bem-sucedido.
 

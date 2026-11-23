@@ -22,6 +22,7 @@ import pytest
 from restaurant_hub.features.identity.application import errors as erros_de_application
 from restaurant_hub.features.identity.application import facade as modulo_facade
 from restaurant_hub.features.identity.application.dtos.commands import (
+    FindAccountByEmailCommand,
     GetAccountRoleCommand,
     GetUnitTimezoneCommand,
     ProvisionAccountCommand,
@@ -31,6 +32,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 from restaurant_hub.features.identity.application.dtos.results import (
     AccountRoleResult,
+    AccountSummaryResult,
     ProvisionedAccountResult,
     UnitTimezoneResult,
     UserResult,
@@ -39,6 +41,7 @@ from restaurant_hub.features.identity.application.errors import RoleNotProvision
 from restaurant_hub.features.identity.application.facade import (
     AccessGrant,
     AccessPrincipal,
+    AccountSummary,
     IdentityAccessFacade,
     IdentityFacade,
     IdentityUnitFacade,
@@ -46,6 +49,9 @@ from restaurant_hub.features.identity.application.facade import (
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.find_account_by_email import (
+    FindAccountByEmailUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
@@ -170,19 +176,36 @@ class _EspiaoDePapel(GetAccountRoleUseCase):
         return self._devolve
 
 
+class _EspiaoDeConta(FindAccountByEmailUseCase):
+    def __init__(
+        self, *, devolve: AccountSummaryResult | None = None, levanta: Exception | None = None
+    ) -> None:
+        self.commands: list[FindAccountByEmailCommand] = []
+        self._devolve = devolve
+        self._levanta = levanta
+
+    def execute(self, command: FindAccountByEmailCommand) -> AccountSummaryResult | None:
+        self.commands.append(command)
+        if self._levanta is not None:
+            raise self._levanta
+        return self._devolve
+
+
 def _fachada_espia(
     *,
     provision: _EspiaoDeProvisionamento | None = None,
     send: _EspiaoDeEnvio | None = None,
     revoke: _EspiaoDeRevogacao | None = None,
     role: _EspiaoDePapel | None = None,
+    account: _EspiaoDeConta | None = None,
 ) -> tuple[IdentityFacade, _EspiaoDeProvisionamento, _EspiaoDeEnvio, _EspiaoDeRevogacao]:
-    """O espião do papel não volta na tupla: quem o quer passa o seu e o guarda."""
+    """Os espiões do papel e da conta não voltam na tupla: quem os quer passa o seu."""
     provision = provision or _EspiaoDeProvisionamento()
     send = send or _EspiaoDeEnvio()
     revoke = revoke or _EspiaoDeRevogacao()
     role = role or _EspiaoDePapel()
-    return IdentityFacade(provision, send, revoke, role), provision, send, revoke
+    account = account or _EspiaoDeConta()
+    return IdentityFacade(provision, send, revoke, role, account), provision, send, revoke
 
 
 def _provisionar(  # noqa: PLR0913 — os cinco argumentos nomeados da fachada, com defaults
@@ -284,9 +307,51 @@ class TestConversaoDePrimitivos:
 
         assert fachada.account_role("nunca-existiu") is None
 
+    def test_find_account_by_email_converte_para_primitivos(self) -> None:
+        """Stage 3.10: o resultado sai em texto, sem tipo de identity (propriedade 1)."""
+        espiao = _EspiaoDeConta(
+            devolve=AccountSummaryResult(
+                user_id=UserId("user-42"),
+                tenant_id=RestaurantId("rest-a"),
+                unit_ids=(UnitId("unit-a1"), UnitId("unit-a2")),
+                sees_every_unit=False,
+            )
+        )
+        fachada, _, _, _ = _fachada_espia(account=espiao)
+
+        conta = fachada.find_account_by_email("Ana@Cantina.com")
+
+        assert conta == AccountSummary(
+            user_id="user-42",
+            tenant_id="rest-a",
+            unit_ids=("unit-a1", "unit-a2"),
+            sees_every_unit=False,
+        )
+        assert conta is not None
+        assert type(conta.user_id) is str
+        assert type(conta.tenant_id) is str
+        assert all(type(unidade) is str for unidade in conta.unit_ids)
+        assert type(conta.unit_ids) is tuple
+        assert espiao.commands == [FindAccountByEmailCommand(email=Email("Ana@Cantina.com"))]
+
+    def test_find_account_by_email_sem_conta_e_none(self) -> None:
+        fachada, _, _, _ = _fachada_espia(account=_EspiaoDeConta(devolve=None))
+
+        assert fachada.find_account_by_email("ninguem@cantina.com") is None
+
+    def test_find_account_by_email_malformado_sobe_sem_traducao_e_sem_consultar(self) -> None:
+        espiao = _EspiaoDeConta()
+        fachada, _, _, _ = _fachada_espia(account=espiao)
+
+        with pytest.raises(InvalidEmailError):
+            fachada.find_account_by_email("nao-e-email")
+
+        assert espiao.commands == []
+
     def test_cada_operacao_chama_so_o_seu_use_case(self) -> None:
         papel = _EspiaoDePapel()
-        fachada, provision, send, revoke = _fachada_espia(role=papel)
+        conta = _EspiaoDeConta()
+        fachada, provision, send, revoke = _fachada_espia(role=papel, account=conta)
 
         _provisionar(fachada)
 
@@ -294,6 +359,16 @@ class TestConversaoDePrimitivos:
         assert send.commands == []
         assert revoke.commands == []
         assert papel.commands == []
+        assert conta.commands == []
+
+    def test_a_excecao_da_consulta_de_conta_sobe_na_mesma_instancia(self) -> None:
+        falha = RuntimeError("banco fora")
+        fachada, _, _, _ = _fachada_espia(account=_EspiaoDeConta(levanta=falha))
+
+        with pytest.raises(RuntimeError) as excinfo:
+            fachada.find_account_by_email("ana@cantina.com")
+
+        assert excinfo.value is falha
 
 
 class TestTransparenciaAExcecoes:
@@ -420,6 +495,8 @@ class TestReexportacao:
         assert set(modulo_facade.__all__) == {
             "AccessGrant",
             "AccessPrincipal",
+            # O resultado da consulta de conta da Stage 3.10 (ADR 3.10.0002 §2).
+            "AccountSummary",
             "EmailAlreadyRegisteredError",
             "IdentityAccessFacade",
             "IdentityFacade",
@@ -463,6 +540,7 @@ class TestSobreOsUseCasesReais:
             SendInvitationUseCase(sender),
             RevokeAllSessionsUseCase(InMemorySessionRepository(), clock),
             GetAccountRoleUseCase(users),
+            FindAccountByEmailUseCase(users),
         )
         return fachada, users, sender
 
