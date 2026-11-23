@@ -361,12 +361,19 @@ _EXCLUSOES: dict[str, str] = {
     "send_invitation": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
     "revoke_all_sessions": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
     "get_account_role": "só a fachada o chama; o consumidor autoriza (ADR 3.5.0001 §1)",
+    "get_unit_timezone": "só a fachada o chama; o consumidor autoriza (issue #198, ADR 4.1.0005)",
 }
 
 # Os módulos facade-only (CA14): o resíduo de `provision_account` (concept 2.7 §13)
 # é guardado pelo alcance — só a fachada e o composition root os importam.
 _FACADE_ONLY = frozenset(
-    {"provision_account", "send_invitation", "revoke_all_sessions", "get_account_role"}
+    {
+        "provision_account",
+        "send_invitation",
+        "revoke_all_sessions",
+        "get_account_role",
+        "get_unit_timezone",
+    }
 )
 _IMPORTADORES_PERMITIDOS = frozenset(
     {

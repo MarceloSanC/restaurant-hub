@@ -26,6 +26,7 @@ from restaurant_hub.features.identity.adapters.out.postgres.tables import (
 from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     SetupTokenPurpose,
 )
+from restaurant_hub.features.identity.domain.entities.unit import DEFAULT_TIMEZONE
 from restaurant_hub.features.identity.domain.value_objects.role import Role
 
 pytestmark = pytest.mark.unit
@@ -214,3 +215,16 @@ def test_sessions_indexa_o_que_os_metodos_do_port_varrem() -> None:
         "ix_sessions_user_id",
         "ix_sessions_expires_at",
     }
+
+
+def test_fuso_da_unidade_e_obrigatorio_com_o_default_do_dominio() -> None:
+    """Issue #198 — o default do banco é o mesmo do domínio, e a coluna não aceita nulo.
+
+    Os dois defaults vivem em lugares distintos (o banco preenche a unidade que já
+    existia antes da `0007`; a entidade, a que nasce sem fuso declarado). Divergir
+    faria a unidade antiga e a nova nascerem em fusos diferentes sem erro algum.
+    """
+    coluna = units.c.timezone
+    assert coluna.nullable is False
+    assert coluna.server_default is not None
+    assert str(coluna.server_default.arg) == f"'{DEFAULT_TIMEZONE}'"  # type: ignore[attr-defined]

@@ -168,6 +168,33 @@ def test_unidade_round_trip(repos: Repositorios) -> None:
     assert lida.name == "Centro"
 
 
+def test_unidade_guarda_o_fuso_declarado(repos: Repositorios) -> None:
+    """Issue #198 — o fuso não default volta como foi gravado, nos dois adapters."""
+    repos.restaurantes.add(Restaurant(id=RestaurantId("rest-a"), name="Cantina"))
+    repos.unidades.add(
+        Unit(
+            id=UnitId("unit-mao"),
+            restaurant_id=RestaurantId("rest-a"),
+            name="Manaus",
+            timezone="America/Manaus",
+        )
+    )
+
+    lida = repos.unidades.find_by_id(UnitId("unit-mao"))
+
+    assert lida is not None
+    assert lida.timezone == "America/Manaus"
+
+
+def test_unidade_sem_fuso_declarado_volta_com_o_default(repos: Repositorios) -> None:
+    _semear_tenant(repos)
+
+    lida = repos.unidades.find_by_id(UnitId("unit-a1"))
+
+    assert lida is not None
+    assert lida.timezone == "America/Sao_Paulo"
+
+
 def test_unidade_inexistente_devolve_none(repos: Repositorios) -> None:
     assert repos.unidades.find_by_id(UnitId("fantasma")) is None
 

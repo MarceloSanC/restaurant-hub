@@ -73,6 +73,32 @@ def test_unidade_faz_round_trip() -> None:
         "rest-1",
         "Centro",
     )
+    assert de_volta.timezone == "America/Sao_Paulo"
+
+
+def test_unidade_leva_o_fuso_na_linha_e_o_traz_de_volta() -> None:
+    """Issue #198 — o fuso não default sobrevive à ida e à volta, sem cair no default."""
+    unidade = Unit(
+        id=UnitId("unit-1"),
+        restaurant_id=RestaurantId("rest-1"),
+        name="Centro",
+        timezone="America/Manaus",
+    )
+    linha = mappers.unit_to_row(unidade)
+    assert linha["timezone"] == "America/Manaus"
+    assert mappers.row_to_unit(_linha(**linha)).timezone == "America/Manaus"
+
+
+def test_unidade_com_fuso_fora_da_base_reidrata_sem_levantar() -> None:
+    """Auditoria do PR #232 — chave gravada que saiu da base IANA (`US/Pacific-New`,
+    removida na 2020b) volta como gravada.
+
+    Levantar aqui seria levantar no `find_by_id` que o `AuthorizeActionUseCase`
+    chama antes da checagem de tenant: a autorização da unidade viraria 422 com a
+    chave no corpo.
+    """
+    linha = _linha(id="unit-1", restaurant_id="rest-1", name="Centro", timezone="US/Pacific-New")
+    assert mappers.row_to_unit(linha).timezone == "US/Pacific-New"
 
 
 def test_usuario_faz_round_trip_e_o_hash_viaja_ao_lado() -> None:

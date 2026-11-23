@@ -10,7 +10,10 @@ from restaurant_hub.features.identity.application.use_cases.create_unit import (
     CreateUnitUseCase,
 )
 from restaurant_hub.features.identity.domain.entities.restaurant import Restaurant
-from restaurant_hub.features.identity.domain.exceptions.errors import InvalidNameError
+from restaurant_hub.features.identity.domain.exceptions.errors import (
+    InvalidNameError,
+    InvalidTimezoneError,
+)
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
     UnitId,
@@ -99,5 +102,51 @@ def test_nome_vazio_propaga_erro_de_dominio() -> None:
 
     with pytest.raises(InvalidNameError):
         use_case.execute(CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name=""))
+
+    assert units.units == {}
+
+
+# ---------------------------------------------------------------------------
+# Fuso da unidade (issue #198, ADR 4.1.0005)
+# ---------------------------------------------------------------------------
+
+
+def test_sem_fuso_declarado_a_unidade_nasce_em_sao_paulo() -> None:
+    use_case, units, _ = _setup()
+
+    result = use_case.execute(
+        CreateUnitCommand(actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name="Centro")
+    )
+
+    assert result.timezone == "America/Sao_Paulo"
+    assert units.units[UnitId(result.id)].timezone == "America/Sao_Paulo"
+
+
+def test_fuso_declarado_e_gravado_e_devolvido() -> None:
+    """O fuso do command chega à entidade gravada **e** ao result, não só a um dos dois."""
+    use_case, units, _ = _setup()
+
+    result = use_case.execute(
+        CreateUnitCommand(
+            actor_id=TEST_ACTOR_ID,
+            restaurant_id=_TENANT,
+            name="Manaus",
+            timezone="America/Manaus",
+        )
+    )
+
+    assert result.timezone == "America/Manaus"
+    assert units.units[UnitId(result.id)].timezone == "America/Manaus"
+
+
+def test_fuso_invalido_propaga_erro_de_dominio_e_nao_grava() -> None:
+    use_case, units, _ = _setup()
+
+    with pytest.raises(InvalidTimezoneError):
+        use_case.execute(
+            CreateUnitCommand(
+                actor_id=TEST_ACTOR_ID, restaurant_id=_TENANT, name="Centro", timezone="Lua/Base"
+            )
+        )
 
     assert units.units == {}

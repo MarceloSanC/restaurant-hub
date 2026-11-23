@@ -4,10 +4,11 @@ import dataclasses
 
 import pytest
 
-from restaurant_hub.features.identity.domain.entities.unit import Unit
+from restaurant_hub.features.identity.domain.entities.unit import DEFAULT_TIMEZONE, Unit
 from restaurant_hub.features.identity.domain.exceptions.errors import (
     InvalidIdentifierError,
     InvalidNameError,
+    InvalidTimezoneError,
 )
 from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     RestaurantId,
@@ -92,3 +93,94 @@ def test_eq_delega_ao_outro_operando_quando_o_tipo_e_estranho() -> None:
     unidade = Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
     assert unidade == _SempreIgual()
     assert _SempreIgual() == unidade
+
+
+# ---------------------------------------------------------------------------
+# Fuso da unidade (issue #198, ADR 4.1.0005)
+# ---------------------------------------------------------------------------
+
+
+def test_fuso_default_e_sao_paulo() -> None:
+    unidade = Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
+    assert unidade.timezone == "America/Sao_Paulo"
+    assert DEFAULT_TIMEZONE == "America/Sao_Paulo"
+
+
+def test_create_sem_fuso_usa_o_default() -> None:
+    unidade = Unit.create(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
+    assert unidade.timezone == "America/Sao_Paulo"
+
+
+@pytest.mark.parametrize("chave", ["America/Manaus", "America/Sao_Paulo", "UTC", "Europe/Lisbon"])
+def test_create_aceita_chave_iana_e_a_guarda_como_veio(chave: str) -> None:
+    unidade = Unit.create(
+        id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone=chave
+    )
+    assert unidade.timezone == chave
+    assert unidade.id == "u1"
+    assert unidade.restaurant_id == "r1"
+    assert unidade.name == "Matriz"
+
+
+def test_create_mantem_as_invariantes_do_construtor() -> None:
+    with pytest.raises(InvalidNameError):
+        Unit.create(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="  ")
+
+
+@pytest.mark.parametrize(
+    "invalida",
+    [
+        "",
+        "   ",
+        "Lua/Base",
+        # Caixa errada: a chave IANA é sensível a caixa.
+        "america/sao_paulo",
+        # Espaço nas pontas: o Windows aceitaria pelo sistema de arquivos, o Linux não.
+        "America/Sao_Paulo ",
+        " America/Sao_Paulo",
+        # Diretório da base, não fuso: construir o `ZoneInfo` levantaria `OSError`.
+        "America",
+        # Caminho absoluto, subida de diretório e byte NUL: `ValueError` no `ZoneInfo`.
+        "/etc/localtime",
+        "../America/Sao_Paulo",
+        "America/Sao\x00_Paulo",
+        # Arquivos da base que não são chave canônica.
+        "posixrules",
+        "right/America/Sao_Paulo",
+    ],
+)
+def test_chave_fora_da_base_iana_e_recusada_com_erro_de_dominio(invalida: str) -> None:
+    with pytest.raises(InvalidTimezoneError, match="fuso horário inválido"):
+        Unit.create(
+            id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone=invalida
+        )
+
+
+def test_construtor_nao_confere_o_fuso_contra_a_base() -> None:
+    """Auditoria do PR #232: a reidratação passa pelo construtor, que não consulta
+    a base IANA.
+
+    `US/Pacific-New` saiu do IANA na 2020b. É uma chave que uma unidade antiga
+    poderia ter gravado e que a base de hoje não carrega. Se o construtor a
+    recusasse, a leitura da unidade levantaria dentro da autorização.
+    """
+    unidade = Unit(
+        id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone="US/Pacific-New"
+    )
+    assert unidade.timezone == "US/Pacific-New"
+    with pytest.raises(InvalidTimezoneError):
+        Unit.create(
+            id=UnitId("u1"),
+            restaurant_id=RestaurantId("r1"),
+            name="Matriz",
+            timezone="US/Pacific-New",
+        )
+
+
+def test_fuso_nao_entra_na_igualdade() -> None:
+    # A unidade continua igual a si mesma depois de mudar de fuso: igualdade por id.
+    antes = Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
+    depois = Unit(
+        id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone="America/Manaus"
+    )
+    assert antes == depois

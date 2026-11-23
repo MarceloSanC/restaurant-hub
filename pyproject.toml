@@ -37,6 +37,13 @@ dependencies = [
     # `python-jose` (CVEs acumuladas, manutenção esparsa) e `authlib`
     # (framework OAuth inteiro onde só se precisa de um codec).
     "pyjwt>=2.9",
+    # Base IANA de fusos (issue #198, ADR 4.1.0005): `Unit.timezone` é validado
+    # por `zoneinfo`, que no Windows não tem base do sistema e depende deste
+    # pacote; a doc do `zoneinfo` ("Data sources") recomenda declará-lo em
+    # projeto multiplataforma. Vinha só por carona do psycopg, e só no Windows.
+    # Sem marcador de plataforma: o mesmo conjunto de chaves em todo ambiente,
+    # inclusive numa imagem sem `/usr/share/zoneinfo`.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
