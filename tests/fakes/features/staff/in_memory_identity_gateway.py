@@ -173,7 +173,7 @@ class InMemoryIdentityGateway:
         )
         if email in self.invalid_emails:
             raise InvalidLoginEmailError(email) from FakeEmailInvalid(email)
-        if email in self.used_emails:
+        if email in self.used_emails or email.strip().lower() in self.used_emails:
             raise LoginEmailAlreadyInUseError(email) from FakeEmailAlreadyUsed(email)
         if tenant_id in self.raw_errors_by_tenant:
             raise self.raw_errors_by_tenant[tenant_id]
@@ -298,6 +298,9 @@ class InMemoryIdentityGateway:
         self.accounts[email.strip().lower()] = ExistingLogin(
             user_id=user_id, tenant_id=tenant_id, unit_ids=unit_ids, every_unit=every_unit
         )
+        # O e-mail de uma conta existente está em uso, como em identity (L-IG2):
+        # provisionar com ele recusa.
+        self.used_emails.add(email.strip().lower())
         if tenant_id is not None:
             self.logins[user_id] = ProvisionedLoginRecord(
                 email=email,
