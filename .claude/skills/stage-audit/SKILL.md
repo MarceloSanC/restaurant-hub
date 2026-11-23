@@ -190,6 +190,12 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
    `[finding]` ou `[deviation]` na execução, foi registrado? Se o histórico
    git mostra commits `[N.M/--]` ou `[N.M/task-NN-extra]` (off-task),
    `§7` deveria ter a entrada justificando.
+7. **Plano de gates** da §1 do technical (regra: PIPELINE §9.6). Conferir
+   se a Stage precisa dele (corte pela data de nascimento da branch), a
+   forma (1 a 3 pontos, o de saída incluído; do 4º em diante, justificativa)
+   e a evidência de **cada** ponto: run verde do `lint-and-test` no commit
+   da Task do ponto, ou a saída local no relatório. Comandos e
+   classificação: [reference/plano-de-gates.md](reference/plano-de-gates.md).
 
 ### Fase D — Judgment (a parte que NÃO se mecaniza)
 
