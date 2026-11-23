@@ -11,8 +11,14 @@ escala em tuplas de primitivos, nos três níveis, na ordem das tuplas do agrega
 direto: o port não tem escrita (a da configuração é da Stage 4.8), e a linha é montada
 **aqui**, campo a campo, sem passar pelo mapper do adapter — uma suíte que semeasse pelo
 inverso do mapper que ela mesma testa provaria só que o mapper concorda consigo.
+
+**Vizinhas como um chamador honesto as leria** (issue #199). `neighbours_now` lê as duas
+vagas pelo próprio port (`list_in_range`), com a regra de `neighbours_of` da application:
+é o `ExpectedNeighbours` de quem leu agora e escreve sem que nada mude no meio. Os testes
+que não são sobre L-SC9 o passam ao `save`; os de L-SC9 montam o esperado à mão.
 """
 
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import Engine, select
@@ -26,7 +32,10 @@ from restaurant_hub.features.scheduling.application.ports.out.schedule_config_re
     SchedulingSettings,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ExpectedNeighbours,
+    NeighbourVersion,
     ScheduleChange,
+    ScheduleRepository,
 )
 from restaurant_hub.features.scheduling.domain.entities.schedule import Schedule
 from restaurant_hub.features.scheduling.domain.value_objects.validation_config import PolicyRule
@@ -105,3 +114,42 @@ def read_trail(engine: Engine, schedule_id: str) -> tuple[ScheduleChange, ...]:
             .order_by(schedule_changes.c.seq)
         ).all()
     return tuple(row_to_change(row) for row in rows)
+
+
+NO_NEIGHBOURS = ExpectedNeighbours(previous=None, following=None)
+
+
+def _seen(schedule: Schedule | None) -> NeighbourVersion | None:
+    return None if schedule is None else NeighbourVersion(schedule.id, schedule.version)
+
+
+def neighbours_now(repo: ScheduleRepository, schedule: Schedule) -> ExpectedNeighbours:
+    """As vagas vizinhas de `schedule` lidas agora pelo port (L-SC9)."""
+    um_dia = timedelta(days=1)
+    anterior = schedule.period.first_day - um_dia
+    seguinte = schedule.period.last_day + um_dia
+    unidade = (schedule.tenant_id, schedule.unit_id)
+    previous = next(
+        (
+            e
+            for e in repo.list_in_range(*unidade, anterior, anterior)
+            if e.period.last_day == anterior and e.id != schedule.id
+        ),
+        None,
+    )
+    following = next(
+        (
+            e
+            for e in repo.list_in_range(*unidade, seguinte, seguinte)
+            if e.period.first_day == seguinte and e.id != schedule.id
+        ),
+        None,
+    )
+    return ExpectedNeighbours(previous=_seen(previous), following=_seen(following))
+
+
+def save_as_read(
+    repo: ScheduleRepository, schedule: Schedule, expected_version: int, change: ScheduleChange
+) -> None:
+    """`save` com as vizinhas lidas agora — o chamador honesto dos testes fora de L-SC9."""
+    repo.save(schedule, expected_version, neighbours_now(repo, schedule), change)

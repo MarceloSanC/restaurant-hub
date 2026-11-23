@@ -22,9 +22,10 @@ método não-leitura de classe declarada em `*_repository.py`.
   `ScheduleNotFoundError`; versão gravada ≠ `expected_version` ⇒
   `ScheduleVersionConflictError` (com a atual); id interno já usado por **outra** escala do
   mesmo (tenant, unidade) ⇒ `IdentifierInUseError`, **no `save` e no `add`**. Ordem do
-  `save`: endereço → versão → ids. O erro relata o primeiro tipo em conflito na ordem faixa →
-  demanda → alocação e, dele, o **menor id por codepoint** entre todas as outras escalas da
-  unidade — forma que não depende de ordem de gravação, que um banco não tem.
+  `save`: endereço → versão → vizinhas (L-SC9) → ids. O erro relata o primeiro tipo em
+  conflito na ordem faixa → demanda → alocação e, dele, o **menor id por codepoint** entre
+  todas as outras escalas da unidade — forma que não depende de ordem de gravação, que um
+  banco não tem.
 - **L-SC5 — endereço de três partes.** Outro tenant ou unidade ⇒ `None`, e nunca aparece
   em listagem.
 - **L-SC6 — recorte.** `list_in_range` = as escalas que cruzam [first_day, last_day],
@@ -33,6 +34,16 @@ método não-leitura de classe declarada em `*_repository.py`.
   máximo `limit`.
 - **L-SC8 — fidelidade.** O lido é o gravado, campo a campo, inclusive a versão e a ordem
   das tuplas de faixas, demandas e alocações — depois de `add` e depois de `save`.
+- **L-SC9 — `save` confere as vizinhas lidas** (issue #199, ADR 4.4.0005). A avaliação do
+  use case lê a anterior e a seguinte adjacentes (ADR 4.2.0002 §1) **antes** da escrita;
+  `save` recebe o que ela leu (`ExpectedNeighbours`) e, com a mesma atomicidade da versão,
+  compara cada vaga — a escala da unidade que termina no dia anterior ao período e a que
+  começa no dia seguinte — com o esperado: outra escala, outra versão, vaga que esvaziou
+  **ou vaga vazia que passou a ter escala** ⇒ `ScheduleVersionConflictError` com
+  `changed_neighbour_id` (a escala que ocupa a vaga, ou a esperada se a vaga esvaziou) e as
+  versões da editada. A anterior é conferida antes da seguinte. Fecha o write skew de
+  fronteira: duas publicações em semanas adjacentes, cada uma avaliada contra o estado
+  antigo da outra, não comitam as duas.
 
 **Período e calendário são da criação** (Stage 4.4). Nenhuma mutação do domínio os muda — o
 calendário é fotografado (ADR 4.1.0009). `save` grava as faixas e a versão; uma escala que
@@ -52,6 +63,29 @@ from restaurant_hub.features.scheduling.domain.value_objects.identifiers import 
     UnitId,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
+
+
+@dataclass(frozen=True)
+class NeighbourVersion:
+    """Uma vizinha como a avaliação a leu: qual escala e em que versão (L-SC9)."""
+
+    schedule_id: ScheduleId
+    version: int
+
+
+@dataclass(frozen=True)
+class ExpectedNeighbours:
+    """As duas vagas adjacentes como a avaliação as leu; `None` = vaga vazia (L-SC9).
+
+    Sem método, como `ScheduleChange` (regra 10 do `check_layout`).
+
+    Attributes:
+        previous: a escala da unidade que termina no dia anterior ao período.
+        following: a que começa no dia seguinte ao período.
+    """
+
+    previous: NeighbourVersion | None
+    following: NeighbourVersion | None
 
 
 @dataclass(frozen=True)
@@ -81,8 +115,18 @@ class ScheduleRepository(Protocol):
         """Insere a escala nova com a sua mudança de criação (L-SC1, L-SC2, L-SC3)."""
         ...
 
-    def save(self, schedule: Schedule, expected_version: int, change: ScheduleChange) -> None:
-        """Substitui a escala se a gravada está em `expected_version` (L-SC3, L-SC4)."""
+    def save(
+        self,
+        schedule: Schedule,
+        expected_version: int,
+        expected_neighbours: ExpectedNeighbours,
+        change: ScheduleChange,
+    ) -> None:
+        """Substitui a escala se ela e as vizinhas estão como lidas (L-SC3, L-SC4, L-SC9).
+
+        `expected_neighbours` é obrigatório: um escritor que não declarasse o que leu
+        reabriria o write skew sem que nada o recusasse.
+        """
         ...
 
     def find_by_id(

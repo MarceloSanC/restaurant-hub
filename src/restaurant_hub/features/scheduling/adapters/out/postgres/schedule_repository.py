@@ -8,8 +8,10 @@ transação e, nela:
    escala da unidade; é convenção da aplicação, e todo escritor futuro destas tabelas tem
    de tomá-lo (`unit_lock_statement`);
 2. rodam as checagens da lei **explicitamente, na ordem da lei** — `add`: id da escala →
-   período → ids internos; `save`: endereço → versão → ids internos. Sob o lock e em
-   `READ COMMITTED`, cada comando vê o que o escritor anterior comitou;
+   período → ids internos; `save`: endereço → versão → vizinhas lidas (L-SC9, ADR
+   4.4.0005) → ids internos. Sob o lock e em `READ COMMITTED`, cada comando vê o que o
+   escritor anterior comitou — por isso a vaga vizinha conferida aqui é a que vale no
+   commit: nenhum outro escritor da unidade grava entre a checagem e o commit;
 3. gravam a raiz, **reescrevem as filhas** (o `save` apaga as faixas e o `CASCADE` leva
    demandas e alocações; depois reinsere o agregado com as posições) e inserem a linha da
    trilha.
@@ -56,6 +58,8 @@ from restaurant_hub.features.scheduling.application.errors import (
     ScheduleVersionConflictError,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ExpectedNeighbours,
+    NeighbourVersion,
     ScheduleChange,
 )
 from restaurant_hub.features.scheduling.domain.entities.schedule import Schedule
@@ -141,11 +145,41 @@ def stored_version_statement(schedule: Schedule) -> Executable:
     )
 
 
+def neighbour_statements(schedule: Schedule) -> tuple[Executable, Executable]:
+    """L-SC9: `(anterior, seguinte)` — id e versão da escala da unidade em cada vaga.
+
+    Anterior: termina no dia anterior ao período (`first_day + days` = início do período).
+    Seguinte: começa no dia seguinte ao último. Os dias disjuntos (L-SC2) garantem no máximo
+    uma linha por vaga.
+    """
+    period = schedule.period
+    base = select(schedules.c.id, schedules.c.version).where(
+        schedules.c.tenant_id == schedule.tenant_id,
+        schedules.c.unit_id == schedule.unit_id,
+        schedules.c.id != schedule.id,
+    )
+    return (
+        base.where(schedules.c.first_day + schedules.c.days == period.first_day),
+        base.where(schedules.c.first_day == period.last_day + timedelta(days=1)),
+    )
+
+
 def next_seq_statement(schedule_id: str) -> Executable:
     """O próximo ordinal da trilha da escala; sob o lock, nenhum escritor concorre."""
     return select(func.coalesce(func.max(schedule_changes.c.seq), 0) + 1).where(
         schedule_changes.c.schedule_id == schedule_id
     )
+
+
+def _changed_neighbour(
+    stored: NeighbourVersion | None, expected: NeighbourVersion | None
+) -> str | None:
+    """A escala a nomear se a vaga não está como lida: a que a ocupa, ou a lida se esvaziou."""
+    if stored is not None and stored != expected:
+        return stored.schedule_id
+    if stored is None and expected is not None:
+        return expected.schedule_id
+    return None
 
 
 class PostgresScheduleRepository:
@@ -177,8 +211,14 @@ class PostgresScheduleRepository:
             # pelo caminho do adapter; `from error` preserva a cadeia de causa.
             raise translate(error, ON_ADD_SCHEDULE, schedule.id) from error
 
-    def save(self, schedule: Schedule, expected_version: int, change: ScheduleChange) -> None:
-        """L-SC4 (endereço → versão → ids internos) e L-SC3; reescreve as filhas."""
+    def save(
+        self,
+        schedule: Schedule,
+        expected_version: int,
+        expected_neighbours: ExpectedNeighbours,
+        change: ScheduleChange,
+    ) -> None:
+        """L-SC4 (endereço → versão → vizinhas → ids internos), L-SC9 e L-SC3."""
         with self._engine.begin() as connection:
             connection.execute(unit_lock_statement(schedule.tenant_id, schedule.unit_id))
             stored_version = connection.execute(stored_version_statement(schedule)).scalar()
@@ -186,6 +226,7 @@ class PostgresScheduleRepository:
                 raise ScheduleNotFoundError(schedule.id)
             if stored_version != expected_version:
                 raise ScheduleVersionConflictError(expected_version, stored_version)
+            self._check_neighbours(connection, schedule, stored_version, expected_neighbours)
             self._check_internal_ids(connection, schedule)
             connection.execute(
                 schedules.update()
@@ -264,6 +305,25 @@ class PostgresScheduleRepository:
             return self._build(connection, tenant_id, unit_id, roots)
 
     # ---- núcleo -----------------------------------------------------------
+
+    @staticmethod
+    def _check_neighbours(
+        connection: Connection,
+        schedule: Schedule,
+        stored_version: int,
+        expected: ExpectedNeighbours,
+    ) -> None:
+        """Cada vaga como lida, a anterior antes da seguinte; vaga vazia que encheu conta."""
+        for statement, esperada in zip(
+            neighbour_statements(schedule), (expected.previous, expected.following), strict=True
+        ):
+            row = connection.execute(statement).first()
+            gravada = None if row is None else NeighbourVersion(ScheduleId(row.id), row.version)
+            changed = _changed_neighbour(gravada, esperada)
+            if changed is not None:
+                raise ScheduleVersionConflictError(
+                    stored_version, stored_version, changed_neighbour_id=changed
+                )
 
     @staticmethod
     def _check_internal_ids(connection: Connection, schedule: Schedule) -> None:
