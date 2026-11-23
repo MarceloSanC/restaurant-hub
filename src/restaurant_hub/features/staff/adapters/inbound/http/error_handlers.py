@@ -65,6 +65,8 @@ from restaurant_hub.features.staff.application.errors import (
 )
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
+    EmployeeHasNoLoginError,
+    EmployeeLoginChangedError,
     EmptyJobFunctionsError,
     EmptyShiftPreferenceError,
     InvalidDayPeriodError,
@@ -139,6 +141,10 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     TerminatedEmployeeLoginError: HTTP_CONFLICT,
     LoginEmailAlreadyInUseError: HTTP_CONFLICT,
     EmployeeHasLoginError: HTTP_CONFLICT,
+    # 409 — Stage 3.10 (ADR 3.10.0001): trocar ou desvincular registro sem login,
+    # e o estado do vínculo que mudou entre a leitura e a escrita condicional.
+    EmployeeHasNoLoginError: HTTP_CONFLICT,
+    EmployeeLoginChangedError: HTTP_CONFLICT,
     # 422 — invariante violada **pelo conteúdo enviado**.
     InvalidNameError: HTTP_UNPROCESSABLE,
     InvalidIdentifierError: HTTP_UNPROCESSABLE,

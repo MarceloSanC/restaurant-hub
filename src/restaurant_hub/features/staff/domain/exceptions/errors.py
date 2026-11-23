@@ -135,6 +135,33 @@ class TerminatedEmployeeLoginError(StaffError):
         super().__init__(f"funcionário desligado não pode receber login: {employee_id!r}")
 
 
+class EmployeeHasNoLoginError(StaffError):
+    """Trocar ou desvincular o login de um registro **sem** login (Stage 3.10).
+
+    Conflito com o estado gravado: não há vínculo para trocar ou encerrar. Quem
+    quer ligar uma conta a um registro sem login vincula (R18), não troca (ADR
+    3.10.0001 §1).
+    """
+
+    def __init__(self, employee_id: str) -> None:
+        super().__init__(f"funcionário não tem login vinculado: {employee_id!r}")
+
+
+class EmployeeLoginChangedError(StaffError):
+    """O vínculo gravado não é mais o que foi lido (Stage 3.10, ADR 3.10.0001 §2).
+
+    As escritas do vínculo e o desligamento decidem sobre o estado lido — o login
+    e, onde a revogação depende dele, se o registro está ativo — e o conferem de
+    novo sobre o **gravado**, na mesma operação que grava. O login gravado
+    diferente do lido, ou um registro lido desligado e gravado ativo (recontratado
+    no meio), recusam a escrita: a decisão de revogar foi tomada sobre outro
+    estado. Conflito, não recurso ausente; a nova tentativa lê o estado atual.
+    """
+
+    def __init__(self, employee_id: str) -> None:
+        super().__init__(f"o vínculo de login do funcionário mudou: {employee_id!r}")
+
+
 class InvalidUnitEnablementError(StaffError):
     """Habilitação por unidade incoerente (Stage 3.11, ADR 3.11.0001 §2).
 
