@@ -710,6 +710,12 @@ pontos do **plano de gates**, a tabela que o autor escreve na §1 do
   o ponto extra entra como `[deviation]` na §7 do technical, com a mesma
   justificativa.
 - O gate do technical (§8.4) revisa o plano.
+- `scripts/check_gate_plan.py`, no `make docs-check`, confere a forma: o
+  título `### Plano de gates` na §1 e a tabela do template, com pontos
+  numerados, células preenchidas, um ponto de saída e, do 4º em diante,
+  motivo que não seja "por segurança". Se o motivo de fato justifica o
+  ponto é com a revisão. As Stages aprovadas antes do ADR estão no corte
+  do script (Transição, abaixo).
 
 **Onde pôr um ponto no meio da Stage.** Logo depois da última Task de um
 grupo cuja quebra invalidaria as Tasks seguintes:
