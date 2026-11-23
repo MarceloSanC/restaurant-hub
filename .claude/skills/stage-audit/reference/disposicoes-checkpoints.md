@@ -18,6 +18,10 @@ foi afirmado.
 Fora do corte, a checagem 3 do script (rodado na Fase B) já garante que as entradas do A e do
 B **existem** no technical `done`. Sobra ao auditor o momento, o C e o conteúdo.
 
+Stage conduzida pelo RUNBOOK multi-sessão não tem revisor de contexto zerado: as entradas do A
+e do B registram os gates humanos dos Passos 5 e 7 (o que pediram, ou aprovação sem ajuste), e
+não há C. Confira o momento delas como no fluxo de sessão única.
+
 ## 2. O que conferir
 
 1. **As entradas.** Uma por checkpoint, e uma por bloco no C:
