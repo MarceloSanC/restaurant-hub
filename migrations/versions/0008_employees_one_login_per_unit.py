@@ -37,6 +37,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    return
     op.create_index(
         "uq_employees_tenant_unit_user",
         "employees",
