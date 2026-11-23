@@ -21,13 +21,14 @@ tem de devolver o estado anterior inteiro (a versão e as faixas do mesmo estado
 seguinte, o novo.
 """
 
+import os
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
-from sqlalchemy import Engine, event, text
+from sqlalchemy import Engine, create_engine, event, make_url, text
 from sqlalchemy.exc import IntegrityError
 
 from restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository import (
@@ -65,6 +66,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.schedule_period imp
     SchedulePeriod,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
+from tests.conftest import fresh_database
 from tests.contract.features.scheduling.support import NO_NEIGHBOURS, project, read_trail
 
 pytestmark = [pytest.mark.integration]
@@ -158,20 +160,73 @@ def _pausa_depois_de(
         event.remove(engine, "after_cursor_execute", depois)
 
 
+# Só as esperas de backends conectados a ESTE banco. `pg_locks` é do cluster inteiro, e na
+# corrida de mutação cada worker roda a suíte no seu banco, em paralelo (issue #132): sem o
+# filtro, a espera de outro worker passaria por "B esperando", A seria liberado antes de B
+# chegar ao lock, e o mutante que tira o lock da unidade poderia sobreviver por acaso
+# (issue #217; `test_espera_de_outro_banco_nao_passa_por_b_esperando` trava a propriedade).
+# O filtro é pelo `datname` da sessão, não pela coluna `database` de `pg_locks`, que é nula
+# no lock `transactionid`.
+_ESPERAS_NESTE_BANCO = text(
+    "SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid "
+    "WHERE NOT l.granted AND l.locktype = :tipo AND a.datname = current_database()"
+)
+
+
 def _espera_lock_nao_concedido(engine: Engine, tipo: str, b: _Escritor) -> None:
-    """Consulta `pg_locks` até aparecer um lock `tipo` não concedido — B esperando."""
+    """Consulta `pg_locks` até aparecer, neste banco, um lock `tipo` não concedido — B esperando."""
     limite = datetime.now(UTC) + timedelta(seconds=_PRAZO)
     while datetime.now(UTC) < limite:
         assert not b.terminou, f"B terminou sem esperar o lock {tipo}: {b.erro!r}"
         with engine.connect() as conexao:
-            esperando = conexao.execute(
-                text("SELECT count(*) FROM pg_locks WHERE NOT granted AND locktype = :tipo"),
-                {"tipo": tipo},
-            ).scalar_one()
+            esperando = conexao.execute(_ESPERAS_NESTE_BANCO, {"tipo": tipo}).scalar_one()
         if esperando:
             return
         threading.Event().wait(0.05)
     pytest.fail(f"B não apareceu esperando um lock {tipo} em {_PRAZO}s")
+
+
+def _esperas_neste_banco(engine: Engine, tipo: str) -> int:
+    with engine.connect() as conexao:
+        return int(conexao.execute(_ESPERAS_NESTE_BANCO, {"tipo": tipo}).scalar_one())
+
+
+def test_espera_de_outro_banco_nao_passa_por_b_esperando(
+    banco_limpo: Engine, database_url: str
+) -> None:
+    """Issue #217: a espera de outro worker do mutmut, no banco dele, não conta aqui.
+
+    Num banco à parte, uma conexão segura um advisory lock e outra espera por ele. Visto de
+    lá, há uma espera (controle positivo: a consulta enxerga o que deve); visto deste banco,
+    nenhuma.
+    """
+    base = make_url(database_url)
+    outro_url = base.set(database=f"{base.database}_outro_{os.getpid()}").render_as_string(
+        hide_password=False
+    )
+    with fresh_database(database_url, outro_url):
+        outro = create_engine(outro_url, connect_args={"connect_timeout": 5})
+        try:
+            with outro.connect() as dono, outro.connect() as espera:
+                dono.execute(text("SELECT pg_advisory_lock(217)"))
+
+                def esperar() -> None:
+                    espera.execute(text("SELECT pg_advisory_lock(217)"))
+
+                esperando = _Escritor("espera-em-outro-banco", esperar)
+                esperando.start()
+                try:
+                    limite = datetime.now(UTC) + timedelta(seconds=_PRAZO)
+                    while _esperas_neste_banco(outro, "advisory") == 0:
+                        assert datetime.now(UTC) < limite, "a espera em outro banco não apareceu"
+                        threading.Event().wait(0.05)
+                    assert _esperas_neste_banco(banco_limpo, "advisory") == 0
+                finally:
+                    dono.execute(text("SELECT pg_advisory_unlock(217)"))
+                    esperando.join(_PRAZO)
+                assert esperando.erro is None
+        finally:
+            outro.dispose()
 
 
 def _intercalar(
