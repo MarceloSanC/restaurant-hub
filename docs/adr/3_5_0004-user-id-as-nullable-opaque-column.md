@@ -5,7 +5,7 @@ when-use: Reference before touching `employees.user_id`, before adding a constra
 keywords: [adr, user_id, employee, login-link, schema, nullable, opaque, no-fk, no-unique, copy, staff]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-11-03
+updated_at: 2026-11-23
 adr_id: 3.5.0004
 decision: '`Employee.user_id: UserId | None` (default `None`) persisted as `employees.user_id TEXT NULL` — opaque (no FK to identity, ADR 3.3.0002), not unique (workforce §3.7 allows several records per person), not indexed (no access path by `user_id` yet, ADR 3.3.0005); set only through `Employee.link_login`, which refuses a record that is already linked or terminated; never carried by the copy, by construction (explicit field-by-field clone with the default left untouched)'
 context_stage: 3.5-employee-login-link
@@ -203,3 +203,12 @@ lei `L-LINK`), que prende a linha e aplica as guardas do domínio sobre o **grav
 deixou de gravar `user_id`. "Definido uma vez" agora vale também na linha, não só na entidade em
 memória. Tudo o mais deste ADR — coluna anulável e opaca, sem FK, sem UNIQUE, sem índice, nunca
 copiada — continua valendo. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-23 — §2 ("set once", só por `Employee.link_login`) superado em parte pelo
+[ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md) (Stage
+3.10).** O vínculo de um registro existente passa a ter três escritas próprias e
+condicionais: `link_login` (sem vínculo), `relink_login` (troca, conferindo o login lido)
+e `unlink_login` (desvínculo, conferindo o login e o estado lidos). Continua sem escrita
+genérica: `update` segue ignorando o `user_id`, e nenhuma troca acontece sem a guarda do
+domínio sobre o gravado. Tudo o mais deste ADR continua valendo. Nota *append-only*; o
+corpo acima não foi editado.

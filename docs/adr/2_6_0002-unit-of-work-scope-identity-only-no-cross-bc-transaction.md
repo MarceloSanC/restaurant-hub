@@ -202,3 +202,15 @@ defasado é a afirmação. Desde a issue #205 há também `_invitation.issue_set
 propósito não recebe repositório ([ADR 0.0.0024](./0_0_0024-setup-token-issuance-is-one-write-free-helper.md),
 com teste que reprova se passar a receber). Seguir, de forma geral, repositório ou gateway entregue
 a helper de módulo é o escopo da issue #243. Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — duas travessias novas na allowlist da regra 10 (Stage 3.10, 2026-11-23)
+
+O campo `decision` enumera duas travessias de staff para identity
+(`create_login_for_employee`, `deactivate_employee`). Desde a Stage 3.10 são quatro:
+`RelinkLoginUseCase` e `UnlinkLoginUseCase` revogam as sessões do login em identity, pelo
+ponto único `end_active_link`, antes de gravar o vínculo em staff — a mesma ordem de R13
+(ADR 3.5.0003 §2) e o mesmo motivo de ficarem fora de uma unidade de trabalho (§2: não
+há transação entre BCs). A regra 10 passou a contar a chamada a um auxiliar declarado em
+`HELPER_WRITES` como escrita do use case que o chama; sem isso a entrada de
+`DeactivateEmployeeUseCase` ficaria morta ([ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md)
+§5). Nota *append-only*; o corpo acima não foi editado.

@@ -5,7 +5,7 @@ when-use: Reference before changing what `deactivate_employee` (R13) does with a
 keywords: [adr, termination, deactivate, revoke-sessions, is_active, employee-login, manager-login, identity-gateway, staff, identity]
 status: accepted
 created_at: 2026-10-19
-updated_at: 2026-11-01
+updated_at: 2026-11-23
 adr_id: 3.8.0001
 decision: R13 revokes the linked login's sessions only when (1) no other **active** record of the **same unit** carries that login and (2) the login's role in identity is `employee`, and only when the record being terminated is still active; otherwise it writes the termination and leaves sessions alone. Condition 1 is read from `EmployeeRepository.list_by_unit` (no new repository method); condition 2 through a new `IdentityGateway.is_employee_login` (L-IG5), backed by a read-only `IdentityFacade.account_role`. Termination never deactivates the account, now or when account deactivation exists
 context_stage: 3.8-termination-access-scope
@@ -260,3 +260,22 @@ record, the copy never carries `user_id`). Any future operation that ends one �
   (use cases return result DTOs)
 - `docs/domain/staff/workforce.md` §3.1, §3.8, §3.8; concept 3.5 §4, §10, CA07
 - Kickoff decision #13 (memory `loop-kickoff-decisions-2026-07`)
+
+## Nota — a decisão 5 implementada, e o dono da corrida (Stage 3.10, 2026-11-23)
+
+**Decisão 5.** A regra mora num ponto único, `_login_link.end_active_link`
+(`features/staff/application/use_cases/_login_link.py`), chamado com o registro lido,
+antes da escrita, por R13, por trocar o login (R19, com o login antigo) e por desvincular
+(R20). Uma varredura de AST trava que só ele chama `revoke_login_sessions` e
+`is_employee_login`, e a regra 10 de `check_layout.py` o conta como a escrita em identity
+do use case ([ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md)
+§5).
+
+**`### Negative`, a corrida de dois desligamentos do mesmo login na mesma unidade —
+superado em parte.** O *"Owner: the Stage that implements 'link an existing login'"*: a
+Stage 3.10 fechou o caminho pela API que a tornaria produzível — vincular e trocar recusam
+a conta que já está em outro registro da unidade (um login por unidade, workforce §3.1) —
+e declarou o resíduo (dois vínculos concorrentes da mesma conta na unidade). O lock por
+`user_id` segue como o fechamento completo, e depende de uma transação de staff que segure
+a leitura da unidade e a escrita; vai para issue própria (ADR 3.10.0001 §6). Nota
+*append-only*; o corpo acima não foi editado.
