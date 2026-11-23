@@ -1417,6 +1417,7 @@ def test_regra10_o_classificador_bate_com_os_ports_reais() -> None:
         "EmployeeRepository.unlink_login",
         "EmployeeRepository.relink_login",
         "EmployeeRepository.deactivate",
+        "EmployeeRepository.reactivate",
         "EmployeeRepository.delete",
         "ScheduleRepository.add",
         "ScheduleRepository.save",

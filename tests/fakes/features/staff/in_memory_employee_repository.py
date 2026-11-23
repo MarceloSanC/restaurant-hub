@@ -103,10 +103,13 @@ class InMemoryEmployeeRepository:
             raise EmployeeRelocationError(employee.id, gravado.unit_id, employee.unit_id)
         # (3) Validade referencial do conjunto.
         self._guard_job_functions(employee)
-        # O vínculo de login não é deste método (issue #68): o gravado fica, e o
-        # da entidade recebida — possivelmente lida antes de um `link_login` —
-        # é ignorado, como a coluna fora do `SET` do adapter.
-        self._store.employees[employee.id] = dataclasses.replace(employee, user_id=gravado.user_id)
+        # O vínculo de login (issue #68) e o estado ativo (issue #242) não são
+        # deste método: o gravado fica, e o da entidade recebida — possivelmente
+        # lida antes de um `link_login`, `deactivate` ou `reactivate` — é
+        # ignorado, como as colunas fora do `SET` do adapter.
+        self._store.employees[employee.id] = dataclasses.replace(
+            employee, user_id=gravado.user_id, active=gravado.active
+        )
 
     def link_login(
         self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId
@@ -170,6 +173,12 @@ class InMemoryEmployeeRepository:
         self._store.employees[employee_id] = gravado.deactivate_as_read(
             expected_user_id, was_active=expected_active
         )
+
+    def reactivate(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
+        """`L-REACT` — endereço, depois a transição do domínio sobre o gravado (#242)."""
+        self._store.record("employees.reactivate")
+        gravado = self._gravado_no_endereco(tenant_id, unit_id, employee_id)
+        self._store.employees[employee_id] = gravado.reactivate()
 
     def _gravado_no_endereco(
         self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId

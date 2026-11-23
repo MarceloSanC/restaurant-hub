@@ -183,6 +183,11 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
                 expected_active=True,
             ),
         ),
+        # Issue #242 — L-REACT.
+        (
+            "employees.reactivate",
+            lambda: fakes.employees.reactivate(_TENANT, _UNIDADE, EmployeeId("e-novo")),
+        ),
         (
             "employees.find_by_id",
             lambda: fakes.employees.find_by_id(_TENANT, _UNIDADE, EmployeeId("e-novo")),
@@ -206,7 +211,7 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
 
 
 def test_todo_metodo_do_par_registra_exatamente_uma_chamada() -> None:
-    """Cada um dos métodos do par (16 desde a Stage 3.11) tem o seu `record()` travado por teste.
+    """Cada um dos métodos do par (21 desde a issue #242) tem o seu `record()` travado por teste.
 
     **Por que isto não é zelo excessivo.** `store.calls` sustenta todos os
     critérios "sem tocar o port" das Tasks 07/09/13 — e um critério desses é

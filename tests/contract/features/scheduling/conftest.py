@@ -185,7 +185,13 @@ def _semear_staff_real(engine: Engine) -> StaffReadFacade:
                 registro.tenant_id, registro.unit_id, registro.id, StaffUserId(user_id)
             )
         if not membro.active:
-            registros.update(registro.deactivate())
+            registros.deactivate(
+                registro.tenant_id,
+                registro.unit_id,
+                registro.id,
+                expected_user_id=None if user_id is None else StaffUserId(user_id),
+                expected_active=True,
+            )
     return StaffReadFacade(registros, funcoes)
 
 

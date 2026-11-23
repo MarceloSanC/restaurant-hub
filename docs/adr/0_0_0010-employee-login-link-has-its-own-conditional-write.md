@@ -193,3 +193,12 @@ condicional (L-DEACT) com o login e o estado que leu; um vínculo concorrente gr
 entre a leitura e a escrita faz R13 responder 409 sem gravar, e o registro fica ativo e
 vinculado (conduta com duas conexões em `test_staff_conduct.py`). O resto deste ADR
 continua valendo. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-23 — a última frase da decisão 3 foi superada em parte (issue #242).** *"Last write
+wins (ADR 3.3.0006) still holds for every other field"* deixou de valer para `active`: o estado
+ganhou escrita própria na mesma forma do vínculo — `update` ignora o `active` da entidade e
+mantém o gravado (`_COLUMNS_WITH_OWN_WRITE` agora traz `user_id` e `active`), e só `deactivate`
+(L-DEACT) e `reactivate` (L-REACT) o escrevem. Detalhes e registros de decisão na nota de
+2026-11-23 do [ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md). Para
+os demais campos, "last write wins" segue valendo. Nota *append-only*; o corpo acima não foi
+editado.

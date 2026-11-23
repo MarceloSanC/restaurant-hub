@@ -5,7 +5,7 @@ when-use: Reference before adding or changing any operation that writes `employe
 keywords: [adr, login-link, unlink, relink, conditional-write, termination, revoke-sessions, single-point, one-per-unit, staff, race]
 status: accepted
 created_at: 2026-11-22
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 adr_id: 3.10.0001
 decision: 'Staff gains three login-link operations — link an existing account (R18, through the existing L-LINK), swap the linked login (R19) and unlink (R20). `EmployeeRepository` gains `unlink_login`, `relink_login` and `deactivate`, each locking the row, re-running a domain guard on the stored record against the link state the use case read (login, and active state where it decides revocation), and writing one column; termination (R13) writes through `deactivate`, so a link or rehire that lands between its read and its write makes it answer 409. The ADR 3.8.0001 rule moves to one helper, `_login_link.end_active_link`, called before the write by R13, R19 and R20; nothing else calls the revocation, and rule 10 of check_layout counts the helper as the cross-BC write. R18 and R19 refuse an account already linked to another record of the same unit (workforce §3.1, one per unit); only two concurrent links of one account in one unit remain as a declared residual.'
 context_stage: 3.10-login-link-management
@@ -186,3 +186,54 @@ unit of work (ADR 2.6.0002 §2). It goes to its own issue.
 - ADR 0.0.0010, ADR 0.0.0013, ADR 2.6.0002, ADR 3.1.0001, ADR 3.3.0006, ADR 3.5.0003,
   ADR 3.5.0004, ADR 3.8.0001
 - `docs/domain/staff/workforce.md` §3.1, §3.8; concept 3.5 §5.5, §6.4, §10
+
+## Notas datadas
+
+**2026-11-23 — a Alternativa H foi adotada, e o último item de `### Negative` está fechado
+(issue #242).** O estado ativo ganhou escrita própria, como o vínculo: `update` ignora o
+`active` da entidade e mantém o gravado (no adapter, `active` entra em
+`_COLUMNS_WITH_OWN_WRITE` ao lado de `user_id`), e a recontratação (R14) grava por um método
+novo do port, `reactivate(tenant_id, unit_id, employee_id)` — lei `L-REACT`: endereço de três
+partes ⇒ `EmployeeNotFoundError`; depois `Employee.reactivate()` sobre o gravado, sob
+`SELECT … FOR UPDATE` no adapter (a forma de `deactivate`, pelo mesmo `_transition_under_lock`);
+só `active` muda. As únicas escritas do estado depois que o registro existe são `deactivate`
+(L-DEACT) e `reactivate` (L-REACT). Uma edição lida antes de uma recontratação e gravada depois
+não devolve mais o registro a desligado, e com um R18 no meio o registro termina ativo e
+vinculado, não desligado e vinculado sem a regra de fim de vínculo; uma edição lida antes de um
+desligamento não o reativa (ADR 3.2.0007). Provas: as leis `test_l_react_*` e
+`test_issue_242_*` de `test_employee_repository_laws.py` (fake ≡ Postgres) e os testes
+`test_issue_242_*` de `test_staff_conduct.py`, com duas conexões. O "Cons" da Alternativa H
+(*"changes `update`'s law for every edit and the rehire path"*) foi pago: além da própria R14,
+nenhum use case gravava o estado por `update` — só arranjos de teste, que passaram a desligar
+pelo port. Nada muda na
+superfície HTTP nem no mapa de erros: R14 continua sem 409. Os registros abaixo decidem a forma.
+A corrida residual de fim de vínculo (§Decision 6, issue #241) não é tocada.
+
+```
+[decision:C] 242-D1 — Forma da escrita própria da recontratação no port
+Escolha: método próprio `reactivate(tenant_id, unit_id, employee_id)`, que trava a linha, aplica `Employee.reactivate` ao gravado e grava só `active` · Alternativas: `UPDATE … SET active = true` sem lock nem guarda do domínio; um único `set_active(…, active: bool)` para as duas transições · Degrau (C): 1
+Base: ADR 0.0.0010, Alternative B (dito de `user_id`, estendido aqui por analogia a `active`): "one writer per column is the form that "link an existing login" and "unlink" can extend (each gets its own method) without reopening `update`." · ADR 3.10.0001, Alternative C (dito de `replace_login(expected, new | None)`; o mesmo princípio descarta `set_active(bool)`): "a mode flag in a port signature" · ADR 3.10.0001 §Decision 2: "The Postgres adapter takes `SELECT … FOR UPDATE` before the guard, as `link_login` does."
+Verificado: parcial→corrigido — evidence-verifier, 2026-11-23: a Base da Alternative B voltou parcial (o texto decide só `user_id`); o registro passou a declarar a extensão a `active` como analogia, e a escolha fica pelo degrau 1 por coerência com a forma das escritas de L-LINK/L-UNLINK/L-RELINK/L-DEACT
+Configuração candidata: nenhuma · Reversível: sim (método novo do port, sem schema nem superfície HTTP)
+```
+
+```
+[decision:E] 242-D2 — O que `update` faz com um `active` divergente do gravado
+Escolha: ignora o da entidade e mantém o gravado, sem erro (a forma de `user_id`) · Alternativas: recusar a entidade com estado divergente
+Base: issue #242, §Critério de aceitação: "`update` com entidade de estado divergente do gravado não altera o estado." · issue #242, §Escopo: "`update` passa a ignorar o estado" · ADR 0.0.0010 §Decision 3: "the fake stores the received entity with the stored `user_id`"
+Verificado: sustenta — evidence-verifier, 2026-11-23 (o §Escopo, "ignorar", é o que descarta a recusa)
+Configuração candidata: nenhuma · Reversível: sim
+```
+
+`[decision] P delegado` — **L-REACT não confere o estado lido; R14 não ganha 409**, motivo: a
+recontratação não decide nada sobre o que leu (`Employee.reactivate` não tem guarda, e nenhuma
+regra depende do vínculo ou do estado lido, ao contrário do fim de vínculo de §Decision 3), e o
+registro que ela produz é ativo — nunca o "desligado e vinculado" que a regra protege. Com o
+registro lido desligado, o vínculo só pode diminuir até a escrita: vincular (R18) e trocar (R19)
+recusam o desligado no gravado, só desvincular (R20) age; e um-login-por-unidade (§Decision 6)
+conta os desligados, então recontratar não cria um segundo vínculo ativo na unidade.
+Alternativa descartada: recusar com 409 quando o registro foi lido ativo e está gravado desligado
+(um R13 entre a leitura e a escrita de um R14 idempotente), o que mudaria o contrato HTTP de R14
+e o oráculo de faixas por um conflito entre dois atos deliberados do gerente; o caso geral de
+edições concorrentes é o controle otimista da issue #226. Nota *append-only*; o corpo acima não
+foi editado.
