@@ -1,0 +1,29 @@
+# Mutantes equivalentes conhecidos da corrida de mutação (issue #217).
+#
+# `scripts/check_mutation_run.py --equivalentes` confere esta lista contra a
+# saída do `mutmut results` no job `mutation` do `audit-gate.yml`:
+# - mutante não morto fora daqui reprova (sobrevivente novo: teste ou entrada
+#   nova, com a justificativa);
+# - item daqui que não sobreviveu reprova (lista desatualizada: o mutmut numera
+#   por função, e editar a função renumera — a equivalência se rejulga).
+#
+# Um nome por linha, como o `mutmut results` imprime. A justificativa de cada
+# um, com a premissa e o teste que a trava, está no bloco "Mutantes
+# equivalentes do adapter (issue #217)" no fim de
+# `tests/integration/features/scheduling/adapters/out/postgres/test_schedule_repository.py`.
+
+# schedule_repository.py — `UPDATE schedules` sem tenant/unidade: `id` é a PK sozinha.
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁsave__mutmut_34
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁsave__mutmut_35
+# `DELETE schedule_bands` sem tenant/unidade: a FK composta prende a filha ao endereço da escala.
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁsave__mutmut_43
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁsave__mutmut_44
+# Leitura das filhas sem tenant/unidade: a mesma FK composta.
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁ_build__mutmut_10
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁ_build__mutmut_11
+# `strict=True` do `zip` trocado: os dois lados são pares fixos.
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁ_check_neighbours__mutmut_3
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁ_check_neighbours__mutmut_6
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.xǁPostgresScheduleRepositoryǁ_check_neighbours__mutmut_8
+# `continue` → `break`: tipo sem ids implica os seguintes sem ids.
+restaurant_hub.features.scheduling.adapters.out.postgres.schedule_repository.x_internal_ids_in_use_statements__mutmut_15
