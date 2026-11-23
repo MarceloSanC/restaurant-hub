@@ -135,6 +135,25 @@ test.
 (ADR 3.4.0008); the unit-level decision is the use case's (ADR 3.7.0001). No route, schema or
 status changes; the boundary's tenant-only check stays defense in depth.
 
+## Decision records
+
+The product fork (Decision 1) is `P delegado`, recorded inline above. The two forks the agent closed,
+in the format of the `evidence-resolution` skill §5, verified by an `evidence-verifier` run over the
+cited sources on 2026-11-23 (eight items: seven `sustenta`, one `parcial` — the delete-and-recreate
+hole only applies to a function that no record holds, corrected in §Context):
+
+[decision:C] D2 — what an actor without reach receives: 403 or 404
+Escolha: 404 for a function absent from the tenant (before reach); 403 (guard's raw denial) for an existing function out of reach · Alternativas: 404 for both · Degrau (C): 1
+Base: ADR 3.11.0001 §Decision 5 "The read is no oracle: what it reveals — the function's enablement — is what the catalogue (`GET /job-functions`) already shows to anyone who passed the tenant authorization." · ADR 3.11.0001 §Decision 6 "each item now says where it is enabled"; `JobFunctionResponse` carries `all_units` and `unit_ids`
+Verificado: sustenta (evidence-verifier, 2026-11-23)
+Configuração candidata: nenhuma · Reversível: sim (status of a denial; no persisted shape)
+
+[decision:C] D3 — the read-then-write race between authorizing on the stored enablement and renaming or deleting
+Escolha: close it with a conditional write on the enablement read (L-JF2 and L-JF3 revised), decided under the row lock · Alternativas: declare the limit with an issue · Degrau (C): 1 (issue #206 / ADR 0.0.0010), 2 (fail-closed)
+Base: ADR 3.11.0001, dated note of 2026-11-22 "recusa com `JobFunctionEnablementChangedError` quando a gravada mudou — sem gravar nada; o mapa de staff a responde como `409`. O adapter Postgres decide sob `SELECT … FOR NO KEY UPDATE`"
+Verificado: sustenta (evidence-verifier, 2026-11-23)
+Configuração candidata: nenhuma · Reversível: sim (port signature, no migration)
+
 ## Alternatives considered
 
 ### Alternative B — keep the tenant-wide authorization and declare the limit
