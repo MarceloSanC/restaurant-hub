@@ -22,6 +22,11 @@ bounded_context: scheduling
 (class P) that the sponsor delegated to the implementing session; it took the recommended
 option and records the reason below.
 
+**Partially supersedes ADR 4.4.0003** (which stays `accepted`, with a dated note in its
+`## Supersessão parcial`): the last item of its §Consequences › "Neutral / trade-offs
+accepted" (the lock does not close the boundary write skew) and the `save` order of its
+§Decision 2, which gains the neighbour step (Decision 4 below).
+
 ## Context
 
 The evaluation of a publish reads the schedule being edited **and** its two adjacent
