@@ -16,7 +16,7 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | `FOR UPDATE` no lookup de `link_login` (#68) | nada, sem vínculo concorrente | #68, aqui |
 | `FOR UPDATE` + guarda do vínculo no `delete` (#108) | nada, sem vínculo concorrente | #108, aqui |
 | `tenant_id` no `WHERE` do `DELETE` (#108) | nada, o lookup sob lock já o conferiu | #108, aqui |
-| condição sob `FOR UPDATE` em `update_enablement` (#206) | nada, sem corrida | #206, aqui |
+| condição sob `FOR NO KEY UPDATE` em `update_enablement` (#206) | nada, sem corrida | #206, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -1181,7 +1181,7 @@ def test_issue_108_delete_escreve_com_o_tenant_no_where(
 # ---------------------------------------------------------------------------
 #
 # `update_enablement` (L-JF7 revisada) só grava se a habilitação gravada ainda for
-# a que o chamador leu, e decide isso sob `FOR UPDATE`. Sem a condição, o estado
+# a que o chamador leu, e decide isso sob `FOR NO KEY UPDATE`. Sem a condição, o estado
 # final de uma corrida é o conjunto do segundo escritor — que nenhum teste de
 # estado sem concorrência distingue de uma escrita legítima.
 
