@@ -202,8 +202,8 @@ class PostgresEmployeeRepository:
             tenant_id,
             unit_id,
             employee_id,
-            lambda gravado: gravado.link_login(user_id),
-            lambda novo: {"user_id": novo.user_id},
+            lambda stored: stored.link_login(user_id),
+            lambda updated: {"user_id": updated.user_id},
         )
 
     def unlink_login(
@@ -220,8 +220,8 @@ class PostgresEmployeeRepository:
             tenant_id,
             unit_id,
             employee_id,
-            lambda gravado: gravado.unlink_login(expected_user_id, was_active=expected_active),
-            lambda novo: {"user_id": novo.user_id},
+            lambda stored: stored.unlink_login(expected_user_id, was_active=expected_active),
+            lambda updated: {"user_id": updated.user_id},
         )
 
     def relink_login(
@@ -238,8 +238,8 @@ class PostgresEmployeeRepository:
             tenant_id,
             unit_id,
             employee_id,
-            lambda gravado: gravado.relink_login(expected_user_id, user_id),
-            lambda novo: {"user_id": novo.user_id},
+            lambda stored: stored.relink_login(expected_user_id, user_id),
+            lambda updated: {"user_id": updated.user_id},
         )
 
     def deactivate(
@@ -256,10 +256,8 @@ class PostgresEmployeeRepository:
             tenant_id,
             unit_id,
             employee_id,
-            lambda gravado: gravado.deactivate_as_read(
-                expected_user_id, was_active=expected_active
-            ),
-            lambda novo: {"active": novo.active},
+            lambda stored: stored.deactivate_as_read(expected_user_id, was_active=expected_active),
+            lambda updated: {"active": updated.active},
         )
 
     def _transition_under_lock(
@@ -291,14 +289,14 @@ class PostgresEmployeeRepository:
             ).one_or_none()
             if row is None:
                 raise EmployeeNotFoundError(employee_id)
-            novo = transition(self._build_aggregates(connection, [row])[0])
+            updated = transition(self._build_aggregates(connection, [row])[0])
             connection.execute(
                 employees.update()
                 .where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
                 )
-                .values(**columns(novo))
+                .values(**columns(updated))
             )
 
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
