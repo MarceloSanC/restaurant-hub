@@ -194,3 +194,25 @@ por uma issue avulsa de identity, não pela 4.4 (concept 4.4 §7 D-TZ).
   consumidor.
 
 Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — o fuso é conferido na criação, não na reidratação
+
+**2026-11-23 — auditoria do PR #232 (issue #198).** A nota anterior diz que `Unit` recusa chave
+fora da base. Na entrega final, quem recusa é `Unit.create`, o caminho de quem cria a unidade. O
+construtor, por onde passa a reidratação (`row_to_unit`), não consulta a base.
+
+- **Por quê.** Pertencer a `zoneinfo.available_timezones()` não é propriedade do estado gravado.
+  Depende do `tzdata` e do sistema de arquivos do processo que lê. Um release do IANA que remova
+  um nome muda o resultado sem nenhuma escrita: o `US/Pacific-New` saiu na 2020b. Um processo
+  com outra base também muda. Com a conferência no construtor, essa linha levantaria no
+  `UnitRepository.find_by_id`, que o `AuthorizeActionUseCase` chama no passo 5, antes de comparar
+  o tenant da unidade. Toda rota que autoriza pela unidade responderia 422, com a chave no corpo,
+  inclusive a quem é de outro tenant. A autorização não lê o fuso.
+- **Quem trata a chave que não carrega.** O consumidor, no ponto de uso, como já previa a
+  §Decision 3 (a conversão de horário de parede em instante é dele). A `IdentityUnitFacade`
+  devolve a chave gravada.
+- **O que não muda.** A chave inválida na criação continua recusada com `InvalidTimezoneError`
+  (domínio, 422), e a Regra 1 dos mappers de identity continua valendo: a reidratação passa pelo
+  construtor.
+
+Nota *append-only*; o corpo acima não foi editado.

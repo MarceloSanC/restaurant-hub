@@ -528,9 +528,13 @@ id nem papel do dono) — fechar isso exigiria rever a unicidade global (idem, �
   lido por port pelos outros BCs
   ([ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md) §Decision). Existe desde
   a issue #198: coluna `units.timezone`, com o padrão gravado nas unidades anteriores a ela;
-  informado (opcional) na criação da unidade; chave fora da base IANA recusada pela entidade
-  (`InvalidTimezoneError`). Outro BC o lê pela `IdentityUnitFacade`, endereçada pelo par
-  (tenant, unidade): unidade de outro tenant responde como inexistente.
+  informado (opcional) na criação da unidade; chave fora da base IANA recusada na criação
+  (`Unit.create`, `InvalidTimezoneError`). A leitura não reconfere a chave: pertencer à base
+  depende do `tzdata` do processo, e uma chave gravada que saia dela não pode derrubar a
+  autorização da unidade ([ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md)
+  §"Nota — o fuso é conferido na criação, não na reidratação"). Outro BC o lê pela
+  `IdentityUnitFacade`, endereçada pelo par (tenant, unidade): unidade de outro tenant responde
+  como inexistente.
 - **Staff e scheduling estendem o vocabulário de permissões** por decisão registrada em ADR (§3.2);
   a teoria de quem faz o quê **dentro** deles vive nos seus docs
   ([`workforce.md`](../staff/workforce.md) §4; [`shift-scheduling.md`](../scheduling/shift-scheduling.md)
