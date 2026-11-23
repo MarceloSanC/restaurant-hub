@@ -7,6 +7,14 @@ antes do commit. Só então o escritor B parte, e o teste consulta `pg_locks` at
 `transactionid` da checagem de unicidade. Aí A é liberado. Tudo com tempo-limite: se B não
 aparecer esperando, o teste **falha** em vez de travar.
 
+**Issue #199 — write skew de fronteira (L-SC9).** Duas conexões publicam semanas adjacentes
+da mesma unidade, cada uma tendo lido a outra na versão 1: alocações da mesma pessoa no fim
+de domingo (22h–02h) e no começo de segunda (06h–10h) — 4h de descanso, violação que só
+existe somando as duas e que nenhuma das avaliações viu. A intercala: B espera o lock da
+unidade e, quando entra, encontra a vizinha numa versão que não é a lida ⇒ recusa, e a
+trilha fica com uma linha por escrita aceita e nenhuma pela recusa. O mesmo vale para a
+vaga que estava vazia na leitura e foi preenchida por um `add` concorrente.
+
 **CA11 — snapshot único nas três leituras.** Um gancho dispara, exatamente uma vez, um `save`
 comitado por outra conexão **entre** o `SELECT` da raiz e o das filhas. A leitura em curso
 tem de devolver o estado anterior inteiro (a versão e as faixas do mesmo estado); a
@@ -32,12 +40,21 @@ from restaurant_hub.features.scheduling.application.errors import (
     ScheduleVersionConflictError,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ExpectedNeighbours,
+    NeighbourVersion,
     ScheduleChange,
 )
 from restaurant_hub.features.scheduling.domain.entities.schedule import Schedule
+from restaurant_hub.features.scheduling.domain.value_objects.demand_quantity import (
+    DemandQuantity,
+)
 from restaurant_hub.features.scheduling.domain.value_objects.identifiers import (
+    AssignmentId,
+    EmployeeId,
+    JobFunctionId,
     ScheduleId,
     ShiftBandId,
+    ShiftDemandId,
     TenantId,
     UnitId,
 )
@@ -262,6 +279,77 @@ def test_em_unidades_diferentes_o_mesmo_id_de_escala_cai_na_pk_traduzida(
     assert isinstance(b.erro, IdentifierInUseError)
     assert (b.erro.id_type, b.erro.value) == ("ScheduleId", "s1")
     assert repo.find_by_id(_T, _U2, ScheduleId("s1")) is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #199 — duas publicações em semanas adjacentes (L-SC9)
+# ---------------------------------------------------------------------------
+
+
+def _com_ana(escala: Schedule, sufixo: str, dia: date, hora: int) -> Schedule:
+    """Uma faixa de 4h no `dia`, com a mesma pessoa ("ana") alocada."""
+    return (
+        escala.enable_band(ShiftBandId(f"f{sufixo}"), _faixa(dia, hora))
+        .declare_demand(
+            ShiftDemandId(f"d{sufixo}"),
+            ShiftBandId(f"f{sufixo}"),
+            JobFunctionId("c"),
+            DemandQuantity(1),
+        )
+        .assign(AssignmentId(f"a{sufixo}"), ShiftDemandId(f"d{sufixo}"), EmployeeId("ana"))
+    )
+
+
+def test_publicacoes_simultaneas_em_semanas_adjacentes_a_segunda_recusa(
+    repo: PostgresScheduleRepository, banco_limpo: Engine
+) -> None:
+    s1, s2 = _escala("s1"), _escala("s2", _SEG + timedelta(days=7))
+    repo.add(s1, _mudanca(None))
+    repo.add(s2, _mudanca(None))
+    # O que cada avaliação leu: a outra escala, vazia, na versão 1.
+    lida_por_a = ExpectedNeighbours(previous=None, following=NeighbourVersion(s2.id, 1))
+    lida_por_b = ExpectedNeighbours(previous=NeighbourVersion(s1.id, 1), following=None)
+    domingo_noite = _com_ana(s1, "1", _SEG + timedelta(days=6), 22)  # 22h–02h
+    segunda_cedo = _com_ana(s2, "2", _SEG + timedelta(days=7), 6)  # 06h–10h
+    a, b = _intercalar(
+        banco_limpo,
+        "UPDATE schedules",
+        lambda: repo.save(domingo_noite, 1, lida_por_a, _mudanca(1)),
+        lambda: repo.save(segunda_cedo, 1, lida_por_b, _mudanca(1)),
+        "advisory",
+    )
+    assert a.erro is None
+    assert isinstance(b.erro, ScheduleVersionConflictError)
+    assert (b.erro.changed_neighbour_id, b.erro.current_version) == ("s1", 1)
+    # Uma linha por escrita aceita; nenhuma pela recusa.
+    assert len(read_trail(banco_limpo, "s1")) == 2  # noqa: PLR2004
+    assert len(read_trail(banco_limpo, "s2")) == 1
+    gravada_b = repo.find_by_id(_T, _U1, ScheduleId("s2"))
+    assert gravada_b is not None
+    assert (gravada_b.version, gravada_b.bands) == (1, ())
+
+
+def test_vaga_vazia_na_leitura_preenchida_por_add_concorrente_recusa_o_save(
+    repo: PostgresScheduleRepository, banco_limpo: Engine
+) -> None:
+    s1 = _escala("s1")
+    repo.add(s1, _mudanca(None))
+    domingo_noite = _com_ana(s1, "1", _SEG + timedelta(days=6), 22)
+    # A cria a semana seguinte e para antes do commit; B salva s1 tendo lido a vaga vazia.
+    a, b = _intercalar(
+        banco_limpo,
+        "INSERT INTO schedules",
+        lambda: repo.add(_escala("s2", _SEG + timedelta(days=7)), _mudanca(None)),
+        lambda: repo.save(domingo_noite, 1, NO_NEIGHBOURS, _mudanca(1)),
+        "advisory",
+    )
+    assert a.erro is None
+    assert isinstance(b.erro, ScheduleVersionConflictError)
+    assert (b.erro.changed_neighbour_id, b.erro.current_version) == ("s2", 1)
+    assert len(read_trail(banco_limpo, "s1")) == 1
+    gravada = repo.find_by_id(_T, _U1, ScheduleId("s1"))
+    assert gravada is not None
+    assert gravada.version == 1
 
 
 # ---------------------------------------------------------------------------
