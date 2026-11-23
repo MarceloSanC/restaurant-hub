@@ -1505,3 +1505,56 @@ def test_as_leis_da_stage_3_10_estao_declaradas_no_port(
     documentacao = getattr(EmployeeRepository, metodo).__doc__ or ""
     assert lei in documentacao
     assert "ADR 3.10.0001" in documentacao
+
+
+# ---------------------------------------------------------------------------
+# Issue #242 — `L-REACT`: a recontratação tem escrita própria do estado ativo
+# ---------------------------------------------------------------------------
+#
+# A forma de L-DEACT sem estado esperado: endereço, depois `Employee.reactivate`
+# sobre o gravado, e só `active` muda. A metade concorrente é conduta, em
+# `test_staff_conduct.py`.
+
+
+@pytest.mark.parametrize("login", [_LOGIN, None], ids=["vinculado", "sem_vinculo"])
+def test_l_react_recontrata_e_nenhum_outro_campo(
+    repos: RepositoriosDeStaff, login: UserId | None
+) -> None:
+    """O vínculo gravado fica como está: recontratar não é vincular nem desvincular."""
+    _gravado(repos, user_id=login, active=False)
+
+    repos.employees.reactivate(_A, _U1, _E1)
+
+    relido = _relido(repos)
+    assert relido.active is True
+    assert relido.user_id == login
+    assert _campos(dataclasses.replace(relido, user_id=None)) == _campos(_registro_completo())
+
+
+@_FORA_DO_ENDERECO
+def test_l_react_fora_do_endereco_e_not_found_e_nao_grava(
+    repos: RepositoriosDeStaff, tenant: TenantId, unidade: UnitId, funcionario: EmployeeId
+) -> None:
+    _gravado(repos, user_id=_LOGIN, active=False)
+
+    with pytest.raises(EmployeeNotFoundError):
+        repos.employees.reactivate(tenant, unidade, funcionario)
+
+    assert _estado(repos) == (_LOGIN, False)
+
+
+def test_l_react_gravado_ja_ativo_e_idempotente(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=_LOGIN, active=True)
+
+    repos.employees.reactivate(_A, _U1, _E1)
+
+    assert _estado(repos) == (_LOGIN, True)
+    assert _campos(dataclasses.replace(_relido(repos), user_id=None)) == _campos(
+        _registro_completo()
+    )
+
+
+def test_a_lei_da_issue_242_esta_declarada_no_port() -> None:
+    documentacao = EmployeeRepository.reactivate.__doc__ or ""
+    assert "L-REACT" in documentacao
+    assert "#242" in documentacao

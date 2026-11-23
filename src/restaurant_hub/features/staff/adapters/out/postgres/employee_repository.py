@@ -260,6 +260,16 @@ class PostgresEmployeeRepository:
             lambda updated: {"active": updated.active},
         )
 
+    def reactivate(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
+        """`L-REACT` — a forma de `deactivate`, com `Employee.reactivate` (issue #242)."""
+        self._transition_under_lock(
+            tenant_id,
+            unit_id,
+            employee_id,
+            lambda stored: stored.reactivate(),
+            lambda updated: {"active": updated.active},
+        )
+
     def _transition_under_lock(
         self,
         tenant_id: TenantId,
@@ -270,8 +280,8 @@ class PostgresEmployeeRepository:
     ) -> None:
         """Trava a linha, aplica a transição do domínio ao gravado, grava as colunas dela.
 
-        A forma das escritas próprias do vínculo e do desligamento (ADR 0.0.0010
-        decisão 2; ADR 3.10.0001 §2): `SELECT … FOR UPDATE` no endereço de três
+        A forma das escritas próprias do vínculo e do estado ativo (ADR 0.0.0010
+        decisão 2; ADR 3.10.0001 §2; issue #242):`SELECT … FOR UPDATE` no endereço de três
         partes, agregado remontado sob o lock (em `READ COMMITTED` — ver
         `link_login`), a transição do **domínio** como única casa das guardas, e um
         `UPDATE` que grava só as colunas que a lei nomeia. Endereço vazio ⇒

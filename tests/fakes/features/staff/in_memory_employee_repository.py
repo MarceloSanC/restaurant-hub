@@ -171,6 +171,12 @@ class InMemoryEmployeeRepository:
             expected_user_id, was_active=expected_active
         )
 
+    def reactivate(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
+        """`L-REACT` — endereço, depois a transição do domínio sobre o gravado (#242)."""
+        self._store.record("employees.reactivate")
+        gravado = self._gravado_no_endereco(tenant_id, unit_id, employee_id)
+        self._store.employees[employee_id] = gravado.reactivate()
+
     def _gravado_no_endereco(
         self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId
     ) -> Employee:

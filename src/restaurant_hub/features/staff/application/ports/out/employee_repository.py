@@ -262,6 +262,26 @@ class EmployeeRepository(Protocol):
         """
         ...
 
+    def reactivate(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
+        """Recontrata o registro — escrita própria do estado ativo (issue #242).
+
+        **`L-REACT` — a única escrita que liga `active`.** Com `deactivate`
+        (`L-DEACT`), é uma das duas escritas do estado depois que o registro existe:
+        `update` não o grava. Ordem de checagem normativa:
+
+        1. inexistente **no endereço** `(tenant_id, unit_id, id)` ⇒
+           `EmployeeNotFoundError`;
+        2. depois `Employee.reactivate()` sobre o **gravado**.
+
+        Não confere estado lido: a recontratação não decide nada sobre o vínculo nem
+        sobre o estado lido (nenhuma regra depende deles, ao contrário do fim de
+        vínculo), e o vínculo gravado fica como está. Idempotente no valor: o gravado
+        já ativo continua ativo sem erro. Em erro, nada é gravado; no sucesso só
+        `active` muda — o resto do agregado não é regravado a partir de uma leitura
+        possivelmente velha.
+        """
+        ...
+
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """Remove o registro **definitivamente** — o oposto de desligar.
 

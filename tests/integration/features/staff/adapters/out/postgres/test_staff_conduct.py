@@ -1796,3 +1796,47 @@ def test_stage_3_10_escrita_condicional_rele_o_vinculo_sob_o_lock(
     assert (relido.user_id, relido.active) == (_LOGIN_CONCORRENTE, True), (
         "a escrita da Stage gravou sobre o vínculo concorrente"
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #242 — o estado ativo tem escrita própria
+# ---------------------------------------------------------------------------
+
+
+def _desligado(motor: Engine) -> None:
+    """Semeia `e1` e o desliga pelo port (L-DEACT), sem vínculo."""
+    _semear(motor)
+    PostgresEmployeeRepository(motor).deactivate(
+        _A, _U1, _E1, expected_user_id=None, expected_active=True
+    )
+
+
+def test_issue_242_reactivate_bloqueia_no_lookup_e_nao_depois(
+    motores: Callable[[], Engine],
+) -> None:
+    """`L-REACT` decide sob o lock da linha — a forma de `link_login` e de `deactivate`.
+
+    Com a linha presa por outra transação, `reactivate` para no **primeiro**
+    statement, o `SELECT … FOR UPDATE`, e nada completa antes: a transição do
+    domínio roda sobre o gravado que nenhuma escrita concorrente está mudando.
+    """
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _desligado(motor_adapter)
+    repositorio = PostgresEmployeeRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("SELECT unit_id FROM employees WHERE id = :e AND tenant_id = :t FOR UPDATE"),
+            {"e": _E1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            repositorio.reactivate(_A, _U1, _E1)
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados, "o adapter nem chegou a emitir statement"
+    assert "FOR UPDATE" in tentados[-1], "o adapter bloqueou em outro statement"
+    assert concluidos == [], "algum statement completou antes do lock"
