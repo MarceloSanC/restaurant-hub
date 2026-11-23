@@ -17,6 +17,14 @@ Dois lados, cada um com o seu controle:
    `tmp_path`, a unidade de cada um é desfeita (`with ...transaction():` vira
    `if True:`) — e a regra 10 reprova cada um, nomeando `self._tokens.add`. Se a
    escrita do token tivesse saído do alcance da regra, a cópia sem unidade passaria.
+
+**Limite do lado 1** (auditoria da #205): o detector lê nomes na anotação. Não vê
+um repositório que chegue embrulhado — anotado como `Any`, como `Callable[...]`
+(o `self._tokens.add` passado como função), dentro de um objeto de contexto ou por
+closure. Para os cinco emissores de hoje o lado 2 fecha o buraco por propriedade, e
+não por forma: qualquer embrulho tira o `self._tokens.add` do corpo do use case, e
+a cópia sem unidade deixa de reprovar (medido na auditoria com o método ligado a
+um nome local). Um emissor novo só fica coberto se entrar em `_EMISSORES`.
 """
 
 import ast
