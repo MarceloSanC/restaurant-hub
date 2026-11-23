@@ -1886,6 +1886,19 @@ skills_hint: [repository-pattern, composition-root]
 > traz `changed_neighbour_id`, e a escala editada não mudou, então reenviar o mesmo lote é válido
 > (ADR 4.4.0005 §Decision 3).
 
+> Nota (2026-11-23): a issue #209 fechou fora de Stage
+> ([ADR 4.3.0005](./adr/4_3_0005-demand-accepts-only-functions-enabled-in-the-unit.md)): a demanda
+> de uma unidade só aceita função habilitada nela, e o lote que declara a demanda ou aumenta o `N`
+> de função que não vale na unidade recusa com `JobFunctionNotEnabledInUnitError` (raiz
+> `SchedulingError`). **A 4.5 herda:** o status e o corpo dessa recusa no mapa de erros de
+> scheduling (o nome repete o erro de staff, cada um no seu BC e no seu mapa); e como a borda
+> sinaliza a demanda gravada antes de staff estreitar a função, que fica, não bloqueia edição
+> alheia e aparece como demanda descoberta (D1). **O Step 5 herda:** o auto-fill nunca cobre essa
+> demanda, que pesa na cobertura e nas "vagas não preenchíveis" até a gerente reduzir ou retirar.
+> **Limite declarado:** a corrida entre BCs (scheduling lê a habilitação, staff estreita, o publish
+> grava) não é versionada pelo `save` e termina no estado tolerado pela D1 (ADR 4.3.0005
+> §Consequences).
+
 #### Stage 4.5 — `4.5-scheduling-http`
 
 **Descrição humana:** endpoints do editor (demanda, alocações, avaliação ao vivo, publicar), calendário dia/semana/mês, escalas anteriores e "minha escala" (RBAC: funcionário só vê a própria); e2e do fluxo completo.
