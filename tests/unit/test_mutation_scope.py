@@ -864,9 +864,14 @@ def test_a_fixture_da_issue_84_nao_e_citacao_e_a_leitura_real_continua(
     com ele, não. Com `.claude/hooks` fora da cópia, a mesma varredura ainda
     acusa o `test_git_guard.py` — o caso da #87. O nome do diretório não aparece
     como literal aqui: este arquivo também é varrido.
+
+    Desde a issue #244 o diretório do devcontainer vai no `also_copy` (o
+    `test_dockerfile.py` o lê de verdade); o controle o tira da cópia, como tira
+    `.claude/hooks`, para que a fixture volte a apontar arquivo fora dela.
     """
     fontes, rastreados, copia = _repositorio()
-    sem_hooks = [entrada for entrada in copia if entrada != ".claude/hooks"]
+    devcontainer = "." + "devcontainer"
+    sem_hooks = [entrada for entrada in copia if entrada not in {".claude/hooks", devcontainer}]
 
     achados = _leituras_fora_da_copia(fontes, rastreados, sem_hooks)
 

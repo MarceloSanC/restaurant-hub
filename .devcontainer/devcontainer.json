@@ -5,7 +5,7 @@
   "workspaceFolder": "/app",
   "shutdownAction": "stopCompose",
   "remoteUser": "root",
-  "postCreateCommand": "uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e \".[dev]\"",
+  "postCreateCommand": "uv sync --locked --extra dev",
   "customizations": {
     "vscode": {
       "extensions": [

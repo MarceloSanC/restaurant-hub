@@ -252,6 +252,11 @@ also_copy = [
     ".gitattributes",
     "CLAUDE.md",
     "README.md",
+    # `test_dockerfile.py` lê o Dockerfile, o devcontainer e cita o
+    # `.dockerignore` no filtro de caminhos do workflow (issue #244).
+    ".devcontainer/",
+    "Dockerfile",
+    ".dockerignore",
 ]
 # `test_check_layout.py` fica de fora da corrida, e o motivo é estrutural, não
 # conveniência.

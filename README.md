@@ -81,7 +81,7 @@ extensão **Dev Containers** do VS Code.
 
 1. Abra a pasta do projeto no VS Code.
 2. `Ctrl+Shift+P` → `Dev Containers: Reopen in Container`.
-3. VS Code sobe o `docker-compose.yml`, abre o IDE dentro da stage `builder` do Dockerfile (com `uv`, `ruff`, `mypy`, `pytest` já instalados) e roda `make setup` automaticamente via `postCreateCommand`.
+3. VS Code sobe o `docker-compose.yml`, abre o IDE dentro da stage `builder` do Dockerfile (com `uv`, `ruff`, `mypy`, `pytest` já instalados) e reinstala o venv do volume pelo lock (`uv sync --locked --extra dev`) via `postCreateCommand`.
 4. Use o terminal integrado para os comandos abaixo (`make check`, `make run`, etc.).
 
 ### Caminho C — Docker Compose direto (sem devcontainer)
