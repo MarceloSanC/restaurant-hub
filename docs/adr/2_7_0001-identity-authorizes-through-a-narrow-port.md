@@ -5,7 +5,7 @@ when-use: Reference before adding an identity use case that acts on behalf of an
 keywords: [adr, identity, authorization, action-authorizer, port, invite-owner, facade, platform-admin, fail-closed, defense-in-depth]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-09
+updated_at: 2026-11-22
 adr_id: "2.7.0001"
 decision: 'The identity use cases that act for an actor carry actor_id: UserId first in their command, depend on a narrow ActionAuthorizer port that AuthorizeActionUseCase satisfies, and open execute with one authorize_requirement call that applies the boundary leak translations (the HTTP guard delegates to the same function); the platform owner invitation becomes InviteOwnerUseCase; IdentityFacade.provision_account refuses any role but employee.'
 context_stage: 2.7-identity-application-authorization
@@ -163,3 +163,44 @@ the rule would silently leave the set of access modules that mutation testing me
 - [ADR 0.0.0018](./0_0_0018-restaurant-owner-is-provisioned-by-invitation.md)
 - [LAYOUT](../LAYOUT.md) §5, §7
 - Concept [2.7](../stages/2.7-identity-application-authorization/concept.md)
+
+## Nota — o resíduo de `ProvisionAccountUseCase` fechado no use case
+
+**2026-11-22 — issue [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211).** A
+última frase de §Decision 5 (*"`ProvisionAccountUseCase` keeps accepting any role"*), a rejeição
+de §Alternative E e o item *"Residual"* de §Consequences › "Negative" deixam de valer. O use case
+declara `PROVISIONABLE_ROLES` (hoje `{employee}`) em `provision_account.py` e recusa todo papel
+fora dele como primeira instrução de `ProvisionAccountUseCase.execute`, antes de qualquer porta,
+com a mesma `RoleNotProvisionableError` da fachada. Quem chama o use case direto, sem a fachada,
+não cria mais `platform_admin` nem `owner`, `manager` ou `hr`.
+
+O que muda em relação à Alternative E: ela foi rejeitada porque o command "models any role" e
+porque a restrição seria sobre o que a entrada entre contextos serve. O command continua modelando
+qualquer papel. Mas o use case também cria conta sem autorizar, então ele é, ele mesmo, uma entrada
+que não autoriza, e o alcance (CA14) protegia só contra quem importa pelos idiomas que a varredura
+vê. O resto desta decisão continua valendo. A fachada mantém a sua checagem, que é a primeira
+instrução de `IdentityFacade.provision_account` e vem antes da conversão do e-mail, e as faixas HTTP
+não mudam. Para as duas cópias da regra não divergirem, `test_facade.py` ›
+`test_a_fachada_aceita_exatamente_os_papeis_que_o_use_case_aceita` as compara papel a papel sobre o
+enum. `provision_account.py` entrou no escopo `only_mutate` do teste de mutação.
+
+```
+[decision] P delegado — fechar o papel no use case (Recomendada) em vez de registrar o resíduo como
+aceito, motivo: critério do sponsor (fail-closed em código de acesso; esqueleto escalável com
+implementação mínima).
+```
+
+```
+[decision:C] #211-1 — forma do fechamento
+Escolha: conjunto aceito declarado no use case (PROVISIONABLE_ROLES), checado primeiro · Alternativas: papel fixo no command (sem ProvisionAccountCommand.role, literal no use case, como InviteOwnerUseCase com Role.OWNER); resíduo aceito · Degrau (C): 2 descarta o resíduo; 4 decide entre o conjunto e o papel fixo
+Base: §Decision 5 › "ProvisionAccountUseCase keeps accepting any role"; §Consequences › "Residual"; ADR 0.0.0020 §Inventory › "This exclusion leaves a known residual"
+Verificado: completude por decision-reviewer (2026-11-22)
+Configuração candidata: nenhuma · Reversível: sim
+```
+
+O degrau 4 decide porque o conjunto não muda a forma do command nem dos seus consumidores (fachada,
+contrato de staff, integração). Alargar o conjunto continua sendo decisão de ADR: cada papel a mais
+é conta privilegiada criada sem "não se concede o que não se detém". O ramo `platform_admin` com
+unidades do use case fica, inalcançável enquanto o conjunto não incluir `platform_admin`, pela ordem
+verbatim de `InviteUserUseCase` e pela mesma razão do concept 2.7 D6. Nota *append-only*; o corpo
+acima não foi editado.

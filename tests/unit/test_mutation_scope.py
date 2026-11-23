@@ -14,8 +14,8 @@ Achado por revisão, não por sintoma — que é o modo de falha que este arquiv
 existe para tornar barulhento.
 
 **Lista explícita + asserção de que ela cobre a configuração**, o par de sempre.
-A lista aqui é a dos módulos que decidem acesso (os quatro da issue e o port da
-Stage 2.7); a asserção seguinte cobra
+A lista aqui é a dos módulos que decidem acesso (os quatro da issue, o port da
+Stage 2.7 e o provisionamento de conta da issue #211); a asserção seguinte cobra
 o `pyproject.toml` contra ela nos dois sentidos, para que nem um módulo saia do
 escopo por edição distraída, nem um quinto entre sem que a issue que o justifica
 seja escrita neste arquivo.
@@ -37,9 +37,9 @@ pytestmark = pytest.mark.unit
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
-# Os módulos que decidem acesso: os quatro que a issue #45 nomeia e o port da
-# Stage 2.7. Um novo entra aqui com a justificativa ao lado — e só então no
-# `pyproject.toml`.
+# Os módulos que decidem acesso: os quatro que a issue #45 nomeia, o port da
+# Stage 2.7 e o provisionamento de conta (issue #211). Um novo entra aqui com a
+# justificativa ao lado — e só então no `pyproject.toml`.
 _MODULOS_DE_ACESSO = frozenset(
     {
         # Os quatro passos do guard (ADR 2.2.0002).
@@ -57,6 +57,11 @@ _MODULOS_DE_ACESSO = frozenset(
         # declarem o mesmo requisito (ADR 2.7.0001). Sem esta entrada a regra
         # deixaria, sem ninguém notar, o conjunto que a mutação mede.
         "src/restaurant_hub/features/identity/application/ports/out/action_authorizer.py",
+        # Os papéis que o provisionamento de conta cria sem autorizar
+        # (`PROVISIONABLE_ROLES`), recusados como primeira instrução de `execute`
+        # (issue #211): o conjunto decide qual conta privilegiada pode nascer por
+        # uma entrada que não autoriza — o mesmo critério de entrada dos demais.
+        "src/restaurant_hub/features/identity/application/use_cases/provision_account.py",
     }
 )
 
