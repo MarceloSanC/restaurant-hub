@@ -234,8 +234,15 @@ tabela —, e os quatro use cases da allowlist são os mesmos. Os auxiliares de 
 `_invitation` recebem port só para ler, ou para enviar e-mail, que o §3 deixa fora da contagem
 (o `EmailSender` não é repositório nem gateway declarado).
 
+A auditoria do PR #257 plantou o auxiliar por cada caminho e fechou três que escapavam: método
+estático ou de classe de um módulo de `use_cases/` (entra como `C.f`); a função que escreve citada
+sem ser chamada ali (`functools.partial`, passada como `Callable`, alias local `g = f`), que conta
+como a escrita, fail-closed; e o repositório entregue por parâmetro a um método da própria classe
+do use case (`self._salvar(self._coisas)`), que conta como a escrita pelo atributo.
+
 **Pontos cegos que continuam declarados** (nenhum tem caso hoje): parâmetro sem anotação (o mypy
-strict o barra em `src/`); repositório dentro de objeto de contexto, num alias local, ou entregue
-como método ligado (`Callable`, o limite que a auditoria da #205 declarou no guarda dela); `getattr`
-dinâmico; função fora de `use_cases/`. A allowlist do §5 não mudou. Nota *append-only*; o corpo
-acima não foi editado.
+strict o barra em `src/`), inclusive `lambda`; repositório dentro de objeto de contexto (atributo
+ou método de instância dele), num alias local, ou entregue como método ligado (`Callable`, o limite
+que a auditoria da #205 declarou no guarda dela); `getattr` dinâmico; função fora de `use_cases/`
+ou fora do nível do módulo. A allowlist do §5 não mudou. Nota *append-only*; o corpo acima não foi
+editado.
