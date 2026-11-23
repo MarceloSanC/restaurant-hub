@@ -267,3 +267,23 @@ def test_troca_concorrente_e_recusada_e_o_gravado_e_o_do_primeiro() -> None:
         _trocar(fakes, gateway, employees=_TrocaConcorrente(fakes.store))
 
     assert _relido(fakes).user_id == UserId("do-primeiro")
+
+
+@pytest.mark.parametrize("onde", ["consulta_de_papel", "revogacao"])
+def test_falha_de_identity_na_regra_do_login_antigo_sobe_crua_e_nada_e_gravado(
+    onde: str,
+) -> None:
+    """A regra roda antes da escrita: a falha deixa o login antigo gravado."""
+    fakes, gateway, antigo = _arranjo()
+    falha = RuntimeError("identity fora")
+    if onde == "revogacao":
+        gateway.fail_revoke_with = falha
+    else:
+        gateway.fail_role_query_with = falha
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _trocar(fakes, gateway)
+
+    assert excinfo.value is falha
+    assert _relido(fakes).user_id == antigo
+    assert "employees.relink_login" not in fakes.store.calls

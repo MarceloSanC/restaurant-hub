@@ -185,8 +185,11 @@ async def test_ca2_conta_de_outro_tenant_e_platform_admin_recebem_o_mesmo_404(
     gerente = auth(cenario.manager)
     unidade = cenario.unidade_a
     registro = await _criar_funcionario(client, gerente, unidade, f"Registro {metodo}")
+    atual = None
+    sessao_atual: dict = {}
     if metodo == "PUT":
-        await _criar_conta(client, cenario, "atual@cantina.com", "employee", [unidade])
+        atual = await _criar_conta(client, cenario, "atual@cantina.com", "employee", [unidade])
+        sessao_atual = await fazer_login(client, "atual@cantina.com")
         vinculado = await client.post(
             _url(unidade, registro), json={"email": "atual@cantina.com"}, headers=gerente
         )
@@ -207,7 +210,10 @@ async def test_ca2_conta_de_outro_tenant_e_platform_admin_recebem_o_mesmo_404(
     assert {r.json()["type"] for r in respostas.values()} == {"staff_error"}
     relido = await client.get(f"{API}/units/{unidade}/employees", headers=gerente)
     (item,) = [i for i in relido.json() if i["id"] == registro]
-    assert item["user_id"] is None if metodo == "POST" else item["user_id"] is not None
+    assert item["user_id"] == atual, "a recusa mudou o vínculo"
+    if metodo == "PUT":
+        status, _ = await _refresh(client, sessao_atual)
+        assert status == HTTPStatus.OK, "a recusa revogou a sessão do login atual"
 
 
 async def test_ca12_a_conta_ja_vinculada_a_outro_registro_da_unidade_e_409(
@@ -229,3 +235,32 @@ async def test_ca12_a_conta_ja_vinculada_a_outro_registro_da_unidade_e_409(
 
     assert resposta.status_code == HTTPStatus.CONFLICT, resposta.text
     assert "outro registro da unidade" in resposta.json()["detail"]
+
+
+async def test_ca5_desvincular_registro_desligado_nao_revoga_e_libera_a_remocao(
+    client: AsyncClient, cenario: Cenario
+) -> None:
+    """R8: o vínculo de um desligado é história; desvinculá-lo não toca identity."""
+    gerente = auth(cenario.manager)
+    unidade = cenario.unidade_a
+    registro = await _criar_funcionario(client, gerente, unidade, "Desligada")
+    await _criar_conta(client, cenario, "desligada@cantina.com", "employee", [unidade])
+    vinculado = await client.post(
+        _url(unidade, registro), json={"email": "desligada@cantina.com"}, headers=gerente
+    )
+    assert vinculado.status_code == HTTPStatus.OK, vinculado.text
+    desligado = await client.post(
+        f"{API}/units/{unidade}/employees/{registro}/termination", headers=gerente
+    )
+    assert desligado.status_code == HTTPStatus.OK, desligado.text
+    # A pessoa loga de novo depois do desligamento (a conta continua existindo).
+    sessao = await fazer_login(client, "desligada@cantina.com")
+
+    desvinculado = await client.delete(_url(unidade, registro), headers=gerente)
+
+    assert desvinculado.status_code == HTTPStatus.OK, desvinculado.text
+    assert (desvinculado.json()["user_id"], desvinculado.json()["active"]) == (None, False)
+    status, _ = await _refresh(client, sessao)
+    assert status == HTTPStatus.OK, "desvincular um desligado revogou as sessões"
+    removido = await client.delete(f"{API}/units/{unidade}/employees/{registro}", headers=gerente)
+    assert removido.status_code == HTTPStatus.NO_CONTENT, removido.text
