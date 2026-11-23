@@ -256,7 +256,7 @@ class PostgresEmployeeRepository:
             tenant_id,
             unit_id,
             employee_id,
-            lambda stored: stored.deactivate_as_read(expected_user_id, was_active=expected_active),
+            lambda stored: stored.deactivate(),
             lambda updated: {"active": updated.active},
         )
 
