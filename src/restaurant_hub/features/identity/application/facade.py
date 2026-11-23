@@ -98,6 +98,7 @@ from restaurant_hub.features.identity.application.use_cases.get_unit_timezone im
     GetUnitTimezoneUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
+    PROVISIONABLE_ROLES,
     ProvisionAccountUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.revoke_all_sessions import (
@@ -191,17 +192,18 @@ class IdentityFacade:
 
         Raises:
             InvalidRoleError: `role` desconhecido.
-            RoleNotProvisionableError: `role` válido, mas não `employee` — a
-                fachada cria contas sem autorizar e só serve o login de
-                funcionário (ADR 2.7.0001 §Decision 5). Checado primeiro, antes do
-                e-mail e de qualquer porta.
+            RoleNotProvisionableError: `role` válido, mas fora de
+                `PROVISIONABLE_ROLES` (hoje só `employee`) — a fachada cria contas
+                sem autorizar e só serve o login de funcionário (ADR 2.7.0001
+                §Decision 5). Checado primeiro, antes do e-mail e de qualquer
+                porta; o conjunto é o do use case, uma cópia só (issue #234).
             InvalidEmailError: `email` malformado (inclusive byte NUL).
             EmailAlreadyRegisteredError: e-mail já usado em qualquer tenant.
             RestaurantNotFoundError, UnitNotFoundError, CrossTenantError,
             PlatformAdminMembershipError: como no use case — sem tradução.
         """
         papel = Role.from_string(role)
-        if papel is not Role.EMPLOYEE:
+        if papel not in PROVISIONABLE_ROLES:
             raise RoleNotProvisionableError(role)
 
         result = self._provision_account.execute(
