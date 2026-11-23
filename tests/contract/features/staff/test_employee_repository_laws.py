@@ -28,6 +28,7 @@ from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     EmployeeRelocationError,
     JobFunctionNotFoundError,
+    LoginAlreadyLinkedInUnitError,
     StaffApplicationError,
 )
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
@@ -1488,6 +1489,152 @@ def test_l_relink_user_id_vazio_e_recusado_e_nada_e_gravado(
         repos.employees.relink_login(_A, _U1, _E1, expected_user_id=_LOGIN, user_id=UserId(vazio))
 
     assert _estado(repos) == (_LOGIN, True)
+
+
+# Um login por unidade nas escritas do vínculo (issue #241, ADR 0.0.0025)
+#
+# L-LINK e L-RELINK recusam, por último — depois do endereço e das guardas do
+# domínio —, o login que já está em **outro** registro do mesmo tenant e da mesma
+# unidade, ativo ou desligado (ADR 3.10.0001 §6). No Postgres é o índice único
+# parcial `uq_employees_tenant_unit_user`; no fake, a leitura do store. A metade
+# concorrente (dois vínculos ao mesmo tempo) é conduta, em `test_staff_conduct.py`
+# (`test_issue_241_*`).
+
+_E3 = EmployeeId("e3")
+
+
+def _dois_registros_na_unidade(repos: RepositoriosDeStaff, *, outro_ativo: bool = True) -> None:
+    """`e1` sem vínculo e `e2`, da mesma unidade, vinculado a `_OUTRO`."""
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_funcionario())
+    repos.employees.add(_funcionario(id=_E2, name="Bruno"))
+    repos.employees.link_login(_A, _U1, _E2, _OUTRO)
+    if not outro_ativo:
+        repos.employees.deactivate(_A, _U1, _E2, expected_user_id=_OUTRO, expected_active=True)
+
+
+def _vinculo_de(repos: RepositoriosDeStaff, funcionario: EmployeeId) -> UserId | None:
+    registro = repos.employees.find_by_id(_A, _U1, funcionario)
+    assert registro is not None
+    return registro.user_id
+
+
+@pytest.mark.parametrize("outro_ativo", [True, False], ids=["outro_ativo", "outro_desligado"])
+def test_l_link_login_de_outro_registro_da_unidade_e_recusado_e_nada_e_gravado(
+    repos: RepositoriosDeStaff, outro_ativo: bool
+) -> None:
+    """O desligado conta, como na regra: recontratá-lo daria dois vínculos ativos."""
+    _dois_registros_na_unidade(repos, outro_ativo=outro_ativo)
+
+    with pytest.raises(LoginAlreadyLinkedInUnitError, match="'e1'"):
+        repos.employees.link_login(_A, _U1, _E1, _OUTRO)
+
+    assert _vinculo_de(repos, _E1) is None
+    assert _vinculo_de(repos, _E2) == _OUTRO
+
+
+def test_l_link_o_mesmo_login_em_outra_unidade_e_em_outro_tenant_e_aceito(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Um por **unidade** (workforce §3.1, §3.7): a regra não atravessa unidade nem tenant."""
+    vizinhos = _com_vizinhos_do_e1(repos)
+    for tenant, unidade, funcionario in vizinhos[1:]:
+        repos.employees.link_login(tenant, unidade, funcionario, _LOGIN)
+
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    assert _vinculo_de(repos, _E1) == _LOGIN
+    for tenant, unidade, funcionario in vizinhos[1:]:
+        vizinho = repos.employees.find_by_id(tenant, unidade, funcionario)
+        assert vizinho is not None
+        assert vizinho.user_id == _LOGIN
+
+
+def test_l_link_registro_ja_vinculado_precede_um_login_por_unidade(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """As guardas do domínio vêm antes: o erro é o do registro, não o da unidade."""
+    _dois_registros_na_unidade(repos)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    with pytest.raises(EmployeeAlreadyHasLoginError):
+        repos.employees.link_login(_A, _U1, _E1, _OUTRO)
+
+    assert _vinculo_de(repos, _E1) == _LOGIN
+
+
+def test_l_link_registro_desligado_precede_um_login_por_unidade(
+    repos: RepositoriosDeStaff,
+) -> None:
+    _dois_registros_na_unidade(repos)
+    repos.employees.add(_funcionario(id=_E3, name="Carla", active=False))
+
+    with pytest.raises(TerminatedEmployeeLoginError):
+        repos.employees.link_login(_A, _U1, _E3, _OUTRO)
+
+    assert _vinculo_de(repos, _E3) is None
+
+
+@pytest.mark.parametrize("outro_ativo", [True, False], ids=["outro_ativo", "outro_desligado"])
+def test_l_relink_login_novo_de_outro_registro_da_unidade_e_recusado_e_o_antigo_fica(
+    repos: RepositoriosDeStaff, outro_ativo: bool
+) -> None:
+    _dois_registros_na_unidade(repos, outro_ativo=outro_ativo)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    with pytest.raises(LoginAlreadyLinkedInUnitError, match="'e1'"):
+        repos.employees.relink_login(_A, _U1, _E1, expected_user_id=_LOGIN, user_id=_OUTRO)
+
+    assert _estado(repos) == (_LOGIN, True)
+    assert _vinculo_de(repos, _E2) == _OUTRO
+
+
+def test_l_relink_login_trocado_precede_um_login_por_unidade(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """O login gravado diferente do lido responde antes do índice da unidade."""
+    _dois_registros_na_unidade(repos)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    with pytest.raises(EmployeeLoginChangedError):
+        repos.employees.relink_login(
+            _A, _U1, _E1, expected_user_id=UserId("login-lido"), user_id=_OUTRO
+        )
+
+    assert _estado(repos) == (_LOGIN, True)
+
+
+def test_l_relink_para_o_proprio_login_nao_conflita_consigo(repos: RepositoriosDeStaff) -> None:
+    """A unicidade é contra **outro** registro: o próprio não conta."""
+    _dois_registros_na_unidade(repos)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    repos.employees.relink_login(_A, _U1, _E1, expected_user_id=_LOGIN, user_id=_LOGIN)
+
+    assert _estado(repos) == (_LOGIN, True)
+
+
+def test_l_relink_libera_o_login_antigo_para_outro_registro_da_unidade(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Depois da troca, o login antigo não está em registro nenhum da unidade."""
+    _dois_registros_na_unidade(repos)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+    repos.employees.add(_funcionario(id=_E3, name="Carla"))
+
+    repos.employees.relink_login(_A, _U1, _E1, expected_user_id=_LOGIN, user_id=UserId("l-3"))
+    repos.employees.link_login(_A, _U1, _E3, _LOGIN)
+
+    assert (_vinculo_de(repos, _E1), _vinculo_de(repos, _E3)) == (UserId("l-3"), _LOGIN)
+
+
+def test_um_login_por_unidade_esta_declarado_no_port_com_a_ancora_da_issue(
+    repos: RepositoriosDeStaff,
+) -> None:
+    for metodo in (EmployeeRepository.link_login, EmployeeRepository.relink_login):
+        documentacao = metodo.__doc__ or ""
+        assert "LoginAlreadyLinkedInUnitError" in documentacao
+        assert "ADR 0.0.0025" in documentacao
 
 
 # L-DEACT

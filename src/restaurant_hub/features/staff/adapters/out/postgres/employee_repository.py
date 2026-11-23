@@ -82,6 +82,7 @@ from sqlalchemy.exc import IntegrityError
 from restaurant_hub.features.staff.adapters.out.postgres import mappers
 from restaurant_hub.features.staff.adapters.out.postgres.integrity_errors import (
     ON_WRITE_EMPLOYEE,
+    ON_WRITE_LOGIN_LINK,
     constraint_name,
     translate,
 )
@@ -289,28 +290,38 @@ class PostgresEmployeeRepository:
         `link_login`), a transição do **domínio** como única casa das guardas, e um
         `UPDATE` que grava só as colunas que a lei nomeia. Endereço vazio ⇒
         `EmployeeNotFoundError`, antes de qualquer guarda.
+
+        **Um login por unidade, por último** (issue #241, ADR 0.0.0025): o `UPDATE`
+        que grava o login de outro registro da unidade viola o índice
+        `uq_employees_tenant_unit_user` e vira `LoginAlreadyLinkedInUnitError`, com a
+        transação desfeita. Sob concorrência, o segundo vínculo **espera** o primeiro
+        no índice e é recusado quando ele comita. Não há segundo lock: a ordem de
+        locks é a de antes (a linha do endereço, depois a entrada do índice).
         """
-        with self._engine.begin() as connection:
-            row = connection.execute(
-                select(employees)
-                .where(
-                    employees.c.id == employee_id,
-                    employees.c.tenant_id == tenant_id,
-                    employees.c.unit_id == unit_id,
+        try:
+            with self._engine.begin() as connection:
+                row = connection.execute(
+                    select(employees)
+                    .where(
+                        employees.c.id == employee_id,
+                        employees.c.tenant_id == tenant_id,
+                        employees.c.unit_id == unit_id,
+                    )
+                    .with_for_update()
+                ).one_or_none()
+                if row is None:
+                    raise EmployeeNotFoundError(employee_id)
+                updated = transition(self._build_aggregates(connection, [row])[0])
+                connection.execute(
+                    employees.update()
+                    .where(
+                        employees.c.id == employee_id,
+                        employees.c.tenant_id == tenant_id,
+                    )
+                    .values(**columns(updated))
                 )
-                .with_for_update()
-            ).one_or_none()
-            if row is None:
-                raise EmployeeNotFoundError(employee_id)
-            updated = transition(self._build_aggregates(connection, [row])[0])
-            connection.execute(
-                employees.update()
-                .where(
-                    employees.c.id == employee_id,
-                    employees.c.tenant_id == tenant_id,
-                )
-                .values(**columns(updated))
-            )
+        except IntegrityError as error:
+            raise translate(error, ON_WRITE_LOGIN_LINK, employee_id) from error
 
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """L-E5 — remoção definitiva; as filhas somem por `CASCADE` (§5.10).

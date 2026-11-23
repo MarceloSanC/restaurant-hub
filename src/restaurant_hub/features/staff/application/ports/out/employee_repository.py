@@ -179,7 +179,12 @@ class EmployeeRepository(Protocol):
            tenant é indistinguível de inexistente;
         2. já vinculado **no gravado** ⇒ `EmployeeAlreadyHasLoginError`, e o
            vínculo gravado fica intacto (vinculado vence desligado);
-        3. desligado **no gravado** ⇒ `TerminatedEmployeeLoginError`.
+        3. desligado **no gravado** ⇒ `TerminatedEmployeeLoginError`;
+        4. **um login por unidade** (issue #241, ADR 0.0.0025): outro registro do
+           mesmo tenant e da mesma unidade, ativo ou desligado, já com o login ⇒
+           `LoginAlreadyLinkedInUnitError`. Vale também contra o vínculo
+           concorrente: de dois vínculos da mesma conta em dois registros da
+           unidade, o segundo é recusado. Outra unidade não conta.
 
         Em qualquer erro, **nada** é gravado. Nenhum outro campo do registro é
         tocado: o vínculo tem escrita própria justamente para não carregar um
@@ -233,7 +238,10 @@ class EmployeeRepository(Protocol):
         2. depois `Employee.relink_login(expected_user_id, user_id)` sobre o
            gravado: sem vínculo ⇒ `EmployeeHasNoLoginError`; desligado ⇒
            `TerminatedEmployeeLoginError`; login diferente do esperado ⇒
-           `EmployeeLoginChangedError`.
+           `EmployeeLoginChangedError`;
+        3. **um login por unidade** (issue #241, ADR 0.0.0025): o login novo já em
+           outro registro do mesmo tenant e da mesma unidade, ativo ou desligado ⇒
+           `LoginAlreadyLinkedInUnitError` — também contra a troca concorrente.
 
         O estado ativo esperado é implícito: o domínio recusa trocar o login de um
         desligado. Em erro, nada é gravado; no sucesso só `user_id` muda.
