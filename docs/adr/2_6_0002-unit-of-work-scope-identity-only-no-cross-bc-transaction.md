@@ -214,3 +214,35 @@ há transação entre BCs). A regra 10 passou a contar a chamada a um auxiliar d
 `HELPER_WRITES` como escrita do use case que o chama; sem isso a entrada de
 `DeactivateEmployeeUseCase` ficaria morta ([ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md)
 §5). Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — os auxiliares que escrevem passam a ser derivados (issue #243, 2026-11-23)
+
+O segundo ponto cego do §5, *"a repository handed to a module-level function"*, fecha-se para a
+forma que o código usa. A tabela `HELPER_WRITES` da nota da Stage 3.10, escrita à mão, saiu de
+`scripts/check_layout.py`; no lugar dela, `helper_writes` deriva da árvore toda função de módulo de
+`use_cases/` (de qualquer BC) que chama um método de escrita — pelo mesmo `is_write` das classes —
+sobre um **parâmetro anotado** com o port, ou que chama outra função que escreve (fecho
+transitivo). A chamada a uma delas conta como escrita do use case que a faz, resolvida pelo import
+(um homônimo que só lê, noutro módulo, não conta); a de um auxiliar com duas escritas, escrita em
+laço ou recursão conta como duas, como a escrita em laço deste §5. O critério da issue, "entrada
+que deixou de escrever reprova", vira propriedade da allowlist: se o auxiliar para de gravar, o use
+case perde a escrita e a entrada dele aqui reprova como morta.
+
+Medido em `develop` (`8c7b16b`): das 40 funções de módulo de `use_cases/`, a derivação acha **uma**
+que escreve, `_login_link.end_active_link` (`IdentityGateway.revoke_login_sessions`) — a mesma da
+tabela —, e os quatro use cases da allowlist são os mesmos. Os auxiliares de scheduling e
+`_invitation` recebem port só para ler, ou para enviar e-mail, que o §3 deixa fora da contagem
+(o `EmailSender` não é repositório nem gateway declarado).
+
+A auditoria do PR #257 plantou o auxiliar por cada caminho e fechou três que escapavam: método
+estático ou de classe de um módulo de `use_cases/` (entra como `C.f`); a função que escreve citada
+sem ser chamada ali (`functools.partial`, passada como `Callable`, alias local `g = f`), que conta
+como a escrita, fail-closed; e o repositório entregue por parâmetro a um método da própria classe
+do use case (`self._salvar(self._coisas)`), que conta como a escrita pelo atributo.
+
+**Pontos cegos que continuam declarados** (nenhum tem caso hoje): parâmetro sem anotação (o mypy
+strict o barra em `src/`), inclusive `lambda`; repositório dentro de objeto de contexto (atributo
+ou método de instância dele), num alias local, ou entregue como método ligado (`Callable`, o limite
+que a auditoria da #205 declarou no guarda dela); `getattr` dinâmico; função fora de `use_cases/`
+ou fora do nível do módulo. A allowlist do §5 não mudou. Nota *append-only*; o corpo acima não foi
+editado.
