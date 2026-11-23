@@ -363,6 +363,25 @@ class TestCasosDeErro:
         with pytest.raises(RestaurantNotFoundError):
             cenario.use_case.execute(_comando(tenant="rest-fantasma"))
 
+    def test_cada_recusa_nomeia_o_que_recusou(self) -> None:
+        """Mutação da issue #211: com o arquivo no escopo `only_mutate`, trocar o
+        argumento de cada `raise` por `None` sobrevivia, porque os testes acima só
+        conferem o tipo. O log e o tradutor de borda leem o identificador recusado
+        (`authorize_at_boundary` nomeia a unidade por `UnitNotFoundError.unit_id`)."""
+        cenario = Cenario()
+        cenario.use_case.execute(_comando("ocupado@x.com"))
+
+        with pytest.raises(EmailAlreadyRegisteredError) as email:
+            cenario.use_case.execute(_comando("ocupado@x.com"))
+        with pytest.raises(RestaurantNotFoundError) as tenant:
+            cenario.use_case.execute(_comando("livre@x.com", tenant="rest-fantasma"))
+        with pytest.raises(UnitNotFoundError) as unidade:
+            cenario.use_case.execute(_comando("livre@x.com", unit_ids=("unit-fantasma",)))
+
+        assert "'ocupado@x.com'" in str(email.value)
+        assert "'rest-fantasma'" in str(tenant.value)
+        assert unidade.value.unit_id == UnitId("unit-fantasma")
+
     def test_unidade_inexistente_levanta(self) -> None:
         cenario = Cenario()
 
