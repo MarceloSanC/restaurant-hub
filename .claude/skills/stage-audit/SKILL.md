@@ -196,6 +196,7 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
 8. **Disposições dos Checkpoints A/B/C** na §7 (CONVENTIONS §3.4): uma entrada por checkpoint,
    gravada no commit que o fechou, todo achado disposto e 1–2 refutações relidas contra o
    artefato. Corte, comandos e classificação: [reference/disposicoes-checkpoints.md](reference/disposicoes-checkpoints.md).
+9. **`Verificado:` dos `[decision:E|C]`** (o gate só vê o termo): `não verificado (§4.2)` em decisão que entra em port, schema, OpenAPI ou regra de segurança/tenant é finding bloqueante (`evidence-resolution` §5).
 
 ### Fase D — Judgment (a parte que NÃO se mecaniza)
 
@@ -253,20 +254,8 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
   no router e (b) **cada `except` no router** aparece na tabela. Integration
   test deveria cobrir cada status code declarado.
 
-**Se `camada_alvo` inclui `adapters/inbound/scheduler`:**
-- **Gated por flag** em `Settings` (default `False` — não arranca em
-  CI/dev sem opt-in). Composition root constrói sempre; lifespan decide
-  se chama `start()`.
-- `start()` / `shutdown()` **idempotentes** — segunda chamada não
-  duplica jobs nem quebra.
-- **Cron string validada cedo** no startup (`CronTrigger.from_crontab(...)`
-  levanta `ValueError`) — preferível a job falhar silenciosamente.
-- **Warning explícito quando lista de unidades/jobs está vazia** —
-  silêncio aqui esconde misconfig (scheduler rodando sem nada
-  registrado).
-- Erros do use case **capturados dentro do job runner** com log `ERROR`
-  — uma exceção não tratada não pode matar o scheduler nem os outros
-  jobs.
+**Se `camada_alvo` inclui `adapters/inbound/scheduler`:** flag, idempotência, cron validado
+cedo, aviso de lista vazia e erro capturado no job — [reference/checklist-por-camada.md](reference/checklist-por-camada.md#adaptersinboundscheduler).
 
 **Se a Stage toca `composition_root`:**
 - Wiring no único arquivo permitido (`composition_root.py` —

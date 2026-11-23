@@ -264,7 +264,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | open | `3.11-job-function-unit-enablement` |
 | [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | done | — |
 | [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | done | #184 |
-| [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
+| [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | done | — |
 | [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
 | [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
 | [#224](https://github.com/MarceloSanC/restaurant-hub/issues/224) | Fixar o corpo do PR como lugar do plano de gates da issue avulsa | shared | docs + .claude | open | #200 |
@@ -273,6 +273,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#233](https://github.com/MarceloSanC/restaurant-hub/issues/233) | Fechar os pontos cegos da varredura de alcance dos use cases facade-only | identity | tests | open | #211 |
 | [#234](https://github.com/MarceloSanC/restaurant-hub/issues/234) | A fachada de provisionamento lê `PROVISIONABLE_ROLES` em vez do literal | identity | application | open | #211, `3.10-login-link-management` |
 | [#236](https://github.com/MarceloSanC/restaurant-hub/issues/236) | Alterar o fuso de uma unidade já criada | identity | domain + application + adapters | open | #198 |
+| [#237](https://github.com/MarceloSanC/restaurant-hub/issues/237) | Conferir o `Verificado:` das decisões gravadas fora da forma do §5 da `evidence-resolution` | shared | tooling | open | #212 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

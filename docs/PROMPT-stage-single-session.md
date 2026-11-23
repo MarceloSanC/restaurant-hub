@@ -5,7 +5,7 @@ when-use: Fluxo padrão de execução de Stage (PIPELINE §11.1, implementa → 
 keywords: [prompt, stage, single-session, concept, technical, execucao, lifecycle, review, subagents, gates]
 status: done
 created_at: 2026-05-21
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 ---
 
 # Prompt — Execução de Stage em Sessão Única
@@ -161,7 +161,9 @@ do fluxo. Trate como gate objetivo.
    (protocolo em §Revisão por Agentes Independentes). Dois subagentes
    com lentes distintas, em paralelo:
    - **Conformidade:** concept × roadmap × overview × ADRs × §7 das
-     dependências — caçar contradições e escopo que vazou.
+     dependências — caçar contradições e escopo que vazou; e o `Verificado:` de
+     cada `[decision:E|C]`: `não verificado (§4.2)` não aprova decisão que entra
+     em port, schema, OpenAPI ou regra de segurança/tenant (`evidence-resolution` §5).
    - **Domínio/testabilidade:** os conceitos de negócio estão corretos?
      Os critérios de aceite são objetivamente testáveis ou são desejos
      vagos?
