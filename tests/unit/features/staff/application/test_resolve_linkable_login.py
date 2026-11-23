@@ -122,6 +122,22 @@ def test_as_recusas_sao_indistinguiveis_entre_si() -> None:
     assert len(mensagens) == 1
 
 
+def test_a_recusa_cita_o_email_enviado() -> None:
+    """A mensagem nomeia o que o gerente digitou, e só isso (docstring do erro).
+
+    Sem este teste, trocar o e-mail por `None` na recusa sobrevivia: as mensagens
+    continuavam iguais entre si (o mutante do `mutation-access-modules` na auditoria
+    do PR #230).
+    """
+    fakes, gateway = _arranjo()
+    with pytest.raises(LoginAccountNotFoundError) as excinfo:
+        _resolver(fakes, gateway)
+
+    assert str(excinfo.value) == (
+        f"nenhuma conta deste restaurante com o e-mail nesta unidade: {_EMAIL!r}"
+    )
+
+
 def test_a_conta_atual_do_registro_volta_sem_checagens() -> None:
     """R19 com o login atual: ele já é do registro, mesmo fora do alcance hoje."""
     fakes, gateway = _arranjo(tenant_id=_A, unit_ids=frozenset({_U2}))
