@@ -24,7 +24,7 @@ Três propriedades definem a fachada:
    handler, o de identity, registrado na app (L-IG2 de staff).
 3. **Não autoriza as próprias operações.** Desde a Stage 2.7 os use cases de
    identity que agem em nome de um ator autorizam o próprio alvo, como os de
-   staff e de scheduling (ADR 0.0.0020, ADR 2.7.0001); os quatro que só esta
+   staff e de scheduling (ADR 0.0.0020, ADR 2.7.0001); os cinco que só esta
    fachada chama ficam fora, por exclusão nomeada no inventário do ADR 0.0.0020:
    quem chama a fachada responde pela autorização do seu lado — para staff, o
    use case consumidor (`create_login_for_employee`, ADR 3.7.0001) e a rota R17
@@ -62,8 +62,9 @@ BC a consome, e o port de leitura do consumidor nasce com ele (o par nomeado no
 A fachada é montada **uma vez**, no `composition_root`, sobre os **mesmos
 repositórios, `EmailSender` e `Clock`** que servem as rotas de identity — um
 grafo, não dois. Os três primeiros use cases por baixo dela nasceram na Stage
-3.5; o quarto, `GetAccountRoleUseCase`, na 3.8 (ADR 3.8.0001 §3) — o único de
-leitura. Todos têm a fachada como único consumidor (ADR 3.5.0001 §Consequences).
+3.5; o quarto, `GetAccountRoleUseCase`, na 3.8 (ADR 3.8.0001 §3), e o quinto,
+`FindAccountByEmailUseCase`, na 3.10 (ADR 3.10.0002 §2) — os dois de leitura. Todos
+têm a fachada como único consumidor (ADR 3.5.0001 §Consequences).
 """
 
 from collections.abc import Sequence
@@ -71,6 +72,7 @@ from dataclasses import dataclass, field
 
 from restaurant_hub.features.identity.application.dtos.commands import (
     AuthorizeActionCommand,
+    FindAccountByEmailCommand,
     GetAccountRoleCommand,
     GetUnitTimezoneCommand,
     ProvisionAccountCommand,
@@ -85,6 +87,9 @@ from restaurant_hub.features.identity.application.errors import (
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
     authorize_at_boundary,
+)
+from restaurant_hub.features.identity.application.use_cases.find_account_by_email import (
+    FindAccountByEmailUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
@@ -114,6 +119,7 @@ from restaurant_hub.features.identity.domain.value_objects.role import Role
 __all__ = [
     "AccessGrant",
     "AccessPrincipal",
+    "AccountSummary",
     "EmailAlreadyRegisteredError",
     "IdentityAccessFacade",
     "IdentityFacade",
@@ -137,8 +143,26 @@ class ProvisionedAccount:
     setup_link: str = field(repr=False)
 
 
+@dataclass(frozen=True)
+class AccountSummary:
+    """Quem é uma conta, em primitivos (Stage 3.10, ADR 3.10.0002 §2).
+
+    Attributes:
+        user_id: a conta.
+        tenant_id: o restaurante da conta; `None` só para `platform_admin`.
+        unit_ids: as unidades de que **esta** conta é membro, em ordem estável.
+        sees_every_unit: a conta enxerga todas as unidades do seu tenant sem
+            membership (o dono); falso para conta sem tenant.
+    """
+
+    user_id: str
+    tenant_id: str | None
+    unit_ids: tuple[str, ...]
+    sees_every_unit: bool
+
+
 class IdentityFacade:
-    """As quatro operações que um consumidor de identity pode pedir."""
+    """As cinco operações que um consumidor de identity pode pedir."""
 
     def __init__(
         self,
@@ -146,11 +170,13 @@ class IdentityFacade:
         send_invitation: SendInvitationUseCase,
         revoke_all_sessions: RevokeAllSessionsUseCase,
         get_account_role: GetAccountRoleUseCase,
+        find_account_by_email: FindAccountByEmailUseCase,
     ) -> None:
         self._provision_account = provision_account
         self._send_invitation = send_invitation
         self._revoke_all_sessions = revoke_all_sessions
         self._get_account_role = get_account_role
+        self._find_account_by_email = find_account_by_email
 
     def provision_account(
         self,
@@ -221,6 +247,27 @@ class IdentityFacade:
         """
         result = self._get_account_role.execute(GetAccountRoleCommand(user_id=UserId(user_id)))
         return None if result is None else result.role.value
+
+    def find_account_by_email(self, email: str) -> AccountSummary | None:
+        """A conta do e-mail — id, tenant, unidades e alcance —, ou `None`.
+
+        Só leitura (Stage 3.10, ADR 3.10.0002 §2). E-mail em qualquer tenant: a
+        decisão de vincular, inclusive a recusa uniforme de conta alheia, é do
+        consumidor. Sem papel na resposta (propriedade 1).
+
+        Raises:
+            InvalidEmailError: `email` malformado (inclusive byte NUL) — sem
+                tradução (propriedade 2).
+        """
+        result = self._find_account_by_email.execute(FindAccountByEmailCommand(email=Email(email)))
+        if result is None:
+            return None
+        return AccountSummary(
+            user_id=result.user_id,
+            tenant_id=result.tenant_id,
+            unit_ids=tuple(result.unit_ids),
+            sees_every_unit=result.sees_every_unit,
+        )
 
 
 @dataclass(frozen=True)

@@ -48,6 +48,9 @@ from restaurant_hub.features.identity.application.errors import (
     UnitNotFoundError,
 )
 from restaurant_hub.features.identity.application.facade import IdentityFacade
+from restaurant_hub.features.identity.application.use_cases.find_account_by_email import (
+    FindAccountByEmailUseCase,
+)
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
 )
@@ -481,6 +484,7 @@ def _gateway_real() -> GatewaySobContrato:
         send_invitation=SendInvitationUseCase(sender),
         revoke_all_sessions=RevokeAllSessionsUseCase(sessoes, clock),
         get_account_role=GetAccountRoleUseCase(users),
+        find_account_by_email=FindAccountByEmailUseCase(users),
     )
     ocupantes = 0
 
