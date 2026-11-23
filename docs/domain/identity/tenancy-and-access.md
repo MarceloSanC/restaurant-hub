@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage que toque o
 keywords: [domain, identity, tenancy, tenant, restaurante, unidade, usuario, conta, rbac, papel, permissao, membership, vinculo, visibilidade, bypass, tenant-wide, autorizacao, fail-closed, provisionamento, platform-admin, sessao, refresh, rotacao, reuso, logout, fachada-de-acesso, convite, conta-pendente, token-de-setup, definicao-de-senha, redefinicao, enumeracao, unidade-de-trabalho, fachada, lingua-ubiqua]
 status: accepted
 created_at: 2026-11-02
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 bounded_context: identity
 subdomain: tenancy-and-access
 references:
@@ -109,7 +109,7 @@ alcança**:
 | Termo | Definição |
 |---|---|
 | **Restaurante** (tenant) | Cliente da plataforma, isolado dos demais (`overview.md` §9, "Tenant"). O restaurante **é** o tenant: a sua identidade é o `tenant_id` de tudo o que lhe pertence; não existe entidade `Tenant` separada ([ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md) §Decision). |
-| **Unidade** | Filial de um restaurante. Pertence a exatamente um restaurante, que é o seu tenant ([ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md) §Decision). "Unidades não compartilham funcionários (não se enxergam)" (`overview.md` §3). |
+| **Unidade** | Filial de um restaurante. Pertence a exatamente um restaurante, que é o seu tenant ([ADR 2.1.0001](../../adr/2_1_0001-identity-aggregates-and-membership.md) §Decision). "Unidades não compartilham funcionários (não se enxergam)" (`overview.md` §3). Tem fuso próprio, `Unit.timezone` (§3.9). |
 | **Usuário** (conta) | Conta de acesso de uma pessoa: e-mail de login, papel fixo e tenant. Distinto do **registro de funcionário** de staff — uma pessoa tem no máximo uma conta e pode ter vários registros ([`workforce.md`](../staff/workforce.md) §3.1). |
 | **Papel** (de acesso) | Um de **cinco** valores fixos: `platform_admin`, `owner` (dono), `manager` (gerente), `hr` (RH), `employee` (funcionário) (`overview.md` §3 "RBAC"; concept 2.1 §5 regra 5). Não é customizável. |
 | **Permissão** | Capacidade que um papel concede (eixo A). O mapa papel → permissões é fixo e total (concept 2.1 §5 regra 6). "Ver o tenant inteiro" **não** é permissão — é bypass do eixo B (concept 2.1 §7). |
@@ -526,8 +526,11 @@ id nem papel do dono) — fechar isso exigiria rever a unicidade global (idem, �
   3.8.0001 §4).
 - **O fuso da unidade é de identity** — `Unit.timezone`, chave IANA, padrão `America/Sao_Paulo`,
   lido por port pelos outros BCs
-  ([ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md) §Decision). Ainda não
-  existe no `Unit` (§5).
+  ([ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md) §Decision). Existe desde
+  a issue #198: coluna `units.timezone`, com o padrão gravado nas unidades anteriores a ela;
+  informado (opcional) na criação da unidade; chave fora da base IANA recusada pela entidade
+  (`InvalidTimezoneError`). Outro BC o lê pela `IdentityUnitFacade`, endereçada pelo par
+  (tenant, unidade): unidade de outro tenant responde como inexistente.
 - **Staff e scheduling estendem o vocabulário de permissões** por decisão registrada em ADR (§3.2);
   a teoria de quem faz o quê **dentro** deles vive nos seus docs
   ([`workforce.md`](../staff/workforce.md) §4; [`shift-scheduling.md`](../scheduling/shift-scheduling.md)
@@ -572,9 +575,11 @@ sua âncora de origem.
   [ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md) ainda não estão em
   `Permission`/`_ROLE_PERMISSIONS`; os nomes e o mapa são da borda HTTP de scheduling
   ([`shift-scheduling.md`](../scheduling/shift-scheduling.md) §4).
-- **Fuso da unidade** — `Unit.timezone` decidido e ainda inexistente; em que Stage entra é lacuna
-  de escopo do roadmap ([ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md);
-  `roadmap.md` §Step 4 › nota 2026-09-14, item (a)).
+- **Fuso da unidade** — `Unit.timezone` entrou pela issue #198 (§3.9;
+  [ADR 4.1.0005](../../adr/4_1_0005-unit-timezone-owned-by-identity.md), nota 2026-11-23). O que
+  sobra é do consumidor: o port de leitura do fuso no BC que o usa e a montagem da
+  `IdentityUnitFacade` no `composition_root` nascem com o primeiro (e-mail da 4.6, ponto do Step 7,
+  hub); editar o fuso de uma unidade já criada não tem rota.
 - **Distinguir a causa da revogação** — logout reapresentado conta como reuso porque a sessão não
   guarda causa nem linhagem; distinguir exige campo novo (concept 2.4 §5 regra 6).
 - **Link perdido sem e-mail** — para quem não tem e-mail, link em mãos perdido ou vencido é beco sem

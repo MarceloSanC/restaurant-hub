@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 4 (
 keywords: [domain, scheduling, shift-scheduling, escala, semana, dia-operacional, horario-de-corte, faixa, turno, intervalo, demanda, vaga, alocacao, excecao-de-funcao, sobre-cobertura, reconciliacao-na-leitura, desligamento, escala-vigente, publicacao, auditoria, versao, concorrencia, validacao, block, warn, aceite-consciente, sobreposicao, interjornada, teto-de-horas, carga-contratada, conta-para-a-carga, indisponibilidade, calendario, minha-escala, notificacao, imagem, fuso-horario, clt, lingua-ubiqua]
 status: accepted
 created_at: 2026-09-13
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 bounded_context: scheduling
 subdomain: shift-scheduling
 references:
@@ -804,7 +804,9 @@ de auditoria são instantes absolutos (UTC).
 > **Lacuna de escopo do roadmap (registrada; a mestra anota no fechamento):** em que Stage entra
 > a coluna `Unit.timezone` — **4.4** (primeira migration do Step 4) ou **issue avulsa de
 > identity** antes da 4.3 (que precisa do port). *Nota 2026-11-16: a 4.4 não a trouxe (concept 4.4
-> §7 D-TZ); é a issue #198, de identity.*
+> §7 D-TZ); é a issue #198, de identity.* *Nota 2026-11-23: a coluna `units.timezone` entrou pela
+> issue #198 (ADR 4.1.0005, nota da mesma data); o port de leitura em scheduling nasce com o
+> primeiro consumidor.*
 
 > **Lacuna fechada pela Stage 4.4 (ADR 4.4.0001; concept 4.4 §7 D-TIME):** representação
 > persistida dos dois regimes — faixas em `TIMESTAMP` sem fuso (wall-clock da unidade), carimbo
@@ -1133,7 +1135,7 @@ F10 (sobre-cobertura) decidida em 2026-09-26, durante o tratamento dos findings 
 | **7.2 / 8.1** | contratos de leitura; "o que valia naquele dia" via auditoria (§3.10.3); grandezas "não conta" e "exceção de função" (§3.10.4) |
 | **sem Stage (roadmap)** | gates dos Steps 7/8: registros inativos invisíveis até a página de histórico de funcionários (limite (2) de F7, §3.4) |
 | **sem Stage (roadmap)** | mapa período nomeado → faixas (proposta: 5.1) (§3.2) |
-| **sem Stage (roadmap)** | em que Stage entra `Unit.timezone` (4.4 × issue de identity) (§3.9) — *a 4.4 não a trouxe: issue #198, de identity* |
+| **issue #198** (identity) | em que Stage entra `Unit.timezone` (4.4 × issue de identity) (§3.9) — *a 4.4 não a trouxe (concept 4.4 §7 D-TZ): reendereçada à issue #198, de identity, que cria a coluna `units.timezone`, o atributo `Unit.timezone` e a leitura pela fachada de identity; o port de leitura em scheduling nasce com o primeiro consumidor* |
 | **sem Stage (roadmap)** | roadmap 5.2 "rascunho de edição" / non-goal "aplicar+publicar" × F1 — gate do Step 5 (§3.5) |
 | **sem Stage (roadmap)** | feriados por unidade (§5) |
 
