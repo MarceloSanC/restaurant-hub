@@ -106,10 +106,25 @@ def test_fuso_default_e_sao_paulo() -> None:
     assert DEFAULT_TIMEZONE == "America/Sao_Paulo"
 
 
+def test_create_sem_fuso_usa_o_default() -> None:
+    unidade = Unit.create(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz")
+    assert unidade.timezone == "America/Sao_Paulo"
+
+
 @pytest.mark.parametrize("chave", ["America/Manaus", "America/Sao_Paulo", "UTC", "Europe/Lisbon"])
-def test_aceita_chave_iana_e_a_guarda_como_veio(chave: str) -> None:
-    unidade = Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone=chave)
+def test_create_aceita_chave_iana_e_a_guarda_como_veio(chave: str) -> None:
+    unidade = Unit.create(
+        id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone=chave
+    )
     assert unidade.timezone == chave
+    assert unidade.id == "u1"
+    assert unidade.restaurant_id == "r1"
+    assert unidade.name == "Matriz"
+
+
+def test_create_mantem_as_invariantes_do_construtor() -> None:
+    with pytest.raises(InvalidNameError):
+        Unit.create(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="  ")
 
 
 @pytest.mark.parametrize(
@@ -136,7 +151,30 @@ def test_aceita_chave_iana_e_a_guarda_como_veio(chave: str) -> None:
 )
 def test_chave_fora_da_base_iana_e_recusada_com_erro_de_dominio(invalida: str) -> None:
     with pytest.raises(InvalidTimezoneError, match="fuso horário inválido"):
-        Unit(id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone=invalida)
+        Unit.create(
+            id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone=invalida
+        )
+
+
+def test_construtor_nao_confere_o_fuso_contra_a_base() -> None:
+    """Auditoria do PR #232: a reidratação passa pelo construtor, que não consulta
+    a base IANA.
+
+    `US/Pacific-New` saiu do IANA na 2020b. É uma chave que uma unidade antiga
+    poderia ter gravado e que a base de hoje não carrega. Se o construtor a
+    recusasse, a leitura da unidade levantaria dentro da autorização.
+    """
+    unidade = Unit(
+        id=UnitId("u1"), restaurant_id=RestaurantId("r1"), name="Matriz", timezone="US/Pacific-New"
+    )
+    assert unidade.timezone == "US/Pacific-New"
+    with pytest.raises(InvalidTimezoneError):
+        Unit.create(
+            id=UnitId("u1"),
+            restaurant_id=RestaurantId("r1"),
+            name="Matriz",
+            timezone="US/Pacific-New",
+        )
 
 
 def test_fuso_nao_entra_na_igualdade() -> None:

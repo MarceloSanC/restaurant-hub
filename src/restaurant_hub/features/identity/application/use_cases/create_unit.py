@@ -69,7 +69,7 @@ class CreateUnitUseCase:
         if self._restaurants.find_by_id(command.restaurant_id) is None:
             raise RestaurantNotFoundError(command.restaurant_id)
 
-        unit = Unit(
+        unit = Unit.create(
             id=UnitId(str(self._id_generator.next_id())),
             restaurant_id=command.restaurant_id,
             name=command.name,

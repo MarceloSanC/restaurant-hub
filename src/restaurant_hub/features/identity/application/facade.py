@@ -319,8 +319,9 @@ class IdentityUnitFacade:
         Só leitura (ADR 4.1.0005). Unidade de outro tenant é `None`, como a
         inexistente: a fachada não autoriza, mas a leitura não atravessa tenants.
         Devolve a chave, não um `ZoneInfo`: a conversão de horário de parede em
-        instante é do consumidor (ADR 4.1.0005 §Decision 3). A falha do
-        repositório sobe como é.
+        instante é do consumidor (ADR 4.1.0005 §Decision 3), e é ele quem trata
+        a chave que a base dele não carregar: a chave foi conferida na criação da
+        unidade, não nesta leitura. A falha do repositório sobe como é.
         """
         result = self._get_unit_timezone.execute(
             GetUnitTimezoneCommand(tenant_id=RestaurantId(tenant_id), unit_id=UnitId(unit_id))

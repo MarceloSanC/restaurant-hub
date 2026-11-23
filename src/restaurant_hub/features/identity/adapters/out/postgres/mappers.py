@@ -97,6 +97,9 @@ def unit_to_row(unit: Unit) -> dict[str, Any]:
 
 
 def row_to_unit(row: Row) -> Unit:
+    # Pelo construtor (Regra 1), que não confere o fuso contra a base IANA: essa
+    # conferência é de `Unit.create`, na entrada (docstring de `Unit`). Uma chave
+    # gravada que saia da base não derruba a leitura da unidade nem a autorização.
     return Unit(
         id=UnitId(row.id),
         restaurant_id=RestaurantId(row.restaurant_id),

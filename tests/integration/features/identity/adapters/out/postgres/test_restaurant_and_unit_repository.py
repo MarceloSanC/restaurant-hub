@@ -82,6 +82,30 @@ def test_unidade_faz_round_trip_campo_a_campo(banco_limpo: Engine) -> None:
     assert lida.name == "  Centro  "
 
 
+def test_unidade_com_fuso_gravado_fora_da_base_e_lida(banco_limpo: Engine) -> None:
+    """Auditoria do PR #232 — linha gravada por fora da entidade, com uma chave que
+    saiu do IANA (`US/Pacific-New`, removida na 2020b), volta como gravada.
+
+    O `find_by_id` é o que o `AuthorizeActionUseCase` chama antes da checagem de
+    tenant: se ele levantasse, toda rota que autoriza por esta unidade cairia.
+    """
+    PostgresRestaurantRepository(banco_limpo).add(
+        Restaurant(id=RestaurantId("rest-1"), name="Cantina")
+    )
+    with banco_limpo.begin() as conexao:
+        conexao.execute(
+            text(
+                "INSERT INTO units (id, restaurant_id, name, timezone) "
+                "VALUES ('unit-1', 'rest-1', 'Centro', 'US/Pacific-New')"
+            )
+        )
+
+    lida = PostgresUnitRepository(banco_limpo).find_by_id(UnitId("unit-1"))
+
+    assert lida is not None
+    assert lida.timezone == "US/Pacific-New"
+
+
 def test_find_by_id_de_unidade_inexistente_devolve_none(banco_limpo: Engine) -> None:
     assert PostgresUnitRepository(banco_limpo).find_by_id(UnitId("nao-existe")) is None
 

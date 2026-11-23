@@ -286,6 +286,32 @@ def test_owner_nao_enxerga_unidade_de_outro_tenant() -> None:
         fixture.use_case.execute(_command("o", unit=_UNIT_B1))
 
 
+def test_fuso_gravado_fora_da_base_nao_muda_a_decisao() -> None:
+    """Auditoria do PR #232 — a autorização não depende do fuso da unidade.
+
+    `US/Pacific-New` saiu do IANA na 2020b. Uma unidade com essa chave gravada é
+    autorizada para quem a enxerga, e quem é de outro tenant recebe o erro de
+    tenant, não um erro de fuso que ecoaria a chave.
+    """
+    fixture = _Fixture()
+    fixture.units.add(
+        Unit(
+            id=UnitId("unit-a3"),
+            restaurant_id=_TENANT_A,
+            name="Antiga",
+            timezone="US/Pacific-New",
+        )
+    )
+    fixture.add_user("o", Role.OWNER, _TENANT_A)
+    fixture.add_user("ob", Role.OWNER, _TENANT_B)
+
+    actor = fixture.use_case.execute(_command("o", unit=UnitId("unit-a3")))
+    assert actor.scope_unit_id == "unit-a3"
+
+    with pytest.raises(TenantNotVisibleError):
+        fixture.use_case.execute(_command("ob", tenant=_TENANT_B, unit=UnitId("unit-a3")))
+
+
 def test_unidade_alvo_inexistente_e_rejeitada() -> None:
     fixture = _Fixture()
     fixture.add_user("o", Role.OWNER, _TENANT_A)

@@ -89,6 +89,18 @@ def test_unidade_leva_o_fuso_na_linha_e_o_traz_de_volta() -> None:
     assert mappers.row_to_unit(_linha(**linha)).timezone == "America/Manaus"
 
 
+def test_unidade_com_fuso_fora_da_base_reidrata_sem_levantar() -> None:
+    """Auditoria do PR #232 — chave gravada que saiu da base IANA (`US/Pacific-New`,
+    removida na 2020b) volta como gravada.
+
+    Levantar aqui seria levantar no `find_by_id` que o `AuthorizeActionUseCase`
+    chama antes da checagem de tenant: a autorização da unidade viraria 422 com a
+    chave no corpo.
+    """
+    linha = _linha(id="unit-1", restaurant_id="rest-1", name="Centro", timezone="US/Pacific-New")
+    assert mappers.row_to_unit(linha).timezone == "US/Pacific-New"
+
+
 def test_usuario_faz_round_trip_e_o_hash_viaja_ao_lado() -> None:
     """`User` não carrega senha; o hash é coluna da mesma linha (DTO da 2.2)."""
     user = User(
