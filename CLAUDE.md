@@ -99,6 +99,8 @@ make docker-down        # derruba a stack
 make docker-shell       # bash dentro do container app
 ```
 
+As duas stages instalam as versões do `uv.lock` com `uv sync --locked` (a `runtime` sem a extra `dev`): lock fora de sincronia com o `pyproject.toml` reprova o build, e `uv pip install` do pyproject não volta (`tests/unit/test_dockerfile.py`). O workflow `docker-build.yml` constrói as duas no CI quando muda `Dockerfile`, `.dockerignore`, `pyproject.toml` ou `uv.lock` (issue #244).
+
 `docker-compose.yml` traz `postgres` e `redis` comentados por default. `scripts/init-project.py` descomenta `postgres` automaticamente quando o projeto escolhe `banco=postgres`; `redis` é descomentado manualmente quando precisar.
 
 ---
