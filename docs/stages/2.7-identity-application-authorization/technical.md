@@ -480,4 +480,8 @@ Oito lacunas da rodada 1, fechadas no commit `[2.7/task-11-extra]`: (1) **R7** �
 **Direção sugerida:** registrar o alargamento no corpo das duas issues; não foi feito aqui porque são issues de outro escopo.
 **Stage candidata:** as próprias #75 e #76, na execução.
 
+### 2026-11-22 — [decision] O resíduo de `ProvisionAccountUseCase` fechado no use case (pós-merge) — Claude
+**Contexto:** o finding de 2026-11-16 acima, com dono na issue [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211).
+**Decisão:** o use case declara `PROVISIONABLE_ROLES` (hoje `{employee}`) e recusa todo papel fora dele como primeira instrução de `execute`, antes de qualquer porta, com a mesma `RoleNotProvisionableError` da fachada. A fachada e o command não mudam, e um teste compara as duas cópias da regra papel a papel. O registro da decisão está na nota de 2026-11-22 do ADR 2.7.0001, e as do ADR 0.0.0020 e do ADR 2.4.0003 apontam para ela. Entrada pós-merge (CONVENTIONS §3.4): o plano acima não muda.
+
 <!-- END: post-execution -->

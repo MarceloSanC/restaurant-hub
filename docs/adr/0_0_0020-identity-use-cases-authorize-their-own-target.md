@@ -5,7 +5,7 @@ when-use: Reference before adding or changing an identity use case that creates,
 keywords: [adr, identity, authorization, application, fail-closed, defense-in-depth, second-driver, platform-admin, escalation, transversal, issue-115]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-09
+updated_at: 2026-11-22
 adr_id: "0.0.0020"
 decision: 'Identity adopts the ADR 3.7.0001 shape for the four use cases that act on behalf of an authenticated actor (ProvisionRestaurant, CreateUnit, CreateUser, InviteUser): the actor travels in the command, and the use case declares its own access requirement and runs it through AuthorizeActionUseCase before any other statement, while the HTTP boundary keeps authorizing as defense in depth. The ten other identity use cases are out by kind (credential-as-authority, the decision itself, facade-only) and the inventory says why. Implementation is Stage 2.7-identity-application-authorization. With a third bounded context following it, the rule "every use case that acts for an actor authorizes its own target" is transversal (ADR 4.3.0002 §5 trigger): each bounded context keeps its own port shape.'
 context_stage: 0.0-global
@@ -288,4 +288,19 @@ converte para `RestaurantId`, e o `User` recusa `platform_admin` com tenant
 `manager` ou `hr` em qualquer tenant existente, e a Stage 2.7 fechou isso: a fachada só provisiona
 `employee`. No `ProvisionAccountUseCase` o resíduo continua. Um teste garante que só a fachada e o
 composition root importam os use cases facade-only, e o primeiro chamador novo reabre a questão.
+Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — §Inventory: o resíduo de `ProvisionAccountUseCase` fechado
+
+**2026-11-22 — issue [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211).** O
+`ProvisionAccountUseCase` continua fora da regra deste ADR. Ele não age por um ator, só a fachada o
+chama, e o consumidor autoriza. Mas a linha dele em §Inventory ganha um complemento: **o papel é
+restringido no próprio use case**. `PROVISIONABLE_ROLES` (hoje `{employee}`) é checado como
+primeira instrução de `ProvisionAccountUseCase.execute`, antes de qualquer porta, e um papel fora
+dele sobe `RoleNotProvisionableError`, a mesma recusa da fachada (ADR 2.7.0001 §Decision 5). Com
+isso, o parágrafo *"This exclusion leaves a known residual"* de §Inventory e a frase *"No
+`ProvisionAccountUseCase` o resíduo continua"* da nota de 2026-11-09 descrevem um estado que já
+não existe. O resíduo fechou no use case, e já não depende de quem o alcança. A varredura de alcance
+(CA14) continua valendo para os quatro use cases facade-only, que não autorizam. Detalhes e decisão:
+a nota de 2026-11-22 do [ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md).
 Nota *append-only*; o corpo acima não foi editado.

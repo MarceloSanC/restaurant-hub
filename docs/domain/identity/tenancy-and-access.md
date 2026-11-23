@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage que toque o
 keywords: [domain, identity, tenancy, tenant, restaurante, unidade, usuario, conta, rbac, papel, permissao, membership, vinculo, visibilidade, bypass, tenant-wide, autorizacao, fail-closed, provisionamento, platform-admin, sessao, refresh, rotacao, reuso, logout, fachada-de-acesso, convite, conta-pendente, token-de-setup, definicao-de-senha, redefinicao, enumeracao, unidade-de-trabalho, fachada, lingua-ubiqua]
 status: accepted
 created_at: 2026-11-02
-updated_at: 2026-11-09
+updated_at: 2026-11-22
 bounded_context: identity
 subdomain: tenancy-and-access
 references:
@@ -285,8 +285,10 @@ fachada autoriza. Um use case novo entra numa das duas listas ou a suíte reprov
 o que não se detém" vale para quem chama direto esses cinco use cases**, não só pela API: nenhum
 papel detém ao mesmo tempo `manage_users` e `manage_platform`, então por eles ninguém cria um
 `platform_admin`, e um `owner` de outro tenant é negado no passo de tenant. A fachada de
-provisionamento, que não autoriza, só aceita o papel `employee` (ADR 2.7.0001 §Decision 5); o use
-case por trás dela continua aceitando qualquer papel (§5).
+provisionamento, que não autoriza, só aceita o papel `employee` (ADR 2.7.0001 §Decision 5), e o use
+case por trás dela recusa sozinho, antes de qualquer leitura, todo papel fora do mesmo conjunto
+(issue #211, nota de 2026-11-22 do ADR 2.7.0001): chamado direto, ele também não cria conta
+privilegiada.
 
 **A mesma decisão, para quem está fora de identity.** Outro BC não recompõe a autorização: ele a
 pede à **fachada de acesso** (`IdentityAccessFacade`, segunda classe de `application/facade.py`),
@@ -555,11 +557,6 @@ sua âncora de origem.
   passa ([ADR 0.0.0020](../../adr/0_0_0020-identity-use-cases-authorize-their-own-target.md)
   §Consequences). Ator de sistema ou delegado — issue #75; e o seed do primeiro `platform_admin`,
   que não tem ator que o autorize, fica para a Stage que o criar.
-- **O use case de provisionamento por trás da fachada aceita qualquer papel** — chamado direto,
-  sem passar pela fachada, ainda cria `platform_admin` ou `owner` em qualquer tenant. O que o
-  guarda é o alcance (um teste trava que só a fachada e o composition root o importam), não uma
-  regra; o primeiro chamador novo reabre a decisão
-  ([ADR 2.7.0001](../../adr/2_7_0001-identity-authorizes-through-a-narrow-port.md) §Consequences).
 - **Gestão de vínculo depois da criação** — acrescentar, retirar ou trocar unidade de um usuário,
   e vincular login existente a registro de staff (o gerente ou dono que também trabalha na escala)
   — issue #107; a regra de fim de vínculo a aplicar é a do
