@@ -34,7 +34,9 @@ pytestmark = pytest.mark.unit
 
 # 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17).
 # 17 até a 3.10; a Stage 3.11 acrescenta `set_job_function_units`.
-_USE_CASES_ESPERADOS = 20  # Stage 3.10: +unlink_login  # Stage 3.10: +link_existing_login
+_USE_CASES_ESPERADOS = (
+    21  # Stage 3.10: +relink_login  # Stage 3.10: +unlink_login  # Stage 3.10: +link_existing_login
+)
 
 
 def _modulos_de_use_case() -> list[str]:
@@ -80,6 +82,7 @@ def test_o_pacote_tem_exatamente_os_use_cases_declarados() -> None:
         "list_job_functions",
         "reactivate_employee",
         "register_unavailability",
+        "relink_login",
         "remove_unavailability",
         "rename_employee",
         "rename_job_function",

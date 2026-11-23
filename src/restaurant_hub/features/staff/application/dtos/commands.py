@@ -323,6 +323,25 @@ class UnlinkLoginCommand:
 
 
 @dataclass(frozen=True)
+class RelinkLoginCommand:
+    """Troca do login vinculado a um registro por outra conta existente (R19, Stage 3.10).
+
+    Attributes:
+        tenant_id: restaurante — vem do **token** (ADR 0.0.0005), nunca do corpo.
+        unit_id: unidade do registro, do path — parte do endereço (ADR 3.4.0007).
+        employee_id: o registro cujo vínculo muda.
+        email: o e-mail da conta que já existe, **como texto** — identity o valida e o
+            normaliza atrás do gateway (L-IG6), como em R17.
+    """
+
+    actor: Actor = field(repr=False)
+    tenant_id: TenantId
+    unit_id: UnitId
+    employee_id: EmployeeId
+    email: str
+
+
+@dataclass(frozen=True)
 class CopyEmployeeToUnitCommand:
     """Cópia do cadastro para **outra** unidade do mesmo restaurante.
 

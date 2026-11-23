@@ -220,6 +220,9 @@ from restaurant_hub.features.staff.application.use_cases.reactivate_employee imp
 from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
     RegisterUnavailabilityUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.relink_login import (
+    RelinkLoginUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.remove_unavailability import (
     RemoveUnavailabilityUseCase,
 )
@@ -303,6 +306,9 @@ class ApplicationDependencies:
     # Stage 3.5 — o 17º use case de staff (R17). Consome `staff_identity_gateway`,
     # como `staff_deactivate_employee` passou a consumir (R13).
     staff_create_login_for_employee: CreateLoginForEmployeeUseCase
+    # Stage 3.10 — transição do vínculo de login (ADR 3.10.0001). Consome
+    # `staff_identity_gateway`, como R13 e R17.
+    staff_relink_login: RelinkLoginUseCase
     # Stage 3.10 — transição do vínculo de login (ADR 3.10.0001). Consome
     # `staff_identity_gateway`, como R13 e R17.
     staff_unlink_login: UnlinkLoginUseCase
@@ -670,6 +676,9 @@ def wire_dependencies(
             guard=staff_access_guard,
         ),
         staff_create_login_for_employee=CreateLoginForEmployeeUseCase(
+            employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
+        ),
+        staff_relink_login=RelinkLoginUseCase(
             employees=staff_employees, gateway=staff_identity_gateway, guard=staff_access_guard
         ),
         staff_unlink_login=UnlinkLoginUseCase(

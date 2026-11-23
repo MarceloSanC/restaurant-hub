@@ -21,12 +21,18 @@ from typing import Final
 
 import pytest
 
-from restaurant_hub.features.staff.application.dtos.commands import DeactivateEmployeeCommand
+from restaurant_hub.features.staff.application.dtos.commands import (
+    DeactivateEmployeeCommand,
+    RelinkLoginCommand,
+    UnlinkLoginCommand,
+)
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import LoginDelivery
 from restaurant_hub.features.staff.application.use_cases._login_link import end_active_link
 from restaurant_hub.features.staff.application.use_cases.deactivate_employee import (
     DeactivateEmployeeUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.relink_login import RelinkLoginUseCase
+from restaurant_hub.features.staff.application.use_cases.unlink_login import UnlinkLoginUseCase
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.exceptions.errors import EmployeeLoginChangedError
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -65,7 +71,7 @@ _TRANSICOES_QUE_ENCERRAM: Final = frozenset(
 
 # Os use cases que encerram vínculo ativo, transcritos — a varredura deriva o conjunto
 # do código e compara. Use case novo que encerre vínculo entra aqui por decisão.
-_ENCERRAM_VINCULO: Final = frozenset({"unlink_login", "deactivate_employee"})
+_ENCERRAM_VINCULO: Final = frozenset({"relink_login", "unlink_login", "deactivate_employee"})
 
 
 # --- 1. estrutura ------------------------------------------------------------
@@ -437,3 +443,110 @@ def test_r13_passa_ao_port_o_estado_que_leu() -> None:
     _desligar(_Espiao(fakes.store), gateway)
 
     assert vistos == [(login, True), (login, False)]
+
+
+# --- 4. CA4: a regra, condição a condição, em cada chamador ------------------
+#
+# A mesma tabela de condições para R13, R19 e R20. Um chamador que reimplementasse
+# a regra (ou a pulasse num caso) reprova aqui em runtime, mesmo que a varredura de
+# AST acima fosse contornada. Em R19 a regra é do login **antigo**: a conta nova,
+# membro da unidade, é semeada à parte.
+
+_NOVA = UserId("conta-nova")
+_EMAIL_DA_NOVA = "nova@cantina.com"
+
+
+def _executar(chamador: str, employees: InMemoryEmployeeRepository, gateway: object) -> None:
+    guard = PermissiveAccessGuard()
+    if chamador == "deactivate_employee":
+        DeactivateEmployeeUseCase(employees, gateway, guard=guard).execute(  # type: ignore[arg-type]
+            DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
+    elif chamador == "unlink_login":
+        UnlinkLoginUseCase(employees, gateway, guard=guard).execute(  # type: ignore[arg-type]
+            UnlinkLoginCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+        )
+    else:
+        RelinkLoginUseCase(employees, gateway, guard=guard).execute(  # type: ignore[arg-type]
+            RelinkLoginCommand(
+                actor=TEST_ACTOR,
+                tenant_id=_A,
+                unit_id=_U1,
+                employee_id=_E1,
+                email=_EMAIL_DA_NOVA,
+            )
+        )
+
+
+_CHAMADORES = sorted(_ENCERRAM_VINCULO)
+
+
+def _arranjo_ca4() -> tuple[StaffFakes, InMemoryIdentityGateway, UserId]:
+    fakes, gateway, login = _arranjo()
+    gateway.seed_account(_NOVA, email=_EMAIL_DA_NOVA, tenant_id=_A, unit_ids=frozenset({_U1}))
+    return fakes, gateway, login
+
+
+@pytest.mark.parametrize("chamador", _CHAMADORES)
+def test_ca4_revoga_o_login_de_funcionario_unico_da_unidade(chamador: str) -> None:
+    fakes, gateway, login = _arranjo_ca4()
+    _gravar(fakes, _registro(user_id=login))
+
+    _executar(chamador, fakes.employees, gateway)
+
+    assert gateway.revoked == [login]
+
+
+@pytest.mark.parametrize("chamador", _CHAMADORES)
+def test_ca4_outro_registro_ativo_da_unidade_com_o_login_nao_revoga(chamador: str) -> None:
+    fakes, gateway, login = _arranjo_ca4()
+    _gravar(fakes, _registro(user_id=login))
+    _gravar(fakes, _registro("e2", user_id=login))
+
+    _executar(chamador, fakes.employees, gateway)
+
+    assert gateway.revoked == []
+    assert not any(c.startswith("is_employee_login") for c in gateway.calls)
+
+
+@pytest.mark.parametrize("chamador", _CHAMADORES)
+def test_ca4_login_de_outro_papel_nao_revoga(chamador: str) -> None:
+    fakes, gateway, _ = _arranjo_ca4()
+    gerente = UserId("login-do-gerente")
+    gateway.seed_login_of_other_role(gerente, tenant_id=_A, unit_id=_U1)
+    _gravar(fakes, _registro(user_id=gerente))
+
+    _executar(chamador, fakes.employees, gateway)
+
+    assert gateway.revoked == []
+
+
+@pytest.mark.parametrize("chamador", _CHAMADORES)
+def test_ca4_login_desconhecido_nao_revoga(chamador: str) -> None:
+    fakes, gateway, _ = _arranjo_ca4()
+    _gravar(fakes, _registro(user_id=UserId("login-que-identity-nao-conhece")))
+
+    _executar(chamador, fakes.employees, gateway)
+
+    assert gateway.revoked == []
+
+
+@pytest.mark.parametrize("chamador", ["deactivate_employee", "unlink_login"])
+def test_ca4_registro_desligado_nao_toca_identity(chamador: str) -> None:
+    """R13 repetido e R20 de desligado. R19 recusa desligado antes (CA6)."""
+    fakes, gateway, login = _arranjo_ca4()
+    _gravar(fakes, _registro(user_id=login, active=False))
+
+    _executar(chamador, fakes.employees, gateway)
+
+    assert gateway.calls == []
+
+
+def test_ca4_trocar_aplica_a_regra_ao_login_antigo_e_nao_ao_novo() -> None:
+    fakes, gateway, login = _arranjo_ca4()
+    _gravar(fakes, _registro(user_id=login))
+
+    _executar("relink_login", fakes.employees, gateway)
+
+    assert gateway.revoked == [login]
+    assert f"is_employee_login({_NOVA!r})" not in gateway.calls
