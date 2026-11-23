@@ -6,10 +6,14 @@ plano de gates. A regra antiga estava escrita em dois prompts. Se ela voltar a
 um doc que alguém segue para trabalhar, volta a ser cumprida. O gate reprova a
 frase, e reprova também o sumiço das duas seções para onde os docs apontam.
 
+Desde a issue #201 o gate também reprova o bloco de comandos que roda o
+`make check` antes do commit de uma Task (a forma do RUNBOOK Passo 9 antes do
+PR #192).
+
 **As frases são plantadas num repositório de mentira** em `tmp_path` (o script
-recebe `repo_root`). Dois testes rodam contra os docs reais: um trava o estado
-desta issue, o outro reintroduz a frase antiga no PROMPT-stage real e confere
-que o gate a pega.
+recebe `repo_root`). Os testes do fim rodam contra os docs reais: travam o
+estado limpo, o piso de blocos varridos, e reintroduzem a frase e o bloco
+antigos nos docs reais para conferir que o gate os pega.
 """
 
 import importlib.util
@@ -195,6 +199,122 @@ def test_a_phrase_at_the_very_start_of_a_line_reports_that_line() -> None:
 
 
 # ---------------------------------------------------------------------------
+# O bloco de comandos (issue #201): o que reprova e o que não pode reprovar
+# ---------------------------------------------------------------------------
+
+# O bloco do RUNBOOK Passo 9 antes do PR #192, como estava escrito.
+_RUNBOOK_STEP9_OLD = """\
+**Aprovado (modo strict):**
+
+```powershell
+# IA escreve os arquivos
+make check          # rodar todos os checks
+git add <arquivos-da-task>
+git commit -m "<type>(<scope>): <desc> [$N.$M/task-NN]
+
+Refs #$issue"
+```
+"""
+
+
+def _fenced(body: str, language: str = "bash") -> str:
+    return f"```{language}\n{body}\n```\n"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        _RUNBOOK_STEP9_OLD,
+        _fenced('make check\ngit commit -m "feat(x): y [4.4/task-03]"'),
+        _fenced('$ make check\n$ git add .\n$ git commit -m "feat(x): y [#201/task-02]"'),
+        _fenced('PS> make check\nPS> git commit -m "fix(x): y [3.9/task-04-fix]"'),
+        _fenced('make check && git commit -m "feat(x): y [1.2/task-01]"'),
+        _fenced('pytest tests -q; make check; git commit -m "feat(x): y [1.2/task-01]"'),
+        _fenced('make check\ngit -C ../wt commit -m "feat(x): y [1.2/task-01]"'),
+        _fenced("make check\ngit commit -F - <<'EOF'\nfeat(x): y [1.2/task-05]\nEOF"),
+        _fenced('make check\ngit commit -m "feat(x): y"\n# [N.M/task-NN]'),
+        # Bloco citado (dentro de `>`) e cerca de til.
+        '> ```bash\n> make check\n> git commit -m "feat(x): y [1.2/task-01]"\n> ```\n',
+        '~~~\nmake check\ngit commit -m "feat(x): y [1.2/task-01]"\n~~~\n',
+        # Dentro de um prompt cercado por ````markdown, a cerca de dentro conta.
+        "````markdown\n# Prompt\n\n"
+        + _fenced('make check\ngit commit -m "a [1.2/task-01]"')
+        + "````\n",
+        # Cerca sem fechamento vai até o fim.
+        '```bash\nmake check\ngit commit -m "feat(x): y [1.2/task-01]"\n',
+    ],
+)
+def test_a_block_running_make_check_before_a_task_commit_is_rejected(text: str) -> None:
+    found = gate.retired_blocks_in(text)
+    assert len(found) == 1, f"não reprovou: {text!r}"
+    assert "regra aposentada pelo ADR 0.0.0021" in found[0][1]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # O Passo 9 de hoje: o `make check` é comentário, condicional ao plano.
+        _fenced(
+            "pytest <arquivos-de-teste-da-task> -q --no-cov   # só os testes da Task\n"
+            "# Task que é ponto do plano de gates (technical.md §1): rodar também `make check`\n"
+            "git add <arquivos-da-task>\n"
+            'git commit -m "<type>(<scope>): <desc> [$N.$M/task-NN]',
+            "powershell",
+        ),
+        # O ponto condicional escrito no próprio comando.
+        _fenced('make check   # ponto do plano de gates\ngit commit -m "feat(x): y [1.2/task-03]"'),
+        _fenced('make check  # gate plan point\ngit commit -m "feat(x): y [1.2/task-03]"'),
+        # O gate de saída: o commit de fechamento não tem marca de Task.
+        _fenced('make check\ngit commit -m "stage N.M: complete"'),
+        _fenced(
+            'make check\ngit add docs/roadmap.md\ngit commit -m "chore(roadmap): fechar issue #9"'
+        ),
+        # O commit vem antes do gate, ou não há commit.
+        _fenced('git commit -m "feat(x): y [1.2/task-01]"\nmake check'),
+        _fenced('git commit -m "feat(x): y [1.2/task-01]" && make check'),
+        _fenced("make check                # gate completo: o último ponto do plano de gates"),
+        # Vizinhos que não são `make check` nem `git commit`.
+        _fenced('make check-task\ngit commit -m "feat(x): y [1.2/task-01]"'),
+        _fenced('make docs-check\ngit commit -m "feat(x): y [1.2/task-01]"'),
+        _fenced('make check\ngit commit-tree HEAD -m "task-01"'),
+        _fenced('echo make check\ngit log --grep="task-01"'),
+        # `make check` em blocos diferentes não é um bloco só.
+        _fenced("make check") + "\nprosa\n\n" + _fenced('git commit -m "feat(x): y [1.2/task-01]"'),
+        # Fora de cerca é prosa, e é da regra da frase.
+        'make check\ngit commit -m "feat(x): y [1.2/task-01]"\n',
+        # Um prompt cercado por ````markdown com os dois comandos em cercas diferentes.
+        "````markdown\n"
+        + _fenced("make check")
+        + _fenced('git commit -m "a [1.2/task-01]"')
+        + "````\n",
+        # Cerca ````text não é contêiner: o ``` de dentro é texto e não fecha.
+        "````text\n```\n````\n" + _fenced("echo ok"),
+    ],
+)
+def test_legitimate_blocks_are_not_rejected(text: str) -> None:
+    """O gate de saída, o ponto condicional e os vizinhos passam: gate frouxo é gate ignorado."""
+    assert gate.retired_blocks_in(text) == []
+
+
+def test_the_reported_line_of_a_block_is_the_make_check_line() -> None:
+    text = "# Título\n\n" + _RUNBOOK_STEP9_OLD
+    [(line, _)] = gate.retired_blocks_in(text)
+    assert text.splitlines()[line - 1].startswith("make check")
+
+
+def test_two_blocks_are_two_findings() -> None:
+    block = _fenced('make check\ngit commit -m "feat(x): y [1.2/task-01]"')
+    expected = 2
+    assert len(gate.retired_blocks_in(block + "\nprosa\n\n" + block)) == expected
+
+
+def test_a_block_finding_is_reported_by_problems(tmp_path: pathlib.Path) -> None:
+    repo = _repo(tmp_path, {"docs/RUNBOOK-STAGE-LIFECYCLE.md": "x\n\n" + _RUNBOOK_STEP9_OLD})
+    [problem] = gate.problems(repo)
+    assert problem.startswith("docs/RUNBOOK-STAGE-LIFECYCLE.md:7: bloco de comandos")
+
+
+# ---------------------------------------------------------------------------
 # O que é varrido e o que fica fora
 # ---------------------------------------------------------------------------
 
@@ -363,6 +483,79 @@ def test_reintroducing_the_old_rule_in_a_real_doc_is_rejected(
     [problem] = gate.problems(repo)
     assert problem.startswith(f"{rel}:")
     assert "regra aposentada pelo ADR 0.0.0021" in problem
+
+
+def test_the_real_docs_have_command_blocks_to_scan() -> None:
+    """Piso: a varredura de blocos alcança os blocos de dentro dos prompts cercados.
+
+    Se o parser de cerca parar de descer no prompt (````markdown), os blocos de
+    dentro somem e o gate fica verde por não olhar.
+    """
+    blocks = 0
+    for path in gate.normative_files(_REPO_ROOT):
+        blocks += len(gate.code_blocks(path.read_text(encoding="utf-8-sig")))
+    floor = 100
+    assert blocks >= floor
+    prompt = (_REPO_ROOT / "docs/PROMPT-issue-single-session.md").read_text(encoding="utf-8")
+    inner_commits = [
+        block
+        for block in gate.code_blocks(prompt)
+        if any("git commit" in line for _, line in block)
+    ]
+    inner_floor = 2
+    assert len(inner_commits) >= inner_floor, "os blocos de commit de dentro do prompt sumiram"
+    runbook = (_REPO_ROOT / "docs/RUNBOOK-STAGE-LIFECYCLE.md").read_text(encoding="utf-8")
+    step9 = [
+        block
+        for block in gate.code_blocks(runbook)
+        if any("git commit" in line for _, line in block)
+        and any("make check" in line for _, line in block)
+    ]
+    assert len(step9) == 1, "o bloco do Passo 9 (com `make check` em comentário) sumiu"
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "docs/RUNBOOK-STAGE-LIFECYCLE.md",
+        "docs/PROMPT-stage-single-session.md",
+        "docs/PROMPT-issue-single-session.md",
+    ],
+)
+def test_reintroducing_the_old_block_in_a_real_doc_is_rejected(
+    tmp_path: pathlib.Path, rel: str
+) -> None:
+    """Mutação sobre o doc real: o bloco antigo do Passo 9 de volta ao doc reprova."""
+    real = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+    assert gate.retired_blocks_in(real) == []
+    repo = _repo(tmp_path, {rel: real + "\n" + _RUNBOOK_STEP9_OLD})
+    [problem] = gate.problems(repo)
+    assert problem.startswith(f"{rel}:")
+    assert "bloco de comandos" in problem
+
+
+def test_uncommenting_make_check_in_the_real_step9_is_rejected(tmp_path: pathlib.Path) -> None:
+    """Mutação no Passo 9 real: o `make check` em comentário vira comando e reprova."""
+    rel = "docs/RUNBOOK-STAGE-LIFECYCLE.md"
+    real = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+    current = "# Task que é ponto do plano de gates (technical.md §1): rodar também `make check`"
+    assert current in real
+    mutated = real.replace(current, "make check          # rodar todos os checks")
+    [problem] = gate.problems(_repo(tmp_path, {rel: mutated}))
+    assert "bloco de comandos" in problem
+
+
+def test_a_task_commit_in_the_real_issue_prompt_with_make_check_is_rejected(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Mutação dentro do prompt cercado: `make check` antes do commit da sub-task reprova."""
+    rel = "docs/PROMPT-issue-single-session.md"
+    real = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+    current = "   git add <arquivos-da-sub-task>\n"
+    assert real.count(current) == 1
+    mutated = real.replace(current, "   make check\n" + current)
+    [problem] = gate.problems(_repo(tmp_path, {rel: mutated}))
+    assert "bloco de comandos" in problem
 
 
 @pytest.mark.parametrize("required", gate.REQUIRED_HEADINGS, ids=lambda r: r.path)

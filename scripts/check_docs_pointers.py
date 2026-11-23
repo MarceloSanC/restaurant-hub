@@ -48,11 +48,33 @@ parêntese curto.
 a frase e é reprovada. O doc normativo diz a regra nova e aponta o ADR; a regra
 antiga fica descrita no ADR.
 
-**O que o guard não pega.** Ele acha a frase, não a intenção. Escapam, e
-continuam dependendo de revisão:
+**O bloco de comandos (issue #201).** O RUNBOOK Passo 9 trazia a regra sem a
+frase, num bloco cercado:
 
-- bloco de comandos que roda `make check` e depois `git commit` (o RUNBOOK
-  Passo 9 tinha um);
+    make check          # rodar todos os checks
+    git add <arquivos-da-task>
+    git commit -m "<type>(<scope>): <desc> [$N.$M/task-NN]
+
+O guard reprova o bloco cercado em que uma linha **roda** `make check` e uma
+linha seguinte **roda** um `git commit` cuja mensagem traz a marca de Task
+(`task-`, CONVENTIONS §4(a) "Marca de Task"). A marca é o que separa o commit
+de cada Task do commit de fechamento (`stage N.M: complete`, `chore(roadmap):
+fechar issue #N`), que vem depois do gate de saída e é legítimo. Detalhes:
+
+- "roda" é a linha de comando, não o comentário: `# rodar também make check`
+  (a forma atual do Passo 9) não conta. O comando pode vir depois de `$ `,
+  `PS> `, `&&`, `;` ou `||`;
+- `make check` com comentário que cita o plano de gates (`make check  # ponto
+  do plano de gates`) é o ponto condicional, e não conta;
+- cerca com linguagem `markdown`/`md` é um prompt inteiro, não um bloco de
+  comandos: o guard desce nela e olha as cercas de dentro, uma a uma.
+
+**O que o guard não pega.** Ele acha a frase e o bloco, não a intenção.
+Escapam, e continuam dependendo de revisão:
+
+- bloco que roda `make check` e depois `git commit` sem a marca de Task na
+  mensagem (`git commit -m "feat(x): y"`): sem a marca, o bloco é igual ao do
+  commit de fechamento;
 - paráfrase sem a amarração escrita: "todo commit passa pelo `make check`",
   "cada Task termina com o `make check` verde";
 - lista de passos por Task com o comando no meio ("para cada Task: implementar
@@ -202,6 +224,27 @@ REQUIRED_HEADINGS: tuple[RequiredHeading, ...] = (
     ),
 )
 
+# O bloco de comandos que roda `make check` e depois o commit de uma Task (issue
+# #201: o RUNBOOK Passo 9 trazia um até o PR #192).
+RETIRED_BLOCK_REASON = (
+    "bloco de comandos que roda `make check` antes do `git commit` de uma Task (marca "
+    "`task-`): regra aposentada pelo ADR 0.0.0021. Por Task rodam só os testes dela; o "
+    "`make check` completo roda nos 1 a 3 pontos do plano de gates (docs/PIPELINE.md §9.6)"
+)
+# Abertura ou fechamento de cerca, com a linguagem depois dela.
+_FENCE = re.compile(r"^[\s>]*(`{3,}|~{3,})(.*)$")
+# Cerca cujo conteúdo é markdown: um prompt inteiro, com as suas próprias cercas.
+_CONTAINER_LANGUAGES = frozenset({"markdown", "md"})
+# Começo de comando numa linha de shell: início, ou depois de `&&`, `;`, `||`;
+# com o prompt `$ ` ou `PS> ` opcional.
+_COMMAND_START = r"(?:^|&&|;|\|\|)\s*(?:\$\s+|PS>\s*)?"
+_RUNS_MAKE_CHECK = re.compile(_COMMAND_START + r"make\s+check(?![\w-])")
+_RUNS_GIT_COMMIT = re.compile(_COMMAND_START + r"git\s+(?:-C\s+\S+\s+)?commit(?![\w-])")
+# Comentário de shell: `#` no começo ou depois de espaço (`[#201/task-01]` não é).
+_COMMENT = re.compile(r"(?:^|\s)#")
+_TASK_MARK = re.compile(r"task-")
+_GATE_PLAN_NOTE = re.compile(r"plano de gates|gate plan", re.IGNORECASE)
+
 # Recuo e `>` de citação no começo da linha: somem antes da busca.
 _LINE_PREFIX = re.compile(r"^[\s>]*")
 # Separa parágrafos no texto achatado. Não é espaço, então `\s` não o atravessa.
@@ -247,6 +290,65 @@ def retired_rules_in(text: str) -> list[tuple[int, str]]:
     return sorted(found)
 
 
+def code_blocks(text: str) -> list[list[tuple[int, str]]]:
+    """Os blocos cercados de comando, cada um como as suas linhas (número 1-based, texto).
+
+    Cerca `markdown`/`md` é um prompt inteiro: o guard desce nela e devolve as
+    cercas de dentro. Cerca sem fechamento vai até o fim do arquivo.
+    """
+    blocks: list[list[tuple[int, str]]] = []
+    # Cada cerca aberta: (marcador, é contêiner, linhas do bloco).
+    open_fences: list[tuple[str, bool, list[tuple[int, str]]]] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        match = _FENCE.match(line)
+        inside_leaf = bool(open_fences) and not open_fences[-1][1]
+        if match and open_fences:
+            marker = open_fences[-1][0]
+            fence, rest = match.group(1), match.group(2).strip()
+            if fence[0] == marker[0] and len(fence) >= len(marker) and not rest:
+                _, container, lines = open_fences.pop()
+                if not container:
+                    blocks.append(lines)
+                continue
+        if match and not inside_leaf:
+            language = match.group(2).strip().lower()
+            open_fences.append((match.group(1), language in _CONTAINER_LANGUAGES, []))
+            continue
+        if inside_leaf:
+            open_fences[-1][2].append((number, line))
+    blocks.extend(lines for _, container, lines in open_fences if not container)
+    return blocks
+
+
+def _command_and_comment(line: str) -> tuple[str, str]:
+    """A parte de comando de uma linha de shell e o comentário depois dela."""
+    content = _LINE_PREFIX.sub("", line)
+    parts = _COMMENT.split(content, maxsplit=1)
+    return parts[0], parts[1] if len(parts) > 1 else ""
+
+
+def retired_blocks_in(text: str) -> list[tuple[int, str]]:
+    """Cada bloco que roda `make check` antes do commit de uma Task, como (linha, motivo)."""
+    found: list[tuple[int, str]] = []
+    for block in code_blocks(text):
+        gate_line: int | None = None
+        for index, (number, line) in enumerate(block):
+            command, comment = _command_and_comment(line)
+            if gate_line is None:
+                gate = _RUNS_MAKE_CHECK.search(command)
+                if gate is None or _GATE_PLAN_NOTE.search(comment):
+                    continue
+                gate_line = number
+                # O commit pode vir na mesma linha (`make check && git commit ...`).
+                command = command[gate.end() :]
+            if _RUNS_GIT_COMMIT.search(command):
+                message = "\n".join(rest for _, rest in block[index:])
+                if _TASK_MARK.search(message):
+                    found.append((gate_line, RETIRED_BLOCK_REASON))
+                    break
+    return found
+
+
 def missing_headings(repo_root: Path) -> list[str]:
     """Os títulos exigidos que sumiram, como `arquivo: motivo`."""
     problems: list[str] = []
@@ -272,7 +374,8 @@ def problems(repo_root: Path) -> list[str]:
     found: list[str] = []
     for path in files:
         rel = path.relative_to(repo_root).as_posix()
-        for line, reason in retired_rules_in(path.read_text(encoding="utf-8-sig")):
+        text = path.read_text(encoding="utf-8-sig")
+        for line, reason in sorted(retired_rules_in(text) + retired_blocks_in(text)):
             found.append(f"{rel}:{line}: {reason}")
     found.extend(missing_headings(repo_root))
     return found
