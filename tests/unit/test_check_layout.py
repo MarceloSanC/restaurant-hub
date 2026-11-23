@@ -920,6 +920,20 @@ _AUXILIAR_QUE_REMOVE = "def revogar(coisas: CoisaRepository) -> None:\n    coisa
             "def revogar(coisas: CoisaRepository) -> None:\n    _base.gravar(coisas)\n",
             id="transitivo-por-import-relativo-de-modulo",
         ),
+        pytest.param(
+            "from functools import partial\n\n\n"
+            "def revogar(coisas: CoisaRepository) -> None:\n    partial(_gravar, coisas)()\n\n\n"
+            "def _gravar(coisas: CoisaRepository) -> None:\n    coisas.remove('s')\n",
+            id="transitivo-por-referencia-em-partial",
+        ),
+        pytest.param(
+            "class _Gravador:\n"
+            "    @staticmethod\n"
+            "    def gravar(coisas: CoisaRepository) -> None:\n"
+            "        coisas.remove('s')\n\n\n"
+            "def revogar(coisas: CoisaRepository) -> None:\n    _Gravador.gravar(coisas)\n",
+            id="transitivo-por-metodo-estatico-do-modulo",
+        ),
     ],
 )
 @pytest.mark.usefixtures("regra10_isolada")
@@ -1053,6 +1067,23 @@ def test_regra10_definicao_local_vence_o_homonimo_de_outro_modulo(tmp_path: path
             f"from {_PACOTE_DOS_USE_CASES}._aux import *",
             id="star-import-cai-no-fail-closed-por-nome",
         ),
+        # A função citada sem ser chamada ali (auditoria do PR #257): a chamada de
+        # verdade a árvore não resolve, então a referência conta no lugar dela.
+        pytest.param(
+            "partial(revogar, self._coisas)()",
+            f"from functools import partial\nfrom {_PACOTE_DOS_USE_CASES}._aux import revogar",
+            id="referencia-em-functools-partial",
+        ),
+        pytest.param(
+            "list(map(revogar, [self._coisas]))",
+            f"from {_PACOTE_DOS_USE_CASES}._aux import revogar",
+            id="referencia-passada-como-callable",
+        ),
+        pytest.param(
+            "apagar = revogar; apagar(self._coisas)",
+            f"from {_PACOTE_DOS_USE_CASES}._aux import revogar",
+            id="alias-local-da-funcao",
+        ),
     ],
 )
 @pytest.mark.usefixtures("regra10_isolada")
@@ -1065,6 +1096,86 @@ def test_regra10_a_chamada_ao_auxiliar_e_resolvida_em_cada_forma_de_import(
 
     assert len(violacoes) == 1, violacoes
     assert "revogar()" in violacoes[0]
+
+
+@pytest.mark.parametrize(
+    ("auxiliar", "chamada", "importacao"),
+    [
+        pytest.param(
+            "class Gravador:\n"
+            "    @staticmethod\n"
+            "    def revogar(coisas: CoisaRepository) -> None:\n"
+            "        coisas.remove('s')\n",
+            "Gravador.revogar(self._coisas)",
+            f"from {_PACOTE_DOS_USE_CASES}._aux import Gravador",
+            id="estatico-de-classe-importada",
+        ),
+        pytest.param(
+            "class Gravador:\n"
+            "    @classmethod\n"
+            "    def revogar(cls, coisas: CoisaRepository) -> None:\n"
+            "        coisas.remove('s')\n",
+            "_aux.Gravador.revogar(self._coisas)",
+            f"from {_PACOTE_DOS_USE_CASES} import _aux",
+            id="de-classe-pelo-modulo",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_metodo_estatico_ou_de_classe_de_modulo_auxiliar_conta(
+    tmp_path: pathlib.Path, auxiliar: str, chamada: str, importacao: str
+) -> None:
+    """Chamado sem instância, é função de módulo com outro nome (auditoria do PR #257)."""
+    raiz = _src_com_auxiliar(tmp_path, auxiliar, chamada, importacao)
+
+    violacoes = check_layout.check_multi_write_unit_of_work(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "Gravador.revogar() (linha" in violacoes[0]
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_port_entregue_por_parametro_a_metodo_do_use_case_conta(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`self._salvar(self._coisas)` com `c.remove()` dentro: a escrita é do use case.
+
+    O varredor só lia `self.<atributo>.<método>`; o repositório entregue por parâmetro
+    a um método da própria classe escapava (auditoria do PR #257).
+    """
+    raiz = _src_com_use_case(
+        tmp_path,
+        "    def execute(self) -> None:\n"
+        "        self._salvar(self._coisas)\n"
+        "        self._coisas.add('a')\n\n"
+        "    def _salvar(self, c: CoisaRepository) -> None:\n"
+        "        c.remove('s')\n"
+        "        c.find_by_id('s')\n",
+    )
+
+    violacoes = check_layout.check_multi_write_unit_of_work(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "c.remove (linha" in violacoes[0]
+    assert "find_by_id" not in violacoes[0]
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_referencia_a_auxiliar_que_so_le_ou_a_nome_local_nao_conta(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Controle das referências: só a que o módulo resolve para um auxiliar que escreve."""
+    que_le = "def revogar(coisas: CoisaRepository) -> None:\n    coisas.find_by_id('s')\n"
+    raiz = _src_com_auxiliar(tmp_path, que_le, chamada="partial(revogar, self._coisas)()")
+    assert check_layout.check_multi_write_unit_of_work(raiz) == []
+
+    homonimo_local = _src_com_auxiliar(
+        tmp_path / "b",
+        _AUXILIAR_QUE_REMOVE,
+        chamada="revogar = [self._coisas]; print(revogar)",
+        importacao="",
+    )
+    assert check_layout.check_multi_write_unit_of_work(homonimo_local) == []
 
 
 @pytest.mark.usefixtures("regra10_isolada")

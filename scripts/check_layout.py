@@ -800,19 +800,24 @@ def _nomes_da_anotacao(anotacao: ast.expr | None) -> set[str]:
 
 @dataclass(frozen=True)
 class _Modulo:
-    """Um arquivo de `use_cases/`: nome pontuado, funções de módulo e nomes importados."""
+    """Um arquivo de `use_cases/`: nome pontuado, funções de módulo e nomes importados.
+
+    `funcoes` inclui os métodos estáticos e de classe das classes do módulo, com a
+    chave `Classe.metodo`: chamados sem instância, são função de módulo com outro nome.
+    """
 
     nome: str
     arvore: ast.Module
     funcoes: dict[str, ast.FunctionDef | ast.AsyncFunctionDef]
     importados: dict[str, str]
+    classes: frozenset[str] = frozenset()
 
     def qualificar(self, func: ast.expr) -> str | None:
         """Nome pontuado do que a chamada invoca, quando o próprio módulo o resolve.
 
-        `f()` definida aqui, `f()` importada (`from m import f [as g]`) ou `m.f()` com
-        `m` importado. Qualquer outra coisa (`self._x.f()`, chamada de retorno de
-        chamada) devolve `None`.
+        `f()` definida aqui, `f()` importada (`from m import f [as g]`), `m.f()` com
+        `m` importado, ou `C.f()` com `C` classe daqui. Qualquer outra coisa
+        (`self._x.f()`, chamada de retorno de chamada) devolve `None`.
         """
         partes: list[str] = []
         no = func
@@ -823,9 +828,18 @@ class _Modulo:
             return None
         if not partes and no.id in self.funcoes:
             return f"{self.nome}.{no.id}"
+        if partes and no.id in self.classes:
+            return ".".join([self.nome, no.id, *partes])
         if no.id in self.importados:
             return ".".join([self.importados[no.id], *partes])
         return None
+
+
+def _estatico_ou_de_classe(funcao: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(
+        isinstance(d, ast.Name) and d.id in {"staticmethod", "classmethod"}
+        for d in funcao.decorator_list
+    )
 
 
 def _modulos_de_use_cases(src_root: Path) -> list[_Modulo]:
@@ -854,7 +868,14 @@ def _modulos_de_use_cases(src_root: Path) -> list[_Modulo]:
                         cabeca = alias.name.split(".")[0]
                         importados[cabeca] = cabeca
         funcoes = {n.name: n for n in tree.body if isinstance(n, _FUNCOES)}
-        modulos.append(_Modulo(nome, tree, funcoes, importados))
+        classes = [n for n in tree.body if isinstance(n, ast.ClassDef)]
+        for classe in classes:
+            funcoes |= {
+                f"{classe.name}.{m.name}": m
+                for m in classe.body
+                if isinstance(m, _FUNCOES) and _estatico_ou_de_classe(m)
+            }
+        modulos.append(_Modulo(nome, tree, funcoes, importados, frozenset(c.name for c in classes)))
     return modulos
 
 
@@ -888,15 +909,45 @@ def _resolver_chamada(
     return None
 
 
+def _referencias_a_auxiliares(
+    modulo: _Modulo, no: ast.AST, auxiliares: dict[str, AuxiliarQueEscreve]
+) -> list[tuple[ast.expr, AuxiliarQueEscreve]]:
+    """Auxiliares que escrevem citados em `no` **sem** ser chamados ali.
+
+    `partial(f, repo)`, `rodar(f, repo)` e `g = f` levam a escrita para uma chamada que
+    a árvore não resolve. Fail-closed: a referência conta como a escrita, no lugar
+    dela. Só a referência que o módulo resolve (import ou definição) — um nome local
+    homônimo não conta.
+    """
+    chamados = {id(n.func) for n in ast.walk(no) if isinstance(n, ast.Call)}
+    achados: list[tuple[ast.expr, AuxiliarQueEscreve]] = []
+    for interno in ast.walk(no):
+        if (
+            isinstance(interno, ast.Name | ast.Attribute)
+            and isinstance(interno.ctx, ast.Load)
+            and id(interno) not in chamados
+        ):
+            qualificado = modulo.qualificar(interno)
+            auxiliar = auxiliares.get(qualificado) if qualificado is not None else None
+            if auxiliar is not None:
+                achados.append((interno, auxiliar))
+    return achados
+
+
+def _parametros_anotados(funcao: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, set[str]]:
+    """Parâmetro → nomes da anotação (vazio quando não anotado), de toda espécie."""
+    a = funcao.args
+    return {
+        p.arg: _nomes_da_anotacao(p.annotation)
+        for p in [*a.posonlyargs, *a.args, *a.kwonlyargs, *filter(None, (a.vararg, a.kwarg))]
+    }
+
+
 def _escritas_diretas(
     funcao: ast.FunctionDef | ast.AsyncFunctionDef, repository_ports: set[str]
 ) -> list[tuple[str, bool]]:
     """`parâmetro.método(...)` de escrita no corpo — inclusive em função aninhada."""
-    a = funcao.args
-    parametros = {
-        p.arg: _nomes_da_anotacao(p.annotation)
-        for p in [*a.posonlyargs, *a.args, *a.kwonlyargs, *filter(None, (a.vararg, a.kwarg))]
-    }
+    parametros = _parametros_anotados(funcao)
     em_laco = _dentro_de_laco(funcao)
     escritas: list[tuple[str, bool]] = []
     for no in ast.walk(funcao):
@@ -927,7 +978,12 @@ def helper_writes(
       `list_`, ou método de `GATEWAY_WRITE_METHODS`) sobre um **parâmetro** anotado com
       o port — todo nome da anotação conta (`X | None`, `"X"`, `mod.X`), e uma função
       aninhada (closure) que use o parâmetro também;
-    - ou chama outro auxiliar que escreve (fecho transitivo, até o ponto fixo).
+    - ou chama outro auxiliar que escreve (fecho transitivo, até o ponto fixo), ou o
+      **cita** sem chamar ali (`partial(f, repo)`, `rodar(f, repo)`, `g = f`) — a
+      chamada de verdade a árvore não resolve, então a referência conta (fail-closed).
+
+    Método estático ou de classe de uma classe do módulo (`C.f(repo)`) entra como
+    função de módulo, com o nome `C.f`.
 
     Duas escritas, ou uma em laço, fazem o auxiliar **múltiplo**: a chamada a ele conta
     como duas, como a escrita em laço do §5 do ADR 2.6.0002. Um auxiliar que abrisse a
@@ -935,10 +991,12 @@ def helper_writes(
     case (LAYOUT §4).
 
     **Limites declarados** (não decidíveis pela árvore, e sem caso no código):
-    parâmetro sem anotação (o mypy strict o barra em `src/`); repositório que chega
-    dentro de um objeto de contexto (`deps.repo.add()`), num alias local
-    (`r = repo`) ou como método ligado (`Callable`, o limite que a auditoria da #205
-    declarou); `getattr` dinâmico; auxiliar fora de `use_cases/`.
+    parâmetro sem anotação (o mypy strict o barra em `src/`), e `lambda`, cujo
+    parâmetro não tem anotação; repositório que chega dentro de um objeto de contexto
+    (`deps.repo.add()`, ou método de instância do objeto que grava pelo próprio
+    `self`), num alias local (`r = repo`) ou como método ligado (`Callable`, o limite
+    que a auditoria da #205 declarou); `getattr` dinâmico; auxiliar fora de
+    `use_cases/`; função definida fora do nível do módulo (dentro de `if`/`try`).
     """
     portas = repository_port_names(src_root) if repository_ports is None else repository_ports
     modulos = _modulos_de_use_cases(src_root)
@@ -964,11 +1022,14 @@ def helper_writes(
                 if chamado is not None:
                     laco = id(no) in em_laco or chamado.multipla
                     escritas.append((f"{chamado.nome}()", laco))
+            for referencia, citado in _referencias_a_auxiliares(modulo, funcao, auxiliares):
+                laco = id(referencia) in em_laco or citado.multipla
+                escritas.append((f"{citado.nome}()", laco))
             if not escritas:
                 continue
             peso = sum(2 if laco else 1 for _, laco in escritas)
             novo = AuxiliarQueEscreve(
-                nome=funcao.name,
+                nome=qualificado.removeprefix(f"{modulo.nome}."),
                 escritas=tuple(sorted({alvo for alvo, _ in escritas})),
                 multipla=peso > 1,
             )
@@ -992,6 +1053,8 @@ class _Varredor:
 
     A chamada a uma função de módulo que escreve (`helper_writes`, derivado) é uma
     escrita do use case, no lugar da chamada; a de um auxiliar múltiplo pesa duas.
+    Escrita sobre um **parâmetro** anotado com o port, num método da classe
+    (`self._salvar(self._coisas)`), conta como a escrita pelo atributo.
     """
 
     def __init__(
@@ -1002,6 +1065,7 @@ class _Varredor:
         auxiliares: dict[str, AuxiliarQueEscreve],
     ) -> None:
         self._metodos = {m.name: m for m in classe.body if isinstance(m, _FUNCOES)}
+        self._parametros = {nome: _parametros_anotados(m) for nome, m in self._metodos.items()}
         self._tipos = _tipos_dos_atributos(classe)
         self._repository_ports = repository_ports
         self._modulo = modulo
@@ -1101,6 +1165,17 @@ class _Varredor:
         pilha: tuple[str, ...],
     ) -> None:
         em_compreensao = _dentro_de_compreensao(no)
+        for referencia, citado in _referencias_a_auxiliares(self._modulo, no, self._auxiliares):
+            resultado.escritas.append(
+                _Escrita(
+                    linha=referencia.lineno,
+                    alvo=f"{citado.nome}()",
+                    dentro_da_unidade=unidade,
+                    em_laco=laco or id(referencia) in em_compreensao or citado.multipla,
+                    seguida_de_raise=seguida_de_raise,
+                )
+            )
+        parametros = self._parametros[pilha[-1]]
         for interno in ast.walk(no):
             if not isinstance(interno, ast.Call):
                 continue
@@ -1130,6 +1205,28 @@ class _Varredor:
                         unidade=unidade,
                         laco=laco_aqui,
                         pilha=(*pilha, metodo),
+                    )
+                continue
+            if isinstance(dono, ast.Name) and dono.id in parametros:
+                # Port entregue por parâmetro ao método (`self._salvar(self._coisas)`):
+                # a mesma escrita, com outro caminho até o repositório.
+                porta = next(
+                    (
+                        t
+                        for t in sorted(parametros[dono.id])
+                        if is_write(t, metodo, self._repository_ports)
+                    ),
+                    None,
+                )
+                if porta is not None:
+                    resultado.escritas.append(
+                        _Escrita(
+                            linha=interno.lineno,
+                            alvo=f"{dono.id}.{metodo}",
+                            dentro_da_unidade=unidade,
+                            em_laco=laco_aqui,
+                            seguida_de_raise=seguida_de_raise,
+                        )
                     )
                 continue
             if atributo is None:
@@ -1183,7 +1280,7 @@ def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
     de `set_password_with_token` para fora da unidade, partir a unidade em duas
     ou acrescentar uma escrita nova fora dela deixaria a suíte verde e a
     atomicidade perdida. A allowlist só aceita o que o ADR justifica — hoje, as
-    duas travessias de staff para identity.
+    travessias de staff para identity (ADR 2.6.0002, nota da Stage 3.10).
     """
     violacoes: list[str] = []
     achados = scan_multi_write_use_cases(src_root)
