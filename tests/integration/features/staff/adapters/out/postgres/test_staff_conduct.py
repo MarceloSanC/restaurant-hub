@@ -89,8 +89,8 @@ from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
-    InvalidUnitEnablementError,
     EmployeeLoginChangedError,
+    InvalidUnitEnablementError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
