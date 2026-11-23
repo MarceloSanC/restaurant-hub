@@ -267,6 +267,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
 | [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
 | [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
+| [#224](https://github.com/MarceloSanC/restaurant-hub/issues/224) | Fixar o corpo do PR como lugar do plano de gates da issue avulsa | shared | docs + .claude | open | #200 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
