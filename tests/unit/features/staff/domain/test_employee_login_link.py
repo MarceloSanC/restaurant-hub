@@ -179,3 +179,21 @@ def test_desligar_com_login_diferente_do_lido_recusa(
 def test_desligar_registro_recontratado_no_meio_recusa() -> None:
     with pytest.raises(EmployeeLoginChangedError):
         _registro(active=True).deactivate_as_read(_A, was_active=False)
+
+
+# --- as guardas com casa única (Checkpoint C, bloco T08–T10, F2) -------------
+
+
+def test_as_guardas_de_desvincular_e_trocar_devolvem_o_login_atual() -> None:
+    assert _registro().assert_can_unlink_login() == _A
+    assert _registro(active=False).assert_can_unlink_login() == _A
+    assert _registro().assert_can_relink_login() == _A
+
+
+def test_guarda_de_trocar_sem_login_vence_desligado() -> None:
+    with pytest.raises(EmployeeHasNoLoginError):
+        _registro(user_id=None, active=False).assert_can_relink_login()
+    with pytest.raises(TerminatedEmployeeLoginError):
+        _registro(active=False).assert_can_relink_login()
+    with pytest.raises(EmployeeHasNoLoginError):
+        _registro(user_id=None).assert_can_unlink_login()

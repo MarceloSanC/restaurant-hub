@@ -42,10 +42,6 @@ from restaurant_hub.features.staff.application.use_cases._login_link import (
     end_active_link,
     resolve_linkable_login,
 )
-from restaurant_hub.features.staff.domain.exceptions.errors import (
-    EmployeeHasNoLoginError,
-    TerminatedEmployeeLoginError,
-)
 
 
 class RelinkLoginUseCase:
@@ -90,11 +86,7 @@ class RelinkLoginUseCase:
         )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
-        current = employee.user_id
-        if current is None:
-            raise EmployeeHasNoLoginError(employee.id)
-        if not employee.active:
-            raise TerminatedEmployeeLoginError(employee.id)
+        current = employee.assert_can_relink_login()
         user_id = resolve_linkable_login(self._employees, self._gateway, command.email, employee)
         if user_id == current:
             return to_employee_result(employee)
