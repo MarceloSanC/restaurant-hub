@@ -16,6 +16,7 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | `FOR UPDATE` no lookup de `link_login` (#68) | nada, sem vínculo concorrente | #68, aqui |
 | `FOR UPDATE` + guarda do vínculo no `delete` (#108) | nada, sem vínculo concorrente | #108, aqui |
 | `tenant_id` no `WHERE` do `DELETE` (#108) | nada, o lookup sob lock já o conferiu | #108, aqui |
+| condição sob `FOR UPDATE` em `update_enablement` (#206) | nada, sem corrida | #206, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -61,18 +62,26 @@ from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository
 from restaurant_hub.features.staff.application.dtos.commands import (
     DeleteEmployeeCommand,
     RenameEmployeeCommand,
+    SetJobFunctionUnitsCommand,
 )
 from restaurant_hub.features.staff.application.errors import (
     EmployeeAlreadyExistsError,
     EmployeeHasLoginError,
+    JobFunctionEnablementChangedError,
     JobFunctionInUseError,
     JobFunctionNotFoundError,
+)
+from restaurant_hub.features.staff.application.ports.out.access_guard import (
+    PERMISSION_MANAGE_JOB_FUNCTIONS,
 )
 from restaurant_hub.features.staff.application.use_cases.delete_employee import (
     DeleteEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.rename_employee import (
     RenameEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
+    SetJobFunctionUnitsUseCase,
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
@@ -84,7 +93,9 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     UnitId,
     UserId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from tests.fakes.features.staff.in_memory_access_guard import InMemoryAccessGuard
 from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
 pytestmark = [pytest.mark.integration]
@@ -1162,4 +1173,169 @@ def test_issue_108_delete_escreve_com_o_tenant_no_where(
     assert "employees.id = " in predicado, remocoes[0]
     assert "employees.tenant_id = " in predicado, (
         f"o DELETE de employees perdeu o filtro de tenant: {remocoes[0]!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Issue #206 — alteração concorrente das unidades de uma função
+# ---------------------------------------------------------------------------
+#
+# `update_enablement` (L-JF7 revisada) só grava se a habilitação gravada ainda for
+# a que o chamador leu, e decide isso sob `FOR UPDATE`. Sem a condição, o estado
+# final de uma corrida é o conjunto do segundo escritor — que nenhum teste de
+# estado sem concorrência distingue de uma escrita legítima.
+
+_UA = UnitId("u-a")
+_UB = UnitId("u-b")
+_SO_A = UnitEnablement.only(frozenset({_UA}))
+_A_E_B = UnitEnablement.only(frozenset({_UA, _UB}))
+
+
+def _semear_funcao_em_a(motor: Engine) -> None:
+    PostgresJobFunctionRepository(motor).add(
+        JobFunction(id=_F1, tenant_id=_A, name="Cozinheiro", unit_enablement=_SO_A)
+    )
+
+
+def _habilitacao_gravada(motor: Engine) -> UnitEnablement:
+    gravada = PostgresJobFunctionRepository(motor).find_by_id(_A, _F1)
+    assert gravada is not None
+    return gravada.unit_enablement
+
+
+def test_issue_206_gerente_que_leu_antes_do_alargamento_e_recusado_e_b_fica(
+    motores: Callable[[], Engine],
+) -> None:
+    """O cenário da issue, com duas conexões e o use case de verdade.
+
+    A função vale em `{A}`. O gerente de A (`SetJobFunctionUnitsUseCase` sobre o
+    adapter Postgres) lê a função; o dono alarga para `{A, B}` e **comita**, por
+    outra conexão, exatamente depois dessa leitura; o gerente segue e reenvia
+    `{A}`. Antes da #206 a escrita substituía a habilitação inteira e B saía por
+    um ator sem alcance sobre B. Agora o port compara sob o lock a gravada com a
+    lida, recusa, e B fica.
+
+    O gatilho é a consulta dos **vínculos**, a última da leitura: disparar na da
+    linha deixaria a leitura remontar os vínculos já alterados, e o gerente
+    leria `{A, B}` — outra corrida, não a da issue.
+    """
+    motor_gerente = motores()
+    motor_dono = motores()
+    _semear_funcao_em_a(motor_gerente)
+    guard = InMemoryAccessGuard(credential=TEST_ACTOR)
+    guard.grant(PERMISSION_MANAGE_JOB_FUNCTIONS, tenant_id=_A)
+    guard.grant(PERMISSION_MANAGE_JOB_FUNCTIONS, tenant_id=_A, unit_id=_UA)
+    alterar = SetJobFunctionUnitsUseCase(
+        PostgresJobFunctionRepository(motor_gerente),
+        PostgresEmployeeRepository(motor_gerente),
+        guard=guard,
+    )
+
+    def _dono_alarga() -> None:
+        PostgresJobFunctionRepository(motor_dono).update_enablement(
+            JobFunction(id=_F1, tenant_id=_A, name="Cozinheiro", unit_enablement=_A_E_B),
+            expected=_SO_A,
+        )
+
+    with (
+        _entrelacar(motor_gerente, "FROM job_function_units", _dono_alarga) as disparou,
+        pytest.raises(JobFunctionEnablementChangedError),
+    ):
+        alterar.execute(
+            SetJobFunctionUnitsCommand(
+                actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F1, unit_ids=frozenset({_UA})
+            )
+        )
+
+    assert disparou[0], "o entrelace não disparou — a corrida não foi exercitada"
+    assert _habilitacao_gravada(motor_dono) == _A_E_B, (
+        "a segunda alteração gravou por cima da primeira — B saiu sem alcance sobre B"
+    )
+
+
+def test_issue_206_update_enablement_bloqueia_no_lookup_e_nao_depois(
+    motores: Callable[[], Engine],
+) -> None:
+    """A comparação decide sob o lock — a mesma prova da CA6b e da #68.
+
+    Com a linha da função presa por outra transação, `update_enablement` para no
+    **primeiro** statement, o `SELECT … FOR UPDATE`, e nada completa antes. Sem o
+    lock, a remontagem da habilitação completaria primeiro e a comparação
+    decidiria sobre um estado que a transação concorrente está mudando.
+    """
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _semear_funcao_em_a(motor_adapter)
+    repositorio = PostgresJobFunctionRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            repositorio.update_enablement(
+                JobFunction(id=_F1, tenant_id=_A, name="Cozinheiro", unit_enablement=_A_E_B),
+                expected=_SO_A,
+            )
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados, "o adapter nem chegou a emitir statement"
+    assert "FOR UPDATE" in tentados[-1], "o adapter bloqueou em outro statement"
+    assert concluidos == [], "algum statement completou antes do lock"
+
+
+def test_issue_206_segunda_alteracao_que_espera_a_primeira_a_rele_e_e_recusada(
+    motores: Callable[[], Engine],
+) -> None:
+    """Duas alterações ao mesmo tempo: a segunda espera o lock, relê e é recusada.
+
+    A primeira conexão prende a linha e acrescenta B **sem comitar**; a segunda,
+    numa thread, chama `update_enablement` com a leitura antiga (`{A}`) e fica
+    parada no lock. Só então a primeira comita. Com a comparação sob o lock, a
+    segunda relê `{A, B}` — a consulta dos vínculos, depois do lock, abre snapshot
+    novo em `READ COMMITTED` — e responde `JobFunctionEnablementChangedError`.
+    Comparando antes do lock, ou sob o snapshot anterior ao commit, ela veria
+    `{A}`, gravaria `{A}` por cima e B sairia.
+    """
+    motor_primeira = motores()
+    motor_segunda = motores()
+    motor_observador = motores()
+    _semear_funcao_em_a(motor_primeira)
+    erros: list[BaseException] = []
+
+    def _segunda_alteracao() -> None:
+        try:
+            PostgresJobFunctionRepository(motor_segunda).update_enablement(
+                JobFunction(id=_F1, tenant_id=_A, name="Cozinheiro", unit_enablement=_SO_A),
+                expected=_SO_A,
+            )
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_primeira.begin() as primeira:
+        primeira.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        primeira.execute(
+            text(
+                "INSERT INTO job_function_units (job_function_id, tenant_id, unit_id) "
+                "VALUES (:f, :t, :u)"
+            ),
+            {"f": _F1, "t": _A, "u": _UB},
+        )
+        segunda = threading.Thread(target=_segunda_alteracao)
+        segunda.start()
+        _esperar_backend_bloqueado(motor_observador)
+    segunda.join(_TIMEOUT_SINCRONIA)
+
+    assert not segunda.is_alive(), "a segunda alteração não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], JobFunctionEnablementChangedError), erros
+    assert _habilitacao_gravada(motor_observador) == _A_E_B, (
+        "a segunda alteração gravou a leitura antiga por cima da primeira"
     )
