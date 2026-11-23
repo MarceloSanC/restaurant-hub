@@ -42,6 +42,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import Engine
 
+from restaurant_hub.features.identity.application.dtos.credentials import UserCredentials
 from restaurant_hub.features.identity.application.errors import (
     InvitationNotSentError,
     RestaurantNotFoundError,
@@ -78,6 +79,9 @@ from restaurant_hub.features.identity.domain.value_objects.identifiers import (
     UserId as IdentityUserId,
 )
 from restaurant_hub.features.identity.domain.value_objects.role import Role
+from restaurant_hub.features.identity.domain.value_objects.unit_membership import (
+    UnitMembership,
+)
 from restaurant_hub.features.staff.adapters.out.identity.local_identity_gateway import (
     LocalIdentityGateway,
 )
@@ -298,6 +302,9 @@ class GatewaySobContrato:
     envio_falha: Callable[[str], type[Exception]]
     login_de_outro_papel: Callable[[str], UserId]
     consulta_de_papel_falha: Callable[[Exception], None]
+    conta_existente: Callable[[str, str, tuple[str, ...]], UserId]
+    conta_em_outro_tenant: Callable[[str], UserId]
+    consulta_de_conta_falha: Callable[[Exception], None]
 
 
 def _gateway_fake() -> GatewaySobContrato:
@@ -342,6 +349,34 @@ def _gateway_fake() -> GatewaySobContrato:
     def consulta_de_papel_falha(excecao: Exception) -> None:
         fake.fail_role_query_with = excecao
 
+    def conta_existente(email: str, papel: str, unidades: tuple[str, ...]) -> UserId:
+        # Espelha a regra de identity: sem tenant só o platform_admin, que não tem
+        # membership; o dono alcança todas as unidades sem membership.
+        user_id = UserId(f"conta-{len(fake.accounts) + 1}")
+        sem_tenant = papel == "platform_admin"
+        fake.seed_account(
+            user_id,
+            email=email,
+            tenant_id=None if sem_tenant else tenant,
+            unit_ids=frozenset(UnitId(u) for u in unidades),
+            every_unit=papel == "owner",
+            employee=papel == "employee",
+        )
+        return user_id
+
+    def conta_em_outro_tenant(email: str) -> UserId:
+        user_id = UserId(f"conta-alheia-{len(fake.accounts) + 1}")
+        fake.seed_account(
+            user_id,
+            email=email,
+            tenant_id=TenantId("tenant-alheio"),
+            unit_ids=frozenset({UnitId("unidade-alheia")}),
+        )
+        return user_id
+
+    def consulta_de_conta_falha(excecao: Exception) -> None:
+        fake.fail_account_query_with = excecao
+
     def login_role_of(user_id: UserId) -> str | None:
         if user_id in papeis_de_outro:
             return papeis_de_outro[user_id]
@@ -371,6 +406,9 @@ def _gateway_fake() -> GatewaySobContrato:
         envio_falha=envio_falha,
         login_de_outro_papel=login_de_outro_papel,
         consulta_de_papel_falha=consulta_de_papel_falha,
+        conta_existente=conta_existente,
+        conta_em_outro_tenant=conta_em_outro_tenant,
+        consulta_de_conta_falha=consulta_de_conta_falha,
     )
 
 
@@ -412,11 +450,17 @@ class _UsuariosArmaveis(InMemoryUserRepository):
     def __init__(self) -> None:
         super().__init__()
         self.falhar_com: Exception | None = None
+        self.falhar_consulta_de_conta_com: Exception | None = None
 
     def find_by_id(self, user_id: IdentityUserId) -> User | None:
         if self.falhar_com is not None:
             raise self.falhar_com
         return super().find_by_id(user_id)
+
+    def find_credentials_by_email(self, email: Email) -> UserCredentials | None:
+        if self.falhar_consulta_de_conta_com is not None:
+            raise self.falhar_consulta_de_conta_com
+        return super().find_credentials_by_email(email)
 
 
 class _EmailSenderArmavel:
@@ -444,7 +488,7 @@ def _link_do_corpo(corpo: str) -> str:
     return next(linha for linha in corpo.splitlines() if "definir-senha" in linha)
 
 
-def _gateway_real() -> GatewaySobContrato:
+def _gateway_real() -> GatewaySobContrato:  # noqa: PLR0915 — um arranjo por lei do port
     users = _UsuariosArmaveis()
     restaurants = InMemoryRestaurantRepository()
     units = InMemoryUnitRepository()
@@ -554,6 +598,36 @@ def _gateway_real() -> GatewaySobContrato:
     def consulta_de_papel_falha(excecao: Exception) -> None:
         users.falhar_com = excecao
 
+    contas = 0
+
+    def _conta(
+        email: str, role: Role, tenant_da_conta: str | None, unidades: tuple[str, ...]
+    ) -> UserId:
+        nonlocal contas
+        contas += 1
+        user_id = IdentityUserId(f"conta-{contas}")
+        users.add(
+            User(
+                id=user_id,
+                email=Email(email),
+                role=role,
+                tenant_id=None if tenant_da_conta is None else RestaurantId(tenant_da_conta),
+            ),
+            hasher.unusable_hash(),
+            tuple(UnitMembership(user_id=user_id, unit_id=IdentityUnitId(u)) for u in unidades),
+        )
+        return UserId(user_id)
+
+    def conta_existente(email: str, papel: str, unidades: tuple[str, ...]) -> UserId:
+        role = Role.from_string(papel)
+        return _conta(email, role, None if role is Role.PLATFORM_ADMIN else tenant, unidades)
+
+    def conta_em_outro_tenant(email: str) -> UserId:
+        return _conta(email, Role.MANAGER, "tenant-alheio", ("unidade-alheia",))
+
+    def consulta_de_conta_falha(excecao: Exception) -> None:
+        users.falhar_consulta_de_conta_com = excecao
+
     def unidade_de_outro_tenant() -> CenarioCru:
         restaurants.add(Restaurant(id=RestaurantId("tenant-alheio"), name="Alheia"))
         units.add(
@@ -594,6 +668,9 @@ def _gateway_real() -> GatewaySobContrato:
         envio_falha=envio_falha,
         login_de_outro_papel=login_de_outro_papel,
         consulta_de_papel_falha=consulta_de_papel_falha,
+        conta_existente=conta_existente,
+        conta_em_outro_tenant=conta_em_outro_tenant,
+        consulta_de_conta_falha=consulta_de_conta_falha,
     )
 
 
