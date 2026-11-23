@@ -41,6 +41,7 @@ from restaurant_hub.features.staff.application.errors import (
     EmployeeNotFoundError,
     EmployeeRelocationError,
     JobFunctionNotFoundError,
+    LoginAlreadyLinkedInUnitError,
 )
 from restaurant_hub.features.staff.application.ports.out.employee_repository import (
     EmployeeRepository,
@@ -126,7 +127,7 @@ class InMemoryEmployeeRepository:
         gravado = self._find_no_endereco(tenant_id, unit_id, employee_id)
         if gravado is None:
             raise EmployeeNotFoundError(employee_id)
-        self._store.employees[employee_id] = gravado.link_login(user_id)
+        self._gravar_vinculo(gravado.link_login(user_id))
 
     def unlink_login(
         self,
@@ -156,7 +157,25 @@ class InMemoryEmployeeRepository:
         """`L-RELINK` — endereço, depois a transição do domínio sobre o gravado."""
         self._store.record("employees.relink_login")
         gravado = self._gravado_no_endereco(tenant_id, unit_id, employee_id)
-        self._store.employees[employee_id] = gravado.relink_login(expected_user_id, user_id)
+        self._gravar_vinculo(gravado.relink_login(expected_user_id, user_id))
+
+    def _gravar_vinculo(self, vinculado: Employee) -> None:
+        """Um login por unidade, **depois** das guardas do domínio (issue #241).
+
+        Espelha o índice `uq_employees_tenant_unit_user` do adapter, que o `UPDATE`
+        só viola depois de a transição do domínio ter passado: outro registro do
+        mesmo tenant e da mesma unidade — ativo ou desligado — com o login ⇒
+        `LoginAlreadyLinkedInUnitError`, e nada é gravado. Outra unidade não conta.
+        """
+        if any(
+            outro.id != vinculado.id
+            and outro.tenant_id == vinculado.tenant_id
+            and outro.unit_id == vinculado.unit_id
+            and outro.user_id == vinculado.user_id
+            for outro in self._store.employees.values()
+        ):
+            raise LoginAlreadyLinkedInUnitError(vinculado.id)
+        self._store.employees[vinculado.id] = vinculado
 
     def deactivate(
         self,

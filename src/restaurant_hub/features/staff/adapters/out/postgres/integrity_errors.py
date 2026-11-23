@@ -63,6 +63,7 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
+    LoginAlreadyLinkedInUnitError,
 )
 
 # Nome da constraint -> fábrica da exceção de aplicação.
@@ -106,6 +107,17 @@ ON_WRITE_EMPLOYEE: ConstraintMap = {
     "pk_employees": EmployeeAlreadyExistsError,
     "uq_employees_id_tenant": EmployeeAlreadyExistsError,
     "fk_employee_job_functions_job_function": JobFunctionNotFoundError,
+}
+
+# Escritas próprias do vínculo (`link_login`, `relink_login` — issue #241, ADR
+# 0.0.0025). O índice único parcial `uq_employees_tenant_unit_user` é "um login por
+# unidade" (ADR 3.10.0001 §6) imposto pelo banco: o vínculo concorrente que passou
+# pela leitura da unidade no use case é recusado aqui, com o **mesmo** erro da
+# leitura. É índice, não constraint de `pg_constraint`, mas o Postgres reporta o nome
+# dele no campo de constraint da violação (`_bt_check_unique`), e é por ele que se
+# traduz. Só as duas escritas que gravam um `user_id` não nulo o alcançam.
+ON_WRITE_LOGIN_LINK: ConstraintMap = {
+    "uq_employees_tenant_unit_user": LoginAlreadyLinkedInUnitError,
 }
 
 
