@@ -358,3 +358,33 @@ def test_save_nao_regrava_periodo_nem_calendario(
     assert "first_day" not in update.split(" WHERE ")[0]
     with banco_limpo.connect() as conexao:
         assert conexao.execute(select(func.count()).select_from(schedules)).scalar_one() == 1
+
+
+# ---------------------------------------------------------------------------
+# Mutantes equivalentes do adapter (issue #217)
+#
+# A corrida de mutação (`[tool.mutmut]`, job `mutation` do `audit-gate.yml`) muta este
+# adapter. Os sobreviventes abaixo não têm teste porque nenhum estado que o schema admite
+# os distingue do original; cada um nomeia a premissa e o teste que a trava. Se a premissa
+# cair (o teste dela mudar), o mutante deixa de ser equivalente e precisa de teste.
+#
+# - `save`, filtros `tenant_id`/`unit_id` do `UPDATE schedules` (mutmut 34 e 35): o
+#   `UPDATE` casa por `schedules.id`, que é a PK sozinha (`pk_schedules`, um id em
+#   qualquer tenant), e o endereço inteiro já foi conferido pela leitura da versão no
+#   mesmo lock. Premissa: `test_schema.py::test_id_de_escala_colide_em_qualquer_tenant`.
+# - `save`, filtros `tenant_id`/`unit_id` do `DELETE schedule_bands` (43 e 44) e
+#   `_build`, os mesmos filtros na leitura das filhas (10 e 11): toda filha com
+#   `schedule_id = X` tem o tenant e a unidade da escala X, pela FK composta
+#   `(tenant_id, unit_id, schedule_id)` somada à PK de `schedules` só no id. Os filtros
+#   são o cerco de L-SC5 em profundidade, não o que decide o resultado. Premissas:
+#   `test_schema.py::test_filha_presa_ao_pai_de_outra_escala_viola_o_cerco` e a de cima.
+# - `_check_neighbours`, `strict=True` do `zip` trocado por `None`/`False`/ausente (3, 6
+#   e 8): os dois lados são pares fixos — `neighbour_statements` devolve
+#   `(anterior, seguinte)` e o outro lado é `(expected.previous, expected.following)` —,
+#   e o `strict` só age quando os comprimentos diferem.
+# - `internal_ids_in_use_statements`, `continue` trocado por `break` (15): o laço segue a
+#   hierarquia faixa → demanda → alocação, e um tipo sem ids implica os seguintes sem ids
+#   (demanda só existe dentro de faixa, alocação dentro de demanda). Parar no primeiro
+#   vazio pula só tipos vazios. Premissa: o agregado (`Schedule`) não tem demanda fora de
+#   faixa nem alocação fora de demanda.
+# ---------------------------------------------------------------------------

@@ -164,7 +164,10 @@ def test_l_sc4_save_otimista(schedule_repo: ScheduleRepository) -> None:
     assert lida.version == 2  # noqa: PLR2004
     with pytest.raises(ScheduleVersionConflictError) as excinfo:
         save_as_read(schedule_repo, _com_faixa(escala, "f9"), 1, _mudanca(1))
-    assert excinfo.value.current_version == 2  # noqa: PLR2004
+    # As duas versões do conflito: a que o editor viu e a vigente (issue #217 — a esperada
+    # trocada por `None` sobrevivia à mutação).
+    assert (excinfo.value.expected_version, excinfo.value.current_version) == (1, 2)
+    assert excinfo.value.changed_neighbour_id is None
     # Manter os próprios ids internos (f1) não é colisão: a escala não colide consigo.
     v3 = v2.redeclare_band_break(ShiftBandId("f1"), 30)
     save_as_read(schedule_repo, v3, 2, _mudanca(2))
@@ -190,9 +193,10 @@ def test_l_sc4_save_de_inexistente_ou_de_outro_endereco_recusa(
     schedule_repo: ScheduleRepository,
 ) -> None:
     schedule_repo.add(_escala("s1"), _mudanca())
-    with pytest.raises(ScheduleNotFoundError):
+    # A recusa nomeia a escala pedida (issue #217 — o id trocado por `None` sobrevivia).
+    with pytest.raises(ScheduleNotFoundError, match="'s1'"):
         save_as_read(schedule_repo, _escala("s1", unit="u2"), 1, _mudanca(1))
-    with pytest.raises(ScheduleNotFoundError):
+    with pytest.raises(ScheduleNotFoundError, match="'s9'"):
         save_as_read(schedule_repo, _escala("s9"), 1, _mudanca(1))
 
 
@@ -223,6 +227,38 @@ def test_l_sc5_endereco_de_tres_partes(schedule_repo: ScheduleRepository) -> Non
     assert schedule_repo.list_in_range(_T, UnitId("u2"), _SEG, _SEG) == ()
     assert schedule_repo.list_in_range(TenantId("t2"), _U, _SEG, _SEG) == ()
     assert schedule_repo.list_ending_before(TenantId("t2"), _U, _SEG + 5 * _SEMANA, 10) == ()
+
+
+_LEITURAS: dict[str, Callable[[ScheduleRepository, TenantId, UnitId], tuple[Schedule, ...]]] = {
+    "find_by_id": lambda repo, tenant, unit: tuple(
+        e for e in (repo.find_by_id(tenant, unit, ScheduleId("s1")),) if e is not None
+    ),
+    "list_in_range": lambda repo, tenant, unit: repo.list_in_range(
+        tenant, unit, _SEG - _SEMANA, _SEG + 5 * _SEMANA
+    ),
+    "list_ending_before": lambda repo, tenant, unit: repo.list_ending_before(
+        tenant, unit, _SEG + 5 * _SEMANA, 10
+    ),
+}
+
+
+@pytest.mark.parametrize("leitura", _LEITURAS)
+@pytest.mark.parametrize(
+    ("tenant", "unit"), [("t2", "u1"), ("t1", "u2")], ids=["outro-tenant", "outra-unidade"]
+)
+def test_l_sc5_toda_leitura_fora_do_endereco_nao_ve_a_escala(
+    schedule_repo: ScheduleRepository, leitura: str, tenant: str, unit: str
+) -> None:
+    """A propriedade, não o caso: cada leitura em cada eixo do endereço (issue #217).
+
+    O caso acima cobria `list_ending_before` só em outro tenant, e tirar dela o filtro de
+    unidade sobrevivia à mutação. Controle positivo: no endereço certo, a mesma leitura vê.
+    """
+    schedule_repo.add(_com_faixa(_escala("s1")), _mudanca())
+    ler = _LEITURAS[leitura]
+
+    assert ler(schedule_repo, TenantId(tenant), UnitId(unit)) == ()
+    assert [e.id for e in ler(schedule_repo, _T, _U)] == ["s1"]
 
 
 def test_l_sc6_recorte_traz_as_que_cruzam_por_first_day(schedule_repo: ScheduleRepository) -> None:
