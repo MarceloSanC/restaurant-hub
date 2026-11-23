@@ -1,8 +1,9 @@
 """`StaffReadFacade` — a fachada de leitura de staff para outros BCs (CA14, Stage 4.4).
 
-Sobre os fakes de staff (`staff_repositories()`): as quatro leituras devolvem só primitivos;
+Sobre os fakes de staff (`staff_repositories()`): as cinco leituras devolvem só primitivos;
 `list_records` e `list_records_of_user` incluem inativos e não cruzam unidade nem tenant;
-jornada fixa vira `Decimal`, sob demanda vira `None`; e a fachada não recebe ator.
+jornada fixa vira `Decimal`, sob demanda vira `None`; as funções de uma unidade são as
+habilitadas nela (issue #209); e a fachada não recebe ator.
 """
 
 import dataclasses
@@ -29,6 +30,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
     UnavailabilityPeriod,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
     FixedSchedule,
     OnDemand,
@@ -65,6 +67,24 @@ def fachada() -> StaffReadFacade:
     repos.job_functions.add(JobFunction(JobFunctionId("cozinheiro"), TenantId("t1"), "Cozinheiro"))
     repos.job_functions.add(JobFunction(JobFunctionId("atendente"), TenantId("t1"), "Atendente"))
     repos.job_functions.add(JobFunction(JobFunctionId("garcom"), TenantId("t2"), "Garçom"))
+    # Habilitação por unidade (Stage 3.11): `caixa` vale só em u2; `barman`, de t2, nomeia
+    # uma unidade com o mesmo id `u2` — e não vaza para t1.
+    repos.job_functions.add(
+        JobFunction(
+            JobFunctionId("caixa"),
+            TenantId("t1"),
+            "Caixa",
+            unit_enablement=UnitEnablement.only(frozenset({UnitId("u2")})),
+        )
+    )
+    repos.job_functions.add(
+        JobFunction(
+            JobFunctionId("barman"),
+            TenantId("t2"),
+            "Barman",
+            unit_enablement=UnitEnablement.only(frozenset({UnitId("u2")})),
+        )
+    )
     ana = dataclasses.replace(
         _registro("ana"), unavailabilities=(UnavailabilityPeriod(*_FERIAS),)
     ).link_login(UserId("user-ana"))
@@ -107,8 +127,29 @@ def test_catalogo_do_tenant_e_so_ele(fachada: StaffReadFacade) -> None:
     assert set(fachada.list_functions("t1")) == {
         StaffFunction("cozinheiro", "Cozinheiro"),
         StaffFunction("atendente", "Atendente"),
+        StaffFunction("caixa", "Caixa"),
     }
-    assert fachada.list_functions("t2") == (StaffFunction("garcom", "Garçom"),)
+    assert set(fachada.list_functions("t2")) == {
+        StaffFunction("garcom", "Garçom"),
+        StaffFunction("barman", "Barman"),
+    }
+
+
+def test_funcoes_da_unidade_sao_as_habilitadas_nela(fachada: StaffReadFacade) -> None:
+    """Issue #209: "todas as unidades" entra em toda unidade; o conjunto, só nas que nomeia."""
+
+    def _ids_de(tenant: str, unidade: str) -> set[str]:
+        return {f.job_function_id for f in fachada.list_unit_functions(tenant, unidade)}
+
+    assert _ids_de("t1", "u1") == {"cozinheiro", "atendente"}
+    assert _ids_de("t1", "u2") == {"cozinheiro", "atendente", "caixa"}
+    assert _ids_de("t2", "u1") == {"garcom"}
+    assert _ids_de("t2", "u2") == {"garcom", "barman"}
+    assert StaffFunction("caixa", "Caixa") in fachada.list_unit_functions("t1", "u2")
+    assert all(
+        type(f.job_function_id) is str and type(f.name) is str
+        for f in fachada.list_unit_functions("t1", "u2")
+    )
 
 
 def test_o_registro_sai_inteiro_e_em_primitivos(fachada: StaffReadFacade) -> None:
@@ -133,7 +174,13 @@ def test_o_registro_sai_inteiro_e_em_primitivos(fachada: StaffReadFacade) -> Non
 
 
 def test_a_fachada_nao_recebe_ator_nem_expoe_o_login() -> None:
-    for nome in ("list_active_records", "list_records", "list_records_of_user", "list_functions"):
+    for nome in (
+        "list_active_records",
+        "list_records",
+        "list_records_of_user",
+        "list_functions",
+        "list_unit_functions",
+    ):
         parametros = set(inspect.signature(getattr(StaffReadFacade, nome)).parameters)
         assert not {"actor", "ator"} & parametros, nome
     assert "user_id" not in {campo.name for campo in dataclasses.fields(StaffRecord)}
