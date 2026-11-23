@@ -64,6 +64,7 @@ from restaurant_hub.features.staff.domain.value_objects.shift_preference import 
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
     UnavailabilityPeriod,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
     FixedSchedule,
     OnDemand,
@@ -591,7 +592,9 @@ def test_l_e5_remover_o_funcionario_libera_a_funcao_que_ele_referenciava(
     repositorio.delete(_A, _U1, _E1)
 
     assert repositorio.exists_by_job_function(_A, _F1) is False
-    funcoes.delete(_A, _F1)
+    # A função semeada vale em todas as unidades (default da entidade) — a condição
+    # de L-JF3 revisada (issue #207).
+    funcoes.delete(_A, _F1, expected=UnitEnablement.everywhere())
     assert funcoes.find_by_id(_A, _F1) is None
 
 

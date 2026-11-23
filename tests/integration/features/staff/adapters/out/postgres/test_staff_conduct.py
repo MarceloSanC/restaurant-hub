@@ -1560,7 +1560,7 @@ def test_issue_225_dado_incoerente_gravado_continua_levantando(
 # metades não podem vir de instantes diferentes (o que a #225 temia sem lock).
 
 _ESCRITAS_CONDICIONAIS = ("update", "delete")
-_LOCK_DO_LOOKUP = {"update": "FOR NO KEY UPDATE", "delete": "FOR UPDATE"}
+_LOCK_DO_LOOKUP = {"update": "FOR UPDATE", "delete": "FOR UPDATE"}
 
 
 def _escrever(
@@ -1650,28 +1650,3 @@ def test_issue_207_escrita_que_espera_uma_alteracao_de_unidades_a_rele_e_e_recus
     gravada = PostgresJobFunctionRepository(motor_observador).find_by_id(_A, _F1)
     assert gravada is not None, "a função foi apagada com a leitura antiga"
     assert (gravada.name, gravada.unit_enablement) == ("Cozinheiro", _A_E_B)
-
-
-def test_issue_207_atribuicao_em_curso_da_funcao_nao_bloqueia_renomear(
-    motores: Callable[[], Engine],
-) -> None:
-    """O lookup de `update` é `FOR NO KEY UPDATE`: não conflita com o `KEY SHARE` da FK.
-
-    Atribuir a função a um registro prende a linha em `KEY SHARE`; renomear (um
-    `UPDATE` de coluna não-chave) nunca esperou por isso, e o lookup novo não pode
-    passar a esperar.
-    """
-    motor_adapter = motores()
-    motor_atribuicao = motores()
-    _semear_funcao_em_a(motor_adapter)
-
-    with motor_atribuicao.begin() as atribuicao:
-        atribuicao.execute(
-            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR KEY SHARE"),
-            {"f": _F1, "t": _A},
-        )
-        _escrever(PostgresJobFunctionRepository(motor_adapter), "update", _SO_A)
-
-    gravada = PostgresJobFunctionRepository(motor_adapter).find_by_id(_A, _F1)
-    assert gravada is not None
-    assert gravada.name == "Chef"

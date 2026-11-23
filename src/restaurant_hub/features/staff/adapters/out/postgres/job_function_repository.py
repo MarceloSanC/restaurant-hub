@@ -174,10 +174,14 @@ class PostgresJobFunctionRepository:
     def update(self, job_function: JobFunction, expected: UnitEnablement) -> None:
         """L-JF2 — `UPDATE` do nome, condicional à habilitação lida (issue #207).
 
-        O lookup sob `FOR NO KEY UPDATE` (o lock que o `UPDATE` de coluna
-        não-chave já tomava) responde `JobFunctionNotFoundError` e compara a
+        O lookup sob `FOR UPDATE` responde `JobFunctionNotFoundError` e compara a
         habilitação gravada com `expected` — `JobFunctionEnablementChangedError`
-        se mudou —, como em `update_enablement`.
+        se mudou —, como em `update_enablement`. `FOR UPDATE`, e não `FOR NO KEY
+        UPDATE`: `name` está no índice único `uq_job_functions_tenant_name`, e o
+        PostgreSQL trata o `UPDATE` de coluna de índice único como atualização de
+        chave — é o lock que o `UPDATE` do nome já tomava (e que já esperava uma
+        atribuição em curso, com o seu `KEY SHARE`). Tomá-lo no lookup evita a
+        promoção de lock no meio da transação.
 
         A guarda de nome de L-JF1 vale aqui **ignorando a própria função**, e o
         índice único resolve isso sozinho: renomear para o nome que a função já
@@ -187,7 +191,9 @@ class PostgresJobFunctionRepository:
         """
         try:
             with self._engine.begin() as connection:
-                self._lock_unchanged(connection, job_function.tenant_id, job_function.id, expected)
+                self._lock_unchanged(
+                    connection, job_function.tenant_id, job_function.id, expected, key_update=True
+                )
                 self._update(connection, job_function)
         except IntegrityError as error:
             raise translate(error, ON_UPDATE_JOB_FUNCTION, job_function.name) from error
@@ -217,7 +223,7 @@ class PostgresJobFunctionRepository:
         try:
             with self._engine.begin() as connection:
                 self._lock_unchanged(
-                    connection, tenant_id, job_function_id, expected, for_delete=True
+                    connection, tenant_id, job_function_id, expected, key_update=True
                 )
                 self._delete(connection, tenant_id, job_function_id)
         except IntegrityError as error:
@@ -375,7 +381,7 @@ class PostgresJobFunctionRepository:
         job_function_id: JobFunctionId,
         expected: UnitEnablement,
         *,
-        for_delete: bool = False,
+        key_update: bool = False,
     ) -> None:
         """Trava a linha, e recusa se ausente ou se a habilitação gravada não é `expected`.
 
@@ -383,12 +389,14 @@ class PostgresJobFunctionRepository:
         numa cópia só. Ausente no tenant ⇒ `JobFunctionNotFoundError` **antes** da
         comparação; diferente ⇒ `JobFunctionEnablementChangedError`.
 
-        O lock é `FOR NO KEY UPDATE` para as duas escritas de coluna não-chave
-        (renomear, mudar unidades): serializa-as entre si e com o `DELETE` sem
-        conflitar com o `KEY SHARE` que a FK de `employee_job_functions` toma ao
-        atribuir a função a um registro (ADR 3.3.0006 (b)) — atribuir não muda a
-        habilitação. Para a remoção é `FOR UPDATE`, o lock que o `DELETE` já
-        tomaria (e que já esperava atribuição em curso).
+        O lock é o que a escrita seguinte tomaria de qualquer forma. Mudar unidades
+        escreve só a flag, coluna não-chave: `FOR NO KEY UPDATE`, que serializa as
+        escritas da função entre si sem conflitar com o `KEY SHARE` que a FK de
+        `employee_job_functions` toma ao atribuir a função a um registro
+        (ADR 3.3.0006 (b)) — atribuir não muda a habilitação. Renomear (o `name`
+        está num índice único, o que o PostgreSQL conta como chave) e apagar
+        tomariam `FOR UPDATE` no próprio `UPDATE`/`DELETE`: `key_update=True`
+        toma-o já no lookup.
         """
         row = connection.execute(
             select(job_functions)
@@ -396,7 +404,7 @@ class PostgresJobFunctionRepository:
                 job_functions.c.id == job_function_id,
                 job_functions.c.tenant_id == tenant_id,
             )
-            .with_for_update(key_share=not for_delete)
+            .with_for_update(key_share=not key_update)
         ).one_or_none()
         if row is None:
             raise JobFunctionNotFoundError(job_function_id)
