@@ -132,13 +132,24 @@ def test_revogacao_e_consulta_de_papel_so_no_ponto_unico() -> None:
     assert fora == set()
 
 
+def _e_end_active_link(nome: str) -> bool:
+    """O ponto único — e as cópias dele que o mutmut escreve no módulo mutado.
+
+    O job `mutation-access-modules` roda a suíte sobre `mutants/`, onde cada função
+    de `_login_link.py` vira um trampolim mais as cópias `x_end_active_link__mutmut_*`
+    (a original e uma por mutante). Elas são o mesmo ponto único; sem aceitá-las, a
+    varredura reprovaria a própria corrida de mutação.
+    """
+    return nome == "end_active_link" or nome.startswith("x_end_active_link__mutmut_")
+
+
 def _chamadas_exclusivas_fora_de_end_active_link(fonte: str) -> set[tuple[str, int]]:
     """As chamadas exclusivas que não estão no corpo de `end_active_link`."""
     arvore = ast.parse(fonte)
     dentro = {
         id(c)
         for funcao in arvore.body
-        if isinstance(funcao, ast.FunctionDef) and funcao.name == "end_active_link"
+        if isinstance(funcao, ast.FunctionDef) and _e_end_active_link(funcao.name)
         for c in _chamadas_por_nome(funcao)
     }
     return {
