@@ -37,6 +37,7 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
     SetJobFunctionUnitsCommand,
+    UnlinkLoginCommand,
 )
 from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
@@ -192,6 +193,12 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
         employee_id=_FUNCIONARIO,
         email="maria@cantina.com",
     ),
+    UnlinkLoginCommand(
+        actor=TEST_ACTOR,
+        tenant_id=_TENANT,
+        unit_id=_UNIDADE,
+        employee_id=_FUNCIONARIO,
+    ),
     ListJobFunctionsQuery(actor=TEST_ACTOR, tenant_id=_TENANT),
     ListEmployeesQuery(actor=TEST_ACTOR, tenant_id=_TENANT, unit_id=_UNIDADE),
     JobFunctionResult(
@@ -204,7 +211,7 @@ _TODOS_OS_DTOS: tuple[object, ...] = (
 
 # 14 + 2 + 2 até a 3.4; a Stage 3.5 acrescenta `CreateLoginForEmployeeCommand` e
 # `EmployeeLoginResult` (concept 3.5 §4); a Stage 3.11, `SetJobFunctionUnitsCommand`.
-_DTOS_ESPERADOS = 17 + 2 + 3  # commands + queries + results (concept §4)
+_DTOS_ESPERADOS = 18 + 2 + 3  # commands + queries + results (concept §4)
 
 
 def _dtos_declarados() -> set[type]:
@@ -277,7 +284,7 @@ def test_todo_dto_tem_igualdade_por_valor(dto: object) -> None:
 
 
 # 16 commands + 2 queries — a entrada de cada um dos 18 use cases.
-_COMMANDS_E_QUERIES_ESPERADOS = 19
+_COMMANDS_E_QUERIES_ESPERADOS = 20
 
 
 def _commands_e_queries() -> list[type]:
@@ -454,7 +461,7 @@ _MODULO_DO_MAPPER = "dtos.results"
 # Contagem **transcrita** dos módulos que consomem o mapper: os 11 use cases que
 # devolvem funcionário mais `create_login_for_employee` (3.5). Sem ela a varredura
 # por AST abaixo passaria sobre uma pasta vazia.
-_TOTAL_DE_CONSUMIDORES_DO_MAPPER = 13
+_TOTAL_DE_CONSUMIDORES_DO_MAPPER = 14
 
 
 def test_employee_result_carrega_o_vinculo_de_login() -> None:
@@ -659,10 +666,11 @@ _COMMANDS_DE_REGISTRO_EXISTENTE = (
     CopyEmployeeToUnitCommand,
     CreateLoginForEmployeeCommand,
     LinkExistingLoginCommand,
+    UnlinkLoginCommand,
 )
 # Contagem do ADR 3.4.0007 §3, na mesma forma do `_DTOS_ESPERADOS` da §4 — dez
 # até a 3.4; o 11º é o command de R17 (3.5), que também endereça o registro.
-_COMMANDS_DE_REGISTRO_EXISTENTE_ESPERADOS = 12
+_COMMANDS_DE_REGISTRO_EXISTENTE_ESPERADOS = 13
 
 
 def test_todo_command_de_registro_existente_esta_na_lista() -> None:
