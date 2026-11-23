@@ -15,6 +15,9 @@ use cases); **não escreve** — a escrita é do `execute` do publish.
 4. **Aceite** (`split_acknowledged`): um aceite cobre a `warn` de mesma `key` cujo desvio
    tem o mesmo sinal e magnitude não maior que a do aceite, calculada com o **limite que
    a gerente viu**.
+5. **Vizinhas lidas** (`BatchOutcome.neighbours`, issue #199): a avaliação usa a anterior e
+   a seguinte como foram lidas aqui; o publish as entrega ao `save`, que recusa se uma
+   delas mudou antes da escrita (L-SC9, ADR 4.4.0005).
 """
 
 from collections.abc import Iterable
@@ -48,6 +51,8 @@ from restaurant_hub.features.scheduling.application.ports.out.schedule_config_re
     ScheduleConfigRepository,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ExpectedNeighbours,
+    NeighbourVersion,
     ScheduleRepository,
 )
 from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
@@ -285,13 +290,21 @@ def load_for_edit(
 
 @dataclass(frozen=True)
 class BatchOutcome:
-    """O que avaliar e publicar precisam depois de aplicar o lote."""
+    """O que avaliar e publicar precisam depois de aplicar o lote.
+
+    `neighbours` é a versão das vizinhas que entraram na avaliação — a que o `save` confere.
+    """
 
     after: Schedule
     effective: tuple[ScheduleOperation, ...]
     view: StaffView
     after_violations: tuple[Violation, ...]
     introduced: tuple[Violation, ...]
+    neighbours: ExpectedNeighbours
+
+
+def _seen(schedule: Schedule | None) -> NeighbourVersion | None:
+    return None if schedule is None else NeighbourVersion(schedule.id, schedule.version)
 
 
 def run_batch(
@@ -335,4 +348,5 @@ def run_batch(
         view=view,
         after_violations=evaluated_after.violations,
         introduced=introduced(prior.violations, evaluated_after.violations),
+        neighbours=ExpectedNeighbours(previous=_seen(previous), following=_seen(following)),
     )

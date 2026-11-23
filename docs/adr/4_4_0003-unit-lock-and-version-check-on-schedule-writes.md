@@ -5,7 +5,7 @@ when-use: Reference before adding a writer of the schedules tables, before repla
 keywords: [adr, scheduling, concurrency, advisory-lock, optimistic-locking, version, transaction, repeatable-read, write-protocol, integrity-error]
 status: accepted
 created_at: 2026-11-16
-updated_at: 2026-11-16
+updated_at: 2026-11-22
 adr_id: 4.4.0003
 decision: 'PostgresScheduleRepository.add and save run in one transaction that first takes pg_advisory_xact_lock on a hash of (tenant_id, unit_id), then runs the checks of the port laws explicitly and in the order the laws fix, then writes the root, rewrites the children by delete and reinsert, and inserts the trail row; the stored version is compared with expected_version inside the lock; the database constraints remain the integrity guarantee and two of them are translated by name on add; save writes the version and the children, never the period or the calendar; find_by_id and the two listings read root and children inside one REPEATABLE READ transaction.'
 context_stage: 4.4-scheduling-persistence
@@ -106,3 +106,17 @@ level before the first statement of the transaction, as `PostgresEmployeeReposit
 - ADR 3.2.0001, ADR 3.3.0004, ADR 3.3.0006, ADR 4.1.0001, ADR 4.3.0004, ADR 4.4.0001
 - PostgreSQL 16 documentation: "Explicit Locking" (Advisory Locks), "Transaction Isolation"
 - `docs/stages/4.4-scheduling-persistence/concept.md` §5, §6, §7 D-LOCK, D-SKEW
+- [ADR 4.4.0005](./4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md) (issue #199)
+
+## Supersessão parcial
+
+**2026-11-22 — o último item de §Consequences › "Neutral / trade-offs accepted" (*"The lock
+does not close the boundary write skew of concept 4.3 §3"*) foi superado pelo ADR 4.4.0005; a
+ordem do `save` em §Decision 2 ganha um passo.** O `save` recebe agora as versões das escalas
+adjacentes que a avaliação leu (`ExpectedNeighbours`, lei L-SC9 do port) e as compara **dentro
+deste lock**, depois da versão e antes dos ids internos: onde §Decision 2 diz *"`save`: address
+→ version → internal ids"*, leia-se endereço → versão → vizinhas → ids internos. O lock é o que
+torna a comparação válida no commit: todo escritor da unidade o toma, então a vaga conferida não
+muda entre a checagem e o commit. O resto da decisão — o lock, a comparação da versão, a
+reescrita das filhas, as leituras em snapshot único — continua valendo. Motivo e alternativas:
+ADR 4.4.0005.

@@ -7,6 +7,11 @@ implementação. A semeadura usa o próprio port (`add`/`save`).
 iguais por id, então `lida.bands == gravada.bands` não compara conteúdo. Os casos da Stage
 4.4 (fidelidade depois de `save`, id interno no `add`, relato canônico do id, ordem do
 `add`) travam o que a lei passou a enunciar no docstring do port.
+
+**L-SC9 (issue #199) trava a propriedade, não um caso:** as duas vagas, cada uma com as
+quatro formas de deixar de ser a lida (outra versão, vaga vazia que encheu, outra escala,
+vaga que esvaziou), recusam sem gravar estado nem trilha; e o que **não** é vaga (escala a
+duas semanas, vizinha de outra unidade ou de outro tenant) não conta.
 """
 
 import dataclasses
@@ -23,6 +28,8 @@ from restaurant_hub.features.scheduling.application.errors import (
     ScheduleVersionConflictError,
 )
 from restaurant_hub.features.scheduling.application.ports.out.schedule_repository import (
+    ExpectedNeighbours,
+    NeighbourVersion,
     ScheduleChange,
     ScheduleRepository,
 )
@@ -47,7 +54,12 @@ from restaurant_hub.features.scheduling.domain.value_objects.schedule_period imp
     SchedulePeriod,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.time_range import TimeRange
-from tests.contract.features.scheduling.support import project
+from tests.contract.features.scheduling.support import (
+    NO_NEIGHBOURS,
+    neighbours_now,
+    project,
+    save_as_read,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -146,16 +158,16 @@ def test_l_sc4_save_otimista(schedule_repo: ScheduleRepository) -> None:
     escala = _escala("s1")
     schedule_repo.add(escala, _mudanca())
     v2 = _com_faixa(escala)
-    schedule_repo.save(v2, 1, _mudanca(1))
+    save_as_read(schedule_repo, v2, 1, _mudanca(1))
     lida = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
     assert lida is not None
     assert lida.version == 2  # noqa: PLR2004
     with pytest.raises(ScheduleVersionConflictError) as excinfo:
-        schedule_repo.save(_com_faixa(escala, "f9"), 1, _mudanca(1))
+        save_as_read(schedule_repo, _com_faixa(escala, "f9"), 1, _mudanca(1))
     assert excinfo.value.current_version == 2  # noqa: PLR2004
     # Manter os próprios ids internos (f1) não é colisão: a escala não colide consigo.
     v3 = v2.redeclare_band_break(ShiftBandId("f1"), 30)
-    schedule_repo.save(v3, 2, _mudanca(2))
+    save_as_read(schedule_repo, v3, 2, _mudanca(2))
     relida = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
     assert relida is not None
     assert relida.version == 3  # noqa: PLR2004
@@ -168,10 +180,10 @@ def test_l_sc4_ordem_endereco_versao_ids(schedule_repo: ScheduleRepository) -> N
     schedule_repo.add(s2, _mudanca())
     # versão vencida E id de outra escala ⇒ a versão vem antes dos ids
     with pytest.raises(ScheduleVersionConflictError):
-        schedule_repo.save(_com_faixa(s2, "f1"), 7, _mudanca(7))
+        save_as_read(schedule_repo, _com_faixa(s2, "f1"), 7, _mudanca(7))
     # endereço inexistente E versão errada ⇒ o endereço vem antes da versão
     with pytest.raises(ScheduleNotFoundError):
-        schedule_repo.save(_escala("s2", _SEG + _SEMANA, unit="u2"), 7, _mudanca(7))
+        save_as_read(schedule_repo, _escala("s2", _SEG + _SEMANA, unit="u2"), 7, _mudanca(7))
 
 
 def test_l_sc4_save_de_inexistente_ou_de_outro_endereco_recusa(
@@ -179,9 +191,9 @@ def test_l_sc4_save_de_inexistente_ou_de_outro_endereco_recusa(
 ) -> None:
     schedule_repo.add(_escala("s1"), _mudanca())
     with pytest.raises(ScheduleNotFoundError):
-        schedule_repo.save(_escala("s1", unit="u2"), 1, _mudanca(1))
+        save_as_read(schedule_repo, _escala("s1", unit="u2"), 1, _mudanca(1))
     with pytest.raises(ScheduleNotFoundError):
-        schedule_repo.save(_escala("s9"), 1, _mudanca(1))
+        save_as_read(schedule_repo, _escala("s9"), 1, _mudanca(1))
 
 
 def test_l_sc4_id_interno_de_outra_escala_da_unidade_recusa(
@@ -192,16 +204,16 @@ def test_l_sc4_id_interno_de_outra_escala_da_unidade_recusa(
     s2 = _escala("s2", _SEG + _SEMANA)
     schedule_repo.add(s2, _mudanca())
     with pytest.raises(IdentifierInUseError) as excinfo:
-        schedule_repo.save(_com_faixa(s2, "f1"), 1, _mudanca(1))
+        save_as_read(schedule_repo, _com_faixa(s2, "f1"), 1, _mudanca(1))
     assert excinfo.value.id_type == "ShiftBandId"
     # Em outra unidade o mesmo id é permitido (unicidade por unidade).
     s3 = _escala("s3", unit="u2")
     schedule_repo.add(s3, _mudanca())
-    schedule_repo.save(_com_faixa(s3, "f1"), 1, _mudanca(1))
+    save_as_read(schedule_repo, _com_faixa(s3, "f1"), 1, _mudanca(1))
     # Nem em outro tenant com a mesma unit_id.
     s4 = _escala("s4", tenant="t2")
     schedule_repo.add(s4, _mudanca())
-    schedule_repo.save(_com_faixa(s4, "f1"), 1, _mudanca(1))
+    save_as_read(schedule_repo, _com_faixa(s4, "f1"), 1, _mudanca(1))
 
 
 def test_l_sc5_endereco_de_tres_partes(schedule_repo: ScheduleRepository) -> None:
@@ -251,11 +263,11 @@ def test_l_sc3_a_mudanca_e_gravada_com_o_estado(
         operations=(operacao,),
         acknowledged=(),
     )
-    schedule_repo.save(_com_faixa(escala), 1, edicao)
+    save_as_read(schedule_repo, _com_faixa(escala), 1, edicao)
     assert trail_of("s1") == (criacao, edicao)
     # Recusa não grava a mudança.
     with pytest.raises(ScheduleVersionConflictError):
-        schedule_repo.save(_com_faixa(escala, "f9"), 1, _mudanca(1))
+        save_as_read(schedule_repo, _com_faixa(escala, "f9"), 1, _mudanca(1))
     assert trail_of("s1") == (criacao, edicao)
 
 
@@ -323,7 +335,7 @@ def test_l_sc8_fidelidade_depois_de_save_que_altera_remove_e_reordena(
         .enable_band(ShiftBandId("f0"), _faixa(_SEG + timedelta(days=6), 22))  # passa do último dia
     )
     reordenada = dataclasses.replace(alterada, bands=tuple(reversed(alterada.bands)))
-    schedule_repo.save(reordenada, escala.version, _mudanca(escala.version))
+    save_as_read(schedule_repo, reordenada, escala.version, _mudanca(escala.version))
     lida = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
     assert lida is not None
     assert project(lida) == project(reordenada)
@@ -397,7 +409,7 @@ def test_l_sc4_o_id_relatado_e_o_canonico_e_nao_o_da_ordem_de_gravacao(
             schedule_repo.add(colidente, _mudanca())
         else:
             schedule_repo.add(_escala("s3", terceira), _mudanca())
-            schedule_repo.save(colidente, 1, _mudanca(1))
+            save_as_read(schedule_repo, colidente, 1, _mudanca(1))
     assert (excinfo.value.id_type, excinfo.value.value) == ("ShiftBandId", "B")
 
 
@@ -449,7 +461,7 @@ def test_l_sc8_escalas_vizinhas_da_unidade_nao_se_misturam_nem_sao_tocadas_pelo_
     assert [project(e) for e in anteriores] == [project(s2), project(s1)]
 
     s2_alterada = s2.disable_band(ShiftBandId("g1"))
-    schedule_repo.save(s2_alterada, s2.version, _mudanca(s2.version))
+    save_as_read(schedule_repo, s2_alterada, s2.version, _mudanca(s2.version))
     lida_s1 = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
     lida_s2 = schedule_repo.find_by_id(_T, _U, ScheduleId("s2"))
     assert lida_s1 is not None
@@ -471,7 +483,138 @@ def test_l_sc5_save_no_endereco_de_outro_tenant_e_escala_inexistente(
 ) -> None:
     schedule_repo.add(_escala("s1"), _mudanca())
     with pytest.raises(ScheduleNotFoundError):
-        schedule_repo.save(_com_faixa(_escala("s1", tenant="t2")), 1, _mudanca(1))
+        save_as_read(schedule_repo, _com_faixa(_escala("s1", tenant="t2")), 1, _mudanca(1))
     lida = schedule_repo.find_by_id(_T, _U, ScheduleId("s1"))
     assert lida is not None
     assert lida.bands == ()
+
+
+# --- L-SC9 (issue #199): o save confere as vizinhas que a avaliação leu -------------------
+
+_MEIO = _SEG + _SEMANA  # a editada; a anterior em _SEG, a seguinte em _SEG + 2 semanas
+_VAGAS = {"previous": _SEG, "following": _SEG + 2 * _SEMANA}
+
+
+def _versao(escala: Schedule) -> NeighbourVersion:
+    return NeighbourVersion(escala.id, escala.version)
+
+
+def _com(vaga: str, valor: NeighbourVersion | None, base: ExpectedNeighbours) -> ExpectedNeighbours:
+    return dataclasses.replace(base, **{vaga: valor})
+
+
+def _estado(
+    repo: ScheduleRepository, trail_of: Callable[[str], tuple[ScheduleChange, ...]]
+) -> object:
+    gravadas = repo.list_in_range(_T, _U, _SEG - _SEMANA, _SEG + 4 * _SEMANA)
+    return [project(e) for e in gravadas], [trail_of(e.id) for e in gravadas]
+
+
+def test_l_sc9_vizinhas_como_lidas_o_save_grava(
+    schedule_repo: ScheduleRepository,
+    trail_of: Callable[[str], tuple[ScheduleChange, ...]],
+) -> None:
+    anterior, meio, seguinte = (
+        _escala("sa", _SEG),
+        _escala("sm", _MEIO),
+        _escala("ss", _VAGAS["following"]),
+    )
+    for escala in (anterior, meio, seguinte):
+        schedule_repo.add(escala, _mudanca())
+    lidas = ExpectedNeighbours(previous=_versao(anterior), following=_versao(seguinte))
+    schedule_repo.save(_com_faixa(meio), 1, lidas, _mudanca(1))
+    lida = schedule_repo.find_by_id(_T, _U, ScheduleId("sm"))
+    assert lida is not None
+    assert lida.version == 2  # noqa: PLR2004
+    # Uma linha por escrita aceita, e só na escala editada.
+    assert len(trail_of("sm")) == 2  # noqa: PLR2004
+    assert len(trail_of("sa")) == len(trail_of("ss")) == 1
+
+
+@pytest.mark.parametrize("vaga", ["previous", "following"])
+@pytest.mark.parametrize(
+    "forma", ["outra_versao", "vaga_vazia_encheu", "outra_escala", "vaga_esvaziou"]
+)
+def test_l_sc9_vaga_que_nao_e_a_lida_recusa_sem_gravar(
+    schedule_repo: ScheduleRepository,
+    trail_of: Callable[[str], tuple[ScheduleChange, ...]],
+    vaga: str,
+    forma: str,
+) -> None:
+    """Cada vaga com cada forma de divergir; a outra vaga é sempre a lida."""
+    outra_vaga = "following" if vaga == "previous" else "previous"
+    meio = _escala("sm", _MEIO)
+    schedule_repo.add(meio, _mudanca())
+    vizinha_da_outra = _escala("so", _VAGAS[outra_vaga])
+    schedule_repo.add(vizinha_da_outra, _mudanca())
+    lidas = _com(outra_vaga, _versao(vizinha_da_outra), NO_NEIGHBOURS)
+    vizinha = _escala("sv", _VAGAS[vaga])
+    if forma == "vaga_vazia_encheu":
+        # Lida vazia; a vizinha foi criada depois da leitura.
+        schedule_repo.add(vizinha, _mudanca())
+        esperado = "sv"
+    elif forma == "vaga_esvaziou":
+        # Lida com uma escala que não está lá (o port não apaga: o esperado a fabrica).
+        lidas = _com(vaga, NeighbourVersion(ScheduleId("sv"), 1), lidas)
+        esperado = "sv"
+    else:
+        schedule_repo.add(vizinha, _mudanca())
+        if forma == "outra_versao":
+            lidas = _com(vaga, _versao(vizinha), lidas)
+            save_as_read(schedule_repo, _com_faixa(vizinha, "g1"), 1, _mudanca(1))
+        else:  # outra_escala: mesma versão, outro id
+            lidas = _com(vaga, NeighbourVersion(ScheduleId("sx"), vizinha.version), lidas)
+        esperado = "sv"
+    antes = _estado(schedule_repo, trail_of)
+    with pytest.raises(ScheduleVersionConflictError) as excinfo:
+        schedule_repo.save(_com_faixa(meio), 1, lidas, _mudanca(1))
+    assert (
+        excinfo.value.changed_neighbour_id,
+        excinfo.value.expected_version,
+        excinfo.value.current_version,
+    ) == (esperado, 1, 1)
+    assert _estado(schedule_repo, trail_of) == antes
+
+
+@pytest.mark.parametrize(
+    ("first_day", "tenant", "unit"),
+    [
+        (_SEG + 3 * _SEMANA, _T, _U),  # duas semanas depois: não é a seguinte
+        (_SEG - _SEMANA, _T, _U),  # duas semanas antes: não é a anterior
+        (_SEG + 2 * _SEMANA, _T, "u2"),  # adjacente, outra unidade
+        (_SEG, "t2", _U),  # adjacente, outro tenant (mesma unit_id)
+    ],
+)
+def test_l_sc9_o_que_nao_e_vaga_nao_conta(
+    schedule_repo: ScheduleRepository, first_day: date, tenant: str, unit: str
+) -> None:
+    meio = _escala("sm", _MEIO)
+    schedule_repo.add(meio, _mudanca())
+    schedule_repo.add(_escala("sz", first_day, tenant=tenant, unit=unit), _mudanca())
+    schedule_repo.save(_com_faixa(meio), 1, NO_NEIGHBOURS, _mudanca(1))
+    lida = schedule_repo.find_by_id(_T, _U, ScheduleId("sm"))
+    assert lida is not None
+    assert lida.version == 2  # noqa: PLR2004
+
+
+def test_l_sc9_ordem_versao_vizinhas_ids_e_anterior_antes_da_seguinte(
+    schedule_repo: ScheduleRepository,
+) -> None:
+    anterior = _escala_com_internos("sa", _SEG, band="f1", demand="d1", assignment="a1")
+    meio = _escala("sm", _MEIO)
+    seguinte = _escala("ss", _VAGAS["following"])
+    for escala in (anterior, meio, seguinte):
+        schedule_repo.add(escala, _mudanca())
+    colide_id = _com_faixa(meio, "f1")  # id interno da anterior
+    # versão vencida E vizinha divergente ⇒ a versão vem antes
+    with pytest.raises(ScheduleVersionConflictError) as excinfo:
+        schedule_repo.save(colide_id, 7, NO_NEIGHBOURS, _mudanca(7))
+    assert excinfo.value.changed_neighbour_id is None
+    # vizinha divergente E id em uso ⇒ a vizinha vem antes dos ids
+    with pytest.raises(ScheduleVersionConflictError) as excinfo:
+        schedule_repo.save(colide_id, 1, NO_NEIGHBOURS, _mudanca(1))
+    # as duas vagas divergem ⇒ a anterior é a relatada
+    assert excinfo.value.changed_neighbour_id == "sa"
+    # vizinhas como lidas ⇒ chega aos ids
+    with pytest.raises(IdentifierInUseError):
+        schedule_repo.save(colide_id, 1, neighbours_now(schedule_repo, meio), _mudanca(1))

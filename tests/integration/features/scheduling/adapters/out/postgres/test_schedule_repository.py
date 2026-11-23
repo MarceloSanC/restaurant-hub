@@ -73,7 +73,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.validation_config i
     PolicyKind,
 )
 from restaurant_hub.features.scheduling.domain.value_objects.violation import Violation
-from tests.contract.features.scheduling.support import project, read_trail
+from tests.contract.features.scheduling.support import project, read_trail, save_as_read
 
 pytestmark = [pytest.mark.integration]
 
@@ -160,7 +160,7 @@ def test_cada_escrita_aceita_grava_exatamente_uma_linha_com_seq_crescente(
     repo.add(v1, _mudanca(None))
     habilita = EnableBand(ShiftBandId("f1"), _faixa(_SEG, 10))
     v2 = v1.enable_band(habilita.band_id, habilita.time_range)
-    repo.save(v2, 1, _mudanca(1, (habilita,), autor="user-a"))
+    save_as_read(repo, v2, 1, _mudanca(1, (habilita,), autor="user-a"))
     declara = DeclareDemand(
         ShiftDemandId("d1"), ShiftBandId("f1"), JobFunctionId("c"), DemandQuantity(2)
     )
@@ -178,7 +178,7 @@ def test_cada_escrita_aceita_grava_exatamente_uma_linha_com_seq_crescente(
         observed=Decimal("1"),
         limit=Decimal("0"),
     )
-    repo.save(v3, 2, _mudanca(2, (declara, aloca), (aceite,), autor="user-b"))
+    save_as_read(repo, v3, 2, _mudanca(2, (declara, aloca), (aceite,), autor="user-b"))
 
     with banco_limpo.connect() as conexao:
         linhas = conexao.execute(select(schedule_changes).order_by(schedule_changes.c.seq)).all()
@@ -217,14 +217,15 @@ def test_recusas_deixam_estado_e_trilha_como_estavam(
     projecao = project(v1)
 
     recusas: list[tuple[type[Exception], Any]] = [
-        (ScheduleVersionConflictError, lambda: repo.save(v1, 9, _mudanca(9))),
+        (ScheduleVersionConflictError, lambda: save_as_read(repo, v1, 9, _mudanca(9))),
         (
             ScheduleNotFoundError,
-            lambda: repo.save(_escala("s9"), 1, _mudanca(1)),
+            lambda: save_as_read(repo, _escala("s9"), 1, _mudanca(1)),
         ),
         (
             IdentifierInUseError,
-            lambda: repo.save(
+            lambda: save_as_read(
+                repo,
                 outra.enable_band(ShiftBandId("f1"), _faixa(outra.period.first_day, 10)),
                 1,
                 _mudanca(1),
@@ -279,7 +280,7 @@ def test_falha_no_insert_da_trilha_desfaz_o_save(
     antes = _contagens(banco_limpo)
     v2 = v1.disable_band(ShiftBandId("f1")).enable_band(ShiftBandId("f2"), _faixa(_SEG, 15))
     with _statements(banco_limpo) as emitidos, pytest.raises(DataError):
-        repo.save(v2, v1.version, _mudanca(_FORA_DO_INTEGER))
+        save_as_read(repo, v2, v1.version, _mudanca(_FORA_DO_INTEGER))
     escritas = [s.split(" ")[0] + " " + s.split(" ")[1] + " " + s.split(" ")[2] for s in emitidos]
     assert "UPDATE schedules SET" in escritas
     assert "DELETE FROM schedule_bands" in escritas
@@ -351,7 +352,7 @@ def test_save_nao_regrava_periodo_nem_calendario(
     v1 = _escala()
     repo.add(v1, _mudanca(None))
     with _statements(banco_limpo) as emitidos:
-        repo.save(v1.enable_band(ShiftBandId("f1"), _faixa(_SEG, 10)), 1, _mudanca(1))
+        save_as_read(repo, v1.enable_band(ShiftBandId("f1"), _faixa(_SEG, 10)), 1, _mudanca(1))
     (update,) = [s for s in emitidos if s.startswith("UPDATE schedules")]
     assert update.startswith("UPDATE schedules SET version=")
     assert "first_day" not in update.split(" WHERE ")[0]

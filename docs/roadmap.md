@@ -254,7 +254,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#196](https://github.com/MarceloSanC/restaurant-hub/issues/196) | `check_harness` não lê o conteúdo de `reference/` nem resolve âncora de link de skill | shared | tooling | done | #162 |
 | [#197](https://github.com/MarceloSanC/restaurant-hub/issues/197) | "Falso vermelho ambiental" da `stage-audit` cita uma checagem da Fase B que não existe | shared | .claude | open | #162 |
 | [#198](https://github.com/MarceloSanC/restaurant-hub/issues/198) | Fuso por unidade em `Unit.timezone` (ADR 4.1.0005) | identity | domain + adapters/out | open | `4.4-scheduling-persistence` |
-| [#199](https://github.com/MarceloSanC/restaurant-hub/issues/199) | Write skew de fronteira entre publicações em semanas adjacentes | scheduling | application + adapters/out | open | `4.4-scheduling-persistence` |
+| [#199](https://github.com/MarceloSanC/restaurant-hub/issues/199) | Write skew de fronteira entre publicações em semanas adjacentes | scheduling | application + adapters/out | done | `4.4-scheduling-persistence` |
 | [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | done | #163, #162 |
 | [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | done | #163 |
 | [#205](https://github.com/MarceloSanC/restaurant-hub/issues/205) | Decidir a extração da emissão do token de convite, hoje em cinco use cases de identity | identity | application | open | #184 |
@@ -1875,6 +1875,14 @@ skills_hint: [repository-pattern, composition-root]
 > alocação gravada faz a escala recusar com `MissingStaffRecordsError`, e apagar uma função
 > demandada deixa a demanda sem nome. Fora da Stage, com dono: `Unit.timezone` (#198) e o write
 > skew de fronteira (#199).
+
+> Nota (2026-11-22): o write skew de fronteira (#199) fechou fora da Stage, como issue
+> ([ADR 4.4.0005](./adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md)):
+> `ScheduleRepository.save` passa a receber as vizinhas que a avaliação leu e recusa com
+> `ScheduleVersionConflictError` quando uma delas mudou (lei L-SC9). Da lista "Fora da Stage" da
+> nota anterior segue aberta só a #198. **A 4.5 herda também** o corpo HTTP dessa recusa: o erro
+> traz `changed_neighbour_id`, e a escala editada não mudou, então reenviar o mesmo lote é válido
+> (ADR 4.4.0005 §Decision 3).
 
 #### Stage 4.5 — `4.5-scheduling-http`
 
