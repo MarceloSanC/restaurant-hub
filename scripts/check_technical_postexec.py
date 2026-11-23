@@ -112,6 +112,9 @@ _CHECKPOINT_PATTERN = re.compile(r"\bCheckpoint (?P<letter>[A-Z])\b")
 # Corte da checagem 3, pelo número da Stage: as 23 Stages de `docs/stages/` em
 # 2026-11-22 e a 3.10, em execução naquela data, são anteriores à regra. Vale para
 # Stage aberta depois do merge da issue #210; não acrescentar Stage nova aqui.
+# Renumerar a 3.10 antes do merge exige trocar o número aqui. Parecida, mas de outra
+# regra e outra data: `LEGACY_STAGES` em `scripts/check_gate_plan.py` (plano de gates,
+# ADR 0.0.0021, sem a 3.10) — as duas não se unificam.
 LEGACY_CHECKPOINT_STAGES = frozenset(
     {
         "1.1", "1.2",
