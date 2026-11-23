@@ -151,8 +151,8 @@ class Recursos:
     job_function_id: str
     job_function_livre: str
     sufixo: str
-    employee_com_login_id: str = ""
-    email_existente: str = ""
+    employee_com_login_id: str
+    email_existente: str
 
 
 Efeito = Callable[[AsyncClient, dict[str, str], Response, Recursos], Awaitable[None]]
@@ -208,6 +208,44 @@ async def _efeito_login_no_registro_da_unidade_do_path(
     assert corpo["employee"]["unit_id"] == recursos.unidade
     assert corpo["employee"]["id"] == recursos.employee_id
     assert corpo["employee"]["user_id"] is not None
+
+
+async def _efeito_vinculado_no_registro_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R18 (3.10): o registro sem login da unidade do path passa a ter um login."""
+    corpo = resposta.json()
+    assert (corpo["unit_id"], corpo["id"]) == (recursos.unidade, recursos.employee_id)
+    assert corpo["user_id"] is not None
+
+
+async def _efeito_login_trocado_no_registro_da_unidade_do_path(
+    client: AsyncClient, cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R19 (3.10): o registro vinculado da unidade do path aponta para a conta existente.
+
+    A conta existente está em outro login que o do R17 semeado; a prova de que a
+    troca aconteceu é R18 com a mesma conta, no outro registro da unidade, passar a
+    ser recusado como "conta já vinculada a outro registro da unidade" (409).
+    """
+    corpo = resposta.json()
+    assert (corpo["unit_id"], corpo["id"]) == (recursos.unidade, recursos.employee_com_login_id)
+    assert corpo["user_id"] is not None
+    de_novo = await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/login-link",
+        json={"email": recursos.email_existente},
+        headers=cabecalho,
+    )
+    assert de_novo.status_code == HTTPStatus.CONFLICT, de_novo.text
+
+
+async def _efeito_desvinculado_no_registro_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R20 (3.10): o registro vinculado da unidade do path fica sem login."""
+    corpo = resposta.json()
+    assert (corpo["unit_id"], corpo["id"]) == (recursos.unidade, recursos.employee_com_login_id)
+    assert corpo["user_id"] is None
 
 
 async def _efeito_copia_lida_da_unidade_do_path(
@@ -427,21 +465,21 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         query=_sem_query,
         body=lambda r: {"email": r.email_existente},
         sucesso=HTTPStatus.OK,
-        efeito=_efeito_no_registro_da_unidade_do_path,
+        efeito=_efeito_vinculado_no_registro_da_unidade_do_path,
     ),
     ("PUT", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
         path=_do_funcionario_com_login,
         query=_sem_query,
         body=lambda r: {"email": r.email_existente},
         sucesso=HTTPStatus.OK,
-        efeito=_efeito_no_registro_da_unidade_do_path,
+        efeito=_efeito_login_trocado_no_registro_da_unidade_do_path,
     ),
     ("DELETE", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
         path=_do_funcionario_com_login,
         query=_sem_query,
         body=_sem_corpo,
         sucesso=HTTPStatus.OK,
-        efeito=_efeito_no_registro_da_unidade_do_path,
+        efeito=_efeito_desvinculado_no_registro_da_unidade_do_path,
     ),
 }
 
@@ -737,6 +775,8 @@ _RECURSOS_FICTICIOS: Final = Recursos(
     job_function_id="função-fictícia",
     job_function_livre="função-livre-fictícia",
     sufixo="401",
+    employee_com_login_id="funcionário-com-login-fictício",
+    email_existente="ficticio@cantina.com",
 )
 
 
@@ -1108,6 +1148,8 @@ async def test_ca13_o_funcionario_de_outra_unidade_responde_404(
         job_function_id=recursos_a.job_function_id,
         job_function_livre=recursos_a.job_function_livre,
         sufixo=recursos_a.sufixo,
+        employee_com_login_id=recursos_b.employee_com_login_id,
+        email_existente=recursos_a.email_existente,
     )
 
     resposta = await _invocar(client, chave_da_rota, enderecado_por_a, cabecalho=auth(manager))
