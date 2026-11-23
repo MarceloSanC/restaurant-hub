@@ -335,13 +335,16 @@ def test_unidade_de_outro_tenant_tambem_e_recusada() -> None:
 @pytest.mark.parametrize(
     ("papel_alvo", "esperado"),
     [
-        (Role.EMPLOYEE, {Permission.MANAGE_USERS}),
+        (Role.EMPLOYEE, {Permission.MANAGE_USERS, Permission.VIEW_OWN_SCHEDULE}),
         (
             Role.MANAGER,
             {
                 Permission.MANAGE_USERS,
                 Permission.MANAGE_STAFF,
                 Permission.MANAGE_JOB_FUNCTIONS,
+                Permission.VIEW_SCHEDULE,
+                Permission.MANAGE_SCHEDULE,
+                Permission.VIEW_OWN_SCHEDULE,
             },
         ),
         (
@@ -350,6 +353,8 @@ def test_unidade_de_outro_tenant_tambem_e_recusada() -> None:
                 Permission.MANAGE_USERS,
                 Permission.MANAGE_STAFF,
                 Permission.MANAGE_JOB_FUNCTIONS,
+                Permission.VIEW_SCHEDULE,
+                Permission.VIEW_OWN_SCHEDULE,
             },
         ),
         (
@@ -359,6 +364,10 @@ def test_unidade_de_outro_tenant_tambem_e_recusada() -> None:
                 Permission.MANAGE_TENANT,
                 Permission.MANAGE_STAFF,
                 Permission.MANAGE_JOB_FUNCTIONS,
+                Permission.VIEW_SCHEDULE,
+                Permission.MANAGE_SCHEDULE,
+                Permission.VIEW_OWN_SCHEDULE,
+                Permission.MANAGE_SCHEDULE_SETTINGS,
             },
         ),
         (Role.PLATFORM_ADMIN, {Permission.MANAGE_USERS, Permission.MANAGE_PLATFORM}),
@@ -382,19 +391,49 @@ def test_conjunto_de_permissoes_exigidas_por_papel_alvo(
     assert required_permissions_for_role(papel_alvo) == esperado
 
 
-def test_criar_login_de_employee_exige_so_manage_users() -> None:
-    """Pino de R17 (Stage 3.5, concept §5.3): a rota de staff exige `manage_staff`
-    **e** `manage_users` — a segunda é exatamente o que este mapa cobra para o
-    papel `employee`, e a rota a cobra por `authorize`, não por este helper.
+# O requisito da rota R17 de staff (concept 3.5 §5.3): `manage_staff` e `manage_users`.
+_REQUISITO_DE_R17 = frozenset({Permission.MANAGE_STAFF, Permission.MANAGE_USERS})
 
-    Se uma Stage futura fizer `employee` exigir mais que `manage_users`, a rota
-    R17 continua cobrando só `manage_users` e um `manager` passaria a criar logins
-    com menos do que a rota `/users/invitations` exigiria — este teste é quem
-    avisa que as duas portas divergiram.
+
+def _papeis_que_r17_deixaria_escalar(
+    mapa: dict[Role, frozenset[Permission]], exigido_para_employee: frozenset[Permission]
+) -> list[Role]:
+    """Papéis que passam no requisito de R17 sem deter o que um `employee` detém.
+
+    Isolada para que o caso plantado a exercite sem gravar em `src/` um mapa que
+    escala privilégio.
     """
-    assert required_permissions_for_role(Role.EMPLOYEE) == frozenset({Permission.MANAGE_USERS}), (
-        "R17 (concept 3.5 §5.3) assume que criar um `employee` exige só `manage_users`"
+    return [
+        papel
+        for papel, permissoes in mapa.items()
+        if permissoes >= _REQUISITO_DE_R17 and not exigido_para_employee <= permissoes
+    ]
+
+
+def test_r17_nao_provisiona_o_que_o_criador_nao_detem() -> None:
+    """Pino de R17 (Stage 3.5, concept §5.3), reescrito como propriedade na Stage 4.5.
+
+    A rota de staff exige `manage_staff` e `manage_users` e provisiona pela fachada,
+    que não aplica `required_permissions_for_role` (ADR 2.7.0001 §Decision 5). Até a
+    4.5 o pino era de igualdade ("criar `employee` exige só `manage_users`"); desde
+    que o `employee` detém `view_own_schedule` (ADR 4.5.0001), a garantia é esta:
+    **todo** papel que passa no requisito de R17 detém o que o `employee` detém —
+    senão R17 seria uma porta que concede o que o criador não tem.
+    """
+    mapa = {papel: papel.permissions for papel in Role}
+    assert (
+        _papeis_que_r17_deixaria_escalar(mapa, required_permissions_for_role(Role.EMPLOYEE)) == []
     )
+
+
+def test_o_detector_do_pino_de_r17_reprova_um_mapa_plantado() -> None:
+    """O detector acha o papel com o requisito de R17 que não detém a permissão do `employee`."""
+    plantado = {
+        Role.MANAGER: frozenset({Permission.MANAGE_STAFF, Permission.MANAGE_USERS}),
+        Role.EMPLOYEE: frozenset({Permission.VIEW_OWN_SCHEDULE}),
+    }
+    exigido = frozenset({Permission.MANAGE_USERS, Permission.VIEW_OWN_SCHEDULE})
+    assert _papeis_que_r17_deixaria_escalar(plantado, exigido) == [Role.MANAGER]
 
 
 # Matriz congelada de **decisão de acesso** — quem pode criar quem, medida antes
@@ -402,11 +441,18 @@ def test_criar_login_de_employee_exige_so_manage_users() -> None:
 # esta matriz **não pode mudar**: ela é o comportamento observável da regra.
 # Crescer o vocabulário só pode tornar a exigência mais estrita, e mais estrita
 # sobre permissões que o próprio criador ganhou no mesmo ato é neutro.
+#
+# **Baseline nova datada — 2026-11-23, Stage 4.5 (ADR 4.5.0001 §Decision 6, D-CREATE).** A
+# primeira mudança desde a 3.4, e numa célula só: `hr` deixa de criar `manager`. O `manager`
+# passou a deter `manage_schedule`, que o `hr` não detém, e a regra fecha a escalada (o RH
+# criaria quem mexe na escala). É também a primeira vez que o vocabulário cresce sem que o
+# criador ganhe, no mesmo ato, tudo o que passou a ser exigido dele — decisão registrada, não
+# deriva. Fora dessa célula, igual à baseline da 3.4.
 _BASELINE_QUEM_CRIA_QUEM: dict[Role, frozenset[Role]] = {
     Role.PLATFORM_ADMIN: frozenset(),
     Role.OWNER: frozenset({Role.EMPLOYEE, Role.MANAGER, Role.HR, Role.OWNER}),
     Role.MANAGER: frozenset({Role.EMPLOYEE, Role.MANAGER, Role.HR}),
-    Role.HR: frozenset({Role.EMPLOYEE, Role.MANAGER, Role.HR}),
+    Role.HR: frozenset({Role.EMPLOYEE, Role.HR}),
     Role.EMPLOYEE: frozenset(),
 }
 

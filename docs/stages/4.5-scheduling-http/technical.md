@@ -577,4 +577,8 @@ atômica, plano de gates contra o PIPELINE §9.6). Correções no commit `stage 
 - **B7** (minor) a premissa de `token_sem_permissao` muda de verdade (S7 nega pela unidade, não pela permissão) → corrigido (premissa declarada na Task 07; permissão de S7 provada por CA14 e CA2)
 - **B8** (minor) CA13 sem check objetivo → corrigido (passo 7 do "Como usar" e verificação na §3)
 
+### 2026-11-23 — [deviation] Task 01 — teste de ordem de `authorize_requirement` fora da lista — Claude (Opus 5.5)
+**Contexto:** `tests/unit/features/identity/application/test_authorize_requirement.py` (CA04 da 2.7) usava `required_permissions_for_role(Role.OWNER)` como insumo de um cenário sobre a **ordem** dos pedidos, e o conjunto do `owner` cresceu com as permissões de escala.
+**Razão:** o insumo virou o conjunto fixo das quatro permissões que o cenário sempre teve; a asserção (permissões por fora, unidades na ordem dada, sem deduplicar) não mudou. Ajuste mecânico abaixo do limiar de pergunta; o arquivo entrou no commit da Task 01.
+
 <!-- END: post-execution -->

@@ -65,7 +65,16 @@ def test_permissoes_em_ordem_por_fora_e_unidades_na_ordem_dada_sem_deduplicar() 
     authorize_requirement(
         autorizador,
         _ATOR,
-        required_permissions_for_role(Role.OWNER),
+        # Conjunto fixo de quatro: o do `owner` cresceu na Stage 4.5 (permissões de escala), e
+        # o cenário é sobre a ordem, não sobre o mapa de papéis.
+        frozenset(
+            {
+                Permission.MANAGE_USERS,
+                Permission.MANAGE_TENANT,
+                Permission.MANAGE_STAFF,
+                Permission.MANAGE_JOB_FUNCTIONS,
+            }
+        ),
         tenant_id=_TENANT,
         unit_ids=(_U2, _U1, _U2),
     )

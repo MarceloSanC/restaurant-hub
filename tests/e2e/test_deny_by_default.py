@@ -512,12 +512,16 @@ async def test_rota_publica_nao_recusa_por_falta_de_credencial(
 async def token_sem_permissao(
     client_gate: AsyncClient, admin_gate: User, caixa_gate: RecordingEmailSender
 ) -> dict[str, str]:
-    """Um `employee` autenticado — o papel cujo conjunto de permissões é vazio.
+    """Um `employee` autenticado — o papel de menor conjunto de permissões.
 
-    `Role.EMPLOYEE` mapeia para `frozenset()` (`role.py`), então ele é negado em
-    **qualquer** rota que exija permissão, seja qual for. É o que torna a perna
-    do 403 independente da permissão que a rota nova venha a exigir: não há
-    capacidade que este ator detenha.
+    Até a Stage 4.5 `Role.EMPLOYEE` mapeava para `frozenset()`; desde ela detém só
+    `view_own_schedule` (ADR 4.5.0001). Ele continua negado em toda rota: nas que
+    exigem outra permissão, pela permissão; na de "minha escala"
+    (`/units/{unit_id}/my-schedule`), pela **unidade** — o parâmetro sintetizado
+    (`"x"`) não é unidade de que ele seja membro, e identity responde 403 de
+    unidade invisível. A perna do 403 cobre, portanto, a rota de `view_own_schedule`
+    pela unidade, não pela permissão; a permissão da rota é provada pelo teste de
+    borda com espião (CA14 da 4.5) e pela matriz e2e (CA2).
 
     A cadeia é a real, pela API: admin cria restaurante, cria o owner, o owner
     cria a unidade e o usuário `employee`. Semear direto no repositório seria
