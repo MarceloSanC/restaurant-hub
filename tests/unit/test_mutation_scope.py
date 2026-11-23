@@ -15,7 +15,8 @@ existe para tornar barulhento.
 
 **Lista explícita + asserção de que ela cobre a configuração**, o par de sempre.
 A lista aqui é a dos módulos que decidem acesso (os quatro da issue, o port da
-Stage 2.7 e o provisionamento de conta da issue #211); a asserção seguinte cobra
+Stage 2.7, o provisionamento de conta da issue #211 e as regras do vínculo de
+login da Stage 3.10); a asserção seguinte cobra
 o `pyproject.toml` contra ela nos dois sentidos, para que nem um módulo saia do
 escopo por edição distraída, nem um quinto entre sem que a issue que o justifica
 seja escrita neste arquivo.
@@ -38,7 +39,8 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
 # Os módulos que decidem acesso: os quatro que a issue #45 nomeia, o port da
-# Stage 2.7 e o provisionamento de conta (issue #211). Um novo entra aqui com a
+# Stage 2.7, o provisionamento de conta (issue #211) e as regras do vínculo de login
+# (Stage 3.10). Um novo entra aqui com a
 # justificativa ao lado — e só então no `pyproject.toml`.
 _MODULOS_DE_ACESSO = frozenset(
     {
@@ -62,6 +64,12 @@ _MODULOS_DE_ACESSO = frozenset(
         # (issue #211): o conjunto decide qual conta privilegiada pode nascer por
         # uma entrada que não autoriza — o mesmo critério de entrada dos demais.
         "src/restaurant_hub/features/identity/application/use_cases/provision_account.py",
+        # Quem recebe login sobre qual registro (Stage 3.10, ADR 3.10.0002 §3): a
+        # elegibilidade da conta existente — tenant do registro, alcance da unidade, a
+        # mesma recusa para conta alheia e `platform_admin` — e o ponto único da regra
+        # de fim de vínculo, que decide de quem as sessões caem (ADR 3.10.0001 §5).
+        # Entrou pela auditoria do PR #230.
+        "src/restaurant_hub/features/staff/application/use_cases/_login_link.py",
     }
 )
 
