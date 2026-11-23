@@ -46,6 +46,7 @@ from restaurant_hub.features.staff.application.errors import (
     LoginEmailAlreadyInUseError,
 )
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    ExistingLogin,
     LoginDelivery,
     ProvisionedLogin,
 )
@@ -116,3 +117,23 @@ class LocalIdentityGateway:
         `False` faria o desligamento gravar com a sessão viva.
         """
         return self._facade.account_role(str(user_id)) == _EMPLOYEE_ROLE
+
+    def find_login_by_email(self, email: str) -> ExistingLogin | None:
+        """A conta do e-mail, em tipos de staff (L-IG6 — ADR 3.10.0002 §1).
+
+        Traduz só o e-mail malformado, preservando a causa, como L-IG2; o resto
+        sobe na mesma instância. Converte os primitivos da fachada e não decide
+        nada: a elegibilidade é do use case.
+        """
+        try:
+            account = self._facade.find_account_by_email(email)
+        except InvalidEmailError as exc:
+            raise InvalidLoginEmailError(email) from exc
+        if account is None:
+            return None
+        return ExistingLogin(
+            user_id=UserId(account.user_id),
+            tenant_id=None if account.tenant_id is None else TenantId(account.tenant_id),
+            unit_ids=frozenset(UnitId(unit_id) for unit_id in account.unit_ids),
+            every_unit=account.sees_every_unit,
+        )

@@ -951,6 +951,8 @@ def test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado() -> None
     assert metodos["IdentityGateway"] == {
         # Leitura (L-IG5, Stage 3.8): fica fora de `GATEWAY_WRITE_METHODS`.
         "is_employee_login",
+        # Leitura (L-IG6, Stage 3.10): fica fora de `GATEWAY_WRITE_METHODS`.
+        "find_login_by_email",
         "provision_employee_login",
         "revoke_login_sessions",
         "send_login_invitation",
