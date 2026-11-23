@@ -7,13 +7,16 @@ name: docker-build
 #
 # Por que filtro de caminho e não todo PR: o build custa minutos, e o que ele
 # pega nasce nestes arquivos — o código em `src/` não muda o que a imagem
-# instala. O lock fora de sincronia com o pyproject o `lock-check` do gate já
-# reprova em todo PR; aqui se prova que a IMAGEM instala o lock.
+# instala. Aqui se prova que a IMAGEM instala o lock. O `lock-check` do
+# `lint-and-test` ainda não reprova lock fora de sincronia com o pyproject: o
+# `uv sync` sem `--locked` do step de instalação reescreve o lock antes dele
+# (issue #265). Até lá, este build (que dispara com o `pyproject.toml`) é o
+# único check que fica vermelho nesse caso.
 #
 # NÃO é check obrigatório: com filtro de caminho ele não roda na maioria dos
 # PRs, e um check obrigatório que não roda trava o merge.
 #
-# `tests/unit/test_dockerfile.py` trava os caminhos do filtro.
+# `tests/unit/test_dockerfile.py` trava os caminhos do filtro e as permissões.
 
 on:
   pull_request:
@@ -31,6 +34,10 @@ on:
       - pyproject.toml
       - uv.lock
       - .github/workflows/docker-build.yml
+
+# Só lê o repositório: o repo é público e PR de fork dispara este build.
+permissions:
+  contents: read
 
 jobs:
   build-images:

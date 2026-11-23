@@ -169,3 +169,13 @@ def test_workflow_constroi_quando_muda_o_que_a_imagem_instala(event: str) -> Non
     paths = set(triggers[event]["paths"])
     missing = sorted(set(IMAGE_INPUTS) - paths)
     assert missing == [], f"{event} não constrói a imagem quando mudam: {missing}"
+
+
+def test_workflow_so_le_o_repositorio() -> None:
+    """O token do `docker-build.yml` só lê: PR de fork (repo público) dispara o build."""
+    workflow: dict[Any, Any] = yaml.safe_load(DOCKER_WORKFLOW.read_text(encoding="utf-8"))
+    assert workflow.get("permissions") == {"contents": "read"}
+    triggers: dict[str, Any] = workflow.get("on") or workflow[True]
+    assert "pull_request_target" not in triggers
+    for job in workflow["jobs"].values():
+        assert "permissions" not in job, "permissão de job amplia a do workflow"
