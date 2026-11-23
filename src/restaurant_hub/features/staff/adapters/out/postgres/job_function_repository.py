@@ -37,7 +37,7 @@ função), e o `__post_init__` de `UnitEnablement` recusa a combinação incoere
 `update` (L-JF2) continua gravando **só o nome**: a habilitação tem escrita
 própria, `update_enablement`, para que uma renomeação concorrente a uma alteração
 de unidades não regrave a habilitação antiga. Desde a issue #206 essa escrita é
-condicional à habilitação lida pelo chamador, decidida sob `FOR UPDATE`.
+condicional à habilitação lida pelo chamador, decidida sob o lock da linha.
 
 E a ordem, que é lei do port desde a Stage 3.3 (`L-ORD`, ADR 3.3.0003):
 `ORDER BY name COLLATE "C", id COLLATE "C"` nas duas listagens, com a colação
@@ -111,14 +111,14 @@ class PostgresJobFunctionRepository:
         """L-JF7 — substitui a habilitação, só se a gravada ainda for a `expected`.
 
         **Escrita condicional sob o lock da linha** (issue #206) — a forma que o
-        ADR 0.0.0010 deu a `link_login`. O lookup é `SELECT … FOR UPDATE` por
+        ADR 0.0.0010 deu a `link_login`. O lookup é `SELECT … FOR NO KEY UPDATE` por
         `(tenant_id, id)`: ausente ⇒ `JobFunctionNotFoundError`. Sob o lock a
         habilitação gravada é remontada (flag + vínculos) e comparada à lida pelo
         chamador; diferente ⇒ `JobFunctionEnablementChangedError`. Só então flag
         e vínculos mudam, na **mesma** transação.
 
         **Por que o lock fecha a corrida em `READ COMMITTED`.** Todo escritor dos
-        vínculos toma a linha-pai antes: este método pelo `FOR UPDATE`, `delete`
+        vínculos toma a linha-pai antes: este método pelo lock do lookup, `delete`
         pelo `DELETE` (os vínculos saem por `CASCADE`), e `add` só cria vínculos
         de linha que ainda não é visível. Uma segunda alteração que espera no lock
         relê a linha comitada pela primeira, e a consulta dos vínculos, que vem
@@ -137,7 +137,13 @@ class PostgresJobFunctionRepository:
                     job_functions.c.id == job_function.id,
                     job_functions.c.tenant_id == job_function.tenant_id,
                 )
-                .with_for_update()
+                # `FOR NO KEY UPDATE`, e não `FOR UPDATE`: é o lock que o `UPDATE`
+                # de coluna não-chave desta escrita já tomava. Serializa as
+                # alterações de unidades entre si, com a renomeação e com o
+                # `DELETE`, sem passar a conflitar com o `KEY SHARE` que a FK de
+                # `employee_job_functions` toma ao atribuir a função a um registro
+                # (ADR 3.3.0006 (b)) — atribuir não muda a habilitação.
+                .with_for_update(key_share=True)
             ).one_or_none()
             if row is None:
                 raise JobFunctionNotFoundError(job_function.id)

@@ -1259,7 +1259,7 @@ def test_issue_206_update_enablement_bloqueia_no_lookup_e_nao_depois(
     """A comparação decide sob o lock — a mesma prova da CA6b e da #68.
 
     Com a linha da função presa por outra transação, `update_enablement` para no
-    **primeiro** statement, o `SELECT … FOR UPDATE`, e nada completa antes. Sem o
+    **primeiro** statement, o `SELECT … FOR NO KEY UPDATE`, e nada completa antes. Sem o
     lock, a remontagem da habilitação completaria primeiro e a comparação
     decidiria sobre um estado que a transação concorrente está mudando.
     """
@@ -1284,7 +1284,7 @@ def test_issue_206_update_enablement_bloqueia_no_lookup_e_nao_depois(
 
     assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
     assert tentados, "o adapter nem chegou a emitir statement"
-    assert "FOR UPDATE" in tentados[-1], "o adapter bloqueou em outro statement"
+    assert "FOR NO KEY UPDATE" in tentados[-1], "o adapter bloqueou em outro statement"
     assert concluidos == [], "algum statement completou antes do lock"
 
 
@@ -1339,3 +1339,32 @@ def test_issue_206_segunda_alteracao_que_espera_a_primeira_a_rele_e_e_recusada(
     assert _habilitacao_gravada(motor_observador) == _A_E_B, (
         "a segunda alteração gravou a leitura antiga por cima da primeira"
     )
+
+
+def test_issue_206_atribuicao_em_curso_da_funcao_nao_bloqueia_a_alteracao_de_unidades(
+    motores: Callable[[], Engine],
+) -> None:
+    """O lock do lookup é `FOR NO KEY UPDATE`, que não conflita com o `KEY SHARE` da FK.
+
+    Atribuir a função a um registro insere em `employee_job_functions`, e a FK
+    composta prende a linha da função em `KEY SHARE` até o commit. Com um
+    `FOR UPDATE` no lookup, a alteração de unidades passaria a esperar toda
+    atribuição em curso da mesma função — bloqueio que a escrita antiga (um
+    `UPDATE` de coluna não-chave) não tinha. Aqui o `KEY SHARE` fica preso numa
+    transação aberta e a alteração completa mesmo assim, dentro do `lock_timeout`.
+    """
+    motor_adapter = motores()
+    motor_atribuicao = motores()
+    _semear_funcao_em_a(motor_adapter)
+
+    with motor_atribuicao.begin() as atribuicao:
+        atribuicao.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR KEY SHARE"),
+            {"f": _F1, "t": _A},
+        )
+        PostgresJobFunctionRepository(motor_adapter).update_enablement(
+            JobFunction(id=_F1, tenant_id=_A, name="Cozinheiro", unit_enablement=_A_E_B),
+            expected=_SO_A,
+        )
+
+    assert _habilitacao_gravada(motor_adapter) == _A_E_B
