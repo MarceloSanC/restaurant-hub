@@ -29,6 +29,9 @@ _DE_APLICACAO = (
     errors.EmployeeNotFoundError,
     errors.JobFunctionAlreadyExistsError,
     errors.EmployeeAlreadyExistsError,
+    # Issue #206 — a escrita condicional de L-JF7: condição da forma da escrita, sem
+    # regra de produto de concorrência em staff (ADR 3.9.0001 §3).
+    errors.JobFunctionEnablementChangedError,
 )
 
 # Conflito, uso, relocalização, cópia e — desde a 3.5 — as três recusas de login da
@@ -91,6 +94,8 @@ def test_modulo_declara_exatamente_as_excecoes_esperadas() -> None:
         "EmployeeHasLoginError",
         # Stage 3.11 — o registro só detém função habilitada na sua unidade.
         "JobFunctionNotEnabledInUnitError",
+        # Issue #206 — a habilitação gravada mudou entre a leitura e a escrita.
+        "JobFunctionEnablementChangedError",
     }
 
 

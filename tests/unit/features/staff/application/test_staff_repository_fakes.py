@@ -131,7 +131,10 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
             "job_functions.list_by_unit",
             lambda: fakes.job_functions.list_by_unit(_TENANT, _UNIDADE),
         ),
-        ("job_functions.update_enablement", lambda: fakes.job_functions.update_enablement(nova)),
+        (
+            "job_functions.update_enablement",
+            lambda: fakes.job_functions.update_enablement(nova, expected=nova.unit_enablement),
+        ),
         (
             "job_functions.delete",
             lambda: fakes.job_functions.delete(_TENANT, JobFunctionId("f-nova")),

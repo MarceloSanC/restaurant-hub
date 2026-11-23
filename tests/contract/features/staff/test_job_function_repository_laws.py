@@ -25,6 +25,7 @@ import pytest
 
 from restaurant_hub.features.staff.application.errors import (
     JobFunctionAlreadyExistsError,
+    JobFunctionEnablementChangedError,
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
@@ -695,7 +696,7 @@ def test_l_jf7_update_enablement_substitui_a_habilitacao_inteira(
     repos.job_functions.add(_funcao_em(antes))
     repos.job_functions.add(_funcao_em(_restrita(_U1), id_=_F2, name="Vizinha"))
 
-    repos.job_functions.update_enablement(_funcao_em(depois, name="Ignorado"))
+    repos.job_functions.update_enablement(_funcao_em(depois, name="Ignorado"), expected=antes)
 
     gravada = repos.job_functions.find_by_id(_A, _F1)
     assert gravada is not None
@@ -715,10 +716,123 @@ def test_l_jf7_update_enablement_de_inexistente_no_tenant_nao_grava_nada(
     repos.job_functions.add(_funcao_em(_restrita(_U1)))
 
     with pytest.raises(JobFunctionNotFoundError):
-        repos.job_functions.update_enablement(_funcao_em(_TODAS, id_=_F2))
+        repos.job_functions.update_enablement(_funcao_em(_TODAS, id_=_F2), expected=_restrita(_U1))
     with pytest.raises(JobFunctionNotFoundError):
-        repos.job_functions.update_enablement(_funcao_em(_TODAS, tenant=_B))
+        repos.job_functions.update_enablement(
+            _funcao_em(_TODAS, tenant=_B), expected=_restrita(_U1)
+        )
 
     assert repos.job_functions.find_by_id(_A, _F2) is None
     assert repos.job_functions.find_by_id(_B, _F1) is None
     assert _habilitacao(repos, _F1) == _restrita(_U1)
+
+
+# --- L-JF7 (revisada), issue #206: escrita condicional à habilitação lida ------
+#
+# A propriedade, não o exemplo: **toda** habilitação esperada diferente da gravada
+# recusa, e **toda** igual grava. O domínio de casos é o produto cartesiano de um
+# conjunto de habilitações escolhido para conter os pares que uma comparação
+# aproximada confundiria — "todas" contra o conjunto que inclui todas as unidades
+# nomeadas, subconjunto contra superconjunto, conjuntos disjuntos do mesmo tamanho. Uma
+# implementação que comparasse só a flag, só o tamanho, `covers` por unidade ou
+# inclusão de conjuntos passa em algum par e morre em outro.
+
+_HABILITACOES = (
+    ("todas", _TODAS),
+    ("u1", _restrita(_U1)),
+    ("u2", _restrita(_U2)),
+    ("u1-u2", _restrita(_U1, _U2)),
+)
+_PARES_DIFERENTES = [
+    pytest.param(gravada, esperada, id=f"gravada={g}-esperada={e}")
+    for g, gravada in _HABILITACOES
+    for e, esperada in _HABILITACOES
+    if g != e
+]
+
+
+@pytest.mark.parametrize(("gravada", "esperada"), _PARES_DIFERENTES)
+def test_l_jf7_habilitacao_esperada_diferente_da_gravada_e_recusada_sem_gravar_nada(
+    gravada: UnitEnablement, esperada: UnitEnablement, repos: RepositoriosDeStaff
+) -> None:
+    """Qualquer diferença entre a lida e a gravada recusa, e a gravada fica intacta.
+
+    O pedido carrega uma habilitação nova distinta das duas (`u3`), para que a
+    recusa não possa ser confundida com uma escrita que coincidisse com o estado
+    gravado.
+    """
+    repos.job_functions.add(_funcao_em(gravada))
+
+    with pytest.raises(JobFunctionEnablementChangedError):
+        repos.job_functions.update_enablement(_funcao_em(_restrita(_U3)), expected=esperada)
+
+    assert _habilitacao(repos, _F1) == gravada
+    na_u3 = any(f.id == _F1 for f in repos.job_functions.list_by_unit(_A, _U3))
+    assert na_u3 == gravada.covers(_U3)
+
+
+@pytest.mark.parametrize(
+    ("rotulo", "habilitacao"), _HABILITACOES, ids=[r for r, _ in _HABILITACOES]
+)
+def test_l_jf7_habilitacao_esperada_igual_a_gravada_grava(
+    rotulo: str, habilitacao: UnitEnablement, repos: RepositoriosDeStaff
+) -> None:
+    """A outra metade da propriedade: a condição satisfeita não recusa, em nenhuma forma."""
+    repos.job_functions.add(_funcao_em(habilitacao))
+
+    repos.job_functions.update_enablement(_funcao_em(_restrita(_U3)), expected=habilitacao)
+
+    assert _habilitacao(repos, _F1) == _restrita(_U3), rotulo
+
+
+def test_l_jf7_a_escrita_aceita_muda_a_condicao_da_seguinte(repos: RepositoriosDeStaff) -> None:
+    """O cenário da issue em sequência, sem concorrência real.
+
+    Dois escritores leem `{u1}`; o primeiro grava `{u1, u2}`; o segundo, com a
+    leitura antiga, é recusado — e `u2`, que só o primeiro alcançava, fica.
+    """
+    repos.job_functions.add(_funcao_em(_restrita(_U1)))
+    lida = _restrita(_U1)
+
+    repos.job_functions.update_enablement(_funcao_em(_restrita(_U1, _U2)), expected=lida)
+    with pytest.raises(JobFunctionEnablementChangedError):
+        repos.job_functions.update_enablement(_funcao_em(_restrita(_U1)), expected=lida)
+
+    assert _habilitacao(repos, _F1) == _restrita(_U1, _U2)
+
+
+def test_l_jf7_not_found_vence_a_recusa_por_mudanca(repos: RepositoriosDeStaff) -> None:
+    """Ordem: o lookup no tenant vem antes da comparação.
+
+    Com `tenant_id` do B e uma esperada que **também** diverge da gravada em A, a
+    resposta é `NotFound` — a recusa por mudança confirmaria a existência da
+    função alheia e o fato de a habilitação dela ser outra.
+    """
+    repos.job_functions.add(_funcao_em(_restrita(_U1)))
+
+    with pytest.raises(JobFunctionNotFoundError):
+        repos.job_functions.update_enablement(
+            _funcao_em(_TODAS, tenant=_B), expected=_restrita(_U2)
+        )
+
+    assert _habilitacao(repos, _F1) == _restrita(_U1)
+
+
+def test_l_jf7_renomeacao_intercalada_nao_recusa_a_alteracao_de_unidades(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """Só a habilitação entra na condição: um rename no meio não muda a lida.
+
+    E a escrita de unidades continua não regravando o nome — o renomeado fica.
+    """
+    repos.job_functions.add(_funcao_em(_restrita(_U1)))
+    lida = _restrita(_U1)
+    repos.job_functions.update(_funcao_em(lida, name="Chef"))
+
+    repos.job_functions.update_enablement(
+        _funcao_em(_restrita(_U1, _U2), name="Cozinheiro"), expected=lida
+    )
+
+    gravada = repos.job_functions.find_by_id(_A, _F1)
+    assert gravada is not None
+    assert (gravada.name, gravada.unit_enablement) == ("Chef", _restrita(_U1, _U2))

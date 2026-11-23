@@ -54,6 +54,7 @@ from restaurant_hub.features.staff.application.errors import (
     EmployeeRelocationError,
     InvalidLoginEmailError,
     JobFunctionAlreadyExistsError,
+    JobFunctionEnablementChangedError,
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotEnabledInUnitError,
@@ -115,6 +116,12 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     EmployeeAlreadyExistsError: HTTP_CONFLICT,
     JobFunctionInUseError: HTTP_CONFLICT,
     JobFunctionNotEnabledInUnitError: HTTP_CONFLICT,
+    # 409 — a escrita condicional de L-JF7 (issue #206): a habilitação gravada não
+    # é mais a que o pedido leu. O payload está correto; o que impede é o estado
+    # gravado por **outra** alteração, comitada entre a leitura e a escrita.
+    # Inalcançável por requisição **isolada** — só um entrelace de duas a produz;
+    # quem a prova pelo banco real é o teste de conduta de duas conexões.
+    JobFunctionEnablementChangedError: HTTP_CONFLICT,
     # `EmployeeInUseError` continua **sem produtor em v1** (nasce com o Step 4) e
     # mesmo assim tem entrada própria: totalidade é sobre a hierarquia, não sobre
     # o que é alcançável hoje. Não escrever e2e esperando produzi-la.

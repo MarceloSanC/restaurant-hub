@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-11-16
-last_reviewed_at: 2026-11-16
+updated_at: 2026-11-22
+last_reviewed_at: 2026-11-22
 ---
 
 # Roadmap — restaurant-hub
@@ -258,7 +258,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#200](https://github.com/MarceloSanC/restaurant-hub/issues/200) | Auditorias (`stage-audit`, `issue-audit`) e prompt do orquestrador leem o plano de gates do ADR 0.0.0021 | shared | docs + .claude | done | #163, #162 |
 | [#201](https://github.com/MarceloSanC/restaurant-hub/issues/201) | Gate mecânico do plano de gates no `technical.md` novo e bloco de comando no `check_docs_pointers` (especulativa) | shared | tooling | open | #163 |
 | [#205](https://github.com/MarceloSanC/restaurant-hub/issues/205) | Decidir a extração da emissão do token de convite, hoje em cinco use cases de identity | identity | application | open | #184 |
-| [#206](https://github.com/MarceloSanC/restaurant-hub/issues/206) | Alteração concorrente das unidades de uma função remove unidade sem alcance (escrita condicional em `update_enablement`) | staff | application + adapters/out | open | `3.11-job-function-unit-enablement` |
+| [#206](https://github.com/MarceloSanC/restaurant-hub/issues/206) | Alteração concorrente das unidades de uma função remove unidade sem alcance (escrita condicional em `update_enablement`) | staff | application + adapters/out | done | `3.11-job-function-unit-enablement` |
 | [#207](https://github.com/MarceloSanC/restaurant-hub/issues/207) | Decidir o alcance por unidade em renomear e apagar função restrita | staff | application + adapters/inbound/http | open | `3.11-job-function-unit-enablement` |
 | [#208](https://github.com/MarceloSanC/restaurant-hub/issues/208) | Docstring de `permission.py` com `manage_job_functions` exercida em unidade nomeada | identity | docs (domain) | open | `3.11-job-function-unit-enablement` |
 | [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | open | `3.11-job-function-unit-enablement` |
@@ -268,6 +268,8 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
 | [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
 | [#224](https://github.com/MarceloSanC/restaurant-hub/issues/224) | Fixar o corpo do PR como lugar do plano de gates da issue avulsa | shared | docs + .claude | open | #200 |
+| [#225](https://github.com/MarceloSanC/restaurant-hub/issues/225) | Leitura de função responde 422 espúrio quando a habilitação muda no meio da remontagem | staff | adapters/out | open | #206 |
+| [#226](https://github.com/MarceloSanC/restaurant-hub/issues/226) | Decidir o controle otimista (`ETag`/`If-Match`) das edições de equipe (especulativa) | staff | application + adapters | open | — |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):

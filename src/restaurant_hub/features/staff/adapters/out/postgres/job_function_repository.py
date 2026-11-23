@@ -36,7 +36,8 @@ L-JF7). A leitura reidrata as duas numa consulta extra por chamada (não por
 função), e o `__post_init__` de `UnitEnablement` recusa a combinação incoerente.
 `update` (L-JF2) continua gravando **só o nome**: a habilitação tem escrita
 própria, `update_enablement`, para que uma renomeação concorrente a uma alteração
-de unidades não regrave a habilitação antiga.
+de unidades não regrave a habilitação antiga. Desde a issue #206 essa escrita é
+condicional à habilitação lida pelo chamador, decidida sob o lock da linha.
 
 E a ordem, que é lei do port desde a Stage 3.3 (`L-ORD`, ADR 3.3.0003):
 `ORDER BY name COLLATE "C", id COLLATE "C"` nas duas listagens, com a colação
@@ -66,13 +67,17 @@ from restaurant_hub.features.staff.adapters.out.postgres.tables import (
     job_function_units,
     job_functions,
 )
-from restaurant_hub.features.staff.application.errors import JobFunctionNotFoundError
+from restaurant_hub.features.staff.application.errors import (
+    JobFunctionEnablementChangedError,
+    JobFunctionNotFoundError,
+)
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     JobFunctionId,
     TenantId,
     UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 
 # Ordem total do port (`L-ORD`). As duas colunas levam a colação explícita — ver
 # o docstring do módulo.
@@ -102,15 +107,50 @@ class PostgresJobFunctionRepository:
                 error, ON_INSERT_JOB_FUNCTION, self._conflict_detail(error, job_function)
             ) from error
 
-    def update_enablement(self, job_function: JobFunction) -> None:
-        """L-JF7 — substitui a habilitação; função ausente no tenant ⇒ `NotFound`.
+    def update_enablement(self, job_function: JobFunction, expected: UnitEnablement) -> None:
+        """L-JF7 — substitui a habilitação, só se a gravada ainda for a `expected`.
 
-        Flag e vínculos mudam na **mesma** transação: o `UPDATE` da flag é também o
-        lookup por `(tenant_id, id)` — `rowcount == 0` levanta antes de tocar os
-        vínculos, e o rollback garante que nada mudou.
+        **Escrita condicional sob o lock da linha** (issue #206) — a forma que o
+        ADR 0.0.0010 deu a `link_login`. O lookup é `SELECT … FOR NO KEY UPDATE` por
+        `(tenant_id, id)`: ausente ⇒ `JobFunctionNotFoundError`. Sob o lock a
+        habilitação gravada é remontada (flag + vínculos) e comparada à lida pelo
+        chamador; diferente ⇒ `JobFunctionEnablementChangedError`. Só então flag
+        e vínculos mudam, na **mesma** transação.
+
+        **Por que o lock fecha a corrida em `READ COMMITTED`.** Todo escritor dos
+        vínculos toma a linha-pai antes: este método pelo lock do lookup, `delete`
+        pelo `DELETE` (os vínculos saem por `CASCADE`), e `add` só cria vínculos
+        de linha que ainda não é visível. Uma segunda alteração que espera no lock
+        relê a linha comitada pela primeira, e a consulta dos vínculos, que vem
+        depois, abre snapshot novo e vê os vínculos já comitados — compara contra
+        o que a primeira gravou, e recusa. `REPEATABLE READ` trocaria essa
+        releitura por erro de serialização (`40001`), o motivo que o ADR 0.0.0010
+        dá para não usá-lo em `link_login`.
+
+        O `UPDATE` da flag mantém o `tenant_id` no `WHERE` mesmo depois do lookup
+        sob lock, como as escritas do registro de funcionário.
         """
         with self._engine.begin() as connection:
-            result = connection.execute(
+            row = connection.execute(
+                select(job_functions)
+                .where(
+                    job_functions.c.id == job_function.id,
+                    job_functions.c.tenant_id == job_function.tenant_id,
+                )
+                # `FOR NO KEY UPDATE`, e não `FOR UPDATE`: é o lock que o `UPDATE`
+                # de coluna não-chave desta escrita já tomava. Serializa as
+                # alterações de unidades entre si, com a renomeação e com o
+                # `DELETE`, sem passar a conflitar com o `KEY SHARE` que a FK de
+                # `employee_job_functions` toma ao atribuir a função a um registro
+                # (ADR 3.3.0006 (b)) — atribuir não muda a habilitação.
+                .with_for_update(key_share=True)
+            ).one_or_none()
+            if row is None:
+                raise JobFunctionNotFoundError(job_function.id)
+            stored = self._hydrate(connection, [row])[0].unit_enablement
+            if stored != expected:
+                raise JobFunctionEnablementChangedError(job_function.id)
+            connection.execute(
                 job_functions.update()
                 .where(
                     job_functions.c.id == job_function.id,
@@ -118,8 +158,6 @@ class PostgresJobFunctionRepository:
                 )
                 .values(enabled_in_all_units=job_function.unit_enablement.all_units)
             )
-            if result.rowcount == 0:
-                raise JobFunctionNotFoundError(job_function.id)
             connection.execute(
                 job_function_units.delete().where(
                     job_function_units.c.job_function_id == job_function.id,

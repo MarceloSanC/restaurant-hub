@@ -59,6 +59,29 @@ class EmployeeNotFoundError(StaffApplicationError):
         super().__init__(f"funcionário não encontrado: {employee_id!r}")
 
 
+class JobFunctionEnablementChangedError(StaffApplicationError):
+    """A habilitação gravada não é mais a que o caso de uso leu (issue #206).
+
+    `update_enablement` (L-JF7) é escrita **condicional**: recebe a habilitação que
+    o use case leu e sobre a qual autorizou a diferença, e recusa quando a gravada
+    mudou desde então — outra alteração de unidades comitou no meio. Aplicar o
+    conjunto novo por cima seria autorizar contra um estado que não é mais o
+    gravado: com a função em `{A}`, o dono alarga para `{A, B}` e um gerente de A
+    reenvia `{A}` — B sairia por um ator sem alcance sobre B (ADR 3.11.0001 §5).
+
+    Fica sob a raiz de **aplicação** (ADR 3.9.0001 §3): não há regra de produto de
+    concorrência em staff, como a F8 é para a escala; a condição nasce da forma
+    da escrita. Quem recebe relê a função e reenvia sobre o estado atual. A
+    mensagem cita só o id que o próprio pedido nomeou.
+    """
+
+    def __init__(self, job_function_id: str) -> None:
+        super().__init__(
+            "as unidades da função de trabalho mudaram desde a leitura; "
+            f"releia e reenvie: {job_function_id!r}"
+        )
+
+
 class JobFunctionNameAlreadyExistsError(StaffError):
     """Nome de função já usado no tenant, comparado **verbatim**.
 

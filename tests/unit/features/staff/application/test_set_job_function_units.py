@@ -15,6 +15,7 @@ import pytest
 
 from restaurant_hub.features.staff.application.dtos.commands import SetJobFunctionUnitsCommand
 from restaurant_hub.features.staff.application.errors import (
+    JobFunctionEnablementChangedError,
     JobFunctionInUseError,
     JobFunctionNotFoundError,
 )
@@ -33,6 +34,9 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
 from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_access_guard import InMemoryAccessGuard
+from tests.fakes.features.staff.in_memory_job_function_repository import (
+    InMemoryJobFunctionRepository,
+)
 from tests.fakes.features.staff.in_memory_staff_store import StaffFakes, staff_repositories
 from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR
 
@@ -376,3 +380,103 @@ def test_registro_ja_fora_da_habilitacao_nao_trava_mudanca_que_nao_tira_a_unidad
     _executar(fakes, _guard(_A, _B), pedido)
 
     assert _gravada(fakes) == UnitEnablement.only(pedido)
+
+
+# --- issue #206: alteração intercalada da habilitação lida ---------------------
+#
+# O use case autoriza a diferença contra a habilitação que **leu**; a escrita é
+# condicional a ela (L-JF7 revisada). Aqui a corrida é reproduzida sobre o fake:
+# a leitura do use case dispara, logo depois de devolver, uma escrita concorrente
+# que comita uma habilitação diferente. A prova pelo banco real, com duas
+# conexões, está em `test_staff_conduct.py`.
+
+
+class _LeituraSeguidaDeEscritaConcorrente(InMemoryJobFunctionRepository):
+    """Fake cujo primeiro `find_by_id` é seguido de uma alteração alheia comitada."""
+
+    def __init__(self, fakes: StaffFakes, intercalada: UnitEnablement) -> None:
+        super().__init__(fakes.store)
+        self._intercalada: UnitEnablement | None = intercalada
+
+    def find_by_id(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> JobFunction | None:
+        lida = super().find_by_id(tenant_id, job_function_id)
+        if self._intercalada is not None and lida is not None:
+            outro_escritor = InMemoryJobFunctionRepository(self._store)
+            outro_escritor.update_enablement(
+                lida.with_enablement(self._intercalada), expected=lida.unit_enablement
+            )
+            self._intercalada = None
+        return lida
+
+
+def _executar_com_corrida(
+    fakes: StaffFakes,
+    guard: InMemoryAccessGuard,
+    intercalada: UnitEnablement,
+    unidades: frozenset[UnitId] | None,
+) -> object:
+    return SetJobFunctionUnitsUseCase(
+        _LeituraSeguidaDeEscritaConcorrente(fakes, intercalada), fakes.employees, guard=guard
+    ).execute(
+        SetJobFunctionUnitsCommand(
+            actor=TEST_ACTOR, tenant_id=_T, job_function_id=_F, unit_ids=unidades
+        )
+    )
+
+
+def test_issue_206_gerente_de_a_que_leu_antes_do_alargamento_nao_remove_b() -> None:
+    """O cenário da issue: `{A}`; o dono alarga para `{A, B}`; o gerente de A reenvia `{A}`.
+
+    O gerente leu `{A}` e o pedido dele não muda nada sobre o que leu — nenhuma
+    unidade a autorizar além do tenant. Sem a condição, a escrita gravaria `{A}` e
+    tiraria B, que ele não alcança. Com ela, recusa e B fica.
+    """
+    fakes = _mundo(_so(_A))
+    guard = _guard(_A)
+
+    with pytest.raises(JobFunctionEnablementChangedError):
+        _executar_com_corrida(fakes, guard, _so(_A, _B), frozenset({_A}))
+
+    assert _gravada(fakes) == _so(_A, _B)
+    assert guard.calls == [f"authorize({_JF},{_T},None)"]
+
+
+_LIDAS = (("todas", _TODAS), ("a", _so(_A)), ("b", _so(_B)), ("a-b", _so(_A, _B)))
+_CORRIDAS = [
+    pytest.param(lida, intercalada, id=f"lida={nl}-intercalada={ni}")
+    for nl, lida in _LIDAS
+    for ni, intercalada in _LIDAS
+    if nl != ni
+]
+
+
+@pytest.mark.parametrize(("lida", "intercalada"), _CORRIDAS)
+@pytest.mark.parametrize(
+    "pedido",
+    [None, frozenset({_A}), frozenset({_C}), frozenset({_A, _B, _C})],
+    ids=["todas", "a", "c", "a-b-c"],
+)
+def test_issue_206_qualquer_mudanca_intercalada_da_habilitacao_lida_recusa(
+    lida: UnitEnablement, intercalada: UnitEnablement, pedido: frozenset[UnitId] | None
+) -> None:
+    """A propriedade: toda habilitação lida que outra escrita mudou recusa o pedido.
+
+    Ator com alcance total — a recusa não pode vir do guard —, e pedidos que vão
+    de "todas" a conjuntos que a corrida nem toca. O gravado é sempre o do outro
+    escritor, intacto.
+    """
+    fakes = _mundo(lida)
+
+    with pytest.raises(JobFunctionEnablementChangedError):
+        _executar_com_corrida(fakes, _guard(_A, _B, _C, restaurante=True), intercalada, pedido)
+
+    assert _gravada(fakes) == intercalada
+
+
+def test_issue_206_sem_corrida_a_habilitacao_lida_e_a_condicao_e_a_escrita_passa() -> None:
+    """Controle: o mesmo fake sem escrita intercalada não recusa (a condição não é sempre-falsa)."""
+    fakes = _mundo(_so(_A))
+
+    _executar(fakes, _guard(_A, _B), frozenset({_A, _B}))
+
+    assert _gravada(fakes) == _so(_A, _B)

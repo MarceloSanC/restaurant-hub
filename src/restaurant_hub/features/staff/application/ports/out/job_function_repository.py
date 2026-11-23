@@ -33,7 +33,8 @@ declarar. `list_by_unit` (L-JF6, Stage 3.11) obedece à mesma `L-ORD`.
 restaurante e carrega `unit_enablement` — todas as unidades ou um conjunto
 não-vazio. Toda leitura deste port devolve a entidade **com** a habilitação
 reidratada (L-JF4/L-JF5 e os dois `find_*`); `add` a grava junto com a linha
-(L-JF1), `delete` a leva junto (L-JF3), e só `update_enablement` (L-JF7) a muda.
+(L-JF1), `delete` a leva junto (L-JF3), e só `update_enablement` (L-JF7) a muda —
+condicionada, desde a issue #206, à habilitação que o chamador leu.
 `update` (L-JF2) **não** a grava: renomear e mudar unidades são escritas
 distintas para que uma não regrave a outra sob concorrência.
 
@@ -57,6 +58,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
     UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 
 
 class JobFunctionRepository(Protocol):
@@ -175,12 +177,27 @@ class JobFunctionRepository(Protocol):
         """
         ...
 
-    def update_enablement(self, job_function: JobFunction) -> None:
+    def update_enablement(self, job_function: JobFunction, expected: UnitEnablement) -> None:
         """Substitui onde a função vale (Stage 3.11, ADR 3.11.0001 §5).
 
         **L-JF7 —** é `UPDATE`, não upsert: função inexistente **no tenant** ⇒
         `JobFunctionNotFoundError`, e **nada** é gravado. Grava **só** a
         habilitação — o nome fica como está gravado — e a substitui inteira: as
         unidades que saíram deixam de valer, as que entraram passam a valer.
+
+        **L-JF7 (revisada) (issue #206) — escrita condicional à habilitação lida.**
+        `expected` é a habilitação que o chamador leu e sobre a qual autorizou a
+        diferença. Se a **gravada** não for igual a ela — qualquer diferença, de
+        "todas" para um conjunto, de um conjunto para "todas", uma unidade a mais
+        ou a menos — ⇒ `JobFunctionEnablementChangedError`, e **nada** é gravado.
+        Sem a condição, duas alterações intercaladas deixariam o conjunto do
+        segundo escritor, inclusive em unidade que só o primeiro alcançava.
+
+        Ordem: o lookup por `(tenant_id, id)` vem **antes** da comparação —
+        função de outro tenant é `JobFunctionNotFoundError`, nunca a recusa por
+        mudança, que confirmaria a existência do registro alheio. Comparação e
+        escrita são **atômicas**: nenhuma outra alteração da mesma função comita
+        entre as duas. Só a habilitação entra na condição; uma renomeação
+        concorrente não a muda e não recusa a escrita.
         """
         ...

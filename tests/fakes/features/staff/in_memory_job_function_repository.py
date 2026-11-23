@@ -18,6 +18,7 @@ from collections.abc import Iterable
 
 from restaurant_hub.features.staff.application.errors import (
     JobFunctionAlreadyExistsError,
+    JobFunctionEnablementChangedError,
     JobFunctionInUseError,
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotFoundError,
@@ -31,6 +32,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     TenantId,
     UnitId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from tests.fakes.features.staff.in_memory_staff_store import InMemoryStaffStore
 
 
@@ -57,12 +59,20 @@ class InMemoryJobFunctionRepository:
         self._guard_name(job_function)
         self._store.job_functions[job_function.id] = job_function
 
-    def update_enablement(self, job_function: JobFunction) -> None:
-        """L-JF7 — substitui só a habilitação; função ausente no tenant ⇒ `NotFound`."""
+    def update_enablement(self, job_function: JobFunction, expected: UnitEnablement) -> None:
+        """L-JF7 — substitui só a habilitação, se a gravada ainda for a `expected`.
+
+        Função ausente no tenant ⇒ `NotFound` **antes** da comparação; gravada
+        diferente da lida ⇒ `JobFunctionEnablementChangedError` (issue #206). A
+        igualdade é a do VO inteiro — flag e conjunto —, a mesma que o adapter
+        real aplica sob o lock da linha.
+        """
         self._store.record("job_functions.update_enablement")
         gravada = self._find(job_function.tenant_id, job_function.id)
         if gravada is None:
             raise JobFunctionNotFoundError(job_function.id)
+        if gravada.unit_enablement != expected:
+            raise JobFunctionEnablementChangedError(job_function.id)
         self._store.job_functions[job_function.id] = gravada.with_enablement(
             job_function.unit_enablement
         )

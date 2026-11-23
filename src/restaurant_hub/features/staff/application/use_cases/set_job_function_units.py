@@ -23,6 +23,13 @@ na sua unidade. Estreitar a habilitação enquanto algum registro — ativo ou
 desligado — de uma unidade que sairia detém a função é recusado, com o mesmo erro
 da remoção guardada. É *check-then-act*: nenhuma constraint fecha a corrida com uma
 atribuição concorrente (limite declarado no ADR).
+
+**A escrita é condicional à habilitação lida** (issue #206). A diferença é
+autorizada contra o que foi lido; se outra alteração de unidades comitar entre a
+leitura e a escrita, o port recusa com `JobFunctionEnablementChangedError` em vez
+de gravar o conjunto deste pedido por cima — o que tiraria, por um ator sem
+alcance, uma unidade que só o outro escritor alcançava (ADR 3.11.0001 §5, nota de
+fechamento). Quem recebe a recusa relê e reenvia.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import SetJobFunctionUnitsCommand
@@ -74,6 +81,8 @@ class SetJobFunctionUnitsUseCase:
                 (domínio, 3.11).
             JobFunctionInUseError: algum registro (ativo ou desligado) de uma
                 unidade que deixaria de ser coberta detém a função.
+            JobFunctionEnablementChangedError: a habilitação gravada mudou entre a
+                leitura e a escrita (L-JF7 revisada, issue #206); nada é gravado.
         """
         # (0) Autorização do alvo do command, antes de qualquer outra instrução
         # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
@@ -110,6 +119,9 @@ class SetJobFunctionUnitsUseCase:
                 current.covers(unit_id) and not enablement.covers(unit_id) for unit_id in holding
             ):
                 raise JobFunctionInUseError(command.job_function_id)
-        # (5) Escrita — só a habilitação (L-JF7); o nome não é regravado.
-        self._job_functions.update_enablement(changed)
+        # (5) Escrita — só a habilitação (L-JF7); o nome não é regravado. Condicional
+        # à habilitação **lida** (issue #206): a diferença foi autorizada contra
+        # `current`, e se outra alteração a mudou desde a leitura o port recusa com
+        # `JobFunctionEnablementChangedError` em vez de gravar por cima.
+        self._job_functions.update_enablement(changed, expected=current)
         return to_job_function_result(changed)
