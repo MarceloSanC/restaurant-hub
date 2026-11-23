@@ -490,34 +490,34 @@ existem (`employees.user_id`, `employees.active`).
 
 ## 11. Critérios de aceitação
 
-- [ ] **CA1** R18 vincula a um registro ativo sem login a conta existente do mesmo
+- [x] **CA1** R18 vincula a um registro ativo sem login a conta existente do mesmo
   tenant que alcança a unidade: gerente membro da unidade, funcionário membro, e o
   **dono sem membership** (pelo alcance de todas as unidades), inclusive a conta do
   próprio ator; só `user_id` muda (unit; e2e com o dono e com um gerente).
-- [ ] **CA2** R18 e R19 recusam com o **mesmo** 404 e o **mesmo** corpo: e-mail sem
+- [x] **CA2** R18 e R19 recusam com o **mesmo** 404 e o **mesmo** corpo: e-mail sem
   conta, conta de outro tenant, conta `platform_admin` e conta do tenant que não
   alcança a unidade; nada é gravado e nenhuma sessão é revogada (unit parametrizado
   sobre R18 × R19 × os quatro casos; e2e: outro tenant e `platform_admin` em R18 e em
   R19).
-- [ ] **CA3** R18, R19 e R20 autorizam `manage_staff` e depois `manage_users` sobre a
+- [x] **CA3** R18, R19 e R20 autorizam `manage_staff` e depois `manage_users` sobre a
   unidade do command, antes de qualquer leitura; negação em qualquer das duas não
   deixa efeito (varredura de autorização de staff).
-- [ ] **CA4** Regra de fim de vínculo por chamador: suíte parametrizada sobre R13,
+- [x] **CA4** Regra de fim de vínculo por chamador: suíte parametrizada sobre R13,
   R19 e R20 × {revoga (registro ativo, único da unidade com o login, login de
   funcionário); não revoga com outro registro ativo da unidade com o login; não
   revoga com login de outro papel; não revoga com login desconhecido; não revoga com
   registro desligado (R13 repetido, R20 de desligado)}; em R19 a regra é aplicada ao
   login **antigo**; R19 com o login atual não escreve nem revoga e não consulta
   elegibilidade nem R10 (o login já é do registro) (unit; e2e com `POST /auth/refresh` do login antigo em R19).
-- [ ] **CA5** R20 desvincula registro ativo e desligado; depois de R20, R15 remove o
+- [x] **CA5** R20 desvincula registro ativo e desligado; depois de R20, R15 remove o
   registro (unit e e2e).
-- [ ] **CA6** Guardas e precedência de §6, antes de consultar identity (unit, com o
+- [x] **CA6** Guardas e precedência de §6, antes de consultar identity (unit, com o
   fake registrando chamadas): R18 em vinculado e desligado ⇒ `EmployeeAlreadyHasLogin`;
   R18 em desligado sem vínculo ⇒ `TerminatedEmployeeLogin`; R19 em desligado e sem
   vínculo ⇒ `EmployeeHasNoLogin`; R19 em desligado vinculado ⇒ `TerminatedEmployeeLogin`;
   R20 sem vínculo ⇒ `EmployeeHasNoLogin`; R18 em vinculado com e-mail malformado ⇒ 409
   (a guarda vence o 422); R18/R19 com e-mail malformado ⇒ 422 na borda.
-- [ ] **CA7** Contrato fake ≡ Postgres de L-UNLINK, L-RELINK e L-DEACT, com um corpo
+- [x] **CA7** Contrato fake ≡ Postgres de L-UNLINK, L-RELINK e L-DEACT, com um corpo
   de teste só: login esperado divergente ⇒ `EmployeeLoginChangedError` (as três);
   lido desligado e gravado ativo ⇒ `EmployeeLoginChangedError` (L-UNLINK, L-DEACT);
   lido ativo e gravado desligado ⇒ L-DEACT sucede sem efeito; L-RELINK sobre gravado
@@ -525,33 +525,33 @@ existem (`employees.user_id`, `employees.active`).
   `EmployeeHasNoLoginError`; L-UNLINK sobre gravado sem vínculo ⇒
   `EmployeeHasNoLoginError`; endereço de outra unidade/tenant ⇒
   `EmployeeNotFoundError`; só a coluna da lei muda; nada é gravado em erro.
-- [ ] **CA8** Contrato fake ≡ real de L-IG6: conta conhecida devolve id, tenant,
+- [x] **CA8** Contrato fake ≡ real de L-IG6: conta conhecida devolve id, tenant,
   unidades de que **ela** é membro e `every_unit`; dono ⇒ `every_unit` verdadeiro sem
   unidades; `platform_admin` ⇒ tenant `None` e `every_unit` falso; desconhecida ⇒
   `None`; e-mail com espaço e maiúsculas encontra a conta
   (normalização de identity); malformado ⇒ `InvalidLoginEmailError`; outra falha sobe
   crua na mesma instância.
-- [ ] **CA9** Ponto único (DoD): varredura de AST prova que `revoke_login_sessions` e
+- [x] **CA9** Ponto único (DoD): varredura de AST prova que `revoke_login_sessions` e
   `is_employee_login` só são chamados em `_login_link.py` e que todo use case que
   chama `deactivate`, `relink_login` ou `unlink_login` do repositório (receptor
   tipado `EmployeeRepository`) chama `end_active_link` antes; o teste do script prova
   que a regra 10 conta a chamada ao auxiliar; a suíte de R13 da 3.5/3.8 segue verde.
-- [ ] **CA10** Conduta com duas conexões (Postgres), uma por lei: L-DEACT — R13 que
+- [x] **CA10** Conduta com duas conexões (Postgres), uma por lei: L-DEACT — R13 que
   leu o registro sem vínculo grava depois de um `link_login` concorrente ⇒
   `EmployeeLoginChangedError`, registro **ativo e vinculado**; L-RELINK — dois R19
   concorrentes sobre o mesmo login lido, o segundo ⇒ `EmployeeLoginChangedError` e o
   gravado é o do primeiro; L-UNLINK — desvincular concorrente a um `relink_login` ⇒
   `EmployeeLoginChangedError`, gravado = o login novo.
-- [ ] **CA11** Identity: `find_account_by_email` devolve id, tenant, unidades da conta
+- [x] **CA11** Identity: `find_account_by_email` devolve id, tenant, unidades da conta
   (filtradas pelo `user_id`) e `sees_every_unit` em primitivos, `None` para e-mail
   sem conta; `find_account_by_email` entra em `_EXCLUSOES` e `_FACADE_ONLY` do
   inventário da 2.7 e só a fachada e o composition root o importam.
-- [ ] **CA12** R10: R18 e R19 recusam com 409 a conta já vinculada a outro registro da
+- [x] **CA12** R10: R18 e R19 recusam com 409 a conta já vinculada a outro registro da
   mesma unidade (ativo ou desligado) e aceitam a conta vinculada a registro de outra
   unidade (unit; e2e para R18).
-- [ ] **CA13** Varreduras de totalidade verdes: mapa de erros de staff, pasta de use
+- [x] **CA13** Varreduras de totalidade verdes: mapa de erros de staff, pasta de use
   cases × composition root, `router.routes` × overrides e tabelas de rota, DTOs.
-- [ ] **CA14** e2e contra Postgres percorre R18 → R19 → R20 → R15 com um gerente real
+- [x] **CA14** e2e contra Postgres percorre R18 → R19 → R20 → R15 com um gerente real
   e cobre o DoD em **cada** rota: R18, R19 e R20 com unidade fora do alcance do ator
   ⇒ 403, e com registro de outra unidade no endereço ⇒ 404; R18 e R19 com conta de
   outro tenant e com `platform_admin` ⇒ 404 (CA2).

@@ -274,7 +274,8 @@ do use case ([ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-w
 **`### Negative`, a corrida de dois desligamentos do mesmo login na mesma unidade —
 superado em parte.** O *"Owner: the Stage that implements 'link an existing login'"*: a
 Stage 3.10 fechou o caminho pela API que a tornaria produzível — vincular e trocar recusam
-a conta que já está em outro registro da unidade (um login por unidade, workforce §3.1) —
+a conta que já está em outro registro da unidade (um login por unidade: regra nova da Stage, apoiada no "um por unidade" de workforce
+§3.1, que ali é descritivo — workforce §3.8, nota de 2026-11-23) —
 e declarou o resíduo (dois vínculos concorrentes da mesma conta na unidade). O lock por
 `user_id` segue como o fechamento completo, e depende de uma transação de staff que segure
 a leitura da unidade e a escrita; vai para issue própria (ADR 3.10.0001 §6). Nota
