@@ -205,7 +205,11 @@ def test_a_fourth_point_to_be_safe_is_rejected(reason: str) -> None:
 
 def test_to_be_safe_within_the_budget_is_left_to_review() -> None:
     """Dentro do orçamento o gate confere só que o motivo existe; o mérito é da revisão."""
-    text = _technical("| 1 | Task 02 | por segurança |", "| 2 | saída | gate de saída (§3) |")
+    text = _technical(
+        "| 1 | saída | gate de saída (§3) |",
+        "| 2 | Task 02 | por segurança |",
+        "| 3 | Task 04 | por segurança |",
+    )
     assert gate.plan_problems(text) == []
 
 

@@ -240,6 +240,8 @@ def _fenced(body: str, language: str = "bash") -> str:
         "````markdown\n# Prompt\n\n"
         + _fenced('make check\ngit commit -m "a [1.2/task-01]"')
         + "````\n",
+        # Cerca curta não fecha a longa: o ``` de dentro da ````bash é texto.
+        '````bash\n```\nmake check\ngit commit -m "a [1.2/task-01]"\n````\n',
         # Cerca sem fechamento vai até o fim.
         '```bash\nmake check\ngit commit -m "feat(x): y [1.2/task-01]"\n',
     ],
