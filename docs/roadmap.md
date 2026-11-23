@@ -274,6 +274,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#234](https://github.com/MarceloSanC/restaurant-hub/issues/234) | A fachada de provisionamento lê `PROVISIONABLE_ROLES` em vez do literal | identity | application | open | #211, `3.10-login-link-management` |
 | [#236](https://github.com/MarceloSanC/restaurant-hub/issues/236) | Alterar o fuso de uma unidade já criada | identity | domain + application + adapters | open | #198 |
 | [#237](https://github.com/MarceloSanC/restaurant-hub/issues/237) | Conferir o `Verificado:` das decisões gravadas fora da forma do §5 da `evidence-resolution` | shared | tooling | open | #212 |
+| [#248](https://github.com/MarceloSanC/restaurant-hub/issues/248) | Decidir se gerente de restaurante de uma unidade volta a renomear e apagar funções de todas as unidades | staff | application | open | #207 |
 
 **Legenda de status (issue):** `open`, `blocked`, `placeholder`, `done`. Vocabulário ditado pelo
 consumidor desta tabela, [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md):
