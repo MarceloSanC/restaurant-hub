@@ -5,7 +5,7 @@ when-use: Reference before adding any credential-delivery path, before letting a
 keywords: [adr, login, invitation, setup-token, setup-link, pending-account, unusable-hash, provisional-password, delivery-channel, staff, identity]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-11-09
+updated_at: 2026-11-23
 adr_id: 3.5.0002
 decision: there is no provisional password — an employee login is born as a pending account (unusable hash + single-use setup token, ADR 2.5.0002/0004) and the manager chooses the delivery channel of the setup link (`email` sent by identity, or `link` returned once in the 201 body to an actor holding `manage_users`); identity exposes `provision_account` and `send_invitation` as separate operations so that staff writes `user_id` between them, the link handed over in person lives under its own configurable TTL (`handover_link_ttl_hours`, default 168h), `InviteUserUseCase` is left intact (only the link/message composition moves to a shared helper), and forced password change is structural because the handed-over secret can only define a password, never authenticate
 context_stage: 3.5-employee-login-link
@@ -253,3 +253,15 @@ O concept da 3.5 descreve o estado anterior em três pontos, que esta nota super
 real é `tests/e2e/features/staff/test_login_invitation_send_failure.py`.
 
 Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — a recuperação existe (Stage 3.10, 2026-11-23)
+
+O que este ADR deixou para depois — *"recovery deferred to the"* finding de vincular e
+desvincular login (concept 3.5 §6.4 e §10) — existe desde a Stage 3.10
+([ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md),
+[ADR 3.10.0002](./3_10_0002-existing-account-eligibility-by-email.md)). A conta
+órfã de uma falha de staff depois do provisionamento é vinculada pelo e-mail (R18); o
+registro vinculado à conta de um e-mail digitado errado troca de login (R19) ou é
+desvinculado (R20) e, então, removido (R15). O beco do link perdido sem e-mail funcional
+continua: reemitir o link segue finding de identity. Nota *append-only*; o corpo acima
+não foi editado.
