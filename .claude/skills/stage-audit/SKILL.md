@@ -196,6 +196,7 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
 8. **Disposições dos Checkpoints A/B/C** na §7 (CONVENTIONS §3.4): uma entrada por checkpoint,
    gravada no commit que o fechou, todo achado disposto e 1–2 refutações relidas contra o
    artefato. Corte, comandos e classificação: [reference/disposicoes-checkpoints.md](reference/disposicoes-checkpoints.md).
+9. **`Verificado:` dos `[decision:E|C]`** (o gate só vê o termo): `não verificado (§4.2)` em decisão que entra em port, schema, OpenAPI ou regra de segurança/tenant é finding bloqueante (`evidence-resolution` §5).
 
 ### Fase D — Judgment (a parte que NÃO se mecaniza)
 
