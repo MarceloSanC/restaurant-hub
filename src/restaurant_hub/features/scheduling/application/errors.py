@@ -57,14 +57,35 @@ class ScheduleVersionConflictError(SchedulingError):
 
     Carrega a versão atual; o estado atual chega pela releitura (concept,
     divergência 12).
+
+    **Vizinha que mudou** (issue #199, ADR 4.4.0005): o `save` recusa também quando uma das
+    escalas adjacentes que a avaliação leu não está mais como foi lida. Aí
+    `changed_neighbour_id` nomeia a escala que hoje ocupa a vaga (ou a lida, se a vaga
+    esvaziou) e as duas versões são as da escala **editada** — iguais, porque ela não
+    mudou: recarregar e publicar de novo reavalia contra a vizinha atual.
     """
 
-    def __init__(self, expected_version: int, current_version: int) -> None:
-        super().__init__(
-            f"a escala mudou: versão esperada {expected_version}, versão atual {current_version}"
-        )
+    def __init__(
+        self,
+        expected_version: int,
+        current_version: int,
+        *,
+        changed_neighbour_id: str | None = None,
+    ) -> None:
+        if changed_neighbour_id is None:
+            message = (
+                f"a escala mudou: versão esperada {expected_version}, "
+                f"versão atual {current_version}"
+            )
+        else:
+            message = (
+                f"a escala vizinha {changed_neighbour_id!r} mudou desde a avaliação "
+                f"(versão da escala editada: {current_version})"
+            )
+        super().__init__(message)
         self.expected_version = expected_version
         self.current_version = current_version
+        self.changed_neighbour_id = changed_neighbour_id
 
 
 class SchedulePeriodTakenError(SchedulingError):

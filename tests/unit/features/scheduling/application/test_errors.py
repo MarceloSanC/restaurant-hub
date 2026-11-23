@@ -96,6 +96,22 @@ def test_a_raiz_de_aplicacao_e_filha_direta_de_application_error() -> None:
 def test_o_conflito_de_versao_carrega_a_versao_atual() -> None:
     erro = errors.ScheduleVersionConflictError(expected_version=2, current_version=5)
     assert (erro.expected_version, erro.current_version) == (2, 5)
+    # Sem vizinha nomeada: quem mudou foi a própria escala editada.
+    assert erro.changed_neighbour_id is None
+    assert "vizinha" not in str(erro)
+
+
+def test_o_conflito_de_vizinha_nomeia_a_vizinha_e_mantem_a_versao_da_editada() -> None:
+    """Issue #199: a vizinha lida mudou; a editada segue na versão que o editor viu."""
+    erro = errors.ScheduleVersionConflictError(
+        expected_version=3, current_version=3, changed_neighbour_id="s2"
+    )
+    assert (erro.expected_version, erro.current_version, erro.changed_neighbour_id) == (
+        3,
+        3,
+        "s2",
+    )
+    assert "'s2'" in str(erro)
 
 
 def test_as_recusas_de_violacao_carregam_as_violacoes() -> None:
