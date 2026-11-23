@@ -48,15 +48,11 @@ from datetime import timedelta
 from restaurant_hub.features.identity.application.dtos.commands import (
     ProvisionRestaurantCommand,
 )
-from restaurant_hub.features.identity.application.dtos.identifiers import SetupTokenId
 from restaurant_hub.features.identity.application.dtos.results import (
     ProvisionedRestaurantResult,
     to_user_result,
 )
-from restaurant_hub.features.identity.application.dtos.setup_tokens import (
-    PasswordSetupToken,
-    SetupTokenPurpose,
-)
+from restaurant_hub.features.identity.application.dtos.setup_tokens import SetupTokenPurpose
 from restaurant_hub.features.identity.application.errors import EmailAlreadyRegisteredError
 from restaurant_hub.features.identity.application.ports.out.action_authorizer import (
     ActionAuthorizer,
@@ -80,7 +76,7 @@ from restaurant_hub.features.identity.application.ports.out.user_repository impo
 from restaurant_hub.features.identity.application.use_cases._invitation import (
     deliver_invitation,
     invitation_message,
-    setup_link,
+    issue_setup_token,
 )
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     authorize_requirement,
@@ -166,15 +162,27 @@ class ProvisionRestaurantUseCase:
 
         # O hash inutilizável, e não `dummy_hash()` — ADR 2.5.0004: o dummy é
         # derivado de um literal do repositório e viraria senha válida do dono.
+        # O token é calculado pela emissão única de identity e gravado aqui, à vista
+        # da regra 10 (issue #205, ADR 0.0.0024). O valor só existe dentro do link,
+        # entre esta linha e o corpo do e-mail (regra 1 da 2.5).
         with self._unit_of_work.transaction():
             self._restaurants.add(restaurant)
             self._users.add(owner, self._hasher.unusable_hash(), ())
-            token_value = self._issue_token(owner.id)
+            invitation = issue_setup_token(
+                self._token_issuer,
+                self._id_generator,
+                user_id=owner.id,
+                purpose=SetupTokenPurpose.INVITATION,
+                now=self._clock.now(),
+                ttl=self._invitation_ttl,
+                base_url=self._base_url,
+            )
+            self._tokens.add(invitation.record)
 
         # Depois do commit — ver o docstring do módulo (ADR 2.6.0002 §3).
         deliver_invitation(
             self._email_sender,
-            invitation_message(command.owner_email.value, setup_link(self._base_url, token_value)),
+            invitation_message(command.owner_email.value, invitation.link),
             owner.id,
         )
 
@@ -183,25 +191,3 @@ class ProvisionRestaurantUseCase:
             name=restaurant.name,
             owner=to_user_result(owner, ()),
         )
-
-    def _issue_token(self, user_id: UserId) -> str:
-        """Emite e persiste o token de convite, devolvendo **só** o valor a enviar.
-
-        O valor não entra no result, em DTO persistido nem em mensagem de erro:
-        existe entre esta linha e o corpo do e-mail (regra 1 da 2.5). Quarta cópia
-        do passo (com `InviteUserUseCase`, `ProvisionAccountUseCase` e
-        `RequestPasswordResetUseCase`), declarada no ADR 0.0.0018.
-        """
-        now = self._clock.now()
-        issued = self._token_issuer.issue()
-        self._tokens.add(
-            PasswordSetupToken(
-                id=SetupTokenId(str(self._id_generator.next_id())),
-                user_id=user_id,
-                purpose=SetupTokenPurpose.INVITATION,
-                token_fingerprint=issued.fingerprint,
-                issued_at=now,
-                expires_at=now + self._invitation_ttl,
-            )
-        )
-        return issued.value
