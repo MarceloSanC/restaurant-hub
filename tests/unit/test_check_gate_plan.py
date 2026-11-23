@@ -50,9 +50,10 @@ _TEMPLATE_ROW = next(
 _EXIT_ROW = "| 1 | saída | gate de saída (§3) |"
 
 
-def _technical(*rows: str) -> str:
-    """O template real com a linha da tabela trocada pelas linhas pedidas."""
-    return _TEMPLATE_TEXT.replace(_TEMPLATE_ROW, "\n".join(rows))
+def _technical(*rows: str, status: str = "done") -> str:
+    """O template real, aprovado (`status: done`), com a linha da tabela trocada pelas pedidas."""
+    approved = _TEMPLATE_TEXT.replace("status: draft", f"status: {status}", 1)
+    return approved.replace(_TEMPLATE_ROW, "\n".join(rows))
 
 
 def _repo(tmp_path: pathlib.Path, technicals: dict[str, str]) -> pathlib.Path:
@@ -239,6 +240,49 @@ def test_the_cut_is_by_folder_name_not_by_stage_number(tmp_path: pathlib.Path) -
     """Um 4.4 com outro slug é outra Stage: o corte não isenta por número (colisão de N.M)."""
     repo = _repo(tmp_path, {"4.4-another-slug": "# Technical\n\n## 1. Contexto\n"})
     assert len(gate.problems(repo)) == 1
+
+
+def test_a_draft_technical_is_skipped(tmp_path: pathlib.Path) -> None:
+    """O scaffold cria o technical em branco e `draft`: a Fase 3B escreve o plano sem vermelho."""
+    repo = _repo(tmp_path, {_NEW_STAGE: _TEMPLATE_TEXT})
+    assert gate.is_draft(_TEMPLATE_TEXT)
+    assert gate.problems(repo) == []
+
+
+def test_the_same_technical_leaving_draft_is_rejected(tmp_path: pathlib.Path) -> None:
+    """Mutação do `draft`: o template em branco aprovado (`status: done`) reprova."""
+    approved = _TEMPLATE_TEXT.replace("status: draft", "status: done", 1)
+    assert not gate.is_draft(approved)
+    found = gate.problems(_repo(tmp_path, {_NEW_STAGE: approved}))
+    assert any("sem 'Motivo' preenchido" in problem for problem in found)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "# Technical\n\nstatus: draft\n",
+        "---\nstatus: done\n---\n\nstatus: draft\n",
+        "---\nstatus: draft\n",
+        "",
+    ],
+    ids=["no-frontmatter", "draft-in-body", "unclosed-frontmatter", "empty"],
+)
+def test_draft_counts_only_in_the_frontmatter(text: str) -> None:
+    assert not gate.is_draft(text)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("|---|---|---|", "|:-|:-:|--:|"),
+        ("### Plano de gates", "### Plano de Gates"),
+        ("| # | Depois da Task | Motivo |", "|  #  | depois da task | MOTIVO |"),
+    ],
+    ids=["aligned-separator", "heading-case", "header-case-and-spaces"],
+)
+def test_reasonable_writing_variations_pass(old: str, new: str) -> None:
+    text = _technical("| 1 | Task 12 | Gate de SAÍDA (§3) |").replace(old, new, 1)
+    assert gate.plan_problems(text) == []
 
 
 def test_a_concept_md_is_not_scanned(tmp_path: pathlib.Path) -> None:

@@ -16,7 +16,7 @@ de saída incluído (regra em `docs/PIPELINE.md` §9.6). Sem este script, um
 no `make docs-check`; só a revisão humana do technical o pegaria.
 
 **O que ele confere (a forma, não o mérito).** Em cada
-`docs/stages/<N.M-slug>/technical.md` fora do corte:
+`docs/stages/<N.M-slug>/technical.md` fora do corte e fora de `draft`:
 
 1. a §1 (`## 1. ...`) tem o título `### Plano de gates`;
 2. a subseção tem a tabela com o cabeçalho do template,
@@ -48,7 +48,20 @@ não uma data:
 - um marcador ("só confere quem tem a seção") isenta justamente o technical
   que esqueceu a seção.
 
-Pasta nova em `docs/stages/` não está na lista, então é conferida.
+Pasta nova em `docs/stages/` não está na lista, então é conferida. Stage
+renomeada sai da lista pelo nome antigo: o teste que exige a pasta de cada nome
+reprova, e a lista troca o nome (não cresce). Stage sem pasta ou sem
+`technical.md` (`draft` no roadmap) não tem o que conferir.
+
+**O `technical.md` em `draft` fica de fora.** O scaffold da Stage cria o
+technical com o template em branco e `status: draft`, e a Fase 3B o preenche
+até o Checkpoint B. Conferir o rascunho deixaria o `make docs-check` vermelho
+durante toda a escrita do plano. O gate morde quando o technical sai de `draft`
+(o commit `stage N.M: technical approved`), antes da primeira Task.
+
+**Tolerância de escrita.** Título e cabeçalho comparam sem diferença de
+maiúsculas; a linha separadora aceita alinhamento (`|:-|`, `|--:|`); "saída"
+vale em qualquer caixa e sem acento. O resto é a forma literal do template.
 
 Códigos de saída:
   0  todo technical fora do corte traz o plano na forma do template
@@ -104,7 +117,9 @@ _SECTION_ONE = re.compile(r"^## 1\.")
 _SECTION = re.compile(r"^## ")
 _SUBSECTION = re.compile(r"^#{2,3} ")
 _FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
-_SEPARATOR_CELL = re.compile(r"^:?-{3,}:?$")
+_SEPARATOR_CELL = re.compile(r"^:?-+:?$")
+# O `status` do frontmatter (o bloco entre as duas primeiras linhas `---`).
+_DRAFT_STATUS = re.compile(r"^status:\s*draft\s*(?:#.*)?$", re.MULTILINE)
 # Barra escapada (`\|`) é texto dentro da célula, não divisa.
 _CELL_SPLIT = re.compile(r"(?<!\\)\|")
 _PLACEHOLDER = re.compile(r"^<.*>$")
@@ -128,6 +143,18 @@ class PlanRow:
 def technical_files(repo_root: Path) -> list[Path]:
     """Todo `technical.md` de `docs/stages/`, em ordem."""
     return sorted(path for path in repo_root.glob(TECHNICAL_GLOB) if path.is_file())
+
+
+def is_draft(text: str) -> bool:
+    """O technical ainda está em `status: draft` no frontmatter (o plano em escrita)."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return False
+    try:
+        end = next(index for index, line in enumerate(lines[1:], 1) if line.strip() == "---")
+    except StopIteration:
+        return False
+    return bool(_DRAFT_STATUS.search("\n".join(lines[1:end])))
 
 
 def _unfenced(lines: list[str]) -> list[tuple[int, str]]:
@@ -165,7 +192,7 @@ def plan_section(text: str) -> tuple[int, list[tuple[int, str]]] | None:
             continue
         if in_section_one and _SECTION.match(line):
             return None
-        if in_section_one and line == PLAN_HEADING:
+        if in_section_one and line.casefold() == PLAN_HEADING.casefold():
             body: list[tuple[int, str]] = []
             for item in lines[index + 1 :]:
                 if _SUBSECTION.match(item[1]):
@@ -189,7 +216,9 @@ def plan_problems(text: str) -> list[tuple[int, str]]:
     heading_line, body = section
 
     table = [(number, line) for number, line in body if line.lstrip().startswith("|")]
-    if not table or tuple(_cells(table[0][1])) != TABLE_HEADER:
+    if not table or tuple(cell.casefold() for cell in _cells(table[0][1])) != tuple(
+        cell.casefold() for cell in TABLE_HEADER
+    ):
         return [
             (
                 heading_line,
@@ -245,8 +274,11 @@ def problems(repo_root: Path) -> list[str]:
     for path in files:
         if path.parent.name in LEGACY_STAGES:
             continue
+        text = path.read_text(encoding="utf-8-sig")
+        if is_draft(text):
+            continue
         rel = path.relative_to(repo_root).as_posix()
-        for line, reason in plan_problems(path.read_text(encoding="utf-8-sig")):
+        for line, reason in plan_problems(text):
             found.append(f"{rel}:{line}: {reason}")
     return found
 
