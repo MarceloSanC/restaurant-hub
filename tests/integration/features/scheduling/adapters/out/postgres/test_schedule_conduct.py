@@ -336,6 +336,64 @@ def test_em_unidades_diferentes_o_mesmo_id_de_escala_cai_na_pk_traduzida(
     assert repo.find_by_id(_T, _U2, ScheduleId("s1")) is None
 
 
+def _escrita(
+    repo: PostgresScheduleRepository, operacao: str, escala: Schedule
+) -> Callable[[], None]:
+    """`add` da escala, ou `save` dela com uma faixa nova (a escala já gravada)."""
+    if operacao == "add":
+        return lambda: repo.add(escala, _mudanca(None))
+    nova = escala.enable_band(ShiftBandId(f"f-{escala.id}"), _faixa(escala.period.first_day, 10))
+    return lambda: repo.save(nova, 1, NO_NEIGHBOURS, _mudanca(1))
+
+
+# O statement depois do qual A para, já com o lock da unidade tomado.
+_PARADA_DE_A = {"add": "INSERT INTO schedules", "save": "UPDATE schedules"}
+
+
+@pytest.mark.parametrize("operacao", _PARADA_DE_A)
+@pytest.mark.parametrize(
+    ("tenant", "unit"), [("t2", "u1"), ("t1", "u2")], ids=["outro-tenant", "outra-unidade"]
+)
+def test_escritor_de_outro_endereco_nao_espera_o_lock_da_unidade(
+    repo: PostgresScheduleRepository, banco_limpo: Engine, operacao: str, tenant: str, unit: str
+) -> None:
+    """A chave do lock é o endereço inteiro: tenant **e** unidade, no `add` e no `save` (#217).
+
+    A para segurando o lock de `(t1, u1)`; B faz a mesma operação em outro tenant ou em
+    outra unidade, sem nada em comum com A (nem id, nem período no mesmo endereço), e
+    termina com A ainda parado. Com a chave sem o tenant (ou sem a unidade), B esperaria A.
+    """
+    de_a = _escala("s1")
+    de_b = Schedule(
+        id=ScheduleId("s2"),
+        tenant_id=TenantId(tenant),
+        unit_id=UnitId(unit),
+        period=SchedulePeriod(first_day=_SEG),
+        calendar=OperationalCalendar.default(),
+    )
+    if operacao == "save":
+        repo.add(de_a, _mudanca(None))
+        repo.add(de_b, _mudanca(None))
+    with _pausa_depois_de(banco_limpo, _PARADA_DE_A[operacao]) as (parado, liberar):
+        a = _Escritor(_NOME_DE_A, _escrita(repo, operacao, de_a))
+        a.start()
+        assert parado.wait(_PRAZO), f"A não parou em {operacao}: {a.erro!r}"
+        b = _Escritor("escritor-B", _escrita(repo, operacao, de_b))
+        b.start()
+        # Bem abaixo do `_PRAZO` com que o gancho segura A: B que esperasse o lock de A
+        # ainda estaria vivo aqui.
+        b.join(_PRAZO / 3)
+        assert not b.is_alive(), "B esperou o lock de A: a chave não separa os endereços"
+        assert b.erro is None
+        assert a.is_alive(), "A não estava segurando o lock"
+        liberar.set()
+        a.join(_PRAZO)
+    assert a.erro is None
+    gravada_por_b = repo.find_by_id(TenantId(tenant), UnitId(unit), ScheduleId("s2"))
+    assert gravada_por_b is not None
+    assert gravada_por_b.version == (1 if operacao == "add" else 2)
+
+
 # ---------------------------------------------------------------------------
 # Issue #199 — duas publicações em semanas adjacentes (L-SC9)
 # ---------------------------------------------------------------------------
