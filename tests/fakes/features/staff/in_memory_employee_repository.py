@@ -103,10 +103,13 @@ class InMemoryEmployeeRepository:
             raise EmployeeRelocationError(employee.id, gravado.unit_id, employee.unit_id)
         # (3) Validade referencial do conjunto.
         self._guard_job_functions(employee)
-        # O vínculo de login não é deste método (issue #68): o gravado fica, e o
-        # da entidade recebida — possivelmente lida antes de um `link_login` —
-        # é ignorado, como a coluna fora do `SET` do adapter.
-        self._store.employees[employee.id] = dataclasses.replace(employee, user_id=gravado.user_id)
+        # O vínculo de login (issue #68) e o estado ativo (issue #242) não são
+        # deste método: o gravado fica, e o da entidade recebida — possivelmente
+        # lida antes de um `link_login`, `deactivate` ou `reactivate` — é
+        # ignorado, como as colunas fora do `SET` do adapter.
+        self._store.employees[employee.id] = dataclasses.replace(
+            employee, user_id=gravado.user_id, active=gravado.active
+        )
 
     def link_login(
         self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId, user_id: UserId

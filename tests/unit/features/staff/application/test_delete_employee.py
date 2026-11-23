@@ -268,7 +268,9 @@ def _vincula(fakes: StaffFakes, *, depois_desliga: bool) -> None:
     if depois_desliga:
         vinculado = fakes.employees.find_by_id(_A, _U1, _E1)
         assert vinculado is not None
-        fakes.employees.update(vinculado.deactivate())
+        fakes.employees.deactivate(
+            _A, _U1, _E1, expected_user_id=vinculado.user_id, expected_active=True
+        )
 
 
 @pytest.mark.parametrize("active", [True, False], ids=["ativo", "desligado"])

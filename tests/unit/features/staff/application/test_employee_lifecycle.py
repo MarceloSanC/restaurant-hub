@@ -420,7 +420,9 @@ def _outro_registro(
     if user_id is not None:
         fakes.employees.link_login(_A, unit_id, registro.id, user_id)
     if not active:
-        fakes.employees.update(registro.deactivate())
+        fakes.employees.deactivate(
+            _A, unit_id, registro.id, expected_user_id=user_id, expected_active=True
+        )
 
 
 def _desligar_e1(use_case: DeactivateEmployeeUseCase) -> EmployeeResult:

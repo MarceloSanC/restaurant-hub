@@ -294,13 +294,14 @@ def test_l_e2_update_de_inexistente_no_tenant_nao_grava_nada(repos: Repositorios
 
 
 def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: RepositoriosDeStaff) -> None:
-    """Nome, perfil, preferência, conjunto, indisponibilidades e estado.
+    """Nome, perfil, preferência, conjunto e indisponibilidades.
 
-    O vínculo de login **não** entra: tem escrita própria (`L-LINK`, issue #68),
-    e o teste irmão abaixo trava que o `update` o ignora.
+    O vínculo de login e o estado ativo **não** entram: têm escrita própria
+    (`L-LINK`, issue #68; `L-DEACT`/`L-REACT`, issue #242), e os testes irmãos
+    abaixo travam que o `update` os ignora.
     """
     _com_funcionario_gravado(repos)
-    editado = _funcionario(name="Joana", job_function_ids=frozenset({_F2}), active=False)
+    editado = _funcionario(name="Joana", job_function_ids=frozenset({_F2}))
     editado = editado.change_workload_profile(OnDemand()).add_unavailability(_PERIODO)
     repos.employees.update(editado)
     gravado = repos.employees.find_by_id(_A, _U1, _E1)
@@ -310,8 +311,7 @@ def test_l_e2_update_grava_o_agregado_inteiro_no_caminho_feliz(repos: Repositori
         gravado.workload_profile,
         gravado.job_function_ids,
         gravado.unavailabilities,
-        gravado.active,
-    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,), False)
+    ) == ("Joana", OnDemand(), frozenset({_F2}), (_PERIODO,))
 
 
 def test_l_e2_update_nao_grava_o_vinculo_que_a_entidade_traz(repos: RepositoriosDeStaff) -> None:
@@ -366,6 +366,69 @@ def test_l_e2_update_de_outro_campo_preserva_o_login_gravado(repos: Repositorios
     relido = repos.employees.find_by_id(_A, _U1, _E1)
     assert relido is not None
     assert (relido.name, relido.user_id) == ("Joana", UserId("login-1"))
+
+
+# --- issue #242: `update` não grava o estado ativo ----------------------------
+#
+# A lei: qualquer que seja o `active` da entidade recebida, o gravado fica. É o que
+# torna "edição lida antes de uma recontratação (ou de um desligamento) grava
+# depois" incapaz de mudar o estado; a versão com duas conexões é conduta, em
+# `test_staff_conduct.py`.
+
+_ESTADOS = pytest.mark.parametrize("gravado_ativo", [True, False], ids=["ativo", "desligado"])
+# `_LOGIN` só nasce na seção de L-LINK, mais abaixo; o decorador roda na importação.
+_LOGINS = pytest.mark.parametrize(
+    "login", [None, UserId("login-1")], ids=["sem_vinculo", "vinculado"]
+)
+
+
+@_ESTADOS
+@_LOGINS
+def test_issue_242_update_com_estado_divergente_nao_altera_o_estado(
+    repos: RepositoriosDeStaff, gravado_ativo: bool, login: UserId | None
+) -> None:
+    """Entidade com o estado oposto ao gravado: os outros campos gravam, o estado não."""
+    _gravado(repos, user_id=login, active=gravado_ativo)
+    divergente = dataclasses.replace(_registro_completo(), active=not gravado_ativo)
+
+    repos.employees.update(divergente.rename("Joana"))
+
+    relido = _relido(repos)
+    assert relido.name == "Joana"
+    assert (relido.active, relido.user_id) == (gravado_ativo, login)
+
+
+def test_issue_242_edicao_lida_antes_da_recontratacao_nao_devolve_a_desligado(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """O cenário da issue, serializado: R07 lê desligado, R14 recontrata, R18 vincula, R07 grava.
+
+    Antes da #242 o registro terminava desligado **e** vinculado, sem que a regra
+    de fim de vínculo tivesse rodado (ADR 3.10.0001 Alt. H).
+    """
+    _gravado(repos, user_id=None, active=False)
+    lido_antes = _relido(repos)
+    repos.employees.reactivate(_A, _U1, _E1)
+    repos.employees.link_login(_A, _U1, _E1, _LOGIN)
+
+    repos.employees.update(lido_antes.rename("Joana"))
+
+    relido = _relido(repos)
+    assert (relido.name, relido.active, relido.user_id) == ("Joana", True, _LOGIN)
+
+
+def test_issue_242_edicao_lida_antes_do_desligamento_nao_reativa(
+    repos: RepositoriosDeStaff,
+) -> None:
+    """R07 lê ativo, R13 desliga, R07 grava: nenhuma edição reativa (ADR 3.2.0007)."""
+    _gravado(repos, user_id=_LOGIN, active=True)
+    lido_antes = _relido(repos)
+    repos.employees.deactivate(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=True)
+
+    repos.employees.update(lido_antes.rename("Joana"))
+
+    relido = _relido(repos)
+    assert (relido.name, relido.active, relido.user_id) == ("Joana", False, _LOGIN)
 
 
 # --- L-E3: localização imutável ----------------------------------------------
@@ -1176,7 +1239,9 @@ def test_l_del_link_registro_vinculado_e_recusado_e_fica_intacto(
     if not active:
         vinculado = repos.employees.find_by_id(_A, _U1, _E1)
         assert vinculado is not None
-        repos.employees.update(vinculado.deactivate())
+        repos.employees.deactivate(
+            _A, _U1, _E1, expected_user_id=vinculado.user_id, expected_active=True
+        )
 
     with pytest.raises(EmployeeHasLoginError):
         repos.employees.delete(_A, _U1, _E1)
@@ -1274,7 +1339,7 @@ def _gravado(repos: RepositoriosDeStaff, *, user_id: UserId | None, active: bool
     if user_id is not None:
         repos.employees.link_login(_A, _U1, _E1, user_id)
     if not active:
-        repos.employees.update(_registro_completo().deactivate())
+        repos.employees.deactivate(_A, _U1, _E1, expected_user_id=user_id, expected_active=True)
 
 
 def _relido(repos: RepositoriosDeStaff) -> Employee:

@@ -127,8 +127,11 @@ _IMMUTABLE_COLUMNS = frozenset({"id", "tenant_id", "unit_id"})
 # #68): no `SET` do `update`, uma entidade lida antes de um vínculo concorrente
 # apagaria o vínculo gravado depois dela — e a conta criada em identity ficaria
 # órfã. Não é imutável (nasce `NULL` e é definido uma vez); só não é deste
-# método.
-_COLUMNS_WITH_OWN_WRITE = frozenset({"user_id"})
+# método. `active` é escrito só por `deactivate` (`L-DEACT`) e `reactivate`
+# (`L-REACT`, issue #242): no `SET` do `update`, uma entidade lida antes de uma
+# recontratação devolveria o registro a desligado — com um vínculo no meio,
+# desligado e vinculado sem a regra de fim de vínculo.
+_COLUMNS_WITH_OWN_WRITE = frozenset({"user_id", "active"})
 
 # `REPEATABLE READ` nas leituras de agregado (§5.18) — ver a nota 4 do docstring.
 _SINGLE_SNAPSHOT = "REPEATABLE READ"
