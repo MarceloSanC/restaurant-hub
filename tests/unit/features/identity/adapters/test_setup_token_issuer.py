@@ -1,13 +1,21 @@
 """Testes do adapter `Sha256SetupTokenIssuer` (Stage 2.5, CA3)."""
 
 import hashlib
+from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qs, urlsplit
 
 from restaurant_hub.features.identity.adapters.out.security.setup_token_issuer import (
     Sha256SetupTokenIssuer,
 )
+from restaurant_hub.features.identity.application.dtos.setup_tokens import SetupTokenPurpose
 from restaurant_hub.features.identity.application.ports.out.setup_token_issuer import (
     SetupTokenIssuer,
 )
+from restaurant_hub.features.identity.application.use_cases._invitation import (
+    issue_setup_token,
+)
+from restaurant_hub.features.identity.domain.value_objects.identifiers import UserId
+from tests.fakes.shared.fake_id_generator import FakeIdGenerator
 
 # ~43 caracteres para 32 bytes em base64url. A asserção é sobre a ordem de
 # grandeza, não sobre o número exato: `token_urlsafe` remove o padding, então o
@@ -88,3 +96,27 @@ class TestFingerprint:
         issuer = Sha256SetupTokenIssuer()
 
         assert issuer.fingerprint("ação") == hashlib.sha256("ação".encode()).hexdigest()
+
+
+def test_a_emissao_unica_grava_o_sha256_do_token_que_o_link_carrega() -> None:
+    """Issue #205 — `issue_setup_token` sobre o adapter real (`secrets.token_urlsafe`).
+
+    O registro que os cinco use cases gravam guarda o SHA-256 do valor que vai no
+    link, e não o valor: quem abre o link redime exatamente esse registro.
+    """
+    issuer = Sha256SetupTokenIssuer()
+
+    emissao = issue_setup_token(
+        issuer,
+        FakeIdGenerator(),
+        user_id=UserId("user-9"),
+        purpose=SetupTokenPurpose.INVITATION,
+        now=datetime(2026, 11, 23, 9, 30, tzinfo=UTC),
+        ttl=timedelta(hours=72),
+        base_url="https://app.exemplo.com",
+    )
+
+    (valor,) = parse_qs(urlsplit(emissao.link).query, strict_parsing=True)["token"]
+    assert len(valor) >= _MINIMO_DE_CARACTERES
+    assert emissao.record.token_fingerprint == hashlib.sha256(valor.encode()).hexdigest()
+    assert emissao.record.token_fingerprint != valor

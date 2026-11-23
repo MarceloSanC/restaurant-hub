@@ -59,12 +59,16 @@ from restaurant_hub.features.staff.application.errors import (
     JobFunctionNameAlreadyExistsError,
     JobFunctionNotEnabledInUnitError,
     JobFunctionNotFoundError,
+    LoginAccountNotFoundError,
+    LoginAlreadyLinkedInUnitError,
     LoginEmailAlreadyInUseError,
     SameUnitCopyError,
     StaffApplicationError,
 )
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
+    EmployeeHasNoLoginError,
+    EmployeeLoginChangedError,
     EmptyJobFunctionsError,
     EmptyShiftPreferenceError,
     InvalidDayPeriodError,
@@ -99,6 +103,9 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     # da hierarquia.
     JobFunctionNotFoundError: HTTP_NOT_FOUND,
     EmployeeNotFoundError: HTTP_NOT_FOUND,
+    # Stage 3.10 — conta existente inexistente ou fora do alcance do registro, com a
+    # mesma resposta para todos os casos (ADR 3.10.0002 §3).
+    LoginAccountNotFoundError: HTTP_NOT_FOUND,
     # 409 — conflito com estado **já gravado**: ou a chave existe, ou uma
     # referência existente impede a remoção. É a definição de faixa do
     # ADR 3.4.0002 §4, e é dela que sai o par `InUse`: o payload está correto,
@@ -116,9 +123,10 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     EmployeeAlreadyExistsError: HTTP_CONFLICT,
     JobFunctionInUseError: HTTP_CONFLICT,
     JobFunctionNotEnabledInUnitError: HTTP_CONFLICT,
-    # 409 — a escrita condicional de L-JF7 (issue #206): a habilitação gravada não
-    # é mais a que o pedido leu. O payload está correto; o que impede é o estado
-    # gravado por **outra** alteração, comitada entre a leitura e a escrita.
+    # 409 — as escritas condicionais de L-JF7 (issue #206) e de L-JF2/L-JF3 (renomear
+    # e apagar, issue #207): a habilitação gravada não é mais a que o pedido leu. O
+    # payload está correto; o que impede é o estado gravado por **outra** alteração,
+    # comitada entre a leitura e a escrita.
     # Inalcançável por requisição **isolada** — só um entrelace de duas a produz;
     # quem a prova pelo banco real é o teste de conduta de duas conexões.
     JobFunctionEnablementChangedError: HTTP_CONFLICT,
@@ -139,6 +147,12 @@ STAFF_ERROR_STATUS: Final[dict[type[StaffFailure], int]] = {
     TerminatedEmployeeLoginError: HTTP_CONFLICT,
     LoginEmailAlreadyInUseError: HTTP_CONFLICT,
     EmployeeHasLoginError: HTTP_CONFLICT,
+    # 409 — Stage 3.10 (ADR 3.10.0001): trocar ou desvincular registro sem login,
+    # e o estado do vínculo que mudou entre a leitura e a escrita condicional.
+    EmployeeHasNoLoginError: HTTP_CONFLICT,
+    EmployeeLoginChangedError: HTTP_CONFLICT,
+    # Stage 3.10 — um login por unidade (ADR 3.10.0001 §6).
+    LoginAlreadyLinkedInUnitError: HTTP_CONFLICT,
     # 422 — invariante violada **pelo conteúdo enviado**.
     InvalidNameError: HTTP_UNPROCESSABLE,
     InvalidIdentifierError: HTTP_UNPROCESSABLE,

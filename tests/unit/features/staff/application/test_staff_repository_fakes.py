@@ -33,6 +33,7 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     UnitId,
     UserId,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
 from tests.fakes.features.staff.in_memory_staff_store import (
     InMemoryStaffStore,
@@ -113,7 +114,10 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
     nova = _funcao(id_="f-nova", name="Nova")
     return [
         ("job_functions.add", lambda: fakes.job_functions.add(nova)),
-        ("job_functions.update", lambda: fakes.job_functions.update(nova)),
+        (
+            "job_functions.update",
+            lambda: fakes.job_functions.update(nova, expected=nova.unit_enablement),
+        ),
         (
             "job_functions.find_by_id",
             lambda: fakes.job_functions.find_by_id(_TENANT, JobFunctionId("f-nova")),
@@ -137,7 +141,9 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
         ),
         (
             "job_functions.delete",
-            lambda: fakes.job_functions.delete(_TENANT, JobFunctionId("f-nova")),
+            lambda: fakes.job_functions.delete(
+                _TENANT, JobFunctionId("f-nova"), expected=nova.unit_enablement
+            ),
         ),
         ("employees.add", lambda: fakes.employees.add(_funcionario(id_="e-novo"))),
         ("employees.update", lambda: fakes.employees.update(_funcionario(id_="e-novo"))),
@@ -146,6 +152,41 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
             lambda: fakes.employees.link_login(
                 _TENANT, _UNIDADE, EmployeeId("e-novo"), UserId("login-novo")
             ),
+        ),
+        (
+            "employees.unlink_login",
+            lambda: fakes.employees.unlink_login(
+                _TENANT,
+                _UNIDADE,
+                EmployeeId("e-novo"),
+                expected_user_id=UserId("login-novo"),
+                expected_active=True,
+            ),
+        ),
+        (
+            "employees.relink_login",
+            lambda: fakes.employees.relink_login(
+                _TENANT,
+                _UNIDADE,
+                EmployeeId("e-novo"),
+                expected_user_id=UserId("login-novo"),
+                user_id=UserId("login-outro"),
+            ),
+        ),
+        (
+            "employees.deactivate",
+            lambda: fakes.employees.deactivate(
+                _TENANT,
+                _UNIDADE,
+                EmployeeId("e-novo"),
+                expected_user_id=UserId("login-novo"),
+                expected_active=True,
+            ),
+        ),
+        # Issue #242 — L-REACT.
+        (
+            "employees.reactivate",
+            lambda: fakes.employees.reactivate(_TENANT, _UNIDADE, EmployeeId("e-novo")),
         ),
         (
             "employees.find_by_id",
@@ -170,7 +211,7 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
 
 
 def test_todo_metodo_do_par_registra_exatamente_uma_chamada() -> None:
-    """Cada um dos métodos do par (16 desde a Stage 3.11) tem o seu `record()` travado por teste.
+    """Cada um dos métodos do par (21 desde a issue #242) tem o seu `record()` travado por teste.
 
     **Por que isto não é zelo excessivo.** `store.calls` sustenta todos os
     critérios "sem tocar o port" das Tasks 07/09/13 — e um critério desses é
@@ -298,7 +339,9 @@ def test_funcionario_gravado_por_uma_visao_e_visto_pela_guarda_da_outra() -> Non
     fakes.job_functions.add(_funcao())
     fakes.employees.add(_funcionario())
     with pytest.raises(JobFunctionInUseError):
-        fakes.job_functions.delete(_TENANT, JobFunctionId("f1"))
+        fakes.job_functions.delete(
+            _TENANT, JobFunctionId("f1"), expected=UnitEnablement.everywhere()
+        )
 
 
 def test_as_duas_visoes_escrevem_no_mesmo_store() -> None:

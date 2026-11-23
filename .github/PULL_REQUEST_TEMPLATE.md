@@ -22,6 +22,15 @@ Closes #<num-issue>
 
 <!-- 1–2 frases sobre o que mudou e por quê. -->
 
+## Plano de gates
+
+<!--
+Issue avulsa: as sub-tasks e os pontos do `make check` completo. Este corpo
+é o lugar do plano; a regra está em docs/PIPELINE.md §9.6, "Issue avulsa"
+(fonte única; este template aponta, não redefine).
+Stage: troque por "no technical.md, §1" (o plano da Stage mora lá).
+-->
+
 ## Checklist (Stage)
 
 <!--

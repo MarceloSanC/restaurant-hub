@@ -211,3 +211,25 @@ erro de serialização ali previsto "in principle" para as leituras não ocorre 
 "read-only transactions will never have serialization conflicts" (PostgreSQL 16, §13.2.2);
 só a transação que escreve ou trava linha o sofre. Provas: os testes `test_issue_225_*` de
 `test_staff_conduct.py`, com duas conexões. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-23 — o lookup de `delete` de função volta a remontar a habilitação, sob lock (issue
+#207).** A nota de 2026-11-23 (issue #225) deixa em `READ COMMITTED` o lookup de `delete`, "que
+deixou de remontar a habilitação". Pelo [ADR 0.0.0023](./0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md), renomear e apagar passaram a ser escritas condicionais
+à habilitação lida, como `update_enablement`: o lookup de `delete` é `SELECT … FOR UPDATE` e
+remonta a habilitação para compará-la, e o de `update` (renomear) também é `SELECT … FOR UPDATE`
+— `name` está num índice único, e o `UPDATE` do nome já tomava esse lock. Sob o lock
+da linha a remontagem em `READ COMMITTED` é coerente pelo mesmo argumento de `update_enablement`
+(todo escritor dos vínculos toma a linha-pai antes). Provas: os testes `test_issue_207_*` de
+`test_staff_conduct.py`. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-23 — "last write wins" deixou de valer para o estado ativo do registro (issue #242).**
+A §Decision mantém "last write wins" como a semântica de duas edições concorrentes, e
+`update` gravava o agregado inteiro, `active` inclusive. Como o vínculo de login antes dele
+([ADR 0.0.0010](./0_0_0010-employee-login-link-has-its-own-conditional-write.md)), o estado
+ganhou escrita própria: `update` ignora o `active` da entidade e mantém o gravado, e só
+`deactivate` (L-DEACT, [ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md))
+e `reactivate` (L-REACT, nota de 2026-11-23 daquele ADR) o escrevem, cada um sob o lock da linha.
+Uma edição lida antes de uma recontratação ou de um desligamento não desfaz mais a transição.
+"Last write wins" segue valendo para os **demais** campos do registro, e o controle otimista do
+caso geral continua com a issue #226. Provas: os testes `test_issue_242_*` de
+`test_staff_conduct.py`, com duas conexões. Nota *append-only*; o corpo acima não foi editado.

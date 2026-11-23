@@ -22,6 +22,7 @@ import pytest
 from restaurant_hub.features.identity.application import errors as erros_de_application
 from restaurant_hub.features.identity.application import facade as modulo_facade
 from restaurant_hub.features.identity.application.dtos.commands import (
+    FindAccountByEmailCommand,
     GetAccountRoleCommand,
     GetUnitTimezoneCommand,
     ProvisionAccountCommand,
@@ -31,6 +32,7 @@ from restaurant_hub.features.identity.application.dtos.commands import (
 from restaurant_hub.features.identity.application.dtos.identifiers import PasswordHash
 from restaurant_hub.features.identity.application.dtos.results import (
     AccountRoleResult,
+    AccountSummaryResult,
     ProvisionedAccountResult,
     UnitTimezoneResult,
     UserResult,
@@ -39,13 +41,20 @@ from restaurant_hub.features.identity.application.errors import RoleNotProvision
 from restaurant_hub.features.identity.application.facade import (
     AccessGrant,
     AccessPrincipal,
+    AccountSummary,
     IdentityAccessFacade,
     IdentityFacade,
     IdentityUnitFacade,
     ProvisionedAccount,
 )
+from restaurant_hub.features.identity.application.use_cases import (
+    provision_account as modulo_provision_account,
+)
 from restaurant_hub.features.identity.application.use_cases.authorize_action import (
     AuthorizeActionUseCase,
+)
+from restaurant_hub.features.identity.application.use_cases.find_account_by_email import (
+    FindAccountByEmailUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.get_account_role import (
     GetAccountRoleUseCase,
@@ -54,7 +63,6 @@ from restaurant_hub.features.identity.application.use_cases.get_unit_timezone im
     GetUnitTimezoneUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
-    PROVISIONABLE_ROLES,
     ProvisionAccountUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.revoke_all_sessions import (
@@ -103,6 +111,9 @@ pytestmark = pytest.mark.unit
 
 _AGORA = datetime(2026, 9, 14, 12, 0, tzinfo=UTC)
 _BASE_URL = "https://app.exemplo.com"
+# Transcrito, não derivado de `PROVISIONABLE_ROLES` (a fachada a lê desde a issue
+# #234): alargar o conjunto é decisão de ADR, e a edição solta reprova aqui também.
+_PAPEIS_QUE_A_FACHADA_ACEITA = frozenset({Role.EMPLOYEE})
 
 
 # ---------------------------------------------------------------------------
@@ -170,19 +181,36 @@ class _EspiaoDePapel(GetAccountRoleUseCase):
         return self._devolve
 
 
+class _EspiaoDeConta(FindAccountByEmailUseCase):
+    def __init__(
+        self, *, devolve: AccountSummaryResult | None = None, levanta: Exception | None = None
+    ) -> None:
+        self.commands: list[FindAccountByEmailCommand] = []
+        self._devolve = devolve
+        self._levanta = levanta
+
+    def execute(self, command: FindAccountByEmailCommand) -> AccountSummaryResult | None:
+        self.commands.append(command)
+        if self._levanta is not None:
+            raise self._levanta
+        return self._devolve
+
+
 def _fachada_espia(
     *,
     provision: _EspiaoDeProvisionamento | None = None,
     send: _EspiaoDeEnvio | None = None,
     revoke: _EspiaoDeRevogacao | None = None,
     role: _EspiaoDePapel | None = None,
+    account: _EspiaoDeConta | None = None,
 ) -> tuple[IdentityFacade, _EspiaoDeProvisionamento, _EspiaoDeEnvio, _EspiaoDeRevogacao]:
-    """O espião do papel não volta na tupla: quem o quer passa o seu e o guarda."""
+    """Os espiões do papel e da conta não voltam na tupla: quem os quer passa o seu."""
     provision = provision or _EspiaoDeProvisionamento()
     send = send or _EspiaoDeEnvio()
     revoke = revoke or _EspiaoDeRevogacao()
     role = role or _EspiaoDePapel()
-    return IdentityFacade(provision, send, revoke, role), provision, send, revoke
+    account = account or _EspiaoDeConta()
+    return IdentityFacade(provision, send, revoke, role, account), provision, send, revoke
 
 
 def _provisionar(  # noqa: PLR0913 — os cinco argumentos nomeados da fachada, com defaults
@@ -284,9 +312,51 @@ class TestConversaoDePrimitivos:
 
         assert fachada.account_role("nunca-existiu") is None
 
+    def test_find_account_by_email_converte_para_primitivos(self) -> None:
+        """Stage 3.10: o resultado sai em texto, sem tipo de identity (propriedade 1)."""
+        espiao = _EspiaoDeConta(
+            devolve=AccountSummaryResult(
+                user_id=UserId("user-42"),
+                tenant_id=RestaurantId("rest-a"),
+                unit_ids=(UnitId("unit-a1"), UnitId("unit-a2")),
+                sees_every_unit=False,
+            )
+        )
+        fachada, _, _, _ = _fachada_espia(account=espiao)
+
+        conta = fachada.find_account_by_email("Ana@Cantina.com")
+
+        assert conta == AccountSummary(
+            user_id="user-42",
+            tenant_id="rest-a",
+            unit_ids=("unit-a1", "unit-a2"),
+            sees_every_unit=False,
+        )
+        assert conta is not None
+        assert type(conta.user_id) is str
+        assert type(conta.tenant_id) is str
+        assert all(type(unidade) is str for unidade in conta.unit_ids)
+        assert type(conta.unit_ids) is tuple
+        assert espiao.commands == [FindAccountByEmailCommand(email=Email("Ana@Cantina.com"))]
+
+    def test_find_account_by_email_sem_conta_e_none(self) -> None:
+        fachada, _, _, _ = _fachada_espia(account=_EspiaoDeConta(devolve=None))
+
+        assert fachada.find_account_by_email("ninguem@cantina.com") is None
+
+    def test_find_account_by_email_malformado_sobe_sem_traducao_e_sem_consultar(self) -> None:
+        espiao = _EspiaoDeConta()
+        fachada, _, _, _ = _fachada_espia(account=espiao)
+
+        with pytest.raises(InvalidEmailError):
+            fachada.find_account_by_email("nao-e-email")
+
+        assert espiao.commands == []
+
     def test_cada_operacao_chama_so_o_seu_use_case(self) -> None:
         papel = _EspiaoDePapel()
-        fachada, provision, send, revoke = _fachada_espia(role=papel)
+        conta = _EspiaoDeConta()
+        fachada, provision, send, revoke = _fachada_espia(role=papel, account=conta)
 
         _provisionar(fachada)
 
@@ -294,6 +364,16 @@ class TestConversaoDePrimitivos:
         assert send.commands == []
         assert revoke.commands == []
         assert papel.commands == []
+        assert conta.commands == []
+
+    def test_a_excecao_da_consulta_de_conta_sobe_na_mesma_instancia(self) -> None:
+        falha = RuntimeError("banco fora")
+        fachada, _, _, _ = _fachada_espia(account=_EspiaoDeConta(levanta=falha))
+
+        with pytest.raises(RuntimeError) as excinfo:
+            fachada.find_account_by_email("ana@cantina.com")
+
+        assert excinfo.value is falha
 
 
 class TestTransparenciaAExcecoes:
@@ -386,22 +466,59 @@ class TestTransparenciaAExcecoes:
 
         assert espiao.commands == []
 
-    def test_a_fachada_aceita_exatamente_os_papeis_que_o_use_case_aceita(self) -> None:
-        """Issue #211 — a regra existe em dois lugares (a entrada e o use case) e este
-        teste as mantém iguais, papel a papel, sobre o enum inteiro. Alargar um lado
-        só reprova aqui, em vez de virar uma recusa tardia ou uma regra morta."""
+    def test_a_fachada_recusa_antes_do_use_case_todo_papel_fora_do_conjunto(self) -> None:
+        """Issues #211 e #234 — sobre o enum inteiro, papel a papel: o recusado não
+        chega ao use case, o aceito chega com o papel convertido, e o conjunto aceito
+        é o **transcrito** em `_PAPEIS_QUE_A_FACHADA_ACEITA`. Desde a #234 a fachada
+        lê `PROVISIONABLE_ROLES`; comparar com a constante seria tautológico (alargá-la
+        passaria verde aqui), por isso a expectativa não é derivada dela."""
         aceitos_pela_fachada: set[Role] = set()
         for papel in Role:
             fachada, espiao, _, _ = _fachada_espia()
             try:
                 _provisionar(fachada, role=papel.value)
-            except RoleNotProvisionableError:
+            except RoleNotProvisionableError as erro:
+                assert erro.role == papel.value
                 assert espiao.commands == []
             else:
+                assert [command.role for command in espiao.commands] == [papel]
                 aceitos_pela_fachada.add(papel)
 
-        assert aceitos_pela_fachada
-        assert aceitos_pela_fachada == PROVISIONABLE_ROLES
+        assert aceitos_pela_fachada == _PAPEIS_QUE_A_FACHADA_ACEITA
+
+    def test_a_fachada_segue_o_conjunto_do_use_case_e_nao_um_literal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Issue #234 — a regra tem uma cópia só, a do use case. Com o conjunto
+        trocado por dublê para `{manager}`, a fachada aceita `manager` e recusa
+        `employee`: um literal reintroduzido na fachada (a segunda cópia), sozinho ou
+        somado à constante, erra um dos dois lados e reprova aqui. O dublê troca o
+        nome nos dois módulos, para não depender de como a fachada o importa."""
+        trocado = frozenset({Role.MANAGER})
+        monkeypatch.setattr(modulo_provision_account, "PROVISIONABLE_ROLES", trocado)
+        monkeypatch.setattr(modulo_facade, "PROVISIONABLE_ROLES", trocado)
+        fachada, espiao, _, _ = _fachada_espia()
+
+        _provisionar(fachada, role="manager")
+        with pytest.raises(RoleNotProvisionableError):
+            _provisionar(fachada, role="employee")
+
+        assert [command.role for command in espiao.commands] == [Role.MANAGER]
+
+    def test_o_nome_que_a_fachada_le_e_o_objeto_do_use_case(self) -> None:
+        """Issue #234 — o teste acima troca o nome **nos dois módulos**, então não vê
+        uma cópia com o mesmo nome declarada na própria fachada
+        (`PROVISIONABLE_ROLES = frozenset({Role.EMPLOYEE})` em `facade.py`): o dublê
+        substitui a cópia e a fachada "segue" o conjunto trocado. A auditoria do PR
+        #255 provou por mutação local que essa cópia passa as unit de identity e de
+        staff.
+        `from ... import PROVISIONABLE_ROLES` liga o nome ao mesmo objeto do use
+        case; a identidade trava que é esse o objeto que a fachada lê, e não um igual
+        a ele. Lido pelo namespace do módulo (`vars`), que é onde a checagem de
+        `provision_account` procura o nome global."""
+        lido_pela_fachada = vars(modulo_facade)["PROVISIONABLE_ROLES"]
+
+        assert lido_pela_fachada is modulo_provision_account.PROVISIONABLE_ROLES
 
 
 class TestReexportacao:
@@ -420,6 +537,8 @@ class TestReexportacao:
         assert set(modulo_facade.__all__) == {
             "AccessGrant",
             "AccessPrincipal",
+            # O resultado da consulta de conta da Stage 3.10 (ADR 3.10.0002 §2).
+            "AccountSummary",
             "EmailAlreadyRegisteredError",
             "IdentityAccessFacade",
             "IdentityFacade",
@@ -463,6 +582,7 @@ class TestSobreOsUseCasesReais:
             SendInvitationUseCase(sender),
             RevokeAllSessionsUseCase(InMemorySessionRepository(), clock),
             GetAccountRoleUseCase(users),
+            FindAccountByEmailUseCase(users),
         )
         return fachada, users, sender
 

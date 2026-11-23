@@ -1,10 +1,13 @@
-"""Autorização de uma habilitação por unidade — compartilhada por dois use cases.
+"""Autorização de uma habilitação por unidade — compartilhada pelo catálogo.
 
 Módulo privado (prefixo `_`, como `_inputs.py` e `_publish.py` de scheduling):
 não é use case, e a varredura "um arquivo por use case" o ignora. Mora aqui
 porque `CreateJobFunctionUseCase` e `SetJobFunctionUnitsUseCase` aplicam **a
 mesma** regra de alcance (ADR 3.11.0001 §4 e §5), e duas cópias de uma regra de
-acesso divergem em silêncio.
+acesso divergem em silêncio. Desde a issue #207 (ADR 0.0.0023)
+`RenameJobFunctionUseCase` e `DeleteJobFunctionUseCase` também a aplicam, com
+`authorize_enablement` sobre a habilitação **gravada**: renomear ou apagar age em
+toda unidade em que a função vale.
 
 **A regra** (concept 3.11 R4/R5):
 
@@ -60,7 +63,11 @@ def authorize_enablement(
     tenant_id: TenantId,
     unit_ids: frozenset[UnitId] | None,
 ) -> None:
-    """Autoriza o ator a habilitar uma função em `unit_ids` (`None` = todas)."""
+    """Autoriza o ator sobre as unidades `unit_ids` (`None` = todas).
+
+    Criar habilita a função nessas unidades; renomear e apagar (issue #207) agem
+    em todas as unidades em que ela vale. Os três pedem o mesmo alcance.
+    """
     if unit_ids is None:
         guard.authorize(actor, PERMISSION_MANAGE_TENANT, tenant_id=tenant_id)
         return

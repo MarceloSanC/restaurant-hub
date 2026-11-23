@@ -37,6 +37,7 @@ papéis editado para dar a `hr` alcance diferente reprova aqui.
 """
 
 import urllib.parse
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -65,7 +66,8 @@ pytestmark = pytest.mark.e2e
 # módulo sem um único caso, e a suíte ficaria verde por não medir nada.
 # 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`); a Stage 3.11, a
 # substituição das unidades de uma função e a listagem de funções da unidade.
-_TOTAL_DE_ROTAS: Final = 19
+# 22 desde a Stage 3.10: R18, R19 e R20 (`.../login-link`).
+_TOTAL_DE_ROTAS: Final = 22
 
 # As três partições do inventário e os dois produtos que os critérios nomeiam.
 # São **números transcritos do concept**, não derivados do código: derivá-los faria
@@ -74,10 +76,10 @@ _TOTAL_DE_ROTAS: Final = 19
 # Stage 3.11: +1 no catálogo (`PUT .../units`) e +1 nas rotas com unidade no path
 # (`GET /units/{unit_id}/job-functions`); os produtos são 2 x 19 e 3 x 19.
 _TOTAL_DE_RJF: Final = 5
-_TOTAL_DE_REMP: Final = 14
-_TOTAL_COM_EMPLOYEE_ID: Final = 11
-_CASOS_DE_CA09: Final = 38
-_CASOS_DE_CA36: Final = 57
+_TOTAL_DE_REMP: Final = 17  # Stage 3.10: +3 (login-link)
+_TOTAL_COM_EMPLOYEE_ID: Final = 14  # Stage 3.10: +3
+_CASOS_DE_CA09: Final = 44  # 2 x 22
+_CASOS_DE_CA36: Final = 66  # 3 x 22
 
 # Os corpos constantes de identity (`identity/adapters/inbound/http/error_handlers.py`).
 # **Transcritos, e não importados**: o critério é sobre o contrato que o cliente
@@ -128,7 +130,8 @@ class Recursos:
         unidade: a unidade do **path** — a que endereça o registro.
         unidade_destino: a outra unidade do mesmo restaurante, destino de R16.
         employee_id: o funcionário semeado em `unidade`.
-        job_function_id: a função atribuída a esse funcionário.
+        job_function_id: a função atribuída a esse funcionário — desde a issue #207
+            habilitada em `unidade` e `unidade_destino`, não em todas.
         job_function_livre: uma segunda função, **sem** nenhum funcionário — R04
             a remove, e removê-la é 204; remover a primeira seria 409
             (`JobFunctionInUseError`), que mediria outra coisa. Desde a Stage 3.11
@@ -136,6 +139,11 @@ class Recursos:
             unidade um efeito que discrimina uma unidade da outra (CA11).
         sufixo: discrimina os nomes quando dois conjuntos isomorfos coexistem
             (CA12) ou quando duas unidades são semeadas lado a lado (CA11).
+        employee_com_login_id: Stage 3.10 — um segundo funcionário em `unidade`,
+            já vinculado por R17: é o registro que R19 troca e R20 desvincula.
+        email_existente: Stage 3.10 — o e-mail de uma conta `employee` do
+            restaurante, membro de `unidade` e sem registro: a conta que R18
+            vincula e R19 põe no lugar do login atual.
     """
 
     unidade: str
@@ -144,6 +152,8 @@ class Recursos:
     job_function_id: str
     job_function_livre: str
     sufixo: str
+    employee_com_login_id: str
+    email_existente: str
 
 
 Efeito = Callable[[AsyncClient, dict[str, str], Response, Recursos], Awaitable[None]]
@@ -201,6 +211,44 @@ async def _efeito_login_no_registro_da_unidade_do_path(
     assert corpo["employee"]["user_id"] is not None
 
 
+async def _efeito_vinculado_no_registro_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R18 (3.10): o registro sem login da unidade do path passa a ter um login."""
+    corpo = resposta.json()
+    assert (corpo["unit_id"], corpo["id"]) == (recursos.unidade, recursos.employee_id)
+    assert corpo["user_id"] is not None
+
+
+async def _efeito_login_trocado_no_registro_da_unidade_do_path(
+    client: AsyncClient, cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R19 (3.10): o registro vinculado da unidade do path aponta para a conta existente.
+
+    A conta existente está em outro login que o do R17 semeado; a prova de que a
+    troca aconteceu é R18 com a mesma conta, no outro registro da unidade, passar a
+    ser recusado como "conta já vinculada a outro registro da unidade" (409).
+    """
+    corpo = resposta.json()
+    assert (corpo["unit_id"], corpo["id"]) == (recursos.unidade, recursos.employee_com_login_id)
+    assert corpo["user_id"] is not None
+    de_novo = await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/login-link",
+        json={"email": recursos.email_existente},
+        headers=cabecalho,
+    )
+    assert de_novo.status_code == HTTPStatus.CONFLICT, de_novo.text
+
+
+async def _efeito_desvinculado_no_registro_da_unidade_do_path(
+    _client: AsyncClient, _cabecalho: dict[str, str], resposta: Response, recursos: Recursos
+) -> None:
+    """R20 (3.10): o registro vinculado da unidade do path fica sem login."""
+    corpo = resposta.json()
+    assert (corpo["unit_id"], corpo["id"]) == (recursos.unidade, recursos.employee_com_login_id)
+    assert corpo["user_id"] is None
+
+
 async def _efeito_copia_lida_da_unidade_do_path(
     client: AsyncClient, cabecalho: dict[str, str], resposta: Response, recursos: Recursos
 ) -> None:
@@ -255,6 +303,11 @@ def _sem_corpo(_recursos: Recursos) -> dict[str, Any] | None:
 
 def _do_funcionario(recursos: Recursos) -> dict[str, str]:
     return {"unit_id": recursos.unidade, "employee_id": recursos.employee_id}
+
+
+def _do_funcionario_com_login(recursos: Recursos) -> dict[str, str]:
+    """Stage 3.10 — o registro já vinculado, que R19 e R20 alcançam."""
+    return {"unit_id": recursos.unidade, "employee_id": recursos.employee_com_login_id}
 
 
 _EMPLOYEES: Final = "/units/{unit_id}/employees"
@@ -405,6 +458,29 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         body=lambda r: {"email": f"login-{r.sufixo}@cantina.com", "delivery": "link"},
         sucesso=HTTPStatus.CREATED,
         efeito=_efeito_login_no_registro_da_unidade_do_path,
+    ),
+    # Stage 3.10 — R18 vincula ao registro sem login a conta existente semeada;
+    # R19 troca o login do registro já vinculado por ela; R20 o desvincula.
+    ("POST", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
+        path=_do_funcionario,
+        query=_sem_query,
+        body=lambda r: {"email": r.email_existente},
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_vinculado_no_registro_da_unidade_do_path,
+    ),
+    ("PUT", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
+        path=_do_funcionario_com_login,
+        query=_sem_query,
+        body=lambda r: {"email": r.email_existente},
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_login_trocado_no_registro_da_unidade_do_path,
+    ),
+    ("DELETE", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
+        path=_do_funcionario_com_login,
+        query=_sem_query,
+        body=_sem_corpo,
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_desvinculado_no_registro_da_unidade_do_path,
     ),
 }
 
@@ -570,7 +646,14 @@ async def _semear(
     ator de montar o próprio cenário.
     """
     cabecalho = auth(cenario.owner)
-    job_function_id = await _criar_funcao(client, cabecalho, f"Função {sufixo}")
+    # Issue #207 — habilitada nas **duas** unidades do cenário, e não em todas:
+    # renomear e apagar exigem alcance sobre onde a função vale, e "todas" seria
+    # só do `owner` (`manage_tenant`). Nas duas, `manager` e `hr` — membros das
+    # duas — alcançam `PATCH /job-functions/{id}` (CA10/CA12/CA36), e a cópia para
+    # o destino continua encontrando a função habilitada lá (ADR 3.11.0002).
+    job_function_id = await _criar_funcao(
+        client, cabecalho, f"Função {sufixo}", unidades=[unidade, destino]
+    )
     job_function_livre = await _criar_funcao(
         client, cabecalho, f"Função livre {sufixo}", unidades=[unidade]
     )
@@ -597,6 +680,40 @@ async def _semear(
     )
     assert marcado.status_code == HTTPStatus.OK, marcado.text
 
+    # Stage 3.10 — a conta existente (R18, R19) e o registro já vinculado (R19,
+    # R20). E-mails com um discriminador próprio: a unicidade de e-mail é global
+    # em identity, e duas semeaduras com o mesmo sufixo num teste colidiriam.
+    marca = uuid.uuid4().hex[:8]
+    email_existente = f"existente-{sufixo}-{marca}@cantina.com"
+    conta = await client.post(
+        f"{API}/users",
+        json={
+            "email": email_existente,
+            "password": SENHA_PADRAO,
+            "role": "employee",
+            "unit_ids": [unidade],
+        },
+        headers=cabecalho,
+    )
+    assert conta.status_code == HTTPStatus.CREATED, conta.text
+    outro = await client.post(
+        f"{API}/units/{unidade}/employees",
+        json={
+            "name": f"Vinculado {sufixo}",
+            "workload_profile": {"type": "on_demand"},
+            "job_function_ids": [job_function_id],
+        },
+        headers=cabecalho,
+    )
+    assert outro.status_code == HTTPStatus.CREATED, outro.text
+    employee_com_login_id = str(outro.json()["id"])
+    vinculado = await client.post(
+        f"{API}/units/{unidade}/employees/{employee_com_login_id}/login",
+        json={"email": f"vinculado-{sufixo}-{marca}@cantina.com", "delivery": "link"},
+        headers=cabecalho,
+    )
+    assert vinculado.status_code == HTTPStatus.CREATED, vinculado.text
+
     return Recursos(
         unidade=unidade,
         unidade_destino=destino,
@@ -604,6 +721,8 @@ async def _semear(
         job_function_id=job_function_id,
         job_function_livre=job_function_livre,
         sufixo=sufixo,
+        employee_com_login_id=employee_com_login_id,
+        email_existente=email_existente,
     )
 
 
@@ -664,6 +783,8 @@ _RECURSOS_FICTICIOS: Final = Recursos(
     job_function_id="função-fictícia",
     job_function_livre="função-livre-fictícia",
     sufixo="401",
+    employee_com_login_id="funcionário-com-login-fictício",
+    email_existente="ficticio@cantina.com",
 )
 
 
@@ -712,7 +833,7 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # produz 422, e um caso que não degrada não mede a corrida.
 
 # Dez até a 3.6; R17 (3.5) tem corpo — onze; `PUT .../units` (3.11) — doze.
-_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 12
+_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 14  # Stage 3.10: R18 e R19
 
 # O corpo que nenhum `*Request` aceita. Não é um campo com valor errado: é a
 # **ausência** dos campos obrigatórios, que é o 422 mais barato de produzir e o
@@ -1035,6 +1156,8 @@ async def test_ca13_o_funcionario_de_outra_unidade_responde_404(
         job_function_id=recursos_a.job_function_id,
         job_function_livre=recursos_a.job_function_livre,
         sufixo=recursos_a.sufixo,
+        employee_com_login_id=recursos_b.employee_com_login_id,
+        email_existente=recursos_a.email_existente,
     )
 
     resposta = await _invocar(client, chave_da_rota, enderecado_por_a, cabecalho=auth(manager))

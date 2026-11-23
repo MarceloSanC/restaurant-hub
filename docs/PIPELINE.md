@@ -778,9 +778,13 @@ Task do ponto:
 **Ponto vermelho.** Commit `fix(<scope>): <desc> [N.M/task-NN-fix]`
 antes da próxima Task.
 
-**Issue avulsa.** Mesma regra, sem `technical.md`: o plano é listado
-junto das sub-tasks. O padrão é um ponto, o de saída. Ponto extra que
-aparecer na execução vai no corpo do PR como `[deviation]`.
+**Issue avulsa.** Mesma regra, sem `technical.md`. O plano (as
+sub-tasks e, para cada ponto, depois de qual sub-task e por quê) vai no
+**corpo do PR**, desde o primeiro push: é o lugar durável que o auditor
+de contexto limpo lê, e a conversa da sessão e o relatório do executor
+não servem. O padrão é um ponto, o de saída, e mesmo ele é escrito.
+Ponto extra que aparecer na execução vai no mesmo corpo do PR como
+`[deviation]`.
 
 **Transição.** Vale para Stage e issue cuja branch nasce depois do merge
 do ADR 0.0.0021. Stage ou issue que já estava em execução termina pelo

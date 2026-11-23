@@ -556,6 +556,44 @@ async def _remocao_de_vinculado(
     )
 
 
+async def _desvincular_sem_login(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`EmployeeHasNoLoginError` — R20 sobre o registro que nunca recebeu login."""
+    return await client.delete(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/login-link",
+        headers=cabecalho,
+    )
+
+
+async def _vincular_email_sem_conta(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`LoginAccountNotFoundError` — R18 com um e-mail que não é conta de ninguém."""
+    return await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/login-link",
+        json={"email": f"ninguem-{recursos.sufixo}@cantina.com"},
+        headers=cabecalho,
+    )
+
+
+async def _trocar_por_conta_de_outro_registro(
+    client: AsyncClient, cabecalho: dict[str, str], recursos: Recursos
+) -> Response:
+    """`LoginAlreadyLinkedInUnitError` — R19 com a conta que R18 já pôs em outro registro."""
+    vinculado = await client.post(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_id}/login-link",
+        json={"email": recursos.email_existente},
+        headers=cabecalho,
+    )
+    assert vinculado.status_code == HTTPStatus.OK, vinculado.text
+    return await client.put(
+        f"{API}/units/{recursos.unidade}/employees/{recursos.employee_com_login_id}/login-link",
+        json={"email": recursos.email_existente},
+        headers=cabecalho,
+    )
+
+
 # As entradas do mapa que **nenhuma requisição consegue produzir**, e a razão de
 # cada uma. Transcritas do comentário da entrada correspondente em
 # `error_handlers.py` — este é o outro lado daquela declaração, e é o que faz dela
@@ -565,10 +603,11 @@ async def _remocao_de_vinculado(
 # - `EmployeeRelocationError` — nenhuma rota permite enviar `unit_id` num update;
 # - as duas colisões de **id** — o id é UUID gerado dentro do use case, nunca
 #   enviado pelo cliente, e produzi-las exigiria dois UUID4 iguais;
-# - `JobFunctionEnablementChangedError` (issue #206) — nenhuma requisição
+# - `JobFunctionEnablementChangedError` (issues #206 e #207) — nenhuma requisição
 #   **isolada** a produz: exige outra alteração de unidades comitada entre a
-#   leitura e a escrita da mesma função. A prova pelo banco real é o teste de
-#   conduta de duas conexões em `test_staff_conduct.py`.
+#   leitura e a escrita (alterar unidades, renomear ou apagar) da mesma função.
+#   A prova pelo banco real é o teste de conduta de duas conexões em
+#   `test_staff_conduct.py`.
 #
 # As cinco recusas de login da Stage 3.5 estiveram aqui entre a Task 01 (entrada
 # no mapa, sem produtor) e a Task 11 (R17 e a guarda de R15), que as moveu para
@@ -584,6 +623,10 @@ INALCANCAVEIS_POR_HTTP: Final = frozenset(
         "JobFunctionAlreadyExistsError",
         "EmployeeAlreadyExistsError",
         "JobFunctionEnablementChangedError",
+        # Stage 3.10: só uma corrida entre duas requisições produz esta exceção
+        # (a escrita condicional confere o estado lido); a conduta com duas
+        # conexões do repositório a cobre (ADR 3.10.0001 §2).
+        "EmployeeLoginChangedError",
     }
 )
 
@@ -655,9 +698,22 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
         _funcao_de_outra_unidade,
         "não está habilitada na unidade",
     ),
+    # Stage 3.10 — as recusas da gestão do vínculo de login, pelo HTTP real.
+    "EmployeeHasNoLoginError": (_desvincular_sem_login, "funcionário não tem login vinculado"),
+    "LoginAccountNotFoundError": (
+        _vincular_email_sem_conta,
+        "nenhuma conta deste restaurante com o e-mail nesta unidade",
+    ),
+    "LoginAlreadyLinkedInUnitError": (
+        _trocar_por_conta_de_outro_registro,
+        "a conta já está vinculada a outro registro da unidade",
+    ),
 }
 
-_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 26
+# 28 desde a Stage 3.10, que acrescenta `EmployeeHasNoLoginError` e
+# `EmployeeLoginChangedError` às 26 de develop (inclui a da issue #206), e
+# `LoginAccountNotFoundError` e `LoginAlreadyLinkedInUnitError` (30).
+_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 30
 
 # O tamanho do domínio de corpo de CA24 **depois** de a varredura descer por
 # lista. Eram dez caminhos; os três novos são um elemento de `job_function_ids`
@@ -667,7 +723,8 @@ _TOTAL_DE_ENTRADAS_DO_MAPA: Final = 26
 # 13 até a 3.6; a Stage 3.5 acrescenta `email` e `delivery` de R17; a Stage 3.11,
 # o elemento de `unit_ids` da criação de função e os dois da substituição de
 # unidades (o corpo da matriz nomeia a unidade do path e a de destino).
-_TOTAL_DE_CAMPOS_ESCALARES: Final = 18
+# 20 desde a Stage 3.10: o `email` de R18 e o de R19.
+_TOTAL_DE_CAMPOS_ESCALARES: Final = 20
 
 
 def test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e() -> None:
@@ -899,6 +956,8 @@ _RECURSOS_DE_INTROSPECCAO: Final = Recursos(
     job_function_id="f",
     job_function_livre="g",
     sufixo="introspecção",
+    employee_com_login_id="e-com-login",
+    email_existente="existente@introspeccao.com",
 )
 
 # As rotas cujo `*Request` declara um campo `name` — o domínio de CA22, derivado.

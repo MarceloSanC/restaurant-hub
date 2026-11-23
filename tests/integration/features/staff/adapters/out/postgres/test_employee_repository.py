@@ -64,6 +64,7 @@ from restaurant_hub.features.staff.domain.value_objects.shift_preference import 
 from restaurant_hub.features.staff.domain.value_objects.unavailability_period import (
     UnavailabilityPeriod,
 )
+from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
 from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
     FixedSchedule,
     OnDemand,
@@ -318,7 +319,11 @@ def test_l_e4_vale_no_update_e_nao_grava_nada(
 def test_l_e2_update_grava_o_agregado_inteiro(
     repositorio: PostgresEmployeeRepository, funcoes: PostgresJobFunctionRepository
 ) -> None:
-    """Nome, perfil, preferência, conjunto, períodos **e** estado, de uma vez."""
+    """Nome, perfil, preferência, conjunto e períodos, de uma vez — o estado não (#242).
+
+    `active` tem escrita própria (`deactivate`/`reactivate`): a entidade chega
+    desligada e o gravado continua ativo.
+    """
     repositorio.add(_funcionario(unavailabilities=(_periodo(10),)))
     repositorio.update(
         Employee(
@@ -341,7 +346,7 @@ def test_l_e2_update_grava_o_agregado_inteiro(
     assert gravado.shift_preference == ShiftPreference(periods=frozenset({DayPeriod.AFTERNOON}))
     assert gravado.job_function_ids == frozenset({_F2, _F3})
     assert gravado.unavailabilities == (_periodo(12), _periodo(14))
-    assert gravado.active is False
+    assert gravado.active is True
 
 
 def test_user_id_faz_round_trip_pelo_add_e_pelo_link_login(
@@ -591,7 +596,9 @@ def test_l_e5_remover_o_funcionario_libera_a_funcao_que_ele_referenciava(
     repositorio.delete(_A, _U1, _E1)
 
     assert repositorio.exists_by_job_function(_A, _F1) is False
-    funcoes.delete(_A, _F1)
+    # A função semeada vale em todas as unidades (default da entidade) — a condição
+    # de L-JF3 revisada (issue #207).
+    funcoes.delete(_A, _F1, expected=UnitEnablement.everywhere())
     assert funcoes.find_by_id(_A, _F1) is None
 
 

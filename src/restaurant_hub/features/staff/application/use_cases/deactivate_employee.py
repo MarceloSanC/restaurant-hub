@@ -37,6 +37,19 @@ estivesse fora. A conta **continua existindo** e continua podendo logar (ADR
 3.5.0003 §3): o que ela deixa de alcançar é decidido pela autorização, e o
 `user_id` permanece no registro — desligar não é desvincular. Desligar **nunca**
 desativa a conta (ADR 3.8.0001 §4). Registro sem login não toca o gateway.
+
+**A regra mora no ponto único** `_login_link.end_active_link` (Stage 3.10, ADR
+3.10.0001 §5): é a mesma que trocar e desvincular o login aplicam, porque a regra é
+de "o vínculo ativo de um registro termina" (ADR 3.8.0001 decisão 5).
+
+**A gravação confere o estado lido** (L-DEACT, ADR 3.10.0001 §4). O desligamento
+grava só `active`, pelo `deactivate` do repositório, condicionado ao `user_id` e ao
+estado ativo que este use case leu. Um vínculo criado, trocado ou desfeito, ou uma
+recontratação, entre a leitura e a escrita recusa com `EmployeeLoginChangedError`
+(409) e nada é gravado: sem isso, um vínculo concorrente deixaria o registro
+desligado **e** vinculado a um login que a regra nunca considerou (a ordem inversa
+do ADR 0.0.0010). A revogação que já tiver acontecido fica — o lado seguro, como
+numa falha de escrita. Outro desligamento concorrente do mesmo registro não recusa.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import DeactivateEmployeeCommand
@@ -55,8 +68,7 @@ from restaurant_hub.features.staff.application.ports.out.employee_repository imp
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
     IdentityGateway,
 )
-from restaurant_hub.features.staff.domain.entities.employee import Employee
-from restaurant_hub.features.staff.domain.value_objects.identifiers import UserId
+from restaurant_hub.features.staff.application.use_cases._login_link import end_active_link
 
 
 class DeactivateEmployeeUseCase:
@@ -74,6 +86,8 @@ class DeactivateEmployeeUseCase:
 
         Raises:
             EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**.
+            EmployeeLoginChangedError: o vínculo ou o estado gravado não é o lido
+                (L-DEACT) — nada é gravado; a nova tentativa lê o estado atual.
             Exception: a falha da listagem da unidade, da consulta de papel (L-IG5)
                 ou da revogação (L-IG2) sobe crua — e o registro **não** é gravado
                 como desligado.
@@ -91,29 +105,13 @@ class DeactivateEmployeeUseCase:
         )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
-        if (
-            employee.active
-            and employee.user_id is not None
-            and self._grants_the_login_access(employee, employee.user_id)
-        ):
-            # Antes de gravar — ver o docstring do módulo. Idempotente do lado de
-            # identity (L-IG4).
-            self._gateway.revoke_login_sessions(employee.user_id)
-        deactivated = employee.deactivate()
-        self._employees.update(deactivated)
-        return to_employee_result(deactivated)
-
-    def _grants_the_login_access(self, employee: Employee, user_id: UserId) -> bool:
-        """Condições 2 e 3 do docstring do módulo, nessa ordem (ADR 3.8.0001 §1 e §2).
-
-        `list_by_unit` devolve só ativos (L-E6), então "outro registro ativo"
-        é "outro registro da listagem". A consulta a identity só acontece se a
-        unidade não decidiu.
-        """
-        shared = any(
-            other.user_id == user_id and other.id != employee.id
-            for other in self._employees.list_by_unit(employee.tenant_id, employee.unit_id)
+        # Antes de gravar — ver o docstring do módulo.
+        end_active_link(self._employees, self._gateway, employee)
+        self._employees.deactivate(
+            command.tenant_id,
+            command.unit_id,
+            command.employee_id,
+            expected_user_id=employee.user_id,
+            expected_active=employee.active,
         )
-        if shared:
-            return False
-        return self._gateway.is_employee_login(user_id)
+        return to_employee_result(employee.deactivate())

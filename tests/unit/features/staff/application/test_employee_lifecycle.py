@@ -175,6 +175,26 @@ def test_recontratar_poe_ativo_sem_mexer_em_mais_nada() -> None:
     assert _exceto_active(depois) == _exceto_active(antes)
 
 
+def test_recontratar_grava_so_o_estado_pela_escrita_propria() -> None:
+    """L-REACT (issue #242): a recontratação não regrava o agregado lido por `update`.
+
+    O lookup e a escrita própria, nesta ordem e nada mais: um `update` aqui
+    voltaria a carregar o agregado inteiro, possivelmente velho, por cima de uma
+    edição concorrente.
+    """
+    fakes = _fakes()
+    _desligar(fakes).execute(
+        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
+    antes_calls = len(fakes.store.calls)
+
+    _recontratar(fakes).execute(
+        ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
+
+    assert fakes.store.calls[antes_calls:] == ["employees.find_by_id", "employees.reactivate"]
+
+
 def test_desligar_duas_vezes_e_idempotente_no_valor() -> None:
     """Repetir não é erro — a borda não precisa consultar o estado antes de agir."""
     fakes = _fakes()
@@ -282,6 +302,8 @@ def test_transicoes_em_registro_inexistente_ou_alheio_nao_gravam(tenant: TenantI
         )
 
     assert "employees.update" not in fakes.store.calls[antes_calls:]
+    assert "employees.deactivate" not in fakes.store.calls[antes_calls:]
+    assert "employees.reactivate" not in fakes.store.calls[antes_calls:]
     assert _result(fakes) == antes
 
 
@@ -398,7 +420,9 @@ def _outro_registro(
     if user_id is not None:
         fakes.employees.link_login(_A, unit_id, registro.id, user_id)
     if not active:
-        fakes.employees.update(registro.deactivate())
+        fakes.employees.deactivate(
+            _A, unit_id, registro.id, expected_user_id=user_id, expected_active=True
+        )
 
 
 def _desligar_e1(use_case: DeactivateEmployeeUseCase) -> EmployeeResult:
@@ -426,7 +450,7 @@ def test_ca05_registro_unico_de_funcionario_revoga_antes_de_gravar_na_ordem() ->
         "employees.list_by_unit",
         f"gateway.is_employee_login({login!r})",
         f"gateway.revoke_login_sessions({login!r})",
-        "employees.update",
+        "employees.deactivate",
     ]
     assert resultado.active is False
     # Desligar não é desvincular: o `user_id` permanece (ADR 3.5.0003 §3).
@@ -450,7 +474,7 @@ def test_ca06_outro_registro_ativo_do_login_na_unidade_nao_toca_o_gateway() -> N
     assert fakes.store.calls[antes:] == [
         "employees.find_by_id",
         "employees.list_by_unit",
-        "employees.update",
+        "employees.deactivate",
     ]
     assert resultado.active is False
 
@@ -511,7 +535,7 @@ def test_ca10_login_de_outro_papel_nao_e_revogado() -> None:
         "employees.find_by_id",
         "employees.list_by_unit",
         f"gateway.is_employee_login({gerente!r})",
-        "employees.update",
+        "employees.deactivate",
     ]
     assert resultado.active is False
 
@@ -542,7 +566,7 @@ def test_ca12_desligar_de_novo_um_desligado_nao_toca_o_gateway() -> None:
     resultado = _desligar_e1(_desligar(fakes, gateway))
 
     assert gateway.revoked == [login]
-    assert fakes.store.calls[antes:] == ["employees.find_by_id", "employees.update"]
+    assert fakes.store.calls[antes:] == ["employees.find_by_id", "employees.deactivate"]
     assert resultado.active is False
 
 
@@ -587,7 +611,7 @@ def test_ca13_falha_antes_de_gravar_sobe_crua_e_o_registro_continua_ativo(onde: 
         )
 
     assert excinfo.value is falha
-    assert "employees.update" not in fakes.store.calls[antes:]
+    assert "employees.deactivate" not in fakes.store.calls[antes:]
     relido = fakes.employees.find_by_id(_A, _U1, _E1)
     assert relido is not None
     assert relido.active is True
@@ -605,7 +629,7 @@ def test_nova_tentativa_depois_de_falha_na_gravacao_revoga_de_novo() -> None:
     falha = RuntimeError("banco fora na gravação")
 
     class _RegistrosQueFalhamNaGravacao(InMemoryEmployeeRepository):
-        def update(self, employee: Employee) -> None:
+        def deactivate(self, *args: object, **kwargs: object) -> None:
             raise falha
 
     with pytest.raises(RuntimeError):
@@ -628,7 +652,7 @@ def test_ca14_registro_sem_login_so_le_e_grava() -> None:
     _desligar_e1(_desligar(fakes, gateway))
 
     assert gateway.calls == []
-    assert fakes.store.calls[antes:] == ["employees.find_by_id", "employees.update"]
+    assert fakes.store.calls[antes:] == ["employees.find_by_id", "employees.deactivate"]
 
 
 def test_ca15_vinculado_em_endereco_alheio_so_faz_o_lookup() -> None:

@@ -417,7 +417,7 @@ def test_desligamento_concorrente_antes_do_vinculo_faz_o_r17_ser_recusado() -> N
     def _espelho(call: str) -> None:
         fakes.store.record(f"gateway.{call}")
         if call.startswith("provision_employee_login("):
-            fakes.employees.update(_relido(fakes).deactivate())
+            fakes.employees.deactivate(_A, _U1, _E1, expected_user_id=None, expected_active=True)
 
     gateway = InMemoryIdentityGateway(mirror=_espelho)
 

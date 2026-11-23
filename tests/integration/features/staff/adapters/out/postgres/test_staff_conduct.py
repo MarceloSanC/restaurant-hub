@@ -18,7 +18,8 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | `tenant_id` no `WHERE` do `DELETE` (#108) | nada, o lookup sob lock já o conferiu | #108, aqui |
 | condição sob `FOR NO KEY UPDATE` em `update_enablement` (#206) | nada, sem corrida | #206, aqui |
 | snapshot único nas leituras de função (#225) | nada, sem alteração concorrente | #225, aqui |
-| lookup de `delete` sem remontar a habilitação (#225) | nada, sem corrida | #225, aqui |
+| condição sob lock em `update` e `delete` de função (#207) | nada, sem corrida | #207, aqui |
+| `active` fora do `SET` do `update` (#242) | nada, sem transição concorrente | #242, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -62,7 +63,9 @@ from restaurant_hub.features.staff.adapters.out.postgres.job_function_repository
     PostgresJobFunctionRepository,
 )
 from restaurant_hub.features.staff.application.dtos.commands import (
+    ChangeWorkloadProfileCommand,
     DeleteEmployeeCommand,
+    ReactivateEmployeeCommand,
     RenameEmployeeCommand,
     SetJobFunctionUnitsCommand,
 )
@@ -76,8 +79,14 @@ from restaurant_hub.features.staff.application.errors import (
 from restaurant_hub.features.staff.application.ports.out.access_guard import (
     PERMISSION_MANAGE_JOB_FUNCTIONS,
 )
+from restaurant_hub.features.staff.application.use_cases.change_workload_profile import (
+    ChangeWorkloadProfileUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.delete_employee import (
     DeleteEmployeeUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.reactivate_employee import (
+    ReactivateEmployeeUseCase,
 )
 from restaurant_hub.features.staff.application.use_cases.rename_employee import (
     RenameEmployeeUseCase,
@@ -89,6 +98,7 @@ from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
+    EmployeeLoginChangedError,
     InvalidUnitEnablementError,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
@@ -99,7 +109,10 @@ from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     UserId,
 )
 from restaurant_hub.features.staff.domain.value_objects.unit_enablement import UnitEnablement
-from restaurant_hub.features.staff.domain.value_objects.workload_profile import FixedSchedule
+from restaurant_hub.features.staff.domain.value_objects.workload_profile import (
+    FixedSchedule,
+    OnDemand,
+)
 from tests.fakes.features.staff.in_memory_access_guard import InMemoryAccessGuard
 from tests.fakes.features.staff.stub_access_guards import TEST_ACTOR, PermissiveAccessGuard
 
@@ -612,7 +625,9 @@ def test_regressao_5_20_update_que_nao_mexe_no_conjunto_nao_deadlocka_com_delete
 
     def _lado_b() -> None:
         try:
-            PostgresJobFunctionRepository(motor_b).delete(_A, _F2)
+            PostgresJobFunctionRepository(motor_b).delete(
+                _A, _F2, expected=UnitEnablement.everywhere()
+            )
         except BaseException as erro:
             resultados["b"] = erro
 
@@ -712,7 +727,9 @@ def test_regressao_5_20_update_sem_mudanca_no_conjunto_nao_segura_lock_em_job_fu
     def _tentar_remover_f2() -> None:
         """Roda com a transação do `update` de A ainda aberta."""
         try:
-            PostgresJobFunctionRepository(motor_b).delete(_A, _F2)
+            PostgresJobFunctionRepository(motor_b).delete(
+                _A, _F2, expected=UnitEnablement.everywhere()
+            )
         except BaseException as erro:
             observado["erro"] = erro
 
@@ -1514,33 +1531,6 @@ def test_issue_225_listagem_nao_mistura_funcoes_de_instantes_diferentes(
     assert lido in (antes, depois), f"listagem com funções de instantes diferentes: {lido!r}"
 
 
-def test_issue_225_delete_com_conjunto_para_todas_no_meio_do_lookup_remove(
-    motores: Callable[[], Engine],
-) -> None:
-    """O lookup de `delete` não levanta por corrida (lei do port, L-JF3).
-
-    O lookup vem antes do `DELETE`, sem lock, sob `READ COMMITTED` — `delete`
-    escreve, e não roda sob o snapshot único das leituras. Se ele remontasse a
-    habilitação, a mesma alteração `{A}` → todas comitando entre a linha e os
-    vínculos faria a remoção responder `InvalidUnitEnablementError`, um 422 num
-    pedido válido. Ele só precisa saber se a função existe.
-    """
-    motor_adapter = motores()
-    motor_escritor = motores()
-    _semear_funcao_em_a(motor_adapter)
-    repositorio = PostgresJobFunctionRepository(motor_adapter)
-
-    with _entrelacar(
-        motor_adapter,
-        _GATILHO_LINHA_DA_FUNCAO,
-        lambda: _alterar(motor_escritor, _F1, _F1_NOME, _SO_A, _TODAS),
-    ) as disparou:
-        repositorio.delete(_A, _F1)
-
-    assert disparou[0], "o entrelace não disparou — o lookup não foi exercitado no meio"
-    assert PostgresJobFunctionRepository(motor_escritor).find_by_id(_A, _F1) is None
-
-
 # `list_by_unit` fica de fora por definição, não por esquecimento: a única
 # incoerência que a remontagem enxerga (flag `false`, zero vínculos) não nomeia
 # unidade nenhuma, então o filtro de L-JF6 não a lista — devolve vazio, e não há
@@ -1570,3 +1560,406 @@ def test_issue_225_dado_incoerente_gravado_continua_levantando(
 
     with pytest.raises(InvalidUnitEnablementError):
         _ler_funcao(PostgresJobFunctionRepository(motor), metodo)
+
+
+# ---------------------------------------------------------------------------
+# Issue #207 — renomear e apagar condicionais à habilitação lida
+# ---------------------------------------------------------------------------
+#
+# Renomear e apagar passam a exigir alcance sobre as unidades em que a função vale,
+# autorizado contra a habilitação **lida**; `update` (L-JF2) e `delete` (L-JF3)
+# recebem essa leitura e decidem sob o lock da linha, na forma de `update_enablement`.
+# O lookup de `delete` agora remonta a habilitação — sob `FOR UPDATE`, onde as duas
+# metades não podem vir de instantes diferentes (o que a #225 temia sem lock).
+
+_ESCRITAS_CONDICIONAIS = ("update", "delete")
+_LOCK_DO_LOOKUP = {"update": "FOR UPDATE", "delete": "FOR UPDATE"}
+
+
+def _escrever(
+    repositorio: PostgresJobFunctionRepository, metodo: str, lida: UnitEnablement
+) -> None:
+    """Renomeia ou apaga `f1` com a habilitação `lida` como condição."""
+    if metodo == "update":
+        repositorio.update(
+            JobFunction(id=_F1, tenant_id=_A, name="Chef", unit_enablement=lida), expected=lida
+        )
+    else:
+        repositorio.delete(_A, _F1, expected=lida)
+
+
+@pytest.mark.parametrize("metodo", _ESCRITAS_CONDICIONAIS)
+def test_issue_207_escrita_bloqueia_no_lookup_e_nao_depois(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """A comparação decide sob o lock — a mesma prova da #206 para `update_enablement`."""
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _semear_funcao_em_a(motor_adapter)
+    repositorio = PostgresJobFunctionRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            _escrever(repositorio, metodo, _SO_A)
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados, "o adapter nem chegou a emitir statement"
+    assert _LOCK_DO_LOOKUP[metodo] in tentados[-1], "o adapter bloqueou em outro statement"
+    assert concluidos == [], "algum statement completou antes do lock"
+
+
+@pytest.mark.parametrize("metodo", _ESCRITAS_CONDICIONAIS)
+def test_issue_207_escrita_que_espera_uma_alteracao_de_unidades_a_rele_e_e_recusada(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """O cenário da issue no banco: o gerente de A leu `{A}`; o dono alarga para `{A, B}`.
+
+    A primeira conexão prende a linha e acrescenta B **sem comitar**; a escrita do
+    gerente, numa thread, fica parada no lock com a leitura antiga. Só então a
+    primeira comita. Com a comparação sob o lock, a escrita relê `{A, B}` e recusa —
+    a função não é renomeada nem apagada em B, que o gerente não alcança. Para o
+    `delete` é também a prova de que a remontagem sob lock não rasga: a alteração
+    comita durante a espera e a leitura vê flag e vínculos do mesmo instante.
+    """
+    motor_primeira = motores()
+    motor_segunda = motores()
+    motor_observador = motores()
+    _semear_funcao_em_a(motor_primeira)
+    erros: list[BaseException] = []
+
+    def _escrita_do_gerente() -> None:
+        try:
+            _escrever(PostgresJobFunctionRepository(motor_segunda), metodo, _SO_A)
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_primeira.begin() as primeira:
+        primeira.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        primeira.execute(
+            text(
+                "INSERT INTO job_function_units (job_function_id, tenant_id, unit_id) "
+                "VALUES (:f, :t, :u)"
+            ),
+            {"f": _F1, "t": _A, "u": _UB},
+        )
+        segunda = threading.Thread(target=_escrita_do_gerente)
+        segunda.start()
+        _esperar_backend_bloqueado(motor_observador)
+    segunda.join(_TIMEOUT_SINCRONIA)
+
+    assert not segunda.is_alive(), "a escrita do gerente não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], JobFunctionEnablementChangedError), erros
+    gravada = PostgresJobFunctionRepository(motor_observador).find_by_id(_A, _F1)
+    assert gravada is not None, "a função foi apagada com a leitura antiga"
+    assert (gravada.name, gravada.unit_enablement) == ("Cozinheiro", _A_E_B)
+
+
+@pytest.mark.parametrize("metodo", _ESCRITAS_CONDICIONAIS)
+def test_issue_207_escrita_que_espera_conjunto_para_todas_nao_responde_422_por_corrida(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """A propriedade da #225 na forma nova: a corrida nunca vira 422 espúrio.
+
+    O teste da #225 que este PR trocou provava que o lookup de `delete`, sem lock,
+    não levantava `InvalidUnitEnablementError` quando `{A}` → todas comitava entre a
+    linha e os vínculos. Com a remontagem de volta, sob o lock, é a transição que
+    **muda a flag** que pode rasgar: flag antiga (`false`) com os vínculos novos
+    (nenhum). A primeira conexão prende a linha, liga a flag e apaga os vínculos
+    **sem comitar**; a escrita, numa thread, para no lock com a leitura `{A}`. Depois
+    do commit, o `SELECT … FOR UPDATE` devolve a versão nova da linha (PostgreSQL 16
+    §13.3.2: "will then lock and return the updated row"), e a consulta dos vínculos
+    abre snapshot novo: a escrita vê todas, coerente, e recusa por mudança — nem
+    422, nem renomeação ou remoção sobre a leitura antiga.
+    """
+    motor_primeira = motores()
+    motor_segunda = motores()
+    motor_observador = motores()
+    _semear_funcao_em_a(motor_primeira)
+    erros: list[BaseException] = []
+
+    def _escrita_do_gerente() -> None:
+        try:
+            _escrever(PostgresJobFunctionRepository(motor_segunda), metodo, _SO_A)
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_primeira.begin() as primeira:
+        primeira.execute(
+            text("SELECT id FROM job_functions WHERE id = :f AND tenant_id = :t FOR UPDATE"),
+            {"f": _F1, "t": _A},
+        )
+        primeira.execute(
+            text(
+                "UPDATE job_functions SET enabled_in_all_units = true "
+                "WHERE id = :f AND tenant_id = :t"
+            ),
+            {"f": _F1, "t": _A},
+        )
+        primeira.execute(
+            text("DELETE FROM job_function_units WHERE job_function_id = :f AND tenant_id = :t"),
+            {"f": _F1, "t": _A},
+        )
+        segunda = threading.Thread(target=_escrita_do_gerente)
+        segunda.start()
+        _esperar_backend_bloqueado(motor_observador)
+    segunda.join(_TIMEOUT_SINCRONIA)
+
+    assert not segunda.is_alive(), "a escrita do gerente não terminou"
+    assert len(erros) == 1, erros
+    assert not isinstance(erros[0], InvalidUnitEnablementError), "422 espúrio por corrida"
+    assert isinstance(erros[0], JobFunctionEnablementChangedError), erros
+    gravada = PostgresJobFunctionRepository(motor_observador).find_by_id(_A, _F1)
+    assert gravada is not None, "a função foi apagada com a leitura antiga"
+    assert (gravada.name, gravada.unit_enablement) == ("Cozinheiro", _TODAS)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.10 — as escritas condicionais ao lido decidem sob o lock (CA10)
+# ---------------------------------------------------------------------------
+#
+# A forma da corrida de dois R17 acima, para as três leis novas (ADR 3.10.0001
+# §2): outra transação muda o vínculo e **não comita**; a escrita da Stage roda
+# numa thread e fica parada no lock; só então a outra comita. Com a guarda sob o
+# lock, a escrita rele o gravado e recusa com `EmployeeLoginChangedError`. Sem o
+# `FOR UPDATE`, ela leria o estado velho, esperaria só no `UPDATE` e gravaria por
+# cima — o contrato sequencial não enxerga essa diferença.
+
+_LOGIN_LIDO = UserId("login-lido")
+_LOGIN_CONCORRENTE = UserId("login-concorrente")
+
+
+def _desligar_conforme_lido(repositorio: PostgresEmployeeRepository) -> None:
+    """L-DEACT: o R13 leu o registro **sem** vínculo (a ordem inversa do ADR 0.0.0010)."""
+    repositorio.deactivate(_A, _U1, _E1, expected_user_id=None, expected_active=True)
+
+
+def _trocar_conforme_lido(repositorio: PostgresEmployeeRepository) -> None:
+    """L-RELINK: um segundo R19 que leu o login antigo."""
+    repositorio.relink_login(
+        _A, _U1, _E1, expected_user_id=_LOGIN_LIDO, user_id=UserId("login-do-segundo")
+    )
+
+
+def _desvincular_conforme_lido(repositorio: PostgresEmployeeRepository) -> None:
+    """L-UNLINK: um R20 que leu o login antigo, concorrente a uma troca."""
+    repositorio.unlink_login(_A, _U1, _E1, expected_user_id=_LOGIN_LIDO, expected_active=True)
+
+
+@pytest.mark.parametrize(
+    ("vinculo_inicial", "escrita"),
+    [
+        (None, _desligar_conforme_lido),
+        (_LOGIN_LIDO, _trocar_conforme_lido),
+        (_LOGIN_LIDO, _desvincular_conforme_lido),
+    ],
+    ids=["l_deact_vinculo_concorrente", "l_relink_troca_concorrente", "l_unlink_troca_concorrente"],
+)
+def test_stage_3_10_escrita_condicional_rele_o_vinculo_sob_o_lock(
+    motores: Callable[[], Engine],
+    vinculo_inicial: UserId | None,
+    escrita: Callable[[PostgresEmployeeRepository], None],
+) -> None:
+    """Uma escrita concorrente comita enquanto a da Stage espera o lock: a da Stage recusa.
+
+    O registro termina **ativo** e com o vínculo da escrita concorrente — no caso
+    de L-DEACT, ativo **e** vinculado, em vez de desligado e vinculado a um login
+    que nenhuma revogação considerou.
+    """
+    motor_concorrente = motores()
+    motor_stage = motores()
+    motor_observador = motores()
+    _semear(motor_concorrente)
+    if vinculo_inicial is not None:
+        PostgresEmployeeRepository(motor_concorrente).link_login(_A, _U1, _E1, vinculo_inicial)
+    erros: list[BaseException] = []
+
+    def _escrita_da_stage() -> None:
+        try:
+            escrita(PostgresEmployeeRepository(motor_stage))
+        except BaseException as erro:  # o teste inspeciona o tipo
+            erros.append(erro)
+
+    with motor_concorrente.begin() as concorrente:
+        concorrente.execute(
+            text("UPDATE employees SET user_id = :u WHERE id = :e AND tenant_id = :t"),
+            {"u": _LOGIN_CONCORRENTE, "e": _E1, "t": _A},
+        )
+        thread = threading.Thread(target=_escrita_da_stage)
+        thread.start()
+        _esperar_backend_bloqueado(motor_observador)
+    thread.join(_TIMEOUT_SINCRONIA)
+
+    assert not thread.is_alive(), "a escrita da Stage não terminou"
+    assert len(erros) == 1, erros
+    assert isinstance(erros[0], EmployeeLoginChangedError), erros
+    relido = PostgresEmployeeRepository(motor_observador).find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.user_id, relido.active) == (_LOGIN_CONCORRENTE, True), (
+        "a escrita da Stage gravou sobre o vínculo concorrente"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Issue #242 — o estado ativo tem escrita própria
+# ---------------------------------------------------------------------------
+
+
+def _desligado(motor: Engine) -> None:
+    """Semeia `e1` e o desliga pelo port (L-DEACT), sem vínculo."""
+    _semear(motor)
+    PostgresEmployeeRepository(motor).deactivate(
+        _A, _U1, _E1, expected_user_id=None, expected_active=True
+    )
+
+
+def test_issue_242_reactivate_bloqueia_no_lookup_e_nao_depois(
+    motores: Callable[[], Engine],
+) -> None:
+    """`L-REACT` decide sob o lock da linha — a forma de `link_login` e de `deactivate`.
+
+    Com a linha presa por outra transação, `reactivate` para no **primeiro**
+    statement, o `SELECT … FOR UPDATE`, e nada completa antes: a transição do
+    domínio roda sobre o gravado que nenhuma escrita concorrente está mudando.
+    """
+    motor_adapter = motores()
+    motor_bloqueador = motores()
+    _desligado(motor_adapter)
+    repositorio = PostgresEmployeeRepository(motor_adapter)
+
+    with motor_bloqueador.begin() as bloqueador:
+        bloqueador.execute(
+            text("SELECT unit_id FROM employees WHERE id = :e AND tenant_id = :t FOR UPDATE"),
+            {"e": _E1, "t": _A},
+        )
+        with (
+            _statements_de(motor_adapter) as (tentados, concluidos),
+            pytest.raises(OperationalError) as excecao,
+        ):
+            repositorio.reactivate(_A, _U1, _E1)
+
+    assert getattr(excecao.value.orig, "sqlstate", None) == "55P03"
+    assert tentados, "o adapter nem chegou a emitir statement"
+    assert "FOR UPDATE" in tentados[-1], "o adapter bloqueou em outro statement"
+    assert concluidos == [], "algum statement completou antes do lock"
+
+
+# A lei de `update` (o estado gravado fica), com duas conexões e os use cases de
+# verdade: uma edição lê o registro; outra conexão recontrata (e vincula) ou desliga
+# e **comita** exatamente depois dessa leitura; a edição grava a entidade que leu,
+# com o estado velho. Antes da #242 o `update` gravava esse estado: a edição lida
+# antes da recontratação devolvia o registro a desligado — com o vínculo no meio,
+# desligado **e** vinculado sem a regra de fim de vínculo —, e a lida antes do
+# desligamento o reativava sem recontratação (ADR 3.2.0007).
+
+_LOGIN_R18 = UserId("login-do-r18")
+
+
+def _renomear(motor: Engine) -> None:
+    RenameEmployeeUseCase(PostgresEmployeeRepository(motor), guard=PermissiveAccessGuard()).execute(
+        RenameEmployeeCommand(
+            actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1, name="Joana"
+        )
+    )
+
+
+def _mudar_jornada(motor: Engine) -> None:
+    ChangeWorkloadProfileUseCase(
+        PostgresEmployeeRepository(motor), guard=PermissiveAccessGuard()
+    ).execute(
+        ChangeWorkloadProfileCommand(
+            actor=TEST_ACTOR,
+            tenant_id=_A,
+            unit_id=_U1,
+            employee_id=_E1,
+            workload_profile=OnDemand(),
+        )
+    )
+
+
+_EDICOES = pytest.mark.parametrize(
+    ("editar", "editado"),
+    [
+        (_renomear, lambda e: e.name == "Joana"),
+        (_mudar_jornada, lambda e: e.workload_profile == OnDemand()),
+    ],
+    ids=["r07_renomear", "r08_jornada"],
+)
+
+
+def _recontratar(motor: Engine) -> None:
+    ReactivateEmployeeUseCase(
+        PostgresEmployeeRepository(motor), guard=PermissiveAccessGuard()
+    ).execute(
+        ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
+
+
+@_EDICOES
+@pytest.mark.parametrize("vincula_depois", [False, True], ids=["r14", "r14_e_r18"])
+def test_issue_242_edicao_lida_antes_da_recontratacao_nao_devolve_a_desligado(
+    motores: Callable[[], Engine],
+    editar: Callable[[Engine], None],
+    editado: Callable[[Employee], bool],
+    vincula_depois: bool,
+) -> None:
+    """O cenário da issue: o registro termina **ativo** — e, com R18, ativo e vinculado."""
+    motor_edicao = motores()
+    motor_concorrente = motores()
+    _desligado(motor_edicao)
+
+    def _r14_e_talvez_r18() -> None:
+        _recontratar(motor_concorrente)
+        if vincula_depois:
+            PostgresEmployeeRepository(motor_concorrente).link_login(_A, _U1, _E1, _LOGIN_R18)
+
+    with _entrelacar(motor_edicao, "FROM employees", _r14_e_talvez_r18) as disparou:
+        editar(motor_edicao)
+
+    assert disparou[0], "o entrelace não disparou — a corrida não foi exercitada"
+    relido = PostgresEmployeeRepository(motor_concorrente).find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert editado(relido), "a edição não gravou o campo que lhe cabe"
+    vinculo = _LOGIN_R18 if vincula_depois else None
+    assert (relido.active, relido.user_id) == (True, vinculo), (
+        "a edição lida antes da recontratação devolveu o registro a desligado"
+    )
+
+
+@_EDICOES
+def test_issue_242_edicao_lida_antes_do_desligamento_nao_reativa(
+    motores: Callable[[], Engine],
+    editar: Callable[[Engine], None],
+    editado: Callable[[Employee], bool],
+) -> None:
+    """A ordem oposta: R13 desliga entre a leitura e a escrita da edição; fica desligado."""
+    motor_edicao = motores()
+    motor_concorrente = motores()
+    _semear(motor_edicao)
+    PostgresEmployeeRepository(motor_edicao).link_login(_A, _U1, _E1, _LOGIN_R18)
+
+    def _r13() -> None:
+        PostgresEmployeeRepository(motor_concorrente).deactivate(
+            _A, _U1, _E1, expected_user_id=_LOGIN_R18, expected_active=True
+        )
+
+    with _entrelacar(motor_edicao, "FROM employees", _r13) as disparou:
+        editar(motor_edicao)
+
+    assert disparou[0], "o entrelace não disparou — a corrida não foi exercitada"
+    relido = PostgresEmployeeRepository(motor_concorrente).find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert editado(relido), "a edição não gravou o campo que lhe cabe"
+    assert (relido.active, relido.user_id) == (False, _LOGIN_R18), (
+        "a edição lida antes do desligamento reativou o registro"
+    )

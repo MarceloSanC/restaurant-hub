@@ -109,11 +109,16 @@ _USE_CASES_DE_STAFF = (
     "staff_reactivate_employee",
     "staff_copy_employee_to_unit",
     "staff_create_login_for_employee",
+    "staff_link_existing_login",
+    "staff_unlink_login",
+    "staff_relink_login",
 )
 
 # 16 até a 3.4; a Stage 3.5 acrescenta `create_login_for_employee` (R17); a Stage
 # 3.11, `set_job_function_units`.
-_TOTAL_DE_USE_CASES = 18
+_TOTAL_DE_USE_CASES = (
+    21  # Stage 3.10: +relink_login  # Stage 3.10: +unlink_login  # Stage 3.10: +link_existing_login
+)
 
 
 def _dependencias() -> ApplicationDependencies:
@@ -360,8 +365,9 @@ def test_o_conteiner_de_staff_tem_exatamente_os_campos_declarados() -> None:
 # 3.5 acrescenta o provedor e a rota de R17; a Stage 3.11, o provedor de
 # `set_job_function_units` e duas rotas (a dele e a listagem por unidade, que reusa
 # o provedor de `list_job_functions`).
-_TOTAL_DE_OVERRIDES_DE_STAFF = 19
-_TOTAL_DE_ROTAS_DE_STAFF = 19
+# 22 desde a Stage 3.10: R18, R19 e R20 (login-link).
+_TOTAL_DE_OVERRIDES_DE_STAFF = 22
+_TOTAL_DE_ROTAS_DE_STAFF = 22
 _TOTAL_DE_ROTAS_DE_IDENTITY = 10
 _PACOTE_HTTP_IDENTITY = "restaurant_hub.features.identity.adapters.inbound.http"
 _PACOTE_HTTP_STAFF = "restaurant_hub.features.staff.adapters.inbound.http"
@@ -648,6 +654,9 @@ def test_ca07_deactivate_e_create_login_recebem_a_mesma_instancia_do_gateway() -
     ("campo", "recebe_gateway"),
     [
         pytest.param("staff_create_login_for_employee", True, id="create-login"),
+        pytest.param("staff_relink_login", True, id="relink_login"),
+        pytest.param("staff_unlink_login", True, id="unlink_login"),
+        pytest.param("staff_link_existing_login", True, id="link_existing_login"),
         pytest.param("staff_deactivate_employee", True, id="deactivate"),
         pytest.param("staff_delete_employee", False, id="delete"),
         pytest.param("staff_reactivate_employee", False, id="reactivate"),

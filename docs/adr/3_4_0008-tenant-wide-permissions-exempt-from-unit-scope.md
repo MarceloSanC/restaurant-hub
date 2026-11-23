@@ -5,7 +5,7 @@ when-use: Reference before adding a permission to TENANT_WIDE_PERMISSIONS, when 
 keywords: [adr, authorization, unit-scope, fail-closed, permission, tenant-wide, job-function, catalogue, identity, staff]
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-08-12
+updated_at: 2026-11-23
 adr_id: 3.4.0008
 decision: Identity gains an explicit TENANT_WIDE_PERMISSIONS set consulted by step 4 of AuthorizeActionUseCase, so a permission opted into it does not demand a unit target and a unit-scoped role such as manager or hr can manage the restaurant-level job-function catalogue; the default stays fail-closed and membership is per permission, enumerated and tested
 context_stage: 3.4-staff-access-scope
@@ -159,3 +159,14 @@ presumes the design of #41; it only avoids foreclosing it.
 - `docs/domain/staff/workforce.md` §3.2
 - ADR 2.2.0002 (two fail-closed axes), ADR 3.4.0006 (the two staff permissions)
 - Issue #41 — per-unit enablement of job functions
+
+## Supersessão parcial
+
+**2026-11-23 — a frase de §Consequences → Neutral *"The catalogue routes therefore have no
+unit-level visibility check at all, which is correct"* foi superada, para renomear e apagar, pelo
+[ADR 0.0.0023](./0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md) (issue #207).** A rota continua sem nomear unidade e autoriza `manage_job_functions` só no
+tenant, como esta decisão permite; quem passa a nomear unidades é o **use case**, depois de ler a
+função: cada unidade em que ela vale (com o passo 5 de visibilidade, que a §Decision 4 preserva
+sempre que uma unidade é nomeada), ou `manage_tenant` quando ela vale em todas. A isenção de
+`TENANT_WIDE_PERMISSIONS`, o passo 4 e a totalidade testada não mudam. Nota *append-only*; o corpo
+acima não foi editado.

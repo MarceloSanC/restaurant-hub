@@ -152,6 +152,15 @@ nenhum módulo de `features/<a>/` importa `features/<b>/`. A única exceção te
   `unmatched_ignore_imports_alerting = error`), e um teste assere a **lista exata** — uma
   segunda aresta entra por decisão, nunca por deriva.
 
+**Os use cases que só a fachada chama não autorizam** ([ADR 0.0.0020](./adr/0_0_0020-identity-use-cases-authorize-their-own-target.md)):
+quem autoriza é o consumidor da fachada, então um terceiro importador reabriria a decisão.
+O alcance deles — só `features.identity.application.facade` e o `composition_root` os
+importam — é guardado pelo teste CA14 (`test_use_cases_authorize.py`, que varre `src/` por
+AST, inclusive import por string) e repetido na parte estática pelo contrato
+`identity-facade-only-reach` do import-linter (`type = protected`, issue #246). A lista de
+módulos do contrato é a de `_FACADE_ONLY` do CA14, e um teste trava a igualdade: use case
+facade-only novo entra nas duas no mesmo commit.
+
 **O tradutor de acesso também é um adapter da aresta** (issue #47, [ADR 0.0.0016](./adr/0_0_0016-staff-access-guard-is-an-adapter-over-an-identity-access-facade.md),
 que supera o ADR 3.4.0001 §3 e fecha o ADR 3.5.0001 §5): o `AccessGuard` de staff é
 `features/staff/adapters/out/identity/local_access_guard.py`. Ele **autoriza** pela fachada
@@ -257,8 +266,11 @@ composition root ([ADR 2.6.0001](./adr/2_6_0001-identity-unit-of-work-port-and-a
 - **`scripts/check_layout.py` regra 10** reprova o use case com duas ou mais
   escritas que não estejam todas dentro de **um** bloco de unidade (escrita em
   laço conta duas; só o "grava e recusa" é tolerado fora). Exceções vivem numa
-  allowlist contável, como a do charter (regra 6) — hoje, as duas travessias de
-  staff para identity.
+  allowlist contável, como a do charter (regra 6) — hoje, as travessias de staff
+  para identity (ADR 2.6.0002, nota da Stage 3.10). A chamada a uma função de
+  módulo de `use_cases/` que grava por um parâmetro anotado com o port (ou chama
+  outra que grava) conta como escrita do use case: a lista desses auxiliares é
+  **derivada** do código (`helper_writes`, issue #243), não escrita à mão.
 
 ## 6. Composition Root
 

@@ -14,10 +14,12 @@ Achado por revisão, não por sintoma — que é o modo de falha que este arquiv
 existe para tornar barulhento.
 
 **Lista explícita + asserção de que ela cobre a configuração**, o par de sempre.
-A lista aqui é a dos módulos que decidem acesso (os quatro da issue, o port da
-Stage 2.7 e o provisionamento de conta da issue #211); a asserção seguinte cobra
-o `pyproject.toml` contra ela nos dois sentidos, para que nem um módulo saia do
-escopo por edição distraída, nem um quinto entre sem que a issue que o justifica
+A lista aqui tem dois critérios de entrada: os módulos que decidem acesso (os
+quatro da issue, o port da Stage 2.7, o provisionamento de conta da issue #211 e
+as regras do vínculo de login da Stage 3.10) e o adapter Postgres da escala
+(issue #217); a asserção seguinte cobra o `pyproject.toml` contra ela nos dois
+sentidos, para que nem um módulo saia do escopo por edição distraída, nem outro
+entre sem que a issue que o justifica
 seja escrita neste arquivo.
 """
 
@@ -29,8 +31,10 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Iterable
+from typing import Any
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
@@ -38,7 +42,8 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
 # Os módulos que decidem acesso: os quatro que a issue #45 nomeia, o port da
-# Stage 2.7 e o provisionamento de conta (issue #211). Um novo entra aqui com a
+# Stage 2.7, o provisionamento de conta (issue #211) e as regras do vínculo de login
+# (Stage 3.10). Um novo entra aqui com a
 # justificativa ao lado — e só então no `pyproject.toml`.
 _MODULOS_DE_ACESSO = frozenset(
     {
@@ -62,8 +67,37 @@ _MODULOS_DE_ACESSO = frozenset(
         # (issue #211): o conjunto decide qual conta privilegiada pode nascer por
         # uma entrada que não autoriza — o mesmo critério de entrada dos demais.
         "src/restaurant_hub/features/identity/application/use_cases/provision_account.py",
+        # Quem recebe login sobre qual registro (Stage 3.10, ADR 3.10.0002 §3): a
+        # elegibilidade da conta existente — tenant do registro, alcance da unidade, a
+        # mesma recusa para conta alheia e `platform_admin` — e o ponto único da regra
+        # de fim de vínculo, que decide de quem as sessões caem (ADR 3.10.0001 §5).
+        # Entrou pela auditoria do PR #230.
+        "src/restaurant_hub/features/staff/application/use_cases/_login_link.py",
     }
 )
+
+# O adapter Postgres da escala (issue #217): segundo critério de entrada, fora do
+# acesso. `schedule_repository.py` decide as leis L-SC1 a L-SC9 e grava a trilha na
+# mesma transação; `mappers.py` é o codec da trilha, contrato de dados (ADR 4.4.0002).
+# Os mutantes deles só morrem nos testes que falam com o banco — daí as guardas de
+# seleção e de banco no fim deste bloco.
+_ADAPTER_POSTGRES_DA_ESCALA = frozenset(
+    {
+        "src/restaurant_hub/features/scheduling/adapters/out/postgres/schedule_repository.py",
+        "src/restaurant_hub/features/scheduling/adapters/out/postgres/mappers.py",
+    }
+)
+
+_ESCOPO_DA_MUTACAO = _MODULOS_DE_ACESSO | _ADAPTER_POSTGRES_DA_ESCALA
+
+# Os testes que matam os mutantes do adapter: o contrato (`[postgres]`) e a integração.
+_TESTES_QUE_FALAM_COM_O_BANCO = (
+    "tests/contract/features/scheduling",
+    "tests/integration/features/scheduling",
+)
+
+_AUDIT_GATE = _REPO_ROOT / ".github" / "workflows" / "audit-gate.yml"
+_JOB_DE_MUTACAO = "mutation"
 
 
 def _config_do_mutmut() -> dict[str, object]:
@@ -88,7 +122,7 @@ def test_todo_caminho_do_only_mutate_existe() -> None:
     )
 
 
-def test_o_escopo_do_mutmut_e_exatamente_os_modulos_de_acesso() -> None:
+def test_o_escopo_do_mutmut_e_exatamente_os_modulos_declarados() -> None:
     """Nos dois sentidos: nada sai sem ser notado, nada entra sem justificativa.
 
     Um módulo a menos é o rename repetido; um módulo a mais é o escopo
@@ -98,10 +132,80 @@ def test_o_escopo_do_mutmut_e_exatamente_os_modulos_de_acesso() -> None:
     caminhos = _config_do_mutmut()["only_mutate"]
     assert isinstance(caminhos, list)
 
-    assert set(caminhos) == _MODULOS_DE_ACESSO, (
-        f"só no pyproject: {sorted(set(caminhos) - _MODULOS_DE_ACESSO)}; "
-        f"só nesta lista: {sorted(_MODULOS_DE_ACESSO - set(caminhos))}"
+    assert set(caminhos) == _ESCOPO_DA_MUTACAO, (
+        f"só no pyproject: {sorted(set(caminhos) - _ESCOPO_DA_MUTACAO)}; "
+        f"só nesta lista: {sorted(_ESCOPO_DA_MUTACAO - set(caminhos))}"
     )
+
+
+def _excluidos_da_selecao(selecao: list[str], alvos: Iterable[str]) -> list[str]:
+    """Os argumentos da seleção que tiram da corrida um dos `alvos`, ou a filtram por nome/marca.
+
+    `--ignore`/`--deselect` de um alvo, de um pai ou de um filho dele contam; `-m`, `-k` e
+    `--ignore-glob` contam sempre — o efeito deles sobre os alvos não é decidível pelo texto.
+    """
+    excluidos: list[str] = []
+    for argumento in selecao:
+        opcao, _, valor = argumento.partition("=")
+        if opcao in {"-m", "-k", "--ignore-glob"}:
+            excluidos.append(argumento)
+        elif opcao in {"--ignore", "--deselect"}:
+            caminho = valor.split("::")[0].rstrip("/")
+            if any(_dentro(caminho, alvo) or _dentro(alvo, caminho) for alvo in alvos):
+                excluidos.append(argumento)
+    return excluidos
+
+
+def test_a_corrida_roda_os_testes_que_matam_os_mutantes_do_adapter() -> None:
+    """Issue #217: sem os testes `[postgres]` e de integração, o adapter sai com "N/N" falso.
+
+    Um mutante do adapter que nenhum teste selecionado executa vira `no_tests`, e o
+    `check_mutation_run.py` o conta como testado: a corrida ficaria verde sem ter medido
+    a persistência. A propriedade cobrada é a da seleção, não a lista exata (que o
+    teste do `check_layout` acima já fixa): nenhum argumento dela tira esses testes.
+    """
+    selecao = _config_do_mutmut()["pytest_add_cli_args_test_selection"]
+    assert isinstance(selecao, list)
+    for pasta in _TESTES_QUE_FALAM_COM_O_BANCO:
+        assert (_REPO_ROOT / pasta).is_dir(), f"{pasta} sumiu: a guarda cobraria pasta morta"
+
+    assert _excluidos_da_selecao(selecao, _TESTES_QUE_FALAM_COM_O_BANCO) == []
+
+
+@pytest.mark.parametrize(
+    ("selecao", "esperado"),
+    [
+        (["--ignore=tests/unit/test_check_layout.py"], []),
+        (["--ignore=tests/integration"], ["--ignore=tests/integration"]),
+        (["--ignore=tests/contract/"], ["--ignore=tests/contract/"]),
+        (
+            ["--ignore=tests/integration/features/scheduling/adapters/out/postgres/x.py"],
+            ["--ignore=tests/integration/features/scheduling/adapters/out/postgres/x.py"],
+        ),
+        (
+            ["--deselect=tests/contract/features/scheduling/test_a.py::t"],
+            ["--deselect=tests/contract/features/scheduling/test_a.py::t"],
+        ),
+        (["-m=unit"], ["-m=unit"]),
+        (["-k=not postgres"], ["-k=not postgres"]),
+        (["--ignore-glob=*laws*"], ["--ignore-glob=*laws*"]),
+        # Prefixo de nome não é pasta.
+        (["--ignore=tests/integration/features/sched"], []),
+    ],
+)
+def test_a_guarda_de_selecao_acusa_o_que_tira_os_testes_do_banco(
+    selecao: list[str], esperado: list[str]
+) -> None:
+    assert _excluidos_da_selecao(selecao, _TESTES_QUE_FALAM_COM_O_BANCO) == esperado
+
+
+def test_o_job_de_mutacao_da_aos_testes_um_postgres() -> None:
+    """Sem o service, todo mutante do adapter morreria por erro de conexão — "N/N" medindo nada."""
+    workflow: dict[str, Any] = yaml.safe_load(_AUDIT_GATE.read_text(encoding="utf-8"))
+    job: dict[str, Any] = workflow["jobs"][_JOB_DE_MUTACAO]
+
+    assert job["services"]["postgres"]["image"].startswith("postgres:")
+    assert job["env"]["DATABASE_URL"].startswith("postgresql")
 
 
 def test_todo_caminho_do_also_copy_existe() -> None:
@@ -128,20 +232,31 @@ def test_o_gate_estrutural_do_check_layout_fica_fora_da_corrida() -> None:
     mutado.)
     Se alguém tirar o `--ignore` por achar que é sobra, a corrida volta a morrer
     na coleta de estatísticas — e este teste diz o porquê antes disso.
+
+    Desde a issue #205 há um segundo, pelo mesmo motivo estrutural:
+    `test_setup_token_issuance_rule10.py` roda a regra 10 sobre o `src/` real e
+    conta os blocos de unidade de `provision_account.py`, que dentro de `mutants/`
+    tem uma cópia de `execute` por mutante — a varredura reprova (medido: o run
+    45113622689 morreu em `failed to collect stats`). É gate sobre o texto do
+    fonte; não mataria mutante nenhum.
     """
     selecao = _config_do_mutmut()["pytest_add_cli_args_test_selection"]
     assert isinstance(selecao, list)
 
-    # Conjunto exato, não pertinência: um segundo `--ignore` entraria calado e a
+    # Conjunto exato, não pertinência: um terceiro `--ignore` entraria calado e a
     # corrida mediria menos suíte com o mesmo "N/N" — a mesma classe do caminho
     # morto em `only_mutate` que este arquivo existe para tornar barulhento.
-    assert selecao == ["--ignore=tests/unit/test_check_layout.py"]
+    assert selecao == [
+        "--ignore=tests/unit/test_check_layout.py",
+        "--ignore=tests/unit/features/identity/application/test_setup_token_issuance_rule10.py",
+    ]
 
-    ignorado = selecao[0].removeprefix("--ignore=")
-    assert (_REPO_ROOT / ignorado).is_file(), (
-        f"o --ignore aponta para {ignorado}, que não existe: a exclusão está morta "
-        f"e a corrida voltaria a morrer na coleta de estatísticas"
-    )
+    for opcao in selecao:
+        ignorado = opcao.removeprefix("--ignore=")
+        assert (_REPO_ROOT / ignorado).is_file(), (
+            f"o --ignore aponta para {ignorado}, que não existe: a exclusão está morta "
+            f"e a corrida voltaria a morrer na coleta de estatísticas"
+        )
 
 
 # ---------------------------------------------------------------------------

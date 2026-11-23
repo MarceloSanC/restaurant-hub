@@ -68,6 +68,8 @@ class JobFunctionEnablementChangedError(StaffApplicationError):
     conjunto novo por cima seria autorizar contra um estado que não é mais o
     gravado: com a função em `{A}`, o dono alarga para `{A, B}` e um gerente de A
     reenvia `{A}` — B sairia por um ator sem alcance sobre B (ADR 3.11.0001 §5).
+    Desde a issue #207 renomear (`update`, L-JF2) e apagar (`delete`, L-JF3) também
+    são autorizados contra a habilitação lida e recusam pela mesma condição.
 
     Fica sob a raiz de **aplicação** (ADR 3.9.0001 §3): não há regra de produto de
     concorrência em staff, como a F8 é para a escala; a condição nasce da forma
@@ -249,3 +251,34 @@ class EmployeeHasLoginError(StaffError):
         super().__init__(
             f"funcionário com login não pode ser removido; desligue-o: {employee_id!r}"
         )
+
+
+class LoginAccountNotFoundError(StaffApplicationError):
+    """Nenhuma conta elegível com o e-mail informado (Stage 3.10, ADR 3.10.0002 §3).
+
+    Vincular ou trocar o login exige uma conta que já existe, do **restaurante do
+    registro**, que alcança a **unidade do registro**. Conta inexistente, de outro
+    restaurante, de administrador da plataforma ou sem alcance sobre a unidade caem
+    **todas** aqui, com a mesma mensagem: nenhuma resposta distingue "não existe" de
+    "existe fora do seu alcance" (ADR 3.4.0007 §4). Recurso referenciado ausente,
+    como `JobFunctionNotFoundError` — por isso a raiz de aplicação. A mensagem cita
+    só o e-mail enviado.
+    """
+
+    def __init__(self, email: str) -> None:
+        super().__init__(f"nenhuma conta deste restaurante com o e-mail nesta unidade: {email!r}")
+
+
+class LoginAlreadyLinkedInUnitError(StaffError):
+    """A conta já está vinculada a outro registro da mesma unidade (Stage 3.10).
+
+    Um login por unidade: a mesma pessoa pode ter vários registros, **um por
+    unidade** (workforce §3.1; ADR 3.1.0001 iii). Regra de negócio que consulta os
+    outros registros da unidade, não transição do agregado — por isso mora aqui,
+    como `LoginEmailAlreadyInUseError`, sob a raiz de domínio (ADR 3.10.0001 §6).
+    Conflito com estado já gravado. Nomeia o registro que se tentou vincular, não
+    o outro.
+    """
+
+    def __init__(self, employee_id: str) -> None:
+        super().__init__(f"a conta já está vinculada a outro registro da unidade: {employee_id!r}")

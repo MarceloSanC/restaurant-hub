@@ -68,17 +68,19 @@ class InMemoryJobFunctionRepository:
         real aplica sob o lock da linha.
         """
         self._store.record("job_functions.update_enablement")
-        gravada = self._find(job_function.tenant_id, job_function.id)
-        if gravada is None:
-            raise JobFunctionNotFoundError(job_function.id)
-        if gravada.unit_enablement != expected:
-            raise JobFunctionEnablementChangedError(job_function.id)
+        gravada = self._require_unchanged(job_function.tenant_id, job_function.id, expected)
         self._store.job_functions[job_function.id] = gravada.with_enablement(
             job_function.unit_enablement
         )
 
-    def update(self, job_function: JobFunction) -> None:
-        """L-JF2 — `UPDATE`, não upsert; a guarda de nome ignora a própria função."""
+    def update(self, job_function: JobFunction, expected: UnitEnablement) -> None:
+        """L-JF2 — `UPDATE`, não upsert; a guarda de nome ignora a própria função.
+
+        Desde a issue #207, condicional à habilitação lida: gravada diferente de
+        `expected` ⇒ `JobFunctionEnablementChangedError`, depois do lookup e antes
+        da guarda de nome — a ordem do adapter real, que compara sob o lock da linha
+        e só então emite o `UPDATE` que o índice único pode recusar.
+        """
         self._store.record("job_functions.update")
         # Lookup por (tenant_id, id) ANTES de qualquer outra guarda (§5.4).
         #
@@ -91,8 +93,7 @@ class InMemoryJobFunctionRepository:
         # (índice único vs. lookup por PK). Onde a ordem É discriminável, ela
         # está travada por teste: `delete` (NotFound vence InUse) e
         # `EmployeeRepository.update` (NotFound vence Relocation).
-        if self._find(job_function.tenant_id, job_function.id) is None:
-            raise JobFunctionNotFoundError(job_function.id)
+        self._require_unchanged(job_function.tenant_id, job_function.id, expected)
         self._guard_name(job_function)
         # L-JF2 grava **só o nome** (Stage 3.11): a habilitação gravada sobrevive,
         # qualquer que seja a da entidade recebida — espelha o `SET name` do
@@ -100,11 +101,17 @@ class InMemoryJobFunctionRepository:
         gravada = self._store.job_functions[job_function.id]
         self._store.job_functions[job_function.id] = gravada.rename(job_function.name)
 
-    def delete(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> None:
-        """L-JF3 — remoção guardada por referências, de registros ativos e inativos."""
+    def delete(
+        self, tenant_id: TenantId, job_function_id: JobFunctionId, expected: UnitEnablement
+    ) -> None:
+        """L-JF3 — remoção guardada por referências, de registros ativos e inativos.
+
+        Desde a issue #207, condicional à habilitação lida: NotFound ⇒ mudança ⇒
+        referências, a ordem do adapter real (o lookup sob lock compara antes do
+        `DELETE` que a FK `RESTRICT` recusa).
+        """
         self._store.record("job_functions.delete")
-        if self._find(tenant_id, job_function_id) is None:
-            raise JobFunctionNotFoundError(job_function_id)
+        self._require_unchanged(tenant_id, job_function_id, expected)
         # A referência conta em qualquer unidade do tenant e independentemente
         # do estado do funcionário: o desligado ainda aponta para a função.
         referenciada = any(
@@ -174,6 +181,22 @@ class InMemoryJobFunctionRepository:
         if job_function is None or job_function.tenant_id != tenant_id:
             return None
         return job_function
+
+    def _require_unchanged(
+        self, tenant_id: TenantId, job_function_id: JobFunctionId, expected: UnitEnablement
+    ) -> JobFunction:
+        """A condição das três escritas sobre função existente (issues #206 e #207).
+
+        Ausente no tenant ⇒ `NotFound` **antes** da comparação; gravada diferente
+        da lida ⇒ `JobFunctionEnablementChangedError`. A igualdade é a do VO
+        inteiro — flag e conjunto —, a mesma que o adapter real aplica sob o lock.
+        """
+        gravada = self._find(tenant_id, job_function_id)
+        if gravada is None:
+            raise JobFunctionNotFoundError(job_function_id)
+        if gravada.unit_enablement != expected:
+            raise JobFunctionEnablementChangedError(job_function_id)
+        return gravada
 
     def _guard_name(self, job_function: JobFunction) -> None:
         """Unicidade de nome no tenant, **ignorando a própria função**.

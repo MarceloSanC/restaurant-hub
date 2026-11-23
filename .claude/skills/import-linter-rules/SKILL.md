@@ -43,6 +43,12 @@ ones **cannot** import upper ones.
   import `pydantic`).
 - `type = independence` — forbid BCs from importing each other (keeps
   vertical slicing).
+- `type = protected` — only the `allowed_importers` may import the
+  `protected_modules` (e.g., `identity-facade-only-reach`, issue #246).
+  Checks **direct** imports only, so a legit chain through an allowed
+  importer does not break it (`forbidden` checks indirect imports too).
+  Each protected module exempts only itself and its descendants: two
+  protected modules importing each other still break the contract.
 
 ## DO
 

@@ -5,7 +5,7 @@ when-use: Reference before adding a second write to any use case, before making 
 keywords: [adr, unit-of-work, scope, bounded-context, cross-bc, side-effect, email, outbox, gate, check-layout, allowlist, staff, identity]
 status: accepted
 created_at: 2026-10-19
-updated_at: 2026-10-19
+updated_at: 2026-11-23
 adr_id: 2.6.0002
 decision: the five identity use cases that write more than once (set_password_with_token, invite_user, provision_account, request_password_reset, refresh_session's rotation) run their writes inside the identity unit; staff gets no unit because none of its use cases writes twice inside staff, and its two cross-BC crossings (create_login_for_employee, deactivate_employee) keep their ordered, declared windows because a transaction across bounded contexts is rejected by ADR 4.1.0006; e-mail is sent after commit; SessionRepository.revoke reports whether it revoked so that a concurrent rotation loser is treated as reuse; check_layout rule 10 requires every use case with two or more writes to keep all of them inside exactly one unit (only write-and-refuse tolerated outside) unless it is in a counted allowlist citing this ADR
 context_stage: 2.6-identity-unit-of-work
@@ -189,3 +189,60 @@ which the rule does see; the staff gateway is an adapter). None exists today.
   [3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md)
 - Concept 3.5 §6.4 and §10; concept 2.5 §5 rule 13
 - Issue: #46; issue #45 (gates)
+
+## Nota — "None exists today", lido ao pé da letra (issue #205, 2026-11-23)
+
+A frase que fecha os pontos cegos declarados (*"None exists today"*) já não vale na letra para o
+segundo deles, *"a repository handed to a module-level function"*: helpers de módulo de
+scheduling recebem repositório — `_inputs.settings_of(config, ...)`,
+`_inputs.neighbours_of(schedules, ...)`, `_publish.load_for_edit(schedules, ...)` e
+`_publish.run_batch(schedules, config, ...)`. Todos só leem (`find_settings`, `list_in_range`,
+`find_by_id`), então nenhuma escrita escapa da regra 10 e a garantia continua de pé; o que ficou
+defasado é a afirmação. Desde a issue #205 há também `_invitation.issue_setup_token`, que de
+propósito não recebe repositório ([ADR 0.0.0024](./0_0_0024-setup-token-issuance-is-one-write-free-helper.md),
+com teste que reprova se passar a receber). Seguir, de forma geral, repositório ou gateway entregue
+a helper de módulo é o escopo da issue #243. Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — duas travessias novas na allowlist da regra 10 (Stage 3.10, 2026-11-23)
+
+O campo `decision` enumera duas travessias de staff para identity
+(`create_login_for_employee`, `deactivate_employee`). Desde a Stage 3.10 são quatro:
+`RelinkLoginUseCase` e `UnlinkLoginUseCase` revogam as sessões do login em identity, pelo
+ponto único `end_active_link`, antes de gravar o vínculo em staff — a mesma ordem de R13
+(ADR 3.5.0003 §2) e o mesmo motivo de ficarem fora de uma unidade de trabalho (§2: não
+há transação entre BCs). A regra 10 passou a contar a chamada a um auxiliar declarado em
+`HELPER_WRITES` como escrita do use case que o chama; sem isso a entrada de
+`DeactivateEmployeeUseCase` ficaria morta ([ADR 3.10.0001](./3_10_0001-login-link-transitions-by-conditional-write.md)
+§5). Nota *append-only*; o corpo acima não foi editado.
+
+## Nota — os auxiliares que escrevem passam a ser derivados (issue #243, 2026-11-23)
+
+O segundo ponto cego do §5, *"a repository handed to a module-level function"*, fecha-se para a
+forma que o código usa. A tabela `HELPER_WRITES` da nota da Stage 3.10, escrita à mão, saiu de
+`scripts/check_layout.py`; no lugar dela, `helper_writes` deriva da árvore toda função de módulo de
+`use_cases/` (de qualquer BC) que chama um método de escrita — pelo mesmo `is_write` das classes —
+sobre um **parâmetro anotado** com o port, ou que chama outra função que escreve (fecho
+transitivo). A chamada a uma delas conta como escrita do use case que a faz, resolvida pelo import
+(um homônimo que só lê, noutro módulo, não conta); a de um auxiliar com duas escritas, escrita em
+laço ou recursão conta como duas, como a escrita em laço deste §5. O critério da issue, "entrada
+que deixou de escrever reprova", vira propriedade da allowlist: se o auxiliar para de gravar, o use
+case perde a escrita e a entrada dele aqui reprova como morta.
+
+Medido em `develop` (`8c7b16b`): das 40 funções de módulo de `use_cases/`, a derivação acha **uma**
+que escreve, `_login_link.end_active_link` (`IdentityGateway.revoke_login_sessions`) — a mesma da
+tabela —, e os quatro use cases da allowlist são os mesmos. Os auxiliares de scheduling e
+`_invitation` recebem port só para ler, ou para enviar e-mail, que o §3 deixa fora da contagem
+(o `EmailSender` não é repositório nem gateway declarado).
+
+A auditoria do PR #257 plantou o auxiliar por cada caminho e fechou três que escapavam: método
+estático ou de classe de um módulo de `use_cases/` (entra como `C.f`); a função que escreve citada
+sem ser chamada ali (`functools.partial`, passada como `Callable`, alias local `g = f`), que conta
+como a escrita, fail-closed; e o repositório entregue por parâmetro a um método da própria classe
+do use case (`self._salvar(self._coisas)`), que conta como a escrita pelo atributo.
+
+**Pontos cegos que continuam declarados** (nenhum tem caso hoje): parâmetro sem anotação (o mypy
+strict o barra em `src/`), inclusive `lambda`; repositório dentro de objeto de contexto (atributo
+ou método de instância dele), num alias local, ou entregue como método ligado (`Callable`, o limite
+que a auditoria da #205 declarou no guarda dela); `getattr` dinâmico; função fora de `use_cases/`
+ou fora do nível do módulo. A allowlist do §5 não mudou. Nota *append-only*; o corpo acima não foi
+editado.
