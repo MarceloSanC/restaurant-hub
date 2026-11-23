@@ -151,10 +151,14 @@ def test_registro_fora_do_endereco_e_404() -> None:
     assert _relido(fakes).user_id == login
 
 
-def test_falha_da_revogacao_sobe_crua_e_nada_e_gravado() -> None:
+@pytest.mark.parametrize("onde", ["consulta_de_papel", "revogacao"])
+def test_falha_de_identity_na_regra_sobe_crua_e_nada_e_gravado(onde: str) -> None:
     fakes, gateway, login = _arranjo()
     falha = RuntimeError("identity fora")
-    gateway.fail_role_query_with = falha
+    if onde == "revogacao":
+        gateway.fail_revoke_with = falha
+    else:
+        gateway.fail_role_query_with = falha
 
     with pytest.raises(RuntimeError) as excinfo:
         _desvincular(fakes, gateway)
