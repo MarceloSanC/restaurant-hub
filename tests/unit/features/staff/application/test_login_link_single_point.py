@@ -65,7 +65,7 @@ _TRANSICOES_QUE_ENCERRAM: Final = frozenset(
 
 # Os use cases que encerram vínculo ativo, transcritos — a varredura deriva o conjunto
 # do código e compara. Use case novo que encerre vínculo entra aqui por decisão.
-_ENCERRAM_VINCULO: Final = frozenset({"deactivate_employee"})
+_ENCERRAM_VINCULO: Final = frozenset({"unlink_login", "deactivate_employee"})
 
 
 # --- 1. estrutura ------------------------------------------------------------

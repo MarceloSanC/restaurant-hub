@@ -645,6 +645,10 @@ HELPER_WRITES: dict[str, str] = {
 # justificada no teste de não-crescimento, e entrada que já não corresponde a um
 # use case que violaria a regra reprova também.
 MULTI_WRITE_ALLOWLIST: dict[str, str] = {
+    "UnlinkLoginUseCase": (
+        "ADR 2.6.0002 §2 — revoga as sessões em identity (end_active_link) antes de "
+        "gravar o vínculo em staff (ADR 3.10.0001 §5); transação entre BCs rejeitada"
+    ),
     "CreateLoginForEmployeeUseCase": (
         "ADR 2.6.0002 §2 — travessia staff → identity (conta pela fachada, depois o "
         "vínculo em staff); transação entre BCs rejeitada pelo ADR 4.1.0006 Alt. A"
