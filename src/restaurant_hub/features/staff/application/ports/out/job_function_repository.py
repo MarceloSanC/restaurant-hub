@@ -38,6 +38,17 @@ condicionada, desde a issue #206, à habilitação que o chamador leu.
 `update` (L-JF2) **não** a grava: renomear e mudar unidades são escritas
 distintas para que uma não regrave a outra sob concorrência.
 
+**Leitura coerente (issue #225).** Toda leitura deste port — os dois `find_*`,
+`find_all_by_ids`, `list_by_tenant` e `list_by_unit` — devolve cada função como
+ela estava gravada **num mesmo instante**: com uma alteração comitando no meio
+da leitura, vem o estado de antes **ou** o de depois, nunca uma mistura dos dois,
+e nunca um erro causado pela corrida (a combinação incoerente que
+`UnitEnablement` recusa só aparece se estiver de fato gravada). Numa listagem o
+instante é **um só para todas as funções**: o resultado não junta uma função de
+antes de uma alteração com outra de depois dela. O lookup de `delete` (L-JF3)
+também não levanta por corrida. O fake cumpre a lei por construção (não há
+leitura concorrente em memória); o adapter Postgres, lendo sob snapshot único.
+
 **Escopo de tenant na assinatura** (ADR 3.2.0002): não existe operação sem
 `tenant_id`. A alternativa — buscar por id e comparar `entity.tenant_id` no use
 case — só protege enquanto **cada** use case lembrar de comparar, e um use case

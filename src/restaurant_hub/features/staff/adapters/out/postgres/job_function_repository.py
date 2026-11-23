@@ -11,10 +11,9 @@ regra 10 do `check_layout` o obriga a decidir.
 
 Para manter a troca barata quando esse consumidor existir, o núcleo reusado
 opera sobre `Connection` — as três escritas e o lookup de `delete`, que é o
-único ponto em que uma operação precisa do resultado de outra. As três leituras
-sem reuso (`find_by_name`, `find_all_by_ids`, `list_by_tenant`) embutem a
-consulta no método público: extrair um privado de um só chamador seria
-indireção sem ponto de troca a servir.
+único ponto em que uma operação precisa do resultado de outra. As leituras
+embutem a consulta no método público: extrair um privado de um só chamador
+seria indireção sem ponto de troca a servir.
 
 Três decisões deste arquivo carregam lei e não são estilo:
 
@@ -39,6 +38,25 @@ própria, `update_enablement`, para que uma renomeação concorrente a uma alter
 de unidades não regrave a habilitação antiga. Desde a issue #206 essa escrita é
 condicional à habilitação lida pelo chamador, decidida sob o lock da linha.
 
+**As leituras rodam sob `REPEATABLE READ`** (issue #225; ADR 3.3.0006 §c, o
+mesmo snapshot único das leituras de agregado de funcionário). Linha e vínculos
+são dois statements, e sob `READ COMMITTED` cada um abre snapshot próprio: uma
+alteração de "conjunto" para "todas" que comitasse entre os dois deixaria a
+leitura com a flag antiga e nenhum vínculo — combinação que `UnitEnablement`
+recusa, e a leitura responderia 422. Sob o snapshot único a leitura vê um
+instante só, e numa listagem o instante é o mesmo para todas as funções. Leitura
+pura em `REPEATABLE READ` não sofre erro de serialização: só a transação que
+escreve ou trava linha o sofre (PostgreSQL 16, §13.2.2). O nível é posto pelo
+método público, não pelo núcleo sobre `Connection` — uma unidade de trabalho
+aberta no nível default perderia o snapshot único destas leituras, o mesmo aviso
+do `employee_repository`.
+
+Duas exceções deliberadas ficam em `READ COMMITTED`: a remontagem de
+`update_enablement`, que roda sob o lock da linha e precisa reler o que a
+alteração anterior comitou (ver o método), e o lookup de `delete`, que não
+remonta a habilitação — só pergunta se a função existe, então não tem duas
+metades para ver de instantes diferentes.
+
 E a ordem, que é lei do port desde a Stage 3.3 (`L-ORD`, ADR 3.3.0003):
 `ORDER BY name COLLATE "C", id COLLATE "C"` nas duas listagens, com a colação
 **nas duas colunas** — `COLLATE` liga-se ao operando à sua esquerda, e um `id`
@@ -49,7 +67,8 @@ SQL compilado (CA10b).
 """
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import Connection, Engine, Row, or_, select
@@ -85,6 +104,9 @@ _TOTAL_ORDER = (
     job_functions.c.name.collate("C"),
     job_functions.c.id.collate("C"),
 )
+
+# Snapshot único nas leituras (issue #225) — ver o docstring do módulo.
+_SINGLE_SNAPSHOT = "REPEATABLE READ"
 
 
 class PostgresJobFunctionRepository:
@@ -203,12 +225,20 @@ class PostgresJobFunctionRepository:
 
     def find_by_id(self, tenant_id: TenantId, job_function_id: JobFunctionId) -> JobFunction | None:
         """Função **do tenant**, ou `None` — id alheio é indistinguível de inexistente."""
-        with self._engine.connect() as connection:
-            return self._find_by_id(connection, tenant_id, job_function_id)
+        with self._in_single_snapshot() as connection:
+            row = connection.execute(
+                select(job_functions).where(
+                    job_functions.c.id == job_function_id,
+                    job_functions.c.tenant_id == tenant_id,
+                )
+            ).one_or_none()
+            if row is None:
+                return None
+            return self._hydrate(connection, [row])[0]
 
     def find_by_name(self, tenant_id: TenantId, name: str) -> JobFunction | None:
         """Homônima do tenant, ou `None`. Comparação **verbatim** — `=`, nunca `ILIKE`."""
-        with self._engine.connect() as connection:
+        with self._in_single_snapshot() as connection:
             row = connection.execute(
                 select(job_functions).where(
                     job_functions.c.tenant_id == tenant_id,
@@ -230,7 +260,7 @@ class PostgresJobFunctionRepository:
         """
         if not job_function_ids:
             return ()
-        with self._engine.connect() as connection:
+        with self._in_single_snapshot() as connection:
             rows = connection.execute(
                 select(job_functions)
                 .where(
@@ -246,7 +276,7 @@ class PostgresJobFunctionRepository:
 
     def list_by_tenant(self, tenant_id: TenantId) -> tuple[JobFunction, ...]:
         """L-JF5 — todas as do tenant e nenhuma de outro; `L-ORD` — em ordem total."""
-        with self._engine.connect() as connection:
+        with self._in_single_snapshot() as connection:
             rows = connection.execute(
                 select(job_functions)
                 .where(job_functions.c.tenant_id == tenant_id)
@@ -266,7 +296,7 @@ class PostgresJobFunctionRepository:
             job_function_units.c.tenant_id == tenant_id,
             job_function_units.c.unit_id == unit_id,
         )
-        with self._engine.connect() as connection:
+        with self._in_single_snapshot() as connection:
             rows = connection.execute(
                 select(job_functions)
                 .where(
@@ -279,6 +309,23 @@ class PostgresJobFunctionRepository:
                 .order_by(*_TOTAL_ORDER)
             ).all()
             return self._hydrate(connection, rows)
+
+    @contextmanager
+    def _in_single_snapshot(self) -> Iterator[Connection]:
+        """Conexão em `REPEATABLE READ`, com a transação aberta explicitamente.
+
+        A forma de `PostgresEmployeeRepository._in_single_snapshot`: o nível é
+        execution option da **conexão** e vale antes do primeiro statement, e o
+        `begin()` explícito escreve a fronteira do snapshot em vez de deixá-la no
+        autobegin. O snapshot é tirado no primeiro statement e vale para os dois.
+        """
+        with (
+            self._engine.connect().execution_options(
+                isolation_level=_SINGLE_SNAPSHOT
+            ) as connection,
+            connection.begin(),
+        ):
+            yield connection
 
     # ---- núcleo sobre `Connection` (ponto de troca para um futuro UoW) -----
 
@@ -337,7 +384,17 @@ class PostgresJobFunctionRepository:
     def _delete(
         self, connection: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
     ) -> None:
-        if self._find_by_id(connection, tenant_id, job_function_id) is None:
+        # Só a existência, sem remontar a habilitação (issue #225): a remontagem
+        # são dois statements em `READ COMMITTED`, e uma alteração de unidades
+        # comitando entre eles faria a remoção responder um erro de dado
+        # incoerente que nunca esteve gravado.
+        found = connection.execute(
+            select(job_functions.c.id).where(
+                job_functions.c.id == job_function_id,
+                job_functions.c.tenant_id == tenant_id,
+            )
+        ).one_or_none()
+        if found is None:
             raise JobFunctionNotFoundError(job_function_id)
         connection.execute(
             job_functions.delete().where(
@@ -345,19 +402,6 @@ class PostgresJobFunctionRepository:
                 job_functions.c.tenant_id == tenant_id,
             )
         )
-
-    def _find_by_id(
-        self, connection: Connection, tenant_id: TenantId, job_function_id: JobFunctionId
-    ) -> JobFunction | None:
-        row = connection.execute(
-            select(job_functions).where(
-                job_functions.c.id == job_function_id,
-                job_functions.c.tenant_id == tenant_id,
-            )
-        ).one_or_none()
-        if row is None:
-            return None
-        return self._hydrate(connection, [row])[0]
 
     @staticmethod
     def _conflict_detail(error: IntegrityError, job_function: JobFunction) -> str:

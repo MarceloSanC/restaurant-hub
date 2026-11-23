@@ -17,6 +17,8 @@ exatamente o mesmo — e que portanto passa nas outras duas suítes inteiras:
 | `FOR UPDATE` + guarda do vínculo no `delete` (#108) | nada, sem vínculo concorrente | #108, aqui |
 | `tenant_id` no `WHERE` do `DELETE` (#108) | nada, o lookup sob lock já o conferiu | #108, aqui |
 | condição sob `FOR NO KEY UPDATE` em `update_enablement` (#206) | nada, sem corrida | #206, aqui |
+| snapshot único nas leituras de função (#225) | nada, sem alteração concorrente | #225, aqui |
+| lookup de `delete` sem remontar a habilitação (#225) | nada, sem corrida | #225, aqui |
 
 Por isso cada teste daqui **reproduz** o comportamento em vez de observar o
 resultado: prende um lock de verdade, força um entrelace de verdade, lê o SQL
@@ -85,7 +87,10 @@ from restaurant_hub.features.staff.application.use_cases.set_job_function_units 
 )
 from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
-from restaurant_hub.features.staff.domain.exceptions.errors import EmployeeAlreadyHasLoginError
+from restaurant_hub.features.staff.domain.exceptions.errors import (
+    EmployeeAlreadyHasLoginError,
+    InvalidUnitEnablementError,
+)
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
     JobFunctionId,
@@ -1368,3 +1373,200 @@ def test_issue_206_atribuicao_em_curso_da_funcao_nao_bloqueia_a_alteracao_de_uni
         )
 
     assert _habilitacao_gravada(motor_adapter) == _A_E_B
+
+
+# ---------------------------------------------------------------------------
+# Issue #225 — a leitura de função vê a habilitação de um instante só
+# ---------------------------------------------------------------------------
+#
+# Cada leitura remonta a habilitação em dois statements: a linha de
+# `job_functions` (com a flag) e, depois, os vínculos de `job_function_units`.
+# Sob `READ COMMITTED` cada statement abre snapshot próprio, e uma alteração de
+# "conjunto" para "todas" que comite entre os dois deixa a leitura com a flag
+# antiga (`false`) e os vínculos novos (nenhum): `UnitEnablement` recusa a
+# combinação e a leitura levanta `InvalidUnitEnablementError` (422). O
+# entrelace aqui é forçado logo depois do primeiro statement sobre a tabela da
+# função, e a escrita concorrente passa pelo próprio port, por outra conexão.
+
+_TODAS = UnitEnablement.everywhere()
+_SO_B = UnitEnablement.only(frozenset({_UB}))
+_F1_NOME = "Cozinheiro"
+_F2_NOME = "Chapeiro"
+
+# As cinco leituras do port (lei "Leitura coerente" do módulo do port). Se
+# nascer outra, esta tupla é o lugar que reclama.
+_LEITURAS_DE_FUNCAO = (
+    "find_by_id",
+    "find_by_name",
+    "find_all_by_ids",
+    "list_by_tenant",
+    "list_by_unit",
+)
+
+# Gatilho do entrelace: o primeiro statement sobre a linha da função. Não casa
+# com `FROM job_function_units`, a consulta dos vínculos.
+_GATILHO_LINHA_DA_FUNCAO = "FROM job_functions"
+
+
+def _ler_funcao(repositorio: PostgresJobFunctionRepository, metodo: str) -> JobFunction | None:
+    """A função `f1` pela leitura nomeada — a única do tenant semeado."""
+    if metodo == "find_by_id":
+        return repositorio.find_by_id(_A, _F1)
+    if metodo == "find_by_name":
+        return repositorio.find_by_name(_A, _F1_NOME)
+    if metodo == "find_all_by_ids":
+        encontradas = repositorio.find_all_by_ids(_A, frozenset({_F1}))
+    elif metodo == "list_by_tenant":
+        encontradas = repositorio.list_by_tenant(_A)
+    else:
+        encontradas = repositorio.list_by_unit(_A, _UA)
+    assert len(encontradas) <= 1, encontradas
+    return encontradas[0] if encontradas else None
+
+
+def _alterar(
+    motor: Engine, funcao: JobFunctionId, nome: str, de: UnitEnablement, para: UnitEnablement
+) -> None:
+    """Alteração das unidades pelo port, numa transação própria que comita ao voltar."""
+    PostgresJobFunctionRepository(motor).update_enablement(
+        JobFunction(id=funcao, tenant_id=_A, name=nome, unit_enablement=para), expected=de
+    )
+
+
+@pytest.mark.parametrize("metodo", _LEITURAS_DE_FUNCAO)
+def test_issue_225_conjunto_para_todas_no_meio_da_leitura_devolve_estado_coerente(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """O cenário da issue, para cada leitura: `{A}` → todas comita no meio, e a leitura não rasga.
+
+    A função vale em `{A}`. Logo depois que o leitor lê a linha da função (flag
+    `false`), outra conexão troca a habilitação para todas as unidades e comita:
+    flag `true` e vínculos apagados. Sob `READ COMMITTED` a consulta seguinte, a
+    dos vínculos, já vê zero vínculos, e a leitura levanta
+    `InvalidUnitEnablementError`. Com o snapshot único, vem `{A}` (antes) ou
+    todas (depois) — o port promete um estado que existiu, não qual dos dois.
+    """
+    motor_leitor = motores()
+    motor_escritor = motores()
+    _semear_funcao_em_a(motor_leitor)
+    repositorio = PostgresJobFunctionRepository(motor_leitor)
+
+    with _entrelacar(
+        motor_leitor,
+        _GATILHO_LINHA_DA_FUNCAO,
+        lambda: _alterar(motor_escritor, _F1, _F1_NOME, _SO_A, _TODAS),
+    ) as disparou:
+        lida = _ler_funcao(repositorio, metodo)
+
+    assert disparou[0], "o entrelace não disparou — a leitura não foi exercitada no meio"
+    assert _habilitacao_gravada(motor_escritor) == _TODAS, "a alteração concorrente não comitou"
+    assert lida is not None
+    assert lida.unit_enablement in (_SO_A, _TODAS), (
+        "leitura rasgada: a habilitação devolvida nunca esteve gravada"
+    )
+
+
+# As três listagens, cada uma com f1 e f2. O estado esperado depois das
+# alterações é por método porque f2 sai da unidade A.
+_LISTAGENS = ("find_all_by_ids", "list_by_tenant", "list_by_unit")
+
+
+def _listar(repositorio: PostgresJobFunctionRepository, metodo: str) -> tuple[JobFunction, ...]:
+    if metodo == "find_all_by_ids":
+        return repositorio.find_all_by_ids(_A, frozenset({_F1, _F2}))
+    if metodo == "list_by_tenant":
+        return repositorio.list_by_tenant(_A)
+    return repositorio.list_by_unit(_A, _UA)
+
+
+@pytest.mark.parametrize("metodo", _LISTAGENS)
+def test_issue_225_listagem_nao_mistura_funcoes_de_instantes_diferentes(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """Numa listagem, todas as funções vêm do mesmo instante (lei do port).
+
+    f1 vale em todas, f2 em `{A}`. No meio da listagem comitam, pelo port e
+    nesta ordem, f1 todas → `{A}` e f2 `{A}` → `{B}`. Os instantes gravados são
+    (todas, `{A}`) → (`{A}`, `{A}`) → (`{A}`, `{B}`). Sob `READ COMMITTED` a
+    listagem leria f1 pela flag antiga (todas) e f2 pelos vínculos novos (`{B}`)
+    — o par (todas, `{B}`), que **nunca** esteve gravado, e sem erro nenhum que
+    o denuncie. O entrelace dispara depois do primeiro statement; a listagem tem
+    de devolver um dos instantes gravados inteiro (aqui, o primeiro ou o último:
+    as duas alterações comitam juntas na janela).
+    """
+    motor_leitor = motores()
+    motor_escritor = motores()
+    funcoes = PostgresJobFunctionRepository(motor_leitor)
+    funcoes.add(JobFunction(id=_F1, tenant_id=_A, name=_F1_NOME, unit_enablement=_TODAS))
+    funcoes.add(JobFunction(id=_F2, tenant_id=_A, name=_F2_NOME, unit_enablement=_SO_A))
+
+    def _duas_alteracoes() -> None:
+        _alterar(motor_escritor, _F1, _F1_NOME, _TODAS, _SO_A)
+        _alterar(motor_escritor, _F2, _F2_NOME, _SO_A, _SO_B)
+
+    with _entrelacar(motor_leitor, _GATILHO_LINHA_DA_FUNCAO, _duas_alteracoes) as disparou:
+        listadas = _listar(funcoes, metodo)
+
+    antes = {_F1: _TODAS, _F2: _SO_A}
+    depois = {_F1: _SO_A} if metodo == "list_by_unit" else {_F1: _SO_A, _F2: _SO_B}
+    lido = {funcao.id: funcao.unit_enablement for funcao in listadas}
+    assert disparou[0], "o entrelace não disparou — a listagem não foi exercitada no meio"
+    assert lido in (antes, depois), f"listagem com funções de instantes diferentes: {lido!r}"
+
+
+def test_issue_225_delete_com_conjunto_para_todas_no_meio_do_lookup_remove(
+    motores: Callable[[], Engine],
+) -> None:
+    """O lookup de `delete` não levanta por corrida (lei do port, L-JF3).
+
+    O lookup vem antes do `DELETE`, sem lock, sob `READ COMMITTED` — `delete`
+    escreve, e não roda sob o snapshot único das leituras. Se ele remontasse a
+    habilitação, a mesma alteração `{A}` → todas comitando entre a linha e os
+    vínculos faria a remoção responder `InvalidUnitEnablementError`, um 422 num
+    pedido válido. Ele só precisa saber se a função existe.
+    """
+    motor_adapter = motores()
+    motor_escritor = motores()
+    _semear_funcao_em_a(motor_adapter)
+    repositorio = PostgresJobFunctionRepository(motor_adapter)
+
+    with _entrelacar(
+        motor_adapter,
+        _GATILHO_LINHA_DA_FUNCAO,
+        lambda: _alterar(motor_escritor, _F1, _F1_NOME, _SO_A, _TODAS),
+    ) as disparou:
+        repositorio.delete(_A, _F1)
+
+    assert disparou[0], "o entrelace não disparou — o lookup não foi exercitado no meio"
+    assert PostgresJobFunctionRepository(motor_escritor).find_by_id(_A, _F1) is None
+
+
+# `list_by_unit` fica de fora por definição, não por esquecimento: a única
+# incoerência que a remontagem enxerga (flag `false`, zero vínculos) não nomeia
+# unidade nenhuma, então o filtro de L-JF6 não a lista — devolve vazio, e não há
+# remontagem a recusar.
+_LEITURAS_QUE_ALCANCAM_FUNCAO_SEM_VINCULO = tuple(
+    metodo for metodo in _LEITURAS_DE_FUNCAO if metodo != "list_by_unit"
+)
+
+
+@pytest.mark.parametrize("metodo", _LEITURAS_QUE_ALCANCAM_FUNCAO_SEM_VINCULO)
+def test_issue_225_dado_incoerente_gravado_continua_levantando(
+    motores: Callable[[], Engine], metodo: str
+) -> None:
+    """CA9b da 3.11 contra o banco: incoerência **gravada** continua recusada.
+
+    O controle que impede o conserto de virar engolir o erro: a função fica
+    gravada com a flag `false` e sem vínculo nenhum — estado que nenhuma escrita
+    do port produz —, e toda leitura que a alcança levanta
+    `InvalidUnitEnablementError`.
+    """
+    motor = motores()
+    _semear_funcao_em_a(motor)
+    with motor.begin() as conexao:
+        conexao.execute(
+            text("DELETE FROM job_function_units WHERE job_function_id = :f"), {"f": _F1}
+        )
+
+    with pytest.raises(InvalidUnitEnablementError):
+        _ler_funcao(PostgresJobFunctionRepository(motor), metodo)
