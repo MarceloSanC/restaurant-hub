@@ -115,6 +115,16 @@ class AccountRoleResult:
 
 
 @dataclass(frozen=True)
+class UnitTimezoneResult:
+    """O fuso de uma unidade existente (issue #198, ADR 4.1.0005).
+
+    `timezone` é a chave IANA (`America/Sao_Paulo`), já validada pela entidade.
+    """
+
+    timezone: str
+
+
+@dataclass(frozen=True)
 class AuthenticationResult:
     """Par de tokens emitido por um login bem-sucedido.
 

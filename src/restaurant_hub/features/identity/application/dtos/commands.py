@@ -168,6 +168,19 @@ class GetAccountRoleCommand:
 
 
 @dataclass(frozen=True)
+class GetUnitTimezoneCommand:
+    """Consulta do fuso de uma unidade (issue #198, ADR 4.1.0005).
+
+    O endereço é o par (tenant, unidade): unidade de outro tenant responde como
+    inexistente. Quem pergunta é a fachada, a serviço do BC que converte horário
+    de parede em instante.
+    """
+
+    tenant_id: RestaurantId
+    unit_id: UnitId
+
+
+@dataclass(frozen=True)
 class InviteUserCommand:
     """Convite de uma pessoa que ainda não tem conta.
 

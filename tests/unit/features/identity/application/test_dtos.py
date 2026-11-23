@@ -44,6 +44,7 @@ from restaurant_hub.features.identity.application.dtos.results import (
     ProvisionedAccountResult,
     ProvisionedRestaurantResult,
     UnitResult,
+    UnitTimezoneResult,
     UserResult,
 )
 from restaurant_hub.features.identity.domain.value_objects.email import Email
@@ -66,6 +67,7 @@ _RESULT_CLASSES = (
     ProvisionedAccountResult,
     AccountRoleResult,
     ProvisionedRestaurantResult,
+    UnitTimezoneResult,
 )
 
 # Prefixo dos módulos de entidade — o que um result nunca pode carregar.
@@ -91,7 +93,8 @@ _ENTITIES_MODULE = "restaurant_hub.features.identity.domain.entities"
 # 27 até a 3.8; a issue #67 troca `CreateRestaurantCommand` e `RestaurantResult`
 # por `ProvisionRestaurantCommand` e `ProvisionedRestaurantResult`.
 # 28 desde a Stage 2.7, que acrescenta `InviteOwnerCommand`.
-_TOTAL_DE_DTOS = 28
+# 30 desde a issue #198, que acrescenta `GetUnitTimezoneCommand` e `UnitTimezoneResult`.
+_TOTAL_DE_DTOS = 30
 
 
 def test_create_user_command_tem_unit_ids_vazio_por_padrao() -> None:
