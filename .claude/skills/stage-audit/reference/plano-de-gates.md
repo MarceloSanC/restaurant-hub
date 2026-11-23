@@ -113,10 +113,14 @@ O §9.6 ("Como um ponto é cumprido") diz o que vale como evidência. Para cada 
 O §9.6, "Issue avulsa", vale com quatro trocas:
 
 - **Corte:** o mesmo comando do item 1, na branch da issue.
-- **Onde está o plano:** listado junto das sub-tasks, que o PROMPT-issue manda escrever em
-  texto, sem lugar fixo (issue #224). O auditor lê o corpo do PR (onde já vai o `[deviation]` do ponto extra)
-  e, se tiver acesso, o relatório do executor. Sem plano escrito vale o padrão do §9.6 (um
-  ponto, o de saída): não é finding.
+- **Onde está o plano:** no corpo do PR, onde o §9.6 o põe (seção "Plano de gates" do
+  template). O auditor lê só ali (`gh pr view <num> --json body`); conversa e relatório do
+  executor não contam. Corpo sem o plano, numa branch posterior ao corte, é finding
+  **non-blocker, dentro da própria issue**, como o plano ausente da Stage (seção 4): o gate
+  de saída verde cobre o código, falta o rastro. O conserto é editar o corpo do PR com as
+  sub-tasks e os pontos em que o executor de fato esperou, com os runs (um só, o de saída, se
+  não esperou em outro). Como todo finding dentro da própria issue, trava a Fase F até o corpo
+  ser editado.
 - **Ponto extra:** um ponto além do de saída precisa do `[deviation]` no corpo do PR, não na §7
   (issue não tem `technical.md`).
 - **Commit do ponto:** a marca é `[#<num>/task-NN`; a evidência segue a seção 3.
