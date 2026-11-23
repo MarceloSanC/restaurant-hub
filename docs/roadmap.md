@@ -5,7 +5,7 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, steps, stages, planejamento, escala, saas, restaurantes]
 status: in_progress
 created_at: 2026-07-10
-updated_at: 2026-11-16
+updated_at: 2026-11-22
 last_reviewed_at: 2026-11-16
 ---
 
@@ -1873,6 +1873,14 @@ skills_hint: [repository-pattern, composition-root]
 > alocação gravada faz a escala recusar com `MissingStaffRecordsError`, e apagar uma função
 > demandada deixa a demanda sem nome. Fora da Stage, com dono: `Unit.timezone` (#198) e o write
 > skew de fronteira (#199).
+
+> Nota (2026-11-22): o write skew de fronteira (#199) fechou fora da Stage, como issue
+> ([ADR 4.4.0005](./adr/4_4_0005-save-checks-the-neighbour-versions-the-evaluation-read.md)):
+> `ScheduleRepository.save` passa a receber as vizinhas que a avaliação leu e recusa com
+> `ScheduleVersionConflictError` quando uma delas mudou (lei L-SC9). Da lista "Fora da Stage" da
+> nota anterior segue aberta só a #198. **A 4.5 herda também** o corpo HTTP dessa recusa: o erro
+> traz `changed_neighbour_id`, e a escala editada não mudou, então reenviar o mesmo lote é válido
+> (ADR 4.4.0005 §Decision 3).
 
 #### Stage 4.5 — `4.5-scheduling-http`
 
