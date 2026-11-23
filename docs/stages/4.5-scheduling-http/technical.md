@@ -639,4 +639,13 @@ Respostas ao questionário: (1) CA1–CA15 com teste nomeado, CA13 é fechamento
 **Decisão:** testes acrescentados: fronteiras de `to_decimal` (aceita 15 dígitos inteiros e qualquer casa; recusa 16 e o expoente gigante); `DemandResponse` com `function_enabled_in_unit` falso; demanda órfã `false` em S2 e S5 pela rota sobre os fakes; fallback 422 do `resolve_status` nas duas raízes; corpo fora do schema (op desconhecida, lote de 501) ⇒ 422 com o corpo constante `validation_error`; sem credencial e corpo inválido ⇒ 401; `schedule_id` só-espaço no path; a trava de CA9 sem depender do nome `scope`; piso de `_TOTAIS_MINIMOS["scheduling"]` em 35. A ordenação dos dias na `key` da resposta é mutante equivalente (o domínio entrega os dias ordenados) e não ganhou teste.
 **Razão:** cada teste mata um sobrevivente ou fecha uma lacuna nomeada pela auditoria; a rodada 2 da auditoria re-executa as mutações.
 
+### 2026-11-23 — [measurement] Auditoria de testes, rodada 2 — Claude (Opus 5.5)
+**Contexto:** a mesma auditora independente, sobre `133298da`, re-executando as mutações sobreviventes da rodada 1 e quatro novas sobre o código alterado; repositório restaurado byte a byte (sha256).
+**Medição:** 8 mutações, 7 mortas, 1 sobrevivente:
+- E2 (fallback 422 → 500), S1 (`>=` → `>` no teto de dígitos inteiros), S9 (`function_enabled_in_unit` constante): mortas;
+- N1 (teto 15 → 16), N2 (rota lendo `unit_id` de variável renomeada), N3 (calendário sem as funções da unidade), N4 (conjunto habilitado = catálogo inteiro): mortas;
+- S3 (sem a guarda `value != 0`): sobreviveu — `Decimal("0E+20").adjusted()` é 20, e só `"0"` e `"0E-20"` eram testados.
+Os seis itens do questionário: sim, com duas pendências baixas — S3 e L-SG3 provada só no fake.
+**Razão:** as duas pendências viram a Task 12 extra (`"0E+20"` aceito; L-SG3 contra o adapter: autorizar u1 não autoriza u2 nem outra permissão, um pedido por alvo). Com elas, todos os itens ficam "sim".
+
 <!-- END: post-execution -->

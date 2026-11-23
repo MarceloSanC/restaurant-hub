@@ -383,3 +383,44 @@ def test_cadeia_real_platform_admin_e_negado(permissao: str) -> None:
     ator = mundo.ator(Role.PLATFORM_ADMIN, None, None)
     with pytest.raises(PermissionDeniedError):
         mundo.guard.authorize(ator, permissao, unit_id=_U1)
+
+
+# --- auditoria de testes, rodada 2 (Task 12 extra): L-SG3 no adapter ---------------------------
+
+
+class _FachadaPorAlvo(_SpyAccessFacade):
+    """Concede só a unidade `u1` e registra cada pedido — uma decisão por alvo."""
+
+    def __init__(self) -> None:
+        super().__init__(_grant())
+        self.pedidos: list[tuple[str, str | None]] = []
+
+    def authorize(
+        self,
+        principal: AccessPrincipal,
+        permission: str,
+        *,
+        tenant_id: str | None,
+        unit_id: str | None,
+    ) -> AccessGrant:
+        self.pedidos.append((permission, unit_id))
+        if unit_id != "u1" or permission != PERMISSION_MANAGE_SCHEDULE:
+            raise PermissionDeniedError("manager", permission)
+        return super().authorize(principal, permission, tenant_id=tenant_id, unit_id=unit_id)
+
+
+def test_l_sg3_cada_alvo_e_uma_decisao_no_adapter() -> None:
+    """Autorizar u1 não autoriza u2, e uma permissão não autoriza outra (L-SG3)."""
+    fachada = _FachadaPorAlvo()
+    guard = _guard(fachada)
+    escopo = guard.authorize(_ator(), PERMISSION_MANAGE_SCHEDULE, unit_id="u1")
+    assert escopo.unit_id == "u1"
+    with pytest.raises(PermissionDeniedError):
+        guard.authorize(_ator(), PERMISSION_MANAGE_SCHEDULE, unit_id="u2")
+    with pytest.raises(PermissionDeniedError):
+        guard.authorize(_ator(), PERMISSION_VIEW_SCHEDULE, unit_id="u1")
+    assert fachada.pedidos == [
+        (PERMISSION_MANAGE_SCHEDULE, "u1"),
+        (PERMISSION_MANAGE_SCHEDULE, "u2"),
+        (PERMISSION_VIEW_SCHEDULE, "u1"),
+    ]

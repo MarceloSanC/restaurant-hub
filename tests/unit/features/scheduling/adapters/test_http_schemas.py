@@ -470,6 +470,7 @@ def test_instante_da_resposta_sai_sem_offset() -> None:
         "1E-1000030",
         "1.000000000000000",
         "0E-20",
+        "0E+20",
         "0",
     ],
     ids=[
@@ -479,6 +480,7 @@ def test_instante_da_resposta_sai_sem_offset() -> None:
         "subnormal",
         "zeros-a-direita",
         "zero-com-expoente",
+        "zero-com-expoente-positivo",
         "zero",
     ],
 )
