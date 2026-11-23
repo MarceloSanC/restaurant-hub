@@ -353,6 +353,9 @@ original aprovado permanece no git. Regras durante a janela de execução:
   no `stage N.M: technical approved`; a de cada bloco do C, no `-fix` do
   bloco ou, sem correção, no commit seguinte. Uma linha por achado, com a
   disposição; checkpoint sem achado também grava a entrada, dizendo isso.
+  No fluxo multi-sessão do RUNBOOK, que não tem revisor de contexto
+  zerado, o gate humano dos Passos 5 e 7 faz as vezes do A e do B: as
+  entradas registram o que cada gate pediu, ou que aprovou sem ajuste.
   Technical `done` sem as entradas do A e do B é recusado por
   `scripts/check_technical_postexec.py` (checagem 3), salvo as Stages do
   corte `LEGACY_CHECKPOINT_STAGES` — as anteriores à regra (issue #210),

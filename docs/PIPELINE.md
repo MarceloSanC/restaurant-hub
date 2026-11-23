@@ -662,7 +662,8 @@ Após a última Task, executar o checklist de fechamento do
       (entradas `[decision]`/`[finding]`/`[deviation]`/`[measurement]` com header `data — [tag] escopo — autor`).
 - [ ] No fluxo de sessão única (§11.1), a §7 tem a entrada de disposição de
       cada Checkpoint (A, B e cada bloco do C), gravada no commit que o
-      fechou (CONVENTIONS §3.4).
+      fechou (CONVENTIONS §3.4); no fluxo multi-sessão, as entradas do A e
+      do B registram os gates humanos dos Passos 5 e 7 do RUNBOOK.
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] Commit final `stage N.M: complete` no branch.
 - [ ] PR contra `develop` aberto e mergeado, seguindo os
