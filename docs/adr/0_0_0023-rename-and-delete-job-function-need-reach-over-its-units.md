@@ -119,9 +119,10 @@ compare the stored enablement with `expected` and refuse with `JobFunctionEnable
 (409, the entry the staff map already has since issue #206) without writing. Order: lookup
 (`JobFunctionNotFoundError`) → comparison → name guard (rename) or reference guard (delete). The
 Postgres adapter decides under the row lock, in one private helper shared by the three writes on an
-existing function: `FOR NO KEY UPDATE` for rename and change of units (the lock their non-key
-`UPDATE` already took, which does not conflict with the `KEY SHARE` an assignment takes), `FOR
-UPDATE` for delete (the lock the `DELETE` takes anyway). `decision:C`, rung 1 (issue #206 / ADR
+existing function, taking in the lookup the lock the write itself would take: `FOR NO KEY UPDATE`
+for the change of units (a non-key column, which does not conflict with the `KEY SHARE` an
+assignment takes), `FOR UPDATE` for rename (`name` is in the unique index
+`uq_job_functions_tenant_name`, which PostgreSQL counts as a key update) and for delete. `decision:C`, rung 1 (issue #206 / ADR
 0.0.0010) and rung 2 (fail-closed). No migration, no new map entry.
 
 The lookup of `delete` rebuilds the enablement again — issue #225 had removed that rebuild because,
@@ -181,8 +182,9 @@ status changes; the boundary's tenant-only check stays defense in depth.
 ### Neutral / trade-offs accepted
 - A rename or delete racing a change of units of the same function now answers 409 and asks the
   client to reread, as the change of units already did.
-- Delete now waits for an assignment of the same function in progress (`FOR UPDATE` on the lookup
-  instead of only at the `DELETE`); it already had to wait at the `DELETE`, so no new wait exists.
+- Rename and delete now take `FOR UPDATE` in the lookup instead of only at the `UPDATE`/`DELETE`;
+  both already waited there for an assignment of the same function in progress, so no new wait
+  exists.
 
 ## References
 
