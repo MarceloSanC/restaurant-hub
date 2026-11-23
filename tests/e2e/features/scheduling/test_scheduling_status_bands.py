@@ -375,7 +375,10 @@ async def test_ca7_ca8_entradas_adversariais_recusam_com_422_de_scheduling(
     url = f"{API}/units/{escala.unidade}/schedules/{sid}"
     lotes = {
         "invalid_identifier": [{**_faixa(_F1), "band_id": "f1"}],
-        "invalid_schedule_request": [_faixa(_F1), _demanda(_D1, escala.funcao, 2_147_483_648)],
+        "invalid_schedule_request": [
+            _faixa(_F1),
+            _demanda(_D1, escala.funcao, quantidade=2_147_483_648),
+        ],
         "invalid_time_range": [{**_faixa(_F1), "start": f"{SEGUNDA}T10:00:00Z"}],
     }
     # Lotes que só valem sobre a faixa e a demanda já gravadas.
@@ -395,7 +398,7 @@ async def test_ca7_ca8_entradas_adversariais_recusam_com_422_de_scheduling(
             f"{url}/evaluations", json={"expected_version": 3, "operations": lote}, headers=gerente
         )
         assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, (code, resposta.text)
-        assert resposta.json()["code"] == code
+        assert resposta.json().get("code") == code, (code, resposta.text)
     faixa_extrema = [{**_faixa(_F2), "start": "9999-12-31T10:00:00", "end": "9999-12-31T16:00:00"}]
     extrema = await client.post(
         f"{url}/evaluations",
@@ -408,7 +411,7 @@ async def test_ca7_ca8_entradas_adversariais_recusam_com_422_de_scheduling(
             f"{url}/evaluations", json={"expected_version": 1, "operations": lote}, headers=gerente
         )
         assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, (code, resposta.text)
-        assert resposta.json()["code"] == code
+        assert resposta.json().get("code") == code, (code, resposta.text)
 
     nul = await client.get(f"{API}/units/u%00/schedules/{sid}", headers=gerente)
     assert (nul.status_code, nul.json()["code"]) == (422, "invalid_identifier")
