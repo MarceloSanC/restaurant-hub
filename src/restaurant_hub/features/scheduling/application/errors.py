@@ -4,7 +4,8 @@ Duas raízes, uma por significado (ADR 3.9.0001, que supera o 2.2.0003):
 
 - `SchedulingError` (domínio, Stage 4.1) — uma regra que o produto enuncia foi
   violada: escalas da unidade não se sobrepõem (L-SC2), a versão vista pelo editor é
-  a vigente (decisão do sponsor F8, ADR 4.1.0001), violações bloqueantes e avisos sem
+  a vigente (decisão do sponsor F8, ADR 4.1.0001) — e a das vizinhas que a avaliação
+  leu também (ADR 4.4.0005), violações bloqueantes e avisos sem
   aceite, registro desligado.
 - `SchedulingApplicationError` (abaixo, sobre `ApplicationError`) — o caso de uso não
   pôde ser atendido por motivo que não é regra: o recurso endereçado não existe, um id
@@ -62,7 +63,8 @@ class ScheduleVersionConflictError(SchedulingError):
     escalas adjacentes que a avaliação leu não está mais como foi lida. Aí
     `changed_neighbour_id` nomeia a escala que hoje ocupa a vaga (ou a lida, se a vaga
     esvaziou) e as duas versões são as da escala **editada** — iguais, porque ela não
-    mudou: recarregar e publicar de novo reavalia contra a vizinha atual.
+    mudou: o mesmo lote, reenviado sobre a mesma versão, é reavaliado contra a vizinha
+    atual. Como o cliente oferece isso é da Stage 4.5.
     """
 
     def __init__(
