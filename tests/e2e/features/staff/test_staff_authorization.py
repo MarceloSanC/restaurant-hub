@@ -37,6 +37,7 @@ papéis editado para dar a `hr` alcance diferente reprova aqui.
 """
 
 import urllib.parse
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -65,7 +66,8 @@ pytestmark = pytest.mark.e2e
 # módulo sem um único caso, e a suíte ficaria verde por não medir nada.
 # 16 até a 3.6; a Stage 3.5 acrescenta R17 (`POST .../login`); a Stage 3.11, a
 # substituição das unidades de uma função e a listagem de funções da unidade.
-_TOTAL_DE_ROTAS: Final = 19
+# 22 desde a Stage 3.10: R18, R19 e R20 (`.../login-link`).
+_TOTAL_DE_ROTAS: Final = 22
 
 # As três partições do inventário e os dois produtos que os critérios nomeiam.
 # São **números transcritos do concept**, não derivados do código: derivá-los faria
@@ -74,10 +76,10 @@ _TOTAL_DE_ROTAS: Final = 19
 # Stage 3.11: +1 no catálogo (`PUT .../units`) e +1 nas rotas com unidade no path
 # (`GET /units/{unit_id}/job-functions`); os produtos são 2 x 19 e 3 x 19.
 _TOTAL_DE_RJF: Final = 5
-_TOTAL_DE_REMP: Final = 14
-_TOTAL_COM_EMPLOYEE_ID: Final = 11
-_CASOS_DE_CA09: Final = 38
-_CASOS_DE_CA36: Final = 57
+_TOTAL_DE_REMP: Final = 17  # Stage 3.10: +3 (login-link)
+_TOTAL_COM_EMPLOYEE_ID: Final = 14  # Stage 3.10: +3
+_CASOS_DE_CA09: Final = 44  # 2 x 22
+_CASOS_DE_CA36: Final = 66  # 3 x 22
 
 # Os corpos constantes de identity (`identity/adapters/inbound/http/error_handlers.py`).
 # **Transcritos, e não importados**: o critério é sobre o contrato que o cliente
@@ -136,6 +138,11 @@ class Recursos:
             unidade um efeito que discrimina uma unidade da outra (CA11).
         sufixo: discrimina os nomes quando dois conjuntos isomorfos coexistem
             (CA12) ou quando duas unidades são semeadas lado a lado (CA11).
+        employee_com_login_id: Stage 3.10 — um segundo funcionário em `unidade`,
+            já vinculado por R17: é o registro que R19 troca e R20 desvincula.
+        email_existente: Stage 3.10 — o e-mail de uma conta `employee` do
+            restaurante, membro de `unidade` e sem registro: a conta que R18
+            vincula e R19 põe no lugar do login atual.
     """
 
     unidade: str
@@ -144,6 +151,8 @@ class Recursos:
     job_function_id: str
     job_function_livre: str
     sufixo: str
+    employee_com_login_id: str = ""
+    email_existente: str = ""
 
 
 Efeito = Callable[[AsyncClient, dict[str, str], Response, Recursos], Awaitable[None]]
@@ -255,6 +264,11 @@ def _sem_corpo(_recursos: Recursos) -> dict[str, Any] | None:
 
 def _do_funcionario(recursos: Recursos) -> dict[str, str]:
     return {"unit_id": recursos.unidade, "employee_id": recursos.employee_id}
+
+
+def _do_funcionario_com_login(recursos: Recursos) -> dict[str, str]:
+    """Stage 3.10 — o registro já vinculado, que R19 e R20 alcançam."""
+    return {"unit_id": recursos.unidade, "employee_id": recursos.employee_com_login_id}
 
 
 _EMPLOYEES: Final = "/units/{unit_id}/employees"
@@ -405,6 +419,29 @@ ROTAS: dict[ChaveDeRota, Rota] = {
         body=lambda r: {"email": f"login-{r.sufixo}@cantina.com", "delivery": "link"},
         sucesso=HTTPStatus.CREATED,
         efeito=_efeito_login_no_registro_da_unidade_do_path,
+    ),
+    # Stage 3.10 — R18 vincula ao registro sem login a conta existente semeada;
+    # R19 troca o login do registro já vinculado por ela; R20 o desvincula.
+    ("POST", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
+        path=_do_funcionario,
+        query=_sem_query,
+        body=lambda r: {"email": r.email_existente},
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_no_registro_da_unidade_do_path,
+    ),
+    ("PUT", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
+        path=_do_funcionario_com_login,
+        query=_sem_query,
+        body=lambda r: {"email": r.email_existente},
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_no_registro_da_unidade_do_path,
+    ),
+    ("DELETE", f"{_EMPLOYEES}/{{employee_id}}/login-link"): Rota(
+        path=_do_funcionario_com_login,
+        query=_sem_query,
+        body=_sem_corpo,
+        sucesso=HTTPStatus.OK,
+        efeito=_efeito_no_registro_da_unidade_do_path,
     ),
 }
 
@@ -597,6 +634,40 @@ async def _semear(
     )
     assert marcado.status_code == HTTPStatus.OK, marcado.text
 
+    # Stage 3.10 — a conta existente (R18, R19) e o registro já vinculado (R19,
+    # R20). E-mails com um discriminador próprio: a unicidade de e-mail é global
+    # em identity, e duas semeaduras com o mesmo sufixo num teste colidiriam.
+    marca = uuid.uuid4().hex[:8]
+    email_existente = f"existente-{sufixo}-{marca}@cantina.com"
+    conta = await client.post(
+        f"{API}/users",
+        json={
+            "email": email_existente,
+            "password": SENHA_PADRAO,
+            "role": "employee",
+            "unit_ids": [unidade],
+        },
+        headers=cabecalho,
+    )
+    assert conta.status_code == HTTPStatus.CREATED, conta.text
+    outro = await client.post(
+        f"{API}/units/{unidade}/employees",
+        json={
+            "name": f"Vinculado {sufixo}",
+            "workload_profile": {"type": "on_demand"},
+            "job_function_ids": [job_function_id],
+        },
+        headers=cabecalho,
+    )
+    assert outro.status_code == HTTPStatus.CREATED, outro.text
+    employee_com_login_id = str(outro.json()["id"])
+    vinculado = await client.post(
+        f"{API}/units/{unidade}/employees/{employee_com_login_id}/login",
+        json={"email": f"vinculado-{sufixo}-{marca}@cantina.com", "delivery": "link"},
+        headers=cabecalho,
+    )
+    assert vinculado.status_code == HTTPStatus.CREATED, vinculado.text
+
     return Recursos(
         unidade=unidade,
         unidade_destino=destino,
@@ -604,6 +675,8 @@ async def _semear(
         job_function_id=job_function_id,
         job_function_livre=job_function_livre,
         sufixo=sufixo,
+        employee_com_login_id=employee_com_login_id,
+        email_existente=email_existente,
     )
 
 
@@ -712,7 +785,7 @@ async def test_ca08_toda_rota_sem_bearer_recebe_401(
 # produz 422, e um caso que não degrada não mede a corrida.
 
 # Dez até a 3.6; R17 (3.5) tem corpo — onze; `PUT .../units` (3.11) — doze.
-_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 12
+_TOTAL_DE_ROTAS_COM_ENTRADA: Final = 14  # Stage 3.10: R18 e R19
 
 # O corpo que nenhum `*Request` aceita. Não é um campo com valor errado: é a
 # **ausência** dos campos obrigatórios, que é o 422 mais barato de produzir e o
