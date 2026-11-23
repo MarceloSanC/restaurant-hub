@@ -4,6 +4,14 @@ O conflito de nome **ignora a própria função**: renomear para o nome que ela 
 tem não é conflito (concept §5.5). É exatamente por causa deste caso que o port
 expõe `find_by_name` (devolve a entidade) e não um `exists_by_name` booleano —
 com booleano, renomear uma função para o próprio nome falharia.
+
+**Quem pode: alcance sobre onde a função vale** (issue #207, ADR 0.0.0023). O nome
+é visto em toda unidade em que a função vale, então renomeá-la é agir sobre cada uma
+delas: `manage_job_functions` em cada unidade nomeada, ou `manage_tenant` quando a
+função vale em todas — a mesma regra de `_unit_enablement`, contra a habilitação
+**gravada**. Por isso a função é lida antes desse alvo (a exceção declarada ao
+ADR 3.7.0001 §4 que `set_job_function_units` já usa), e a escrita é condicional à
+habilitação lida: uma alteração de unidades comitada no meio recusa o pedido.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import RenameJobFunctionCommand
@@ -22,6 +30,10 @@ from restaurant_hub.features.staff.application.ports.out.access_guard import (
 from restaurant_hub.features.staff.application.ports.out.job_function_repository import (
     JobFunctionRepository,
 )
+from restaurant_hub.features.staff.application.use_cases._unit_enablement import (
+    authorize_enablement,
+    named_units,
+)
 
 
 class RenameJobFunctionUseCase:
@@ -36,8 +48,9 @@ class RenameJobFunctionUseCase:
 
         A ordem é o contrato (concept §5.16, com as erratas de 2026-08-30 e de
         2026-10-19): a **autorização** do alvo antes de tudo (ADR 3.7.0001),
-        depois a **existência**, depois a **validação local do nome**, e só então
-        a sonda de unicidade. Renomear uma função inexistente para um nome já
+        depois a **existência**, depois o **alcance** sobre as unidades em que a
+        função vale (issue #207), depois a **validação local do nome**, e só
+        então a sonda de unicidade. Renomear uma função inexistente para um nome já
         usado devolve `JobFunctionNotFoundError`, não o conflito — do contrário a
         resposta confirmaria que aquele nome existe no tenant a quem pediu por um
         id que não é dele.
@@ -58,6 +71,10 @@ class RenameJobFunctionUseCase:
                 não reembrulhado, e levantado **sem sondar unicidade**.
             JobFunctionNameAlreadyExistsError: nome já usado por **outra**
                 função do tenant.
+            JobFunctionEnablementChangedError: a habilitação gravada mudou entre a
+                leitura e a escrita (L-JF2 revisada, issue #207); nada é gravado.
+
+        A recusa de alcance é a exceção do guard, crua (L-AG2), sem efeito.
         """
         # (0) Autorização do alvo do command, antes de qualquer outra instrução
         # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
@@ -68,12 +85,19 @@ class RenameJobFunctionUseCase:
         job_function = self._job_functions.find_by_id(command.tenant_id, command.job_function_id)
         if job_function is None:
             raise JobFunctionNotFoundError(command.job_function_id)
+        # (1b) Alcance sobre as unidades em que a função vale (issue #207): cada
+        # unidade nomeada, ou `manage_tenant` para todas. Exceção declarada ao
+        # ADR 3.7.0001 §4 — o alvo depende da habilitação gravada.
+        authorize_enablement(
+            self._guard, command.actor, command.tenant_id, named_units(job_function.unit_enablement)
+        )
         # (2) Transição: o domínio rejeita o nome inválido aqui, antes do port.
         renamed = job_function.rename(command.name)
         # (3) Conflito de nome, ignorando a própria função.
         namesake = self._job_functions.find_by_name(command.tenant_id, command.name)
         if namesake is not None and namesake.id != job_function.id:
             raise JobFunctionNameAlreadyExistsError(command.name)
-        # (4) Escrita.
+        # (4) Escrita — condicional à habilitação lida, contra a qual o alcance foi
+        # autorizado (L-JF2 revisada, issue #207).
         self._job_functions.update(renamed, expected=job_function.unit_enablement)
         return to_job_function_result(renamed)

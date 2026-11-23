@@ -306,7 +306,9 @@ async def test_r02_lista_o_catalogo_do_tenant_com_200(
 
 
 async def test_r03_renomeia_funcao_com_200(client: AsyncClient, ambiente: Ambiente) -> None:
-    ambiente.com_funcao("jf-1", "Garçom")
+    # Issue #207 — renomear exige alcance sobre onde a função vale: a função nasce
+    # na unidade do ator, que o ambiente concede (sem `manage_tenant`).
+    ambiente.com_funcao_em("jf-1", "Garçom", _UNIDADE)
 
     resposta = await client.patch("/api/v1/job-functions/jf-1", json={"name": "Garçom Sênior"})
 
@@ -315,8 +317,8 @@ async def test_r03_renomeia_funcao_com_200(client: AsyncClient, ambiente: Ambien
         "id": "jf-1",
         "tenant_id": _TENANT,
         "name": "Garçom Sênior",
-        "all_units": True,
-        "unit_ids": [],
+        "all_units": False,
+        "unit_ids": [_UNIDADE],
     }
 
 
@@ -324,7 +326,7 @@ async def test_r04_remove_funcao_com_204_e_corpo_vazio(
     client: AsyncClient, ambiente: Ambiente
 ) -> None:
     """204 não carrega corpo — um 200 com corpo aqui seria contrato diferente."""
-    ambiente.com_funcao("jf-1")
+    ambiente.com_funcao_em("jf-1", "Garçom", _UNIDADE)  # issue #207: alcance do ator
 
     resposta = await client.delete("/api/v1/job-functions/jf-1")
 
@@ -364,7 +366,7 @@ async def test_funcao_em_uso_recebe_409_e_nao_e_removida(
     client: AsyncClient, ambiente: Ambiente
 ) -> None:
     """O par `InUse` é 409 e não 422: o payload está certo, outro registro impede."""
-    ambiente.com_funcao("jf-1")
+    ambiente.com_funcao_em("jf-1", "Garçom", _UNIDADE)  # issue #207: alcance do ator
     ambiente.com_funcionario_usando("jf-1")
 
     resposta = await client.delete("/api/v1/job-functions/jf-1")
@@ -775,3 +777,46 @@ def test_provedor_nao_conectado_falha_alto(provedor: str) -> None:
     """
     with pytest.raises(RuntimeError, match="composition root"):
         getattr(router_module, provedor)()
+
+
+# ---------------------------------------------------------------------------
+# Issue #207 — renomear e apagar exigem alcance sobre onde a função vale
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("metodo", "corpo"),
+    [("PATCH", {"name": "Garçom Sênior"}), ("DELETE", None)],
+    ids=["renomear", "apagar"],
+)
+@pytest.mark.parametrize(
+    "habilitacao",
+    [("u-de-outra-unidade",), (_UNIDADE, "u-de-outra-unidade"), None],
+    ids=["so-de-outra", "inclui-outra", "todas"],
+)
+async def test_issue_207_funcao_fora_do_alcance_do_ator_e_negada_crua_e_nada_muda(
+    client: AsyncClient,
+    ambiente: Ambiente,
+    metodo: str,
+    corpo: dict[str, object] | None,
+    habilitacao: tuple[str, ...] | None,
+) -> None:
+    """Pela borda real: a recusa é do **guard** no use case, crua (L-AG2), sem efeito.
+
+    O ator do ambiente alcança só a sua unidade e não detém `manage_tenant`. A
+    função vale só noutra unidade, nela e noutra, ou em todas: os três pedem alcance
+    que ele não tem. A borda continua autorizando só o tenant (ADR 3.4.0008); quem
+    nega é o use case (ADR 3.7.0001).
+    """
+    if habilitacao is None:
+        ambiente.com_funcao("jf-1", "Garçom")
+    else:
+        ambiente.com_funcao_em("jf-1", "Garçom", *habilitacao)
+
+    with pytest.raises(FakeAuthorizationRejected) as excinfo:
+        await client.request(metodo, "/api/v1/job-functions/jf-1", json=corpo)
+
+    assert excinfo.value is ambiente.guard.authorization_error
+    relida = ambiente.fakes.job_functions.find_by_id(TenantId(_TENANT), JobFunctionId("jf-1"))
+    assert relida is not None
+    assert relida.name == "Garçom"

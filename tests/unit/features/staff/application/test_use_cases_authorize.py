@@ -450,18 +450,21 @@ CENARIOS: Final[dict[str, Cenario]] = {
         alvos=((_MANAGE_JOB_FUNCTIONS, _A, None),),
         no_endereco_do_command=_catalogo_do_tenant,
     ),
+    # Issue #207 — renomear e apagar autorizam também onde a função vale, lido da
+    # habilitação **gravada**: as duas funções da semeadura valem em todas as
+    # unidades, então o alvo derivado é `manage_tenant`.
     "rename_job_function": Cenario(
         classe=RenameJobFunctionUseCase,
         command=RenameJobFunctionCommand(
             actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F_EM_USO, name="Chef"
         ),
-        alvos=((_MANAGE_JOB_FUNCTIONS, _A, None),),
+        alvos=((_MANAGE_JOB_FUNCTIONS, _A, None), (_MANAGE_TENANT, _A, None)),
         no_endereco_do_command=_funcao_renomeada_no_tenant,
     ),
     "delete_job_function": Cenario(
         classe=DeleteJobFunctionUseCase,
         command=DeleteJobFunctionCommand(actor=TEST_ACTOR, tenant_id=_A, job_function_id=_F_LIVRE),
-        alvos=((_MANAGE_JOB_FUNCTIONS, _A, None),),
+        alvos=((_MANAGE_JOB_FUNCTIONS, _A, None), (_MANAGE_TENANT, _A, None)),
         no_endereco_do_command=_funcao_apagada_no_tenant,
     ),
     # Stage 3.11 — `f-livre` nasce em todas as unidades (default da semeadura):
@@ -679,15 +682,23 @@ def test_os_use_cases_de_dois_alvos_sao_os_do_concept() -> None:
         "copy_employee_to_unit",
         "create_job_function",
         "create_login_for_employee",
+        "delete_job_function",
+        "rename_job_function",
         "set_job_function_units",
     ]
 
 
 # A exceção declarada ao ADR 3.7.0001 §4 (ADR 3.11.0001 §5): o alvo derivado de
 # `set_job_function_units` é a **diferença** contra a habilitação gravada, então a
-# função é lida entre as duas autorizações. A lista é transcrita — um segundo use
-# case que lesse antes de autorizar tudo não entra aqui de carona.
-_LEEM_ANTES_DO_ALVO_DERIVADO: Final = ("set_job_function_units",)
+# função é lida entre as duas autorizações. Desde a issue #207 (ADR 0.0.0023)
+# renomear e apagar também: o alvo derivado é a habilitação gravada inteira. A
+# lista é transcrita — um use case que lesse antes de autorizar tudo não entra
+# aqui de carona.
+_LEEM_ANTES_DO_ALVO_DERIVADO: Final = (
+    "delete_job_function",
+    "rename_job_function",
+    "set_job_function_units",
+)
 
 
 @pytest.mark.parametrize(
@@ -864,7 +875,25 @@ def test_ca15_o_execute_abre_com_exatamente_as_autorizacoes_da_matriz(nome: str)
         and isinstance(no.func, ast.Name)
         and no.func.id.startswith("authorize_enablement")
     ]
-    assert len(chamadas_ao_helper) == (1 if nome in _COM_ALVO_DERIVADO else 0), nome
+    com_helper = nome in _COM_ALVO_DERIVADO or nome in _ALVO_DA_HABILITACAO_GRAVADA
+    assert len(chamadas_ao_helper) == (1 if com_helper else 0), nome
+    # Issue #207 — renomear e apagar: o helper recebe a habilitação **gravada** (a
+    # da função lida, nunca um campo do command) e é a instrução seguinte à
+    # checagem de existência — antes da validação do nome, da guarda de
+    # referências e da escrita.
+    if nome in _ALVO_DA_HABILITACAO_GRAVADA:
+        leitura, existencia, seguinte = corpo[len(esperadas) : len(esperadas) + 3]
+        assert ast.dump(leitura) == ast.dump(
+            ast.parse(
+                f"job_function = self._job_functions.find_by_id({param}.tenant_id, "
+                f"{param}.job_function_id)"
+            ).body[0]
+        ), nome
+        assert isinstance(existencia, ast.If), nome
+        assert isinstance(seguinte, ast.Expr), nome
+        assert ast.dump(seguinte.value) == ast.dump(
+            ast.parse(_HELPER_DA_HABILITACAO_GRAVADA.format(param=param), mode="eval").body
+        ), nome
 
 
 def test_a_varredura_de_forma_conhece_as_permissoes_do_port() -> None:
@@ -921,6 +950,14 @@ _COM_ALVO_DERIVADO: Final[dict[str, str]] = {
     "create_job_function": "unit_ids",
     "set_job_function_units": "unit_ids",
 }
+# Issue #207 (ADR 0.0.0023) — os alvos derivados da habilitação **gravada**:
+# renomear e apagar agem em toda unidade em que a função vale, e o alcance sobre
+# ela é a mesma regra da criação (`authorize_enablement`), aplicada ao que foi lido.
+_ALVO_DA_HABILITACAO_GRAVADA: Final = ("delete_job_function", "rename_job_function")
+_HELPER_DA_HABILITACAO_GRAVADA: Final = (
+    "authorize_enablement(self._guard, {param}.actor, {param}.tenant_id, "
+    "named_units(job_function.unit_enablement))"
+)
 _HELPER_DE_HABILITACAO: Final[dict[str, str]] = {
     "create_job_function": (
         "authorize_enablement(self._guard, {param}.actor, {param}.tenant_id, {param}.unit_ids)"
@@ -936,6 +973,9 @@ def _alvos_derivados(nome: str, command: object) -> tuple[AuthorizeCall, ...]:
     cenário (`f-livre`) vale em todas as unidades, então qualquer conjunto pedido
     muda o alcance do restaurante inteiro — `manage_tenant`.
     """
+    if nome in _ALVO_DA_HABILITACAO_GRAVADA:
+        # As funções da semeadura valem em todas as unidades: `manage_tenant`.
+        return ((_MANAGE_TENANT, command.tenant_id, None),)  # type: ignore[attr-defined]
     campo = _COM_ALVO_DERIVADO.get(nome)
     if campo is None:
         return ()
