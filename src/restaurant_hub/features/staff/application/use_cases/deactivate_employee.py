@@ -21,10 +21,11 @@ vinculado, as sessões vivas da conta são revogadas pelo `IdentityGateway`
    desligamento; um duplo clique não derruba essas sessões. A nova tentativa
    depois de uma falha continua segura: como a revogação vem antes da escrita,
    um registro cuja gravação falhou ainda está ativo;
-2. **nenhum outro registro ativo da mesma unidade aponta para o login** — se
-   houver, é ele quem ainda concede o acesso. Só a unidade: nenhuma operação de
-   staff atravessa unidades implicitamente (workforce §3.1), e o sponsor aceitou
-   o custo — a pessoa com registro em outra unidade loga de novo;
+2. **nenhum outro registro ativo da mesma unidade aponta para o login** — vale
+   por construção e não é lido: o índice único da unidade impede dois registros
+   dela com o mesmo login (issue #241, ADR 0.0.0025 §4). Só a unidade: nenhuma
+   operação de staff atravessa unidades implicitamente (workforce §3.1), e o
+   sponsor aceitou o custo — a pessoa com registro em outra unidade loga de novo;
 3. **o login é de funcionário** (L-IG5) — gerente ou dono vinculado a um
    registro de escala tira a autoridade do papel, não do registro; revogar não
    protegeria nada e só interromperia o trabalho dele.
@@ -88,9 +89,8 @@ class DeactivateEmployeeUseCase:
             EmployeeNotFoundError: registro inexistente **no endereço (tenant + unidade)**.
             EmployeeLoginChangedError: o vínculo ou o estado gravado não é o lido
                 (L-DEACT) — nada é gravado; a nova tentativa lê o estado atual.
-            Exception: a falha da listagem da unidade, da consulta de papel (L-IG5)
-                ou da revogação (L-IG2) sobe crua — e o registro **não** é gravado
-                como desligado.
+            Exception: a falha da consulta de papel (L-IG5) ou da revogação (L-IG2)
+                sobe crua — e o registro **não** é gravado como desligado.
         """
         # (0) Autorização do alvo do command, antes de qualquer outra instrução
         # (ADR 3.7.0001 §4). A exceção do guard sobe crua (L-AG2).
@@ -106,7 +106,7 @@ class DeactivateEmployeeUseCase:
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
         # Antes de gravar — ver o docstring do módulo.
-        end_active_link(self._employees, self._gateway, employee)
+        end_active_link(self._gateway, employee)
         self._employees.deactivate(
             command.tenant_id,
             command.unit_id,

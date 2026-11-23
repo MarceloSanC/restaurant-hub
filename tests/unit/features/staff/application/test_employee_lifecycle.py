@@ -432,7 +432,10 @@ def _desligar_e1(use_case: DeactivateEmployeeUseCase) -> EmployeeResult:
 
 
 def test_ca05_registro_unico_de_funcionario_revoga_antes_de_gravar_na_ordem() -> None:
-    """A ordem é o contrato: unidade → papel → revogar → gravar (concept §5.2).
+    """A ordem é o contrato: papel → revogar → gravar (concept §5.2).
+
+    A unidade não é mais lida (issue #241, ADR 0.0.0025 §4): o índice único da
+    unidade garante que nenhum outro registro dela concede o login.
 
     Gravar primeiro deixaria um desligado com sessão viva quando identity estivesse
     fora; a consulta local primeiro decide sem cruzar a fronteira.
@@ -447,7 +450,6 @@ def test_ca05_registro_unico_de_funcionario_revoga_antes_de_gravar_na_ordem() ->
     assert gateway.revoked == [login]
     assert fakes.store.calls[antes:] == [
         "employees.find_by_id",
-        "employees.list_by_unit",
         f"gateway.is_employee_login({login!r})",
         f"gateway.revoke_login_sessions({login!r})",
         "employees.deactivate",
@@ -460,34 +462,11 @@ def test_ca05_registro_unico_de_funcionario_revoga_antes_de_gravar_na_ordem() ->
     assert relido.user_id == login
 
 
-def test_ca06_outro_registro_ativo_do_login_na_unidade_nao_toca_o_gateway() -> None:
-    """Caso (a) da issue #60: é o outro registro que ainda concede o acesso."""
-    fakes = _fakes()
-    gateway = _gateway_espelhado(fakes)
-    login = _vincular(fakes, gateway)
-    _outro_registro(fakes, "e2", user_id=login)
-    antes = len(fakes.store.calls)
-
-    resultado = _desligar_e1(_desligar(fakes, gateway))
-
-    assert gateway.calls == []
-    assert fakes.store.calls[antes:] == [
-        "employees.find_by_id",
-        "employees.list_by_unit",
-        "employees.deactivate",
-    ]
-    assert resultado.active is False
-
-
-def test_ca07_o_outro_registro_do_login_na_unidade_ja_desligado_nao_impede() -> None:
-    fakes = _fakes()
-    gateway = _gateway_espelhado(fakes)
-    login = _vincular(fakes, gateway)
-    _outro_registro(fakes, "e2", user_id=login, active=False)
-
-    _desligar_e1(_desligar(fakes, gateway))
-
-    assert gateway.revoked == [login]
+# CA06 e CA07 (o outro registro do login **na mesma unidade**, ativo ou desligado) saíram
+# com a issue #241: o estado é recusado pelo índice `uq_employees_tenant_unit_user` e
+# pela lei de `link_login`/`relink_login` (ADR 0.0.0025). Que a regra não o lê — e,
+# se ele existisse, revogaria — está em `test_login_link_single_point.py`
+# (`test_outro_registro_nao_e_lido_e_o_vinculo_ativo_revoga`).
 
 
 def test_ca08_outro_registro_ativo_do_login_em_outra_unidade_nao_impede() -> None:
@@ -533,7 +512,6 @@ def test_ca10_login_de_outro_papel_nao_e_revogado() -> None:
     assert gateway.revoked == []
     assert fakes.store.calls[antes:] == [
         "employees.find_by_id",
-        "employees.list_by_unit",
         f"gateway.is_employee_login({gerente!r})",
         "employees.deactivate",
     ]
@@ -579,9 +557,12 @@ class _GatewayQueFalhaNaRevogacao(InMemoryIdentityGateway):
         raise self._falha
 
 
-@pytest.mark.parametrize("onde", ["list_by_unit", "is_employee_login", "revoke_login_sessions"])
+@pytest.mark.parametrize("onde", ["is_employee_login", "revoke_login_sessions"])
 def test_ca13_falha_antes_de_gravar_sobe_crua_e_o_registro_continua_ativo(onde: str) -> None:
-    """Tudo antes da escrita: qualquer falha deixa o registro ativo (ADR 3.5.0003 §2)."""
+    """Tudo antes da escrita: qualquer falha deixa o registro ativo (ADR 3.5.0003 §2).
+
+    A falha da listagem da unidade saiu com a issue #241: a regra não lista mais.
+    """
     fakes = _fakes()
     falha = RuntimeError(f"{onde} fora")
     gateway = (
@@ -592,21 +573,10 @@ def test_ca13_falha_antes_de_gravar_sobe_crua_e_o_registro_continua_ativo(onde: 
     _vincular(fakes, gateway)
     if onde == "is_employee_login":
         gateway.fail_role_query_with = falha
-
-    class _RegistrosQueFalhamNaListagem(InMemoryEmployeeRepository):
-        def list_by_unit(
-            self, tenant_id: TenantId, unit_id: UnitId, *, include_inactive: bool = False
-        ) -> tuple[Employee, ...]:
-            raise falha
-
-    # Sobre o **mesmo** store: o ledger e o estado são os do holder.
-    employees = (
-        _RegistrosQueFalhamNaListagem(fakes.store) if onde == "list_by_unit" else fakes.employees
-    )
     antes = len(fakes.store.calls)
 
     with pytest.raises(RuntimeError) as excinfo:
-        DeactivateEmployeeUseCase(employees, gateway, guard=PermissiveAccessGuard()).execute(
+        DeactivateEmployeeUseCase(fakes.employees, gateway, guard=PermissiveAccessGuard()).execute(
             DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
         )
 
