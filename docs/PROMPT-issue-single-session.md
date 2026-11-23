@@ -5,7 +5,7 @@ when-use: Issue avulsa da tabela de issues do roadmap com escopo delimitado, sob
 keywords: [prompt, issue, single-session, execucao, lifecycle]
 status: draft
 created_at: 2026-06-10
-updated_at: 2026-11-16
+updated_at: 2026-11-23
 ---
 
 # Prompt — Execução de Issue Avulsa em Sessão Única
@@ -166,7 +166,8 @@ exatos a modificar. Sua responsabilidade é ler o código e identificar o que pr
    PARE — propor abertura de Stage.
 4. **Plano de gates:** listar junto das sub-tasks depois de quais o `make check` completo
    precisa estar verde e por quê. De 1 a 3 pontos por issue, o de saída incluído; o padrão
-   é só o de saída. Regra completa: PIPELINE §9.6.
+   é só o de saída. Sub-tasks e plano vão na seção "Plano de gates" do corpo do PR (lugar e
+   regra completa: PIPELINE §9.6, "Issue avulsa").
 5. Identificar **bifurcações materiais**: decisões ausentes na issue, no roadmap e no
    código existente que afetam contrato, fronteira ou critério de aceite.
    - Se houver: usar `AskUserQuestion` antes de codar.
@@ -361,6 +362,9 @@ Closes #<issue>
 ## O que foi feito
 
 <resumo de 2–3 linhas>
+
+## Plano de gates
+<sub-tasks e pontos da decomposição, item 4 (lugar: PIPELINE §9.6, "Issue avulsa")>
 
 ## Decisões e achados
 <[decision] e [deviation] registrados aqui; [finding] foi para comentário na issue>

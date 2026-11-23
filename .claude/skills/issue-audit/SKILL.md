@@ -208,12 +208,12 @@ git archive origin/<base> | tar -x -C <tmp> && cd <tmp> && <comando do gate>
 6. **Docs derivados.** `docs/roadmap.md`: status da issue na tabela e
    frontmatter (`updated_at`/`last_reviewed_at`) coerentes? (Issue
    **não** tem `§7 post-execution` — isso é de Stage; não cobrar aqui.)
-7. **Plano de gates** (regra: PIPELINE §9.6, "Issue avulsa"). Listado
-   junto das sub-tasks, no corpo do PR ou no relatório; sem plano escrito
-   vale o padrão, um ponto, o de saída. Ponto além dele: `[deviation]` no
-   corpo do PR e run verde do `lint-and-test` no commit da sub-task do
-   ponto. Branch nascida antes do merge do ADR 0.0.0021 não deve plano.
-   Corte e comandos: [plano-de-gates.md](../stage-audit/reference/plano-de-gates.md#issue-avulsa).
+7. **Plano de gates** (regra e lugar: PIPELINE §9.6, "Issue avulsa").
+   Ler o plano no corpo do PR; corpo sem plano é finding dentro da própria
+   issue. Ponto além do de saída: `[deviation]` no corpo do PR e run verde
+   do `lint-and-test` no commit da sub-task do ponto. Branch nascida antes
+   do merge do ADR 0.0.0021 não deve plano.
+   Corte, classificação e comandos: [plano-de-gates.md](../stage-audit/reference/plano-de-gates.md#issue-avulsa).
 
 ### Fase D — Judgment por tipo de mudança (não se mecaniza)
 

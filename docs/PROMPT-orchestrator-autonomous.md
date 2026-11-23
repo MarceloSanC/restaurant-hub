@@ -5,7 +5,7 @@ when-use: Avançar o backlog aberto do roadmap (Stages e issues) sem acompanhame
 keywords: [prompt, orchestrator, autonomous, worktree, parallel, subagents, audit, auto-merge, github-actions]
 status: accepted
 created_at: 2026-11-01
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 ---
 
 # Prompt — Orquestrador Autônomo de Stages e Issues
@@ -34,8 +34,8 @@ subagentes de contexto zerado e responde aos forks deles.
    arquivos tocados, os testes afetados contra o Postgres da própria worktree). A evidência dos
    gates de `make check`/coverage é o run do Actions (`gh pr checks <num>`,
    `gh run view <id> --log | tail`), não reexecução local. O implementador espera o veredito do
-   Actions só nos pontos do **plano de gates** (§1 do `technical.md`; na issue avulsa, listado com
-   as sub-tasks); entre pontos segue para a Task seguinte (regra em
+   Actions só nos pontos do **plano de gates** (§1 do `technical.md`; na issue avulsa, no corpo do
+   PR, com as sub-tasks); entre pontos segue para a Task seguinte (regra em
    [`PIPELINE.md` §9.6](./PIPELINE.md#96-plano-de-gates)).
 4. **Decisões:** forks dos subagentes chegam ao orquestrador, que os resolve pela skill
    `evidence-resolution` (E/C fecha sozinho e registra; só P vai ao humano, com header `P:`).
