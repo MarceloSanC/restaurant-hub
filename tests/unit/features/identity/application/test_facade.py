@@ -490,18 +490,18 @@ class TestTransparenciaAExcecoes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Issue #234 — a regra tem uma cópia só, a do use case. Com o conjunto
-        alargado por dublê, a fachada passa a aceitar o papel novo; um literal
-        reintroduzido na fachada (a segunda cópia) o recusaria e reprova aqui. O
-        dublê troca o nome nos dois módulos, para não depender de como a fachada o
-        importa."""
-        alargado = frozenset({Role.EMPLOYEE, Role.MANAGER})
-        monkeypatch.setattr(modulo_provision_account, "PROVISIONABLE_ROLES", alargado)
-        monkeypatch.setattr(modulo_facade, "PROVISIONABLE_ROLES", alargado)
+        trocado por dublê para `{manager}`, a fachada aceita `manager` e recusa
+        `employee`: um literal reintroduzido na fachada (a segunda cópia), sozinho ou
+        somado à constante, erra um dos dois lados e reprova aqui. O dublê troca o
+        nome nos dois módulos, para não depender de como a fachada o importa."""
+        trocado = frozenset({Role.MANAGER})
+        monkeypatch.setattr(modulo_provision_account, "PROVISIONABLE_ROLES", trocado)
+        monkeypatch.setattr(modulo_facade, "PROVISIONABLE_ROLES", trocado)
         fachada, espiao, _, _ = _fachada_espia()
 
         _provisionar(fachada, role="manager")
         with pytest.raises(RoleNotProvisionableError):
-            _provisionar(fachada, role="owner")
+            _provisionar(fachada, role="employee")
 
         assert [command.role for command in espiao.commands] == [Role.MANAGER]
 
