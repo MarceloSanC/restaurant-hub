@@ -193,6 +193,9 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
 7. **Plano de gates** da §1 do technical (regra: PIPELINE §9.6): se a Stage o deve (corte), a
    forma e a evidência de **cada** ponto (run do `lint-and-test` no commit da Task, ou saída
    local). Corte, comandos e classificação: [reference/plano-de-gates.md](reference/plano-de-gates.md).
+8. **Disposições dos Checkpoints A/B/C** na §7 (CONVENTIONS §3.4): uma entrada por checkpoint,
+   gravada no commit que o fechou, todo achado disposto e 1–2 refutações relidas contra o
+   artefato. Corte, comandos e classificação: [reference/disposicoes-checkpoints.md](reference/disposicoes-checkpoints.md).
 
 ### Fase D — Judgment (a parte que NÃO se mecaniza)
 
