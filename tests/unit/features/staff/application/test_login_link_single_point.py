@@ -56,6 +56,12 @@ _PASTA: Final = (
 _MODULO_DO_PONTO_UNICO: Final = "_login_link"
 _CHAMADAS_EXCLUSIVAS: Final = frozenset({"revoke_login_sessions", "is_employee_login"})
 _ESCRITAS_QUE_ENCERRAM: Final = frozenset({"deactivate", "relink_login", "unlink_login"})
+# As transições da entidade que encerram vínculo: um use case que as aplicasse e
+# gravasse por outro caminho (`update(employee.deactivate())`) também encerraria o
+# vínculo ativo — contam, com qualquer receptor (Checkpoint C, bloco T05–T07, F1).
+_TRANSICOES_QUE_ENCERRAM: Final = frozenset(
+    {"deactivate", "deactivate_as_read", "relink_login", "unlink_login"}
+)
 
 # Os use cases que encerram vínculo ativo, transcritos — a varredura deriva o conjunto
 # do código e compara. Use case novo que encerre vínculo entra aqui por decisão.
@@ -77,6 +83,13 @@ def _e_escrita_que_encerra(chamada: ast.Call) -> bool:
     )
 
 
+def _encerra_vinculo(chamada: ast.Call) -> bool:
+    """Escrita do port **ou** transição da entidade que encerra vínculo."""
+    return _e_escrita_que_encerra(chamada) or (
+        isinstance(chamada.func, ast.Attribute) and chamada.func.attr in _TRANSICOES_QUE_ENCERRAM
+    )
+
+
 def _e_ponto_unico(chamada: ast.Call) -> bool:
     return isinstance(chamada.func, ast.Name) and chamada.func.id == "end_active_link"
 
@@ -92,7 +105,7 @@ def _violacoes_de_ordem(fonte: str) -> list[int]:
         violacoes += [
             c.lineno
             for c in chamadas
-            if _e_escrita_que_encerra(c) and not any(p < c.lineno for p in pontos)
+            if _encerra_vinculo(c) and not any(p < c.lineno for p in pontos)
         ]
     return violacoes
 
@@ -133,7 +146,8 @@ def test_os_use_cases_que_encerram_vinculo_sao_os_transcritos() -> None:
     derivados = {
         nome
         for nome, fonte in _modulos().items()
-        if any(_e_escrita_que_encerra(c) for c in _chamadas_por_nome(ast.parse(fonte)))
+        if nome != _MODULO_DO_PONTO_UNICO
+        and any(_encerra_vinculo(c) for c in _chamadas_por_nome(ast.parse(fonte)))
     }
     assert derivados == _ENCERRAM_VINCULO
 
@@ -159,8 +173,18 @@ def test_controle_a_varredura_de_ordem_reprova(fonte: str) -> None:
     assert _violacoes_de_ordem(fonte) != []
 
 
-def test_controle_a_transicao_da_entidade_nao_conta_como_escrita() -> None:
-    fonte = "def execute(self, c):\n    return to_result(employee.deactivate())\n"
+def test_controle_a_transicao_da_entidade_sem_ponto_unico_reprova() -> None:
+    """`update(employee.deactivate())` desligaria um vinculado sem a regra (F1)."""
+    fonte = "def execute(self, c):\n    self._employees.update(employee.deactivate())\n"
+    assert _violacoes_de_ordem(fonte) != []
+
+
+def test_controle_a_transicao_depois_do_ponto_unico_passa() -> None:
+    fonte = (
+        "def execute(self, c):\n"
+        "    end_active_link(self._employees, self._gateway, employee)\n"
+        "    return to_result(employee.deactivate())\n"
+    )
     assert _violacoes_de_ordem(fonte) == []
 
 
@@ -347,6 +371,44 @@ def test_r13_que_leu_sem_vinculo_e_recusado_por_um_vinculo_concorrente() -> None
     assert gateway.revoked == []
 
 
+class _RecontratacaoEntreALeituraEAEscrita(InMemoryEmployeeRepository):
+    """Um R14 concorrente que recontrata o registro entre a leitura do R13 e a escrita."""
+
+    def deactivate(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId | None,
+        expected_active: bool,
+    ) -> None:
+        gravado = self.find_by_id(tenant_id, unit_id, employee_id)
+        assert gravado is not None
+        self._store.employees[employee_id] = gravado.reactivate()
+        super().deactivate(
+            tenant_id,
+            unit_id,
+            employee_id,
+            expected_user_id=expected_user_id,
+            expected_active=expected_active,
+        )
+
+
+def test_r13_que_leu_desligado_e_recusado_por_uma_recontratacao_concorrente() -> None:
+    """O motivo de `expected_active`: o vínculo voltou a ser ativo e a regra não rodou."""
+    fakes, gateway, login = _arranjo()
+    _gravar(fakes, _registro(user_id=login, active=False))
+
+    with pytest.raises(EmployeeLoginChangedError):
+        _desligar(_RecontratacaoEntreALeituraEAEscrita(fakes.store), gateway)
+
+    relido = fakes.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    assert (relido.active, relido.user_id) == (True, login)
+    assert gateway.calls == []
+
+
 def test_r13_passa_ao_port_o_estado_que_leu() -> None:
     fakes, gateway, login = _arranjo()
     _gravar(fakes, _registro(user_id=login))
@@ -372,5 +434,6 @@ def test_r13_passa_ao_port_o_estado_que_leu() -> None:
             )
 
     _desligar(_Espiao(fakes.store), gateway)
+    _desligar(_Espiao(fakes.store), gateway)
 
-    assert vistos == [(login, True)]
+    assert vistos == [(login, True), (login, False)]
