@@ -211,3 +211,12 @@ erro de serialização ali previsto "in principle" para as leituras não ocorre 
 "read-only transactions will never have serialization conflicts" (PostgreSQL 16, §13.2.2);
 só a transação que escreve ou trava linha o sofre. Provas: os testes `test_issue_225_*` de
 `test_staff_conduct.py`, com duas conexões. Nota *append-only*; o corpo acima não foi editado.
+
+**2026-11-23 — o lookup de `delete` de função volta a remontar a habilitação, sob lock (issue
+#207).** A nota de 2026-11-23 (issue #225) deixa em `READ COMMITTED` o lookup de `delete`, "que
+deixou de remontar a habilitação". Pelo [ADR 0.0.0023](./0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md), renomear e apagar passaram a ser escritas condicionais
+à habilitação lida, como `update_enablement`: o lookup de `delete` é `SELECT … FOR UPDATE` e
+remonta a habilitação para compará-la, e o de `update` é `SELECT … FOR NO KEY UPDATE`. Sob o lock
+da linha a remontagem em `READ COMMITTED` é coerente pelo mesmo argumento de `update_enablement`
+(todo escritor dos vínculos toma a linha-pai antes). Provas: os testes `test_issue_207_*` de
+`test_staff_conduct.py`. Nota *append-only*; o corpo acima não foi editado.

@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 3 (
 keywords: [domain, staff, workforce, funcionario, funcao, jornada, sob-demanda, intermitente, preferencia-turno, indisponibilidade, copia-unidade, identity-gateway, lingua-ubiqua, ciclo-de-vida, desligamento, recontratacao, cadastro-minimo, homonimos, wall-clock, fuso-da-unidade, rbac]
 status: accepted
 created_at: 2026-07-23
-updated_at: 2026-11-16
+updated_at: 2026-11-23
 bounded_context: staff
 subdomain: workforce
 references:
@@ -36,6 +36,7 @@ references:
   - ../../adr/3_8_0001-termination-revokes-only-access-the-record-grants.md
   - ../../adr/3_11_0001-job-function-unit-enablement-model.md
   - ../../adr/3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md
+  - ../../adr/0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md
   - ../../adr/4_1_0003-v1-validation-policy-set-defaults-and-modes.md
   - ../../adr/4_1_0004-hr-reads-schedules-in-member-units.md
   - ../../adr/4_1_0005-unit-timezone-owned-by-identity.md
@@ -275,6 +276,18 @@ desligado** (§3.1), porque o registro dele sobrevive ao desligamento.
 >   função de uma unidade em que algum registro — ativo ou desligado — a detém também.
 >
 > A consequência sobre a cópia entre unidades está na nota de §3.7.
+
+> **Nota (2026-11-23) — renomear e remover também exigem alcance (issue #207;
+> [ADR 0.0.0023](../../adr/0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md)):**
+> a frase "Renomear e remover seguem com o alcance do catálogo do restaurante", da nota acima,
+> deixou de valer. Renomear ou remover uma função age em **toda unidade em que ela vale**, e exige
+> por isso o mesmo alcance que criar para essas unidades: gerir o catálogo em cada uma delas, ou o
+> alcance sobre o restaurante inteiro (`manage_tenant`, hoje do dono) quando a função vale em
+> todas. O gerente de uma unidade não renomeia nem remove função que vale em outra unidade que ele
+> não enxerga — e, com isso, remover e recriar deixou de ser caminho para tirar uma função de uma
+> unidade alheia. Função que vale em todas as unidades (inclusive todas as anteriores à Stage 3.11)
+> é renomeada e removida pelo dono. As regras de ciclo de vida acima (remoção guardada por qualquer
+> registro, ativo ou desligado) não mudam.
 
 ### 3.3 Perfil de jornada: fixa × sob demanda
 
@@ -582,7 +595,7 @@ Quem faz o quê no staff (papéis de **acesso** de identity aplicados a este sub
 | Papel | No subdomínio workforce |
 |---|---|
 | **dono (owner)** | Gerencia a equipe; visibilidade **bypassa** memberships (enxerga todas as unidades do tenant). ADR 2.1.0001 (eixo de visibilidade); kickoff #1 e #9. |
-| **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). ADR 2.1.0001 (escopo por membership); ADR 3.4.0006 (gerente e RH nas unidades de que são membros). O **catálogo de funções**, que é do restaurante (§3.2), ele gerencia sem nomear unidade — a permissão do catálogo é *tenant-wide* ([ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)). |
+| **gerente (manager)** | Gerencia a equipe das unidades das quais é membro (escopado às memberships). ADR 2.1.0001 (escopo por membership); ADR 3.4.0006 (gerente e RH nas unidades de que são membros). O **catálogo de funções**, que é do restaurante (§3.2), ele gerencia sem nomear unidade — a permissão do catálogo é *tenant-wide* ([ADR 3.4.0008](../../adr/3_4_0008-tenant-wide-permissions-exempt-from-unit-scope.md)). *(Nota 2026-11-23: criar, mudar unidades, renomear e remover uma função exigem alcance sobre as unidades em que ela vale — renomear e remover desde a issue #207 ([ADR 0.0.0023](../../adr/0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md)); função que vale em todas as unidades é do dono. Ver §3.2.)* |
 | **RH (hr)** | Em identity, coincide com o gerente (mesmo MANAGE_USERS); **no staff também coincide** — mesmas permissões e mesmo alcance do gerente: os registros das unidades das quais é membro, **sem** alcance cross-unidade, e o catálogo de funções do restaurante inteiro ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md); ADR 3.4.0008). A divergência que o kickoff #10 previu existe, mas é de **família de operação** e mora na **escala** (Step 4): o RH mexe no cadastro; mexer na escala é do gerente e do dono, e o RH só a lê (ADR 4.1.0004; ver a lacuna fechada abaixo). Kickoff #10; `src/restaurant_hub/features/identity/domain/value_objects/role.py` (manager e hr com as mesmas permissões de staff — `MANAGE_STAFF` e `MANAGE_JOB_FUNCTIONS` — e o mesmo `MANAGE_USERS` de identity). *(Nota 2026-09-13: a divergência real é na **escala**, não no staff — dentro do staff hr ≡ manager ([ADR 3.4.0006](../../adr/3_4_0006-staff-rbac-two-permissions-and-hr-parity.md)); na escala, hr **lê** nas unidades de que é membro e não gerencia ([ADR 4.1.0004](../../adr/4_1_0004-hr-reads-schedules-in-member-units.md)).)* |
 | **funcionário (employee)** | Papel fixo, tenant-scoped, com **permissões vazias** — na v1 **não enxerga nada de staff**; o único caso de uso futuro é consultar a própria escala (Step 4, fora deste subdomínio — roadmap 3.5 `non_goals`). Âncoras das permissões vazias: `Role.EMPLOYEE: frozenset()` em `src/restaurant_hub/features/identity/domain/value_objects/role.py` (Stage 2.1, merged); mapeamento bronze do kickoff ("hoje só consulta"). |
 | **admin de plataforma** | Fora do tenant; bypass de visibilidade é da fundação (ADR 2.1.0001), sem particularidade de staff. |

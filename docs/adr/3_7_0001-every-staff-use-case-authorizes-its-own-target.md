@@ -5,7 +5,7 @@ when-use: Reference before adding a staff use case, changing a staff command, or
 keywords: [adr, staff, authorization, access-guard, application, fail-closed, defense-in-depth]
 status: accepted
 created_at: 2026-10-19
-updated_at: 2026-10-19
+updated_at: 2026-11-23
 adr_id: 3.7.0001
 decision: Every staff use case receives the AccessGuard by constructor and, before any other statement, authorizes the target its command declares — the tenant is confirmed, not derived — while the HTTP boundary keeps its own authorization as defense in depth
 context_stage: 3.7-application-authorization
@@ -289,3 +289,17 @@ as an access error — fail-closed, untyped.
 - Code: `src/restaurant_hub/features/identity/application/use_cases/authorize_action.py`
   (steps 2–5), `src/restaurant_hub/composition_root.py` (`_IdentityAccessGuard`)
 - Issue: #49
+
+## Supersessão parcial
+
+**2026-11-23 — a linha da tabela de §Decision 3 *"the 4 catalogue use cases — `manage_job_functions`
+— tenant only"* foi superada pelo [ADR 0.0.0023](./0_0_0023-rename-and-delete-job-function-need-reach-over-its-units.md) (issue #207), e a exceção à §Decision 4 cresceu.** Além da
+criação e da alteração de unidades (errata de 2026-11-09), renomear e apagar autorizam também onde
+a função vale: o tenant primeiro, depois a leitura da função (404 se ausente), e só então cada
+unidade da habilitação gravada, ou `manage_tenant` quando ela vale em todas. A leitura entre as
+duas autorizações é a mesma exceção declarada para `set_job_function_units` (ADR 3.11.0001 §5),
+sem oráculo: revela só o que o catálogo já mostra a quem passou na autorização do tenant. A
+varredura `test_use_cases_authorize.py` transcreve os três use cases da exceção
+(`_LEEM_ANTES_DO_ALVO_DERIVADO`) e trava, pela AST, que o alvo derivado de renomear e apagar é a
+instrução seguinte à checagem de existência. O resto da decisão continua valendo. Nota
+*append-only*; o corpo acima não foi editado.
