@@ -226,7 +226,6 @@ class PostgresScheduleRepository:
                 raise ScheduleNotFoundError(schedule.id)
             if stored_version != expected_version:
                 raise ScheduleVersionConflictError(expected_version, stored_version)
-            self._check_neighbours(connection, schedule, stored_version, expected_neighbours)
             self._check_internal_ids(connection, schedule)
             connection.execute(
                 schedules.update()
