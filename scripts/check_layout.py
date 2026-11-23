@@ -630,11 +630,12 @@ GATEWAY_WRITE_METHODS: dict[str, frozenset[str]] = {
 
 # Ports de saída que não são repositório e **não gravam**, cada um com o motivo
 # (issue #260). Com `GATEWAY_WRITE_METHODS`, é a classificação **total** desses ports:
-# todo `Protocol` (ou `ABC`) de `ports/out/` fora de `*_repository.py`, de qualquer BC
-# ou de `shared/`, está num dos dois, ou `check_out_port_classification` reprova. Sem
-# isso, um gateway novo que gravasse em outro BC seria lido como leitura em silêncio.
-# A chave é o nome da classe, como em `is_write`: dois ports homônimos (os dois
-# `AccessGuard`) partilham a classificação.
+# todo port (`_e_port`) de `ports/out/` fora de `*_repository.py`, de qualquer BC ou de
+# `shared/`, está num dos dois, ou `check_out_port_classification` reprova. Sem isso,
+# um gateway novo que gravasse em outro BC seria lido como leitura em silêncio. A chave
+# é o nome da classe, como em `is_write`: dois ports homônimos (os dois `AccessGuard`)
+# partilham a classificação — fail-closed, porque o pino de métodos do teste é por
+# (arquivo, classe) e o método que grava conta pelo nome nos dois.
 NON_WRITING_PORTS: dict[str, str] = {
     "ActionAuthorizer": "decide o acesso (AuthorizeActionUseCase); não grava",
     "PasswordHasher": "calcula e confere hash em memória; não grava",
@@ -736,25 +737,64 @@ def port_methods(src_root: Path) -> dict[str, set[str]]:
     return metodos
 
 
-def _e_port(classe: ast.ClassDef) -> bool:
-    """`class X(Protocol)`, `X(typing.Protocol)`, `X(Protocol[T])` ou `X(ABC)`.
+_BASES_DE_PORT = frozenset({"Protocol", "ABC"})
+_METACLASSES_DE_PORT = frozenset({"ABCMeta"})
+
+
+def _apelidos(tree: ast.Module) -> dict[str, str]:
+    """`from typing import Protocol as P` → `{"P": "Protocol"}` (e o mesmo para `ABC`/`ABCMeta`)."""
+    return {
+        nome.asname: nome.name
+        for no in ast.walk(tree)
+        if isinstance(no, ast.ImportFrom)
+        for nome in no.names
+        if nome.asname is not None and nome.name in _BASES_DE_PORT | _METACLASSES_DE_PORT
+    }
+
+
+def _e_port(
+    classe: ast.ClassDef,
+    apelidos: dict[str, str] | None = None,
+    ports_conhecidos: frozenset[str] = frozenset(),
+) -> bool:
+    """`class X(Protocol)`, `X(typing.Protocol)`, `X(Protocol[T])`, `X(ABC)`,
+    `X(metaclass=ABCMeta)` — com o nome importado sob apelido ou não — ou uma
+    classe que herda de outro port (`ports_conhecidos`).
 
     As outras classes de `ports/out/` (dataclasses de retorno, enums) não são port.
     """
+    apelidos = apelidos or {}
+
+    def nome_real(no: ast.expr) -> str | None:
+        nome = _anotacao(no)
+        return apelidos.get(nome, nome) if nome is not None else None
+
     for base in classe.bases:
-        alvo = base.value if isinstance(base, ast.Subscript) else base
-        if _anotacao(alvo) in {"Protocol", "ABC"}:
+        nome = nome_real(base.value if isinstance(base, ast.Subscript) else base)
+        if nome in _BASES_DE_PORT or nome in ports_conhecidos:
             return True
-    return False
+    return any(
+        k.arg == "metaclass" and nome_real(k.value) in _METACLASSES_DE_PORT for k in classe.keywords
+    )
 
 
 def non_repository_ports(src_root: Path) -> dict[tuple[str, str], frozenset[str]]:
     """(arquivo relativo, port) → métodos, para todo port de saída que não é repositório.
 
-    Derivado da árvore: `ports/out/` de cada feature e de `shared/`, fora de
-    `*_repository.py` (issue #260).
+    Derivado da árvore: `ports/out/` de cada feature e de `shared/` (subpastas e
+    `__init__.py` inclusive), fora de `*_repository.py` (issue #260). Port é a classe
+    de `_e_port`; a herança de outro port (de repositório ou não) se resolve até o
+    ponto fixo, pelo nome.
+
+    **Limites declarados** (auditoria do PR #263): só a classe no nível do módulo — a
+    definida dentro de `if`/`try`/função não é vista; classe sem base nenhuma usada
+    como interface não é port para a regra (o port do projeto é `Protocol`, LAYOUT
+    §5); e a classe de um arquivo `*_repository.py` é sempre repositório,
+    classificada pelo prefixo do método (o que não começa com `find_`/`exists_`/`list_`
+    grava — o erro desse lado é contar escrita a mais, salvo o método com prefixo de
+    leitura que grava, risco que já era o da convenção de nome dos repositórios).
     """
-    portas: dict[tuple[str, str], frozenset[str]] = {}
+    classes: dict[tuple[str, str], tuple[ast.ClassDef, dict[str, str]]] = {}
     for arquivo in sorted(src_root.rglob("*.py")):
         caminho = posix(arquivo)
         if PORTS_OUT_ANCHOR not in caminho or caminho.endswith(REPOSITORY_PORT_SUFFIX):
@@ -763,11 +803,22 @@ def non_repository_ports(src_root: Path) -> dict[tuple[str, str], frozenset[str]
         if tree is None:
             continue
         relativo = arquivo.relative_to(src_root).as_posix()
-        for classe in (n for n in tree.body if isinstance(n, ast.ClassDef) and _e_port(n)):
-            portas[(relativo, classe.name)] = frozenset(
-                m.name for m in classe.body if isinstance(m, _FUNCOES)
-            )
-    return portas
+        apelidos = _apelidos(tree)
+        for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
+            classes[(relativo, classe.name)] = (classe, apelidos)
+
+    conhecidos = frozenset(repository_port_names(src_root))
+    portas: dict[tuple[str, str], frozenset[str]] = {}
+    while True:
+        novas = {
+            chave: frozenset(m.name for m in classe.body if isinstance(m, _FUNCOES))
+            for chave, (classe, apelidos) in classes.items()
+            if chave not in portas
+            and _e_port(classe, apelidos, conhecidos | {nome for _, nome in portas})
+        }
+        if not novas:
+            return portas
+        portas.update(novas)
 
 
 def is_write(port: str, method: str, repository_ports: set[str]) -> bool:

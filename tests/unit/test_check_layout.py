@@ -1638,6 +1638,118 @@ def test_regra10_port_novo_e_achado_em_cada_forma_de_declaracao(
     assert "'NovoGateway' não está classificado" in violacoes[0]
 
 
+_DECLARA_PROTOCOLO = (
+    "from typing import Protocol\n\n\nclass Base(Protocol):\n    def ler(self) -> int: ...\n"
+)
+
+
+@pytest.mark.parametrize(
+    "arquivos",
+    [
+        pytest.param(
+            {
+                "features/x/application/ports/out/novo.py": (
+                    "from typing import Protocol as P\n\n\n"
+                    "class NovoGateway(P):\n    def gravar(self) -> None: ...\n"
+                )
+            },
+            id="protocol-com-apelido",
+        ),
+        pytest.param(
+            {
+                "features/x/application/ports/out/novo.py": (
+                    "from abc import ABCMeta, abstractmethod\n\n\n"
+                    "class NovoGateway(metaclass=ABCMeta):\n"
+                    "    @abstractmethod\n    def gravar(self) -> None: ...\n"
+                )
+            },
+            id="metaclass-abcmeta",
+        ),
+        pytest.param(
+            {
+                "features/x/application/ports/out/novo.py": (
+                    "from abc import ABCMeta as M\n\n\n"
+                    "class NovoGateway(metaclass=M):\n    def gravar(self) -> None: ...\n"
+                )
+            },
+            id="metaclass-com-apelido",
+        ),
+        pytest.param(
+            {"features/x/application/ports/out/sub/novo.py": _PORT_NOVO},
+            id="subpasta",
+        ),
+        pytest.param(
+            {"features/x/application/ports/out/__init__.py": _PORT_NOVO},
+            id="init",
+        ),
+        pytest.param(
+            {
+                "features/x/application/ports/out/novo.py": (
+                    "from .base import Base\n\n\n"
+                    "class NovoGateway(Base):\n    def gravar(self) -> None: ...\n"
+                ),
+            },
+            id="herda-de-port-sem-protocol",
+        ),
+        pytest.param(
+            {
+                "features/x/application/ports/out/novo.py": (
+                    "from .coisa_repository import CoisaRepository\n\n\n"
+                    "class NovoGateway(CoisaRepository):\n    def gravar(self) -> None: ...\n"
+                )
+            },
+            id="herda-de-repositorio",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("classificacao_sintetica")
+def test_regra10_port_novo_escondido_tambem_e_achado(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, arquivos: dict[str, str]
+) -> None:
+    """Formas que a auditoria do PR #263 plantou: as três primeiras e a herança escapavam."""
+    monkeypatch.setattr(
+        check_layout, "NON_WRITING_PORTS", {"UnitOfWork": "a unidade", "Base": "só lê"}
+    )
+    # `Base` (classificado) fica em toda árvore: é o port de que um dos casos herda.
+    raiz = _src_com_ports(
+        tmp_path, {"features/x/application/ports/out/base.py": _DECLARA_PROTOCOLO, **arquivos}
+    )
+
+    violacoes = check_layout.check_out_port_classification(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "'NovoGateway' não está classificado" in violacoes[0]
+
+
+def test_regra10_homonimos_tem_cada_um_o_seu_pino(tmp_path: pathlib.Path) -> None:
+    """Os dois `AccessGuard` partilham a classificação no script, não o pino de métodos.
+
+    Um método novo num deles não muda nada no script (o nome já está classificado),
+    mas muda a chave (arquivo, port) dele em `non_repository_ports` — é o que faz
+    `test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado` reprovar.
+    """
+    guarda = (
+        "from typing import Protocol\n\n\n"
+        "class Guard(Protocol):\n    def authorize(self) -> None: ...\n"
+    )
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/a/application/ports/out/guard.py": guarda,
+            "features/b/application/ports/out/guard.py": (
+                guarda + "    def provisionar(self) -> None: ...\n"
+            ),
+        },
+    )
+
+    assert check_layout.non_repository_ports(raiz) == {
+        ("features/a/application/ports/out/guard.py", "Guard"): frozenset({"authorize"}),
+        ("features/b/application/ports/out/guard.py", "Guard"): frozenset(
+            {"authorize", "provisionar"}
+        ),
+    }
+
+
 @pytest.mark.parametrize(
     ("tabela", "valor"),
     [
