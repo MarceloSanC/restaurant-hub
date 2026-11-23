@@ -178,6 +178,90 @@ class EmployeeRepository(Protocol):
         """
         ...
 
+    def unlink_login(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId,
+        expected_active: bool,
+    ) -> None:
+        """Retira o vínculo de login — **só** se o gravado for o que foi lido.
+
+        **`L-UNLINK` — escrita própria e condicional do desvínculo** (Stage 3.10,
+        ADR 3.10.0001 §2). O use case decide a revogação de sessões sobre o
+        registro que leu; esta escrita confere esse estado sobre o **gravado**, na
+        mesma operação atômica que grava. Ordem de checagem normativa:
+
+        1. inexistente **no endereço** `(tenant_id, unit_id, id)` ⇒
+           `EmployeeNotFoundError`;
+        2. depois `Employee.unlink_login(expected_user_id, was_active=expected_active)`
+           sobre o gravado: sem vínculo ⇒ `EmployeeHasNoLoginError`; login
+           diferente do esperado, ou lido desligado e gravado ativo ⇒
+           `EmployeeLoginChangedError`.
+
+        Vale para registro desligado. Em erro, nada é gravado; no sucesso só
+        `user_id` muda (para nulo).
+        """
+        ...
+
+    def relink_login(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId,
+        user_id: UserId,
+    ) -> None:
+        """Troca o login vinculado — **só** se o gravado for o que foi lido.
+
+        **`L-RELINK` — escrita própria e condicional da troca** (Stage 3.10,
+        ADR 3.10.0001 §2). Ordem de checagem normativa:
+
+        1. inexistente **no endereço** ⇒ `EmployeeNotFoundError`;
+        2. depois `Employee.relink_login(expected_user_id, user_id)` sobre o
+           gravado: sem vínculo ⇒ `EmployeeHasNoLoginError`; desligado ⇒
+           `TerminatedEmployeeLoginError`; login diferente do esperado ⇒
+           `EmployeeLoginChangedError`.
+
+        O estado ativo esperado é implícito: o domínio recusa trocar o login de um
+        desligado. Em erro, nada é gravado; no sucesso só `user_id` muda.
+        """
+        ...
+
+    def deactivate(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId | None,
+        expected_active: bool,
+    ) -> None:
+        """Desliga o registro — **só** se o vínculo gravado for o que foi lido.
+
+        **`L-DEACT` — escrita própria e condicional do desligamento** (Stage 3.10,
+        ADR 3.10.0001 §4). Fecha o entrelace "desligamento contra vínculo na ordem
+        inversa" do ADR 0.0.0010: um desligamento que leu o registro sem vínculo
+        e grava depois de um vínculo concorrente é recusado, em vez de deixar o
+        registro desligado **e** vinculado a um login que ninguém revogou. Ordem
+        de checagem normativa:
+
+        1. inexistente **no endereço** ⇒ `EmployeeNotFoundError`;
+        2. depois `Employee.deactivate_as_read(expected_user_id,
+           was_active=expected_active)` sobre o gravado: login diferente do
+           esperado, ou lido desligado e gravado ativo (recontratado no meio) ⇒
+           `EmployeeLoginChangedError`.
+
+        Idempotente no valor: o gravado já desligado, com o login esperado,
+        continua desligado sem erro. Em erro, nada é gravado; no sucesso só
+        `active` muda — o resto do agregado não é regravado a partir de uma
+        leitura possivelmente velha.
+        """
+        ...
+
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """Remove o registro **definitivamente** — o oposto de desligar.
 

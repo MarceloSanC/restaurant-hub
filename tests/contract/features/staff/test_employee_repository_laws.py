@@ -37,6 +37,8 @@ from restaurant_hub.features.staff.domain.entities.employee import Employee
 from restaurant_hub.features.staff.domain.entities.job_function import JobFunction
 from restaurant_hub.features.staff.domain.exceptions.errors import (
     EmployeeAlreadyHasLoginError,
+    EmployeeHasNoLoginError,
+    EmployeeLoginChangedError,
     InvalidIdentifierError,
     InvalidNameError,
     StaffError,
@@ -1249,3 +1251,257 @@ def test_l_del_link_esta_declarada_no_port_com_a_ancora_da_issue(
     assert "L-DEL-LINK" in documentacao
     assert "EmployeeHasLoginError" in documentacao
     assert "ADR 0.0.0013" in documentacao
+
+
+# --- L-UNLINK, L-RELINK e L-DEACT: escritas condicionais ao lido (Stage 3.10) --
+#
+# As três escritas da Stage 3.10 têm a forma de `L-LINK` (ADR 3.10.0001 §2): o
+# endereço primeiro, depois a transição do domínio sobre o **gravado** com o estado
+# que o use case leu, e uma coluna só. Cada recusa deixa o gravado exatamente como
+# estava. A metade concorrente é conduta, em `test_staff_conduct.py`.
+
+_OUTRO = UserId("login-2")
+_FORA_DO_ENDERECO = pytest.mark.parametrize(
+    ("tenant", "unidade", "funcionario"),
+    [(_A, _U1, EmployeeId("fantasma")), (_A, _U2, _E1), (_B, _U1, _E1)],
+    ids=["inexistente", "outra_unidade", "outro_tenant"],
+)
+
+
+def _gravado(repos: RepositoriosDeStaff, *, user_id: UserId | None, active: bool = True) -> None:
+    _com_funcoes_gravadas(repos)
+    repos.employees.add(_registro_completo())
+    if user_id is not None:
+        repos.employees.link_login(_A, _U1, _E1, user_id)
+    if not active:
+        repos.employees.update(_registro_completo().deactivate())
+
+
+def _relido(repos: RepositoriosDeStaff) -> Employee:
+    relido = repos.employees.find_by_id(_A, _U1, _E1)
+    assert relido is not None
+    return relido
+
+
+def _estado(repos: RepositoriosDeStaff) -> tuple[UserId | None, bool]:
+    relido = _relido(repos)
+    return relido.user_id, relido.active
+
+
+# L-UNLINK
+
+
+@pytest.mark.parametrize("ativo", [True, False], ids=["ativo", "desligado"])
+def test_l_unlink_tira_o_vinculo_e_nenhum_outro_campo(
+    repos: RepositoriosDeStaff, ativo: bool
+) -> None:
+    _gravado(repos, user_id=_LOGIN, active=ativo)
+
+    repos.employees.unlink_login(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=ativo)
+
+    relido = _relido(repos)
+    assert relido.user_id is None
+    esperado = _registro_completo() if ativo else _registro_completo().deactivate()
+    assert _campos(relido) == _campos(esperado)
+
+
+@_FORA_DO_ENDERECO
+def test_l_unlink_fora_do_endereco_e_not_found_e_nao_grava(
+    repos: RepositoriosDeStaff, tenant: TenantId, unidade: UnitId, funcionario: EmployeeId
+) -> None:
+    _gravado(repos, user_id=_LOGIN)
+
+    with pytest.raises(EmployeeNotFoundError):
+        repos.employees.unlink_login(
+            tenant, unidade, funcionario, expected_user_id=_LOGIN, expected_active=True
+        )
+
+    assert _estado(repos) == (_LOGIN, True)
+
+
+def test_l_unlink_sem_vinculo_gravado_e_recusado(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=None)
+
+    with pytest.raises(EmployeeHasNoLoginError):
+        repos.employees.unlink_login(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=True)
+
+    assert _estado(repos) == (None, True)
+
+
+def test_l_unlink_login_gravado_diferente_do_lido_e_recusado(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=_OUTRO)
+
+    with pytest.raises(EmployeeLoginChangedError):
+        repos.employees.unlink_login(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=True)
+
+    assert _estado(repos) == (_OUTRO, True)
+
+
+def test_l_unlink_lido_desligado_e_gravado_ativo_e_recusado(repos: RepositoriosDeStaff) -> None:
+    """Recontratado no meio: desvincular agora encerraria um vínculo ativo sem a regra."""
+    _gravado(repos, user_id=_LOGIN, active=True)
+
+    with pytest.raises(EmployeeLoginChangedError):
+        repos.employees.unlink_login(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=False)
+
+    assert _estado(repos) == (_LOGIN, True)
+
+
+def test_l_unlink_lido_ativo_e_gravado_desligado_desvincula(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=_LOGIN, active=False)
+
+    repos.employees.unlink_login(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=True)
+
+    assert _estado(repos) == (None, False)
+
+
+# L-RELINK
+
+
+def test_l_relink_troca_o_login_e_nenhum_outro_campo(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=_LOGIN)
+
+    repos.employees.relink_login(_A, _U1, _E1, expected_user_id=_LOGIN, user_id=_OUTRO)
+
+    relido = _relido(repos)
+    assert relido.user_id == _OUTRO
+    assert _campos(dataclasses.replace(relido, user_id=None)) == _campos(_registro_completo())
+
+
+@_FORA_DO_ENDERECO
+def test_l_relink_fora_do_endereco_e_not_found_e_nao_grava(
+    repos: RepositoriosDeStaff, tenant: TenantId, unidade: UnitId, funcionario: EmployeeId
+) -> None:
+    _gravado(repos, user_id=_LOGIN)
+
+    with pytest.raises(EmployeeNotFoundError):
+        repos.employees.relink_login(
+            tenant, unidade, funcionario, expected_user_id=_LOGIN, user_id=_OUTRO
+        )
+
+    assert _estado(repos) == (_LOGIN, True)
+
+
+def test_l_relink_sem_vinculo_gravado_vence_desligado(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=None, active=False)
+
+    with pytest.raises(EmployeeHasNoLoginError):
+        repos.employees.relink_login(_A, _U1, _E1, expected_user_id=_LOGIN, user_id=_OUTRO)
+
+    assert _estado(repos) == (None, False)
+
+
+def test_l_relink_gravado_desligado_vence_login_trocado(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=_OUTRO, active=False)
+
+    with pytest.raises(TerminatedEmployeeLoginError):
+        repos.employees.relink_login(
+            _A, _U1, _E1, expected_user_id=_LOGIN, user_id=UserId("login-3")
+        )
+
+    assert _estado(repos) == (_OUTRO, False)
+
+
+def test_l_relink_login_gravado_diferente_do_lido_e_recusado(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=_OUTRO)
+
+    with pytest.raises(EmployeeLoginChangedError):
+        repos.employees.relink_login(
+            _A, _U1, _E1, expected_user_id=_LOGIN, user_id=UserId("login-3")
+        )
+
+    assert _estado(repos) == (_OUTRO, True)
+
+
+@pytest.mark.parametrize("vazio", ["", "   "], ids=["vazio", "so_espacos"])
+def test_l_relink_user_id_vazio_e_recusado_e_nada_e_gravado(
+    repos: RepositoriosDeStaff, vazio: str
+) -> None:
+    _gravado(repos, user_id=_LOGIN)
+
+    with pytest.raises(InvalidIdentifierError):
+        repos.employees.relink_login(_A, _U1, _E1, expected_user_id=_LOGIN, user_id=UserId(vazio))
+
+    assert _estado(repos) == (_LOGIN, True)
+
+
+# L-DEACT
+
+
+@pytest.mark.parametrize("login", [_LOGIN, None], ids=["vinculado", "sem_vinculo"])
+def test_l_deact_desliga_e_nenhum_outro_campo(
+    repos: RepositoriosDeStaff, login: UserId | None
+) -> None:
+    _gravado(repos, user_id=login)
+
+    repos.employees.deactivate(_A, _U1, _E1, expected_user_id=login, expected_active=True)
+
+    relido = _relido(repos)
+    assert relido.active is False
+    assert relido.user_id == login
+    assert _campos(dataclasses.replace(relido, active=True, user_id=None)) == _campos(
+        _registro_completo()
+    )
+
+
+@_FORA_DO_ENDERECO
+def test_l_deact_fora_do_endereco_e_not_found_e_nao_grava(
+    repos: RepositoriosDeStaff, tenant: TenantId, unidade: UnitId, funcionario: EmployeeId
+) -> None:
+    _gravado(repos, user_id=None)
+
+    with pytest.raises(EmployeeNotFoundError):
+        repos.employees.deactivate(
+            tenant, unidade, funcionario, expected_user_id=None, expected_active=True
+        )
+
+    assert _estado(repos) == (None, True)
+
+
+@pytest.mark.parametrize(
+    ("gravado", "lido"),
+    [(_LOGIN, None), (None, _LOGIN), (_OUTRO, _LOGIN)],
+    ids=["vinculado_no_meio", "desvinculado_no_meio", "trocado_no_meio"],
+)
+def test_l_deact_login_gravado_diferente_do_lido_e_recusado(
+    repos: RepositoriosDeStaff, gravado: UserId | None, lido: UserId | None
+) -> None:
+    """A ordem inversa do ADR 0.0.0010: o desligamento não grava sobre outro vínculo."""
+    _gravado(repos, user_id=gravado)
+
+    with pytest.raises(EmployeeLoginChangedError):
+        repos.employees.deactivate(_A, _U1, _E1, expected_user_id=lido, expected_active=True)
+
+    assert _estado(repos) == (gravado, True)
+
+
+def test_l_deact_lido_desligado_e_gravado_ativo_e_recusado(repos: RepositoriosDeStaff) -> None:
+    _gravado(repos, user_id=_LOGIN, active=True)
+
+    with pytest.raises(EmployeeLoginChangedError):
+        repos.employees.deactivate(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=False)
+
+    assert _estado(repos) == (_LOGIN, True)
+
+
+@pytest.mark.parametrize("lido_ativo", [True, False], ids=["concorrente", "repetido"])
+def test_l_deact_gravado_ja_desligado_e_idempotente(
+    repos: RepositoriosDeStaff, lido_ativo: bool
+) -> None:
+    _gravado(repos, user_id=_LOGIN, active=False)
+
+    repos.employees.deactivate(_A, _U1, _E1, expected_user_id=_LOGIN, expected_active=lido_ativo)
+
+    assert _estado(repos) == (_LOGIN, False)
+
+
+@pytest.mark.parametrize(
+    ("metodo", "lei"),
+    [("unlink_login", "L-UNLINK"), ("relink_login", "L-RELINK"), ("deactivate", "L-DEACT")],
+)
+def test_as_leis_da_stage_3_10_estao_declaradas_no_port(
+    repos: RepositoriosDeStaff, metodo: str, lei: str
+) -> None:
+    documentacao = getattr(EmployeeRepository, metodo).__doc__ or ""
+    assert lei in documentacao
+    assert "ADR 3.10.0001" in documentacao

@@ -148,6 +148,36 @@ def _invocacoes(fakes: StaffFakes) -> list[tuple[str, Callable[[], object]]]:
             ),
         ),
         (
+            "employees.unlink_login",
+            lambda: fakes.employees.unlink_login(
+                _TENANT,
+                _UNIDADE,
+                EmployeeId("e-novo"),
+                expected_user_id=UserId("login-novo"),
+                expected_active=True,
+            ),
+        ),
+        (
+            "employees.relink_login",
+            lambda: fakes.employees.relink_login(
+                _TENANT,
+                _UNIDADE,
+                EmployeeId("e-novo"),
+                expected_user_id=UserId("login-novo"),
+                user_id=UserId("login-outro"),
+            ),
+        ),
+        (
+            "employees.deactivate",
+            lambda: fakes.employees.deactivate(
+                _TENANT,
+                _UNIDADE,
+                EmployeeId("e-novo"),
+                expected_user_id=UserId("login-novo"),
+                expected_active=True,
+            ),
+        ),
+        (
             "employees.find_by_id",
             lambda: fakes.employees.find_by_id(_TENANT, _UNIDADE, EmployeeId("e-novo")),
         ),
