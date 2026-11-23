@@ -5,7 +5,7 @@ when-use: Reference before changing how a job function is scoped to units, befor
 keywords: [adr, job-function, unit, enablement, catalogue, manage-tenant, migration, staff, uniqueness]
 status: accepted
 created_at: 2026-11-09
-updated_at: 2026-11-16
+updated_at: 2026-11-22
 adr_id: 3.11.0001
 decision: JobFunction stays tenant-owned and gains a UnitEnablement value object that is either every unit of the restaurant, present and future, or a non-empty explicit set of units; the name stays unique in the restaurant; enabling in every unit requires manage_tenant on top of manage_job_functions, enabling in named units requires manage_job_functions on each unit; changing the enablement replaces it whole and needs reach over the units added and removed (manage_tenant when every unit is on either side); existing functions migrate to every unit
 context_stage: 3.11-job-function-unit-enablement
@@ -208,3 +208,24 @@ before and after the migration is the same for every existing function.
 - ADR 3.3.0001, ADR 3.3.0002, ADR 3.3.0007, ADR 3.4.0001, ADR 3.4.0003, ADR 3.4.0006,
   ADR 3.4.0007, ADR 3.4.0008, ADR 3.1.0006, ADR 3.2.0005, ADR 3.7.0001
 - `docs/domain/staff/workforce.md` §3.2
+
+## Notas datadas
+
+**2026-11-22 — o "Declared limit — two concurrent changes of the same function" da §5
+(Decision 5) foi fechado pela issue #206.** `JobFunctionRepository.update_enablement`
+(lei `L-JF7`, revisada) recebe a habilitação que o use case leu e sobre a qual autorizou a
+diferença, e recusa com `JobFunctionEnablementChangedError` quando a gravada mudou — sem
+gravar nada; o mapa de staff a responde como `409`. O adapter Postgres decide sob
+`SELECT … FOR UPDATE` na linha da função, a forma que o
+[ADR 0.0.0010](./0_0_0010-employee-login-link-has-its-own-conditional-write.md) deu a
+`link_login`; staff continua sem lock otimista
+([ADR 3.3.0006](./3_3_0006-transactional-atomicity-without-optimistic-locking.md)) e não há
+migration. Duas alterações intercaladas não deixam mais o conjunto do segundo escritor: com a
+função em `{A}`, o dono alarga para `{A, B}` e o gerente de A que reenvia `{A}` sobre a
+leitura antiga recebe a recusa, e B fica. Provas: a suíte de contrato de
+`test_job_function_repository_laws.py` (todo par gravada/esperada diferente recusa, fake e
+Postgres com um corpo só) e os testes de conduta `test_issue_206_*` de
+`test_staff_conduct.py`, com duas conexões. O resto da decisão continua valendo; a corrida
+entre estreitar a habilitação e atribuir a função a um registro, declarada no
+[ADR 3.11.0002](./3_11_0002-employee-holds-only-functions-enabled-in-its-unit.md), não é
+esta e segue aberta. Nota *append-only*; o corpo acima não foi editado.
