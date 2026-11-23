@@ -219,6 +219,7 @@ docs-check:
 	uv run python scripts/check_adr_code_citations.py
 	uv run python scripts/check_doc_frontmatter.py
 	uv run python scripts/check_docs_pointers.py
+	uv run python scripts/check_gate_plan.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes (sem cobertura — loop rápido local)

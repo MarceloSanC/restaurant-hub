@@ -13,6 +13,12 @@ Sumário: [1. Corte](#1-a-stage-precisa-de-plano-corte) ·
 
 ## 1. A Stage precisa de plano? (corte)
 
+**Stage: o corte é mecânico.** `scripts/check_gate_plan.py` (issue #201, no `make docs-check`)
+isenta só as pastas da lista fechada `LEGACY_STAGES` (as 23 de `docs/stages/` em 2026-11-22,
+travadas por teste) e o technical em `draft`. Pasta fora da lista, com technical aprovado, deve
+o plano: com o `docs-check` verde, o corte e a forma já estão conferidos. A data de nascimento
+abaixo sobra para a issue avulsa (que não tem pasta) e para a evidência de uma divergência.
+
 A transição do §9.6 fala da branch que **nasce** depois do merge do ADR 0.0.0021. O nascimento é
 a menor data de autor entre os commits da branch, que o rebase preserva. A comparação é em
 segundos desde a época (`%at`/`%ct`), não em texto ISO: commit feito com outro fuso (devcontainer
@@ -53,9 +59,10 @@ Ler a tabela "Plano de gates" da §1 do `technical.md` e conferir contra o §9.6
 quantos pontos, se o de saída está entre eles, se cada ponto do 4º em diante traz a
 justificativa no plano ou um `[deviation]` na §7. "Por segurança" não justifica.
 
-Quem confere a forma mecanicamente é o gate da issue #201, se ela o criar no `make docs-check`:
-com ele verde, o auditor só lê se o motivo de cada ponto é concreto. Enquanto ele não existir, o
-auditor conta as linhas. Ponto posto no lugar errado (fora dos grupos de "Onde pôr um ponto no
+Quem confere a forma é `scripts/check_gate_plan.py`, no `make docs-check` (título na §1,
+cabeçalho do template, pontos numerados, células preenchidas, ponto de saída, "por segurança"
+recusado do 4º em diante): com ele verde, o auditor só lê se o motivo de cada ponto é concreto e
+confere o cumprimento (seção 3). Ponto posto no lugar errado (fora dos grupos de "Onde pôr um ponto no
 meio da Stage") é julgamento da Fase D-bis, não contagem.
 
 ## 3. O cumprimento de cada ponto
