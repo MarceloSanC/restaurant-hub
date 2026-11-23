@@ -143,6 +143,22 @@ class JobFunctionNotFoundError(SchedulingApplicationError):
         super().__init__(f"função de trabalho não encontrada: {job_function_id!r}")
 
 
+class JobFunctionNotEnabledInUnitError(SchedulingError):
+    """Demanda de função que não vale na unidade da escala (issue #209, ADR 4.3.0005).
+
+    A função existe no catálogo do tenant, mas a habilitação dela em staff não cobre a
+    unidade (ADR 3.11.0001). Recusa o que o lote **introduz**: declarar a demanda ou
+    aumentar o `N` de uma já gravada. Ecoa só o que o pedido nomeou e o endereço.
+    """
+
+    def __init__(self, job_function_id: str, unit_id: str) -> None:
+        super().__init__(
+            f"função de trabalho {job_function_id!r} não habilitada na unidade {unit_id!r}"
+        )
+        self.job_function_id = job_function_id
+        self.unit_id = unit_id
+
+
 class InactiveAllocationsInUseError(SchedulingError):
     """Faixa ou demanda presa só por alocações de registros desligados (D3).
 

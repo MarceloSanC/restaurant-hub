@@ -7,8 +7,14 @@ use cases); **não escreve** — a escrita é do `execute` do publish.
    mesmo tipo, na escala carregada ou numa vizinha ⇒ `IdentifierInUseError`.
 2. **Aplicação** (`apply_operations`): operações em ordem, em memória; por operação, as
    pré-checagens da application (alvo de `AssignEmployee` presente e ativo, função no
-   catálogo, instantes de `RescheduleBand` ingênuos e de minuto inteiro, D3) e depois o
-   domínio, cujos erros sobem crus. Efetiva = o resultado não `is` a escala de entrada.
+   catálogo, função habilitada na unidade, instantes de `RescheduleBand` ingênuos e de
+   minuto inteiro, D3) e depois o domínio, cujos erros sobem crus. Efetiva = o resultado
+   não `is` a escala de entrada.
+
+   **Função habilitada na unidade** (issue #209, ADR 4.3.0005): declarar demanda de função
+   que não vale na unidade, ou aumentar o `N` de uma já gravada, é recusado. Demanda
+   gravada antes de a função ser estreitada em staff fica e não trava o resto do lote:
+   reduzir, zerar, retirar ou mover a faixa passam (D1, ADR 4.3.0003 §4).
 3. **Introduzidas** (`introduced`): desvio com sinal (`observed - limit`); a do depois é
    introduzida se a `key` é nova, ou se o desvio trocou de sinal ou cresceu em magnitude.
    Sobre-cobertura casa por demanda.
@@ -42,6 +48,7 @@ from restaurant_hub.features.scheduling.application.errors import (
     IdentifierInUseError,
     InactiveAllocationsInUseError,
     InactiveStaffMemberError,
+    JobFunctionNotEnabledInUnitError,
     JobFunctionNotFoundError,
     ScheduleNotFoundError,
     ScheduleVersionConflictError,
@@ -162,6 +169,22 @@ def _assign(schedule: Schedule, operation: AssignEmployee, view: StaffView) -> S
     )
 
 
+def _require_enabled(schedule: Schedule, job_function_id: str, view: StaffView) -> None:
+    """A função vale na unidade da escala, ou o lote a introduz e é recusado (issue #209)."""
+    if job_function_id not in view.unit_function_ids:
+        raise JobFunctionNotEnabledInUnitError(job_function_id, schedule.unit_id)
+
+
+def _change_quantity(
+    schedule: Schedule, operation: ChangeDemandQuantity, view: StaffView
+) -> Schedule:
+    _, demand = schedule.locate_demand(operation.demand_id)
+    # Só aumentar o N introduz vaga: reduzir ou zerar é a gerente corrigindo (D1).
+    if operation.quantity.value > demand.quantity.value:
+        _require_enabled(schedule, demand.job_function_id, view)
+    return schedule.change_demand_quantity(operation.demand_id, operation.quantity)
+
+
 def _apply_one(  # noqa: PLR0911 — um ramo por operação do lote
     schedule: Schedule, operation: ScheduleOperation, view: StaffView
 ) -> Schedule:
@@ -181,11 +204,12 @@ def _apply_one(  # noqa: PLR0911 — um ramo por operação do lote
     if isinstance(operation, DeclareDemand):
         if operation.job_function_id not in view.function_names:
             raise JobFunctionNotFoundError(operation.job_function_id)
+        _require_enabled(schedule, operation.job_function_id, view)
         return schedule.declare_demand(
             operation.demand_id, operation.band_id, operation.job_function_id, operation.quantity
         )
     if isinstance(operation, ChangeDemandQuantity):
-        return schedule.change_demand_quantity(operation.demand_id, operation.quantity)
+        return _change_quantity(schedule, operation, view)
     if isinstance(operation, WithdrawDemand):
         _, demand = schedule.locate_demand(operation.demand_id)
         _guard_invisible(demand.assignments, view)
@@ -329,6 +353,7 @@ def run_batch(
         (loaded, *neighbours),
         targets=targets,
         with_roster=True,
+        with_unit_functions=True,
     )
     applied = apply_operations(loaded, operations, view)
     facts = facts_of(view)

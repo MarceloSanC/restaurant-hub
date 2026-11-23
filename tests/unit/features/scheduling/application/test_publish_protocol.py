@@ -2,9 +2,10 @@
 
 CA04 (1ª falha recusa), CA08 (aceite e medida), CA09 (sobre-cobertura), CA10
 (pré-existente), CA11 (alocar), CA12 (no-op), CA14 (D3), CA19 (instante de fora), CA20
-(erros crus), CA22 (ids de criação).
+(erros crus), CA22 (ids de criação); issue #209 (função habilitada na unidade).
 """
 
+import dataclasses
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -29,6 +30,7 @@ from restaurant_hub.features.scheduling.application.errors import (
     IdentifierInUseError,
     InactiveAllocationsInUseError,
     InactiveStaffMemberError,
+    JobFunctionNotEnabledInUnitError,
     JobFunctionNotFoundError,
     StaffMemberNotFoundError,
 )
@@ -66,6 +68,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.violation import Vi
 from tests.unit.features.scheduling.application.conftest import (
     COOK,
     MONDAY,
+    U1,
     WAITER,
     at,
     member,
@@ -75,12 +78,15 @@ from tests.unit.features.scheduling.application.conftest import (
 pytestmark = pytest.mark.unit
 
 _F1, _D1 = ShiftBandId("f1"), ShiftDemandId("d1")
+_CAIXA = JobFunctionId("caixa")
 
 
 def _view(*membros: object) -> StaffView:
     return StaffView(
         members={m.employee_id: m for m in membros},  # type: ignore[attr-defined]
-        function_names={COOK: "Cozinheiro", WAITER: "Atendente"},
+        function_names={COOK: "Cozinheiro", WAITER: "Atendente", _CAIXA: "Caixa"},
+        # `caixa` está no catálogo do tenant, mas não vale na unidade (issue #209).
+        unit_function_ids=frozenset({COOK, WAITER}),
     )
 
 
@@ -451,3 +457,96 @@ def test_ca09_outra_politica_da_mesma_demanda_nao_substitui_a_referencia() -> No
     # A referência de sobre-cobertura é a sobre-cobertura da demanda, nunca outra política.
     assert introduced((sobre, alheia), (sobre,)) == ()
     assert introduced((alheia, sobre), (sobre,)) == ()
+
+
+# --- issue #209 — função habilitada na unidade ----------------------------------------------
+
+
+def _com_demanda_de_caixa(quantidade: int = 1) -> Schedule:
+    """Demanda de `caixa` gravada antes de a função deixar de valer na unidade."""
+    return _base().declare_demand(ShiftDemandId("d-caixa"), _F1, _CAIXA, DemandQuantity(quantidade))
+
+
+def test_issue_209_declarar_demanda_de_funcao_nao_habilitada_recusa() -> None:
+    with pytest.raises(JobFunctionNotEnabledInUnitError) as excinfo:
+        apply_operations(
+            _base(), (DeclareDemand(ShiftDemandId("d2"), _F1, _CAIXA, DemandQuantity(1)),), _VIEW
+        )
+    assert (excinfo.value.job_function_id, excinfo.value.unit_id) == (_CAIXA, U1)
+
+
+def test_issue_209_demanda_zero_de_funcao_nao_habilitada_tambem_recusa() -> None:
+    """A recusa é pela função, não pela vaga: N = 0 também declara a demanda."""
+    with pytest.raises(JobFunctionNotEnabledInUnitError):
+        apply_operations(
+            _base(), (DeclareDemand(ShiftDemandId("d2"), _F1, _CAIXA, DemandQuantity(0)),), _VIEW
+        )
+
+
+def test_issue_209_funcao_fora_do_catalogo_continua_nao_encontrada() -> None:
+    """A checagem de catálogo vem antes: id desconhecido não vira "não habilitada"."""
+    with pytest.raises(JobFunctionNotFoundError):
+        apply_operations(
+            _base(),
+            (DeclareDemand(ShiftDemandId("d2"), _F1, JobFunctionId("zz"), DemandQuantity(1)),),
+            _VIEW,
+        )
+
+
+def test_issue_209_view_sem_funcoes_da_unidade_recusa_tudo() -> None:
+    """Fail-closed: quadro lido sem as funções da unidade não deixa declarar nenhuma."""
+    vazia = dataclasses.replace(_VIEW, unit_function_ids=frozenset())
+    with pytest.raises(JobFunctionNotEnabledInUnitError):
+        apply_operations(
+            _base(), (DeclareDemand(ShiftDemandId("d2"), _F1, COOK, DemandQuantity(1)),), vazia
+        )
+
+
+def test_issue_209_aumentar_o_n_de_demanda_nao_habilitada_recusa() -> None:
+    with pytest.raises(JobFunctionNotEnabledInUnitError):
+        apply_operations(
+            _com_demanda_de_caixa(1),
+            (ChangeDemandQuantity(ShiftDemandId("d-caixa"), DemandQuantity(2)),),
+            _VIEW,
+        )
+
+
+def test_issue_209_reabrir_demanda_zerada_de_funcao_nao_habilitada_recusa() -> None:
+    with pytest.raises(JobFunctionNotEnabledInUnitError):
+        apply_operations(
+            _com_demanda_de_caixa(0),
+            (ChangeDemandQuantity(ShiftDemandId("d-caixa"), DemandQuantity(1)),),
+            _VIEW,
+        )
+
+
+@pytest.mark.parametrize("quantidade", [2, 1, 0], ids=["mesmo-n", "reduzir", "zerar"])
+def test_issue_209_demanda_pre_existente_reduz_zera_ou_fica(quantidade: int) -> None:
+    """D1: a demanda gravada antes do estreitamento não trava quem a corrige."""
+    resultado = apply_operations(
+        _com_demanda_de_caixa(2),
+        (ChangeDemandQuantity(ShiftDemandId("d-caixa"), DemandQuantity(quantidade)),),
+        _VIEW,
+    )
+    _, demanda = resultado.schedule.locate_demand(ShiftDemandId("d-caixa"))
+    assert demanda.quantity == DemandQuantity(quantidade)
+
+
+def test_issue_209_demanda_pre_existente_sai_e_nao_trava_o_resto_do_lote() -> None:
+    lote = (
+        DeclareDemand(ShiftDemandId("d2"), _F1, WAITER, DemandQuantity(1)),
+        ChangeDemandQuantity(_D1, DemandQuantity(3)),
+        WithdrawDemand(ShiftDemandId("d-caixa")),
+    )
+    resultado = apply_operations(_com_demanda_de_caixa(), lote, _VIEW)
+    assert resultado.effective == lote
+    assert {d.job_function_id for f in resultado.schedule.bands for d in f.demands} == {
+        COOK,
+        WAITER,
+    }
+
+
+def test_issue_209_aumentar_o_n_de_funcao_habilitada_passa() -> None:
+    resultado = apply_operations(_base(), (ChangeDemandQuantity(_D1, DemandQuantity(5)),), _VIEW)
+    _, demanda = resultado.schedule.locate_demand(_D1)
+    assert demanda.quantity == DemandQuantity(5)
