@@ -663,7 +663,9 @@ CENARIOS_POR_EXCECAO: dict[str, tuple[CenarioDeExcecao, str]] = {
     ),
 }
 
-_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 26
+# 28 desde a Stage 3.10, que acrescenta `EmployeeHasNoLoginError` e
+# `EmployeeLoginChangedError` às 26 de develop (inclui a da issue #206).
+_TOTAL_DE_ENTRADAS_DO_MAPA: Final = 28
 
 # O tamanho do domínio de corpo de CA24 **depois** de a varredura descer por
 # lista. Eram dez caminhos; os três novos são um elemento de `job_function_ids`
