@@ -135,7 +135,7 @@ def test_revogacao_e_consulta_de_papel_so_no_ponto_unico() -> None:
 def _e_end_active_link(nome: str) -> bool:
     """O ponto único — e as cópias dele que o mutmut escreve no módulo mutado.
 
-    O job `mutation-access-modules` roda a suíte sobre `mutants/`, onde cada função
+    O job `mutation` do `audit-gate.yml` roda a suíte sobre `mutants/`, onde cada função
     de `_login_link.py` vira um trampolim mais as cópias `x_end_active_link__mutmut_*`
     (a original e uma por mutante). Elas são o mesmo ponto único; sem aceitá-las, a
     varredura reprovaria a própria corrida de mutação.
