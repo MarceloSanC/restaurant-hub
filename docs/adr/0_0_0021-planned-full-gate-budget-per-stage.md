@@ -14,6 +14,8 @@ bounded_context: transversal
 
 # ADR 0.0.0021 — A planned budget of 1 to 3 full gates per Stage replaces the full gate before every commit
 
+> ⚠️ **Errata (2026-11-22):** §Consequences › *Neutral / trade-offs accepted* — the first bullet ("No gate checks that a technical.md has a gate plan") no longer holds: since issue #201 `scripts/check_gate_plan.py`, wired in `make docs-check`, rejects a technical.md out of `draft` without the "Plano de gates" heading in §1 or with the table out of the template's form (numbered points, filled cells, an exit point, no "por segurança" from the 4th point on). The cut-off for the Stages approved before this ADR is a closed list of their folders, locked by a test. Since the same issue, `scripts/check_docs_pointers.py` also rejects a fenced command block that runs `make check` before a `git commit` carrying a Task mark. The technical gate still reviews the merit of the plan. The decision is unchanged — ver issue #201 / PR #221
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
 ## Status
@@ -147,7 +149,7 @@ Configuração candidata: nenhuma · Reversível: sim
 - The quality of the plan depends on the author's judgement. The budget cap and the justification rule make a bad plan visible. They do not prevent one.
 
 ### Neutral / trade-offs accepted
-- The technical gate reviews the merit of the plan. Its form is checked mechanically since issue #201: `scripts/check_gate_plan.py`, wired in `make docs-check`, rejects a technical.md without the "Plano de gates" heading in §1 or with the table out of the template's form (numbered points, filled cells, an exit point, no "por segurança" from the 4th point on). The cut-off for the Stages approved before this ADR is a closed list of their folders, locked by a test. Since the same issue, `scripts/check_docs_pointers.py` also rejects a fenced command block that runs `make check` before a `git commit` carrying a Task mark.
+- No gate checks that a technical.md has a gate plan or that the plan has 1 to 3 points: the technical gate reviews it. A mechanical check would need a cut-off for the Stages approved before this ADR (issue #201, speculative).
 - The audit skills (`stage-audit`, `issue-audit`) do not yet read the gate plan. They are being reorganized by issue #162, so the change is left as a follow-up (issue #200, which also adds the pointer to the orchestrator prompt).
 
 ## References
