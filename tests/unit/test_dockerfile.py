@@ -26,14 +26,20 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 DEVCONTAINER = REPO_ROOT / ".devcontainer" / "devcontainer.json"
+DOCKER_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "docker-build.yml"
 
 # As duas stages que alguém consome: `builder` (compose/devcontainer,
 # `make docker-build`) e `runtime` (`make docker-build-prod`, deploy).
 STAGES = ("builder", "runtime")
+
+# Arquivos que decidem o que a imagem instala: mudar qualquer um precisa
+# construir as stages no CI.
+IMAGE_INPUTS = ("Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock")
 
 
 def _instructions(text: str) -> list[str]:
@@ -152,3 +158,14 @@ def test_devcontainer_reinstala_pelo_lock() -> None:
     command = config["postCreateCommand"]
     assert "pip install" not in command
     assert "uv sync --locked" in command
+
+
+@pytest.mark.parametrize("event", ["pull_request", "push"])
+def test_workflow_constroi_quando_muda_o_que_a_imagem_instala(event: str) -> None:
+    """O filtro de caminhos do `docker-build.yml` cobre todo arquivo que decide a imagem."""
+    workflow: dict[Any, Any] = yaml.safe_load(DOCKER_WORKFLOW.read_text(encoding="utf-8"))
+    # O YAML 1.1 do PyYAML lê a chave `on` como o booleano True.
+    triggers: dict[str, Any] = workflow.get("on") or workflow[True]
+    paths = set(triggers[event]["paths"])
+    missing = sorted(set(IMAGE_INPUTS) - paths)
+    assert missing == [], f"{event} não constrói a imagem quando mudam: {missing}"

@@ -1,0 +1,75 @@
+name: docker-build
+
+# Constrói as duas stages do `Dockerfile` quando muda o que decide o conteúdo
+# delas (issue #244). O `lint-and-test` do `ci.yml` não usa a imagem: sem este
+# workflow, uma regressão no `Dockerfile` (ou um lock que a imagem não aceita)
+# só apareceria no deploy.
+#
+# Por que filtro de caminho e não todo PR: o build custa minutos, e o que ele
+# pega nasce nestes arquivos — o código em `src/` não muda o que a imagem
+# instala. O lock fora de sincronia com o pyproject o `lock-check` do gate já
+# reprova em todo PR; aqui se prova que a IMAGEM instala o lock.
+#
+# NÃO é check obrigatório: com filtro de caminho ele não roda na maioria dos
+# PRs, e um check obrigatório que não roda trava o merge.
+#
+# `tests/unit/test_dockerfile.py` trava os caminhos do filtro.
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/docker-build.yml
+  push:
+    branches: [develop]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/docker-build.yml
+
+jobs:
+  build-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # As duas stages instalam com `uv sync --locked`: lock fora de sincronia
+      # com o pyproject reprova o build aqui.
+      - name: Build da stage builder (devcontainer)
+        run: docker build --target builder -t restaurant_hub-app:dev .
+
+      - name: Build da stage runtime (deploy)
+        run: docker build --target runtime -t restaurant_hub-app:prod .
+
+      # A runtime não tem as dependências de dev: importar a app prova que as de
+      # produção bastam para subir.
+      - name: A app importa na runtime
+        run: docker run --rm restaurant_hub-app:prod python -c "import restaurant_hub.main"
+
+      # Todo pacote instalado na runtime tem a versão do `uv.lock`, e nenhuma
+      # dependência de dev entrou.
+      - name: A runtime instala as versões do uv.lock
+        shell: python3 {0}
+        run: |
+          import json, re, subprocess, sys, tomllib
+
+          def norm(name):
+              return re.sub(r"[-_.]+", "-", name).lower()
+
+          with open("uv.lock", "rb") as fh:
+              locked = {norm(p["name"]): p["version"] for p in tomllib.load(fh)["package"] if "version" in p}
+          out = subprocess.run(
+              ["docker", "run", "--rm", "-e", "UV_NO_CACHE=1", "restaurant_hub-app:prod",
+               "uv", "pip", "list", "--format", "json"],
+              capture_output=True, text=True, check=True,
+          ).stdout
+          installed = {norm(p["name"]): p["version"] for p in json.loads(out)}
+          diverge = {n: (v, locked.get(n)) for n, v in installed.items() if locked.get(n) != v}
+          dev = sorted({"pytest", "ruff", "mypy", "pre-commit", "import-linter"} & installed.keys())
+          print(f"{len(installed)} pacotes instalados; divergentes do lock: {diverge}; dev: {dev}")
+          sys.exit(1 if diverge or dev else 0)
