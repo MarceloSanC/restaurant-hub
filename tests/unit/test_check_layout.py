@@ -503,6 +503,7 @@ def regra10_isolada(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr(check_layout, "MULTI_WRITE_ALLOWLIST", {})
     monkeypatch.setattr(check_layout, "GATEWAY_WRITE_METHODS", {})
+    monkeypatch.setattr(check_layout, "HELPER_WRITES", {})
 
 
 def _src_com_use_case(tmp_path: pathlib.Path, corpo: str) -> pathlib.Path:
@@ -823,6 +824,59 @@ def test_regra10_entrada_da_allowlist_sem_violacao_reprova(
     )
 
     assert any("'Fazer' está na allowlist mas não viola" in v for v in violacoes), violacoes
+
+
+_USE_CASE_COM_AUXILIAR = (
+    "def revogar(coisas: CoisaRepository) -> None:\n"
+    "    coisas.remove('sessoes')\n\n\n"
+    + _CABECALHO_DO_USE_CASE
+    + "    def execute(self) -> None:\n"
+    "        revogar(self._coisas)\n"
+    "        self._coisas.add('a')\n"
+)
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_chamada_a_auxiliar_declarado_conta_como_escrita(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stage 3.10: a revogação feita por função de módulo não some do varredor."""
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/use_cases/fazer.py": _USE_CASE_COM_AUXILIAR,
+        },
+    )
+    assert check_layout.check_multi_write_unit_of_work(raiz) == []
+
+    monkeypatch.setattr(check_layout, "HELPER_WRITES", {"revogar": "escreve fora"})
+    violacoes = check_layout.check_multi_write_unit_of_work(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "'Fazer'" in violacoes[0]
+    assert "revogar()" in violacoes[0]
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_auxiliar_declarado_que_nao_existe_reprova(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(check_layout, "HELPER_WRITES", {"sumiu": "escreve fora"})
+
+    violacoes = check_layout.check_multi_write_unit_of_work(
+        _src_com_use_case(tmp_path, _DUAS_DENTRO)
+    )
+
+    assert any("HELPER_WRITES declara 'sumiu'" in v for v in violacoes), violacoes
+
+
+def test_regra10_o_desligamento_conta_o_ponto_unico_como_a_escrita_em_identity() -> None:
+    """Sem a tabela, R13 teria uma escrita só e a entrada dele na allowlist morreria."""
+    achados = check_layout.scan_multi_write_use_cases(_SRC)
+
+    assert "end_active_link()" in achados["DeactivateEmployeeUseCase"][2]
 
 
 def test_regra10_os_use_cases_reais_cumprem_a_regra() -> None:
