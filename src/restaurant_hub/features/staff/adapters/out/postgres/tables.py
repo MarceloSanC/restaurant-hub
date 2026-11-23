@@ -55,6 +55,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
     true,
 )
 
@@ -183,10 +184,9 @@ employees = Table(
     # O login em identity vinculado ao registro (Stage 3.5, ADR 3.5.0004).
     # Opaco e **sem FK** para `users` — nenhuma FK atravessa BC (ADR 3.3.0002),
     # como `tenant_id` e `unit_id` acima. Anulável: login é opcional e explícito
-    # por registro (workforce §3.8). **Sem UNIQUE**: `workforce.md` §3.7 admite
-    # vários registros apontando para o mesmo `User` por vínculos explícitos.
-    # **Sem índice**: nenhum acesso por `user_id` nesta Stage; índice acompanha
-    # acesso medido (ADR 3.3.0005) e entra com `find_by_user_id` no Step 4.
+    # por registro (workforce §3.8). Único **por unidade**, nunca entre unidades:
+    # `workforce.md` §3.7 admite vários registros do mesmo `User` em unidades
+    # diferentes — ver `uq_employees_tenant_unit_user` abaixo (issue #241).
     Column("user_id", Text, nullable=True),
     # Colisão de id é **global** (L-E1), pelo mesmo motivo de `job_functions`.
     PrimaryKeyConstraint("id", name="pk_employees"),
@@ -211,6 +211,19 @@ employees = Table(
     ),
     # `list_by_unit` varre por `(tenant_id, unit_id)` — o acesso medido (D5).
     Index("ix_employees_tenant_unit", "tenant_id", "unit_id"),
+    # Um login por unidade (ADR 3.10.0001 §6), imposto pelo **banco** a todo
+    # escritor de `user_id` (issue #241, ADR 0.0.0025): dois vínculos concorrentes
+    # da mesma conta em dois registros da unidade não passam os dois. Parcial: só
+    # as linhas vinculadas. Sem `active` no predicado: o desligado conta, como na
+    # regra. `link_login`/`relink_login` traduzem a violação pelo nome.
+    Index(
+        "uq_employees_tenant_unit_user",
+        "tenant_id",
+        "unit_id",
+        "user_id",
+        unique=True,
+        postgresql_where=text("user_id IS NOT NULL"),
+    ),
 )
 
 

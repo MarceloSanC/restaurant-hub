@@ -155,6 +155,8 @@ def test_os_indices_sao_exatamente_os_declarados() -> None:
         "ix_employee_job_functions_function",
         # Stage 3.11 — serve `list_by_unit` (L-JF6).
         "ix_job_function_units_tenant_unit",
+        # Issue #241 — um login por unidade (ADR 0.0.0025); regra, não acesso.
+        "uq_employees_tenant_unit_user",
     }
     assert [c.name for c in next(iter(employee_job_functions.indexes)).columns] == [
         "job_function_id",
@@ -472,13 +474,13 @@ def test_employees_tem_oito_colunas_e_user_id_e_a_ultima() -> None:
     ]
 
 
-def test_user_id_e_text_anulavel_sem_fk_sem_unique_e_sem_indice() -> None:
-    """As quatro ausências são decisão (ADR 3.5.0004 §3), e cada uma é asserida.
+def test_user_id_e_text_anulavel_sem_fk_e_sem_unique_sozinho() -> None:
+    """As ausências que ficam do ADR 3.5.0004 §3, cada uma asserida.
 
-    FK: ADR 3.3.0002. UNIQUE: workforce §3.7. Índice: ADR 3.3.0005. Anulável:
-    workforce §3.8. Um `UniqueConstraint("user_id")` acrescentado "por
-    segurança" reprova aqui — congelaria o contrário do que o doc de domínio
-    admite.
+    FK: ADR 3.3.0002. Anulável: workforce §3.8. **Sem UNIQUE sobre `user_id`
+    sozinho**: workforce §3.7 admite o mesmo `User` em registros de unidades
+    diferentes, e um `UniqueConstraint("user_id")` acrescentado "por segurança"
+    reprova aqui. A unicidade é só por unidade — ver o teste seguinte.
     """
     coluna = employees.c.user_id
     assert isinstance(coluna.type, Text)
@@ -489,8 +491,26 @@ def test_user_id_e_text_anulavel_sem_fk_sem_unique_e_sem_indice() -> None:
         for constraint in employees.constraints
         if isinstance(constraint, UniqueConstraint)
     }
-    assert ("user_id",) not in colunas_unicas
-    assert all("user_id" not in [c.name for c in indice.columns] for indice in employees.indexes)
+    assert all("user_id" not in colunas for colunas in colunas_unicas)
+    indices_com_user_id = [
+        indice for indice in employees.indexes if "user_id" in [c.name for c in indice.columns]
+    ]
+    assert [indice.name for indice in indices_com_user_id] == ["uq_employees_tenant_unit_user"]
+
+
+def test_um_login_por_unidade_e_indice_unico_parcial_sobre_tenant_unidade_e_login() -> None:
+    """Issue #241 (ADR 0.0.0025 §1): o banco impõe a regra a todo escritor de `user_id`.
+
+    As três colunas, nesta ordem: sem `unit_id` o índice proibiria o mesmo login em
+    duas unidades (workforce §3.7); sem `tenant_id`, um login colidiria com o de
+    outro restaurante. O predicado deixa de fora só os registros sem login — e não
+    filtra `active`: o desligado conta, como na regra (ADR 3.10.0001 §6).
+    """
+    indice = next(i for i in employees.indexes if i.name == "uq_employees_tenant_unit_user")
+    assert indice.unique is True
+    assert [c.name for c in indice.columns] == ["tenant_id", "unit_id", "user_id"]
+    predicado = indice.dialect_options["postgresql"]["where"]
+    assert str(predicado) == "user_id IS NOT NULL"
 
 
 # ---------------------------------------------------------------------------

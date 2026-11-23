@@ -23,6 +23,11 @@ antes. O detalhe fica em `features/scheduling/adapters/out/postgres/test_schema.
 A issue #198 acrescentou a `0007_units_timezone`, sobre a `0006`: a coluna `timezone` em
 `units`, e a unidade que já existia antes dela fica com o default `America/Sao_Paulo`
 (ADR 4.1.0005); o `downgrade` de um passo remove só a coluna.
+
+A issue #241 acrescentou a `0008_employees_one_login_per_unit`, sobre a `0007`: o índice
+único parcial `uq_employees_tenant_unit_user` (ADR 0.0.0025). O `downgrade` de um passo
+remove só o índice; o `upgrade` sobre duas linhas da mesma unidade com o mesmo login
+**falha** e não aplica nada — a migration não conserta dados (fail-closed).
 """
 
 import logging
@@ -31,6 +36,7 @@ import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import alembic_config
 
@@ -418,3 +424,83 @@ def test_downgrade_da_0007_remove_so_a_coluna_timezone(engine: Engine, database_
         command.upgrade(config, "head")
 
     assert "timezone" in _colunas_de(engine, "units")
+
+
+# ---------------------------------------------------------------------------
+# Issue #241 — `0008_employees_one_login_per_unit` (ADR 0.0.0025)
+# ---------------------------------------------------------------------------
+
+_INDICE_DA_0008 = "uq_employees_tenant_unit_user"
+
+
+def _indices_de_employees(engine: Engine) -> set[str]:
+    with engine.connect() as conexao:
+        linhas = conexao.execute(
+            text("SELECT indexname FROM pg_indexes WHERE tablename = 'employees'")
+        )
+        return {linha[0] for linha in linhas}
+
+
+def _revisao_atual(engine: Engine) -> str:
+    with engine.connect() as conexao:
+        return str(conexao.execute(text("SELECT version_num FROM alembic_version")).scalar_one())
+
+
+@pytest.mark.slow
+def test_downgrade_da_0008_remove_so_o_indice_de_um_login_por_unidade(
+    engine: Engine, database_url: str
+) -> None:
+    """Descer um passo: `employees` fica com os outros índices, e o da `0008` some."""
+    config = alembic_config(database_url)
+    anterior = ScriptDirectory.from_config(config).get_revision("0008").down_revision
+    assert isinstance(anterior, str), anterior
+
+    assert _INDICE_DA_0008 in _indices_de_employees(engine)
+    try:
+        command.downgrade(config, anterior)
+        indices = _indices_de_employees(engine)
+        assert _INDICE_DA_0008 not in indices
+        assert {"pk_employees", "ix_employees_tenant_unit"} <= indices, indices
+    finally:
+        command.upgrade(config, "head")
+
+    assert _INDICE_DA_0008 in _indices_de_employees(engine)
+
+
+@pytest.mark.slow
+def test_0008_sobre_duplicata_da_unidade_falha_e_nao_aplica_nada(
+    engine: Engine, database_url: str
+) -> None:
+    """ADR 0.0.0025 §5 — a migration não conserta dados: aborta, e o banco fica na `0007`.
+
+    As duas linhas são gravadas com o banco na revisão anterior (sem o índice), como só a
+    corrida da issue as produzia pela API. Depois de apagá-las, o `upgrade` passa.
+    """
+    config = alembic_config(database_url)
+    anterior = ScriptDirectory.from_config(config).get_revision("0008").down_revision
+    assert isinstance(anterior, str), anterior
+    try:
+        command.downgrade(config, anterior)
+        with engine.begin() as conexao:
+            for id_ in ("e-dup-1", "e-dup-2"):
+                conexao.execute(
+                    text(
+                        "INSERT INTO employees "
+                        "(id, tenant_id, unit_id, name, workload_kind, weekly_hours, active, "
+                        "user_id) VALUES (:id, 't-dup', 'u-dup', 'Ana', 'on_demand', NULL, "
+                        "true, 'login-dup')"
+                    ),
+                    {"id": id_},
+                )
+
+        with pytest.raises(IntegrityError):
+            command.upgrade(config, "head")
+
+        assert _revisao_atual(engine) == anterior
+        assert _INDICE_DA_0008 not in _indices_de_employees(engine)
+    finally:
+        with engine.begin() as conexao:
+            conexao.execute(text("DELETE FROM employees WHERE tenant_id = 't-dup'"))
+        command.upgrade(config, "head")
+
+    assert _INDICE_DA_0008 in _indices_de_employees(engine)
