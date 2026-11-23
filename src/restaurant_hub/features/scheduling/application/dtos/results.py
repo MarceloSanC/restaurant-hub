@@ -12,6 +12,13 @@ nome `None`. A recusa do registro ausente acontece antes, no use case (§5.12).
 **Ordem determinística** (§5.20): faixas por (início, id); demandas por (função, id);
 alocações por (nome, id); turnos por (início, id da alocação); escalas por first_day;
 violações na ordem do avaliador.
+
+**A demanda diz se a função vale na unidade** (Stage 4.5, ADR 4.5.0003 §Decision 4): a
+demanda gravada antes de staff estreitar a função fica (D1, ADR 4.3.0005) e aparece como
+descoberta; `function_enabled_in_unit` é o que a borda mostra. Os mapeadores que constroem
+demanda recebem as funções habilitadas da unidade como argumento **obrigatório e
+keyword-only** — um chamador que esquecesse o conjunto não compila, em vez de marcar toda
+demanda com um valor constante.
 """
 
 from collections.abc import Iterable, Mapping
@@ -40,6 +47,7 @@ from restaurant_hub.features.scheduling.domain.value_objects.violation import Vi
 
 StaffIndex = Mapping[EmployeeId, StaffMember]
 FunctionNames = Mapping[JobFunctionId, str]
+EnabledFunctions = frozenset[JobFunctionId]
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,7 @@ class DemandResult:
     demand_id: ShiftDemandId
     job_function_id: JobFunctionId
     job_function_name: str | None
+    function_enabled_in_unit: bool
     quantity: int
     assignments: tuple[AssignmentResult, ...]
 
@@ -177,7 +186,12 @@ def _to_assignment_result(
 
 
 def _to_demand_result(
-    schedule: Schedule, demand: ShiftDemand, staff: StaffIndex, names: FunctionNames
+    schedule: Schedule,
+    demand: ShiftDemand,
+    staff: StaffIndex,
+    names: FunctionNames,
+    *,
+    enabled: EnabledFunctions,
 ) -> DemandResult:
     allocations = sorted(
         (
@@ -191,13 +205,19 @@ def _to_demand_result(
         demand_id=demand.id,
         job_function_id=demand.job_function_id,
         job_function_name=names.get(demand.job_function_id),
+        function_enabled_in_unit=demand.job_function_id in enabled,
         quantity=demand.quantity.value,
         assignments=tuple(allocations),
     )
 
 
 def _to_band_result(
-    schedule: Schedule, band: ShiftBand, staff: StaffIndex, names: FunctionNames
+    schedule: Schedule,
+    band: ShiftBand,
+    staff: StaffIndex,
+    names: FunctionNames,
+    *,
+    enabled: EnabledFunctions,
 ) -> BandResult:
     demands = sorted(band.demands, key=lambda d: (d.job_function_id, d.id))
     return BandResult(
@@ -205,19 +225,23 @@ def _to_band_result(
         schedule_id=schedule.id,
         operational_day=schedule.operational_day_of(band),
         time_range=band.time_range,
-        demands=tuple(_to_demand_result(schedule, d, staff, names) for d in demands),
+        demands=tuple(
+            _to_demand_result(schedule, d, staff, names, enabled=enabled) for d in demands
+        ),
     )
 
 
-def _bands_of(
+def _bands_of(  # noqa: PLR0913 — escalas + índices (2) + funções habilitadas + recorte (2)
     schedules: Iterable[Schedule],
     staff: StaffIndex,
     names: FunctionNames,
     first_day: date | None = None,
     last_day: date | None = None,
+    *,
+    enabled: EnabledFunctions,
 ) -> tuple[BandResult, ...]:
     bands = [
-        _to_band_result(sched, band, staff, names)
+        _to_band_result(sched, band, staff, names, enabled=enabled)
         for sched in schedules
         for band in sched.bands
         if first_day is None
@@ -232,11 +256,13 @@ def to_schedule_result(
     staff: StaffIndex,
     names: FunctionNames,
     violations: tuple[Violation, ...],
+    *,
+    enabled: EnabledFunctions,
 ) -> ScheduleResult:
     """A escala com as faixas e as violações dadas (as atuais, do avaliador)."""
     return ScheduleResult(
         summary=to_schedule_summary_result(schedule),
-        bands=_bands_of((schedule,), staff, names),
+        bands=_bands_of((schedule,), staff, names, enabled=enabled),
         violations=violations,
     )
 
@@ -250,12 +276,14 @@ def to_evaluation_result(
     return EvaluationResult(schedule=schedule, blocking=blocking, warnings=warnings)
 
 
-def to_calendar_result(
+def to_calendar_result(  # noqa: PLR0913 — recorte (2) + escalas + índices (2) + funções
     first_day: date,
     last_day: date,
     schedules: tuple[Schedule, ...],
     staff: StaffIndex,
     names: FunctionNames,
+    *,
+    enabled: EnabledFunctions,
 ) -> CalendarResult:
     """O calendário do recorte — faixas cujo dia operacional cai em [first, last]."""
     return CalendarResult(
@@ -265,7 +293,7 @@ def to_calendar_result(
             to_schedule_summary_result(e)
             for e in sorted(schedules, key=lambda e: e.period.first_day)
         ),
-        bands=_bands_of(schedules, staff, names, first_day, last_day),
+        bands=_bands_of(schedules, staff, names, first_day, last_day, enabled=enabled),
     )
 
 

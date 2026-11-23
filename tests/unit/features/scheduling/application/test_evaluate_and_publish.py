@@ -666,3 +666,19 @@ def test_issue_209_demanda_gravada_antes_do_estreitamento_nao_trava_edicao_alhei
                 version=2,
             )
         )
+
+
+# --- Stage 4.5: a demanda diz se a função vale na unidade (ADR 4.5.0003 §Decision 4) --------
+
+
+@pytest.mark.parametrize(("unidades", "esperado"), [(None, True), (frozenset({"u2"}), False)])
+def test_avaliar_e_publicar_dizem_se_a_funcao_vale_na_unidade(
+    world: World, unidades: frozenset[str] | None, esperado: bool
+) -> None:
+    """A demanda gravada fica quando staff estreita a função (D1) e sai marcada como órfã."""
+    _seed(world)
+    world.staff.add_job_function(T1, JobFunctionEntry(COOK, "Cozinheiro"), units=unidades)
+    avaliada = _evaluate(world).execute(_q(world, ()))
+    assert avaliada.schedule.bands[0].demands[0].function_enabled_in_unit is esperado
+    publicada = _publish(world).execute(_c(world, ()))
+    assert publicada.bands[0].demands[0].function_enabled_in_unit is esperado

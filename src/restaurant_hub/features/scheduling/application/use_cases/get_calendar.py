@@ -2,8 +2,9 @@
 
 As escalas da unidade que cruzam o recorte e as faixas cujo dia operacional (pelo
 calendário fotografado de cada escala) cai nele. Recorte de até 42 dias. Sem avaliação:
-o calendário é para ver, não para editar. Alocação de inativo não aparece; alocado
-ausente em qualquer escala do recorte recusa o recorte (§5.12).
+o calendário é para ver, não para editar. Lê as funções habilitadas da unidade para dizer, em
+cada demanda, se a função ainda vale nela (Stage 4.5, ADR 4.5.0003 §Decision 4). Alocação de
+inativo não aparece; alocado ausente em qualquer escala do recorte recusa o recorte (§5.12).
 """
 
 from restaurant_hub.features.scheduling.application.dtos.queries import GetCalendarQuery
@@ -59,6 +60,13 @@ class GetCalendarUseCase:
             query.unit_id,
             found,
             with_roster=False,
-            with_unit_functions=False,
+            with_unit_functions=True,
         )
-        return to_calendar_result(first, last, found, view.members, view.function_names)
+        return to_calendar_result(
+            first,
+            last,
+            found,
+            view.members,
+            view.function_names,
+            enabled=view.unit_function_ids,
+        )
