@@ -524,8 +524,10 @@ def test_a_varredura_de_alcance_ve_import_relativo() -> None:
 
 
 def test_os_facade_only_so_sao_importados_pela_fachada_e_pelo_composition_root() -> None:
-    """CA14 — o resíduo de `ProvisionAccountUseCase` (aceita qualquer papel) fica
-    guardado pelo alcance: um terceiro importador reabre a decisão (ADR 0.0.0020)."""
+    """CA14 — os facade-only não autorizam, então um terceiro importador reabre a
+    decisão (ADR 0.0.0020). Desde a issue #211 o papel de `ProvisionAccountUseCase`
+    não depende mais deste alcance: o use case recusa sozinho todo papel fora de
+    `PROVISIONABLE_ROLES` (`test_provision_account.py` › `TestPapelProvisionavel`)."""
     prefixo = "restaurant_hub.features.identity.application.use_cases"
     alvos = {f"{prefixo}.{nome}" for nome in _FACADE_ONLY}
     importadores: set[pathlib.Path] = set()

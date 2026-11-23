@@ -5,7 +5,7 @@ when-use: Reference before adding a route that creates or elevates a user, when 
 keywords: [adr, authorization, rbac, privilege-escalation, bootstrap, tenancy, provisioning, boundary, identity]
 status: accepted
 created_at: 2026-07-19
-updated_at: 2026-11-09
+updated_at: 2026-11-22
 adr_id: 2.4.0003
 decision: The HTTP adapter declares which permissions an action requires (including every permission of the role being granted, so no actor can grant what it does not hold) and delegates every decision to AuthorizeActionUseCase; tenant provisioning gets a dedicated manage_platform route that creates the restaurant's first owner, which is what makes the roadmap's end-to-end chain reachable at all
 context_stage: 2.4-identity-http
@@ -261,3 +261,11 @@ use cases — não para `ProvisionAccountUseCase`, que só a fachada alcança (r
 2.7.0001 §Consequences). Na nota de 2026-11-09 acima, *"O papel continua o literal `Role.OWNER` no
 router"* também foi superado: o literal passou do router para `InviteOwnerUseCase`. Nota
 *append-only*; o corpo acima não foi editado.
+
+**2026-11-22 — o resíduo de `ProvisionAccountUseCase` fechado (issue [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211)).**
+Na nota de 2026-11-09 acima, a ressalva *"não para `ProvisionAccountUseCase`, que só a fachada
+alcança"* deixou de valer. O use case recusa todo papel fora de `PROVISIONABLE_ROLES` (hoje
+`{employee}`) como primeira instrução, então também por ele ninguém cria `platform_admin` nem
+`owner`. Detalhes: a nota de 2026-11-22 do
+[ADR 2.7.0001](./2_7_0001-identity-authorizes-through-a-narrow-port.md). Nota *append-only*; o
+corpo acima não foi editado.

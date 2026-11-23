@@ -48,6 +48,7 @@ from restaurant_hub.features.identity.application.use_cases.get_account_role imp
     GetAccountRoleUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.provision_account import (
+    PROVISIONABLE_ROLES,
     ProvisionAccountUseCase,
 )
 from restaurant_hub.features.identity.application.use_cases.revoke_all_sessions import (
@@ -378,6 +379,23 @@ class TestTransparenciaAExcecoes:
             _provisionar(fachada, role="owner", email="sem-arroba")
 
         assert espiao.commands == []
+
+    def test_a_fachada_aceita_exatamente_os_papeis_que_o_use_case_aceita(self) -> None:
+        """Issue #211 — a regra existe em dois lugares (a entrada e o use case) e este
+        teste as mantém iguais, papel a papel, sobre o enum inteiro. Alargar um lado
+        só reprova aqui, em vez de virar uma recusa tardia ou uma regra morta."""
+        aceitos_pela_fachada: set[Role] = set()
+        for papel in Role:
+            fachada, espiao, _, _ = _fachada_espia()
+            try:
+                _provisionar(fachada, role=papel.value)
+            except RoleNotProvisionableError:
+                assert espiao.commands == []
+            else:
+                aceitos_pela_fachada.add(papel)
+
+        assert aceitos_pela_fachada
+        assert aceitos_pela_fachada == PROVISIONABLE_ROLES
 
 
 class TestReexportacao:

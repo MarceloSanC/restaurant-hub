@@ -57,7 +57,8 @@ jobs:
           echo "OK: auditoria complete."
 
   # ---------------------------------------------------------------------------
-  # M2 (issue #45) — teste de mutação nos quatro módulos que decidem acesso.
+  # M2 (issue #45) — teste de mutação nos módulos que decidem acesso (os quatro da
+  # issue #45 e os que entraram depois; lista em `tests/unit/test_mutation_scope.py`).
   #
   # **Job próprio, noturno, e OBSERVACIONAL na primeira semana.** As três coisas
   # são decisões, não acidentes:
@@ -133,8 +134,10 @@ jobs:
       - name: Suíte verde no código original
         run: uv run pytest tests/ -q
 
-      # O escopo vem do `[tool.mutmut]` do pyproject (`only_mutate`): os quatro
-      # arquivos que decidem acesso, e nada mais.
+      # O escopo vem do `[tool.mutmut]` do pyproject (`only_mutate`): os módulos
+      # que decidem acesso, e nada mais. A lista explícita, com a issue de cada
+      # entrada, está em `tests/unit/test_mutation_scope.py`, que a cobra contra o
+      # pyproject nos dois sentidos.
       #
       # Os workers rodam em paralelo (um por CPU, o default do mutmut 3.7.0), e
       # cada um usa um banco próprio, `<banco>_mutmut_<pid>`, que a fixture
