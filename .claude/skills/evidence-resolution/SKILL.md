@@ -100,6 +100,19 @@ Verificado: sustenta | parcial→corrigido | não verificado (§4.2)
 Configuração candidata: <alternativa> | nenhuma · Reversível: sim | não (motivo)
 ```
 
+`Verificado:` começa por um dos três termos, escritos assim; depois do termo, texto livre (quem,
+quando). O `make docs-check` reprova o resto (`scripts/check_decision_records.py`), inclusive a
+linha acima copiada sem escolher.
+- `sustenta` — o `evidence-verifier` (§4.2) respondeu `sustenta` em todos os itens.
+- `parcial→corrigido` — algum item voltou `parcial` ou `não sustenta`, e o registro foi corrigido
+  (citação trocada ou retirada, decisão refeita pelo §3) antes de gravar.
+- `não verificado (§4.2)` — o verificador não rodou. Só vale para decisão **fora** das quatro
+  classes do §4.2; em port, schema persistido, contrato OpenAPI ou regra de segurança/tenant o
+  concept não é aprovado assim (fail-closed). A classe não se decide por texto: quem cobra é o
+  Checkpoint A e a `stage-audit`.
+
+O campo é final no Checkpoint A: concept em `draft` não é conferido, ADR é sempre.
+
 ## 6. Pergunta ao humano — só P
 
 - Resolver antes todos os E/C do mesmo lote; a pergunta P chega com eles como contexto decidido.
