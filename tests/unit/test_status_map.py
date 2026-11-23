@@ -66,7 +66,9 @@ _BOUNDED_CONTEXTS = ("identity", "scheduling", "staff")
 # validação (`InvalidValidationConfigError`, `InvalidEvaluationInputError`).
 # Medido em 2026-11-01 (Stage 4.3, Task 02): scheduling 34 — mais as 12 de
 # `application/errors.py` (concept 4.3 §4).
-_TOTAIS_MINIMOS = {"identity": 28, "scheduling": 34, "staff": 18}
+# Medido em 2026-11-23 (Stage 4.5, auditoria de testes): scheduling 35 — mais
+# `JobFunctionNotEnabledInUnitError` (issue #209, ADR 4.3.0005).
+_TOTAIS_MINIMOS = {"identity": 28, "scheduling": 35, "staff": 18}
 
 # Os módulos de erro que um BC pode ter. É o import deles que popula
 # `__subclasses__`, então a lista não é documentação: é o que faz a varredura ver

@@ -258,3 +258,14 @@ def test_nenhum_corpo_nomeia_registro_invisivel(client: TestClient) -> None:
         corpo = client.get(f"/levanta/{caso}").json()
         assert "employee_id" not in corpo
         assert EmployeeId("emp") not in str(corpo)
+
+
+# --- auditoria de testes (Task 11 extra) ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raiz", [dom_errors.SchedulingError, app_errors.SchedulingApplicationError]
+)
+def test_a_raiz_sem_entrada_cai_no_422_e_nunca_em_500(raiz: type[Exception]) -> None:
+    """O default do `resolve_status` (classe não classificada) é 422 — degrada, não quebra."""
+    assert resolve_status(raiz("x")) == 422  # type: ignore[arg-type]  # noqa: PLR2004

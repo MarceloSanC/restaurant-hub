@@ -24,7 +24,11 @@ from restaurant_hub.features.scheduling.application.ports.out.access_guard impor
     PERMISSION_VIEW_OWN_SCHEDULE,
     PERMISSION_VIEW_SCHEDULE,
 )
+from restaurant_hub.features.scheduling.application.ports.out.staff_read_port import (
+    JobFunctionEntry,
+)
 from tests.unit.features.scheduling.adapters.http_support import API, Ambiente, bearer
+from tests.unit.features.scheduling.application.conftest import COOK, T1
 
 pytestmark = pytest.mark.unit
 
@@ -334,7 +338,12 @@ async def test_ca7_escala_invalida_no_path_e_422_sem_autorizar(
     ambiente: Ambiente, client: AsyncClient, chave: tuple[str, str]
 ) -> None:
     ambiente.world.guard.calls.clear()
-    resposta = await _invocar(client, chave, _GERENTE, schedule_id="s%00")
+    for invalido in ("s%00", "%20"):
+        ambiente.world.guard.calls.clear()
+        resposta = await _invocar(client, chave, _GERENTE, schedule_id=invalido)
+        assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, invalido
+        assert resposta.json()["code"] == "invalid_identifier"
+        assert not [c for c in ambiente.world.guard.calls if c.startswith("authorize")]
     assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert resposta.json()["code"] == "invalid_identifier"
     assert not [c for c in ambiente.world.guard.calls if c.startswith("authorize")]
@@ -619,3 +628,75 @@ def test_ca9_o_tenant_de_todo_command_vem_do_escopo() -> None:
     ]
     assert origens
     assert set(origens) == {"scope.tenant_id"}
+
+
+# --- auditoria de testes (Task 11 extra) ------------------------------------------------------
+
+
+async def test_a_demanda_orfa_sai_false_em_s2_e_s5(ambiente: Ambiente, client: AsyncClient) -> None:
+    """A função estreitada para outra unidade: a demanda gravada fica e sai `false` (CA6)."""
+    sid = await _criar(client)
+    publicada = await client.post(
+        f"{API}/units/{_U}/schedules/{sid}/publications",
+        json={"expected_version": 1, "operations": _LOTE_DA_ANA[:2]},
+        headers=_GERENTE,
+    )
+    assert publicada.status_code == HTTPStatus.OK, publicada.text
+    ambiente.world.staff.add_job_function(
+        T1, JobFunctionEntry(COOK, "Cozinheiro"), units=frozenset({"u2"})
+    )
+    lida = await client.get(f"{API}/units/{_U}/schedules/{sid}", headers=_GERENTE)
+    cal = await client.get(
+        f"{API}/units/{_U}/calendar",
+        params={"first_day": "2026-11-02", "last_day": "2026-11-02"},
+        headers=_GERENTE,
+    )
+    assert lida.json()["bands"][0]["demands"][0]["function_enabled_in_unit"] is False
+    assert cal.json()["bands"][0]["demands"][0]["function_enabled_in_unit"] is False
+
+
+_CORPO_DE_VALIDACAO = {"detail": "requisição inválida", "type": "validation_error"}
+
+
+@pytest.mark.parametrize(
+    "operacoes",
+    [[{"op": "apagar_tudo"}], [{"op": "disable_band", "band_id": "f1"}] * 501],
+    ids=["op-desconhecida", "lote-acima-de-500"],
+)
+async def test_corpo_fora_do_schema_e_422_do_framework_com_corpo_constante(
+    ambiente: Ambiente, client: AsyncClient, operacoes: list[dict[str, str]]
+) -> None:
+    resposta = await client.post(
+        f"{API}/units/{_U}/schedules/s1/evaluations",
+        json={"expected_version": 1, "operations": operacoes},
+        headers=_GERENTE,
+    )
+    assert resposta.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resposta.json() == _CORPO_DE_VALIDACAO
+
+
+async def test_sem_credencial_com_corpo_invalido_e_401_antes_do_422(client: AsyncClient) -> None:
+    """A autenticação é `Depends`: roda antes da validação do corpo."""
+    resposta = await client.post(
+        f"{API}/units/{_U}/schedules/s1/evaluations",
+        json={"expected_version": "x", "operations": [{"op": "apagar_tudo"}]},
+    )
+    assert resposta.status_code == HTTPStatus.UNAUTHORIZED
+
+
+def _leituras_de_unit_id(fonte: str) -> list[int]:
+    """Qualquer leitura de atributo `unit_id` — qualquer que seja o nome do objeto."""
+    return [
+        no.lineno
+        for no in ast.walk(ast.parse(fonte))
+        if isinstance(no, ast.Attribute) and no.attr == "unit_id" and isinstance(no.ctx, ast.Load)
+    ]
+
+
+def test_ca9_o_router_nao_le_unit_id_de_objeto_nenhum() -> None:
+    """Mais forte que a trava por nome `scope`: renomear a variável não a contorna."""
+    assert _leituras_de_unit_id(inspect.getsource(router_module)) == []
+
+
+def test_ca9_o_detector_forte_reprova_outro_nome() -> None:
+    assert _leituras_de_unit_id("s = guard.authorize(a)\nx = s.unit_id\n") == [2]

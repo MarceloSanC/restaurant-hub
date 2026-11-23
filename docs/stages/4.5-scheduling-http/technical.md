@@ -610,4 +610,33 @@ atômica, plano de gates contra o PIPELINE §9.6). Correções no commit `stage 
 **Medição:** run `ci` 45138602830, job `lint-and-test` **success** sobre `f5a0157a` — https://github.com/MarceloSanC/restaurant-hub/actions/runs/45138602830/job/137570771955 (inclui `test_deny_by_default.py` e `test_credential_responses_are_not_stored.py` vendo as sete rotas de scheduling, e a integração da 4.4 sem os campos provisórios).
 **Razão:** o ponto 2 confirma o composition root e as varreduras globais antes dos e2e das Tasks 08–10.
 
+### 2026-11-23 — [measurement] Auditoria de testes (subagente independente), rodada 1 — Claude (Opus 5.5)
+**Contexto:** gate "Auditoria de Testes" do PROMPT de sessão única, por subagente que não escreveu os testes, sobre o código e os testes das Tasks 01–07 e os e2e das Tasks 08–10 (lidos, não executados: Postgres compartilhado).
+**Medição:** 1666 testes unitários verdes; 27 mutações reais aplicadas e restauradas (sha256 conferido), **22 mortas e 5 sobreviventes**:
+- guard (`LocalAccessGuard.authorize`): 5/5 mortas (tenant `or`, negação do ator sem tenant, tenant do escopo, checagem de tipo);
+- router (ordem validar → autorizar, permissão da rota, tenant omitido): 6/6 mortas;
+- mapa de erros: 6/7 — sobreviveu `resolve_status` com fallback 422 → 500;
+- conversores: 5/9 — sobreviveram as três fronteiras de `to_decimal` (`>`/`>=`, `<`/`<=`, `value != 0`) e `DemandResponse.function_enabled_in_unit` constante (só o e2e da CA6 a matava); a ordenação dos dias na `key` da resposta é equivalente (o domínio entrega os dias ordenados).
+Respostas ao questionário: (1) CA1–CA15 com teste nomeado, CA13 é fechamento documental; (2) casos da §6 com teste, menos o corpo fora do schema pela rota e o `schedule_id` só-espaço; (3) acima; (4) leis no fake e no adapter (dublês + cadeia real); (5) e2e conferidos contra rotas e regras de staff, sem divergência; (6) faixas par a par e por e2e.
+**Razão:** as lacunas viram a Task 11 extra (testes) e um `-fix` da Task 05: a docstring de `to_decimal` prometia 15 dígitos inteiros e o código aceitava 16; o limite passou a contar dígitos inteiros e casas decimais sem contexto decimal (o `normalize()` de `1E+1000000` estoura o contexto).
+
+### 2026-11-23 — [decision] Checkpoint C (bloco Tasks 07–10) — disposições — Claude (Opus 5.5)
+**Contexto:** rodada 1, um revisor de contexto zerado sobre o commit da Task 07 (`f5a0157a`), os e2e das Tasks 08–10 (ainda não commitados na revisão) e o diff de `to_decimal` da auditoria de testes, com as skills `composition-root`, `fastapi-thin-adapter` e `pytest-with-fakes`. O revisor rodou 1770 testes unitários e conferiu passo a passo os e2e contra as rotas e regras de staff e identity: nenhuma falha esperada. Correções nos commits das Tasks 08–10 (antes do primeiro commit deles), em `[4.5/task-05-fix]` e em `[4.5/task-11-extra]` (esta entrada).
+- **C9** (minor, contrato) o teto de casas decimais de `to_decimal` recusaria medida que o próprio servidor emite (carga contratada com muitas casas em staff), travando o aceite, e não evitava 500 nenhum (underflow não é armadilha) → corrigido (fica só o teto de 15 dígitos inteiros, contado por `adjusted()` sem contexto decimal; teste com a medida de 13 casas aceita e com `1E-1000030`)
+- **C10** (minor) faltava `tests/e2e/features/scheduling/__init__.py` (o conftest carregava duas vezes) → corrigido (Task 08)
+- **C11** (minor) os três arquivos e2e sem `pytestmark = pytest.mark.e2e` → corrigido (Tasks 08–10)
+- **C12** (minor) a matriz CA2 contava as rotas contra si mesma → corrigido (Task 09: total sobre `router.routes`)
+- **C13** (minor) a Task 10 pedia limite de faixa extremo, quantidade por `change_demand_quantity` e id só-espaço no corpo pela API → corrigido (Task 10)
+- **C14** (minor) a Task 09 pedia um cenário por módulo para as rotas de leitura → desvio registrado abaixo
+- Pergunta fixa: a fachada de acesso de scheduling é uma instância nova sobre o **mesmo** `AuthorizeActionUseCase` (sem estado) — refutado como achado: artefato `composition_root.py` › `scheduling_access_guard = SchedulingLocalAccessGuard(access=IdentityAccessFacade(authorize_action=authorize_action), …)`, a mesma forma do guard de staff, e `test_o_guard_decide_sobre_o_mesmo_authorize_action_…` trava o `authorize_action` e o `IdentityGuard` por identidade.
+
+### 2026-11-23 — [deviation] Task 09 — um cenário por caso na matriz e2e — Claude (Opus 5.5)
+**Contexto:** a Task 09 previa as rotas de leitura sobre um cenário só por módulo (finding de custo da 3.6). A matriz monta o cenário inteiro em cada um dos 56 casos.
+**Razão:** o `truncar_tudo` das fixtures de e2e é por teste (`app_e2e`), e um cenário de módulo exigiria um segundo regime de fixture só para esta suíte; as rotas de escrita precisam de cenário próprio de todo jeito. O custo fica no CI (medido no run do ponto 3, abaixo), sem afetar o isolamento.
+
+### 2026-11-23 — [decision] Task 11 extra — o que a auditoria de testes pediu — Claude (Opus 5.5)
+**Contexto:** a auditoria (entrada `[measurement]` acima) deixou 5 sobreviventes e 3 lacunas de teste.
+**Decisão:** testes acrescentados: fronteiras de `to_decimal` (aceita 15 dígitos inteiros e qualquer casa; recusa 16 e o expoente gigante); `DemandResponse` com `function_enabled_in_unit` falso; demanda órfã `false` em S2 e S5 pela rota sobre os fakes; fallback 422 do `resolve_status` nas duas raízes; corpo fora do schema (op desconhecida, lote de 501) ⇒ 422 com o corpo constante `validation_error`; sem credencial e corpo inválido ⇒ 401; `schedule_id` só-espaço no path; a trava de CA9 sem depender do nome `scope`; piso de `_TOTAIS_MINIMOS["scheduling"]` em 35. A ordenação dos dias na `key` da resposta é mutante equivalente (o domínio entrega os dias ordenados) e não ganhou teste.
+**Razão:** cada teste mata um sobrevivente ou fecha uma lacuna nomeada pela auditoria; a rodada 2 da auditoria re-executa as mutações.
+
 <!-- END: post-execution -->
