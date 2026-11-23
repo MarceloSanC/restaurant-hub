@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 # tripwire contra a enumeração encolher em silêncio — `__subclasses__` só enxerga
 # o que foi importado, então um módulo de erro novo que ninguém importasse aqui
 # faria a varredura passar sobre um universo menor do que o real.
-_TOTAL_DE_ERROS_DE_STAFF = 28
+_TOTAL_DE_ERROS_DE_STAFF = 30
 _TOTAL_DE_MODULOS_DE_ERRO = 2
 
 # Os dois módulos são importados acima de propósito, e não por acaso: é o import
@@ -134,6 +134,8 @@ _STATUS_ESPERADO = [
     # Stage 3.10 — trocar/desvincular sem login e o vínculo que mudou (ADR 3.10.0001).
     (domain_errors.EmployeeHasNoLoginError("e1"), 409),
     (domain_errors.EmployeeLoginChangedError("e1"), 409),
+    (application_errors.LoginAccountNotFoundError("ana@x.com"), 404),
+    (application_errors.LoginAlreadyLinkedInUnitError("e1"), 409),
 ]
 
 

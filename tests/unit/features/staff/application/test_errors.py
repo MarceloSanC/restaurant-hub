@@ -32,6 +32,8 @@ _DE_APLICACAO = (
     # Issue #206 — a escrita condicional de L-JF7: condição da forma da escrita, sem
     # regra de produto de concorrência em staff (ADR 3.9.0001 §3).
     errors.JobFunctionEnablementChangedError,
+    # Stage 3.10 — conta referenciada inexistente ou fora do alcance (ADR 3.10.0002 §3).
+    errors.LoginAccountNotFoundError,
 )
 
 # Conflito, uso, relocalização, cópia e — desde a 3.5 — as três recusas de login da
@@ -47,6 +49,8 @@ _DE_DOMINIO = (
     errors.EmployeeHasLoginError,
     # Stage 3.11 — função fora da unidade do registro (ADR 3.11.0002).
     errors.JobFunctionNotEnabledInUnitError,
+    # Stage 3.10 — um login por unidade (ADR 3.10.0001 §6).
+    errors.LoginAlreadyLinkedInUnitError,
 )
 
 
@@ -72,7 +76,7 @@ def test_modulo_declara_exatamente_as_excecoes_esperadas() -> None:
     """Guarda a lista: classe nova ou removida força revisão consciente do teste."""
     nomes = {cls.__name__ for cls in _application_error_classes()}
     assert nomes == {
-        # Ausência — os únicos dois 404 desta camada.
+        # Ausência — 404 desta camada (com `LoginAccountNotFoundError`, Stage 3.10).
         "JobFunctionNotFoundError",
         "EmployeeNotFoundError",
         # Conflito de nome (verbatim, no tenant) e de id (`add` é inserção,
@@ -96,6 +100,9 @@ def test_modulo_declara_exatamente_as_excecoes_esperadas() -> None:
         "JobFunctionNotEnabledInUnitError",
         # Issue #206 — a habilitação gravada mudou entre a leitura e a escrita.
         "JobFunctionEnablementChangedError",
+        # Stage 3.10 — conta existente fora do alcance; um login por unidade.
+        "LoginAccountNotFoundError",
+        "LoginAlreadyLinkedInUnitError",
     }
 
 
