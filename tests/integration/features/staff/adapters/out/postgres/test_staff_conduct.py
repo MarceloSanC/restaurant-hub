@@ -1541,7 +1541,16 @@ def test_issue_225_delete_com_conjunto_para_todas_no_meio_do_lookup_remove(
     assert PostgresJobFunctionRepository(motor_escritor).find_by_id(_A, _F1) is None
 
 
-@pytest.mark.parametrize("metodo", _LEITURAS_DE_FUNCAO)
+# `list_by_unit` fica de fora por definição, não por esquecimento: a única
+# incoerência que a remontagem enxerga (flag `false`, zero vínculos) não nomeia
+# unidade nenhuma, então o filtro de L-JF6 não a lista — devolve vazio, e não há
+# remontagem a recusar.
+_LEITURAS_QUE_ALCANCAM_FUNCAO_SEM_VINCULO = tuple(
+    metodo for metodo in _LEITURAS_DE_FUNCAO if metodo != "list_by_unit"
+)
+
+
+@pytest.mark.parametrize("metodo", _LEITURAS_QUE_ALCANCAM_FUNCAO_SEM_VINCULO)
 def test_issue_225_dado_incoerente_gravado_continua_levantando(
     motores: Callable[[], Engine], metodo: str
 ) -> None:
@@ -1549,7 +1558,8 @@ def test_issue_225_dado_incoerente_gravado_continua_levantando(
 
     O controle que impede o conserto de virar engolir o erro: a função fica
     gravada com a flag `false` e sem vínculo nenhum — estado que nenhuma escrita
-    do port produz —, e toda leitura levanta `InvalidUnitEnablementError`.
+    do port produz —, e toda leitura que a alcança levanta
+    `InvalidUnitEnablementError`.
     """
     motor = motores()
     _semear_funcao_em_a(motor)
