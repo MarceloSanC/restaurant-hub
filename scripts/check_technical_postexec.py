@@ -23,7 +23,7 @@ realidade livremente (o plano original permanece no git). Por isso a
 checagem 2 é pulada quando o commit de aprovação já é ancestral de uma
 branch de integração.
 
-O script faz três checagens:
+O script faz quatro checagens:
 
 1. **Estrutural (sempre):** o arquivo contém exatamente uma ocorrência
    dos marcadores `BEGIN/END: post-execution`, na ordem correta, com
@@ -40,6 +40,15 @@ O script faz três checagens:
    (`stage N.M: technical approved`) localizado via `git log`. Se há
    alteração em linhas fora da janela `BEGIN..END`, falha. É pulada se a
    Stage já mergeou (ver `_stage_is_merged`).
+3. **Disposições dos Checkpoints A e B (`status: done`):** a §7 tem uma
+   entrada de cabeçalho com tag do vocabulário que nomeia `Checkpoint A` e
+   outra que nomeia `Checkpoint B` (PROMPT-stage-single-session, §"Revisão
+   por agentes independentes"; issue #210). As duas são gravadas antes do
+   commit `stage N.M: technical approved`, que é quando o technical passa a
+   `done`. Corte: as Stages de `LEGACY_CHECKPOINT_STAGES`, anteriores à
+   regra, ficam de fora; caminho fora de `docs/stages/N.M-slug/` também.
+   O Checkpoint C não é cobrado aqui: acontece na Fase 4, depois do `done`
+   do technical, e quem confere é a `stage-audit` (Fase C).
 
 Retorna código de saída 0 se tudo OK, 1 se houver violações.
 
@@ -61,6 +70,7 @@ import difflib
 import re
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 BEGIN_MARKER = "<!-- BEGIN: post-execution -->"
@@ -93,6 +103,23 @@ _ENTRY_HEADER_PATTERN = re.compile(
 _PLACEHOLDER_DATE = "YYYY-MM-DD"
 
 _FENCE_PREFIXES = ("```", "~~~")
+
+# Checagem 3 (issue #210): checkpoints cuja disposição a §7 de um technical `done`
+# precisa ter, e como o cabeçalho da entrada os nomeia.
+REQUIRED_CHECKPOINTS = ("A", "B")
+_CHECKPOINT_PATTERN = re.compile(r"\bCheckpoint (?P<letter>[A-Z])\b")
+
+# Corte da checagem 3, pelo número da Stage: as 23 Stages de `docs/stages/` em
+# 2026-11-22 e a 3.10, em execução naquela data, são anteriores à regra. Vale para
+# Stage aberta depois do merge da issue #210; não acrescentar Stage nova aqui.
+LEGACY_CHECKPOINT_STAGES = frozenset(
+    {
+        "1.1", "1.2",
+        "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7",
+        "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10", "3.11",
+        "4.1", "4.2", "4.3", "4.4",
+    }
+)  # fmt: skip
 
 
 class CheckError(Exception):
@@ -139,10 +166,12 @@ def _check_markers(content: str, path: Path) -> tuple[int, int]:
     return begin, end
 
 
-def _check_entry_tags(content: str, window: tuple[int, int], path: Path) -> list[str]:
-    """Checagem 1b: tag de cada cabeçalho de entrada da §7 está em `ENTRY_TAGS`."""
+def _entry_headers(content: str, window: tuple[int, int]) -> Iterator[tuple[int, re.Match[str]]]:
+    """`(índice da linha, match)` de cada cabeçalho de entrada da §7, fora de bloco de código.
+
+    O placeholder do template (`### YYYY-MM-DD — [tag] …`) não é entrada.
+    """
     lines = content.splitlines()
-    errors: list[str] = []
     in_fence = False
     for index in range(window[0] + 1, window[1]):
         line = lines[index]
@@ -154,21 +183,59 @@ def _check_entry_tags(content: str, window: tuple[int, int], path: Path) -> list
         match = _ENTRY_HEADER_PATTERN.match(line)
         if match is None or _PLACEHOLDER_DATE in (match.group("prefix") or ""):
             continue
-        if match.group("tag") not in ENTRY_TAGS:
-            errors.append(
-                f"{path}:{index + 1}: tag `[{match.group('tag')}]` fora do vocabulário "
-                f"da §7 ({', '.join(sorted(ENTRY_TAGS))}) — CONVENTIONS §3.4."
-            )
-    return errors
+        yield index, match
+
+
+def _check_entry_tags(content: str, window: tuple[int, int], path: Path) -> list[str]:
+    """Checagem 1b: tag de cada cabeçalho de entrada da §7 está em `ENTRY_TAGS`."""
+    return [
+        f"{path}:{index + 1}: tag `[{match.group('tag')}]` fora do vocabulário "
+        f"da §7 ({', '.join(sorted(ENTRY_TAGS))}) — CONVENTIONS §3.4."
+        for index, match in _entry_headers(content, window)
+        if match.group("tag") not in ENTRY_TAGS
+    ]
+
+
+def _stage_number(path: Path) -> str | None:
+    """`N.M` da Stage dona do `technical.md`, ou None fora de `docs/stages/N.M-slug/`."""
+    match = _STAGE_DIR_PATTERN.search(path.as_posix())
+    if not match:
+        return None
+    return f"{match.group(1)}.{match.group(2)}"
+
+
+def _check_checkpoint_entries(content: str, window: tuple[int, int], path: Path) -> list[str]:
+    """Checagem 3: technical `done` tem na §7 a disposição dos Checkpoints A e B.
+
+    Conta o cabeçalho de entrada com tag do vocabulário cujo título, depois da tag,
+    nomeia `Checkpoint <letra>`. Stage do corte ou caminho fora de `docs/stages/`
+    passam sem checagem.
+    """
+    stage = _stage_number(path)
+    if stage is None or stage in LEGACY_CHECKPOINT_STAGES:
+        return []
+    lines = content.splitlines()
+    named = {
+        found.group("letter")
+        for index, match in _entry_headers(content, window)
+        if match.group("tag") in ENTRY_TAGS
+        for found in _CHECKPOINT_PATTERN.finditer(lines[index][match.end() :])
+    }
+    return [
+        f"{path}: §7 sem a entrada de disposição do Checkpoint {letter} "
+        f"(`### AAAA-MM-DD — [decision] Checkpoint {letter} — disposições — <Autor>`, "
+        "gravada antes do `technical approved`) — CONVENTIONS §3.4; issue #210."
+        for letter in REQUIRED_CHECKPOINTS
+        if letter not in named
+    ]
 
 
 def _approved_commit_for(path: Path) -> str | None:
     """SHA do commit `stage N.M: technical approved` mais recente que tocou o arquivo, ou None."""
-    match = _STAGE_DIR_PATTERN.search(path.as_posix())
-    if not match:
+    stage = _stage_number(path)
+    if stage is None:
         return None
-    stage_n, stage_m = match.group(1), match.group(2)
-    needle = f"stage {stage_n}.{stage_m}: technical approved"
+    needle = f"stage {stage}: technical approved"
 
     result = subprocess.run(
         ["git", "log", "--format=%H%x09%s", "--", path.as_posix()],
@@ -353,7 +420,11 @@ def check_file(path: Path) -> list[str]:
         # Status ainda draft — checagens estruturais bastam.
         return errors
 
-    return errors + _check_postexec_diff(path, content, (begin, end))
+    return (
+        errors
+        + _check_checkpoint_entries(content, (begin, end), path)
+        + _check_postexec_diff(path, content, (begin, end))
+    )
 
 
 def _discover_targets(root: Path) -> list[Path]:

@@ -481,3 +481,155 @@ def test_main_reports_missing_file(tmp_path: Path) -> None:
 
 def test_main_without_targets_passes(tmp_path: Path) -> None:
     assert ctp.main(["--root", str(tmp_path)]) == 0
+
+
+# --- checagem 3: disposições dos Checkpoints A e B na §7 (issue #210) -------
+
+
+def _stage_technical(root: Path, section: str, *, stage: str = "5.1", status: str = "done") -> Path:
+    path = root / "docs" / "stages" / f"{stage}-nova" / "technical.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\nstatus: {status}\n---\n\n# Technical\n\n## 7. Execução\n"
+        f"{ctp.BEGIN_MARKER}\n{section}\n{ctp.END_MARKER}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _checkpoint_entry(letter: str, tag: str = "decision") -> str:
+    return f"### 2026-11-22 — [{tag}] Checkpoint {letter} — disposições — Claude\n- A1: x\n"
+
+
+def _no_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sem commit de aprovação: a checagem 2 sai do caminho e só a 3 fala."""
+    monkeypatch.setattr(ctp, "_approved_commit_for", lambda _path: None)
+
+
+def test_done_technical_with_both_checkpoint_entries_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _no_git(monkeypatch)
+    section = _checkpoint_entry("A") + _checkpoint_entry("B", "decision:C")
+    assert ctp.check_file(_stage_technical(tmp_path, section)) == []
+
+
+@pytest.mark.parametrize(
+    ("present", "missing"),
+    [("A", ["B"]), ("B", ["A"]), ("", ["A", "B"]), ("C", ["A", "B"])],
+    ids=["sem-B", "sem-A", "sem-nenhum", "so-C"],
+)
+def test_missing_checkpoint_entry_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, present: str, missing: list[str]
+) -> None:
+    _no_git(monkeypatch)
+    section = _checkpoint_entry(present) if present else "nada ainda"
+    path = _stage_technical(tmp_path, section)
+
+    errors = ctp.check_file(path)
+
+    assert [e.split("Checkpoint ")[1][0] for e in errors] == missing
+    assert all(e.startswith(f"{path}: §7 sem a entrada de disposição") for e in errors)
+    assert all("issue #210" in e for e in errors)
+
+
+def test_draft_technical_is_not_charged(tmp_path: Path) -> None:
+    """O Checkpoint A grava a entrada com o technical ainda esqueleto (`draft`)."""
+    path = _stage_technical(tmp_path, _checkpoint_entry("A"), status="draft")
+    assert ctp.check_file(path) == []
+
+
+@pytest.mark.parametrize("stage", sorted(ctp.LEGACY_CHECKPOINT_STAGES))
+def test_legacy_stage_is_not_charged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
+) -> None:
+    _no_git(monkeypatch)
+    assert ctp.check_file(_stage_technical(tmp_path, "nada ainda", stage=stage)) == []
+
+
+_STAGES_IN_FOLDER_AT_THE_CUT = 23
+
+
+def test_cut_covers_the_stages_before_the_rule() -> None:
+    """As 23 Stages de `docs/stages/` em 2026-11-22 e a 3.10, então em execução."""
+    assert len(ctp.LEGACY_CHECKPOINT_STAGES - {"3.10"}) == _STAGES_IN_FOLDER_AT_THE_CUT
+    assert {"1.1", "3.10", "3.11", "4.4"} <= ctp.LEGACY_CHECKPOINT_STAGES
+    assert "4.5" not in ctp.LEGACY_CHECKPOINT_STAGES
+
+
+def test_path_outside_stages_is_not_charged(tmp_path: Path) -> None:
+    path = tmp_path / "technical.md"
+    path.write_text(_technical(), encoding="utf-8")
+    assert ctp.check_file(path) == []
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        # sem tag do vocabulário: não é entrada de disposição
+        "### 2026-11-22 — Checkpoint A — disposições — Claude\n",
+        # tag fora do vocabulário: a 1b reprova e a 3 não conta
+        "### 2026-11-22 — [nota] Checkpoint A — disposições — Claude\n",
+        # dentro de bloco de código
+        "```markdown\n" + "### 2026-11-22 — [decision] Checkpoint A — x — Claude\n" + "```\n",
+        # "Checkpoint A" só no corpo da entrada, não no cabeçalho
+        "### 2026-11-22 — [decision] disposições — Claude\nCheckpoint A no corpo\n",
+        # o placeholder do template
+        "### YYYY-MM-DD — [decision] Checkpoint A — <Autor>\n",
+        # plural junta checkpoints numa entrada só: não vale pelo A
+        "### 2026-11-22 — [decision] Checkpoints A e B — disposições — Claude\n",
+        # letra colada não é o checkpoint
+        "### 2026-11-22 — [decision] Checkpoint AB — disposições — Claude\n",
+    ],
+    ids=["sem-tag", "tag-fora", "fence", "so-no-corpo", "placeholder", "plural", "colado"],
+)
+def test_only_a_tagged_entry_header_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, section: str
+) -> None:
+    _no_git(monkeypatch)
+    errors = ctp.check_file(_stage_technical(tmp_path, section + _checkpoint_entry("B")))
+    assert any("Checkpoint A" in e and "sem a entrada" in e for e in errors)
+
+
+def test_checkpoint_named_before_the_tag_does_not_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _no_git(monkeypatch)
+    section = "### Checkpoint A — [decision] disposições — Claude\n" + _checkpoint_entry("B")
+    errors = ctp.check_file(_stage_technical(tmp_path, section))
+    assert len(errors) == 1
+    assert "Checkpoint A" in errors[0]
+
+
+def test_entry_outside_the_window_does_not_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _no_git(monkeypatch)
+    path = _stage_technical(tmp_path, _checkpoint_entry("B"))
+    text = path.read_text(encoding="utf-8").replace(
+        "# Technical\n", "# Technical\n" + _checkpoint_entry("A")
+    )
+    path.write_text(text, encoding="utf-8")
+    [error] = ctp.check_file(path)
+    assert "Checkpoint A" in error
+
+
+def test_stage_number_comes_from_the_folder() -> None:
+    assert ctp._stage_number(Path("docs/stages/3.10-x/technical.md")) == "3.10"
+    assert ctp._stage_number(Path("/abs/docs/stages/12.4-y/technical.md")) == "12.4"
+    assert ctp._stage_number(Path("docs/stages/3.10-x/concept.md")) is None
+
+
+def test_main_fails_on_a_new_stage_without_dispositions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    _stage_technical(tmp_path, "nada ainda")
+    _stage_technical(tmp_path, "nada ainda", stage="4.4")
+
+    assert ctp.main(["--root", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert "5.1-nova" in err
+    assert "4.4-nova" not in err
+    assert "2 erro(s) em 2 arquivo(s)." in err
