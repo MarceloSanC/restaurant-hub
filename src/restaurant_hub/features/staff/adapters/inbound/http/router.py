@@ -64,12 +64,15 @@ from restaurant_hub.features.staff.application.dtos.commands import (
     DeclareShiftPreferenceCommand,
     DeleteEmployeeCommand,
     DeleteJobFunctionCommand,
+    LinkExistingLoginCommand,
     ReactivateEmployeeCommand,
     RegisterUnavailabilityCommand,
+    RelinkLoginCommand,
     RemoveUnavailabilityCommand,
     RenameEmployeeCommand,
     RenameJobFunctionCommand,
     SetJobFunctionUnitsCommand,
+    UnlinkLoginCommand,
 )
 from restaurant_hub.features.staff.application.dtos.queries import (
     ListEmployeesQuery,
@@ -106,6 +109,9 @@ from restaurant_hub.features.staff.application.use_cases.delete_employee import 
 from restaurant_hub.features.staff.application.use_cases.delete_job_function import (
     DeleteJobFunctionUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.link_existing_login import (
+    LinkExistingLoginUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.list_employees import (
     ListEmployeesUseCase,
 )
@@ -118,6 +124,9 @@ from restaurant_hub.features.staff.application.use_cases.reactivate_employee imp
 from restaurant_hub.features.staff.application.use_cases.register_unavailability import (
     RegisterUnavailabilityUseCase,
 )
+from restaurant_hub.features.staff.application.use_cases.relink_login import (
+    RelinkLoginUseCase,
+)
 from restaurant_hub.features.staff.application.use_cases.remove_unavailability import (
     RemoveUnavailabilityUseCase,
 )
@@ -129,6 +138,9 @@ from restaurant_hub.features.staff.application.use_cases.rename_job_function imp
 )
 from restaurant_hub.features.staff.application.use_cases.set_job_function_units import (
     SetJobFunctionUnitsUseCase,
+)
+from restaurant_hub.features.staff.application.use_cases.unlink_login import (
+    UnlinkLoginUseCase,
 )
 from restaurant_hub.features.staff.domain.value_objects.identifiers import (
     EmployeeId,
@@ -162,6 +174,7 @@ from .schemas import (
     DeclareShiftPreferenceRequest,
     EmployeeLoginResponse,
     EmployeeResponse,
+    ExistingLoginRequest,
     JobFunctionResponse,
     RegisterUnavailabilityRequest,
     RenameEmployeeRequest,
@@ -254,6 +267,18 @@ def _get_copy_employee_to_unit() -> CopyEmployeeToUnitUseCase:
 
 def _get_create_login_for_employee() -> CreateLoginForEmployeeUseCase:
     _not_wired("staff_create_login_for_employee")
+
+
+def _get_link_existing_login() -> LinkExistingLoginUseCase:
+    _not_wired("link_existing_login")
+
+
+def _get_relink_login() -> RelinkLoginUseCase:
+    _not_wired("relink_login")
+
+
+def _get_unlink_login() -> UnlinkLoginUseCase:
+    _not_wired("unlink_login")
 
 
 def _to_shift_preference(periods: list[str] | None) -> ShiftPreference | None:
@@ -897,3 +922,102 @@ def create_login_for_employee(  # noqa: PLR0913
         )
     )
     return EmployeeLoginResponse.from_result(result)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3.10 — R18, R19 e R20: a gestão do vínculo de login
+# ---------------------------------------------------------------------------
+#
+# O mesmo par de R17, na mesma ordem (ADR 3.10.0002 §5): `manage_staff` porque
+# altera o registro, `manage_users` porque administra o vínculo com uma conta de
+# identity. A segunda não acontece quando a primeira nega. O sub-recurso é
+# `login-link`, e não `login`, porque `POST /login` é R17, que **cria** conta (concept
+# 3.10 D9). As três respondem 200 com o registro, como as transições R13 e R14.
+#
+# O `email` não passa por `validate_identifier`, como em R17: é vocabulário de
+# identity, validado atrás do gateway (L-IG6), e a recusa volta traduzida.
+
+
+@router.post(
+    "/units/{unit_id}/employees/{employee_id}/login-link",
+    response_model=EmployeeResponse,
+)
+def link_existing_login(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    payload: ExistingLoginRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[LinkExistingLoginUseCase, Depends(_get_link_existing_login)],
+) -> EmployeeResponse:
+    """Vincula ao registro sem login uma conta que já existe no restaurante (R18)."""
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
+    guard.authorize(actor, MANAGE_USERS_IN_UNIT_ACCESS.permission, unit_id=unit)
+    result = use_case.execute(
+        LinkExistingLoginCommand(
+            actor=actor,
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
+            email=payload.email,
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.put(
+    "/units/{unit_id}/employees/{employee_id}/login-link",
+    response_model=EmployeeResponse,
+)
+def relink_login(  # noqa: PLR0913
+    unit_id: str,
+    employee_id: str,
+    payload: ExistingLoginRequest,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[RelinkLoginUseCase, Depends(_get_relink_login)],
+) -> EmployeeResponse:
+    """Troca o login vinculado ao registro por outra conta existente (R19)."""
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
+    guard.authorize(actor, MANAGE_USERS_IN_UNIT_ACCESS.permission, unit_id=unit)
+    result = use_case.execute(
+        RelinkLoginCommand(
+            actor=actor,
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
+            email=payload.email,
+        )
+    )
+    return EmployeeResponse.from_result(result)
+
+
+@router.delete(
+    "/units/{unit_id}/employees/{employee_id}/login-link",
+    response_model=EmployeeResponse,
+)
+def unlink_login(
+    unit_id: str,
+    employee_id: str,
+    actor: CurrentActor,
+    guard: StaffAccessGuard,
+    use_case: Annotated[UnlinkLoginUseCase, Depends(_get_unlink_login)],
+) -> EmployeeResponse:
+    """Desvincula o login do registro (R20)."""
+    unit = validate_identifier(unit_id, entity=_UNIT)
+    employee = validate_identifier(employee_id, entity=_EMPLOYEE)
+    scope = guard.authorize(actor, MANAGE_STAFF_IN_UNIT_ACCESS.permission, unit_id=unit)
+    guard.authorize(actor, MANAGE_USERS_IN_UNIT_ACCESS.permission, unit_id=unit)
+    result = use_case.execute(
+        UnlinkLoginCommand(
+            actor=actor,
+            tenant_id=scope.tenant_id,
+            unit_id=UnitId(unit),
+            employee_id=EmployeeId(employee),
+        )
+    )
+    return EmployeeResponse.from_result(result)

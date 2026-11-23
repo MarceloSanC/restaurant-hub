@@ -73,7 +73,7 @@ funcionário porque períodos do mesmo registro não se sobrepõem.
 """
 
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
 from sqlalchemy import Connection, Engine, exists, select
@@ -198,6 +198,85 @@ class PostgresEmployeeRepository:
         sugeria seria redundante sob o lock: nenhuma escrita concorrente alcança
         a linha entre a guarda e a escrita.
         """
+        self._transition_under_lock(
+            tenant_id,
+            unit_id,
+            employee_id,
+            lambda stored: stored.link_login(user_id),
+            lambda updated: {"user_id": updated.user_id},
+        )
+
+    def unlink_login(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId,
+        expected_active: bool,
+    ) -> None:
+        """`L-UNLINK` — a forma de `link_login`, com `Employee.unlink_login` (ADR 3.10.0001 §2)."""
+        self._transition_under_lock(
+            tenant_id,
+            unit_id,
+            employee_id,
+            lambda stored: stored.unlink_login(expected_user_id, was_active=expected_active),
+            lambda updated: {"user_id": updated.user_id},
+        )
+
+    def relink_login(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId,
+        user_id: UserId,
+    ) -> None:
+        """`L-RELINK` — a forma de `link_login`, com `Employee.relink_login` (ADR 3.10.0001 §2)."""
+        self._transition_under_lock(
+            tenant_id,
+            unit_id,
+            employee_id,
+            lambda stored: stored.relink_login(expected_user_id, user_id),
+            lambda updated: {"user_id": updated.user_id},
+        )
+
+    def deactivate(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId | None,
+        expected_active: bool,
+    ) -> None:
+        """`L-DEACT` — a forma de `link_login`, gravando **só** `active` (ADR 3.10.0001 §4)."""
+        self._transition_under_lock(
+            tenant_id,
+            unit_id,
+            employee_id,
+            lambda stored: stored.deactivate_as_read(expected_user_id, was_active=expected_active),
+            lambda updated: {"active": updated.active},
+        )
+
+    def _transition_under_lock(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        transition: Callable[[Employee], Employee],
+        columns: Callable[[Employee], dict[str, object]],
+    ) -> None:
+        """Trava a linha, aplica a transição do domínio ao gravado, grava as colunas dela.
+
+        A forma das escritas próprias do vínculo e do desligamento (ADR 0.0.0010
+        decisão 2; ADR 3.10.0001 §2): `SELECT … FOR UPDATE` no endereço de três
+        partes, agregado remontado sob o lock (em `READ COMMITTED` — ver
+        `link_login`), a transição do **domínio** como única casa das guardas, e um
+        `UPDATE` que grava só as colunas que a lei nomeia. Endereço vazio ⇒
+        `EmployeeNotFoundError`, antes de qualquer guarda.
+        """
         with self._engine.begin() as connection:
             row = connection.execute(
                 select(employees)
@@ -210,14 +289,14 @@ class PostgresEmployeeRepository:
             ).one_or_none()
             if row is None:
                 raise EmployeeNotFoundError(employee_id)
-            linked = self._build_aggregates(connection, [row])[0].link_login(user_id)
+            updated = transition(self._build_aggregates(connection, [row])[0])
             connection.execute(
                 employees.update()
                 .where(
                     employees.c.id == employee_id,
                     employees.c.tenant_id == tenant_id,
                 )
-                .values(user_id=linked.user_id)
+                .values(**columns(updated))
             )
 
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:

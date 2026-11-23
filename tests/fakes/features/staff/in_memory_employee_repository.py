@@ -125,6 +125,60 @@ class InMemoryEmployeeRepository:
             raise EmployeeNotFoundError(employee_id)
         self._store.employees[employee_id] = gravado.link_login(user_id)
 
+    def unlink_login(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId,
+        expected_active: bool,
+    ) -> None:
+        """`L-UNLINK` — endereço, depois a transição do domínio sobre o gravado."""
+        self._store.record("employees.unlink_login")
+        gravado = self._gravado_no_endereco(tenant_id, unit_id, employee_id)
+        self._store.employees[employee_id] = gravado.unlink_login(
+            expected_user_id, was_active=expected_active
+        )
+
+    def relink_login(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId,
+        user_id: UserId,
+    ) -> None:
+        """`L-RELINK` — endereço, depois a transição do domínio sobre o gravado."""
+        self._store.record("employees.relink_login")
+        gravado = self._gravado_no_endereco(tenant_id, unit_id, employee_id)
+        self._store.employees[employee_id] = gravado.relink_login(expected_user_id, user_id)
+
+    def deactivate(
+        self,
+        tenant_id: TenantId,
+        unit_id: UnitId,
+        employee_id: EmployeeId,
+        *,
+        expected_user_id: UserId | None,
+        expected_active: bool,
+    ) -> None:
+        """`L-DEACT` — endereço, depois a transição do domínio sobre o gravado."""
+        self._store.record("employees.deactivate")
+        gravado = self._gravado_no_endereco(tenant_id, unit_id, employee_id)
+        self._store.employees[employee_id] = gravado.deactivate_as_read(
+            expected_user_id, was_active=expected_active
+        )
+
+    def _gravado_no_endereco(
+        self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId
+    ) -> Employee:
+        gravado = self._find_no_endereco(tenant_id, unit_id, employee_id)
+        if gravado is None:
+            raise EmployeeNotFoundError(employee_id)
+        return gravado
+
     def delete(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
         """L-E5 — remoção definitiva guardada, no endereço de três partes.
 

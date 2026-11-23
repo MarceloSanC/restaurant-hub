@@ -274,6 +274,18 @@ class CreateLoginRequest(BaseModel):
     delivery: Literal["email", "link"]
 
 
+class ExistingLoginRequest(BaseModel):
+    """A conta que já existe, nomeada pelo e-mail (R18 e R19, Stage 3.10).
+
+    Um campo, sem default. `email` viaja como **texto**, como em R17: não é
+    identificador de staff e não vira VO aqui — identity o valida e o normaliza
+    atrás do gateway (L-IG6). O `user_id` da conta não vem do cliente: o request
+    de staff continua sem ele (decisão 1 deste módulo; ADR 3.10.0002 §1).
+    """
+
+    email: str
+
+
 class CopyEmployeeRequest(BaseModel):
     """Cópia do funcionário para outra unidade.
 

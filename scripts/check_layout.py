@@ -628,11 +628,31 @@ GATEWAY_WRITE_METHODS: dict[str, frozenset[str]] = {
     "IdentityGateway": frozenset({"provision_employee_login", "revoke_login_sessions"}),
 }
 
+# Funções auxiliares de `use_cases/` que escrevem fora do bounded context, cada uma
+# com a escrita que faz (Stage 3.10, ADR 3.10.0001 §5). O varredor só enxerga escrita
+# por `self.<atributo>.<método>`; uma função de módulo que recebe o gateway a
+# esconderia. A chamada a uma destas funções conta como **uma** escrita do use case
+# que a faz. Entrada que não corresponde a função nenhuma de `use_cases/` reprova.
+HELPER_WRITES: dict[str, str] = {
+    "end_active_link": (
+        "revoga as sessões do login em identity (IdentityGateway.revoke_login_sessions) "
+        "— ponto único da regra de fim de vínculo, ADR 3.10.0001 §5"
+    ),
+}
+
 # Use cases tolerados com escrita múltipla fora de unidade, cada um com o motivo.
 # A allowlist é contável como a do charter (regra 6): entrada nova reprova até ser
 # justificada no teste de não-crescimento, e entrada que já não corresponde a um
 # use case que violaria a regra reprova também.
 MULTI_WRITE_ALLOWLIST: dict[str, str] = {
+    "RelinkLoginUseCase": (
+        "ADR 2.6.0002 §2 — revoga as sessões em identity (end_active_link) antes de "
+        "gravar o vínculo em staff (ADR 3.10.0001 §5); transação entre BCs rejeitada"
+    ),
+    "UnlinkLoginUseCase": (
+        "ADR 2.6.0002 §2 — revoga as sessões em identity (end_active_link) antes de "
+        "gravar o vínculo em staff (ADR 3.10.0001 §5); transação entre BCs rejeitada"
+    ),
     "CreateLoginForEmployeeUseCase": (
         "ADR 2.6.0002 §2 — travessia staff → identity (conta pela fachada, depois o "
         "vínculo em staff); transação entre BCs rejeitada pelo ADR 4.1.0006 Alt. A"
@@ -861,6 +881,21 @@ class _Varredor:
     ) -> None:
         em_compreensao = _dentro_de_compreensao(no)
         for interno in ast.walk(no):
+            if (
+                isinstance(interno, ast.Call)
+                and isinstance(interno.func, ast.Name)
+                and interno.func.id in HELPER_WRITES
+            ):
+                resultado.escritas.append(
+                    _Escrita(
+                        linha=interno.lineno,
+                        alvo=f"{interno.func.id}()",
+                        dentro_da_unidade=unidade,
+                        em_laco=laco or id(interno) in em_compreensao,
+                        seguida_de_raise=seguida_de_raise,
+                    )
+                )
+                continue
             if not (isinstance(interno, ast.Call) and isinstance(interno.func, ast.Attribute)):
                 continue
             laco_aqui = laco or id(interno) in em_compreensao
@@ -927,6 +962,19 @@ def scan_multi_write_use_cases(src_root: Path) -> dict[str, tuple[str, int, str]
     return achados
 
 
+def _helper_functions(src_root: Path) -> set[str]:
+    """Nomes das funções de módulo definidas em `use_cases/` (os auxiliares)."""
+    nomes: set[str] = set()
+    for arquivo in sorted(src_root.rglob("*.py")):
+        if USE_CASES_ANCHOR not in posix(arquivo):
+            continue
+        tree = parse(arquivo)
+        if tree is None:
+            continue
+        nomes |= {n.name for n in tree.body if isinstance(n, _FUNCOES)}
+    return nomes
+
+
 def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
     """Regra 10 — use case que escreve duas vezes escreve dentro de **uma** unidade.
 
@@ -949,6 +997,12 @@ def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
         violacoes.append(
             f"ESCRITA MÚLTIPLA: '{classe}' está na allowlist mas não viola mais a regra "
             f"10 — tire a entrada (allowlist morta documenta dívida já paga)."
+        )
+    definidas = _helper_functions(src_root)
+    for nome in sorted(set(HELPER_WRITES) - definidas):
+        violacoes.append(
+            f"ESCRITA MÚLTIPLA: HELPER_WRITES declara '{nome}', que não é função de "
+            f"use_cases/ — a tabela de auxiliares está desatualizada."
         )
     metodos = port_methods(src_root)
     for port, nomes in sorted(GATEWAY_WRITE_METHODS.items()):

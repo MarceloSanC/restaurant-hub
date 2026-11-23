@@ -335,6 +335,7 @@ unmatched_ignore_imports_alerting = error
 name = use cases facade-only de identity so sao importados pela fachada e pelo composition_root (ADR 0.0.0020)
 type = protected
 protected_modules =
+    restaurant_hub.features.identity.application.use_cases.find_account_by_email
     restaurant_hub.features.identity.application.use_cases.get_account_role
     restaurant_hub.features.identity.application.use_cases.get_unit_timezone
     restaurant_hub.features.identity.application.use_cases.provision_account

@@ -32,6 +32,7 @@ from restaurant_hub.features.staff.application.errors import (
 )
 from restaurant_hub.features.staff.application.ports.out import identity_gateway
 from restaurant_hub.features.staff.application.ports.out.identity_gateway import (
+    ExistingLogin,
     LoginDelivery,
     ProvisionedLogin,
 )
@@ -350,11 +351,126 @@ def test_l_ig5_falha_da_consulta_sobe_crua_na_mesma_instancia(
 
 
 # ---------------------------------------------------------------------------
+# L-IG6 — `find_login_by_email` encontra a conta existente (Stage 3.10)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("papel", ["employee", "manager", "hr"])
+def test_l_ig6_conta_membro_devolve_tenant_e_as_unidades_dela(
+    gateway: GatewaySobContrato, papel: str
+) -> None:
+    user_id = gateway.conta_existente("ana@contrato.exemplo", papel, (gateway.unit_id, "u-2"))
+
+    conta = gateway.gateway.find_login_by_email("ana@contrato.exemplo")
+
+    assert conta == ExistingLogin(
+        user_id=user_id,
+        tenant_id=gateway.tenant_id,
+        unit_ids=frozenset({gateway.unit_id, UnitId("u-2")}),
+        every_unit=False,
+    )
+
+
+def test_l_ig6_dono_sem_membership_alcanca_todas_as_unidades(gateway: GatewaySobContrato) -> None:
+    user_id = gateway.conta_existente("dono@contrato.exemplo", "owner", ())
+
+    conta = gateway.gateway.find_login_by_email("dono@contrato.exemplo")
+
+    assert conta == ExistingLogin(
+        user_id=user_id, tenant_id=gateway.tenant_id, unit_ids=frozenset(), every_unit=True
+    )
+
+
+def test_l_ig6_platform_admin_nao_tem_tenant_nem_alcance(gateway: GatewaySobContrato) -> None:
+    user_id = gateway.conta_existente("adm@plataforma.exemplo", "platform_admin", ())
+
+    conta = gateway.gateway.find_login_by_email("adm@plataforma.exemplo")
+
+    assert conta == ExistingLogin(
+        user_id=user_id, tenant_id=None, unit_ids=frozenset(), every_unit=False
+    )
+
+
+def test_l_ig6_conta_de_outro_tenant_e_devolvida_com_o_tenant_dela(
+    gateway: GatewaySobContrato,
+) -> None:
+    """O port não filtra por tenant: a recusa uniforme é do use case (ADR 3.10.0002 §3)."""
+    user_id = gateway.conta_em_outro_tenant("alheia@contrato.exemplo")
+
+    conta = gateway.gateway.find_login_by_email("alheia@contrato.exemplo")
+
+    assert conta is not None
+    assert conta.user_id == user_id
+    assert conta.tenant_id == TenantId("tenant-alheio")
+    assert conta.tenant_id != gateway.tenant_id
+
+
+def test_l_ig6_login_provisionado_e_encontrado_pelo_email(gateway: GatewaySobContrato) -> None:
+    login = _provisionar(gateway, email="maria@contrato.exemplo")
+
+    conta = gateway.gateway.find_login_by_email("maria@contrato.exemplo")
+
+    assert conta == ExistingLogin(
+        user_id=login.user_id,
+        tenant_id=gateway.tenant_id,
+        unit_ids=frozenset({gateway.unit_id}),
+        every_unit=False,
+    )
+
+
+def test_l_ig6_email_com_espaco_e_maiusculas_encontra_a_conta(
+    gateway: GatewaySobContrato,
+) -> None:
+    user_id = gateway.conta_existente("ana@contrato.exemplo", "manager", (gateway.unit_id,))
+
+    conta = gateway.gateway.find_login_by_email("  Ana@Contrato.EXEMPLO ")
+
+    assert conta is not None
+    assert conta.user_id == user_id
+
+
+def test_l_ig6_o_email_de_conta_existente_esta_em_uso_para_provisionar(
+    gateway: GatewaySobContrato,
+) -> None:
+    """L-IG2 sobre uma conta que não nasceu por este port: o e-mail já é login de alguém."""
+    gateway.conta_existente("ana@contrato.exemplo", "manager", (gateway.unit_id,))
+
+    with pytest.raises(LoginEmailAlreadyInUseError):
+        _provisionar(gateway, email="ana@contrato.exemplo")
+
+
+def test_l_ig6_email_sem_conta_e_none(gateway: GatewaySobContrato) -> None:
+    gateway.conta_existente("ana@contrato.exemplo", "manager", (gateway.unit_id,))
+
+    assert gateway.gateway.find_login_by_email("ninguem@contrato.exemplo") is None
+
+
+def test_l_ig6_email_malformado_vira_o_erro_de_staff(gateway: GatewaySobContrato) -> None:
+    for email in gateway.emails_invalidos():
+        with pytest.raises(InvalidLoginEmailError) as excinfo:
+            gateway.gateway.find_login_by_email(email)
+        assert excinfo.value.__cause__ is not None, "a tradução apagou quem recusou"
+
+
+def test_l_ig6_falha_da_consulta_sobe_crua_na_mesma_instancia(
+    gateway: GatewaySobContrato,
+) -> None:
+    gateway.conta_existente("ana@contrato.exemplo", "manager", (gateway.unit_id,))
+    falha = RuntimeError("identity fora")
+    gateway.consulta_de_conta_falha(falha)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        gateway.gateway.find_login_by_email("ana@contrato.exemplo")
+
+    assert excinfo.value is falha
+
+
+# ---------------------------------------------------------------------------
 # As leis estão escritas no port
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("lei", ["L-IG1", "L-IG2", "L-IG3", "L-IG4", "L-IG5"])
+@pytest.mark.parametrize("lei", ["L-IG1", "L-IG2", "L-IG3", "L-IG4", "L-IG5", "L-IG6"])
 def test_a_lei_esta_documentada_no_port(gateway: GatewaySobContrato, lei: str) -> None:
     """Lei sem texto normativo é convenção — e convenção não sobrevive à segunda
     implementação. Recebe a fixture sem usá-la para rodar sob cada implementação,
