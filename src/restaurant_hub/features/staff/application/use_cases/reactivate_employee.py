@@ -5,6 +5,12 @@ manteve enquanto esteve desligado — funções, preferência e indisponibilidad
 nunca foram apagadas.
 
 **Idempotente no valor**: recontratar quem já está ativo não é erro.
+
+**Grava só o estado** (L-REACT, issue #242). A recontratação escreve pelo
+`reactivate` do repositório, que liga `active` sobre o registro **gravado** e não
+regrava o resto do agregado a partir desta leitura. É a outra metade de "`update`
+não grava o estado": uma edição concorrente não desfaz a recontratação, e esta não
+desfaz uma edição concorrente. O vínculo de login gravado fica como está.
 """
 
 from restaurant_hub.features.staff.application.dtos.commands import ReactivateEmployeeCommand
@@ -50,6 +56,5 @@ class ReactivateEmployeeUseCase:
         )
         if employee is None:
             raise EmployeeNotFoundError(command.employee_id)
-        reactivated = employee.reactivate()
-        self._employees.update(reactivated)
-        return to_employee_result(reactivated)
+        self._employees.reactivate(command.tenant_id, command.unit_id, command.employee_id)
+        return to_employee_result(employee.reactivate())
