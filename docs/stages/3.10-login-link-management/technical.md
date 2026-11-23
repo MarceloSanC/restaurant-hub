@@ -432,4 +432,79 @@ T08, T09). M2 — "acima de 5 arquivos" declarado em T02, T05, T07–T10. M3 —
 de CA6 entra no critério de T10. M4 — mapa da §1 completo.
 
 
+### 2026-11-23 — [deviation] Task 01 — contagem do mapa na varredura e2e — Claude (Opus 5.5)
+**Contexto:** o `lint-and-test` do commit da Task 01 reprovou `test_staff_status_bands.py::test_toda_excecao_alcancavel_do_mapa_tem_cenario_e2e`: o mapa ganhou duas entradas e `_TOTAL_DE_ENTRADAS_DO_MAPA` ficou na contagem antiga. A Task tinha posto as classes em `INALCANCAVEIS_POR_HTTP`, mas não a cardinalidade.
+**Razão:** commit `a112ea8` `[3.10/task-01-fix]`, antes da Task seguinte ter rodado no Actions. Ajuste de contagem, sem mudança de comportamento.
+
+### 2026-11-23 — [deviation] Dois rebases sobre develop — Claude (Opus 5.5)
+**Contexto:** o PR ficou em conflito duas vezes com develop (o GitHub não roda workflow em PR em conflito). Primeiro rebase: #206 (mapa de erros de staff com 26 entradas, `JobFunctionEnablementChangedError`) e #201. Segundo: #232 (consulta facade-only `get_unit_timezone`, DTOs de identity 28→30), #211, #225, #199, #210.
+**Razão:** resolvido somando os dois lados: `_TOTAL_DE_ERROS_DE_STAFF` e `_TOTAL_DE_ENTRADAS_DO_MAPA` 26 + 4 = 30; `_TOTAL_DE_DTOS` de identity 30 + 2 = 32; o inventário facade-only com `get_unit_timezone` **e** `find_account_by_email`; os comandos e resultados de identity lado a lado; os blocos de conduta da #206/#225 e desta Stage em seções próprias. O rebase deixou um import fora da ordem do ruff na conduta, corrigido em `2cc077c` `[3.10/task-02-fix]`. Nenhuma migration nesta Stage: develop termina na `0007_units_timezone` (#232) e a cadeia não muda.
+
+### 2026-11-23 — [decision] Checkpoint C, bloco T01–T04 — Claude (Opus 5.5)
+**Contexto:** revisor de contexto zerado sobre o diff das Tasks 01–04: nenhum achado de contrato ou comportamento; três menores.
+**Pergunta:** disposição de cada achado.
+**Opções:**
+- A — corrigir com commit `-fix` ✅ recomendada
+- B — aceitar com registro
+**Decisão:** m1 (identificadores `gravado`/`novo` em código de produção) `corrigido` em `dccfbda`; m2 (o fake não tratava o e-mail de conta semeada como em uso) `corrigido` em `923b783`, com caso novo de contrato; m3 (a conduta usa `UPDATE` cru como escritor concorrente, e não `relink_login`/`link_login`) aceito.
+**Razão:** m3 prova a mesma propriedade — a escrita da Stage relê o gravado sob o lock e recusa —, e o revisor confirma que tirar o `FOR UPDATE` derruba o teste; usar a operação do port como escritor concorrente exigiria expor a conexão do adapter só para o teste.
+
+### 2026-11-23 — [decision] Checkpoint C, bloco T05–T07 — Claude (Opus 5.5)
+**Contexto:** revisor de contexto zerado sobre as Tasks 05–07: dois achados médios e três baixos, todos de cobertura ou de trava.
+**Pergunta:** disposição de cada achado.
+**Opções:**
+- A — corrigir com commit `-fix` ✅ recomendada
+- B — escalar como finding
+**Decisão:** F1 (a varredura do ponto único não via as transições da entidade, e `update(employee.deactivate())` passaria) `corrigido` em `aa4afd3`; F2 (mutante `expected_active=True` sobrevivia) `corrigido` em `aa4afd3` com o entrelace de recontratação no use case; F4 (cláusula `other.id != employee.id` de R10 sem teste) `corrigido` em `8a1204d`; F3 (a tabela `HELPER_WRITES` da regra 10 é manual) escalado como finding, issue #243; F5 (a trava de ordem compara só linhas) coberto pela suíte CA4 parametrizada sobre R13, R19 e R20 (`f925748`), que pega em runtime a regra pulada ou aplicada ao registro errado.
+**Razão:** F3 é melhoria do script de gate com escopo próprio; os demais cabem na Stage.
+
+### 2026-11-23 — [decision] Checkpoint C, bloco T08–T10 — Claude (Opus 5.5)
+**Contexto:** revisor de contexto zerado sobre as Tasks 08–10: um achado alto, um médio, um baixo.
+**Pergunta:** disposição de cada achado.
+**Opções:**
+- A — corrigir com commit `-fix` ✅ recomendada
+- B — refutar com artefato
+**Decisão:** F1 (os campos novos de `Recursos` com default vazio montavam `.../employees//login-link` nos recursos fictícios e no CA13, e o 404 viria do roteador) `corrigido` em `bcc9f66`, sem default; F2 (as guardas de R19/R20 repetidas entre use case e entidade) `corrigido` em `1b7539e` com `assert_can_relink_login`/`assert_can_unlink_login` como casa única, na forma de R18; F3 (efeito de CA11 de PUT/DELETE só conferia a unidade) `corrigido` em `bcc9f66` com efeitos próprios.
+**Razão:** os três mudam cobertura ou o dono da regra.
+
+### 2026-11-23 — [measurement] Verificação das citações de D3a, D3b, D5, D7 e D10 do concept — Claude (Opus 5.5)
+**Contexto:** a regra decidida com o gate de registros de decisão (PR #235) não aceita `não verificado (§4.2)` em decisão de concept aprovado que entra em port, contrato ou regra de tenant. O concept desta Stage está aprovado (`status: done`), então o resultado fica aqui, por decisão.
+**Medição:** `evidence-verifier` de contexto zerado, lendo a fonte bruta de cada citação:
+- **D3a** (recusa uniforme): ADR 3.4.0007 §Decision 4 — **sustenta** ("No error confirms the existence of a record the caller may not address").
+- **D3b** (404, raiz de aplicação): `error_handlers.py` › `STAFF_ERROR_STATUS` e `application/errors.py` › `JobFunctionNotFoundError(StaffApplicationError)` — **sustenta**.
+- **D5** (forma da escrita): **parcial→corrigido**. O trecho de ADR 0.0.0010 Alt. A está em `Cons`, e o motivo da rejeição é outro: "rung 1 — the adapter's own `update` already decides under `FOR UPDATE` before writing … the same form keeps one place for the guards". O de Alt. B ("each gets its own method") é o motivo de rejeitar B, descrevendo a forma escolhida. A decisão se mantém pelo mesmo degrau 1 com a base corrigida: a forma ratificada é "decidir sob `FOR UPDATE` com as guardas do domínio numa casa só, um método por escrita do vínculo".
+- **D7** (desligamento confere o vínculo): a regra "registro desligado recusa criar login" (concept 3.5 §5.5; workforce §3.8) **sustenta**. O motivo atribuído ao ADR 3.5.0003 §2 é **parcial→corrigido**: o texto é "writing and then failing to revoke would return an error to the client with the termination already persisted — partial success hidden behind a 500. The order that never hides partial success is revoke → write". A recusa de L-DEACT não grava o desligamento, então não é esse sucesso parcial; a decisão se mantém.
+- **D10** (porta da consulta): `UserCredentials.password_hash` com `repr=False`, `find_credentials_by_email` e `list_memberships` existem, e o docstring do port diz que `list_memberships` "não precisa filtrar" — **sustenta**.
+**Razão:** nenhuma decisão muda; as duas bases parciais ficam corrigidas aqui, com o trecho literal.
+
+### 2026-11-23 — [measurement] Auditoria de testes — Claude (Opus 5.5)
+**Contexto:** gate explícito do PROMPT, por subagente que não escreveu os testes, em duas rodadas.
+**Medição:** rodada 1 — itens 1, 2, 4, 5 e 6 satisfeitos com lacunas: falha da **revogação** sem teste em R13/R19/R20 (e um teste de R20 com nome que dizia revogação e testava a consulta de papel), falha de identity dentro da regra em R19, e2e de R20 sobre desligado seguido de R15, e2e de CA2 em R19 sem conferir o login exato; item 3 incompleto. Extra `d5ddcb4` `[3.10/task-13-extra]` fecha as quatro lacunas. Mutação real (`mutate310.py`, cada arquivo restaurado depois; `uv run pytest tests/unit/features/staff/application tests/unit/features/staff/domain tests/unit/features/identity/application tests/contract/features/staff -k "not postgres" -q --no-cov -x`): **21 mutantes, 21 mortos** — 7 em `resolve_linkable_login` (atalho do login atual, tenant, `every_unit` com `and` e ignorado, R10 só ativos, R10 contando o próprio, sem R10), 4 em `end_active_link` (guarda `active`, `shared`, `shared` contando o próprio, revogar sem papel), 3 em `assert_link_state` (sem comparar login, sem a cláusula de recontratação, direção invertida), 1 em `deactivate_as_read`, 4 nos use cases (regra depois da escrita em R19, `expected_active` fixo em R20 e R13, `expected_user_id=None` em R13), 2 em `find_account_by_email` (sem filtro por usuário, `sees_every_unit` sem tenant). Exemplo: `RL5 R10 so ativos: MORTO | FAILED …test_link_existing_login.py::test_ca12_conta_ja_em_outro_registro_da_unidade_e_409_sem_gravar || 1 failed, 562 passed`. Rodada 2 — os seis itens "sim".
+**Razão:** o SQL do adapter Postgres não entrou na mutação local (o Postgres é compartilhado); fica coberto pelo contrato `[postgres]` e pela conduta, no Actions.
+
+### 2026-11-23 — [measurement] Plano de gates — Claude (Opus 5.5)
+**Contexto:** os pontos do plano cumpridos pelo `lint-and-test` do Actions (orquestração autônoma).
+**Medição:** ponto 1 (Task 04 e os seus `-fix`) — run 45104981152, `completed success`, sobre `544f98e` (antes do segundo rebase). Ponto 2 (Task 07) — run 45106386922, `completed success`, sobre `12a84bb`. Ponto 3 (saída) — o run do commit `stage 3.10: complete`, citado no PR.
+**Razão:** os hashes dos pontos 1 e 2 mudaram no rebase sobre develop; o veredito vale para o conteúdo das Tasks, que o rebase só somou com develop.
+
+### 2026-11-23 — [finding] staff — resíduo da corrida de fim de vínculo na unidade — Claude (Opus 5.5)
+**Contexto:** concept §6.1, D8; ADR 3.10.0001 §6. Um login por unidade fecha o caminho pela API, mas dois vínculos concorrentes da mesma conta em dois registros da unidade ainda podem passar.
+**Direção sugerida:** lock por `user_id` numa transação de staff, ou índice único parcial `(tenant_id, unit_id, user_id)`.
+**Stage candidata:** issue #241.
+
+### 2026-11-23 — [finding] staff — `update` grava o estado ativo a partir de leitura velha — Claude (Opus 5.5)
+**Contexto:** concept §6.1; ADR 3.10.0001 Alt. H. Edição lida antes de uma recontratação devolve o registro a desligado; com um vínculo no meio, termina desligado e vinculado sem a regra.
+**Direção sugerida:** escrita própria de `active` (L-REACT), como `user_id`.
+**Stage candidata:** issue #242.
+
+### 2026-11-23 — [finding] shared — a tabela `HELPER_WRITES` da regra 10 é manual — Claude (Opus 5.5)
+**Contexto:** Checkpoint C, bloco T05–T07, F3.
+**Direção sugerida:** derivar a tabela das funções de `use_cases/` que escrevem por parâmetro.
+**Stage candidata:** issue #243.
+
+### 2026-11-23 — [finding] identity — consulta de conta por e-mail lê o hash que descarta — Claude (Opus 5.5)
+**Contexto:** concept D10: `FindAccountByEmailUseCase` usa `find_credentials_by_email` para não mudar o port de usuários enquanto a #211 editava identity.
+**Direção sugerida:** `UserRepository.find_by_email`, com fake, adapter e contrato, quando aparecer o segundo consumidor de leitura por e-mail.
+**Stage candidata:** a próxima Stage que toque `features/identity/application/ports/out/user_repository.py`.
+
 <!-- END: post-execution -->
