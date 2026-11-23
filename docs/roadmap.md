@@ -270,7 +270,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#224](https://github.com/MarceloSanC/restaurant-hub/issues/224) | Fixar o corpo do PR como lugar do plano de gates da issue avulsa | shared | docs + .claude | open | #200 |
 | [#225](https://github.com/MarceloSanC/restaurant-hub/issues/225) | Leitura de função responde 422 espúrio quando a habilitação muda no meio da remontagem | staff | adapters/out | done | #206 |
 | [#226](https://github.com/MarceloSanC/restaurant-hub/issues/226) | Decidir o controle otimista (`ETag`/`If-Match`) das edições de equipe (especulativa) | staff | application + adapters | open | — |
-| [#233](https://github.com/MarceloSanC/restaurant-hub/issues/233) | Fechar os pontos cegos da varredura de alcance dos use cases facade-only | identity | tests | open | #211 |
+| [#233](https://github.com/MarceloSanC/restaurant-hub/issues/233) | Fechar os pontos cegos da varredura de alcance dos use cases facade-only | identity | tests | done | #211 |
 | [#234](https://github.com/MarceloSanC/restaurant-hub/issues/234) | A fachada de provisionamento lê `PROVISIONABLE_ROLES` em vez do literal | identity | application | open | #211, `3.10-login-link-management` |
 | [#236](https://github.com/MarceloSanC/restaurant-hub/issues/236) | Alterar o fuso de uma unidade já criada | identity | domain + application + adapters | open | #198 |
 | [#237](https://github.com/MarceloSanC/restaurant-hub/issues/237) | Conferir o `Verificado:` das decisões gravadas fora da forma do §5 da `evidence-resolution` | shared | tooling | open | #212 |
