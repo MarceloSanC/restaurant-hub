@@ -628,17 +628,11 @@ GATEWAY_WRITE_METHODS: dict[str, frozenset[str]] = {
     "IdentityGateway": frozenset({"provision_employee_login", "revoke_login_sessions"}),
 }
 
-# Funções auxiliares de `use_cases/` que escrevem fora do bounded context, cada uma
-# com a escrita que faz (Stage 3.10, ADR 3.10.0001 §5). O varredor só enxerga escrita
-# por `self.<atributo>.<método>`; uma função de módulo que recebe o gateway a
-# esconderia. A chamada a uma destas funções conta como **uma** escrita do use case
-# que a faz. Entrada que não corresponde a função nenhuma de `use_cases/` reprova.
-HELPER_WRITES: dict[str, str] = {
-    "end_active_link": (
-        "revoga as sessões do login em identity (IdentityGateway.revoke_login_sessions) "
-        "— ponto único da regra de fim de vínculo, ADR 3.10.0001 §5"
-    ),
-}
+# Os auxiliares que escrevem — funções de módulo de `use_cases/` que recebem um
+# repositório ou gateway e gravam por ele — **não** são uma tabela: saem de
+# `helper_writes`, derivados do código (issue #243). Até a issue #243 eram uma tabela
+# escrita à mão (`HELPER_WRITES`, Stage 3.10), e um auxiliar novo que gravasse pelo
+# parâmetro ficava invisível à regra até alguém lembrar de declará-lo.
 
 # Use cases tolerados com escrita múltipla fora de unidade, cada um com o motivo.
 # A allowlist é contável como a do charter (regra 6): entrada nova reprova até ser
@@ -768,6 +762,222 @@ def _dentro_de_compreensao(no: ast.AST) -> set[int]:
     return ids
 
 
+def _dentro_de_laco(no: ast.AST) -> set[int]:
+    """Ids dos nós que rodam a cada volta de um laço ou compreensão contido em `no`."""
+    ids = _dentro_de_compreensao(no)
+    for interno in ast.walk(no):
+        if isinstance(interno, ast.For | ast.AsyncFor | ast.While):
+            partes: list[ast.AST] = list(interno.body)
+            if isinstance(interno, ast.While):
+                partes.append(interno.test)
+            for parte in partes:
+                ids |= {id(n) for n in ast.walk(parte)}
+    return ids
+
+
+def _nomes_da_anotacao(anotacao: ast.expr | None) -> set[str]:
+    """Todo nome da anotação — `X`, `mod.X`, `"X"`, `X | None`, `Optional[X]`.
+
+    Mais largo que `_anotacao` de propósito: um parâmetro de auxiliar anotado como
+    `EmployeeRepository | None` grava do mesmo jeito (o mesmo leitor do guarda da
+    issue #205, `test_setup_token_issuance_rule10.py`).
+    """
+    if anotacao is None:
+        return set()
+    nomes: set[str] = set()
+    for no in ast.walk(anotacao):
+        if isinstance(no, ast.Name):
+            nomes.add(no.id)
+        elif isinstance(no, ast.Attribute):
+            nomes.add(no.attr)
+        elif isinstance(no, ast.Constant) and isinstance(no.value, str):
+            try:
+                nomes |= _nomes_da_anotacao(ast.parse(no.value, mode="eval").body)
+            except SyntaxError:
+                continue
+    return nomes
+
+
+@dataclass(frozen=True)
+class _Modulo:
+    """Um arquivo de `use_cases/`: nome pontuado, funções de módulo e nomes importados."""
+
+    nome: str
+    arvore: ast.Module
+    funcoes: dict[str, ast.FunctionDef | ast.AsyncFunctionDef]
+    importados: dict[str, str]
+
+    def qualificar(self, func: ast.expr) -> str | None:
+        """Nome pontuado do que a chamada invoca, quando o próprio módulo o resolve.
+
+        `f()` definida aqui, `f()` importada (`from m import f [as g]`) ou `m.f()` com
+        `m` importado. Qualquer outra coisa (`self._x.f()`, chamada de retorno de
+        chamada) devolve `None`.
+        """
+        partes: list[str] = []
+        no = func
+        while isinstance(no, ast.Attribute):
+            partes.insert(0, no.attr)
+            no = no.value
+        if not isinstance(no, ast.Name):
+            return None
+        if not partes and no.id in self.funcoes:
+            return f"{self.nome}.{no.id}"
+        if no.id in self.importados:
+            return ".".join([self.importados[no.id], *partes])
+        return None
+
+
+def _modulos_de_use_cases(src_root: Path) -> list[_Modulo]:
+    modulos: list[_Modulo] = []
+    for arquivo in sorted(src_root.rglob("*.py")):
+        if USE_CASES_ANCHOR not in posix(arquivo):
+            continue
+        tree = parse(arquivo)
+        if tree is None:
+            continue
+        nome = ".".join(arquivo.relative_to(src_root.parent).with_suffix("").parts)
+        importados: dict[str, str] = {}
+        for no in ast.walk(tree):
+            if isinstance(no, ast.ImportFrom):
+                base = no.module or ""
+                if no.level:
+                    pacote = nome.split(".")[: -no.level]
+                    base = ".".join([*pacote, *([base] if base else [])])
+                for alias in no.names:
+                    importados[alias.asname or alias.name] = f"{base}.{alias.name}"
+            elif isinstance(no, ast.Import):
+                for alias in no.names:
+                    if alias.asname:
+                        importados[alias.asname] = alias.name
+                    else:
+                        cabeca = alias.name.split(".")[0]
+                        importados[cabeca] = cabeca
+        funcoes = {n.name: n for n in tree.body if isinstance(n, _FUNCOES)}
+        modulos.append(_Modulo(nome, tree, funcoes, importados))
+    return modulos
+
+
+@dataclass(frozen=True)
+class AuxiliarQueEscreve:
+    """Função de módulo de `use_cases/` que grava, e o que grava."""
+
+    nome: str
+    escritas: tuple[str, ...]
+    # Duas ou mais escritas, ou uma em laço: a chamada pesa como escrita em laço.
+    multipla: bool
+
+
+def _resolver_chamada(
+    modulo: _Modulo, chamada: ast.Call, auxiliares: dict[str, AuxiliarQueEscreve]
+) -> AuxiliarQueEscreve | None:
+    """O auxiliar que escreve chamado aqui, se algum.
+
+    Resolve pelo import, para que um homônimo que só lê, em outro módulo, não conte.
+    Chamada por nome nu que o módulo **não** resolve (um `from m import *`, por
+    exemplo) cai no fail-closed: conta se algum auxiliar que escreve tem o nome.
+    """
+    qualificado = modulo.qualificar(chamada.func)
+    if qualificado is not None:
+        return auxiliares.get(qualificado)
+    if isinstance(chamada.func, ast.Name):
+        return next(
+            (a for q, a in sorted(auxiliares.items()) if q.rsplit(".", 1)[1] == chamada.func.id),
+            None,
+        )
+    return None
+
+
+def _escritas_diretas(
+    funcao: ast.FunctionDef | ast.AsyncFunctionDef, repository_ports: set[str]
+) -> list[tuple[str, bool]]:
+    """`parâmetro.método(...)` de escrita no corpo — inclusive em função aninhada."""
+    a = funcao.args
+    parametros = {
+        p.arg: _nomes_da_anotacao(p.annotation)
+        for p in [*a.posonlyargs, *a.args, *a.kwonlyargs, *filter(None, (a.vararg, a.kwarg))]
+    }
+    em_laco = _dentro_de_laco(funcao)
+    escritas: list[tuple[str, bool]] = []
+    for no in ast.walk(funcao):
+        if not (
+            isinstance(no, ast.Call)
+            and isinstance(no.func, ast.Attribute)
+            and isinstance(no.func.value, ast.Name)
+            and no.func.value.id in parametros
+        ):
+            continue
+        tipos = parametros[no.func.value.id]
+        porta = next(
+            (t for t in sorted(tipos) if is_write(t, no.func.attr, repository_ports)), None
+        )
+        if porta is not None:
+            escritas.append((f"{porta}.{no.func.attr}", id(no) in em_laco))
+    return escritas
+
+
+def helper_writes(
+    src_root: Path, repository_ports: set[str] | None = None
+) -> dict[str, AuxiliarQueEscreve]:
+    """Nome pontuado → auxiliar, para toda função de módulo de `use_cases/` que escreve.
+
+    **Derivado, nunca escrito à mão** (issue #243). Escreve a função que:
+
+    - chama um método de escrita (`is_write`: repositório fora de `find_`/`exists_`/
+      `list_`, ou método de `GATEWAY_WRITE_METHODS`) sobre um **parâmetro** anotado com
+      o port — todo nome da anotação conta (`X | None`, `"X"`, `mod.X`), e uma função
+      aninhada (closure) que use o parâmetro também;
+    - ou chama outro auxiliar que escreve (fecho transitivo, até o ponto fixo).
+
+    Duas escritas, ou uma em laço, fazem o auxiliar **múltiplo**: a chamada a ele conta
+    como duas, como a escrita em laço do §5 do ADR 2.6.0002. Um auxiliar que abrisse a
+    própria unidade seria, por isso, cobrado do chamador: quem abre a unidade é o use
+    case (LAYOUT §4).
+
+    **Limites declarados** (não decidíveis pela árvore, e sem caso no código):
+    parâmetro sem anotação (o mypy strict o barra em `src/`); repositório que chega
+    dentro de um objeto de contexto (`deps.repo.add()`), num alias local
+    (`r = repo`) ou como método ligado (`Callable`, o limite que a auditoria da #205
+    declarou); `getattr` dinâmico; auxiliar fora de `use_cases/`.
+    """
+    portas = repository_port_names(src_root) if repository_ports is None else repository_ports
+    modulos = _modulos_de_use_cases(src_root)
+    diretas = {
+        f"{m.nome}.{nome}": (m, funcao, _escritas_diretas(funcao, portas))
+        for m in modulos
+        for nome, funcao in m.funcoes.items()
+    }
+    auxiliares: dict[str, AuxiliarQueEscreve] = {}
+    mudou = True
+    while mudou:
+        mudou = False
+        for qualificado, (modulo, funcao, proprias) in diretas.items():
+            em_laco = _dentro_de_laco(funcao)
+            escritas = list(proprias)
+            for no in ast.walk(funcao):
+                if not isinstance(no, ast.Call):
+                    continue
+                # Recursão entra como qualquer chamada: na segunda volta a função já
+                # escreve, a chamada a si mesma soma e ela vira múltipla — gravar de
+                # novo a cada nível é o laço com outra forma.
+                chamado = _resolver_chamada(modulo, no, auxiliares)
+                if chamado is not None:
+                    laco = id(no) in em_laco or chamado.multipla
+                    escritas.append((f"{chamado.nome}()", laco))
+            if not escritas:
+                continue
+            peso = sum(2 if laco else 1 for _, laco in escritas)
+            novo = AuxiliarQueEscreve(
+                nome=funcao.name,
+                escritas=tuple(sorted({alvo for alvo, _ in escritas})),
+                multipla=peso > 1,
+            )
+            if auxiliares.get(qualificado) != novo:
+                auxiliares[qualificado] = novo
+                mudou = True
+    return auxiliares
+
+
 class _Varredor:
     """Percorre os métodos de uma classe de use case coletando escritas e unidades.
 
@@ -779,12 +989,23 @@ class _Varredor:
     Cada **entrada** num bloco de unidade conta: um helper que abre unidade,
     chamado duas vezes, são duas transações; uma unidade dentro de laço conta como
     duas (são N).
+
+    A chamada a uma função de módulo que escreve (`helper_writes`, derivado) é uma
+    escrita do use case, no lugar da chamada; a de um auxiliar múltiplo pesa duas.
     """
 
-    def __init__(self, classe: ast.ClassDef, repository_ports: set[str]) -> None:
+    def __init__(
+        self,
+        classe: ast.ClassDef,
+        repository_ports: set[str],
+        modulo: _Modulo,
+        auxiliares: dict[str, AuxiliarQueEscreve],
+    ) -> None:
         self._metodos = {m.name: m for m in classe.body if isinstance(m, _FUNCOES)}
         self._tipos = _tipos_dos_atributos(classe)
         self._repository_ports = repository_ports
+        self._modulo = modulo
+        self._auxiliares = auxiliares
 
     def varrer(self) -> _Varredura:
         resultado = _Varredura(escritas=[], unidades=[])
@@ -881,22 +1102,21 @@ class _Varredor:
     ) -> None:
         em_compreensao = _dentro_de_compreensao(no)
         for interno in ast.walk(no):
-            if (
-                isinstance(interno, ast.Call)
-                and isinstance(interno.func, ast.Name)
-                and interno.func.id in HELPER_WRITES
-            ):
+            if not isinstance(interno, ast.Call):
+                continue
+            auxiliar = _resolver_chamada(self._modulo, interno, self._auxiliares)
+            if auxiliar is not None:
                 resultado.escritas.append(
                     _Escrita(
                         linha=interno.lineno,
-                        alvo=f"{interno.func.id}()",
+                        alvo=f"{auxiliar.nome}()",
                         dentro_da_unidade=unidade,
-                        em_laco=laco or id(interno) in em_compreensao,
+                        em_laco=laco or id(interno) in em_compreensao or auxiliar.multipla,
                         seguida_de_raise=seguida_de_raise,
                     )
                 )
                 continue
-            if not (isinstance(interno, ast.Call) and isinstance(interno.func, ast.Attribute)):
+            if not isinstance(interno.func, ast.Attribute):
                 continue
             laco_aqui = laco or id(interno) in em_compreensao
             metodo = interno.func.attr
@@ -944,35 +1164,16 @@ def _violacao_de_escrita_multipla(varredura: _Varredura) -> str | None:
 def scan_multi_write_use_cases(src_root: Path) -> dict[str, tuple[str, int, str]]:
     """Use case → (arquivo, linha, motivo) para cada classe que viola a regra 10."""
     repository_ports = repository_port_names(src_root)
+    auxiliares = helper_writes(src_root, repository_ports)
     achados: dict[str, tuple[str, int, str]] = {}
-    for arquivo in sorted(src_root.rglob("*.py")):
-        if USE_CASES_ANCHOR not in posix(arquivo):
-            continue
-        tree = parse(arquivo)
-        if tree is None:
-            continue
-        for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
-            motivo = _violacao_de_escrita_multipla(_Varredor(classe, repository_ports).varrer())
+    for modulo in _modulos_de_use_cases(src_root):
+        arquivo = Path(*modulo.nome.split(".")).with_suffix(".py")
+        for classe in (n for n in modulo.arvore.body if isinstance(n, ast.ClassDef)):
+            varredor = _Varredor(classe, repository_ports, modulo, auxiliares)
+            motivo = _violacao_de_escrita_multipla(varredor.varrer())
             if motivo is not None:
-                achados[classe.name] = (
-                    str(arquivo.relative_to(src_root.parent)),
-                    classe.lineno,
-                    motivo,
-                )
+                achados[classe.name] = (str(arquivo), classe.lineno, motivo)
     return achados
-
-
-def _helper_functions(src_root: Path) -> set[str]:
-    """Nomes das funções de módulo definidas em `use_cases/` (os auxiliares)."""
-    nomes: set[str] = set()
-    for arquivo in sorted(src_root.rglob("*.py")):
-        if USE_CASES_ANCHOR not in posix(arquivo):
-            continue
-        tree = parse(arquivo)
-        if tree is None:
-            continue
-        nomes |= {n.name for n in tree.body if isinstance(n, _FUNCOES)}
-    return nomes
 
 
 def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
@@ -997,12 +1198,6 @@ def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
         violacoes.append(
             f"ESCRITA MÚLTIPLA: '{classe}' está na allowlist mas não viola mais a regra "
             f"10 — tire a entrada (allowlist morta documenta dívida já paga)."
-        )
-    definidas = _helper_functions(src_root)
-    for nome in sorted(set(HELPER_WRITES) - definidas):
-        violacoes.append(
-            f"ESCRITA MÚLTIPLA: HELPER_WRITES declara '{nome}', que não é função de "
-            f"use_cases/ — a tabela de auxiliares está desatualizada."
         )
     metodos = port_methods(src_root)
     for port, nomes in sorted(GATEWAY_WRITE_METHODS.items()):

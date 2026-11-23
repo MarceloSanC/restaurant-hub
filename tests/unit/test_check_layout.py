@@ -503,7 +503,6 @@ def regra10_isolada(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr(check_layout, "MULTI_WRITE_ALLOWLIST", {})
     monkeypatch.setattr(check_layout, "GATEWAY_WRITE_METHODS", {})
-    monkeypatch.setattr(check_layout, "HELPER_WRITES", {})
 
 
 def _src_com_use_case(tmp_path: pathlib.Path, corpo: str) -> pathlib.Path:
@@ -826,57 +825,421 @@ def test_regra10_entrada_da_allowlist_sem_violacao_reprova(
     assert any("'Fazer' está na allowlist mas não viola" in v for v in violacoes), violacoes
 
 
-_USE_CASE_COM_AUXILIAR = (
-    "def revogar(coisas: CoisaRepository) -> None:\n"
-    "    coisas.remove('sessoes')\n\n\n"
-    + _CABECALHO_DO_USE_CASE
-    + "    def execute(self) -> None:\n"
-    "        revogar(self._coisas)\n"
-    "        self._coisas.add('a')\n"
+# --- Auxiliares que escrevem: derivados do código (issue #243) -----------------
+#
+# Até a issue #243 a regra 10 só contava a chamada a um auxiliar declarado à mão
+# (`HELPER_WRITES`); um auxiliar novo que gravasse pelo parâmetro ficava invisível.
+# Os casos abaixo plantam o auxiliar num módulo `_aux.py` ao lado do use case e o
+# importam como o código real importa (`from <pacote>.use_cases._aux import f`).
+
+_PACOTE_DOS_USE_CASES = "restaurant_hub.features.x.application.use_cases"
+_GATEWAY = (
+    "from typing import Protocol\n\n\n"
+    "class OutroGateway(Protocol):\n"
+    "    def gravar(self, x: str) -> None: ...\n"
+    "    def ler(self, x: str) -> str: ...\n"
 )
 
 
+def _use_case_que_chama(chamada: str, importacao: str) -> str:
+    """Use case com uma escrita própria fora de unidade, mais a `chamada` ao auxiliar."""
+    return (
+        importacao
+        + "\n\n"
+        + _CABECALHO_DO_USE_CASE
+        + "    def execute(self) -> None:\n"
+        + f"        {chamada}\n"
+        + "        self._coisas.add('a')\n"
+    )
+
+
+def _src_com_auxiliar(
+    tmp_path: pathlib.Path,
+    auxiliar: str,
+    chamada: str = "revogar(self._coisas)",
+    importacao: str = f"from {_PACOTE_DOS_USE_CASES}._aux import revogar",
+    extras: dict[str, str] | None = None,
+) -> pathlib.Path:
+    return _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/ports/out/outro_gateway.py": _GATEWAY,
+            "features/x/application/use_cases/_aux.py": auxiliar,
+            "features/x/application/use_cases/fazer.py": _use_case_que_chama(chamada, importacao),
+            **(extras or {}),
+        },
+    )
+
+
+_AUXILIAR_QUE_REMOVE = "def revogar(coisas: CoisaRepository) -> None:\n    coisas.remove('s')\n"
+
+
+@pytest.mark.parametrize(
+    "auxiliar",
+    [
+        pytest.param(_AUXILIAR_QUE_REMOVE, id="repositorio-por-parametro"),
+        pytest.param(
+            "def revogar(coisas: CoisaRepository | None) -> None:\n"
+            "    if coisas is not None:\n"
+            "        coisas.remove('s')\n",
+            id="anotacao-com-none",
+        ),
+        pytest.param(
+            "def revogar(coisas: 'CoisaRepository') -> None:\n    coisas.remove('s')\n",
+            id="anotacao-em-string",
+        ),
+        pytest.param(
+            "def revogar(*, coisas: ports.CoisaRepository) -> None:\n    coisas.remove('s')\n",
+            id="anotacao-qualificada-e-keyword-only",
+        ),
+        pytest.param(
+            "def revogar(coisas: CoisaRepository) -> None:\n"
+            "    def dentro() -> None:\n"
+            "        coisas.remove('s')\n"
+            "    dentro()\n",
+            id="closure-sobre-o-parametro",
+        ),
+        pytest.param(
+            "async def revogar(coisas: CoisaRepository) -> None:\n    await coisas.remove('s')\n",
+            id="auxiliar-async",
+        ),
+        pytest.param(
+            "def revogar(coisas: CoisaRepository) -> None:\n    _gravar(coisas)\n\n\n"
+            "def _gravar(coisas: CoisaRepository) -> None:\n    coisas.remove('s')\n",
+            id="transitivo-no-mesmo-modulo",
+        ),
+        pytest.param(
+            f"from {_PACOTE_DOS_USE_CASES}._base import gravar\n\n\n"
+            "def revogar(coisas: CoisaRepository) -> None:\n    gravar(coisas)\n",
+            id="transitivo-por-import",
+        ),
+        pytest.param(
+            "from . import _base\n\n\n"
+            "def revogar(coisas: CoisaRepository) -> None:\n    _base.gravar(coisas)\n",
+            id="transitivo-por-import-relativo-de-modulo",
+        ),
+    ],
+)
 @pytest.mark.usefixtures("regra10_isolada")
-def test_regra10_chamada_a_auxiliar_declarado_conta_como_escrita(
+def test_regra10_auxiliar_que_escreve_e_contado_sem_declaracao(
+    tmp_path: pathlib.Path, auxiliar: str
+) -> None:
+    """Critério da #243: o auxiliar que grava pelo parâmetro conta, sem tabela nenhuma."""
+    base = "def gravar(coisas: CoisaRepository) -> None:\n    coisas.remove('s')\n"
+    raiz = _src_com_auxiliar(
+        tmp_path, auxiliar, extras={"features/x/application/use_cases/_base.py": base}
+    )
+
+    violacoes = check_layout.check_multi_write_unit_of_work(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "'Fazer'" in violacoes[0]
+    assert "revogar() (linha" in violacoes[0]
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_auxiliar_que_escreve_por_gateway_declarado_e_contado(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Stage 3.10: a revogação feita por função de módulo não some do varredor."""
+    """O caso de `end_active_link`: a escrita é método de `GATEWAY_WRITE_METHODS`."""
+    monkeypatch.setattr(
+        check_layout, "GATEWAY_WRITE_METHODS", {"OutroGateway": frozenset({"gravar"})}
+    )
+    auxiliar = "def revogar(gateway: OutroGateway) -> None:\n    gateway.gravar('s')\n"
+
+    violacoes = check_layout.check_multi_write_unit_of_work(
+        _src_com_auxiliar(tmp_path, auxiliar, chamada="revogar(object())")
+    )
+
+    assert len(violacoes) == 1, violacoes
+    assert "revogar()" in violacoes[0]
+
+
+@pytest.mark.parametrize(
+    "auxiliar",
+    [
+        pytest.param(
+            "def revogar(coisas: CoisaRepository) -> None:\n    coisas.find_by_id('s')\n",
+            id="so-le-o-repositorio",
+        ),
+        pytest.param(
+            "def revogar(gateway: OutroGateway) -> None:\n    gateway.ler('s')\n",
+            id="so-le-o-gateway",
+        ),
+        pytest.param(
+            "def revogar(coisas: CoisaRepository) -> None:\n    _ler(coisas)\n\n\n"
+            "def _ler(coisas: CoisaRepository) -> None:\n    coisas.find_by_id('s')\n",
+            id="so-chama-quem-le",
+        ),
+        pytest.param(
+            "def revogar(coisas: object) -> None:\n    coisas.remove('s')\n",
+            id="parametro-que-nao-e-port",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_auxiliar_que_so_le_nao_e_contado(tmp_path: pathlib.Path, auxiliar: str) -> None:
+    """Controle negativo — os auxiliares de scheduling recebem repositório só para ler."""
+    raiz = _src_com_auxiliar(tmp_path, auxiliar)
+
+    assert check_layout.check_multi_write_unit_of_work(raiz) == []
+    assert check_layout.helper_writes(raiz) == {}
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_homonimo_em_outro_modulo_nao_contamina(tmp_path: pathlib.Path) -> None:
+    """A chamada é resolvida pelo import: o `revogar` que só lê não herda a escrita do outro."""
+    que_le = "def revogar(coisas: CoisaRepository) -> None:\n    coisas.find_by_id('s')\n"
+    raiz = _src_com_auxiliar(
+        tmp_path,
+        que_le,
+        extras={"features/x/application/use_cases/_outro.py": _AUXILIAR_QUE_REMOVE},
+    )
+
+    assert check_layout.check_multi_write_unit_of_work(raiz) == []
+    assert set(check_layout.helper_writes(raiz)) == {f"{_PACOTE_DOS_USE_CASES}._outro.revogar"}
+
+    pelo_outro = _src_com_auxiliar(
+        tmp_path / "b",
+        que_le,
+        importacao=f"from {_PACOTE_DOS_USE_CASES}._outro import revogar",
+        extras={"features/x/application/use_cases/_outro.py": _AUXILIAR_QUE_REMOVE},
+    )
+    assert len(check_layout.check_multi_write_unit_of_work(pelo_outro)) == 1
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_definicao_local_vence_o_homonimo_de_outro_modulo(tmp_path: pathlib.Path) -> None:
+    """O `revogar` definido no próprio módulo do use case é o chamado — não o de `_outro`."""
     raiz = _src_falso(
         tmp_path,
         {
             "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
             "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
-            "features/x/application/use_cases/fazer.py": _USE_CASE_COM_AUXILIAR,
+            "features/x/application/use_cases/_outro.py": _AUXILIAR_QUE_REMOVE,
+            "features/x/application/use_cases/fazer.py": (
+                "def revogar(coisas: CoisaRepository) -> None:\n"
+                "    coisas.find_by_id('s')\n\n\n"
+                + _use_case_que_chama("revogar(self._coisas)", "")
+            ),
         },
     )
+
     assert check_layout.check_multi_write_unit_of_work(raiz) == []
 
-    monkeypatch.setattr(check_layout, "HELPER_WRITES", {"revogar": "escreve fora"})
+
+@pytest.mark.parametrize(
+    ("chamada", "importacao"),
+    [
+        pytest.param(
+            "apagar(self._coisas)",
+            f"from {_PACOTE_DOS_USE_CASES}._aux import revogar as apagar",
+            id="import-com-alias",
+        ),
+        pytest.param(
+            "_aux.revogar(self._coisas)",
+            f"from {_PACOTE_DOS_USE_CASES} import _aux",
+            id="atributo-de-modulo-importado",
+        ),
+        pytest.param(
+            "aux.revogar(self._coisas)",
+            f"import {_PACOTE_DOS_USE_CASES}._aux as aux",
+            id="import-de-modulo-com-alias",
+        ),
+        pytest.param(
+            "revogar(self._coisas)",
+            f"from {_PACOTE_DOS_USE_CASES}._aux import *",
+            id="star-import-cai-no-fail-closed-por-nome",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_a_chamada_ao_auxiliar_e_resolvida_em_cada_forma_de_import(
+    tmp_path: pathlib.Path, chamada: str, importacao: str
+) -> None:
+    raiz = _src_com_auxiliar(tmp_path, _AUXILIAR_QUE_REMOVE, chamada, importacao)
+
     violacoes = check_layout.check_multi_write_unit_of_work(raiz)
 
     assert len(violacoes) == 1, violacoes
-    assert "'Fazer'" in violacoes[0]
     assert "revogar()" in violacoes[0]
 
 
 @pytest.mark.usefixtures("regra10_isolada")
-def test_regra10_auxiliar_declarado_que_nao_existe_reprova(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+def test_regra10_auxiliar_definido_no_proprio_modulo_do_use_case_conta(
+    tmp_path: pathlib.Path,
 ) -> None:
-    monkeypatch.setattr(check_layout, "HELPER_WRITES", {"sumiu": "escreve fora"})
-
-    violacoes = check_layout.check_multi_write_unit_of_work(
-        _src_com_use_case(tmp_path, _DUAS_DENTRO)
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/use_cases/fazer.py": _AUXILIAR_QUE_REMOVE
+            + "\n\n"
+            + _use_case_que_chama("revogar(self._coisas)", ""),
+        },
     )
 
-    assert any("HELPER_WRITES declara 'sumiu'" in v for v in violacoes), violacoes
+    assert len(check_layout.check_multi_write_unit_of_work(raiz)) == 1
+
+
+@pytest.mark.parametrize(
+    "auxiliar",
+    [
+        pytest.param(
+            "def revogar(coisas: CoisaRepository) -> None:\n"
+            "    coisas.remove('s')\n"
+            "    coisas.add('t')\n",
+            id="duas-escritas",
+        ),
+        pytest.param(
+            "def revogar(coisas: CoisaRepository, xs: list[str]) -> None:\n"
+            "    for x in xs:\n"
+            "        coisas.remove(x)\n",
+            id="escrita-em-laco",
+        ),
+        pytest.param(
+            "def revogar(coisas: CoisaRepository) -> None:\n"
+            "    coisas.remove('s')\n"
+            "    revogar(coisas)\n",
+            id="recursao",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_auxiliar_multiplo_pesa_duas_escritas(
+    tmp_path: pathlib.Path, auxiliar: str
+) -> None:
+    """Sozinho no use case e fora de unidade, o auxiliar múltiplo já reprova."""
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/use_cases/_aux.py": auxiliar,
+            "features/x/application/use_cases/fazer.py": (
+                f"from {_PACOTE_DOS_USE_CASES}._aux import revogar\n\n\n"
+                + _CABECALHO_DO_USE_CASE
+                + "    def execute(self) -> None:\n"
+                "        revogar(self._coisas)\n"
+            ),
+        },
+    )
+
+    violacoes = check_layout.check_multi_write_unit_of_work(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "revogar()" in violacoes[0]
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_auxiliar_de_uma_escrita_sozinho_nao_reprova(tmp_path: pathlib.Path) -> None:
+    """Controle do anterior: uma escrita só, num auxiliar, é uma escrita só."""
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/use_cases/_aux.py": _AUXILIAR_QUE_REMOVE,
+            "features/x/application/use_cases/fazer.py": (
+                f"from {_PACOTE_DOS_USE_CASES}._aux import revogar\n\n\n"
+                + _CABECALHO_DO_USE_CASE
+                + "    def execute(self) -> None:\n"
+                "        revogar(self._coisas)\n"
+            ),
+        },
+    )
+
+    assert check_layout.check_multi_write_unit_of_work(raiz) == []
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_auxiliar_chamado_dentro_da_unidade_nao_reprova(tmp_path: pathlib.Path) -> None:
+    raiz = _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            "features/x/application/use_cases/_aux.py": _AUXILIAR_QUE_REMOVE,
+            "features/x/application/use_cases/fazer.py": (
+                f"from {_PACOTE_DOS_USE_CASES}._aux import revogar\n\n\n"
+                + _CABECALHO_DO_USE_CASE
+                + "    def execute(self) -> None:\n"
+                "        with self._unit_of_work.transaction():\n"
+                "            revogar(self._coisas)\n"
+                "            self._coisas.add('a')\n"
+            ),
+        },
+    )
+
+    assert check_layout.check_multi_write_unit_of_work(raiz) == []
+
+
+@pytest.mark.usefixtures("regra10_isolada")
+def test_regra10_auxiliar_que_deixou_de_escrever_mata_a_entrada_da_allowlist(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Critério da #243, segunda metade, na forma derivada.
+
+    Não há mais entrada de tabela para envelhecer: quando o auxiliar deixa de gravar,
+    a escrita some do use case, e a entrada dele na allowlist (que só existia por
+    causa dela) reprova como morta.
+    """
+    monkeypatch.setattr(check_layout, "MULTI_WRITE_ALLOWLIST", {"Fazer": "ADR 2.6.0002 §2"})
+    escreve = _src_com_auxiliar(tmp_path / "antes", _AUXILIAR_QUE_REMOVE)
+    assert check_layout.check_multi_write_unit_of_work(escreve) == []
+
+    deixou = _src_com_auxiliar(
+        tmp_path / "depois",
+        "def revogar(coisas: CoisaRepository) -> None:\n    coisas.find_by_id('s')\n",
+    )
+
+    assert check_layout.check_multi_write_unit_of_work(deixou) == [
+        "ESCRITA MÚLTIPLA: 'Fazer' está na allowlist mas não viola mais a regra 10 — tire "
+        "a entrada (allowlist morta documenta dívida já paga)."
+    ]
+
+
+# O piso: hoje a derivação acha exatamente um auxiliar que escreve. Mais pode entrar
+# (e entra calado, contado pela regra); zero significaria a derivação quebrada.
+_PISO_DE_AUXILIARES_QUE_ESCREVEM = 1
+
+
+def test_regra10_a_derivacao_acha_os_auxiliares_reais_que_escrevem() -> None:
+    auxiliares = check_layout.helper_writes(_SRC)
+
+    assert len(auxiliares) >= _PISO_DE_AUXILIARES_QUE_ESCREVEM, auxiliares
+    ponto_unico = auxiliares[
+        "restaurant_hub.features.staff.application.use_cases._login_link.end_active_link"
+    ]
+    assert ponto_unico.escritas == ("IdentityGateway.revoke_login_sessions",)
+    assert not ponto_unico.multipla
+
+
+def test_regra10_os_auxiliares_reais_que_so_leem_ficam_fora() -> None:
+    """Os que recebem port só para ler (ADR 2.6.0002, nota da issue #205) não entram."""
+    auxiliares = {q.rsplit(".", 1)[1] for q in check_layout.helper_writes(_SRC)}
+
+    for so_le in (
+        "resolve_linkable_login",
+        "issue_setup_token",
+        "deliver_invitation",
+        "settings_of",
+        "neighbours_of",
+        "load_for_edit",
+        "run_batch",
+    ):
+        assert so_le not in auxiliares
 
 
 def test_regra10_o_desligamento_conta_o_ponto_unico_como_a_escrita_em_identity() -> None:
-    """Sem a tabela, R13 teria uma escrita só e a entrada dele na allowlist morreria."""
+    """Sem a derivação, R13 teria uma escrita só e a entrada dele na allowlist morreria."""
     achados = check_layout.scan_multi_write_use_cases(_SRC)
 
-    assert "end_active_link()" in achados["DeactivateEmployeeUseCase"][2]
+    for classe in ("DeactivateEmployeeUseCase", "RelinkLoginUseCase", "UnlinkLoginUseCase"):
+        assert "end_active_link()" in achados[classe][2]
 
 
 def test_regra10_os_use_cases_reais_cumprem_a_regra() -> None:
