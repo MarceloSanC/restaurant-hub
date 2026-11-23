@@ -237,3 +237,23 @@ Alternativa descartada: recusar com 409 quando o registro foi lido ativo e está
 e o oráculo de faixas por um conflito entre dois atos deliberados do gerente; o caso geral de
 edições concorrentes é o controle otimista da issue #226. Nota *append-only*; o corpo acima não
 foi editado.
+
+**2026-11-23 — §Decision 6 (o resíduo) fechado, com a Alternativa F (issue #241).** O
+[ADR 0.0.0025](./0_0_0025-one-login-per-unit-is-a-partial-unique-index.md) adotou o índice único parcial `uq_employees_tenant_unit_user` sobre `employees
+(tenant_id, unit_id, user_id) WHERE user_id IS NOT NULL` (migration `0008`), que esta ADR
+deixava como "the candidate for the residual". `L-LINK` e `L-RELINK` ganharam a última guarda —
+outro registro do tenant e da unidade com o login ⇒ `LoginAlreadyLinkedInUnitError` (409),
+nada gravado —, que o adapter obtém traduzindo a violação do índice pelo nome
+(`ON_WRITE_LOGIN_LINK`) e o fake lendo o store; `resolve_linkable_login` continua lendo a
+unidade como caminho comum. De dois vínculos concorrentes da mesma conta em dois registros da
+unidade, o segundo espera o primeiro no índice e é recusado (`test_issue_241_*` de
+`test_staff_conduct.py`, R18 e R19, duas conexões). O "Cons" da Alternativa F foi pago: os
+arranjos do caso (a) dentro da unidade (suítes da 3.8, a CA4 de
+`test_login_link_single_point.py` e o mundo de contrato da leitura de staff em scheduling)
+foram reescritos, e a condição de mesma unidade do ADR 3.8.0001 saiu do código —
+`end_active_link(gateway, employee)` não recebe mais o repositório nem lista a unidade (§5 acima
+cita a assinatura antiga). A Alternativa G (lock por `user_id`) foi rejeitada de novo: ver ADR
+0.0.0025, Alternativa A. O item *"Two concurrent links of one account into one unit remain
+possible"* de `### Negative` está fechado num banco na revisão `0008`; um banco com duplicatas
+anteriores não chega a ela (a migration falha). Nota *append-only*; o corpo acima não foi
+editado.

@@ -43,6 +43,7 @@ references:
   - ../../adr/4_1_0004-hr-reads-schedules-in-member-units.md
   - ../../adr/4_1_0005-unit-timezone-owned-by-identity.md
   - ../../adr/4_1_0006-termination-reconciled-on-read-and-guarded-delete-by-reverse-port.md
+  - ../../adr/0_0_0025-one-login-per-unit-is-a-partial-unique-index.md
 ---
 
 # Domínio staff/workforce — equipe da unidade
@@ -619,6 +620,17 @@ do BC identity e **não é reescrita aqui** — este doc só fixa a fronteira.
 > Vincular, trocar e desvincular exigem as mesmas duas permissões de criar login
 > ([ADR 3.10.0001](../../adr/3_10_0001-login-link-transitions-by-conditional-write.md);
 > [ADR 3.10.0002](../../adr/3_10_0002-existing-account-eligibility-by-email.md)).
+
+> **Nota (2026-11-23): um login por unidade, imposto pelo banco (issue #241).** A regra "um
+> login por unidade" da nota acima era checada lendo a unidade antes de gravar, e dois
+> vínculos simultâneos da mesma conta em dois registros da unidade podiam passar os dois.
+> Desde a issue #241 o banco a impõe: o segundo é recusado com a mesma resposta. Por isso o
+> bullet "O `user_id` é coluna anulável e opaca [...] sem FK, `UNIQUE` ou índice" vale agora
+> **entre unidades** — dentro de uma unidade, o mesmo login não fica em dois registros, ativos ou
+> desligados. Com isso, "nenhum outro registro ativo da mesma unidade aponta para o login" (nota
+> de 2026-10-19) é sempre verdade para um registro vinculado, e o desligamento não precisa mais
+> consultá-lo
+> ([ADR 0.0.0025](../../adr/0_0_0025-one-login-per-unit-is-a-partial-unique-index.md)).
 
 ---
 
