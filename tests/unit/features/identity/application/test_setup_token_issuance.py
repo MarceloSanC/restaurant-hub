@@ -6,12 +6,14 @@ link — vive em `InviteUserUseCase`, `InviteOwnerUseCase`, `ProvisionRestaurant
 **efeito observável** do passo nos cinco, por igual, para que a extração da issue
 #205 não mude nada:
 
-- o registro gravado é **exatamente** o esperado (id, dono, proposito, fingerprint,
+- o registro gravado é **exatamente** o esperado (id, dono, propósito, fingerprint,
   emissão e expiração), com o prazo de cada fluxo;
 - o valor gravado é o fingerprint do token que **o link** carrega — o link que a
   pessoa abre redime o registro que a emissão gravou, e o valor em claro não é
   gravado;
 - uma emissão por execução, pela fonte do port (`SetupTokenIssuer.issue`).
+
+No fim, os testes da definição única do passo, `_invitation.issue_setup_token`.
 """
 
 from collections.abc import Callable
@@ -35,6 +37,10 @@ from restaurant_hub.features.identity.application.dtos.setup_tokens import (
     IssuedSetupToken,
     PasswordSetupToken,
     SetupTokenPurpose,
+)
+from restaurant_hub.features.identity.application.use_cases._invitation import (
+    issue_setup_token,
+    setup_link,
 )
 from restaurant_hub.features.identity.application.use_cases.invite_owner import (
     InviteOwnerUseCase,
@@ -349,3 +355,97 @@ def test_o_valor_gravado_e_o_fingerprint_do_token_do_link(nome: str) -> None:
     # substring, por isso a comparação é campo a campo, e não por `in repr`).
     assert valor not in [getattr(registro, campo.name) for campo in fields(registro)]
     assert len(grafo.issuer.emissoes) == 1
+
+
+# ---------------------------------------------------------------------------
+# A definição única do passo — `issue_setup_token` (issue #205)
+# ---------------------------------------------------------------------------
+
+
+class _Ordem:
+    """Port de emissão e gerador de ids que anotam a ordem em que são chamados."""
+
+    def __init__(self) -> None:
+        self.chamadas: list[str] = []
+        self.issuer = FakeSetupTokenIssuer()
+        self.ids = FakeIdGenerator()
+
+    def issue(self) -> IssuedSetupToken:
+        self.chamadas.append("issue")
+        return self.issuer.issue()
+
+    def fingerprint(self, token_value: str) -> str:
+        return self.issuer.fingerprint(token_value)
+
+    def next_id(self) -> UUID:
+        self.chamadas.append("next_id")
+        return self.ids.next_id()
+
+
+@pytest.mark.parametrize(
+    ("proposito", "ttl"),
+    [
+        (SetupTokenPurpose.INVITATION, _CONVITE_TTL),
+        (SetupTokenPurpose.INVITATION, _ENTREGA_TTL),
+        (SetupTokenPurpose.PASSWORD_RESET, _RESET_TTL),
+    ],
+)
+def test_issue_setup_token_monta_registro_e_link_da_mesma_emissao(
+    proposito: SetupTokenPurpose, ttl: timedelta
+) -> None:
+    ordem = _Ordem()
+
+    emissao = issue_setup_token(
+        ordem,
+        ordem,
+        user_id=UserId("user-9"),
+        purpose=proposito,
+        now=_AGORA,
+        ttl=ttl,
+        base_url=_BASE_URL,
+    )
+
+    assert emissao.record == PasswordSetupToken(
+        id=SetupTokenId(str(UUID(int=1))),
+        user_id=UserId("user-9"),
+        purpose=proposito,
+        token_fingerprint="sfp::setup-1",
+        issued_at=_AGORA,
+        expires_at=_AGORA + ttl,
+    )
+    # Byte a byte o link de `setup_link`, com o valor da mesma emissão.
+    assert emissao.link == "https://app.exemplo.com/definir-senha?token=setup-1"
+    assert emissao.link == setup_link(_BASE_URL, "setup-1")
+    assert ordem.fingerprint(_token_do_link(emissao.link)) == emissao.record.token_fingerprint
+
+
+def test_issue_setup_token_emite_uma_vez_e_antes_de_pedir_o_id() -> None:
+    """A ordem das cópias substituídas: valor do port, depois id do registro."""
+    ordem = _Ordem()
+
+    issue_setup_token(
+        ordem,
+        ordem,
+        user_id=UserId("user-9"),
+        purpose=SetupTokenPurpose.INVITATION,
+        now=_AGORA,
+        ttl=_CONVITE_TTL,
+        base_url=_BASE_URL,
+    )
+
+    assert ordem.chamadas == ["issue", "next_id"]
+
+
+def test_issue_setup_token_nao_mostra_o_link_no_repr() -> None:
+    emissao = issue_setup_token(
+        FakeSetupTokenIssuer(),
+        FakeIdGenerator(),
+        user_id=UserId("user-9"),
+        purpose=SetupTokenPurpose.INVITATION,
+        now=_AGORA,
+        ttl=_CONVITE_TTL,
+        base_url=_BASE_URL,
+    )
+
+    assert "definir-senha" not in repr(emissao)
+    assert "token=" not in repr(emissao)
