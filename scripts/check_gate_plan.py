@@ -82,7 +82,8 @@ TECHNICAL_GLOB = "docs/stages/*/technical.md"
 # ADR 0.0.0021 Decisão 11). Lista fechada: não se adiciona Stage aqui. Parecida, mas
 # de outra regra e outra data: `LEGACY_CHECKPOINT_STAGES` em
 # `scripts/check_technical_postexec.py` (disposições dos Checkpoints, issue #210,
-# com a 3.10) — as duas não se unificam.
+# com a 3.10) — as duas não se unificam. Uma terceira, por registro e não por Stage:
+# `LEGACY_RECORDS` em `scripts/check_decision_records.py` (campo Verificado, #212).
 LEGACY_STAGES: frozenset[str] = frozenset(
     {
         "1.1-bootstrap",

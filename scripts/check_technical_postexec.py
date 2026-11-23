@@ -114,7 +114,9 @@ _CHECKPOINT_PATTERN = re.compile(r"\bCheckpoint (?P<letter>[A-Z])\b")
 # Stage aberta depois do merge da issue #210; não acrescentar Stage nova aqui.
 # Renumerar a 3.10 antes do merge exige trocar o número aqui. Parecida, mas de outra
 # regra e outra data: `LEGACY_STAGES` em `scripts/check_gate_plan.py` (plano de gates,
-# ADR 0.0.0021, sem a 3.10) — as duas não se unificam.
+# ADR 0.0.0021, sem a 3.10) — as duas não se unificam. Uma terceira, por registro e
+# não por Stage: `LEGACY_RECORDS` em `scripts/check_decision_records.py` (campo
+# Verificado, issue #212).
 LEGACY_CHECKPOINT_STAGES = frozenset(
     {
         "1.1", "1.2",

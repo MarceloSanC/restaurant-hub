@@ -194,7 +194,7 @@ implementação mínima).
 [decision:C] #211-1 — forma do fechamento
 Escolha: conjunto aceito declarado no use case (PROVISIONABLE_ROLES), checado primeiro · Alternativas: papel fixo no command (sem ProvisionAccountCommand.role, literal no use case, como InviteOwnerUseCase com Role.OWNER); resíduo aceito · Degrau (C): 2 descarta o resíduo; 4 decide entre o conjunto e o papel fixo
 Base: §Decision 5 › "ProvisionAccountUseCase keeps accepting any role"; §Consequences › "Residual"; ADR 0.0.0020 §Inventory › "This exclusion leaves a known residual"
-Verificado: completude por decision-reviewer (2026-11-22)
+Verificado: sustenta — evidence-verifier (2026-11-23, auditoria do PR #235, 4/4 itens: as três citações da Base e PROVISIONABLE_ROLES checado primeiro em provision_account.py); completude por decision-reviewer (2026-11-22)
 Configuração candidata: nenhuma · Reversível: sim
 ```
 
