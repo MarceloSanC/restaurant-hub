@@ -220,13 +220,13 @@ class PostgresScheduleRepository:
     ) -> None:
         """L-SC4 (endereço → versão → vizinhas → ids internos), L-SC9 e L-SC3."""
         with self._engine.begin() as connection:
+            self._check_neighbours(connection, schedule, expected_version, expected_neighbours)
             connection.execute(unit_lock_statement(schedule.tenant_id, schedule.unit_id))
             stored_version = connection.execute(stored_version_statement(schedule)).scalar()
             if stored_version is None:
                 raise ScheduleNotFoundError(schedule.id)
             if stored_version != expected_version:
                 raise ScheduleVersionConflictError(expected_version, stored_version)
-            self._check_neighbours(connection, schedule, stored_version, expected_neighbours)
             self._check_internal_ids(connection, schedule)
             connection.execute(
                 schedules.update()
