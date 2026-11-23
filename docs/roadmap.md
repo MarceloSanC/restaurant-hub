@@ -264,7 +264,7 @@ Stages, e seu número fica no `issue_id` do `technical.md`.
 | [#209](https://github.com/MarceloSanC/restaurant-hub/issues/209) | Decidir se a demanda da unidade se restringe às funções habilitadas nela | scheduling | application | open | `3.11-job-function-unit-enablement` |
 | [#210](https://github.com/MarceloSanC/restaurant-hub/issues/210) | Persistir em artefato as disposições dos Checkpoints A e B | shared | docs + .claude | done | — |
 | [#211](https://github.com/MarceloSanC/restaurant-hub/issues/211) | Fechar no `ProvisionAccountUseCase` o papel que a fachada já restringe (resíduo da Stage 2.7) | identity | application | done | #184 |
-| [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | open | — |
+| [#212](https://github.com/MarceloSanC/restaurant-hub/issues/212) | Cobrar no `make docs-check` o vocabulário do campo `Verificado:` dos registros de decisão | shared | tooling | done | — |
 | [#216](https://github.com/MarceloSanC/restaurant-hub/issues/216) | Pôr os testes sob o `mypy` do gate ou declarar a exclusão | shared | tooling | open | — |
 | [#217](https://github.com/MarceloSanC/restaurant-hub/issues/217) | Pôr o adapter Postgres da escala no escopo da mutação noturna | scheduling | tooling + tests | open | `4.4-scheduling-persistence` |
 | [#224](https://github.com/MarceloSanC/restaurant-hub/issues/224) | Fixar o corpo do PR como lugar do plano de gates da issue avulsa | shared | docs + .claude | open | #200 |
