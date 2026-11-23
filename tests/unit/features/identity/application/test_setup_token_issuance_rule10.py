@@ -2,11 +2,14 @@
 
 A regra 10 do `scripts/check_layout.py` (ADR 2.6.0002 §5) conta escrita por
 atributo de repositório **do use case** — `self._tokens.add(...)`, no corpo dele ou
-nos seus métodos privados. Ela não segue um repositório entregue a uma função de
-módulo: é ponto cego declarado do ADR. Uma extração que recebesse o repositório e
-gravasse por dentro esconderia da regra a escrita do token nos cinco use cases que
-emitem — e então tirar a unidade de trabalho de volta de `users.add` + `tokens.add`
-deixaria a suíte verde e a atomicidade perdida.
+nos seus métodos privados. Quando este guarda nasceu, ela não seguia um repositório
+entregue a uma função de módulo (ponto cego declarado do ADR): uma extração que
+recebesse o repositório e gravasse por dentro esconderia da regra a escrita do token
+nos cinco use cases que emitem — e então tirar a unidade de trabalho de volta de
+`users.add` + `tokens.add` deixaria a suíte verde e a atomicidade perdida. Desde a
+issue #243 a regra segue o repositório **anotado no parâmetro** de uma função de
+módulo (`helper_writes`), mas não os embrulhos do limite abaixo; e o ADR 0.0.0024
+continua pedindo que o helper não grave, que é o que o lado 1 cobra.
 
 Dois lados, cada um com o seu controle:
 

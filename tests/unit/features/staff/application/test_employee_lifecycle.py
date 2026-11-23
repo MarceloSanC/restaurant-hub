@@ -175,6 +175,26 @@ def test_recontratar_poe_ativo_sem_mexer_em_mais_nada() -> None:
     assert _exceto_active(depois) == _exceto_active(antes)
 
 
+def test_recontratar_grava_so_o_estado_pela_escrita_propria() -> None:
+    """L-REACT (issue #242): a recontratação não regrava o agregado lido por `update`.
+
+    O lookup e a escrita própria, nesta ordem e nada mais: um `update` aqui
+    voltaria a carregar o agregado inteiro, possivelmente velho, por cima de uma
+    edição concorrente.
+    """
+    fakes = _fakes()
+    _desligar(fakes).execute(
+        DeactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
+    antes_calls = len(fakes.store.calls)
+
+    _recontratar(fakes).execute(
+        ReactivateEmployeeCommand(actor=TEST_ACTOR, tenant_id=_A, unit_id=_U1, employee_id=_E1)
+    )
+
+    assert fakes.store.calls[antes_calls:] == ["employees.find_by_id", "employees.reactivate"]
+
+
 def test_desligar_duas_vezes_e_idempotente_no_valor() -> None:
     """Repetir não é erro — a borda não precisa consultar o estado antes de agir."""
     fakes = _fakes()
@@ -283,6 +303,7 @@ def test_transicoes_em_registro_inexistente_ou_alheio_nao_gravam(tenant: TenantI
 
     assert "employees.update" not in fakes.store.calls[antes_calls:]
     assert "employees.deactivate" not in fakes.store.calls[antes_calls:]
+    assert "employees.reactivate" not in fakes.store.calls[antes_calls:]
     assert _result(fakes) == antes
 
 
@@ -399,7 +420,9 @@ def _outro_registro(
     if user_id is not None:
         fakes.employees.link_login(_A, unit_id, registro.id, user_id)
     if not active:
-        fakes.employees.update(registro.deactivate())
+        fakes.employees.deactivate(
+            _A, unit_id, registro.id, expected_user_id=user_id, expected_active=True
+        )
 
 
 def _desligar_e1(use_case: DeactivateEmployeeUseCase) -> EmployeeResult:

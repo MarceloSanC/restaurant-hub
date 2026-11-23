@@ -127,8 +127,11 @@ _IMMUTABLE_COLUMNS = frozenset({"id", "tenant_id", "unit_id"})
 # #68): no `SET` do `update`, uma entidade lida antes de um vínculo concorrente
 # apagaria o vínculo gravado depois dela — e a conta criada em identity ficaria
 # órfã. Não é imutável (nasce `NULL` e é definido uma vez); só não é deste
-# método.
-_COLUMNS_WITH_OWN_WRITE = frozenset({"user_id"})
+# método. `active` é escrito só por `deactivate` (`L-DEACT`) e `reactivate`
+# (`L-REACT`, issue #242): no `SET` do `update`, uma entidade lida antes de uma
+# recontratação devolveria o registro a desligado — com um vínculo no meio,
+# desligado e vinculado sem a regra de fim de vínculo.
+_COLUMNS_WITH_OWN_WRITE = frozenset({"user_id", "active"})
 
 # `REPEATABLE READ` nas leituras de agregado (§5.18) — ver a nota 4 do docstring.
 _SINGLE_SNAPSHOT = "REPEATABLE READ"
@@ -260,6 +263,16 @@ class PostgresEmployeeRepository:
             lambda updated: {"active": updated.active},
         )
 
+    def reactivate(self, tenant_id: TenantId, unit_id: UnitId, employee_id: EmployeeId) -> None:
+        """`L-REACT` — a forma de `deactivate`, com `Employee.reactivate` (issue #242)."""
+        self._transition_under_lock(
+            tenant_id,
+            unit_id,
+            employee_id,
+            lambda stored: stored.reactivate(),
+            lambda updated: {"active": updated.active},
+        )
+
     def _transition_under_lock(
         self,
         tenant_id: TenantId,
@@ -270,8 +283,8 @@ class PostgresEmployeeRepository:
     ) -> None:
         """Trava a linha, aplica a transição do domínio ao gravado, grava as colunas dela.
 
-        A forma das escritas próprias do vínculo e do desligamento (ADR 0.0.0010
-        decisão 2; ADR 3.10.0001 §2): `SELECT … FOR UPDATE` no endereço de três
+        A forma das escritas próprias do vínculo e do estado ativo (ADR 0.0.0010
+        decisão 2; ADR 3.10.0001 §2; issue #242):`SELECT … FOR UPDATE` no endereço de três
         partes, agregado remontado sob o lock (em `READ COMMITTED` — ver
         `link_login`), a transição do **domínio** como única casa das guardas, e um
         `UPDATE` que grava só as colunas que a lei nomeia. Endereço vazio ⇒

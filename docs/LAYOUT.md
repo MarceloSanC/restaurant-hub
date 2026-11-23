@@ -266,8 +266,11 @@ composition root ([ADR 2.6.0001](./adr/2_6_0001-identity-unit-of-work-port-and-a
 - **`scripts/check_layout.py` regra 10** reprova o use case com duas ou mais
   escritas que não estejam todas dentro de **um** bloco de unidade (escrita em
   laço conta duas; só o "grava e recusa" é tolerado fora). Exceções vivem numa
-  allowlist contável, como a do charter (regra 6) — hoje, as duas travessias de
-  staff para identity.
+  allowlist contável, como a do charter (regra 6) — hoje, as travessias de staff
+  para identity (ADR 2.6.0002, nota da Stage 3.10). A chamada a uma função de
+  módulo de `use_cases/` que grava por um parâmetro anotado com o port (ou chama
+  outra que grava) conta como escrita do use case: a lista desses auxiliares é
+  **derivada** do código (`helper_writes`, issue #243), não escrita à mão.
 
 ## 6. Composition Root
 
