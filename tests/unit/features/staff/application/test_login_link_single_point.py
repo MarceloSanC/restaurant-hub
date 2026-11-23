@@ -3,11 +3,12 @@
 Três camadas de prova:
 
 1. **Estrutura (AST, CA9).** `revoke_login_sessions` e `is_employee_login` só são
-   chamados em `_login_link.py`; todo use case que faz uma escrita que encerra
-   vínculo (`deactivate`, `relink_login`, `unlink_login` do repositório) chama
-   `end_active_link` antes, no mesmo `execute`. A escrita do port é reconhecida pelo
-   argumento nomeado `expected_user_id`, que as três assinaturas exigem por nome —
-   um apelido do repositório (`repo = self._employees`) não escapa, e as transições
+   chamados em `_login_link.py`, e ali só dentro de `end_active_link`; todo use case
+   que faz uma escrita que encerra vínculo (`deactivate`, `relink_login`,
+   `unlink_login` do repositório) chama `end_active_link` antes, no mesmo `execute`.
+   A escrita do port é reconhecida pelo argumento nomeado `expected_user_id`, que
+   as três assinaturas exigem por nome — um apelido do repositório
+   (`repo = self._employees`) não escapa, e as transições
    homônimas da entidade (`employee.deactivate()`) não são confundidas com ela.
 2. **Comportamento da regra** (`end_active_link` direto), uma condição por teste.
 3. **R13 sobre o ponto único e a escrita condicional**, inclusive o entrelace "vínculo
@@ -129,6 +130,44 @@ def test_revogacao_e_consulta_de_papel_so_no_ponto_unico() -> None:
         if isinstance(c.func, ast.Attribute) and c.func.attr in _CHAMADAS_EXCLUSIVAS
     }
     assert fora == set()
+
+
+def _chamadas_exclusivas_fora_de_end_active_link(fonte: str) -> set[tuple[str, int]]:
+    """As chamadas exclusivas que não estão no corpo de `end_active_link`."""
+    arvore = ast.parse(fonte)
+    dentro = {
+        id(c)
+        for funcao in arvore.body
+        if isinstance(funcao, ast.FunctionDef) and funcao.name == "end_active_link"
+        for c in _chamadas_por_nome(funcao)
+    }
+    return {
+        (c.func.attr, c.lineno)
+        for c in _chamadas_por_nome(arvore)
+        if isinstance(c.func, ast.Attribute)
+        and c.func.attr in _CHAMADAS_EXCLUSIVAS
+        and id(c) not in dentro
+    }
+
+
+def test_no_modulo_do_ponto_unico_so_end_active_link_revoga() -> None:
+    """A regra 10 só conta `end_active_link` como escrita em identity (`HELPER_WRITES`).
+
+    Uma segunda função de `_login_link.py` que revogasse passaria pela varredura acima
+    (o módulo é o permitido) e ficaria invisível à regra 10 — o ponto cego que a
+    auditoria do PR #230 mediu; a derivação geral da tabela é a issue #243.
+    """
+    assert _chamadas_exclusivas_fora_de_end_active_link(_modulos()[_MODULO_DO_PONTO_UNICO]) == set()
+
+
+def test_controle_outra_funcao_do_modulo_que_revoga_reprova() -> None:
+    fonte = (
+        "def end_active_link(employees, gateway, employee):\n"
+        "    gateway.revoke_login_sessions(employee.user_id)\n"
+        "def cut(gateway, user_id):\n"
+        "    gateway.revoke_login_sessions(user_id)\n"
+    )
+    assert _chamadas_exclusivas_fora_de_end_active_link(fonte) == {("revoke_login_sessions", 4)}
 
 
 def test_o_ponto_unico_faz_as_duas_chamadas() -> None:
