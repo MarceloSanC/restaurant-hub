@@ -137,7 +137,7 @@ graph LR
 | `3.7-application-authorization` | Autorização na camada application de staff | application | done | `3.5-employee-login-link` |
 | `3.8-termination-access-scope` | Desligamento corta só o acesso que o registro concede | vertical (staff) + identity (application, fachada) | done | `3.5-employee-login-link` |
 | `3.9-error-hierarchy` | Hierarquia de exceções sem protocolo HTTP | shared (domain + application) + identity/staff/scheduling (application, adapters/inbound/http) | done | `3.6-staff-http`, `4.3-scheduling-application`, #45 |
-| `3.10-login-link-management` | Vincular, desvincular e trocar o login de um registro | vertical (staff) + identity (fachada) | draft | `3.8-termination-access-scope`, `2.7-identity-application-authorization`, #178 |
+| `3.10-login-link-management` | Vincular, desvincular e trocar o login de um registro | vertical (staff) + identity (fachada) | done | `3.8-termination-access-scope`, `2.7-identity-application-authorization`, #178 |
 | `3.11-job-function-unit-enablement` | Habilitação de função de trabalho por unidade | vertical (staff) | done | `3.7-application-authorization`, `3.9-error-hierarchy` |
 | `4.1-scheduling-domain` | Domínio da escala | domain | done | `3.1-staff-domain` |
 | `4.2-validation-policies` | Políticas de validação configuráveis | domain | done | `4.1-scheduling-domain` |
@@ -1636,6 +1636,24 @@ Perguntas que a issue deixa para o concept (registradas na #107):
 - **Desligamento × R17 na ordem inversa** (anexo da auditoria do PR #103, comentário na #107). Um R13 que leu o registro sem vínculo e grava depois de um R17 concorrente deixa o registro desligado **e** vinculado, sem revogar sessões (ADR 0.0.0010 › "The reverse order of the termination race is not closed"). Hoje não concede acesso, mas contraria "desligado não recebe login". Ao extrair de `deactivate_employee.py` o ponto único da regra de fim de vínculo, o concept decide se o R13 reconfere o vínculo sob o lock da linha (ADR 3.5.0003 §2) e põe no critério um teste de conduta com duas conexões para esse entrelace.
 - **Paralelismo.** A 4.4 pode tocar o repositório de staff (`find_by_user_id` e índice, guarda reversa); não rodar em paralelo com ela se as pegadas de arquivo se cruzarem.
 
+> **Nota (2026-11-23): fechamento da Stage 3.10** (issue #218; concept e technical em
+> `docs/stages/3.10-login-link-management/`; ADRs 3.10.0001 e 3.10.0002). O que a execução fixou:
+>
+> - **Três rotas** em `.../employees/{employee_id}/login-link`: vincular conta existente (R18,
+>   `POST`), trocar o login (R19, `PUT`) e desvincular (R20, `DELETE`), com `manage_staff` e
+>   `manage_users` na unidade, como R17. A conta é nomeada pelo e-mail.
+> - **Elegibilidade:** conta do restaurante do registro que alcança a unidade (membro, ou o dono,
+>   que nasce sem membership); conta de outro restaurante, `platform_admin` ou sem alcance recebe o
+>   mesmo 404 de uma conta inexistente. Um login por unidade (409). O papel não entra na regra, e a
+>   consulta nova da fachada (`find_account_by_email`) não devolve papel.
+> - **Escritas condicionais** (L-UNLINK, L-RELINK, L-DEACT) conferem o estado lido; o desligamento
+>   passou a gravar por L-DEACT, o que fecha a ordem inversa do ADR 0.0.0010. A regra de fim de
+>   vínculo mora num ponto único (`_login_link.end_active_link`), travado por varredura de AST e pela
+>   regra 10. Sem migration.
+> - **12 Tasks + 9 commits de correção** (Checkpoints C, CI e rebases) **+ 1 extra** (auditoria de
+>   testes, 2 rodadas, 21 mutações reais). Forks P delegados ao recomendado (concept §7). Resíduo da
+>   corrida de fim de vínculo e escrita do estado ativo por `update` viram as issues #241 e #242.
+
 ---
 
 #### Stage 3.11 — `3.11-job-function-unit-enablement`
@@ -2410,6 +2428,7 @@ A decomposição em Stages acontece quando cada Step for planejado (nova rodada 
 | 2026-11-09 | Issue **#41** promovida a **Stage `3.11-job-function-unit-enablement`** (Step 3, BC staff; `depends_on: 3.7-application-authorization, 3.9-error-hierarchy`): a linha sai da Tabela de Issues e entra na de Stages, com bloco próprio. O corpo pede concept (invariante do conjunto de unidades, leis do port revisadas, regra da cópia entre unidades com ADR, unicidade do nome) e toca modelo de dados com migration — o litmus de PIPELINE §4.5. Número conferido livre em develop, nas branches remotas e nas worktrees abertas (a #106 cria a 4.8). Step 3 passa a `3.1 → 3.11` | Promoção da issue #41 |
 | 2026-11-16 | Stage `3.11-job-function-unit-enablement` concluída (`done`): função de trabalho com habilitação por unidade (todas ou conjunto), listagem por unidade, alteração das unidades com guarda do estreitamento e a invariante funcionário × unidade em criar, atribuir e copiar (ADRs 3.11.0001 e 3.11.0002, migration `0005`); bloco acrescido de nota datada de fechamento. Auditoria do PR #188: findings sem pouso viraram as issues #206–#210 | Fechamento da Stage 3.11 (issue #41, PR #188) |
 | 2026-11-16 | Stage 2.7-identity-application-authorization concluída (`done`); bloco acrescido de nota datada de fechamento. Os cinco use cases de identity que agem por um ator (`ProvisionRestaurant`, `CreateUnit`, `CreateUser`, `InviteUser` e o novo `InviteOwner`) autorizam o alvo do próprio command antes de qualquer outra instrução, pelo port `ActionAuthorizer`; a borda HTTP segue autorizando e nenhuma faixa muda (`tests/e2e/` intocado); a fachada só provisiona `employee`. ADR 2.7.0001, notas datadas em 2.4.0003, 0.0.0014, 0.0.0018, 3.5.0001 e 0.0.0020. Issue #205 aberta para as cinco cópias da emissão do token. **O Step 2 permanece `in_progress`** (frontend) | Execução da Stage 2.7 — issue #184 |
+| 2026-11-23 | Stage `3.10-login-link-management` concluída (`done`): vincular conta existente, trocar e desvincular o login de um registro, com escritas condicionais, o ponto único da regra de fim de vínculo e a consulta de conta por e-mail na fachada de identity; bloco acrescido de nota datada. Issues #241, #242 e #243 registradas | Execução da Stage 3.10 — issue #218 |
 
 ## Próxima revisão de roadmap
 
