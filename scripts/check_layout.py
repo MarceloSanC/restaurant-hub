@@ -628,6 +628,33 @@ GATEWAY_WRITE_METHODS: dict[str, frozenset[str]] = {
     "IdentityGateway": frozenset({"provision_employee_login", "revoke_login_sessions"}),
 }
 
+# Ports de saída que não são repositório e **não gravam**, cada um com o motivo
+# (issue #260). Com `GATEWAY_WRITE_METHODS`, é a classificação **total** desses ports:
+# todo `Protocol` (ou `ABC`) de `ports/out/` fora de `*_repository.py`, de qualquer BC
+# ou de `shared/`, está num dos dois, ou `check_out_port_classification` reprova. Sem
+# isso, um gateway novo que gravasse em outro BC seria lido como leitura em silêncio.
+# A chave é o nome da classe, como em `is_write`: dois ports homônimos (os dois
+# `AccessGuard`) partilham a classificação.
+NON_WRITING_PORTS: dict[str, str] = {
+    "ActionAuthorizer": "decide o acesso (AuthorizeActionUseCase); não grava",
+    "PasswordHasher": "calcula e confere hash em memória; não grava",
+    "SetupTokenIssuer": (
+        "gera o valor do token e a impressão digital; quem grava é o PasswordSetupTokenRepository"
+    ),
+    "TokenIssuer": (
+        "assina, decodifica e gera tokens em memória; quem grava a sessão é o SessionRepository"
+    ),
+    "UnitOfWork": "é a própria unidade de trabalho da regra 10 (UNIT_OF_WORK_PORT)",
+    "AccessGuard": "autentica e autoriza (scheduling e staff, homônimos); só lê",
+    "StaffReadPort": "scheduling lê staff pela fachada de leitura (list_*); não grava",
+    "Clock": "lê a hora; não grava",
+    "IdGenerator": "gera o identificador em memória; não grava",
+    "EmailSender": (
+        "efeito externo fora de propósito: o e-mail sai depois do commit e não conta "
+        "como escrita da unidade (ADR 2.6.0002 §3)"
+    ),
+}
+
 # Os auxiliares que escrevem — funções de módulo de `use_cases/` que recebem um
 # repositório ou gateway e gravam por ele — **não** são uma tabela: saem de
 # `helper_writes`, derivados do código (issue #243). Até a issue #243 eram uma tabela
@@ -707,6 +734,40 @@ def port_methods(src_root: Path) -> dict[str, set[str]]:
         for classe in (n for n in tree.body if isinstance(n, ast.ClassDef)):
             metodos[classe.name] = {m.name for m in classe.body if isinstance(m, _FUNCOES)}
     return metodos
+
+
+def _e_port(classe: ast.ClassDef) -> bool:
+    """`class X(Protocol)`, `X(typing.Protocol)`, `X(Protocol[T])` ou `X(ABC)`.
+
+    As outras classes de `ports/out/` (dataclasses de retorno, enums) não são port.
+    """
+    for base in classe.bases:
+        alvo = base.value if isinstance(base, ast.Subscript) else base
+        if _anotacao(alvo) in {"Protocol", "ABC"}:
+            return True
+    return False
+
+
+def non_repository_ports(src_root: Path) -> dict[tuple[str, str], frozenset[str]]:
+    """(arquivo relativo, port) → métodos, para todo port de saída que não é repositório.
+
+    Derivado da árvore: `ports/out/` de cada feature e de `shared/`, fora de
+    `*_repository.py` (issue #260).
+    """
+    portas: dict[tuple[str, str], frozenset[str]] = {}
+    for arquivo in sorted(src_root.rglob("*.py")):
+        caminho = posix(arquivo)
+        if PORTS_OUT_ANCHOR not in caminho or caminho.endswith(REPOSITORY_PORT_SUFFIX):
+            continue
+        tree = parse(arquivo)
+        if tree is None:
+            continue
+        relativo = arquivo.relative_to(src_root).as_posix()
+        for classe in (n for n in tree.body if isinstance(n, ast.ClassDef) and _e_port(n)):
+            portas[(relativo, classe.name)] = frozenset(
+                m.name for m in classe.body if isinstance(m, _FUNCOES)
+            )
+    return portas
 
 
 def is_write(port: str, method: str, repository_ports: set[str]) -> bool:
@@ -1306,6 +1367,43 @@ def check_multi_write_unit_of_work(src_root: Path) -> list[str]:
     return violacoes
 
 
+def check_out_port_classification(src_root: Path) -> list[str]:
+    """Regra 10 — todo port de saída que não é repositório está classificado (issue #260).
+
+    O repositório se classifica pelo nome do método; o resto, só pelo que o script
+    declara. Port novo fora de `GATEWAY_WRITE_METHODS` e de `NON_WRITING_PORTS`
+    reprova até alguém dizer se ele grava — o padrão contrário, ler como leitura,
+    deixaria passar verde um use case que gravasse por ele e pelo repositório fora
+    de unidade. Entrada que não corresponde a port real reprova também, e o mesmo
+    nome nos dois lados é contradição.
+    """
+    portas = non_repository_ports(src_root)
+    nomes = {nome for _, nome in portas}
+    violacoes: list[str] = []
+    for arquivo, nome in sorted(portas):
+        if nome not in GATEWAY_WRITE_METHODS and nome not in NON_WRITING_PORTS:
+            violacoes.append(
+                f"ESCRITA MÚLTIPLA: {arquivo} — o port de saída '{nome}' não está "
+                f"classificado. Ponha os métodos que gravam em GATEWAY_WRITE_METHODS, ou "
+                f"declare-o em NON_WRITING_PORTS com o motivo (issue #260)."
+            )
+    for tabela, declarados in (
+        ("GATEWAY_WRITE_METHODS", set(GATEWAY_WRITE_METHODS)),
+        ("NON_WRITING_PORTS", set(NON_WRITING_PORTS)),
+    ):
+        for nome in sorted(declarados - nomes):
+            violacoes.append(
+                f"ESCRITA MÚLTIPLA: {tabela} declara '{nome}', que não é port de saída "
+                f"fora de repositório — tire a entrada (classificação morta)."
+            )
+    for nome in sorted(set(GATEWAY_WRITE_METHODS) & set(NON_WRITING_PORTS)):
+        violacoes.append(
+            f"ESCRITA MÚLTIPLA: '{nome}' está em GATEWAY_WRITE_METHODS e em "
+            f"NON_WRITING_PORTS — um port grava ou não grava."
+        )
+    return violacoes
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1340,6 +1438,7 @@ def main() -> int:
         *check_result_construction_sites(src_root),
         *check_package_markers(src_root),
         *check_multi_write_unit_of_work(src_root),
+        *check_out_port_classification(src_root),
         *check_error_hierarchy_protocol(src_root),
     ]
 

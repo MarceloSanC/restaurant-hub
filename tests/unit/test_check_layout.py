@@ -1471,24 +1471,282 @@ def test_regra10_construtor_com_atribuicao_anotada_tambem_e_lido(tmp_path: pathl
     assert len(check_layout.check_multi_write_unit_of_work(raiz)) == 1
 
 
-def test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado() -> None:
-    """Um método novo num gateway declarado precisa ser classificado aqui.
-
-    Para repositório, a classificação sai do nome; para gateway, de uma lista. Sem
-    este pino, um `unlink_login` novo em `IdentityGateway` — que grava em identity —
-    seria lido como leitura em silêncio.
-    """
-    metodos = check_layout.port_methods(_SRC)
-
-    assert metodos["IdentityGateway"] == {
+# Todo port de saída que não é repositório, com a classificação de cada método
+# (`True` grava, `False` não grava). Medido em `develop` `0b57697` (issue #260). Port
+# novo entra aqui **e** em `GATEWAY_WRITE_METHODS` (os métodos que gravam) ou em
+# `NON_WRITING_PORTS` (com o motivo), no script; método novo num port daqui também
+# reprova até ser classificado — inclusive num port que hoje não grava.
+_GRAVA = True
+_NAO_GRAVA = False
+_PORTS_FORA_DE_REPOSITORIO: dict[tuple[str, str], dict[str, bool]] = {
+    ("features/identity/application/ports/out/action_authorizer.py", "ActionAuthorizer"): {
+        "execute": _NAO_GRAVA,
+    },
+    ("features/identity/application/ports/out/password_hasher.py", "PasswordHasher"): {
+        "hash": _NAO_GRAVA,
+        "verify": _NAO_GRAVA,
+        "dummy_hash": _NAO_GRAVA,
+        "unusable_hash": _NAO_GRAVA,
+    },
+    ("features/identity/application/ports/out/setup_token_issuer.py", "SetupTokenIssuer"): {
+        "issue": _NAO_GRAVA,
+        "fingerprint": _NAO_GRAVA,
+    },
+    ("features/identity/application/ports/out/token_issuer.py", "TokenIssuer"): {
+        "issue_access_token": _NAO_GRAVA,
+        "issue_refresh_token": _NAO_GRAVA,
+        "fingerprint": _NAO_GRAVA,
+        "decode_access_token": _NAO_GRAVA,
+    },
+    ("features/identity/application/ports/out/unit_of_work.py", "UnitOfWork"): {
+        "transaction": _NAO_GRAVA,
+    },
+    ("features/scheduling/application/ports/out/access_guard.py", "AccessGuard"): {
+        "authorize": _NAO_GRAVA,
+    },
+    ("features/scheduling/application/ports/out/staff_read_port.py", "StaffReadPort"): {
+        "list_active_members": _NAO_GRAVA,
+        "list_members": _NAO_GRAVA,
+        "list_members_of_user": _NAO_GRAVA,
+        "list_job_functions": _NAO_GRAVA,
+        "list_unit_job_functions": _NAO_GRAVA,
+    },
+    ("features/staff/application/ports/out/access_guard.py", "AccessGuard"): {
+        "authenticate": _NAO_GRAVA,
+        "authorize": _NAO_GRAVA,
+    },
+    ("features/staff/application/ports/out/identity_gateway.py", "IdentityGateway"): {
+        "provision_employee_login": _GRAVA,
+        "revoke_login_sessions": _GRAVA,
+        "send_login_invitation": _NAO_GRAVA,
         # Leitura (L-IG5, Stage 3.8): fica fora de `GATEWAY_WRITE_METHODS`.
-        "is_employee_login",
+        "is_employee_login": _NAO_GRAVA,
         # Leitura (L-IG6, Stage 3.10): fica fora de `GATEWAY_WRITE_METHODS`.
-        "find_login_by_email",
-        "provision_employee_login",
-        "revoke_login_sessions",
-        "send_login_invitation",
+        "find_login_by_email": _NAO_GRAVA,
+    },
+    ("shared/application/ports/out/clock.py", "Clock"): {"now": _NAO_GRAVA},
+    # E-mail depois do commit: fora da contagem por propósito (ADR 2.6.0002 §3).
+    ("shared/application/ports/out/email_sender.py", "EmailSender"): {"send": _NAO_GRAVA},
+    ("shared/application/ports/out/id_generator.py", "IdGenerator"): {"next_id": _NAO_GRAVA},
+}
+
+
+def test_regra10_todo_metodo_dos_gateways_declarados_esta_classificado() -> None:
+    """Todo método de todo port de saída fora de repositório está classificado aqui.
+
+    Para repositório, a classificação sai do nome; para o resto, de
+    `GATEWAY_WRITE_METHODS`. Até a issue #260 este pino só cobria `IdentityGateway`;
+    agora cobre o conjunto, derivado da árvore. Sem ele, um `unlink_login` novo em
+    `IdentityGateway` — ou um método que grave num port que hoje só lê — seria lido
+    como leitura em silêncio.
+    """
+    portas = check_layout.non_repository_ports(_SRC)
+    repositorios = check_layout.repository_port_names(_SRC)
+
+    assert {chave: set(metodos) for chave, metodos in portas.items()} == {
+        chave: set(metodos) for chave, metodos in _PORTS_FORA_DE_REPOSITORIO.items()
     }
+    classificacao = {
+        chave: {m: check_layout.is_write(chave[1], m, repositorios) for m in metodos}
+        for chave, metodos in portas.items()
+    }
+    assert classificacao == _PORTS_FORA_DE_REPOSITORIO
+
+
+# Os 12 da medição da #260. Piso, não igualdade — o pino exato é o dicionário acima.
+_MINIMO_DE_PORTS_FORA_DE_REPOSITORIO = 12
+
+
+def test_regra10_os_ports_reais_estao_todos_classificados() -> None:
+    """Sobre `src/`: nenhum port sem classificação, nenhuma entrada morta.
+
+    O piso de contagem impede o verde vazio: se a âncora de `ports/out/` mudasse e a
+    descoberta voltasse vazia, a lista de violações também viria vazia.
+    """
+    assert len(check_layout.non_repository_ports(_SRC)) >= _MINIMO_DE_PORTS_FORA_DE_REPOSITORIO
+    assert check_layout.check_out_port_classification(_SRC) == []
+
+
+def test_regra10_cada_port_que_nao_grava_diz_o_motivo() -> None:
+    sem_motivo = [nome for nome, motivo in check_layout.NON_WRITING_PORTS.items() if not motivo]
+    assert sem_motivo == []
+    assert "ADR 2.6.0002 §3" in check_layout.NON_WRITING_PORTS["EmailSender"]
+
+
+_PORT_NOVO = (
+    "from typing import Protocol\n\n\n"
+    "class NovoGateway(Protocol):\n"
+    "    def gravar_no_outro_bc(self, x: str) -> None: ...\n"
+)
+
+
+def _src_com_ports(tmp_path: pathlib.Path, extras: dict[str, str]) -> pathlib.Path:
+    return _src_falso(
+        tmp_path,
+        {
+            "features/x/application/ports/out/coisa_repository.py": _PORT_DE_REPOSITORIO,
+            "features/x/application/ports/out/unit_of_work.py": _PORT_DA_UNIDADE,
+            **extras,
+        },
+    )
+
+
+@pytest.fixture
+def classificacao_sintetica(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Só a unidade classificada — a árvore sintética não tem os ports do `src/` real."""
+    monkeypatch.setattr(check_layout, "GATEWAY_WRITE_METHODS", {})
+    monkeypatch.setattr(check_layout, "NON_WRITING_PORTS", {"UnitOfWork": "a unidade"})
+
+
+@pytest.mark.parametrize(
+    "caminho",
+    [
+        pytest.param("features/x/application/ports/out/novo_gateway.py", id="feature"),
+        pytest.param("shared/application/ports/out/novo_gateway.py", id="shared"),
+    ],
+)
+@pytest.mark.usefixtures("classificacao_sintetica")
+def test_regra10_port_novo_nao_classificado_reprova(tmp_path: pathlib.Path, caminho: str) -> None:
+    """Critério da #260: port sintético novo, nem repositório nem classificado, reprova."""
+    raiz = _src_com_ports(tmp_path, {caminho: _PORT_NOVO})
+
+    assert check_layout.check_out_port_classification(raiz) == [
+        f"ESCRITA MÚLTIPLA: {caminho} — o port de saída 'NovoGateway' não está "
+        "classificado. Ponha os métodos que gravam em GATEWAY_WRITE_METHODS, ou "
+        "declare-o em NON_WRITING_PORTS com o motivo (issue #260)."
+    ]
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        pytest.param("typing.Protocol", id="protocol-qualificado"),
+        pytest.param("Protocol[T]", id="protocol-generico"),
+        pytest.param("ABC", id="abc"),
+    ],
+)
+@pytest.mark.usefixtures("classificacao_sintetica")
+def test_regra10_port_novo_e_achado_em_cada_forma_de_declaracao(
+    tmp_path: pathlib.Path, base: str
+) -> None:
+    port = f"class NovoGateway({base}):\n    def gravar(self) -> None: ...\n"
+    raiz = _src_com_ports(tmp_path, {"features/x/application/ports/out/novo.py": port})
+
+    violacoes = check_layout.check_out_port_classification(raiz)
+
+    assert len(violacoes) == 1, violacoes
+    assert "'NovoGateway' não está classificado" in violacoes[0]
+
+
+@pytest.mark.parametrize(
+    ("tabela", "valor"),
+    [
+        pytest.param(
+            "GATEWAY_WRITE_METHODS",
+            {"NovoGateway": frozenset({"gravar_no_outro_bc"})},
+            id="grava",
+        ),
+        pytest.param(
+            "NON_WRITING_PORTS",
+            {"UnitOfWork": "a unidade", "NovoGateway": "só lê"},
+            id="nao-grava",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("classificacao_sintetica")
+def test_regra10_port_novo_classificado_passa(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tabela: str, valor: object
+) -> None:
+    monkeypatch.setattr(check_layout, tabela, valor)
+    raiz = _src_com_ports(
+        tmp_path, {"features/x/application/ports/out/novo_gateway.py": _PORT_NOVO}
+    )
+
+    assert check_layout.check_out_port_classification(raiz) == []
+
+
+@pytest.mark.usefixtures("classificacao_sintetica")
+def test_regra10_o_que_nao_e_port_fora_de_repositorio_nao_e_cobrado(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Dataclass e enum de `ports/out/`, o repositório e o `Protocol` fora de `ports/out/`."""
+    raiz = _src_com_ports(
+        tmp_path,
+        {
+            "features/x/application/ports/out/novo_gateway.py": (
+                "from dataclasses import dataclass\nfrom enum import StrEnum\n\n\n"
+                "@dataclass(frozen=True)\nclass Retorno:\n    x: str\n\n\n"
+                "class Modo(StrEnum):\n    A = 'a'\n"
+            ),
+            "features/x/application/ports/out/outra_repository.py": _PORT_NOVO,
+            "features/x/application/use_cases/fazer.py": _PORT_NOVO,
+        },
+    )
+
+    assert check_layout.check_out_port_classification(raiz) == []
+
+
+@pytest.mark.parametrize(
+    ("tabela", "valor", "esperado"),
+    [
+        pytest.param(
+            "GATEWAY_WRITE_METHODS",
+            {"SumidoGateway": frozenset({"gravar"})},
+            "GATEWAY_WRITE_METHODS declara 'SumidoGateway'",
+            id="gateway-que-nao-existe",
+        ),
+        pytest.param(
+            "GATEWAY_WRITE_METHODS",
+            {"CoisaRepository": frozenset({"add"})},
+            "GATEWAY_WRITE_METHODS declara 'CoisaRepository'",
+            id="repositorio-declarado-como-gateway",
+        ),
+        pytest.param(
+            "NON_WRITING_PORTS",
+            {"UnitOfWork": "a unidade", "SumidoPort": "só lê"},
+            "NON_WRITING_PORTS declara 'SumidoPort'",
+            id="nao-grava-que-nao-existe",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("classificacao_sintetica")
+def test_regra10_classificacao_morta_reprova(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tabela: str,
+    valor: object,
+    esperado: str,
+) -> None:
+    monkeypatch.setattr(check_layout, tabela, valor)
+
+    violacoes = check_layout.check_out_port_classification(_src_com_ports(tmp_path, {}))
+
+    assert len(violacoes) == 1, violacoes
+    assert esperado in violacoes[0]
+    assert "classificação morta" in violacoes[0]
+
+
+@pytest.mark.usefixtures("classificacao_sintetica")
+def test_regra10_port_nos_dois_lados_reprova(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(check_layout, "GATEWAY_WRITE_METHODS", {"UnitOfWork": frozenset()})
+
+    assert check_layout.check_out_port_classification(_src_com_ports(tmp_path, {})) == [
+        "ESCRITA MÚLTIPLA: 'UnitOfWork' está em GATEWAY_WRITE_METHODS e em "
+        "NON_WRITING_PORTS — um port grava ou não grava."
+    ]
+
+
+def test_regra10_a_classificacao_dos_ports_esta_ligada_ao_main(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A checagem só protege o build se o script a executa — é o `main()` que roda no CI."""
+    raiz = _src_falso(tmp_path, {"features/x/application/ports/out/novo_gateway.py": _PORT_NOVO})
+    monkeypatch.setattr(sys, "argv", ["check_layout.py", "--src", str(raiz)])
+
+    assert check_layout.main() == 1
+    assert "o port de saída 'NovoGateway' não está classificado" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
