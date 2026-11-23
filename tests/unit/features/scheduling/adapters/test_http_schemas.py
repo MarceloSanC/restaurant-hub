@@ -98,6 +98,7 @@ OPERACOES_VALIDAS: dict[str, dict[str, object]] = {
         "assignment_id": _A,
         "demand_id": _D,
         "employee_id": "emp-1",
+        "counts_toward_workload": False,
     },
     "unassign_employee": {"op": "unassign_employee", "assignment_id": "a1"},
     "declare_workload_counting": {
@@ -108,7 +109,7 @@ OPERACOES_VALIDAS: dict[str, dict[str, object]] = {
     "declare_allocation_break": {
         "op": "declare_allocation_break",
         "assignment_id": "a1",
-        "break_minutes": None,
+        "break_minutes": 15,
     },
 }
 
@@ -144,7 +145,33 @@ def test_ha_uma_operacao_valida_por_variante_da_uniao() -> None:
 def test_cada_operacao_valida_vira_o_dto_da_4_3(nome: str) -> None:
     op = _op(nome)
     check_operation_identifiers([op])
-    assert type(to_operation(op)) is _DTO_POR_OP[nome]
+    dto = to_operation(op)
+    assert type(dto) is _DTO_POR_OP[nome]
+    # Campo a campo: o que o cliente mandou é o que o DTO carrega (Checkpoint C, bloco 04–06 —
+    # um valor fixo no conversor descartaria a escolha do cliente sem reprovar o tipo).
+    for campo, valor in OPERACOES_VALIDAS[nome].items():
+        if campo in {"op", "start", "end", "break_minutes", "quantity"} and nome in {
+            "enable_band",
+            "declare_demand",
+            "change_demand_quantity",
+        }:
+            continue
+        if campo == "op":
+            continue
+        assert getattr(dto, campo) == (
+            datetime.fromisoformat(valor) if campo in {"start", "end"} else valor
+        ), (nome, campo)
+
+
+def test_intervalo_nulo_da_alocacao_volta_a_herdar() -> None:
+    dto = to_operation(_op("declare_allocation_break", break_minutes=None))
+    assert dto.break_minutes is None  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("nome", ["declare_demand", "change_demand_quantity"])
+def test_a_quantidade_do_cliente_chega_ao_dto(nome: str) -> None:
+    dto = to_operation(_op(nome, quantity=7))
+    assert dto.quantity.value == 7  # type: ignore[union-attr]  # noqa: PLR2004
 
 
 def test_enable_band_carrega_o_time_range_com_o_intervalo() -> None:
@@ -342,6 +369,10 @@ def test_aceite_vira_o_dto_com_a_key_como_ecoada() -> None:
         ("limit", "Infinity", "limit"),
         ("limit", "", "limit"),
         ("observed", "40,5", "observed"),
+        ("observed", "1E+1000000", "observed"),
+        ("limit", "-9E+999999", "limit"),
+        ("observed", "1E+16", "observed"),
+        ("limit", "1E-13", "limit"),
     ],
 )
 def test_medida_malformada_e_422_de_scheduling(campo: str, valor: str, trecho: str) -> None:
