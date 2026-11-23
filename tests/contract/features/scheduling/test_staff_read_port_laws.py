@@ -54,7 +54,8 @@ def test_l_st3_lote_vazio_devolve_vazio(mundo: StaffReadPort) -> None:
 
 
 def test_l_st4_vinculo_de_login_na_unidade_ativos_ou_nao(mundo: StaffReadPort) -> None:
-    assert _ids(mundo.list_members_of_user(_T1, _U1, "user-ana")) == {"ana", "caio"}
+    assert _ids(mundo.list_members_of_user(_T1, _U1, "user-ana")) == {"ana"}
+    assert _ids(mundo.list_members_of_user(_T1, _U1, "user-caio")) == {"caio"}
     assert _ids(mundo.list_members_of_user(_T1, _U2, "user-ana")) == {"ana-u2"}
     assert mundo.list_members_of_user(_T1, _U1, "user-outro") == ()
 
